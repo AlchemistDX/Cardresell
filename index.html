@@ -1251,11 +1251,13 @@ function tplCardToNormalized(c, gameSlug, fallbackImage) {
   if (!priceVariants.length) {
     priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
   }
+  // Use TPL's own image_url as the base image — fallbackImage (pokemontcg.io) overrides if injected later
+  const baseImg = fallbackImage || c.image_url || '';
   return {
     name:  c.name,
     game:  gameSlug,
-    images: { small: fallbackImage || '', large: fallbackImage || '' },
-    setName: c.set_name || '',
+    images: { small: baseImg, large: baseImg },
+    setName: c.set_name || c.set?.name || '',
     number:  c.number || c.card_number || '',
     rarity:  c.rarity || '',
     priceVariants,
@@ -1936,24 +1938,29 @@ function attachDropHandlers(cardFactory) {
 
   // ── Scanner auto-select: pick the result whose card number matches the scan ──
   if (window._scanTargetNumber) {
-    const targetNum = window._scanTargetNumber.toLowerCase().replace('/', '');
+    // Normalize: "TG09/TG30" → "tg09", "TG09" → "tg09"
+    const normNum = n => (n || '').toLowerCase().split('/')[0].replace(/^0+/,'').trim();
+    const targetNum  = normNum(window._scanTargetNumber);
     const targetName = (window._scanTargetName || '').toLowerCase();
-    const grader = window._scanTargetGrader || '';
-    window._scanTargetNumber = null; // consume so it only fires once
+    const grader     = window._scanTargetGrader || '';
+    const grade      = window._scanTargetGrade  || '';
+    // Consume immediately so it only fires once
+    window._scanTargetNumber = null;
     window._scanTargetName   = null;
     window._scanTargetGrader = null;
+    window._scanTargetGrade  = null;
 
-    // Find best matching item: exact number match preferred, then name match
+    // Find best matching drop item — exact number match wins
     let bestEl = null;
     let bestScore = -1;
     dropList.querySelectorAll('.drop-item').forEach(el => {
-      const idx = parseInt(el.dataset.idx);
+      const idx  = parseInt(el.dataset.idx);
       const card = cardFactory(idx);
-      const num = (card.number || '').toLowerCase().replace('/', '');
+      const num  = normNum(card.number);
       const name = (card.name || '').toLowerCase();
       let score = 0;
       if (num === targetNum) score += 10;
-      if (num.startsWith(targetNum) || targetNum.startsWith(num)) score += 5;
+      else if (num.startsWith(targetNum) || targetNum.startsWith(num)) score += 4;
       if (name === targetName) score += 2;
       if (score > bestScore) { bestScore = score; bestEl = el; }
     });
@@ -1961,16 +1968,31 @@ function attachDropHandlers(cardFactory) {
     if (bestEl && bestScore > 0) {
       setTimeout(() => {
         bestEl.click();
-        // If we know the grader, auto-switch to the right graded pill
+        // Auto-switch grader pill + grade after card loads
         if (grader) {
-          const graderMap = { 'PSA': 'psa', 'BGS': 'bgs', 'Beckett': 'bgs', 'CGC': 'cgc', 'ACE': 'ace', 'SGC': 'sgc', 'TAG': 'tag' };
+          const graderMap = { 'PSA':'psa','BGS':'bgs','Beckett':'bgs','CGC':'cgc','ACE':'ace','SGC':'sgc','TAG':'tag' };
           const pillKey = graderMap[grader];
-          if (pillKey) {
-            setTimeout(() => {
+          setTimeout(() => {
+            if (pillKey) {
               const pill = document.querySelector(`.grade-pill[data-grader="${pillKey}"]`);
               if (pill) pill.click();
-            }, 400);
-          }
+            }
+            // Auto-select the correct grade number
+            if (grade) {
+              setTimeout(() => {
+                const gradeSelect = document.querySelector('#gradeSelect, [data-grade-select], select[name="grade"]');
+                if (gradeSelect) {
+                  // Try setting select value directly
+                  gradeSelect.value = grade;
+                  gradeSelect.dispatchEvent(new Event('change'));
+                } else {
+                  // Try clicking grade pill/button if it exists
+                  const gradeBtn = document.querySelector(`[data-grade="${grade}"], .grade-option[value="${grade}"]`);
+                  if (gradeBtn) gradeBtn.click();
+                }
+              }, 300);
+            }
+          }, 400);
         }
       }, 150);
     }
@@ -3397,7 +3419,8 @@ async function processScanImage(input) {
     // Store scan metadata so post-search auto-select can pick the exact card
     window._scanTargetNumber = cardNumber;   // e.g. "TG09"
     window._scanTargetName   = cardName;     // e.g. "Spiritomb"
-    window._scanTargetGrader = grader;       // e.g. "PSA" (set graded pill after load)
+    window._scanTargetGrader = grader;       // e.g. "PSA"
+    window._scanTargetGrade  = detection?.grading?.grade?.value || ''; // e.g. "9"
 
     setTimeout(() => {
       cancelScan();
