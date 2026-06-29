@@ -310,9 +310,9 @@ a.plat-card:active{transform:translateY(0) scale(.98)}
 .plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .plat-card.best{border-color:var(--green);box-shadow:0 0 0 1px var(--green),var(--shadow-sm)}
 .plat-card.worst{opacity:.65}
-.plat-sell-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:.6rem;padding-top:.5rem;border-top:1px solid var(--divider);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint);gap:.25rem;transition:color .15s}
-a.plat-card:hover .plat-sell-footer{color:var(--gold)}
-.plat-sell-arrow{font-size:.8rem;transition:transform .15s}
+.plat-sell-badge{display:inline-flex;align-items:center;gap:.3rem;margin-top:.3rem;margin-bottom:.55rem;padding:.22rem .55rem .22rem .45rem;border-radius:99px;font-size:.68rem;font-weight:700;letter-spacing:.02em;background:var(--surface-off);color:var(--text-muted);border:1px solid var(--border);transition:all .15s;width:fit-content}
+a.plat-card:hover .plat-sell-badge{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
+.plat-sell-arrow{font-size:.75rem;transition:transform .15s}
 a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-accent{position:absolute;top:0;left:0;width:4px;height:100%;border-radius:14px 0 0 14px}
 .plat-hdr{display:flex;align-items:center;justify-content:space-between;padding-left:.45rem;margin-bottom:.75rem}
@@ -2748,8 +2748,8 @@ function calc() {
     const sellUrl = window._platSellUrls ? (window._platSellUrls[r.pid] || '') : '';
     const cardTag  = sellUrl ? 'a' : 'div';
     const cardHref = sellUrl ? ` href="${sellUrl}" target="_blank" rel="noopener"` : '';
-    const sellFooter = sellUrl
-      ? `<div class="plat-sell-footer">Sell here <span class="plat-sell-arrow">→</span></div>`
+    const sellBadge = sellUrl
+      ? `<div class="plat-sell-badge">Tap to sell here <span class="plat-sell-arrow">→</span></div>`
       : '';
 
     if (!r.eligible) {
@@ -2769,6 +2769,7 @@ function calc() {
         ${badgeHtml}
       </div>
       <div class="plat-payout ${r.netPayout >= 0 ? 'pos' : 'neg'}">${fmt(r.netPayout)}</div>
+      ${sellBadge}
       ${itemCost > 0
         ? `<div class="plat-sub">Profit: <span style="color:${r.grossProfit>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(r.grossProfit)}</span> · <span style="${r.margin>=0?'color:var(--green)':'color:var(--red)'}">${r.margin.toFixed(1)}%</span></div>`
         : `<div class="plat-sub">After all fees &amp; shipping</div>`}
@@ -2778,7 +2779,6 @@ function calc() {
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
       </div>
-      ${sellFooter}
     </${cardTag}>`;
   });
 
