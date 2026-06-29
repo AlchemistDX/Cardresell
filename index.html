@@ -1153,6 +1153,44 @@ function updateKeyStatus() {
 }
 
 // ── TCGPriceLookup search ──
+// After TPL renders results (no images), fetch images from pokemontcg.io and inject them
+async function injectPokemonImages(cards, gameSlug) {
+  // Build a name+number lookup against pokemontcg.io
+  const names = [...new Set(cards.map(c => c.name).filter(Boolean))];
+  if (!names.length) return;
+  try {
+    const q = names.slice(0, 3).map(n => `name:"${n}"`).join(' OR ');
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=50&select=id,name,number,set,images`;
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const data = await r.json();
+    const lookup = {};
+    (data.data || []).forEach(c => {
+      const key = (c.name + '|' + (c.number || '')).toLowerCase();
+      lookup[key] = c.images?.small || '';
+      // Also store by name only as fallback
+      if (!lookup[c.name.toLowerCase()]) lookup[c.name.toLowerCase()] = c.images?.small || '';
+    });
+    // Inject images into existing drop items
+    cards.forEach((c, i) => {
+      const key = (c.name + '|' + (c.number || '')).toLowerCase();
+      const img = lookup[key] || lookup[c.name.toLowerCase()] || '';
+      if (!img) return;
+      const item = dropList.querySelector(`[data-idx="${i}"]`);
+      if (!item) return;
+      const ph = item.querySelector('.drop-thumb-ph');
+      if (!ph) return;
+      const el = document.createElement('img');
+      el.className = 'drop-thumb';
+      el.src = img;
+      el.alt = c.name;
+      ph.replaceWith(el);
+      // Also store image on the card data for later use in loadCardUI
+      if (window._searchCards[i]) window._searchCards[i]._imgSmall = img;
+    });
+  } catch(e) { /* silent — images are nice-to-have */ }
+}
+
 async function searchWithTPL(q, gameSlug) {
   if (!window.tplApiKey) return null;
   try {
@@ -1414,7 +1452,7 @@ searchInput.addEventListener('input', () => {
   clearTimeout(searchTimeout);
   const q = searchInput.value.trim();
   if (q.length < 2) { dropList.classList.remove('open'); return; }
-  searchTimeout = setTimeout(() => doSearch(q), 320);
+  searchTimeout = setTimeout(() => doSearch(q), 180);
 });
 
 searchInput.addEventListener('keydown', e => {
@@ -1477,8 +1515,10 @@ async function searchPokemon(q) {
     }).join('');
     attachDropHandlers(i => {
       const entry = window._searchCards[i];
-      return tplCardToNormalized(entry._tpl, 'pokemon', '');
+      return tplCardToNormalized(entry._tpl, 'pokemon', entry._imgSmall || '');
     });
+    // Fetch images in background without blocking the dropdown
+    injectPokemonImages(tplData, 'pokemon');
     return;
   }
 
@@ -1542,7 +1582,7 @@ async function searchPokemon(q) {
     const num = c.number ? `#${c.number}` : '';
     const rarity = c.rarity || '';
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${img ? `<img class="drop-thumb" src="${img}" alt="${esc(c.name)}" loading="lazy"/>` : `<div class="drop-thumb-ph">🃏</div>`}
+      ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(setName)}${num ? ' · ' + num : ''}${rarity ? ' · ' + esc(rarity) : ''}</div>
@@ -1651,7 +1691,7 @@ async function searchPokemonJP(q) {
       const setName = c.set?.name || '';
       const num = c.number ? `#${c.number}` : '';
       items.push(`<div class="drop-item" data-idx="${idx}" role="option">
-        ${img ? `<img class="drop-thumb" src="${img}" alt="${esc(c.name)}" loading="lazy"/>` : `<div class="drop-thumb-ph">🏃</div>`}
+        ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🏃</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)} <span style="font-size:.7rem;color:var(--text-muted)">[EN ref]</span></div>
           <div class="drop-meta">${esc(setName)}${num ? ' · ' + num : ''} · <em>English version — use JP COMPS for JP pricing</em></div>
@@ -1771,7 +1811,7 @@ async function searchMTG(q) {
     const bestPrice = usd || usdFoil;
     const rarity = c.rarity ? c.rarity.charAt(0).toUpperCase() + c.rarity.slice(1) : '';
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" alt="${esc(c.name)}" loading="lazy"/>` : `<div class="drop-thumb-ph">🧙</div>`}
+      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🧙</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(c.set_name || '')} · ${esc(rarity)}</div>
@@ -1847,7 +1887,7 @@ async function searchYugioh(q) {
     const imgSrc = c.card_images?.[0]?.image_url_small || '';
     const tcgPrice = c.card_prices?.[0]?.tcgplayer_price ? parseFloat(c.card_prices[0].tcgplayer_price) : null;
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" alt="${esc(c.name)}" loading="lazy"/>` : `<div class="drop-thumb-ph">🐉</div>`}
+      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🐉</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(c.type || '')}${c.race ? ' · ' + esc(c.race) : ''}</div>
