@@ -3182,6 +3182,8 @@ function handleGoogleSignIn(response) {
   
   // Persist session so reload doesn't log user out
   try { localStorage.setItem('cardsell_google_user', JSON.stringify(googleUser)); } catch(e) {}
+  // Persist token in sessionStorage — valid ~1hr, gone when tab closes
+  try { sessionStorage.setItem('cardsell_id_token', response.credential); } catch(e) {}
 
   applyGoogleUser();
   loadUserData();
@@ -3202,6 +3204,8 @@ function signOut() {
   googleUser = null;
   // Clear persisted session
   try { localStorage.removeItem('cardsell_google_user'); } catch(e) {}
+  try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
+  window._googleIdToken = null;
   document.getElementById('googleSignInBtn').style.display = 'flex';
   document.getElementById('googleUserBtn').style.display = 'none';
   document.getElementById('googleAvatar').src = '';
@@ -3257,6 +3261,17 @@ async function processScanImage(input) {
   // Double-check auth (belt + suspenders)
   if (!googleUser) { openScanner(); return; }
 
+  // If user profile is restored but token expired, catch it early
+  if (!window._googleIdToken) {
+    const overlay2 = document.getElementById('scanOverlay');
+    const statusEl2 = document.getElementById('scanStatus');
+    const resultEl2 = document.getElementById('scanResult');
+    overlay2.style.display = 'flex';
+    statusEl2.innerHTML = '<span style="color:#f87171">Your sign-in expired. Please sign in again to scan.</span>';
+    resultEl2.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
+    return;
+  }
+
   const overlay  = document.getElementById('scanOverlay');
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
@@ -3295,14 +3310,19 @@ async function processScanImage(input) {
     });
 
     if (response.status === 401) {
-      statusEl.innerHTML = '<span style="color:#f87171">Session expired — please sign in again.</span>';
-      setTimeout(cancelScan, 2500);
+      // Token expired — clear it and prompt a fresh Google sign-in
+      window._googleIdToken = null;
+      try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
+      statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again, then scan.</span>';
+      // Show sign-in button inside the overlay
+      resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || 'Scan failed');
+      let errMsg = 'Scan failed. Try a clearer photo.';
+      try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
+      throw new Error(errMsg);
     }
 
     const data = await response.json();
@@ -3329,7 +3349,12 @@ async function processScanImage(input) {
 
   } catch(err) {
     console.error('Scan error:', err);
-    statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+    const isNetErr = err instanceof TypeError && err.message.includes('fetch');
+    if (isNetErr) {
+      statusEl.innerHTML = '<span style="color:#f87171">Network error — check your connection and try again.</span>';
+    } else {
+      statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+    }
   }
 }
 
@@ -3372,6 +3397,20 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     const saved = localStorage.getItem('cardsell_google_user');
     if (saved) {
       googleUser = JSON.parse(saved);
+      // Also restore the ID token from sessionStorage if still there
+      const savedToken = sessionStorage.getItem('cardsell_id_token');
+      if (savedToken) {
+        // Quick expiry check — decode JWT exp claim
+        try {
+          const exp = JSON.parse(atob(savedToken.split('.')[1])).exp;
+          if (exp && Date.now() / 1000 < exp - 60) {
+            window._googleIdToken = savedToken;
+          } else {
+            // Token expired — clear it but keep user profile (UI stays signed in)
+            sessionStorage.removeItem('cardsell_id_token');
+          }
+        } catch(e) { /* bad token — ignore */ }
+      }
       // Wait for DOM to be ready
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', applyGoogleUser);
