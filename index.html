@@ -18,6 +18,29 @@
 .sell-btn{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.65rem 1rem;background:#e53935;color:#fff;border-radius:var(--radius-lg);font-size:.85rem;font-weight:700;text-decoration:none;transition:background var(--ease),transform var(--ease);margin-top:.75rem}
 .sell-btn:hover{background:#c62828}
 .sell-btn:active{transform:scale(.98)}
+/* ─── WHERE TO SELL LINKS ─── */
+.sell-links{display:flex;flex-direction:column;gap:.45rem;margin-top:.75rem}
+.sell-link-row{display:flex;align-items:center;gap:.5rem}
+.sell-link-label{font-size:.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;min-width:4.5rem}
+.sell-link-btns{display:flex;flex-wrap:wrap;gap:.4rem}
+.sell-platform-btn{display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .65rem;border-radius:99px;font-size:.75rem;font-weight:700;text-decoration:none;border:1.5px solid transparent;transition:all .15s ease;white-space:nowrap}
+.sell-platform-btn:active{transform:scale(.97)}
+.spb-ebay{background:#fef2f2;color:#c0392b;border-color:#fca5a5}
+[data-theme=dark] .spb-ebay{background:#2d1515;color:#f87171;border-color:#7f1d1d}
+.spb-ebay:hover{background:#fee2e2}
+.spb-tcgp{background:#fef9ec;color:#b45309;border-color:#fcd34d}
+[data-theme=dark] .spb-tcgp{background:#2d2008;color:#fbbf24;border-color:#78350f}
+.spb-tcgp:hover{background:#fef3c7}
+.spb-mercari{background:#fdf2f8;color:#9d174d;border-color:#f9a8d4}
+[data-theme=dark] .spb-mercari{background:#2d1020;color:#f472b6;border-color:#831843}
+.spb-mercari:hover{background:#fce7f3}
+.spb-comc{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}
+[data-theme=dark] .spb-comc{background:#0d1f3c;color:#60a5fa;border-color:#1e3a8a}
+.spb-comc:hover{background:#dbeafe}
+.spb-stockx{background:#f8fafc;color:#334155;border-color:#cbd5e1}
+[data-theme=dark] .spb-stockx{background:#1e293b;color:#94a3b8;border-color:#334155}
+.spb-stockx:hover{background:#f1f5f9}
+.sell-divider{height:1px;background:var(--divider);margin:.5rem 0}
 /* ─── SETTINGS PANEL ─── */
 .settings-panel{overflow:hidden;max-height:0;transition:max-height .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;opacity:0;pointer-events:none}
 .settings-panel.open{max-height:900px;opacity:1;pointer-events:auto}
@@ -684,6 +707,29 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             Sell on eBay
           </a>
+
+          <!-- Where to Sell / Buy platform links -->
+          <div id="sellLinksBlock" class="sell-links" style="display:none">
+            <div class="sell-divider"></div>
+            <div class="sell-link-row">
+              <span class="sell-link-label">Sell</span>
+              <div class="sell-link-btns">
+                <a id="slEbaySell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-ebay">🛒 eBay</a>
+                <a id="slTcgpSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-tcgp" style="display:none">🃏 TCGPlayer</a>
+                <a id="slMercariSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-mercari">🏷️ Mercari</a>
+                <a id="slComcSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-comc">📦 COMC</a>
+                <a id="slStockxSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-stockx">👟 StockX</a>
+              </div>
+            </div>
+            <div class="sell-link-row">
+              <span class="sell-link-label">Buy / Comps</span>
+              <div class="sell-link-btns">
+                <a id="slEbayBuy" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-ebay">🛒 eBay Sold</a>
+                <a id="slTcgpBuy" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-tcgp" style="display:none">🃏 TCGPlayer</a>
+                <a id="slComcBuy" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-comc">📦 COMC</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1848,7 +1894,7 @@ function openEbayComps() {
   if (!parts.length) { alert('Enter at least a player name first.'); return; }
 
   const query = encodeURIComponent(parts.join(' '));
-  window.open(`https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=212&LH_Sold=1&LH_Complete=1`, '_blank');
+  window.open(buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=212&LH_Sold=1&LH_Complete=1`), '_blank');
 
   // Sync search input so it shows what was searched
   const ssi = document.getElementById('sportsSearchInput');
@@ -1964,7 +2010,7 @@ async function doSportsSearchLive(q) {
     el.addEventListener('click', () => {
       const idx = el.dataset.sportsIdx;
       if (idx === 'ebay-direct') {
-        window.open(ebayUrl, '_blank');
+        window.open(buildEbayUrl(ebayUrl), '_blank');
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
@@ -1974,7 +2020,7 @@ async function doSportsSearchLive(q) {
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
       } else if (el.dataset.ebayUrl) {
-        window.open(el.dataset.ebayUrl, '_blank');
+        window.open(buildEbayUrl(el.dataset.ebayUrl), '_blank');
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         // Set grade dropdown
@@ -2086,7 +2132,7 @@ function loadCardUI(card) {
     // EN ref card in JP tab — still show JP links for the card name
     const rawName = card.name.replace(' (JP — use Override for JP price)', '').trim();
     jpLinksPanel.style.display = 'block';
-    jpEbayLink.href = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(rawName + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`;
+    jpEbayLink.href = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(rawName + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`);
     jpPCLink.href   = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(rawName + ' japanese')}&type=prices`;
   } else {
     jpLinksPanel.style.display = 'none';
@@ -2137,9 +2183,12 @@ function loadCardUI(card) {
   const ebayListBtn = document.getElementById('ebayListBtn');
   if (ebayListBtn) {
     const ebayQuery = encodeURIComponent(card.name + (card.setName ? ' ' + card.setName : ''));
-    ebayListBtn.href = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQuery}`;
+    ebayListBtn.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQuery}`);
     ebayListBtn.style.display = 'flex';
   }
+
+  // Update platform sell/buy links
+  updateSellLinks(card);
 
   // Build printing dropdown from priceVariants
   currentPrices = {};
@@ -2175,6 +2224,8 @@ function resetCardPanel() {
   cardNameBlock.style.display = 'none';
   const ebayListBtn = document.getElementById('ebayListBtn');
   if (ebayListBtn) ebayListBtn.style.display = 'none';
+  const sellLinksBlock = document.getElementById('sellLinksBlock');
+  if (sellLinksBlock) sellLinksBlock.style.display = 'none';
   priceMain.textContent = '—';
   priceMain.style.color = 'var(--text-faint)';
   priceRange.textContent = '';
@@ -2352,7 +2403,7 @@ async function syncGradeToPrintSelect() {
       const cardName = selectedCard?.name?.replace(/ \(JP.*?\)/,'').replace(/ \(EN.*?\)/,'') || '';
       const graderLabel = graderNames[grader] || grader.toUpperCase();
       const ebayQuery = encodeURIComponent(`${cardName} ${graderLabel} ${grade} pokemon card`);
-      const ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${ebayQuery}&LH_Sold=1&LH_Complete=1&_sacat=183454`;
+      const ebayUrl = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${ebayQuery}&LH_Sold=1&LH_Complete=1&_sacat=183454`);
 
       if (banner) {
         const note    = document.getElementById('gradedCompsNote');
@@ -2387,6 +2438,80 @@ async function syncGradeToPrintSelect() {
     }
   }
   updatePriceFromPrinting();
+}
+
+// ─── AFFILIATE LINK HELPERS ───
+
+// Builds an eBay URL with affiliate campaign ID appended (if available)
+function buildEbayUrl(url) {
+  const campId = window.CARDSELL_EPN_CAMPID;
+  if (!campId) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=10001&customid=cardsell`;
+}
+
+// Builds a TCGPlayer search URL with affiliate tag appended (if available)
+function buildTcgpUrl(cardName, setName) {
+  const q = encodeURIComponent(cardName + (setName ? ' ' + setName : ''));
+  const base = `https://www.tcgplayer.com/search/all/product?q=${q}&view=grid`;
+  const affId = window.CARDSELL_TCGP_AFFID;
+  if (!affId) return base;
+  return `${base}&affiliate=${encodeURIComponent(affId)}`;
+}
+
+// Updates all the "Where to Sell" platform buttons for the currently loaded card
+function updateSellLinks(card) {
+  const block = document.getElementById('sellLinksBlock');
+  if (!block || !card) return;
+
+  const name    = card.name || '';
+  const setName = card.setName || '';
+  const game    = card.game || 'pokemon';
+  const isPokemon = game === 'pokemon' || game === 'pokemon_jp';
+  const isMagic   = game === 'mtg';
+
+  // eBay category IDs: trading cards = 183454 (Pokémon), 212 (sports/other)
+  const ebaycat = isPokemon ? '183454' : isMagic ? '183454' : '212';
+  const ebaySearchQ = encodeURIComponent(`${name}${setName ? ' ' + setName : ''} card`);
+  const ebaySoldQ   = encodeURIComponent(`${name}${setName ? ' ' + setName : ''} card`);
+
+  // eBay sell link (create listing, pre-filled)
+  const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(name + (setName ? ' ' + setName : ''))}`;
+  const ebayBuyRaw  = `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
+
+  const slEbaySell   = document.getElementById('slEbaySell');
+  const slEbayBuy    = document.getElementById('slEbayBuy');
+  const slTcgpSell   = document.getElementById('slTcgpSell');
+  const slTcgpBuy    = document.getElementById('slTcgpBuy');
+  const slMercariSell= document.getElementById('slMercariSell');
+  const slComcSell   = document.getElementById('slComcSell');
+  const slComcBuy    = document.getElementById('slComcBuy');
+  const slStockxSell = document.getElementById('slStockxSell');
+
+  if (slEbaySell)    slEbaySell.href    = buildEbayUrl(ebaySellRaw);
+  if (slEbayBuy)     slEbayBuy.href     = buildEbayUrl(ebayBuyRaw);
+
+  // Mercari: search sold/listed
+  const mercariQ = encodeURIComponent(`${name}${setName ? ' ' + setName : ''}`);
+  if (slMercariSell) slMercariSell.href = `https://www.mercari.com/search/?keyword=${mercariQ}`;
+
+  // COMC: trading card specialists
+  const comcQ = encodeURIComponent(name);
+  if (slComcSell)    slComcSell.href    = `https://www.comc.com/Cards/*/buy?q=${comcQ}`;
+  if (slComcBuy)     slComcBuy.href     = `https://www.comc.com/Cards/*/buy?q=${comcQ}`;
+
+  // StockX: mainly sneakers/streetwear but does sealed product
+  const stockxQ = encodeURIComponent(`${name} pokemon`);
+  if (slStockxSell)  slStockxSell.href  = `https://stockx.com/search?s=${stockxQ}`;
+
+  // TCGPlayer: show for Pokémon, Magic, Yu-Gi-Oh
+  const showTcgp = isPokemon || isMagic || game === 'yugioh';
+  if (slTcgpSell) slTcgpSell.style.display = showTcgp ? 'inline-flex' : 'none';
+  if (slTcgpBuy)  slTcgpBuy.style.display  = showTcgp ? 'inline-flex' : 'none';
+  if (slTcgpSell) slTcgpSell.href = buildTcgpUrl(name, setName);
+  if (slTcgpBuy)  slTcgpBuy.href  = buildTcgpUrl(name, setName);
+
+  block.style.display = 'flex';
 }
 
 function toggleGrade() {
@@ -2940,8 +3065,8 @@ function renderFlipsView() {
 
 let googleUser = null; // { name, email, avatar, sub }
 
-// ── Google OAuth Client ID — reads from localStorage if user pasted it in Settings ──
-const _HARDCODED_CLIENT_ID = '458953497801-placeholder.apps.googleusercontent.com';
+// ── Google OAuth Client ID — reads from config.js first, then localStorage fallback ──
+const _HARDCODED_CLIENT_ID = window.CARDSELL_GOOGLE_CLIENT_ID || '458953497801-placeholder.apps.googleusercontent.com';
 const _SAVED_CLIENT_ID = (() => { try { return localStorage.getItem('cardsell_google_client_id') || ''; } catch(e) { return ''; } })();
 const GOOGLE_CLIENT_ID = (_SAVED_CLIENT_ID && !_SAVED_CLIENT_ID.includes('placeholder')) ? _SAVED_CLIENT_ID : _HARDCODED_CLIENT_ID;
 const GOOGLE_AUTH_READY = !GOOGLE_CLIENT_ID.includes('placeholder') && GOOGLE_CLIENT_ID.includes('.apps.googleusercontent.com');
