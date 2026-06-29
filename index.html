@@ -526,7 +526,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
   <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
     <div class="settings-title">📷 AI Card Scanner (optional)</div>
-    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:.5rem">Add an OpenAI API key to enable AI-powered card scanning. Without it, the scanner uses basic text reading. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--gold)">platform.openai.com</a> — costs ~$0.001 per scan.</div>
+    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:.5rem">The CardSell scanner uses CardGrader.AI to identify your card, predict its PSA grade (centering, corners, edges, surface), and estimate market value — all from one photo. Sign in with Google to scan.</div>
     <div class="settings-row">
       <input type="password" id="openAiKeyInput" class="settings-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
       <button class="settings-save-btn" onclick="saveOpenAiKey()">Save</button>
@@ -552,7 +552,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
     <span class="tpl-lock-indicator" id="tplLockIndicator">🔓 300K+ DB</span>
-    <button id="scanBtn" class="scan-btn" onclick="openScanner()" title="Scan card with camera">
+    <button id="scanBtn" class="scan-btn" onclick="openScanner()" title="AI Card Scanner — identifies card, predicts grade & value">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
@@ -3441,7 +3441,7 @@ async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
-  // Double-check auth (belt + suspenders)
+  // Double-check auth
   if (!googleUser) { openScanner(); return; }
 
   // If user profile is restored but token expired, catch it early
@@ -3462,8 +3462,8 @@ async function processScanImage(input) {
   const prevImg  = document.getElementById('scanPreviewImg');
 
   overlay.style.display = 'flex';
-  resultEl.textContent = '';
-  statusEl.textContent = 'Analyzing card…';
+  resultEl.innerHTML = '';
+  statusEl.innerHTML = '<span style="color:rgba(255,255,255,.7)">Analyzing card…</span>';
 
   const objectUrl = URL.createObjectURL(file);
   prevImg.src = objectUrl;
@@ -3476,13 +3476,24 @@ async function processScanImage(input) {
     reader.readAsDataURL(file);
   });
 
+  // Animated status updates while CardGrader polls (30-120s)
+  const phases = [
+    'Uploading photo…',
+    'AI is identifying the card…',
+    'Analyzing condition & corners…',
+    'Checking edges & surface…',
+    'Pulling market comps…',
+    'Finalizing grade prediction…',
+  ];
+  let phaseIdx = 0;
+  statusEl.textContent = phases[0];
+  const phaseTimer = setInterval(() => {
+    phaseIdx = Math.min(phaseIdx + 1, phases.length - 1);
+    statusEl.textContent = phases[phaseIdx];
+  }, 10000);
+
   try {
-    statusEl.textContent = 'AI is identifying the card…';
-
-    // Get the Google ID token to authenticate the server request
     const idToken = window._googleIdToken || '';
-
-    // Call our secure server-side proxy (CardSight key never in frontend)
     const response = await fetch('/api/scan', {
       method: 'POST',
       headers: {
@@ -3492,13 +3503,19 @@ async function processScanImage(input) {
       body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
     });
 
+    clearInterval(phaseTimer);
+
     if (response.status === 401) {
-      // Token expired — clear it and prompt a fresh Google sign-in
       window._googleIdToken = null;
       try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
       statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again, then scan.</span>';
-      // Show sign-in button inside the overlay
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
+      return;
+    }
+
+    if (response.status === 402) {
+      statusEl.innerHTML = '<span style="color:#f87171">Scanner credits used up.</span>';
+      resultEl.innerHTML = '<span style="font-size:.8rem;color:rgba(255,255,255,.6)">Contact will@cardresell.org to top up.</span>';
       return;
     }
 
@@ -3509,49 +3526,62 @@ async function processScanImage(input) {
     }
 
     const data = await response.json();
-    const detection = data?.detections?.[0];
-    const card = detection?.card || {};
-    const cardName = card.name || '';
+    const cardName = data.cardName || '';
 
     if (!cardName) {
       statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
 
-    // Build a rich search query using everything CardSight returned
-    const cardNumber = card.number || '';
-    const setAbbrev = card.fields?.find(f => f.key === 'SET_ABBREVIATION')?.value || '';
-    const releaseName = card.releaseName || '';
-    const confidence = detection?.confidence || '';
-    const grader = detection?.grading?.company?.name || '';
+    // ── Build rich status display ──
+    const grade = data.predictedGrade ?? data.grade ?? null;
+    const gradeStr = grade !== null ? ` · AI grade: ${grade}` : '';
+    const rawVal = data.rawEstimate ? ` · ~$${data.rawEstimate.toFixed(0)} raw` : '';
 
-    // Smart search string: "Spiritomb TG09 Lost Origin" hits the right variant every time
-    let searchQuery = cardName;
-    if (cardNumber) searchQuery += ' ' + cardNumber;
-    if (setAbbrev) searchQuery += ' ' + setAbbrev;
-    else if (releaseName) searchQuery += ' ' + releaseName;
+    statusEl.innerHTML = `
+      <div style="text-align:center">
+        <div style="color:#4ade80;font-weight:700;font-size:1rem;margin-bottom:.3rem">✓ ${esc(cardName)}${data.cardNumber ? ' #' + esc(data.cardNumber) : ''}</div>
+        <div style="font-size:.8rem;color:rgba(255,255,255,.75);margin-bottom:.5rem">${esc(data.setName||'')}${data.year?' · '+data.year:''}${gradeStr}${rawVal}</div>
+        ${data.subGrades ? `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.3rem;margin-bottom:.5rem;font-size:.72rem">
+          ${Object.entries(data.subGrades).map(([k,v]) =>
+            `<div style="background:rgba(255,255,255,.08);border-radius:6px;padding:.25rem .3rem">
+              <div style="color:rgba(255,255,255,.5);text-transform:capitalize">${k}</div>
+              <div style="color:#fff;font-weight:700">${v}</div>
+            </div>`
+          ).join('')}
+        </div>` : ''}
+        ${data.gradeSummary ? `<div style="font-size:.75rem;color:rgba(255,255,255,.6);font-style:italic;margin-bottom:.4rem">"${esc(data.gradeSummary)}"</div>` : ''}
+        ${data.gradingRecommendation ? `<div style="font-size:.75rem;color:var(--gold);margin-bottom:.4rem">📊 ${esc(data.gradingRecommendation)}</div>` : ''}
+      </div>`;
 
-    const graderLabel = grader ? ` · ${grader} slab detected` : '';
-    statusEl.innerHTML = `<span style="color:#4ade80">✓ ${cardName}${cardNumber ? ' #' + cardNumber : ''}</span><br><span style="font-size:.8rem;opacity:.7">${releaseName}${graderLabel} · ${confidence} confidence</span>`;
+    // Store scan metadata for post-search auto-select
+    window._scanTargetNumber = data.cardNumber || '';
+    window._scanTargetName   = cardName;
+    window._scanTargetGrader = 'PSA';  // default grader
+    window._scanTargetGrade  = grade !== null ? String(Math.round(grade)) : '';
+
+    // Auto-set grade in the calculator if we got one
+    if (grade !== null) {
+      const roundedGrade = Math.round(grade * 2) / 2; // round to nearest 0.5
+      window._scanAutoGrade = roundedGrade;
+    }
+
     resultEl.textContent = 'Searching…';
-
-    // Store scan metadata so post-search auto-select can pick the exact card
-    window._scanTargetNumber = cardNumber;   // e.g. "TG09"
-    window._scanTargetName   = cardName;     // e.g. "Spiritomb"
-    window._scanTargetGrader = grader;       // e.g. "PSA"
-    window._scanTargetGrade  = detection?.grading?.grade?.value || ''; // e.g. "9"
 
     setTimeout(() => {
       cancelScan();
       URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
-      // Search just the card name — broader match, we'll filter by number below
-      searchInput.value = cardName.trim();
+      // Use card name + number for precise search
+      const searchQ = cardName + (data.cardNumber ? ' ' + data.cardNumber : '') + (data.setName ? ' ' + data.setName.split(':')[0].trim() : '');
+      searchInput.value = searchQ.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 1200);
+    }, 2500);
 
   } catch(err) {
+    clearInterval(phaseTimer);
     console.error('Scan error:', err);
     const isNetErr = err instanceof TypeError && err.message.includes('fetch');
     if (isNetErr) {
