@@ -1020,6 +1020,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 </div><!-- /wrap -->
 
+<script src="config.js" onerror="console.warn('config.js not found — key must be set manually in Settings')"></script>
 <script>
 /* ═══════════════════════════════════════════
    CARDSELL v2 — Card Lookup + Platform Calculator
@@ -1027,7 +1028,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 // ── TCGPriceLookup API Key (JS variable only, resets on reload) ──
 // Load saved API key from localStorage on startup
-window.tplApiKey = (() => { try { return localStorage.getItem('cardsell_tpl_key') || ''; } catch(e) { return ''; } })();
+window.tplApiKey = (() => { try { return localStorage.getItem('cardsell_tpl_key') || window.CARDSELL_TPL_KEY || ''; } catch(e) { return window.CARDSELL_TPL_KEY || ''; } })();
 // Load saved OpenAI key for AI card scanning
 window._openAiKey = (() => { try { return localStorage.getItem('cardsell_openai_key') || ''; } catch(e) { return ''; } })();
 
