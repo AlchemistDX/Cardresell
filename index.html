@@ -558,15 +558,46 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </button>
     <button id="searchBtn" class="search-btn">Search</button>
   </div>
-  <!-- Camera scan overlay -->
-  <!-- Hidden file input — opens native camera on mobile -->
-  <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
-  <!-- Scan status modal -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
-    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(90vw,380px)">
+  <!-- Hidden file inputs — one per scan mode -->
+  <input type="file" id="scanFileInputQuick"  accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this,'identify')" />
+  <input type="file" id="scanFileInputGraded" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this,'full')" />
+
+  <!-- Scan mode picker modal -->
+  <div id="scanModeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:center;justify-content:center;padding:1.5rem">
+    <div style="background:#1a1a17;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:1.75rem 1.5rem;width:min(92vw,360px);text-align:center">
+      <div style="font-size:1.5rem;margin-bottom:.4rem">📷</div>
+      <div style="font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:.3rem">Scan a Card</div>
+      <div style="font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:1.5rem">Choose how much detail you need</div>
+
+      <!-- Quick Identify -->
+      <button onclick="startScan('identify')" style="width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:1rem;margin-bottom:.75rem;cursor:pointer;text-align:left;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='rgba(255,255,255,.07)'">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem">
+          <span style="font-weight:700;color:#fff;font-size:.95rem">⚡ Quick Identify</span>
+          <span style="background:rgba(74,222,128,.15);color:#4ade80;font-size:.7rem;font-weight:700;padding:.2rem .5rem;border-radius:99px">FREE</span>
+        </div>
+        <div style="font-size:.78rem;color:rgba(255,255,255,.55);line-height:1.4">Identifies the card name, set &amp; number. Auto-fills the calculator instantly. Best for quick flip checks.</div>
+      </button>
+
+      <!-- Graded Scan -->
+      <button onclick="startScan('full')" style="width:100%;background:rgba(232,160,32,.08);border:1px solid rgba(232,160,32,.3);border-radius:14px;padding:1rem;margin-bottom:1.25rem;cursor:pointer;text-align:left;transition:background .15s" onmouseover="this.style.background='rgba(232,160,32,.15)'" onmouseout="this.style.background='rgba(232,160,32,.08)'">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem">
+          <span style="font-weight:700;color:var(--gold);font-size:.95rem">🏆 Graded Scan</span>
+          <span style="background:rgba(232,160,32,.2);color:var(--gold);font-size:.7rem;font-weight:700;padding:.2rem .5rem;border-radius:99px">$1 · PRO</span>
+        </div>
+        <div style="font-size:.78rem;color:rgba(255,255,255,.55);line-height:1.4">Full AI grade prediction — centering, corners, edges, surface. Estimates PSA grade &amp; raw/graded market value.</div>
+      </button>
+
+      <button onclick="closeScanModeModal()" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:.85rem;cursor:pointer;padding:.25rem .5rem">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Scan progress overlay -->
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
+    <div id="scanModeTag" style="font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:99px;margin-bottom:-.5rem"></div>
+    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(90vw,340px)">
       <img id="scanPreviewImg" style="width:100%;border-radius:12px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card preview" />
     </div>
-    <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
+    <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Analyzing…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
     <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
   </div>
@@ -3404,13 +3435,13 @@ function signOut() {
 // ── Scanner gate — requires Google sign-in ──
 function openScanner() {
   if (!googleUser) {
-    // Show a friendly prompt instead of just doing nothing
+    // Show sign-in prompt in scan overlay
     const overlay  = document.getElementById('scanOverlay');
     const statusEl = document.getElementById('scanStatus');
     const resultEl = document.getElementById('scanResult');
     const prevWrap = document.getElementById('scanPreviewWrap');
     prevWrap.style.display = 'none';
-    resultEl.textContent = '';
+    resultEl.innerHTML = '';
     statusEl.innerHTML = `
       <div style="text-align:center;padding:1rem">
         <div style="font-size:2rem;margin-bottom:.75rem">📷</div>
@@ -3421,30 +3452,41 @@ function openScanner() {
     overlay.style.display = 'flex';
     return;
   }
-  document.getElementById('scanFileInput').click();
+  // Show mode picker
+  document.getElementById('scanModeModal').style.display = 'flex';
+}
+
+function closeScanModeModal() {
+  document.getElementById('scanModeModal').style.display = 'none';
+}
+
+function startScan(mode) {
+  closeScanModeModal();
+  const inputId = mode === 'identify' ? 'scanFileInputQuick' : 'scanFileInputGraded';
+  document.getElementById(inputId).click();
 }
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
-  // Reset file input — replace the element so same file can be scanned again
-  const fi = document.getElementById('scanFileInput');
-  if (fi) {
+  document.getElementById('scanModeModal').style.display = 'none';
+  // Reset both file inputs so same file can be re-scanned
+  ['scanFileInputQuick','scanFileInputGraded'].forEach(id => {
+    const fi = document.getElementById(id);
+    if (!fi) return;
     fi.value = '';
-    // Force reset by replacing the input (necessary for some browsers)
     const clone = fi.cloneNode(true);
     fi.parentNode.replaceChild(clone, fi);
-    clone.addEventListener('change', function() { processScanImage(this); });
-  }
+    const mode = id === 'scanFileInputQuick' ? 'identify' : 'full';
+    clone.addEventListener('change', function() { processScanImage(this, mode); });
+  });
 }
 
-async function processScanImage(input) {
+async function processScanImage(input, mode = 'identify') {
   const file = input.files[0];
   if (!file) return;
 
-  // Double-check auth
   if (!googleUser) { openScanner(); return; }
 
-  // If user profile is restored but token expired, catch it early
   if (!window._googleIdToken) {
     const overlay2 = document.getElementById('scanOverlay');
     const statusEl2 = document.getElementById('scanStatus');
@@ -3455,15 +3497,28 @@ async function processScanImage(input) {
     return;
   }
 
+  const isGraded = mode === 'full';
   const overlay  = document.getElementById('scanOverlay');
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
   const prevWrap = document.getElementById('scanPreviewWrap');
   const prevImg  = document.getElementById('scanPreviewImg');
+  const modeTag  = document.getElementById('scanModeTag');
+
+  // Show mode badge
+  if (modeTag) {
+    if (isGraded) {
+      modeTag.textContent = '🏆 Graded Scan';
+      modeTag.style.cssText = 'font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:99px;margin-bottom:-.5rem;background:rgba(232,160,32,.2);color:var(--gold)';
+    } else {
+      modeTag.textContent = '⚡ Quick Identify';
+      modeTag.style.cssText = 'font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:99px;margin-bottom:-.5rem;background:rgba(74,222,128,.15);color:#4ade80';
+    }
+  }
 
   overlay.style.display = 'flex';
   resultEl.innerHTML = '';
-  statusEl.innerHTML = '<span style="color:rgba(255,255,255,.7)">Analyzing card…</span>';
+  statusEl.textContent = 'Uploading photo…';
 
   const objectUrl = URL.createObjectURL(file);
   prevImg.src = objectUrl;
@@ -3476,31 +3531,23 @@ async function processScanImage(input) {
     reader.readAsDataURL(file);
   });
 
-  // Animated status updates while CardGrader polls (30-120s)
-  const phases = [
-    'Uploading photo…',
-    'AI is identifying the card…',
-    'Analyzing condition & corners…',
-    'Checking edges & surface…',
-    'Pulling market comps…',
-    'Finalizing grade prediction…',
-  ];
+  // Animated phases — different messaging per mode
+  const quickPhases = ['Uploading photo…','AI is identifying the card…','Matching against 300K+ cards…','Almost done…'];
+  const gradedPhases = ['Uploading photo…','AI is identifying the card…','Analyzing centering & corners…','Checking edges & surface…','Pulling market comps…','Finalizing grade prediction…'];
+  const phases = isGraded ? gradedPhases : quickPhases;
   let phaseIdx = 0;
   statusEl.textContent = phases[0];
   const phaseTimer = setInterval(() => {
     phaseIdx = Math.min(phaseIdx + 1, phases.length - 1);
     statusEl.textContent = phases[phaseIdx];
-  }, 10000);
+  }, isGraded ? 12000 : 8000);
 
   try {
     const idToken = window._googleIdToken || '';
     const response = await fetch('/api/scan', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      },
-      body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify({ imageBase64: base64, mimeType: file.type, module: mode })
     });
 
     clearInterval(phaseTimer);
@@ -3512,13 +3559,11 @@ async function processScanImage(input) {
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-
     if (response.status === 402) {
       statusEl.innerHTML = '<span style="color:#f87171">Scanner credits used up.</span>';
       resultEl.innerHTML = '<span style="font-size:.8rem;color:rgba(255,255,255,.6)">Contact will@cardresell.org to top up.</span>';
       return;
     }
-
     if (!response.ok) {
       let errMsg = 'Scan failed. Try a clearer photo.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
@@ -3533,62 +3578,66 @@ async function processScanImage(input) {
       return;
     }
 
-    // ── Build rich status display ──
-    const grade = data.predictedGrade ?? data.grade ?? null;
-    const gradeStr = grade !== null ? ` · AI grade: ${grade}` : '';
-    const rawVal = data.rawEstimate ? ` · ~$${data.rawEstimate.toFixed(0)} raw` : '';
+    // ── Quick Identify result ──
+    if (!isGraded) {
+      statusEl.innerHTML = `
+        <div style="text-align:center">
+          <div style="color:#4ade80;font-weight:700;font-size:1rem;margin-bottom:.25rem">✓ ${esc(cardName)}${data.cardNumber ? ' #' + esc(data.cardNumber) : ''}</div>
+          <div style="font-size:.8rem;color:rgba(255,255,255,.65)">${esc(data.setName||'')}${data.year?' · '+data.year:''}</div>
+          ${data.parallel ? `<div style="font-size:.75rem;color:var(--gold);margin-top:.2rem">${esc(data.parallel)}</div>` : ''}
+        </div>`;
 
-    statusEl.innerHTML = `
-      <div style="text-align:center">
-        <div style="color:#4ade80;font-weight:700;font-size:1rem;margin-bottom:.3rem">✓ ${esc(cardName)}${data.cardNumber ? ' #' + esc(data.cardNumber) : ''}</div>
-        <div style="font-size:.8rem;color:rgba(255,255,255,.75);margin-bottom:.5rem">${esc(data.setName||'')}${data.year?' · '+data.year:''}${gradeStr}${rawVal}</div>
-        ${data.subGrades ? `
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.3rem;margin-bottom:.5rem;font-size:.72rem">
-          ${Object.entries(data.subGrades).map(([k,v]) =>
-            `<div style="background:rgba(255,255,255,.08);border-radius:6px;padding:.25rem .3rem">
-              <div style="color:rgba(255,255,255,.5);text-transform:capitalize">${k}</div>
-              <div style="color:#fff;font-weight:700">${v}</div>
-            </div>`
-          ).join('')}
-        </div>` : ''}
-        ${data.gradeSummary ? `<div style="font-size:.75rem;color:rgba(255,255,255,.6);font-style:italic;margin-bottom:.4rem">"${esc(data.gradeSummary)}"</div>` : ''}
-        ${data.gradingRecommendation ? `<div style="font-size:.75rem;color:var(--gold);margin-bottom:.4rem">📊 ${esc(data.gradingRecommendation)}</div>` : ''}
-      </div>`;
+    // ── Graded Scan result ──
+    } else {
+      const grade = data.predictedGrade ?? data.grade ?? null;
+      const gradeStr = grade !== null ? ` · AI grade: ${grade}` : '';
+      const rawVal = data.rawEstimate ? ` · ~$${data.rawEstimate.toFixed(0)} raw` : '';
 
-    // Store scan metadata for post-search auto-select
-    window._scanTargetNumber = data.cardNumber || '';
-    window._scanTargetName   = cardName;
-    window._scanTargetGrader = 'PSA';  // default grader
-    window._scanTargetGrade  = grade !== null ? String(Math.round(grade)) : '';
+      statusEl.innerHTML = `
+        <div style="text-align:center">
+          <div style="color:#4ade80;font-weight:700;font-size:1rem;margin-bottom:.3rem">✓ ${esc(cardName)}${data.cardNumber ? ' #' + esc(data.cardNumber) : ''}</div>
+          <div style="font-size:.8rem;color:rgba(255,255,255,.75);margin-bottom:.5rem">${esc(data.setName||'')}${data.year?' · '+data.year:''}${gradeStr}${rawVal}</div>
+          ${data.subGrades ? `
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.3rem;margin-bottom:.5rem;font-size:.72rem;max-width:280px;margin-left:auto;margin-right:auto">
+            ${Object.entries(data.subGrades).map(([k,v]) =>
+              `<div style="background:rgba(255,255,255,.08);border-radius:6px;padding:.3rem .2rem">
+                <div style="color:rgba(255,255,255,.5);text-transform:capitalize;font-size:.65rem">${k}</div>
+                <div style="color:#fff;font-weight:700">${v}</div>
+              </div>`
+            ).join('')}
+          </div>` : ''}
+          ${data.gradeSummary ? `<div style="font-size:.75rem;color:rgba(255,255,255,.55);font-style:italic;margin-bottom:.35rem">"${esc(data.gradeSummary)}"</div>` : ''}
+          ${data.gradingRecommendation ? `<div style="font-size:.75rem;color:var(--gold)">📊 ${esc(data.gradingRecommendation)}</div>` : ''}
+        </div>`;
 
-    // Auto-set grade in the calculator if we got one
-    if (grade !== null) {
-      const roundedGrade = Math.round(grade * 2) / 2; // round to nearest 0.5
-      window._scanAutoGrade = roundedGrade;
+      const grade2 = data.predictedGrade ?? data.grade ?? null;
+      window._scanTargetGrade = grade2 !== null ? String(Math.round(grade2)) : '';
+      if (grade2 !== null) window._scanAutoGrade = Math.round(grade2 * 2) / 2;
     }
 
-    resultEl.textContent = 'Searching…';
+    window._scanTargetNumber = data.cardNumber || '';
+    window._scanTargetName   = cardName;
+    window._scanTargetGrader = 'PSA';
+    resultEl.textContent = 'Loading card…';
 
+    const delay = isGraded ? 3000 : 1500;
     setTimeout(() => {
       cancelScan();
       URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
-      // Use card name + number for precise search
-      const searchQ = cardName + (data.cardNumber ? ' ' + data.cardNumber : '') + (data.setName ? ' ' + data.setName.split(':')[0].trim() : '');
-      searchInput.value = searchQ.trim();
+      const searchQ = (cardName + (data.cardNumber ? ' ' + data.cardNumber : '') + (data.setName ? ' ' + data.setName.split(':')[0].trim() : '')).trim();
+      searchInput.value = searchQ;
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 2500);
+    }, delay);
 
   } catch(err) {
     clearInterval(phaseTimer);
     console.error('Scan error:', err);
     const isNetErr = err instanceof TypeError && err.message.includes('fetch');
-    if (isNetErr) {
-      statusEl.innerHTML = '<span style="color:#f87171">Network error — check your connection and try again.</span>';
-    } else {
-      statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
-    }
+    statusEl.innerHTML = isNetErr
+      ? '<span style="color:#f87171">Network error — check your connection and try again.</span>'
+      : `<span style="color:#f87171">${esc(err.message || 'Could not identify the card. Try a clearer photo.')}</span>`;
   }
 }
 

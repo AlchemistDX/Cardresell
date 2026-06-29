@@ -49,8 +49,10 @@ export default async function handler(req, res) {
     const header = Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="front"; filename="card.jpg"\r\nContent-Type: ${mime}\r\n\r\n`
     );
+    // module: "identify" (1 credit, card ID only) or "full" (2 credits, ID+grade+value)
+    const scanModule = (req.body.module === 'identify') ? 'identify' : 'full';
     const modulePart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\nfull`
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\n${scanModule}`
     );
     const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
     const body = Buffer.concat([header, imageBuffer, modulePart, footer]);
