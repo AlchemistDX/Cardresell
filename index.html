@@ -1197,10 +1197,15 @@ async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
     if (!cards.length) return null;
 
     // Try to find exact number match first
+    // pokemontcg.io gives "232" but TPL gives "232/091" — normalize by stripping the /set-size part
+    const normalizeNum = n => (n || '').replace(/\s/g,'').split('/')[0].replace(/^0+/, '') || n;
     let match = null;
     if (number) {
-      // number from pokemontcg.io is like "172/142" — TPL also stores as "172/142"
-      match = cards.find(c => (c.number || '').replace(/\s/g,'') === number.replace(/\s/g,''));
+      const normTarget = normalizeNum(number);
+      // Exact normalized match (e.g. "232" matches "232/091")
+      match = cards.find(c => normalizeNum(c.number) === normTarget);
+      // Full string fallback (e.g. both have "172/142")
+      if (!match) match = cards.find(c => (c.number || '').replace(/\s/g,'') === number.replace(/\s/g,''));
     }
     // Fallback: pick the rarest card with graded data
     if (!match) {
