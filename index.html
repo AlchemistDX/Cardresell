@@ -1933,6 +1933,48 @@ function attachDropHandlers(cardFactory) {
       loadCardUI(card);
     });
   });
+
+  // ── Scanner auto-select: pick the result whose card number matches the scan ──
+  if (window._scanTargetNumber) {
+    const targetNum = window._scanTargetNumber.toLowerCase().replace('/', '');
+    const targetName = (window._scanTargetName || '').toLowerCase();
+    const grader = window._scanTargetGrader || '';
+    window._scanTargetNumber = null; // consume so it only fires once
+    window._scanTargetName   = null;
+    window._scanTargetGrader = null;
+
+    // Find best matching item: exact number match preferred, then name match
+    let bestEl = null;
+    let bestScore = -1;
+    dropList.querySelectorAll('.drop-item').forEach(el => {
+      const idx = parseInt(el.dataset.idx);
+      const card = cardFactory(idx);
+      const num = (card.number || '').toLowerCase().replace('/', '');
+      const name = (card.name || '').toLowerCase();
+      let score = 0;
+      if (num === targetNum) score += 10;
+      if (num.startsWith(targetNum) || targetNum.startsWith(num)) score += 5;
+      if (name === targetName) score += 2;
+      if (score > bestScore) { bestScore = score; bestEl = el; }
+    });
+
+    if (bestEl && bestScore > 0) {
+      setTimeout(() => {
+        bestEl.click();
+        // If we know the grader, auto-switch to the right graded pill
+        if (grader) {
+          const graderMap = { 'PSA': 'psa', 'BGS': 'bgs', 'Beckett': 'bgs', 'CGC': 'cgc', 'ACE': 'ace', 'SGC': 'sgc', 'TAG': 'tag' };
+          const pillKey = graderMap[grader];
+          if (pillKey) {
+            setTimeout(() => {
+              const pill = document.querySelector(`.grade-pill[data-grader="${pillKey}"]`);
+              if (pill) pill.click();
+            }, 400);
+          }
+        }
+      }, 150);
+    }
+  }
 }
 
 // ── eBay comps link for sports ──
@@ -3352,11 +3394,17 @@ async function processScanImage(input) {
     statusEl.innerHTML = `<span style="color:#4ade80">✓ ${cardName}${cardNumber ? ' #' + cardNumber : ''}</span><br><span style="font-size:.8rem;opacity:.7">${releaseName}${graderLabel} · ${confidence} confidence</span>`;
     resultEl.textContent = 'Searching…';
 
+    // Store scan metadata so post-search auto-select can pick the exact card
+    window._scanTargetNumber = cardNumber;   // e.g. "TG09"
+    window._scanTargetName   = cardName;     // e.g. "Spiritomb"
+    window._scanTargetGrader = grader;       // e.g. "PSA" (set graded pill after load)
+
     setTimeout(() => {
       cancelScan();
       URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
-      searchInput.value = searchQuery.trim();
+      // Search just the card name — broader match, we'll filter by number below
+      searchInput.value = cardName.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
     }, 1200);
