@@ -1177,11 +1177,77 @@ async function fetchTPLCardById(id, gameSlug) {
     const json = await r.json();
     const c = json.data || json;
     if (!c) return null;
-    // Re-normalize with full graded data
     const img = selectedCard?.images?.small || '';
     return tplCardToNormalized(c, gameSlug || selectedCard?.tplGameSlug || 'pokemon', img);
   } catch(e) {
     console.warn('TPL fetchById error:', e);
+    return null;
+  }
+}
+
+// ── Fetch graded data from TPL by card name + number (for cards loaded from pokemontcg.io) ──
+async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
+  if (!window.tplApiKey || !name) return null;
+  try {
+    const url = `https://api.tcgpricelookup.com/v1/cards/search?q=${encodeURIComponent(name)}&game=${gameSlug || 'pokemon'}&limit=20`;
+    const r = await fetch(url, { headers: { 'X-API-Key': window.tplApiKey } });
+    if (!r.ok) return null;
+    const json = await r.json();
+    const cards = json.data || [];
+    if (!cards.length) return null;
+
+    // Try to find exact number match first
+    let match = null;
+    if (number) {
+      // number from pokemontcg.io is like "172/142" — TPL also stores as "172/142"
+      match = cards.find(c => (c.number || '').replace(/\s/g,'') === number.replace(/\s/g,''));
+    }
+    // Fallback: pick the rarest card with graded data
+    if (!match) {
+      const withGraded = cards.filter(c => {
+        const g = c.prices?.graded || {};
+        return Object.keys(g).some(grader => Object.keys(g[grader] || {}).length > 0);
+      });
+      if (withGraded.length) {
+        // Sort rarest first
+        const rarityScore = r => {
+          const t = (r || '').toLowerCase();
+          if (t.includes('special illustration')) return 0;
+          if (t.includes('ultra rare')) return 1;
+          if (t.includes('rare')) return 2;
+          return 3;
+        };
+        withGraded.sort((a,b) => rarityScore(a.rarity) - rarityScore(b.rarity));
+        match = withGraded[0];
+      }
+    }
+    if (!match) match = cards[0]; // last resort
+
+    // Store the tplId on selectedCard for future lookups
+    if (match && selectedCard) {
+      selectedCard.tplId = match.id;
+      selectedCard.tplGameSlug = gameSlug || 'pokemon';
+    }
+
+    // Extract graded variants
+    const graded = match?.prices?.graded || {};
+    const GRADERS = ['psa', 'bgs', 'cgc', 'ace', 'tag', 'sgc'];
+    const gradedVariants = [];
+    GRADERS.forEach(grader => {
+      const g = graded[grader] || {};
+      Object.keys(g).forEach(grade => {
+        const ebay = g[grade]?.ebay || {};
+        const mkt = ebay.avg_7d ?? ebay.avg_1d ?? ebay.avg_30d ?? g[grade]?.market ?? null;
+        if (mkt !== null) {
+          const key = `${grader}_${grade}`.replace(/\./, '_');
+          const label = `${grader.toUpperCase()} ${grade}`;
+          gradedVariants.push({ key, label, market: mkt, low: ebay.avg_30d ?? mkt, mid: mkt, high: ebay.avg_1d ?? mkt });
+        }
+      });
+    });
+    return gradedVariants;
+  } catch(e) {
+    console.warn('TPL graded by name error:', e);
     return null;
   }
 }
@@ -2229,42 +2295,53 @@ async function syncGradeToPrintSelect() {
       // Has graded data in API — use it
       printSelect.value = (match || fallback).value;
       if (banner) banner.style.display = 'none';
-    } else if (window.tplApiKey && selectedCard?.tplId) {
-      // No graded variant cached — try re-fetching the full card by ID to get graded data
+    } else if (window.tplApiKey && (selectedCard?.tplId || selectedCard?.name)) {
+      // No graded variant cached — fetch graded data from TPL
       if (banner) {
         banner.style.display = 'block';
         const note = document.getElementById('gradedCompsNote');
         if (note) note.textContent = 'Fetching graded prices…';
-        // Hide the upsell button while loading
-        const upsellBtn = banner.querySelector('a[href*="tcgpricelookup.com/pricing"]');
+        const upsellBtn = document.getElementById('gradedUpsellBtn');
         if (upsellBtn) upsellBtn.style.display = 'none';
       }
-      const fullCard = await fetchTPLCardById(selectedCard.tplId, selectedCard.tplGameSlug);
-      if (fullCard) {
-        // Merge the new graded priceVariants into selectedCard
-        const gradedVariants = fullCard.priceVariants.filter(v => /^(psa|bgs|cgc)_/.test(v.key));
-        if (gradedVariants.length) {
-          // Remove old graded variants and add fresh ones
-          selectedCard.priceVariants = [
-            ...selectedCard.priceVariants.filter(v => !/^(psa|bgs|cgc)_/.test(v.key)),
-            ...gradedVariants,
-          ];
-          // Rebuild printSelect options
-          rebuildPrintSelect(selectedCard.priceVariants);
-          // Try matching again
-          const opts2 = Array.from(printSelect.options);
-          const targetKey2 = `${grader}_${grade}`.replace(/\./g, '_');
-          const match2  = opts2.find(o => o.value === targetKey2);
-          const fallback2 = !match2 && opts2.find(o => o.value.startsWith(grader + '_'));
-          if (match2 || fallback2) {
-            printSelect.value = (match2 || fallback2).value;
-            if (banner) banner.style.display = 'none';
-            updatePriceFromPrinting();
-            return;
-          }
+
+      let gradedVariants = null;
+
+      if (selectedCard?.tplId) {
+        // Has TPL ID — fetch by ID for most accurate result
+        const fullCard = await fetchTPLCardById(selectedCard.tplId, selectedCard.tplGameSlug);
+        if (fullCard) {
+          gradedVariants = fullCard.priceVariants.filter(v => /^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key));
+        }
+      } else if (selectedCard?.name) {
+        // Loaded from pokemontcg.io — search TPL by name + card number
+        gradedVariants = await fetchTPLGradedByNameNumber(
+          selectedCard.name,
+          selectedCard.number,
+          selectedCard.game === 'pokemon' ? 'pokemon' : selectedCard.tplGameSlug || 'pokemon'
+        );
+      }
+
+      if (gradedVariants && gradedVariants.length) {
+        // Merge into selectedCard and rebuild dropdown
+        selectedCard.priceVariants = [
+          ...selectedCard.priceVariants.filter(v => !/^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key)),
+          ...gradedVariants,
+        ];
+        rebuildPrintSelect(selectedCard.priceVariants);
+        // Try matching again
+        const opts2 = Array.from(printSelect.options);
+        const targetKey2 = `${grader}_${grade}`.replace(/\./g, '_');
+        const match2    = opts2.find(o => o.value === targetKey2);
+        const fallback2 = !match2 && opts2.find(o => o.value.startsWith(grader + '_'));
+        if (match2 || fallback2) {
+          printSelect.value = (match2 || fallback2).value;
+          if (banner) banner.style.display = 'none';
+          updatePriceFromPrinting();
+          return;
         }
       }
-      // Still no data after re-fetch — show banner
+      // Still no data after fetch — show banner
       // No graded variant in API — show eBay comps banner
       const cardName = selectedCard?.name?.replace(/ \(JP.*?\)/,'').replace(/ \(EN.*?\)/,'') || '';
       const graderLabel = graderNames[grader] || grader.toUpperCase();
