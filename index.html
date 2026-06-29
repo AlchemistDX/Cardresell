@@ -768,6 +768,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <span class="pill" data-val="psa" onclick="setPill(this,'gradedPills');toggleGrade();calc()">PSA</span>
           <span class="pill" data-val="bgs" onclick="setPill(this,'gradedPills');toggleGrade();calc()">BGS/Beckett</span>
           <span class="pill" data-val="cgc" onclick="setPill(this,'gradedPills');toggleGrade();calc()">CGC</span>
+          <span class="pill" data-val="ace" onclick="setPill(this,'gradedPills');toggleGrade();calc()">ACE</span>
+          <span class="pill" data-val="tag" onclick="setPill(this,'gradedPills');toggleGrade();calc()">TAG</span>
+          <span class="pill" data-val="sgc" onclick="setPill(this,'gradedPills');toggleGrade();calc()">SGC</span>
         </div>
 
         <!-- Grade selector -->
@@ -1115,22 +1118,34 @@ function tplCardToNormalized(c, gameSlug, fallbackImage) {
   ];
   const priceVariants = [];
   COND_MAP.forEach(({ key, label }) => {
-    const mkt = raw[key]?.tcgplayer?.market ?? null;
+    const condData = raw[key] || {};
+    // Try tcgplayer.market first, then ebay avg, then direct market field
+    const mkt = condData?.tcgplayer?.market
+             ?? condData?.ebay?.avg_7d
+             ?? condData?.ebay?.avg_1d
+             ?? condData?.market
+             ?? null;
+    const low  = condData?.tcgplayer?.low   ?? condData?.ebay?.avg_30d ?? null;
+    const high = condData?.tcgplayer?.high  ?? condData?.ebay?.avg_1d  ?? null;
     if (mkt !== null) {
-      priceVariants.push({ key, label, market: mkt, low: null, mid: null, high: null });
+      priceVariants.push({ key, label, market: mkt, low, mid: mkt, high });
     }
   });
   // Graded prices
   const graded = c.prices?.graded || {};
-  const GRADERS = ['psa', 'bgs', 'cgc'];
+  const GRADERS = ['psa', 'bgs', 'cgc', 'ace', 'tag', 'sgc'];
   GRADERS.forEach(grader => {
     const g = graded[grader] || {};
     Object.keys(g).forEach(grade => {
-      const mkt = g[grade]?.market ?? null;
+      // API returns ebay.avg_1d / avg_7d / avg_30d — use 7d as market price
+      const ebay = g[grade]?.ebay || {};
+      const mkt = ebay.avg_7d ?? ebay.avg_1d ?? ebay.avg_30d ?? g[grade]?.market ?? null;
       if (mkt !== null) {
         const key = `${grader}_${grade}`.replace('.', '_');
         const label = `${grader.toUpperCase()} ${grade}`;
-        priceVariants.push({ key, label, market: mkt, low: null, mid: null, high: null });
+        const low  = ebay.avg_30d ?? mkt;
+        const high = ebay.avg_1d  ?? mkt;
+        priceVariants.push({ key, label, market: mkt, low, mid: mkt, high });
       }
     });
   });
@@ -1341,20 +1356,39 @@ async function searchPokemon(q) {
   const data = await r.json();
   let cards = data.data || [];
 
-  // Sort: exact match first, then prefix match, then contains, then by set date desc
+  // Sort: exact match first, then by rarity (rarest first), then by set date desc
   const ql = q.toLowerCase().trim();
+  const rarityScore = r => {
+    const t = (r || '').toLowerCase();
+    if (t.includes('special illustration')) return 0;
+    if (t.includes('hyper rare'))           return 1;
+    if (t.includes('illustration rare'))    return 2;
+    if (t.includes('secret rare'))          return 3;
+    if (t.includes('ultra rare'))           return 4;
+    if (t.includes('rainbow rare'))         return 5;
+    if (t.includes('full art'))             return 6;
+    if (t.includes('rare holo') || t.includes('holo rare')) return 7;
+    if (t.includes('rare') && !t.includes('ultra')) return 8;
+    if (t.includes('promo'))                return 9;
+    if (t.includes('uncommon'))             return 10;
+    if (t.includes('common'))              return 11;
+    return 7;
+  };
   cards = cards.slice().sort((a, b) => {
-    const scoreCard = c => {
+    const nameScore = c => {
       const nl = c.name.toLowerCase();
-      if (nl === ql) return 0;                        // exact match
-      if (nl.startsWith(ql + ' ') || nl === ql) return 1; // exact word start
-      if (nl.startsWith(ql)) return 2;               // prefix match
-      if (nl.split(' ').some(w => w.startsWith(ql))) return 3; // any word starts with query
-      return 4;                                       // partial/fuzzy
+      if (nl === ql) return 0;
+      if (nl.startsWith(ql + ' ') || nl === ql) return 1;
+      if (nl.startsWith(ql)) return 2;
+      if (nl.split(' ').some(w => w.startsWith(ql))) return 3;
+      return 4;
     };
-    const sa = scoreCard(a), sb = scoreCard(b);
-    if (sa !== sb) return sa - sb;
-    // Within same tier: sort by set release date descending (newest first)
+    const na = nameScore(a), nb = nameScore(b);
+    if (na !== nb) return na - nb;
+    // Within same name-match tier: rarest first
+    const ra = rarityScore(a.rarity), rb = rarityScore(b.rarity);
+    if (ra !== rb) return ra - rb;
+    // Then newest set first
     const da = a.set?.releaseDate || '0000-00-00';
     const db = b.set?.releaseDate || '0000-00-00';
     return db.localeCompare(da);
@@ -2169,7 +2203,7 @@ async function syncGradeToPrintSelect() {
   const grader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const grade  = document.getElementById('gradeSelect').value;
   const banner = document.getElementById('gradedCompsBanner');
-  const graderNames = { psa: 'PSA', bgs: 'BGS/Beckett', cgc: 'CGC' };
+  const graderNames = { psa: 'PSA', bgs: 'BGS/Beckett', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
 
   if (grader === 'no') {
     // Raw / Ungraded — switch printSelect back to first non-graded variant
