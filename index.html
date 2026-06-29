@@ -11,7 +11,7 @@
   <style>
 /* ─── SETTINGS PANEL ─── */
 .settings-panel{overflow:hidden;max-height:0;transition:max-height .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;opacity:0;pointer-events:none}
-.settings-panel.open{max-height:280px;opacity:1;pointer-events:auto}
+.settings-panel.open{max-height:480px;opacity:1;pointer-events:auto}
 .settings-inner{background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--radius-lg);padding:1.1rem 1.25rem;margin-bottom:1.25rem;box-shadow:var(--shadow-md)}
 .settings-title{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.875rem}
 .settings-row{display:flex;gap:.5rem;align-items:stretch;margin-bottom:.75rem}
@@ -311,6 +311,11 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .other-tcg-note{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:.75rem;font-size:.83rem;color:var(--text-muted)}
 .other-tcg-note strong{color:var(--text)}
 
+/* ─── GOOGLE AUTH ─── */
+.sign-out-btn{font-size:.7rem;font-weight:600;color:var(--text-muted);padding:.3rem .6rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);transition:all var(--ease);cursor:pointer}
+.sign-out-btn:hover{border-color:var(--red);color:var(--red)}
+.auth-note{font-size:.72rem;color:var(--text-muted);text-align:center;padding:.5rem 0}
+
 /* footer */
 footer{margin-top:3rem;padding-top:1.25rem;border-top:1px solid var(--divider);text-align:center;font-size:.68rem;color:var(--text-faint);line-height:1.8}
 footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset:3px}
@@ -401,6 +406,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .fl-sub-btn{display:flex;align-items:center;gap:.4rem;padding:.4rem .85rem;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:var(--radius-lg);font-size:.78rem;font-weight:600;transition:all var(--ease)}
 .fl-sub-btn:hover{border-color:var(--gold);color:var(--gold)}
   </style>
+  <!-- Google Sign-In -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -418,6 +425,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <span class="logo-text">Card<span>Sell</span></span>
   </div>
   <div class="hdr-right">
+    <div id="googleUserBtn" style="display:none;align-items:center;gap:.5rem;cursor:pointer" onclick="signOut()">
+      <img id="googleAvatar" src="" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold-border)" />
+      <span id="googleName" style="font-size:.75rem;font-weight:600;color:var(--text-muted);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    </div>
+    <div id="googleSignInBtn" style="display:flex"></div>
     <span class="badge">2026 Fees</span>
     <span class="badge-fulldb" id="badgeFulldb">🔓 Full DB</span>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
@@ -440,6 +452,23 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <span id="statusText">No key — using free sources. Get a free key at tcgpricelookup.com</span>
     </div>
     <a href="https://tcgpricelookup.com" target="_blank" rel="noopener" class="settings-link">Get free key →</a>
+  </div>
+  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
+    <div class="settings-title">🔑 Google Sign-In Setup</div>
+    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:.5rem">
+      To enable Google Sign-In and save your flip data per account:
+      <ol style="margin:.4rem 0 0 1.1rem;padding:0;">
+        <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener" style="color:var(--gold)">console.cloud.google.com</a></li>
+        <li>Create a project → APIs &amp; Services → OAuth 2.0 Client IDs</li>
+        <li>Add your site URL as an authorized JavaScript origin</li>
+        <li>Copy your Client ID and paste it below</li>
+      </ol>
+    </div>
+    <div class="settings-row">
+      <input type="text" id="googleClientIdInput" class="settings-input" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false" />
+      <button class="settings-save-btn" onclick="saveGoogleClientId()">Save</button>
+    </div>
+    <div id="googleIdStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Paste your Google OAuth Client ID above, then reload the page.</div>
   </div>
 </div>
 
@@ -698,6 +727,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <input type="number" id="itemCost" class="mini-input" style="width:100%" placeholder="0.00" min="0" step="0.01" oninput="calc()" />
         </div>
 
+        <button class="calc-btn" onclick="calc()">⚡ Calculate Platform Payouts</button>
+
         <div class="sep"></div>
 
         <!-- Advanced -->
@@ -916,6 +947,11 @@ window.tplApiKey = '';
     btn.addEventListener('click', () => {
       const open = panel.classList.toggle('open');
       btn.classList.toggle('active', open);
+      // Pre-fill Google Client ID input with saved value
+      if (open) {
+        const gcInput = document.getElementById('googleClientIdInput');
+        if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
+      }
     });
   }
 })();
@@ -2131,23 +2167,32 @@ function showIntro() {
     resultsArea.innerHTML = `<div class="intro-state">
       <div class="intro-icon">⚾</div>
       <div class="intro-h">Search eBay comps, then enter your price</div>
-      <p class="intro-p">Click "Find eBay Sold Comps" to research your card's market value, then enter a price in the Override field to see platform payouts.</p>
+      <p class="intro-p">Click "Find eBay Sold Comps" to research your card's market value, then enter a price in the <strong>Override field above</strong> to see platform payouts.</p>
     </div>`;
+    // Highlight the override field to guide the user
+    priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
     return;
   }
   if (activeGame === 'pokemonjp' && !priceOverride.value) {
     resultsArea.innerHTML = `<div class="intro-state">
       <div class="intro-icon">🇯🇵</div>
       <div class="intro-h">Search a JP card, click JP COMPS</div>
-      <p class="intro-p">Type a card name, then click the gold JP COMPS row to open eBay Japanese sold listings. Use the Override field to enter the JP price you find.</p>
+      <p class="intro-p">Type a card name, then click the gold JP COMPS row to open eBay Japanese sold listings. Use the <strong>Override field</strong> to enter the JP price you find.</p>
     </div>`;
+    priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
     return;
   }
   resultsArea.innerHTML = `<div class="intro-state">
     <div class="intro-icon">💰</div>
-    <div class="intro-h">Enter a sale price</div>
-    <p class="intro-p">Use the price override field or adjust condition to set a value, then platform payouts will appear here.</p>
+    <div class="intro-h">Enter a sale price to calculate</div>
+    <p class="intro-p">Type a price in the <strong>Override field above</strong>, or search for a card to get its market price — then hit <strong>⚡ Calculate</strong> to see platform payouts.</p>
   </div>`;
+  // Pulse-highlight the override field
+  priceOverride.focus();
+  priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
+  setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
 }
 
 /* ─── THEME TOGGLE ─── */
@@ -2175,19 +2220,9 @@ function showIntro() {
    MY FLIPS — Flip Log + Portfolio + P&L
    ═══════════════════════════════════════ */
 
-// ── Storage helpers ──
-function loadFlipsData() {
-  try { return JSON.parse(localStorage.getItem('cardsell_flips') || '[]'); } catch(e) { return []; }
-}
-function saveFlipsData(data) {
-  try { localStorage.setItem('cardsell_flips', JSON.stringify(data)); } catch(e) {}
-}
-function loadPortData() {
-  try { return JSON.parse(localStorage.getItem('cardsell_portfolio') || '[]'); } catch(e) { return []; }
-}
-function savePortData(data) {
-  try { localStorage.setItem('cardsell_portfolio', JSON.stringify(data)); } catch(e) {}
-}
+// ── Storage helpers (user-scoped; fall back to global key when not signed in) ──
+// NOTE: definitive versions are declared below in the Google Sign-In section.
+// Temporary stubs here are replaced at runtime by the user-scoped versions.
 
 // ── View switching ──
 function switchView(view) {
@@ -2229,7 +2264,8 @@ function openAddFlip(mode) {
 }
 
 function closeFlipModal(e) {
-  if (e && e.target !== document.getElementById('flipModal')) return;
+  // Only close when clicking the dark backdrop itself, not children
+  if (e && !e.target.classList.contains('modal-overlay')) return;
   document.getElementById('flipModal').classList.remove('open');
   clearModal();
 }
@@ -2371,6 +2407,109 @@ function renderFlipsView() {
     '</tbody></table></div>';
   }
 }
+
+
+/* ═══════════════════════════════════════
+   GOOGLE SIGN-IN
+   ═══════════════════════════════════════ */
+
+let googleUser = null; // { name, email, avatar, sub }
+
+// ── Google OAuth Client ID — reads from localStorage if user pasted it in Settings ──
+const _HARDCODED_CLIENT_ID = '458953497801-placeholder.apps.googleusercontent.com';
+const _SAVED_CLIENT_ID = (() => { try { return localStorage.getItem('cardsell_google_client_id') || ''; } catch(e) { return ''; } })();
+const GOOGLE_CLIENT_ID = (_SAVED_CLIENT_ID && !_SAVED_CLIENT_ID.includes('placeholder')) ? _SAVED_CLIENT_ID : _HARDCODED_CLIENT_ID;
+const GOOGLE_AUTH_READY = !GOOGLE_CLIENT_ID.includes('placeholder') && GOOGLE_CLIENT_ID.includes('.apps.googleusercontent.com');
+
+function saveGoogleClientId() {
+  const input = document.getElementById('googleClientIdInput');
+  const status = document.getElementById('googleIdStatus');
+  const val = (input?.value || '').trim();
+  if (!val || !val.includes('.apps.googleusercontent.com')) {
+    if (status) status.textContent = '⚠️ That doesn\'t look like a valid Client ID. It should end in .apps.googleusercontent.com';
+    return;
+  }
+  try { localStorage.setItem('cardsell_google_client_id', val); } catch(e) {}
+  if (status) status.textContent = '✅ Saved! Reload the page to activate Google Sign-In.';
+}
+
+function initGoogleSignIn() {
+  // If no real client ID is configured, show a setup prompt instead of the GSI button
+  if (!GOOGLE_AUTH_READY) {
+    const btn = document.getElementById('googleSignInBtn');
+    if (btn) {
+      btn.innerHTML = `<button style="font-size:.72rem;padding:.3rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:99px;color:var(--text-muted);cursor:pointer" onclick="alert('Google Sign-In needs setup. See the setup guide in the app.')">Sign In (setup needed)</button>`;
+    }
+    return;
+  }
+  if (!window.google) { setTimeout(initGoogleSignIn, 500); return; }
+  try {
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleSignIn,
+      auto_select: false,
+    });
+    google.accounts.id.renderButton(
+      document.getElementById('googleSignInBtn'),
+      { theme: 'outline', size: 'small', text: 'signin', shape: 'pill', logo_alignment: 'left' }
+    );
+  } catch(err) {
+    console.warn('Google Sign-In init failed:', err);
+  }
+}
+
+function handleGoogleSignIn(response) {
+  // Decode JWT payload
+  const payload = JSON.parse(atob(response.credential.split('.')[1]));
+  googleUser = { name: payload.name, email: payload.email, avatar: payload.picture, sub: payload.sub };
+  
+  // Update UI
+  document.getElementById('googleSignInBtn').style.display = 'none';
+  const userBtn = document.getElementById('googleUserBtn');
+  userBtn.style.display = 'flex';
+  document.getElementById('googleAvatar').src = googleUser.avatar;
+  document.getElementById('googleName').textContent = googleUser.name.split(' ')[0];
+  
+  // Load this user's flip/portfolio data
+  loadUserData();
+}
+
+function signOut() {
+  if (!confirm('Sign out of ' + (googleUser?.name || 'your account') + '?')) return;
+  googleUser = null;
+  document.getElementById('googleSignInBtn').style.display = 'flex';
+  document.getElementById('googleUserBtn').style.display = 'none';
+  document.getElementById('googleAvatar').src = '';
+  document.getElementById('googleName').textContent = '';
+  // Re-render flips view with no-user state
+  if (document.getElementById('flipsView').classList.contains('active')) renderFlipsView();
+}
+
+function getUserKey(suffix) {
+  return googleUser ? 'cardsell_' + googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
+}
+
+function loadUserData() {
+  // Reload flips view if it's active so it shows the signed-in user's data
+  if (document.getElementById('flipsView')?.classList.contains('active')) renderFlipsView();
+}
+
+// Override storage helpers to be user-scoped when signed in
+function loadFlipsData() {
+  try { return JSON.parse(localStorage.getItem(getUserKey('flips')) || '[]'); } catch(e) { return []; }
+}
+function saveFlipsData(data) {
+  try { localStorage.setItem(getUserKey('flips'), JSON.stringify(data)); } catch(e) {}
+}
+function loadPortData() {
+  try { return JSON.parse(localStorage.getItem(getUserKey('portfolio')) || '[]'); } catch(e) { return []; }
+}
+function savePortData(data) {
+  try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(data)); } catch(e) {}
+}
+
+// Init on load
+window.addEventListener('load', initGoogleSignIn);
 
 // ── Keyboard: Escape closes modal ──
 document.addEventListener('keydown', e => {
