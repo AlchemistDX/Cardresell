@@ -1619,86 +1619,78 @@ async function searchPokemon(q) {
   });
 }
 
-/* ── Pokémon JP (TCGdex + eBay fallback) ── */
-async function searchPokemonJP(q) {
-  // Strategy 0: Try TCGPriceLookup (pokemon-jp) if key is set
-  const tplData = await searchWithTPL(q, 'pokemon-jp');
-
-  // Strategy 1: Try TCGdex for JP cards (has some JP sets)
-  // Strategy 2: For any card, always show eBay JP comps as the primary resource
-  // We use PokemonTCG.io with a JP-friendly search (returns EN results) + eBay deep-link
-
-  // First, try PokemonTCG.io for EN art reference / image (with 5s timeout)
-  let enCards = [];
+/* ── TCGdex JP image fetch helper ── */
+async function fetchTCGdexJP(q) {
+  // TCGdex has 172 JP sets with card images — search by Japanese name or romanized name
   try {
-    const enUrl = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=20&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-    const enCtrl = new AbortController();
-    const enTimeout = setTimeout(() => enCtrl.abort(), 5000);
-    const enR = await fetch(enUrl, { signal: enCtrl.signal });
-    clearTimeout(enTimeout);
-    const enData = await enR.json();
-    enCards = (enData.data || []).slice(0, 5); // just for images
-  } catch(e) { /* silently ignore timeout or network errors */ }
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch(`https://api.tcgdex.net/v2/ja/cards?name=${encodeURIComponent(q)}&page=1`, { signal: ctrl.signal });
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data) ? data.slice(0, 15) : [];
+  } catch(e) { return []; }
+}
 
-  // Build JP search results — always show an eBay JP search card first
+/* ── Pokémon JP (TPL JP 34k cards + TCGdex images + eBay fallback) ── */
+async function searchPokemonJP(q) {
   window._searchCards = {};
   const items = [];
 
-  // Always add an eBay JP comps card at top
-  const ebayIdx = 0;
-  window._searchCards[ebayIdx] = {
-    _jpCard: true,
-    name: q,
-    jpQuery: q,
-    game: 'pokemonjp',
-  };
-  items.push(`<div class="drop-item" data-idx="${ebayIdx}" role="option" style="border-left:3px solid var(--gold)">
-    <div class="drop-thumb-ph" style="font-size:1.3rem">JP</div>
+  // Run TPL JP and TCGdex in parallel for speed
+  const [tplData, tcgdexCards] = await Promise.all([
+    searchWithTPL(q, 'pokemon-jp').catch(() => null),
+    fetchTCGdexJP(q).catch(() => []),
+  ]);
+
+  // Slot 0: eBay JP comps quick-link (always shown at top)
+  window._searchCards[0] = { _jpCard: true, name: q, jpQuery: q, game: 'pokemonjp' };
+  items.push(`<div class="drop-item" data-idx="0" role="option" style="border-left:3px solid var(--gold)">
+    <div class="drop-thumb-ph" style="font-size:1rem;font-weight:700;color:var(--gold)">JP</div>
     <div class="drop-info">
       <div class="drop-name">${esc(q)} <span style="font-size:.75rem;color:var(--gold);font-weight:700">ジャパニーズ</span></div>
-      <div class="drop-meta">Click to view eBay JP sold comps + PSA grade prices</div>
+      <div class="drop-meta">eBay JP sold comps + PSA graded prices</div>
     </div>
-    <span class="drop-price" style="background:var(--gold);color:#fff;font-size:.7rem;padding:.2rem .5rem;border-radius:.4rem">JP COMPS</span>
+    <span class="drop-price" style="background:var(--gold);color:#000;font-size:.7rem;padding:.2rem .5rem;border-radius:.4rem;font-weight:700">COMPS</span>
   </div>`);
 
-  // If TPL returned real JP data, show those cards (real JP database)
+  // TPL JP results: 34,327 JP cards with real price data + CDN images
   if (tplData && tplData.length) {
-    let offset = 1;
+    // Build a TCGdex image lookup by number for enrichment
+    const dexImgMap = {};
+    tcgdexCards.forEach(c => {
+      if (c.localId) dexImgMap[c.localId.toLowerCase()] = c.image ? c.image + '/low.webp' : '';
+    });
+
     tplData.forEach((c, i) => {
-      const idx = offset + i;
+      const idx = i + 1;
       window._searchCards[idx] = { _tpl: c, game: 'pokemonjp' };
       const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+      // Use TPL CDN image first, enrich with TCGdex if available
+      const cardNum = (c.number || '').split('/')[0].toLowerCase();
+      const imgSrc = c.image_url || dexImgMap[cardNum] || '';
       items.push(`<div class="drop-item" data-idx="${idx}" role="option">
-        <div class="drop-thumb-ph">🃏</div>
+        ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}" onerror="this.style.display='none'"/>` : `<div class="drop-thumb-ph" style="font-size:.7rem;color:var(--gold);font-weight:700">JP</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL JP</span></div>
+          <div class="drop-meta">${esc(c.set_name || '')}${c.number ? ' · #' + esc(c.number) : ''}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.65rem;color:var(--gold);font-weight:700">JP</span></div>
         </div>
-        ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
+        ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">—</span>`}
       </div>`);
     });
-  } else {
-    // Add EN cards as reference (art/image only, note they are English)
-    let offset = 1;
-    enCards.forEach((c, i) => {
-      const idx = offset + i;
-      window._searchCards[idx] = { _raw: c, game: 'pokemonjp', _isEnRef: true };
-      const prices = c.tcgplayer?.prices || {};
-      let bestPrice = null;
-      for (const v of Object.keys(prices)) {
-        const p = prices[v]?.market || prices[v]?.mid;
-        if (p && (!bestPrice || p > bestPrice)) bestPrice = p;
-      }
-      const img = c.images?.small;
-      const setName = c.set?.name || '';
-      const num = c.number ? `#${c.number}` : '';
+  } else if (tcgdexCards.length) {
+    // TCGdex fallback: JP card data with images (no price data, but shows the card)
+    tcgdexCards.forEach((c, i) => {
+      const idx = i + 1;
+      window._searchCards[idx] = { _tcgdex: c, game: 'pokemonjp' };
+      const imgSrc = c.image ? c.image + '/low.webp' : '';
       items.push(`<div class="drop-item" data-idx="${idx}" role="option">
-        ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🏃</div>`}
+        ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}" onerror="this.style.display='none'"/>` : `<div class="drop-thumb-ph" style="font-size:.7rem;color:var(--gold)">JP</div>`}
         <div class="drop-info">
-          <div class="drop-name">${esc(c.name)} <span style="font-size:.7rem;color:var(--text-muted)">[EN ref]</span></div>
-          <div class="drop-meta">${esc(setName)}${num ? ' · ' + num : ''} · <em>English version — use JP COMPS for JP pricing</em></div>
+          <div class="drop-name">${esc(c.name)}</div>
+          <div class="drop-meta">${esc(c.set?.name || '')}${c.localId ? ' · #' + esc(c.localId) : ''} <span style="font-size:.65rem;color:var(--gold);font-weight:700">TCGdex JP</span></div>
         </div>
-        ${bestPrice ? `<span class="drop-price">$${bestPrice.toFixed(2)} EN</span>` : `<span class="drop-no-price">EN only</span>`}
+        <span class="drop-no-price">—</span>
       </div>`);
     });
   }
@@ -1737,32 +1729,26 @@ async function searchPokemonJP(q) {
         _jpPCUrl: pcUrl,
       };
     } else if (entry._tpl) {
-      // Real JP card from TPL
-      return tplCardToNormalized(entry._tpl, 'pokemonjp', '');
-    } else {
-      // EN reference card
-      const c = entry._raw;
-      const prices = c.tcgplayer?.prices || {};
-      const priceVariants = Object.keys(prices).map(key => ({
-        key,
-        label: formatVariantName(key) + ' (EN)',
-        market: prices[key]?.market ?? null,
-        low:    prices[key]?.low ?? null,
-        mid:    prices[key]?.mid ?? null,
-        high:   prices[key]?.high ?? null,
-      }));
-      if (!priceVariants.length) priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
+      // Real JP card from TPL — use image_url directly
+      return tplCardToNormalized(entry._tpl, 'pokemonjp', entry._tpl.image_url || '');
+    } else if (entry._tcgdex) {
+      // TCGdex JP card — has image but no price data
+      const c = entry._tcgdex;
+      const imgSrc = c.image ? c.image + '/high.webp' : '';
       return {
-        name: c.name + ' (JP — use Override for JP price)',
+        name: c.name,
         game: 'pokemonjp',
-        images: { small: c.images?.small || '', large: c.images?.large || '' },
-        setName: (c.set?.name || '') + ' [English ref]',
-        number: c.number || '',
+        images: { small: imgSrc, large: imgSrc },
+        setName: c.set?.name || '',
+        number: c.localId || '',
         rarity: c.rarity || '',
-        priceVariants,
-        source: 'TCGPlayer (EN)',
-        updatedAt: c.tcgplayer?.updatedAt || '',
+        priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
+        source: 'TCGdex JP',
+        updatedAt: 'Use eBay JP COMPS for price',
       };
+    } else {
+      // Fallback
+      return { name: q, game: 'pokemonjp', images: { small: '', large: '' }, setName: '', number: '', rarity: '', priceVariants: [{ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null }], source: 'Manual', updatedAt: '' };
     }
   });
 }
@@ -2068,54 +2054,86 @@ let _sportsSearchTimeout = null;
 async function doSportsSearchLive(q) {
   const sdl = document.getElementById('sportsDropList');
   if (!sdl) return;
-  sdl.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Searching eBay sold&hellip;</div>';
+  sdl.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Fetching sold comps&hellip;</div>';
   sdl.classList.add('open');
 
   const sport  = document.getElementById('sp_sport')?.value || 'Baseball';
   const year   = document.getElementById('sp_year')?.value?.trim() || '';
   const brand  = document.getElementById('sp_brand')?.value?.trim() || '';
   const grade  = document.getElementById('sp_grade')?.value || 'Raw/Ungraded';
-  const gradeLabel = grade !== 'Raw/Ungraded' ? grade : '';
-  const queryParts = [q, year, brand, gradeLabel, sport + ' card'].filter(Boolean);
-  const ebayQuery  = queryParts.join(' ');
-  const ebayUrl    = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(ebayQuery)}&_sacat=212&LH_Sold=1&LH_Complete=1`;
+
+  // Call /api/sports — returns live eBay sold data if EBAY_APP_ID is set, else links
+  let apiData = null;
+  try {
+    const params = new URLSearchParams({ q, sport, year, brand, grade });
+    const r = await fetch('/api/sports?' + params.toString());
+    if (r.ok) apiData = await r.json();
+  } catch(e) { /* fall through to link mode */ }
 
   let html = '';
+  const ebayBaseUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([q,year,brand,grade!=='Raw/Ungraded'?grade:'',sport+' card'].filter(Boolean).join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`;
 
-  // Direct eBay search row
-  html += `<div class="drop-item" data-sports-idx="ebay-direct" style="border-left:3px solid var(--gold);cursor:pointer">
-    <div class="drop-thumb-ph" style="font-size:1.1rem">🛒</div>
-    <div class="drop-info">
-      <div class="drop-name">${esc(q)} <span style="font-size:.72rem;color:var(--gold);font-weight:700">SEARCH EBAY SOLD</span></div>
-      <div class="drop-meta">Open eBay sold listings for: ${esc(queryParts.slice(0,3).join(' '))}</div>
-    </div>
-    <span style="background:var(--gold);color:#fff;font-size:.68rem;font-weight:700;padding:.2rem .5rem;border-radius:.4rem;white-space:nowrap">Sold Comps</span>
-  </div>`;
-
-  // Grade-specific eBay searches
-  const gradeOpts = ['Raw/Ungraded','PSA 10','PSA 9','PSA 8','BGS 9.5','CGC 9.5'];
-  gradeOpts.forEach((g, i) => {
-    const gq = g !== 'Raw/Ungraded' ? g : '';
-    const gParts = [q, year, brand, gq, sport + ' card'].filter(Boolean);
-    const gUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(gParts.join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`;
-    const glabel = g === 'Raw/Ungraded' ? 'Raw / Ungraded' : g;
-    html += `<div class="drop-item" data-sports-idx="ebay-grade-${i}" data-ebay-url="${esc(gUrl)}" data-grade-val="${esc(g)}" style="cursor:pointer">
-      <div class="drop-thumb-ph" style="font-size:.95rem">🏷️</div>
-      <div class="drop-info">
-        <div class="drop-name">${esc(q)} — <span style="font-weight:600">${esc(glabel)}</span></div>
-        <div class="drop-meta">eBay sold comps for this grade</div>
+  // ── LIVE DATA MODE: show inline stats + recent sales ──
+  if (apiData?.mode === 'data' && apiData.stats) {
+    const s = apiData.stats;
+    html += `<div style="padding:.75rem 1rem;background:var(--surface-2);border-bottom:1px solid var(--border)">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;color:var(--text-faint);margin-bottom:.5rem">EBAY SOLD COMPS — LAST ${s.count} SALES</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;text-align:center">
+        <div><div style="font-size:1.05rem;font-weight:700;color:var(--gold)">$${s.avg.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">AVG</div></div>
+        <div><div style="font-size:1.05rem;font-weight:700;color:#4ade80">$${s.low.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">LOW</div></div>
+        <div><div style="font-size:1.05rem;font-weight:700;color:#f87171">$${s.high.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">HIGH</div></div>
+        <div><div style="font-size:1.05rem;font-weight:700;color:var(--text)">$${s.median.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">MEDIAN</div></div>
       </div>
-      <span style="font-size:.68rem;color:var(--text-muted)">eBay →</span>
     </div>`;
-  });
+    // Use avg as the card's market price
+    apiData.sales.slice(0,5).forEach((sale, i) => {
+      const d = sale.date ? new Date(sale.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+      html += `<div class="drop-item" data-sports-idx="sale-${i}" data-sale-price="${sale.price}" data-ebay-url="${esc(sale.url)}" style="cursor:pointer">
+        ${sale.img ? `<img class="drop-thumb" src="${esc(sale.img)}" loading="eager" style="object-fit:contain"/>` : `<div class="drop-thumb-ph" style="font-size:.9rem">🏆</div>`}
+        <div class="drop-info">
+          <div class="drop-name" style="font-size:.82rem;line-height:1.3">${esc(sale.title.length>55?sale.title.slice(0,55)+'…':sale.title)}</div>
+          <div class="drop-meta">${esc(sale.condition)}${d?' · '+d:''}</div>
+        </div>
+        <span class="drop-price" style="color:#4ade80">$${sale.price.toFixed(2)}</span>
+      </div>`;
+    });
+    // "Load into calculator" row
+    html += `<div class="drop-item" data-sports-idx="use-avg" data-avg-price="${s.avg}" style="border-top:1px solid var(--border);cursor:pointer;border-left:3px solid var(--gold)">
+      <div class="drop-thumb-ph" style="font-size:1rem">✓</div>
+      <div class="drop-info">
+        <div class="drop-name" style="color:var(--gold);font-weight:700">Use avg $${s.avg.toFixed(2)} in calculator</div>
+        <div class="drop-meta">Sets market value based on ${s.count} recent eBay sales</div>
+      </div>
+    </div>`;
+  } else {
+    // ── LINKS MODE: no eBay app ID yet, show grade-specific search links ──
+    const links = apiData?.results || [
+      { label: 'Raw / Ungraded', ebayUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([q,year,brand,sport+' card'].filter(Boolean).join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1` },
+      ...['PSA 10','PSA 9','PSA 8','BGS 9.5','CGC 9.5'].map(g => ({
+        label: g,
+        ebayUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([q,year,brand,g,sport+' card'].filter(Boolean).join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`
+      }))
+    ];
+    html += `<div style="padding:.5rem 1rem .25rem;font-size:.7rem;color:var(--text-faint);border-bottom:1px solid var(--border)">EBAY SOLD COMPS BY GRADE</div>`;
+    links.forEach((link, i) => {
+      html += `<div class="drop-item" data-sports-idx="link-${i}" data-ebay-url="${esc(link.ebayUrl)}" style="cursor:pointer">
+        <div class="drop-thumb-ph" style="font-size:.9rem">🏷️</div>
+        <div class="drop-info">
+          <div class="drop-name">${esc(q)} <span style="font-weight:700;color:var(--gold)">${esc(link.label)}</span></div>
+          <div class="drop-meta">View eBay sold listings</div>
+        </div>
+        <span style="font-size:.68rem;color:var(--text-muted)">eBay →</span>
+      </div>`;
+    });
+  }
 
-  // PriceCharting search link
-  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(q + ' ' + sport)}&type=prices`;
+  // Always add a PriceCharting row at bottom
+  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(q+' '+sport)}&type=prices`;
   html += `<div class="drop-item" data-sports-idx="pricecharting" data-pc-url="${esc(pcUrl)}" style="cursor:pointer">
-    <div class="drop-thumb-ph" style="font-size:.95rem">📊</div>
+    <div class="drop-thumb-ph" style="font-size:.9rem">📊</div>
     <div class="drop-info">
       <div class="drop-name">${esc(q)} on PriceCharting</div>
-      <div class="drop-meta">Cross-reference prices (especially graded)</div>
+      <div class="drop-meta">Cross-reference graded prices</div>
     </div>
     <span style="font-size:.68rem;color:var(--text-muted)">PC →</span>
   </div>`;
@@ -2127,29 +2145,24 @@ async function doSportsSearchLive(q) {
   sdl.querySelectorAll('.drop-item').forEach(el => {
     el.addEventListener('click', () => {
       const idx = el.dataset.sportsIdx;
-      if (idx === 'ebay-direct') {
-        window.open(buildEbayUrl(ebayUrl), '_blank');
-        const spPlayer = document.getElementById('sp_player');
-        if (spPlayer && !spPlayer.value) spPlayer.value = q;
-        loadSportsCardFromSearch(q);
-      } else if (idx === 'pricecharting') {
+      if (idx === 'pricecharting') {
         window.open(el.dataset.pcUrl, '_blank');
-        const spPlayer = document.getElementById('sp_player');
-        if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
+      } else if (idx === 'use-avg') {
+        // Set the override price to the avg sold price
+        const avg = parseFloat(el.dataset.avgPrice);
+        const priceOverride = document.getElementById('priceOverride');
+        if (priceOverride && avg) {
+          priceOverride.value = avg.toFixed(2);
+          priceOverride.dispatchEvent(new Event('input'));
+        }
+        loadSportsCardFromSearch(q, avg);
+      } else if (idx && idx.startsWith('sale-')) {
+        window.open(buildEbayUrl(el.dataset.ebayUrl), '_blank');
+        const salePrice = parseFloat(el.dataset.salePrice);
+        loadSportsCardFromSearch(q, salePrice);
       } else if (el.dataset.ebayUrl) {
         window.open(buildEbayUrl(el.dataset.ebayUrl), '_blank');
-        const spPlayer = document.getElementById('sp_player');
-        if (spPlayer && !spPlayer.value) spPlayer.value = q;
-        // Set grade dropdown
-        const gradeVal = el.dataset.gradeVal;
-        if (gradeVal) {
-          const spGrade = document.getElementById('sp_grade');
-          if (spGrade) {
-            const opt = Array.from(spGrade.options).find(o => o.value === gradeVal);
-            if (opt) spGrade.value = opt.value;
-          }
-        }
         loadSportsCardFromSearch(q);
       }
       sdl.classList.remove('open');
@@ -2171,7 +2184,7 @@ function doSportsSearch() {
   doSportsSearchLive(q);
 }
 
-function loadSportsCardFromSearch(playerName) {
+function loadSportsCardFromSearch(playerName, avgPrice = null) {
   const year    = document.getElementById('sp_year')?.value?.trim() || '';
   const brand   = document.getElementById('sp_brand')?.value?.trim() || '';
   const cardnum = document.getElementById('sp_cardnum')?.value?.trim() || '';
@@ -2184,9 +2197,9 @@ function loadSportsCardFromSearch(playerName) {
     setName: [year, brand].filter(Boolean).join(' '),
     number: cardnum,
     rarity: sport,
-    priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
-    source: 'Manual',
-    updatedAt: 'Enter via override',
+    priceVariants: [{ key: 'ebay_sold', label: avgPrice ? `eBay Avg Sold $${avgPrice.toFixed(2)}` : 'Manual / Override', market: avgPrice, low: null, mid: avgPrice, high: null }],
+    source: avgPrice ? 'eBay Sold Comps' : 'Manual',
+    updatedAt: avgPrice ? 'Recent eBay sales' : 'Enter via override',
   };
   selectedCard = sportCard;
   loadCardUI(sportCard);
