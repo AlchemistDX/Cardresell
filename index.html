@@ -303,10 +303,17 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .plat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.875rem}
 @media(max-width:600px){.plat-grid{grid-template-columns:1fr}}
 
-.plat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.15rem;position:relative;overflow:hidden;transition:border-color var(--ease),box-shadow var(--ease),transform var(--ease)}
+.plat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.15rem;position:relative;overflow:hidden;transition:border-color var(--ease),box-shadow var(--ease),transform var(--ease);display:block;text-decoration:none;color:inherit;cursor:default}
+a.plat-card{cursor:pointer}
+a.plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+a.plat-card:active{transform:translateY(0) scale(.98)}
 .plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .plat-card.best{border-color:var(--green);box-shadow:0 0 0 1px var(--green),var(--shadow-sm)}
 .plat-card.worst{opacity:.65}
+.plat-sell-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:.6rem;padding-top:.5rem;border-top:1px solid var(--divider);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint);gap:.25rem;transition:color .15s}
+a.plat-card:hover .plat-sell-footer{color:var(--gold)}
+.plat-sell-arrow{font-size:.8rem;transition:transform .15s}
+a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-accent{position:absolute;top:0;left:0;width:4px;height:100%;border-radius:14px 0 0 14px}
 .plat-hdr{display:flex;align-items:center;justify-content:space-between;padding-left:.45rem;margin-bottom:.75rem}
 .plat-name{font-size:.88rem;font-weight:700;letter-spacing:-.01em}
@@ -2187,8 +2194,10 @@ function loadCardUI(card) {
     ebayListBtn.style.display = 'flex';
   }
 
-  // Update platform sell/buy links
+  // Update platform sell/buy links (skip auto-recalc — loadCardUI handles calc below)
+  updateSellLinks._skipRecalc = true;
   updateSellLinks(card);
+  updateSellLinks._skipRecalc = false;
 
   // Build printing dropdown from priceVariants
   currentPrices = {};
@@ -2226,6 +2235,7 @@ function resetCardPanel() {
   if (ebayListBtn) ebayListBtn.style.display = 'none';
   const sellLinksBlock = document.getElementById('sellLinksBlock');
   if (sellLinksBlock) sellLinksBlock.style.display = 'none';
+  window._platSellUrls = null; // Clear sell URLs so cards won't be clickable until a card is loaded
   priceMain.textContent = '—';
   priceMain.style.color = 'var(--text-faint)';
   priceRange.textContent = '';
@@ -2461,57 +2471,56 @@ function buildTcgpUrl(cardName, setName) {
 
 // Updates all the "Where to Sell" platform buttons for the currently loaded card
 function updateSellLinks(card) {
-  const block = document.getElementById('sellLinksBlock');
-  if (!block || !card) return;
+  if (!card) return;
 
-  const name    = card.name || '';
+  // Hide old pill block — sell links now live on the platform cards themselves
+  const block = document.getElementById('sellLinksBlock');
+  if (block) block.style.display = 'none';
+
+  // Strip number suffix TPL appends (e.g. "Lacey - 172/142" → "Lacey")
+  const rawName = (card.name || '').replace(/\s*-\s*\d+\/\d+\s*$/, '').trim();
   const setName = card.setName || '';
+  const number  = card.number || '';
   const game    = card.game || 'pokemon';
   const isPokemon = game === 'pokemon' || game === 'pokemon_jp';
   const isMagic   = game === 'mtg';
+  const isYugioh  = game === 'yugioh';
 
-  // eBay category IDs: trading cards = 183454 (Pokémon), 212 (sports/other)
+  const searchName = rawName;
+  const gameTag = isPokemon ? 'pokemon card' : isMagic ? 'mtg card' : isYugioh ? 'yugioh card' : 'trading card';
   const ebaycat = isPokemon ? '183454' : isMagic ? '183454' : '212';
-  const ebaySearchQ = encodeURIComponent(`${name}${setName ? ' ' + setName : ''} card`);
-  const ebaySoldQ   = encodeURIComponent(`${name}${setName ? ' ' + setName : ''} card`);
 
-  // eBay sell link (create listing, pre-filled)
-  const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(name + (setName ? ' ' + setName : ''))}`;
-  const ebayBuyRaw  = `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
+  // Build per-platform sell URLs
+  const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(searchName + (setName ? ' ' + setName : '') + (number ? ' ' + number : ''))}`;
+  const mercariQ    = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
+  const comcQ       = encodeURIComponent(searchName);
+  const stockxQ     = encodeURIComponent(`${searchName}${isPokemon ? ' pokemon' : isMagic ? ' magic' : ''}`);
+  const tcgpUrl     = (isPokemon || isMagic || isYugioh) ? buildTcgpUrl(searchName, setName) : '';
 
-  const slEbaySell   = document.getElementById('slEbaySell');
-  const slEbayBuy    = document.getElementById('slEbayBuy');
-  const slTcgpSell   = document.getElementById('slTcgpSell');
-  const slTcgpBuy    = document.getElementById('slTcgpBuy');
-  const slMercariSell= document.getElementById('slMercariSell');
-  const slComcSell   = document.getElementById('slComcSell');
-  const slComcBuy    = document.getElementById('slComcBuy');
-  const slStockxSell = document.getElementById('slStockxSell');
+  // Store URLs globally — calc() reads these to make cards clickable
+  window._platSellUrls = {
+    ebay:     buildEbayUrl(ebaySellRaw),
+    mercari:  `https://www.mercari.com/search/?keyword=${mercariQ}`,
+    comc:     `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
+    stockx:   `https://stockx.com/search?s=${stockxQ}`,
+    poshmark: `https://poshmark.com/search?query=${mercariQ}&type=listings`,
+    // TCGPlayer only for card games (not sports)
+    ...(tcgpUrl ? {} : {})
+  };
+  // TCGPlayer replaces eBay for card game sell if available
+  // (eBay is always the primary sell destination; TCGPlayer added as separate comps via old pills if ever re-enabled)
 
-  if (slEbaySell)    slEbaySell.href    = buildEbayUrl(ebaySellRaw);
-  if (slEbayBuy)     slEbayBuy.href     = buildEbayUrl(ebayBuyRaw);
+  // Also keep eBay buy/comps link alive for the graded comps banner
+  const ebaySoldQ = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
+  const ebayBuyRaw = `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
+  const slEbayBuy = document.getElementById('slEbayBuy');
+  if (slEbayBuy) slEbayBuy.href = buildEbayUrl(ebayBuyRaw);
 
-  // Mercari: search sold/listed
-  const mercariQ = encodeURIComponent(`${name}${setName ? ' ' + setName : ''}`);
-  if (slMercariSell) slMercariSell.href = `https://www.mercari.com/search/?keyword=${mercariQ}`;
-
-  // COMC: trading card specialists
-  const comcQ = encodeURIComponent(name);
-  if (slComcSell)    slComcSell.href    = `https://www.comc.com/Cards/*/buy?q=${comcQ}`;
-  if (slComcBuy)     slComcBuy.href     = `https://www.comc.com/Cards/*/buy?q=${comcQ}`;
-
-  // StockX: mainly sneakers/streetwear but does sealed product
-  const stockxQ = encodeURIComponent(`${name} pokemon`);
-  if (slStockxSell)  slStockxSell.href  = `https://stockx.com/search?s=${stockxQ}`;
-
-  // TCGPlayer: show for Pokémon, Magic, Yu-Gi-Oh
-  const showTcgp = isPokemon || isMagic || game === 'yugioh';
-  if (slTcgpSell) slTcgpSell.style.display = showTcgp ? 'inline-flex' : 'none';
-  if (slTcgpBuy)  slTcgpBuy.style.display  = showTcgp ? 'inline-flex' : 'none';
-  if (slTcgpSell) slTcgpSell.href = buildTcgpUrl(name, setName);
-  if (slTcgpBuy)  slTcgpBuy.href  = buildTcgpUrl(name, setName);
-
-  block.style.display = 'flex';
+  // Recalc only if called outside of loadCardUI (i.e. price already set) so cards refresh with new sell URLs
+  // loadCardUI handles its own calc() call, so we guard against double-recalc
+  if (updateSellLinks._skipRecalc) return;
+  const price = getEffectivePrice();
+  if (price > 0) calc();
 }
 
 function toggleGrade() {
@@ -2735,6 +2744,14 @@ function calc() {
 
     const cls = ['plat-card', isWin ? 'best' : '', isWrst ? 'worst' : '', !r.eligible ? 'worst' : ''].filter(Boolean).join(' ');
 
+    // Build platform-specific sell URL (used to make card clickable)
+    const sellUrl = window._platSellUrls ? (window._platSellUrls[r.pid] || '') : '';
+    const cardTag  = sellUrl ? 'a' : 'div';
+    const cardHref = sellUrl ? ` href="${sellUrl}" target="_blank" rel="noopener"` : '';
+    const sellFooter = sellUrl
+      ? `<div class="plat-sell-footer">Sell here <span class="plat-sell-arrow">→</span></div>`
+      : '';
+
     if (!r.eligible) {
       html += `<div class="${cls}" style="opacity:.4">
         <div class="plat-accent" style="background:${info.color}"></div>
@@ -2745,7 +2762,7 @@ function calc() {
       return;
     }
 
-    html += `<div class="${cls}">
+    html += `<${cardTag} class="${cls}"${cardHref}>
       <div class="plat-accent" style="background:${info.color}"></div>
       <div class="plat-hdr">
         <span class="plat-name">${info.emoji} ${info.name}</span>
@@ -2761,7 +2778,8 @@ function calc() {
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
       </div>
-    </div>`;
+      ${sellFooter}
+    </${cardTag}>`;
   });
 
   html += `</div>`;
