@@ -3327,25 +3327,39 @@ async function processScanImage(input) {
 
     const data = await response.json();
     const detection = data?.detections?.[0];
-    const cardName = detection?.card?.name || '';
+    const card = detection?.card || {};
+    const cardName = card.name || '';
 
     if (!cardName) {
       statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
 
+    // Build a rich search query using everything CardSight returned
+    const cardNumber = card.number || '';
+    const setAbbrev = card.fields?.find(f => f.key === 'SET_ABBREVIATION')?.value || '';
+    const releaseName = card.releaseName || '';
     const confidence = detection?.confidence || '';
-    statusEl.textContent = `Found: "${cardName}"${confidence ? ' · ' + confidence + ' confidence' : ''}`;
+    const grader = detection?.grading?.company?.name || '';
+
+    // Smart search string: "Spiritomb TG09 Lost Origin" hits the right variant every time
+    let searchQuery = cardName;
+    if (cardNumber) searchQuery += ' ' + cardNumber;
+    if (setAbbrev) searchQuery += ' ' + setAbbrev;
+    else if (releaseName) searchQuery += ' ' + releaseName;
+
+    const graderLabel = grader ? ` · ${grader} slab detected` : '';
+    statusEl.innerHTML = `<span style="color:#4ade80">✓ ${cardName}${cardNumber ? ' #' + cardNumber : ''}</span><br><span style="font-size:.8rem;opacity:.7">${releaseName}${graderLabel} · ${confidence} confidence</span>`;
     resultEl.textContent = 'Searching…';
 
     setTimeout(() => {
       cancelScan();
       URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
-      searchInput.value = cardName;
+      searchInput.value = searchQuery.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 900);
+    }, 1200);
 
   } catch(err) {
     console.error('Scan error:', err);

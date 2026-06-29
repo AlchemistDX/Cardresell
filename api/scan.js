@@ -52,7 +52,7 @@ export default async function handler(req, res) {
     const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
     const body = Buffer.concat([header, imageBuffer, footer]);
 
-    const cardSightRes = await fetch('https://api.cardsight.ai/identify/card', {
+    const cardSightRes = await fetch('https://api.cardsight.ai/v1/identify/card', {
       method: 'POST',
       headers: {
         'X-API-Key': apiKey,
