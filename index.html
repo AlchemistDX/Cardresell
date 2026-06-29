@@ -938,7 +938,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
    ═══════════════════════════════════════════ */
 
 // ── TCGPriceLookup API Key (JS variable only, resets on reload) ──
-window.tplApiKey = '';
+// Load saved API key from localStorage on startup
+window.tplApiKey = (() => { try { return localStorage.getItem('cardsell_tpl_key') || ''; } catch(e) { return ''; } })();
 
 // ── Settings panel toggle ──
 (function() {
@@ -948,10 +949,12 @@ window.tplApiKey = '';
     btn.addEventListener('click', () => {
       const open = panel.classList.toggle('open');
       btn.classList.toggle('active', open);
-      // Pre-fill Google Client ID input with saved value
+      // Pre-fill saved values when panel opens
       if (open) {
         const gcInput = document.getElementById('googleClientIdInput');
         if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
+        const tplInput = document.getElementById('tplKeyInput');
+        if (tplInput && window.tplApiKey) tplInput.value = window.tplApiKey;
       }
     });
   }
@@ -961,6 +964,8 @@ window.tplApiKey = '';
 function saveTPLKey() {
   const val = (document.getElementById('tplKeyInput')?.value || '').trim();
   window.tplApiKey = val;
+  // Persist to localStorage so it survives page reloads
+  try { localStorage.setItem('cardsell_tpl_key', val); } catch(e) {}
   updateKeyStatus();
   // Close panel after save
   document.getElementById('settingsPanel')?.classList.remove('open');
