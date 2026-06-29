@@ -480,6 +480,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <div id="googleIdStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Paste your Google OAuth Client ID above, then reload the page.</div>
   </div>
+  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
+    <div class="settings-title">📷 AI Card Scanner (optional)</div>
+    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:.5rem">Add an OpenAI API key to enable AI-powered card scanning. Without it, the scanner uses basic text reading. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--gold)">platform.openai.com</a> — costs ~$0.001 per scan.</div>
+    <div class="settings-row">
+      <input type="password" id="openAiKeyInput" class="settings-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+      <button class="settings-save-btn" onclick="saveOpenAiKey()">Save</button>
+    </div>
+    <div id="openAiKeyStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem"></div>
+  </div>
 </div>
 
 
@@ -499,31 +508,23 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
     <span class="tpl-lock-indicator" id="tplLockIndicator">🔓 300K+ DB</span>
-    <button id="scanBtn" class="scan-btn" onclick="startScan()" title="Scan card with camera">
+    <button id="scanBtn" class="scan-btn" onclick="document.getElementById('scanFileInput').click()" title="Scan card with camera">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
     <button id="searchBtn" class="search-btn">Search</button>
   </div>
   <!-- Camera scan overlay -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1rem">
-    <div style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:-.01em">Point camera at card name</div>
-    <div style="position:relative;width:min(90vw,420px)">
-      <video id="scanVideo" style="width:100%;border-radius:12px;display:block" playsinline autoplay muted></video>
-      <!-- Targeting reticle -->
-      <div style="position:absolute;inset:0;pointer-events:none">
-        <div style="position:absolute;top:30%;left:8%;right:8%;height:22%;border:2px solid var(--gold);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.4)">
-          <div style="position:absolute;top:-1.4rem;left:50%;transform:translateX(-50%);font-size:.7rem;font-weight:700;color:var(--gold);white-space:nowrap;letter-spacing:.08em">ALIGN CARD NAME HERE</div>
-        </div>
-      </div>
-      <canvas id="scanCanvas" style="display:none"></canvas>
+  <!-- Hidden file input — opens native camera on mobile -->
+  <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
+  <!-- Scan status modal -->
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
+    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(90vw,380px)">
+      <img id="scanPreviewImg" style="width:100%;border-radius:12px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card preview" />
     </div>
-    <div id="scanStatus" style="color:rgba(255,255,255,.7);font-size:.85rem;min-height:1.4rem">Initializing camera…</div>
-    <div style="display:flex;gap:.75rem">
-      <button onclick="captureScan()" style="padding:.6rem 1.5rem;background:var(--gold);color:#fff;border-radius:99px;font-weight:700;font-size:.9rem">Capture</button>
-      <button onclick="stopScan()" style="padding:.6rem 1.5rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.9rem">Cancel</button>
-    </div>
-    <div id="scanResult" style="color:#fff;font-size:.8rem;max-width:340px;text-align:center;opacity:.8"></div>
+    <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
+    <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
+    <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
   </div>
   <div class="cat-row" id="catRow">
     <span class="cat-pill active" data-game="pokemon">Pokémon EN</span>
@@ -977,6 +978,20 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 // ── TCGPriceLookup API Key (JS variable only, resets on reload) ──
 // Load saved API key from localStorage on startup
 window.tplApiKey = (() => { try { return localStorage.getItem('cardsell_tpl_key') || ''; } catch(e) { return ''; } })();
+// Load saved OpenAI key for AI card scanning
+window._openAiKey = (() => { try { return localStorage.getItem('cardsell_openai_key') || ''; } catch(e) { return ''; } })();
+
+function saveOpenAiKey() {
+  const val = (document.getElementById('openAiKeyInput')?.value || '').trim();
+  const status = document.getElementById('openAiKeyStatus');
+  if (val && !val.startsWith('sk-')) {
+    if (status) status.textContent = '⚠️ OpenAI keys start with sk-';
+    return;
+  }
+  window._openAiKey = val;
+  try { localStorage.setItem('cardsell_openai_key', val); } catch(e) {}
+  if (status) status.textContent = val ? '✅ AI scanning enabled — costs ~$0.001 per scan.' : 'Key cleared. Using basic text reading.';
+}
 
 // ── Settings panel toggle ──
 (function() {
@@ -992,6 +1007,8 @@ window.tplApiKey = (() => { try { return localStorage.getItem('cardsell_tpl_key'
         if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
         const tplInput = document.getElementById('tplKeyInput');
         if (tplInput && window.tplApiKey) tplInput.value = window.tplApiKey;
+        const oaiInput = document.getElementById('openAiKeyInput');
+        if (oaiInput && window._openAiKey) oaiInput.value = window._openAiKey;
       }
     });
   }
@@ -2546,67 +2563,96 @@ function signOut() {
 }
 
 /* ═══════════════════════════════════════
-   CARD SCANNER — Camera OCR
+   CARD SCANNER — Photo + AI Vision
    ═══════════════════════════════════════ */
 
-let _scanStream = null;
-let _tesseractWorker = null;
+function cancelScan() {
+  document.getElementById('scanOverlay').style.display = 'none';
+  const fi = document.getElementById('scanFileInput');
+  if (fi) fi.value = '';
+}
 
-async function startScan() {
-  const overlay = document.getElementById('scanOverlay');
+async function processScanImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const overlay  = document.getElementById('scanOverlay');
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const prevWrap = document.getElementById('scanPreviewWrap');
+  const prevImg  = document.getElementById('scanPreviewImg');
+
   overlay.style.display = 'flex';
-  document.getElementById('scanResult').textContent = '';
-  document.getElementById('scanStatus').textContent = 'Starting camera…';
+  resultEl.textContent = '';
+  statusEl.textContent = 'Analyzing card…';
+
+  const objectUrl = URL.createObjectURL(file);
+  prevImg.src = objectUrl;
+  prevWrap.style.display = 'block';
+
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
   try {
-    // Prefer rear camera on mobile
-    _scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    statusEl.textContent = 'AI is reading the card…';
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${window._openAiKey || ''}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 60,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'This is a trading card (Pokemon, sports, MTG, Yu-Gi-Oh, etc). Reply with ONLY the card name as printed on the card. No extra text, no set name, no number — just the name.' },
+            { type: 'image_url', image_url: { url: `data:${file.type};base64,${base64}`, detail: 'low' } }
+          ]
+        }]
+      })
     });
-    const video = document.getElementById('scanVideo');
-    video.srcObject = _scanStream;
-    await video.play();
-    document.getElementById('scanStatus').textContent = 'Align the card name in the gold box, then tap Capture.';
+
+    if (response.status === 401 || response.status === 403 || !window._openAiKey) {
+      statusEl.textContent = 'Using local text reader…';
+      await fallbackOCR(file, statusEl, resultEl, objectUrl);
+      return;
+    }
+
+    if (!response.ok) throw new Error('Vision API error ' + response.status);
+
+    const data = await response.json();
+    const cardName = (data.choices?.[0]?.message?.content || '').trim().replace(/["\''.]/g, '').trim();
+
+    if (!cardName) { statusEl.textContent = 'Could not identify the card. Try a clearer photo.'; return; }
+
+    statusEl.textContent = `Found: "${cardName}"`;
+    resultEl.textContent = 'Searching…';
+
+    setTimeout(() => {
+      cancelScan();
+      URL.revokeObjectURL(objectUrl);
+      const searchInput = document.getElementById('searchInput');
+      searchInput.value = cardName;
+      searchInput.dispatchEvent(new Event('input'));
+      setTimeout(() => document.getElementById('searchBtn').click(), 300);
+    }, 900);
+
   } catch(err) {
-    document.getElementById('scanStatus').textContent = 'Camera access denied. Please allow camera in browser settings.';
+    await fallbackOCR(file, statusEl, resultEl, objectUrl);
   }
 }
 
-function stopScan() {
-  if (_scanStream) { _scanStream.getTracks().forEach(t => t.stop()); _scanStream = null; }
-  document.getElementById('scanOverlay').style.display = 'none';
-  document.getElementById('scanVideo').srcObject = null;
-}
-
-async function captureScan() {
-  const video = document.getElementById('scanVideo');
-  const canvas = document.getElementById('scanCanvas');
-  const statusEl = document.getElementById('scanStatus');
-  const resultEl = document.getElementById('scanResult');
-
-  if (!video.srcObject) { statusEl.textContent = 'Camera not ready.'; return; }
-
-  // Draw frame to canvas
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0);
-
-  // Crop the reticle area (30%–52% vertical, 8%–92% horizontal)
-  const cropX = Math.floor(canvas.width * 0.08);
-  const cropY = Math.floor(canvas.height * 0.30);
-  const cropW = Math.floor(canvas.width * 0.84);
-  const cropH = Math.floor(canvas.height * 0.22);
-  const cropCanvas = document.createElement('canvas');
-  cropCanvas.width = cropW * 2; cropCanvas.height = cropH * 2; // 2x upscale for OCR
-  const cCtx = cropCanvas.getContext('2d');
-  cCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW * 2, cropH * 2);
-
-  statusEl.textContent = 'Reading card name…';
-
+async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
   try {
-    // Load Tesseract.js from CDN if not already loaded
     if (!window.Tesseract) {
+      statusEl.textContent = 'Loading text reader…';
       await new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
@@ -2614,32 +2660,24 @@ async function captureScan() {
         document.head.appendChild(s);
       });
     }
-
-    const { data: { text } } = await Tesseract.recognize(cropCanvas, 'eng', {
+    statusEl.textContent = 'Reading card text…';
+    const imgUrl = objectUrl || URL.createObjectURL(file);
+    const { data: { text } } = await Tesseract.recognize(imgUrl, 'eng', {
       logger: m => { if (m.status === 'recognizing text') statusEl.textContent = 'Reading… ' + Math.round(m.progress * 100) + '%'; }
     });
-
-    // Clean up the text — take the first non-empty line
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
     const cardName = lines[0] || '';
-
-    if (!cardName) {
-      statusEl.textContent = 'Could not read text. Try better lighting or hold camera steady.';
-      return;
-    }
-
-    resultEl.textContent = `Detected: "${cardName}" — searching…`;
-    statusEl.textContent = 'Got it!';
-
-    // Fill search box and trigger search
-    stopScan();
-    const searchInput = document.getElementById('searchInput');
-    searchInput.value = cardName;
-    searchInput.dispatchEvent(new Event('input'));
-    setTimeout(() => document.getElementById('searchBtn').click(), 300);
-
+    if (!cardName) { statusEl.textContent = 'Could not read text. Try a clearer, well-lit photo.'; return; }
+    statusEl.textContent = `Found: "${cardName}"`;
+    setTimeout(() => {
+      cancelScan();
+      const searchInput = document.getElementById('searchInput');
+      searchInput.value = cardName;
+      searchInput.dispatchEvent(new Event('input'));
+      setTimeout(() => document.getElementById('searchBtn').click(), 300);
+    }, 900);
   } catch(err) {
-    statusEl.textContent = 'OCR failed: ' + (err.message || 'unknown error');
+    statusEl.textContent = 'Could not read card. Try a clearer, well-lit photo.';
   }
 }
 
