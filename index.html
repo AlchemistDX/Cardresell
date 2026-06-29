@@ -552,7 +552,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
     <span class="tpl-lock-indicator" id="tplLockIndicator">🔓 300K+ DB</span>
-    <button id="scanBtn" class="scan-btn" onclick="document.getElementById('scanFileInput').click()" title="Scan card with camera">
+    <button id="scanBtn" class="scan-btn" onclick="openScanner()" title="Scan card with camera">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
@@ -3177,6 +3177,8 @@ function handleGoogleSignIn(response) {
   // Decode JWT payload
   const payload = JSON.parse(atob(response.credential.split('.')[1]));
   googleUser = { name: payload.name, email: payload.email, avatar: payload.picture, sub: payload.sub };
+  // Store ID token for scanner auth proxy
+  window._googleIdToken = response.credential;
   
   // Persist session so reload doesn't log user out
   try { localStorage.setItem('cardsell_google_user', JSON.stringify(googleUser)); } catch(e) {}
@@ -3212,6 +3214,29 @@ function signOut() {
    CARD SCANNER — Photo + AI Vision
    ═══════════════════════════════════════ */
 
+// ── Scanner gate — requires Google sign-in ──
+function openScanner() {
+  if (!googleUser) {
+    // Show a friendly prompt instead of just doing nothing
+    const overlay  = document.getElementById('scanOverlay');
+    const statusEl = document.getElementById('scanStatus');
+    const resultEl = document.getElementById('scanResult');
+    const prevWrap = document.getElementById('scanPreviewWrap');
+    prevWrap.style.display = 'none';
+    resultEl.textContent = '';
+    statusEl.innerHTML = `
+      <div style="text-align:center;padding:1rem">
+        <div style="font-size:2rem;margin-bottom:.75rem">📷</div>
+        <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:.5rem">Sign in to scan cards</div>
+        <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1.25rem">Google sign-in is required to use the card scanner.</div>
+        <button onclick="cancelScan();document.getElementById('googleSignInBtn')?.click()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.6rem 1.4rem;font-weight:700;font-size:.9rem;cursor:pointer">Sign in with Google</button>
+      </div>`;
+    overlay.style.display = 'flex';
+    return;
+  }
+  document.getElementById('scanFileInput').click();
+}
+
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
   // Reset file input — replace the element so same file can be scanned again
@@ -3228,6 +3253,9 @@ function cancelScan() {
 async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
+
+  // Double-check auth (belt + suspenders)
+  if (!googleUser) { openScanner(); return; }
 
   const overlay  = document.getElementById('scanOverlay');
   const statusEl = document.getElementById('scanStatus');
@@ -3251,41 +3279,43 @@ async function processScanImage(input) {
   });
 
   try {
-    statusEl.textContent = 'AI is reading the card…';
+    statusEl.textContent = 'AI is identifying the card…';
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Get the Google ID token to authenticate the server request
+    const idToken = window._googleIdToken || '';
+
+    // Call our secure server-side proxy (CardSight key never in frontend)
+    const response = await fetch('/api/scan', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${window._openAiKey || ''}`
+        'Authorization': `Bearer ${idToken}`
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 60,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: 'This is a trading card (Pokemon, sports, MTG, Yu-Gi-Oh, etc). Reply with ONLY the card name as printed on the card. No extra text, no set name, no number — just the name.' },
-            { type: 'image_url', image_url: { url: `data:${file.type};base64,${base64}`, detail: 'low' } }
-          ]
-        }]
-      })
+      body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
     });
 
-    if (response.status === 401 || response.status === 403 || !window._openAiKey) {
-      statusEl.textContent = 'Using local text reader…';
-      await fallbackOCR(file, statusEl, resultEl, objectUrl);
+    if (response.status === 401) {
+      statusEl.innerHTML = '<span style="color:#f87171">Session expired — please sign in again.</span>';
+      setTimeout(cancelScan, 2500);
       return;
     }
 
-    if (!response.ok) throw new Error('Vision API error ' + response.status);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Scan failed');
+    }
 
     const data = await response.json();
-    const cardName = (data.choices?.[0]?.message?.content || '').trim().replace(/["\''.]/g, '').trim();
+    const detection = data?.detections?.[0];
+    const cardName = detection?.card?.name || '';
 
-    if (!cardName) { statusEl.textContent = 'Could not identify the card. Try a clearer photo.'; return; }
+    if (!cardName) {
+      statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
+      return;
+    }
 
-    statusEl.textContent = `Found: "${cardName}"`;
+    const confidence = detection?.confidence || '';
+    statusEl.textContent = `Found: "${cardName}"${confidence ? ' · ' + confidence + ' confidence' : ''}`;
     resultEl.textContent = 'Searching…';
 
     setTimeout(() => {
@@ -3298,7 +3328,8 @@ async function processScanImage(input) {
     }, 900);
 
   } catch(err) {
-    await fallbackOCR(file, statusEl, resultEl, objectUrl);
+    console.error('Scan error:', err);
+    statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
   }
 }
 
