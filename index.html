@@ -703,13 +703,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <!-- No data state -->
           <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span style="font-size:.8rem;font-weight:600;color:var(--text)">No real sold data without an API key</span>
+            <span id="gradedBannerTitle" style="font-size:.8rem;font-weight:600;color:var(--text)">No graded sales data for this card</span>
           </div>
           <div id="gradedCompsNote" style="font-size:.75rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.4"></div>
           <!-- CTA: get key -->
-          <a href="https://tcgpricelookup.com/tcg-api" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:700;color:#fff;background:var(--gold);padding:.45rem .9rem;border-radius:.5rem;text-decoration:none;margin-bottom:.5rem;width:fit-content">
+          <a id="gradedUpsellBtn" href="https://tcgpricelookup.com/tcg-api" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:700;color:#fff;background:var(--gold);padding:.45rem .9rem;border-radius:.5rem;text-decoration:none;margin-bottom:.5rem;width:fit-content">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Get free API key → $19.99/mo for real graded prices
+            <span id="gradedUpsellLabel">Get API key → $19.99/mo for real graded prices</span>
           </a>
           <!-- Secondary links -->
           <div style="display:flex;flex-wrap:wrap;gap:.4rem">
@@ -1147,7 +1147,28 @@ function tplCardToNormalized(c, gameSlug, fallbackImage) {
     priceVariants,
     source: 'TCGPriceLookup',
     updatedAt: 'daily',
+    tplId: c.id || null,          // preserve exact card ID for graded re-fetch
+    tplGameSlug: gameSlug,
   };
+}
+
+// ── Fetch full card by ID (includes complete graded data) ──
+async function fetchTPLCardById(id, gameSlug) {
+  if (!window.tplApiKey || !id) return null;
+  try {
+    const url = `https://api.tcgpricelookup.com/v1/cards/${encodeURIComponent(id)}`;
+    const r = await fetch(url, { headers: { 'X-API-Key': window.tplApiKey } });
+    if (!r.ok) { console.warn('TPL fetch by ID failed:', r.status); return null; }
+    const json = await r.json();
+    const c = json.data || json;
+    if (!c) return null;
+    // Re-normalize with full graded data
+    const img = selectedCard?.images?.small || '';
+    return tplCardToNormalized(c, gameSlug || selectedCard?.tplGameSlug || 'pokemon', img);
+  } catch(e) {
+    console.warn('TPL fetchById error:', e);
+    return null;
+  }
 }
 
 // ── State ──
@@ -2126,7 +2147,25 @@ function getEffectivePrice() {
 }
 
 // ── Grade UI ──
-function syncGradeToPrintSelect() {
+// Rebuild the printing/variant dropdown from an updated priceVariants array
+// Called after a by-ID re-fetch brings in graded data that wasn't in the search result
+function rebuildPrintSelect(variants) {
+  currentPrices = {};
+  printSelect.innerHTML = '';
+  if (!variants || !variants.length) {
+    printSelect.innerHTML = '<option value="">No price data</option>';
+    return;
+  }
+  variants.forEach(v => {
+    currentPrices[v.key] = v;
+    const opt = document.createElement('option');
+    opt.value = v.key;
+    opt.textContent = v.market != null ? `${v.label} — $${v.market.toFixed(2)}` : v.label;
+    printSelect.appendChild(opt);
+  });
+}
+
+async function syncGradeToPrintSelect() {
   const grader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const grade  = document.getElementById('gradeSelect').value;
   const banner = document.getElementById('gradedCompsBanner');
@@ -2156,7 +2195,42 @@ function syncGradeToPrintSelect() {
       // Has graded data in API — use it
       printSelect.value = (match || fallback).value;
       if (banner) banner.style.display = 'none';
-    } else {
+    } else if (window.tplApiKey && selectedCard?.tplId) {
+      // No graded variant cached — try re-fetching the full card by ID to get graded data
+      if (banner) {
+        banner.style.display = 'block';
+        const note = document.getElementById('gradedCompsNote');
+        if (note) note.textContent = 'Fetching graded prices…';
+        // Hide the upsell button while loading
+        const upsellBtn = banner.querySelector('a[href*="tcgpricelookup.com/pricing"]');
+        if (upsellBtn) upsellBtn.style.display = 'none';
+      }
+      const fullCard = await fetchTPLCardById(selectedCard.tplId, selectedCard.tplGameSlug);
+      if (fullCard) {
+        // Merge the new graded priceVariants into selectedCard
+        const gradedVariants = fullCard.priceVariants.filter(v => /^(psa|bgs|cgc)_/.test(v.key));
+        if (gradedVariants.length) {
+          // Remove old graded variants and add fresh ones
+          selectedCard.priceVariants = [
+            ...selectedCard.priceVariants.filter(v => !/^(psa|bgs|cgc)_/.test(v.key)),
+            ...gradedVariants,
+          ];
+          // Rebuild printSelect options
+          rebuildPrintSelect(selectedCard.priceVariants);
+          // Try matching again
+          const opts2 = Array.from(printSelect.options);
+          const targetKey2 = `${grader}_${grade}`.replace(/\./g, '_');
+          const match2  = opts2.find(o => o.value === targetKey2);
+          const fallback2 = !match2 && opts2.find(o => o.value.startsWith(grader + '_'));
+          if (match2 || fallback2) {
+            printSelect.value = (match2 || fallback2).value;
+            if (banner) banner.style.display = 'none';
+            updatePriceFromPrinting();
+            return;
+          }
+        }
+      }
+      // Still no data after re-fetch — show banner
       // No graded variant in API — show eBay comps banner
       const cardName = selectedCard?.name?.replace(/ \(JP.*?\)/,'').replace(/ \(EN.*?\)/,'') || '';
       const graderLabel = graderNames[grader] || grader.toUpperCase();
@@ -2171,7 +2245,16 @@ function syncGradeToPrintSelect() {
         // Honest no-data message — no fake multiplier estimates
         const cardName2 = selectedCard?.name?.replace(/ \(JP.*?\)/,'').replace(/ \(EN.*?\)/,'') || 'this card';
         const graderLabel2 = graderNames[grader] || grader.toUpperCase();
-        if (note) note.textContent = `No ${graderLabel2} ${grade} data for ${cardName2}. Add your TCGPriceLookup Starter key in ⚙ settings for real sold prices.`;
+        const bannerTitle = document.getElementById('gradedBannerTitle');
+        if (window.tplApiKey) {
+          // Has key — data just not available for this specific card/grade
+          if (bannerTitle) bannerTitle.textContent = 'No graded sales data for this printing';
+          if (note) note.textContent = `No ${graderLabel2} ${grade} sales tracked for ${cardName2}. This card may not have graded comps yet — try eBay sold listings below.`;
+        } else {
+          // No key
+          if (bannerTitle) bannerTitle.textContent = 'Add API key for graded prices';
+          if (note) note.textContent = `No ${graderLabel2} ${grade} data for ${cardName2}. Add your TCGPriceLookup Starter key in ⚙ settings for real sold prices.`;
+        }
         if (link) link.href = ebayUrl;
 
         // TCGPriceLookup card page deep link
@@ -2179,6 +2262,9 @@ function syncGradeToPrintSelect() {
         if (tplLink) tplLink.href = tplCardUrl;
 
         banner.style.display = 'block';
+        // Hide upsell CTA if user already has a key
+        const upsellBtn = document.getElementById('gradedUpsellBtn');
+        if (upsellBtn) upsellBtn.style.display = window.tplApiKey ? 'none' : 'flex';
       }
       // Keep printSelect on whatever raw variant it had
     }
