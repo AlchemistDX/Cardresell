@@ -1497,40 +1497,148 @@ async function doSearch(q) {
   }
 }
 
-/* ── Pokémon API (PokemonTCG.io) ── */
+/* ── PokeTrace fetch helper ── */
+async function fetchPokeTrace(q, limit = 12) {
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(`/api/poketrace?q=${encodeURIComponent(q)}&limit=${limit}`, { signal: ctrl.signal });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.cards || null;
+  } catch(e) { return null; }
+}
+
+function poketraceToNormalized(pt) {
+  const condMap = {
+    'Near Mint':         'Near Mint (NM)',
+    'Lightly Played':    'Lightly Played (LP)',
+    'Moderately Played': 'Moderately Played (MP)',
+    'Heavily Played':    'Heavily Played (HP)',
+    'Damaged':           'Damaged (DM)',
+  };
+  const priceVariants = [];
+  const cp = pt.conditionPrices || {};
+  for (const [label, data] of Object.entries(cp)) {
+    const mkt = data.ebay_avg7d ?? data.tcg_avg ?? null;
+    const low  = data.ebay_low ?? data.tcg_low ?? null;
+    const high = data.ebay_high ?? mkt;
+    if (mkt !== null) {
+      priceVariants.push({
+        key: label.toLowerCase().replace(/[^a-z]/g,'_'),
+        label: condMap[label] || label,
+        market: mkt, low, mid: mkt, high,
+        _ebay_sales: data.ebay_sales,
+      });
+    }
+  }
+  if (!priceVariants.length) {
+    priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
+  }
+  return {
+    name: pt.name,
+    game: 'pokemon',
+    images: { small: pt.image || '', large: pt.image || '' },
+    setName: pt.set || '',
+    number: pt.number || '',
+    rarity: pt.rarity || '',
+    variant: pt.variant || '',
+    priceVariants,
+    source: 'PokeTrace (eBay sold)',
+    updatedAt: pt.lastUpdated ? pt.lastUpdated.slice(0,10) : 'live',
+    marketplaceUrls: pt.marketplaceUrls || {},
+    _poketraceId: pt.id,
+  };
+}
+
+/* ── Pokémon API (TPL + PokeTrace eBay comps + PokemonTCG.io fallback) ── */
 async function searchPokemon(q) {
-  // Try TCGPriceLookup first if key is set
-  const tplData = await searchWithTPL(q, 'pokemon');
-  if (tplData) {
-    window._searchCards = {};
-    dropList.innerHTML = tplData.map((c, i) => {
-      window._searchCards[i] = { _tpl: c, game: 'pokemon' };
-      const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
-      return `<div class="drop-item" data-idx="${i}" role="option">
-        <div class="drop-thumb-ph">🃏</div>
+  // Run TPL + PokeTrace in parallel — fastest path, maximum coverage
+  const [tplData, ptData] = await Promise.all([
+    searchWithTPL(q, 'pokemon').catch(() => null),
+    fetchPokeTrace(q, 12).catch(() => null),
+  ]);
+
+  window._searchCards = {};
+  let idx = 0;
+  const items = [];
+
+  // Build PokeTrace lookup: "name|number" → ptCard for cross-enrichment
+  const ptMap = {};
+  if (ptData) {
+    for (const pt of ptData) {
+      const k = `${(pt.name||'').toLowerCase()}|${(pt.number||'').toLowerCase()}`;
+      ptMap[k] = pt;
+    }
+  }
+
+  if (tplData && tplData.length) {
+    for (const c of tplData) {
+      const i = idx++;
+      const ptKey = `${(c.name||'').toLowerCase()}|${(c.number||c.card_number||'').toLowerCase()}`;
+      const ptMatch = ptMap[ptKey];
+      const nmTpl  = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+      const nmEbay = ptMatch?.ebayNmAvg7d ?? null;
+      const displayPrice = nmEbay ?? nmTpl;
+      const priceLabel   = nmEbay ? 'eBay' : nmTpl ? 'TCG' : null;
+      const img = ptMatch?.image || c.image_url || '';
+      window._searchCards[i] = { _tpl: c, _pt: ptMatch || null, game: 'pokemon' };
+      items.push(`<div class="drop-item" data-idx="${i}" role="option">
+        ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL${nmEbay?' + eBay':''}</span></div>
         </div>
-        ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
-      </div>`;
-    }).join('');
+        ${displayPrice !== null
+          ? `<span class="drop-price">$${displayPrice.toFixed(2)}<span style="font-size:.6rem;opacity:.6;margin-left:.2rem">${priceLabel||''}</span></span>`
+          : `<span class="drop-no-price">No price</span>`}
+      </div>`);
+    }
+    dropList.innerHTML = items.join('');
     attachDropHandlers(i => {
       const entry = window._searchCards[i];
-      return tplCardToNormalized(entry._tpl, 'pokemon', entry._imgSmall || '');
+      const base = tplCardToNormalized(entry._tpl, 'pokemon', entry._pt?.image || entry._imgSmall || '');
+      if (entry._pt) {
+        const ptNorm = poketraceToNormalized(entry._pt);
+        const hasNm = base.priceVariants.some(v => v.key === 'near_mint' && v.market);
+        if (!hasNm && ptNorm.priceVariants[0]?.market) {
+          base.priceVariants.unshift(ptNorm.priceVariants[0]);
+        }
+        if (ptNorm.marketplaceUrls?.ebay) base._ptEbayUrl = ptNorm.marketplaceUrls.ebay;
+      }
+      return base;
     });
-    // Fetch images in background without blocking the dropdown
-    injectPokemonImages(tplData, 'pokemon');
+    const stillMissing = tplData.filter((_, i) => !window._searchCards[i]?._pt?.image && !tplData[i]?.image_url);
+    if (stillMissing.length) injectPokemonImages(tplData, 'pokemon');
     return;
   }
 
-  // Fallback: PokemonTCG.io
+  // TPL unavailable — PokeTrace as primary
+  if (ptData && ptData.length) {
+    for (const pt of ptData) {
+      const i = idx++;
+      window._searchCards[i] = { _pt: pt, game: 'pokemon' };
+      const price = pt.marketPrice;
+      items.push(`<div class="drop-item" data-idx="${i}" role="option">
+        ${pt.image ? `<img class="drop-thumb" src="${pt.image}" loading="eager" alt="${esc(pt.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
+        <div class="drop-info">
+          <div class="drop-name">${esc(pt.name)}</div>
+          <div class="drop-meta">${esc(pt.set||'')}${pt.number?' · #'+esc(pt.number):''}${pt.rarity?' · '+esc(pt.rarity):''} <span style="font-size:.68rem;color:#4ade80">eBay sold</span></div>
+        </div>
+        ${price !== null ? `<span class="drop-price">$${price.toFixed(2)}<span style="font-size:.6rem;opacity:.6;margin-left:.2rem">eBay</span></span>` : `<span class="drop-no-price">No price</span>`}
+      </div>`);
+    }
+    dropList.innerHTML = items.join('');
+    attachDropHandlers(i => poketraceToNormalized(window._searchCards[i]._pt));
+    return;
+  }
+
+  // Final fallback: PokemonTCG.io
   const url = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
   const r = await fetch(url);
   const data = await r.json();
   let cards = data.data || [];
 
-  // Sort: exact match first, then by rarity (rarest first), then by set date desc
   const ql = q.toLowerCase().trim();
   const rarityScore = r => {
     const t = (r || '').toLowerCase();
@@ -1559,10 +1667,8 @@ async function searchPokemon(q) {
     };
     const na = nameScore(a), nb = nameScore(b);
     if (na !== nb) return na - nb;
-    // Within same name-match tier: rarest first
     const ra = rarityScore(a.rarity), rb = rarityScore(b.rarity);
     if (ra !== rb) return ra - rb;
-    // Then newest set first
     const da = a.set?.releaseDate || '0000-00-00';
     const db = b.set?.releaseDate || '0000-00-00';
     return db.localeCompare(da);
