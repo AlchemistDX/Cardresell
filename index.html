@@ -10,6 +10,15 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
 /* ─── SETTINGS PANEL ─── */
+/* ─── SCAN BUTTON ─── */
+.scan-btn{display:flex;align-items:center;gap:.4rem;padding:.55rem .85rem;background:var(--surface);border:1.5px solid var(--gold-border);border-radius:var(--radius-lg);font-size:.82rem;font-weight:700;color:var(--gold);white-space:nowrap;transition:all var(--ease);cursor:pointer}
+.scan-btn:hover{background:var(--gold-hi);border-color:var(--gold)}
+.scan-btn:active{transform:scale(.97)}
+/* ─── SELL BUTTON ─── */
+.sell-btn{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.65rem 1rem;background:#e53935;color:#fff;border-radius:var(--radius-lg);font-size:.85rem;font-weight:700;text-decoration:none;transition:background var(--ease),transform var(--ease);margin-top:.75rem}
+.sell-btn:hover{background:#c62828}
+.sell-btn:active{transform:scale(.98)}
+/* ─── SETTINGS PANEL ─── */
 .settings-panel{overflow:hidden;max-height:0;transition:max-height .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;opacity:0;pointer-events:none}
 .settings-panel.open{max-height:480px;opacity:1;pointer-events:auto}
 .settings-inner{background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--radius-lg);padding:1.1rem 1.25rem;margin-bottom:1.25rem;box-shadow:var(--shadow-md)}
@@ -490,7 +499,31 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
     <span class="tpl-lock-indicator" id="tplLockIndicator">🔓 300K+ DB</span>
+    <button id="scanBtn" class="scan-btn" onclick="startScan()" title="Scan card with camera">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      Scan
+    </button>
     <button id="searchBtn" class="search-btn">Search</button>
+  </div>
+  <!-- Camera scan overlay -->
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1rem">
+    <div style="color:#fff;font-size:1rem;font-weight:700;letter-spacing:-.01em">Point camera at card name</div>
+    <div style="position:relative;width:min(90vw,420px)">
+      <video id="scanVideo" style="width:100%;border-radius:12px;display:block" playsinline autoplay muted></video>
+      <!-- Targeting reticle -->
+      <div style="position:absolute;inset:0;pointer-events:none">
+        <div style="position:absolute;top:30%;left:8%;right:8%;height:22%;border:2px solid var(--gold);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.4)">
+          <div style="position:absolute;top:-1.4rem;left:50%;transform:translateX(-50%);font-size:.7rem;font-weight:700;color:var(--gold);white-space:nowrap;letter-spacing:.08em">ALIGN CARD NAME HERE</div>
+        </div>
+      </div>
+      <canvas id="scanCanvas" style="display:none"></canvas>
+    </div>
+    <div id="scanStatus" style="color:rgba(255,255,255,.7);font-size:.85rem;min-height:1.4rem">Initializing camera…</div>
+    <div style="display:flex;gap:.75rem">
+      <button onclick="captureScan()" style="padding:.6rem 1.5rem;background:var(--gold);color:#fff;border-radius:99px;font-weight:700;font-size:.9rem">Capture</button>
+      <button onclick="stopScan()" style="padding:.6rem 1.5rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.9rem">Cancel</button>
+    </div>
+    <div id="scanResult" style="color:#fff;font-size:.8rem;max-width:340px;text-align:center;opacity:.8"></div>
   </div>
   <div class="cat-row" id="catRow">
     <span class="cat-pill active" data-game="pokemon">Pokémon EN</span>
@@ -599,6 +632,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div id="cardNameBlock" style="display:none">
           <div class="card-name" id="cardNameEl"></div>
           <div class="card-meta-row" id="cardMetaEl"></div>
+          <a id="ebayListBtn" href="#" target="_blank" rel="noopener" class="sell-btn" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            Sell on eBay
+          </a>
         </div>
       </div>
 
@@ -1721,6 +1758,14 @@ function loadCardUI(card) {
   cardMetaEl.textContent = metaParts.join(' · ');
   cardNameBlock.style.display = 'block';
 
+  // eBay Sell button — pre-fill with card name
+  const ebayListBtn = document.getElementById('ebayListBtn');
+  if (ebayListBtn) {
+    const ebayQuery = encodeURIComponent(card.name + (card.setName ? ' ' + card.setName : ''));
+    ebayListBtn.href = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQuery}`;
+    ebayListBtn.style.display = 'flex';
+  }
+
   // Build printing dropdown from priceVariants
   currentPrices = {};
   printSelect.innerHTML = '';
@@ -1753,6 +1798,8 @@ function resetCardPanel() {
   cardImgPh.style.display = 'flex';
   sportsCardPh.style.display = 'none';
   cardNameBlock.style.display = 'none';
+  const ebayListBtn = document.getElementById('ebayListBtn');
+  if (ebayListBtn) ebayListBtn.style.display = 'none';
   priceMain.textContent = '—';
   priceMain.style.color = 'var(--text-faint)';
   priceRange.textContent = '';
@@ -2496,6 +2543,104 @@ function signOut() {
   document.getElementById('googleName').textContent = '';
   // Re-render flips view with no-user state
   if (document.getElementById('flipsView').classList.contains('active')) renderFlipsView();
+}
+
+/* ═══════════════════════════════════════
+   CARD SCANNER — Camera OCR
+   ═══════════════════════════════════════ */
+
+let _scanStream = null;
+let _tesseractWorker = null;
+
+async function startScan() {
+  const overlay = document.getElementById('scanOverlay');
+  overlay.style.display = 'flex';
+  document.getElementById('scanResult').textContent = '';
+  document.getElementById('scanStatus').textContent = 'Starting camera…';
+
+  try {
+    // Prefer rear camera on mobile
+    _scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById('scanVideo');
+    video.srcObject = _scanStream;
+    await video.play();
+    document.getElementById('scanStatus').textContent = 'Align the card name in the gold box, then tap Capture.';
+  } catch(err) {
+    document.getElementById('scanStatus').textContent = 'Camera access denied. Please allow camera in browser settings.';
+  }
+}
+
+function stopScan() {
+  if (_scanStream) { _scanStream.getTracks().forEach(t => t.stop()); _scanStream = null; }
+  document.getElementById('scanOverlay').style.display = 'none';
+  document.getElementById('scanVideo').srcObject = null;
+}
+
+async function captureScan() {
+  const video = document.getElementById('scanVideo');
+  const canvas = document.getElementById('scanCanvas');
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+
+  if (!video.srcObject) { statusEl.textContent = 'Camera not ready.'; return; }
+
+  // Draw frame to canvas
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  // Crop the reticle area (30%–52% vertical, 8%–92% horizontal)
+  const cropX = Math.floor(canvas.width * 0.08);
+  const cropY = Math.floor(canvas.height * 0.30);
+  const cropW = Math.floor(canvas.width * 0.84);
+  const cropH = Math.floor(canvas.height * 0.22);
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = cropW * 2; cropCanvas.height = cropH * 2; // 2x upscale for OCR
+  const cCtx = cropCanvas.getContext('2d');
+  cCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW * 2, cropH * 2);
+
+  statusEl.textContent = 'Reading card name…';
+
+  try {
+    // Load Tesseract.js from CDN if not already loaded
+    if (!window.Tesseract) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    const { data: { text } } = await Tesseract.recognize(cropCanvas, 'eng', {
+      logger: m => { if (m.status === 'recognizing text') statusEl.textContent = 'Reading… ' + Math.round(m.progress * 100) + '%'; }
+    });
+
+    // Clean up the text — take the first non-empty line
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+    const cardName = lines[0] || '';
+
+    if (!cardName) {
+      statusEl.textContent = 'Could not read text. Try better lighting or hold camera steady.';
+      return;
+    }
+
+    resultEl.textContent = `Detected: "${cardName}" — searching…`;
+    statusEl.textContent = 'Got it!';
+
+    // Fill search box and trigger search
+    stopScan();
+    const searchInput = document.getElementById('searchInput');
+    searchInput.value = cardName;
+    searchInput.dispatchEvent(new Event('input'));
+    setTimeout(() => document.getElementById('searchBtn').click(), 300);
+
+  } catch(err) {
+    statusEl.textContent = 'OCR failed: ' + (err.message || 'unknown error');
+  }
 }
 
 // Restore Google session on page load
