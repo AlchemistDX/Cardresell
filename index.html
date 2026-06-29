@@ -20,7 +20,7 @@
 .sell-btn:active{transform:scale(.98)}
 /* ─── SETTINGS PANEL ─── */
 .settings-panel{overflow:hidden;max-height:0;transition:max-height .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;opacity:0;pointer-events:none}
-.settings-panel.open{max-height:480px;opacity:1;pointer-events:auto}
+.settings-panel.open{max-height:900px;opacity:1;pointer-events:auto}
 .settings-inner{background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--radius-lg);padding:1.1rem 1.25rem;margin-bottom:1.25rem;box-shadow:var(--shadow-md)}
 .settings-title{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.875rem}
 .settings-row{display:flex;gap:.5rem;align-items:stretch;margin-bottom:.75rem}
@@ -161,6 +161,18 @@ img{display:block;max-width:100%;height:auto}
 .drop-loading{padding:1rem;text-align:center;color:var(--text-muted);font-size:.85rem}
 .drop-empty{padding:1rem;text-align:center;color:var(--text-faint);font-size:.85rem}
 
+/* ─── SPORTS SEARCH BAR ─── */
+.sports-search-row{display:flex;gap:.625rem;align-items:stretch;margin-bottom:.75rem}
+.sports-search-box{position:relative;flex:1}
+.sports-search-input{width:100%;padding:.75rem .875rem .75rem 2.6rem;border:1.5px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2);font-size:.95rem;outline:none;transition:border-color var(--ease),box-shadow var(--ease)}
+.sports-search-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-border)}
+.sports-search-input::placeholder{color:var(--text-faint)}
+.sports-search-btn{padding:.75rem 1.35rem;background:var(--gold);color:#fff;border-radius:var(--radius-lg);font-weight:700;font-size:.88rem;white-space:nowrap;transition:background var(--ease),transform var(--ease)}
+.sports-search-btn:hover{background:var(--gold-h)}
+.sports-search-btn:active{transform:scale(.97)}
+.sports-drop-list{position:absolute;top:.4rem;left:0;right:0;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);max-height:280px;overflow-y:auto;display:none;z-index:25}
+.sports-drop-list.open{display:block}
+
 /* ─── SPORTS CARD ENTRY FORM ─── */
 .sports-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.5rem;margin-bottom:.75rem}
 .sports-form-title{font-size:.85rem;font-weight:700;letter-spacing:-.01em;color:var(--text);margin-bottom:1rem}
@@ -229,9 +241,11 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .mini-input:focus{border-color:var(--gold)}
 .mini-input::-webkit-outer-spin-button,.mini-input::-webkit-inner-spin-button{-webkit-appearance:none}
 
-.calc-btn{width:100%;margin-top:1rem;padding:.75rem;background:var(--gold);color:#fff;border-radius:var(--radius-lg);font-weight:700;font-size:.9rem;transition:background var(--ease),transform var(--ease)}
-.calc-btn:hover{background:var(--gold-h)}
+.calc-btn{width:100%;margin-top:1rem;padding:.75rem;background:var(--gold);color:#fff;border-radius:var(--radius-lg);font-weight:700;font-size:.9rem;transition:background var(--ease),transform var(--ease),box-shadow var(--ease)}
+.calc-btn:hover{background:var(--gold-h);box-shadow:0 0 0 3px var(--gold-border)}
 .calc-btn:active{transform:scale(.98)}
+@keyframes calc-pulse{0%{box-shadow:0 0 0 0 var(--gold-border)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.calc-btn.pulsed{animation:calc-pulse .45s ease-out}
 
 .sep{height:1px;background:var(--divider);margin:.875rem 0}
 
@@ -540,6 +554,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
   <!-- Sports card entry form (hidden by default) -->
   <div id="sportsForm" style="display:none;margin-top:.875rem">
+    <!-- Sports Search Bar -->
+    <div class="sports-search-row">
+      <div class="sports-search-box">
+        <span class="search-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </span>
+        <input id="sportsSearchInput" class="sports-search-input" type="text" placeholder="Search player name on eBay sold comps…" autocomplete="off" />
+        <div id="sportsDropList" class="sports-drop-list"></div>
+      </div>
+      <button id="sportsSearchBtn" class="sports-search-btn" onclick="doSportsSearch()">Search eBay</button>
+    </div>
     <div class="sports-form">
       <div class="sports-form-title">Sports Card Details</div>
       <div class="sports-grid">
@@ -573,17 +598,39 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="sports-field sports-full">
           <label for="sp_grade">Grade / Condition</label>
           <select id="sp_grade">
-            <option value="Raw/Ungraded">Raw / Ungraded</option>
-            <option value="PSA 10">PSA 10</option>
-            <option value="PSA 9">PSA 9</option>
-            <option value="PSA 8">PSA 8</option>
-            <option value="PSA 7">PSA 7</option>
-            <option value="BGS 9.5">BGS 9.5</option>
-            <option value="BGS 9">BGS 9</option>
-            <option value="BGS 8">BGS 8</option>
-            <option value="CGC 10">CGC 10</option>
-            <option value="CGC 9.5">CGC 9.5</option>
-            <option value="CGC 9">CGC 9</option>
+            <optgroup label="Raw / Ungraded">
+              <option value="Raw/Ungraded">Raw — Near Mint</option>
+              <option value="Raw/Excellent">Raw — Excellent</option>
+              <option value="Raw/Good">Raw — Good</option>
+              <option value="Raw/Poor">Raw — Poor</option>
+            </optgroup>
+            <optgroup label="PSA">
+              <option value="PSA 10">PSA 10 — Gem Mint</option>
+              <option value="PSA 9">PSA 9 — Mint</option>
+              <option value="PSA 8">PSA 8 — NM-MT</option>
+              <option value="PSA 7">PSA 7 — Near Mint</option>
+              <option value="PSA 6">PSA 6 — Ex-MT</option>
+              <option value="PSA 5">PSA 5 — Excellent</option>
+            </optgroup>
+            <optgroup label="BGS / Beckett">
+              <option value="BGS 10">BGS 10 — Pristine</option>
+              <option value="BGS 9.5">BGS 9.5 — Gem Mint</option>
+              <option value="BGS 9">BGS 9 — Mint</option>
+              <option value="BGS 8.5">BGS 8.5 — NM-MT+</option>
+              <option value="BGS 8">BGS 8 — NM-MT</option>
+            </optgroup>
+            <optgroup label="CGC">
+              <option value="CGC 10">CGC 10 — Pristine</option>
+              <option value="CGC 9.5">CGC 9.5 — Gem Mint</option>
+              <option value="CGC 9">CGC 9 — Mint</option>
+              <option value="CGC 8.5">CGC 8.5 — NM-MT+</option>
+              <option value="CGC 8">CGC 8 — NM-MT</option>
+            </optgroup>
+            <optgroup label="SGC">
+              <option value="SGC 10">SGC 10 — Gem</option>
+              <option value="SGC 9.5">SGC 9.5 — Mint+</option>
+              <option value="SGC 9">SGC 9 — Mint</option>
+            </optgroup>
           </select>
         </div>
       </div>
@@ -592,7 +639,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         Find eBay Sold Comps →
       </button>
       <div class="sports-note">
-        <strong>No free sports card API is available.</strong> Search eBay sold listings above to find your card's market value, then enter it in the <strong>Override price</strong> field below. The fee calculator will work normally once you've set a price.
+        <strong>Tip:</strong> Use the <strong>Search eBay</strong> bar above to find sold comps for your card. Copy the price you find into the <strong>Override price</strong> field below — the fee calculator will show you every platform's payout instantly.
       </div>
     </div>
   </div>
@@ -766,7 +813,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <input type="number" id="itemCost" class="mini-input" style="width:100%" placeholder="0.00" min="0" step="0.01" oninput="calc()" />
         </div>
 
-        <button class="calc-btn" onclick="calc()">⚡ Calculate Platform Payouts</button>
+        <button class="calc-btn" id="calcBtn" onclick="this.classList.remove('pulsed');void this.offsetWidth;this.classList.add('pulsed');calc()">⚡ Calculate Platform Payouts</button>
 
         <div class="sep"></div>
 
@@ -1001,14 +1048,14 @@ function saveOpenAiKey() {
     btn.addEventListener('click', () => {
       const open = panel.classList.toggle('open');
       btn.classList.toggle('active', open);
-      // Pre-fill saved values when panel opens
+      // Pre-fill saved values whenever panel opens
       if (open) {
         const gcInput = document.getElementById('googleClientIdInput');
-        if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
+        if (gcInput) gcInput.value = _SAVED_CLIENT_ID || '';
         const tplInput = document.getElementById('tplKeyInput');
-        if (tplInput && window.tplApiKey) tplInput.value = window.tplApiKey;
+        if (tplInput) tplInput.value = window.tplApiKey || '';
         const oaiInput = document.getElementById('openAiKeyInput');
-        if (oaiInput && window._openAiKey) oaiInput.value = window._openAiKey;
+        if (oaiInput) oaiInput.value = window._openAiKey || '';
       }
     });
   }
@@ -1155,6 +1202,8 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
     const isOther  = activeGame === 'other';
     const isJP    = activeGame === 'pokemonjp';
 
+    // Show the main search row for all non-sports tabs
+    // Sports has its own search bar inside the sportsForm
     searchRow.style.display = isSports ? 'none' : 'flex';
     sportsForm.style.display = isSports ? 'block' : 'none';
     otherTcgNote.style.display = isOther ? 'block' : 'none';
@@ -1170,12 +1219,24 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
     if (!isSports) {
       searchInput.placeholder = placeholders[activeGame] || 'Search card name…';
       searchInput.value = '';
+      dropList.innerHTML = '';
+    } else {
+      // Clear sports search bar on re-entering sports tab
+      const ssi = document.getElementById('sportsSearchInput');
+      if (ssi) ssi.value = '';
+      const sdl = document.getElementById('sportsDropList');
+      if (sdl) { sdl.innerHTML = ''; sdl.classList.remove('open'); }
     }
 
     // Clear selected card state for non-sports
     if (!isSports) {
       selectedCard = null;
       resetCardPanel();
+    } else {
+      // Show sports placeholder in card panel
+      resetCardPanel();
+      cardImgPh.style.display = 'none';
+      sportsCardPh.style.display = 'flex';
     }
   });
 });
@@ -1662,6 +1723,10 @@ function openEbayComps() {
   const query = encodeURIComponent(parts.join(' '));
   window.open(`https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=212&LH_Sold=1&LH_Complete=1`, '_blank');
 
+  // Sync search input so it shows what was searched
+  const ssi = document.getElementById('sportsSearchInput');
+  if (ssi && player) ssi.value = player;
+
   // Also load a sports card into the card panel
   const emoji = SPORT_EMOJI[sport] || '🏆';
   const sportCard = {
@@ -1679,8 +1744,174 @@ function openEbayComps() {
   loadCardUI(sportCard);
 }
 
+// ── Sports search (eBay sold comps) ──
+let _sportsSearchTimeout = null;
+
+// Wire up sports search input via event delegation
+(function initSportsSearch() {
+  document.addEventListener('input', function(e) {
+    if (e.target.id !== 'sportsSearchInput') return;
+    clearTimeout(_sportsSearchTimeout);
+    const q = e.target.value.trim();
+    const sdl = document.getElementById('sportsDropList');
+    if (q.length < 2) { if (sdl) { sdl.innerHTML = ''; sdl.classList.remove('open'); } return; }
+    _sportsSearchTimeout = setTimeout(() => doSportsSearchLive(q), 350);
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.target.id !== 'sportsSearchInput') return;
+    if (e.key === 'Enter') { clearTimeout(_sportsSearchTimeout); doSportsSearch(); }
+    if (e.key === 'Escape') {
+      const sdl = document.getElementById('sportsDropList');
+      if (sdl) { sdl.innerHTML = ''; sdl.classList.remove('open'); }
+    }
+  });
+  document.addEventListener('click', function(e) {
+    // Keep dropdown open if clicking the search box OR the search button
+    if (!e.target.closest('.sports-search-box') && !e.target.closest('#sportsSearchBtn')) {
+      const sdl = document.getElementById('sportsDropList');
+      if (sdl) { sdl.classList.remove('open'); }
+    }
+  });
+})();
+
+async function doSportsSearchLive(q) {
+  const sdl = document.getElementById('sportsDropList');
+  if (!sdl) return;
+  sdl.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Searching eBay sold&hellip;</div>';
+  sdl.classList.add('open');
+
+  const sport  = document.getElementById('sp_sport')?.value || 'Baseball';
+  const year   = document.getElementById('sp_year')?.value?.trim() || '';
+  const brand  = document.getElementById('sp_brand')?.value?.trim() || '';
+  const grade  = document.getElementById('sp_grade')?.value || 'Raw/Ungraded';
+  const gradeLabel = grade !== 'Raw/Ungraded' ? grade : '';
+  const queryParts = [q, year, brand, gradeLabel, sport + ' card'].filter(Boolean);
+  const ebayQuery  = queryParts.join(' ');
+  const ebayUrl    = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(ebayQuery)}&_sacat=212&LH_Sold=1&LH_Complete=1`;
+
+  let html = '';
+
+  // Direct eBay search row
+  html += `<div class="drop-item" data-sports-idx="ebay-direct" style="border-left:3px solid var(--gold);cursor:pointer">
+    <div class="drop-thumb-ph" style="font-size:1.1rem">🛒</div>
+    <div class="drop-info">
+      <div class="drop-name">${esc(q)} <span style="font-size:.72rem;color:var(--gold);font-weight:700">SEARCH EBAY SOLD</span></div>
+      <div class="drop-meta">Open eBay sold listings for: ${esc(queryParts.slice(0,3).join(' '))}</div>
+    </div>
+    <span style="background:var(--gold);color:#fff;font-size:.68rem;font-weight:700;padding:.2rem .5rem;border-radius:.4rem;white-space:nowrap">Sold Comps</span>
+  </div>`;
+
+  // Grade-specific eBay searches
+  const gradeOpts = ['Raw/Ungraded','PSA 10','PSA 9','PSA 8','BGS 9.5','CGC 9.5'];
+  gradeOpts.forEach((g, i) => {
+    const gq = g !== 'Raw/Ungraded' ? g : '';
+    const gParts = [q, year, brand, gq, sport + ' card'].filter(Boolean);
+    const gUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(gParts.join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`;
+    const glabel = g === 'Raw/Ungraded' ? 'Raw / Ungraded' : g;
+    html += `<div class="drop-item" data-sports-idx="ebay-grade-${i}" data-ebay-url="${esc(gUrl)}" data-grade-val="${esc(g)}" style="cursor:pointer">
+      <div class="drop-thumb-ph" style="font-size:.95rem">🏷️</div>
+      <div class="drop-info">
+        <div class="drop-name">${esc(q)} — <span style="font-weight:600">${esc(glabel)}</span></div>
+        <div class="drop-meta">eBay sold comps for this grade</div>
+      </div>
+      <span style="font-size:.68rem;color:var(--text-muted)">eBay →</span>
+    </div>`;
+  });
+
+  // PriceCharting search link
+  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(q + ' ' + sport)}&type=prices`;
+  html += `<div class="drop-item" data-sports-idx="pricecharting" data-pc-url="${esc(pcUrl)}" style="cursor:pointer">
+    <div class="drop-thumb-ph" style="font-size:.95rem">📊</div>
+    <div class="drop-info">
+      <div class="drop-name">${esc(q)} on PriceCharting</div>
+      <div class="drop-meta">Cross-reference prices (especially graded)</div>
+    </div>
+    <span style="font-size:.68rem;color:var(--text-muted)">PC →</span>
+  </div>`;
+
+  sdl.innerHTML = html;
+  sdl.classList.add('open');
+
+  // Attach click handlers
+  sdl.querySelectorAll('.drop-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = el.dataset.sportsIdx;
+      if (idx === 'ebay-direct') {
+        window.open(ebayUrl, '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        loadSportsCardFromSearch(q);
+      } else if (idx === 'pricecharting') {
+        window.open(el.dataset.pcUrl, '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        loadSportsCardFromSearch(q);
+      } else if (el.dataset.ebayUrl) {
+        window.open(el.dataset.ebayUrl, '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        // Set grade dropdown
+        const gradeVal = el.dataset.gradeVal;
+        if (gradeVal) {
+          const spGrade = document.getElementById('sp_grade');
+          if (spGrade) {
+            const opt = Array.from(spGrade.options).find(o => o.value === gradeVal);
+            if (opt) spGrade.value = opt.value;
+          }
+        }
+        loadSportsCardFromSearch(q);
+      }
+      sdl.classList.remove('open');
+    });
+  });
+}
+
+function doSportsSearch() {
+  const ssi = document.getElementById('sportsSearchInput');
+  const q = (ssi?.value || '').trim();
+  if (!q) {
+    if (ssi) {
+      ssi.focus();
+      ssi.style.boxShadow = '0 0 0 3px var(--gold-border)';
+      setTimeout(() => { ssi.style.boxShadow = ''; }, 1500);
+    }
+    return;
+  }
+  doSportsSearchLive(q);
+}
+
+function loadSportsCardFromSearch(playerName) {
+  const year    = document.getElementById('sp_year')?.value?.trim() || '';
+  const brand   = document.getElementById('sp_brand')?.value?.trim() || '';
+  const cardnum = document.getElementById('sp_cardnum')?.value?.trim() || '';
+  const sport   = document.getElementById('sp_sport')?.value || 'Baseball';
+  const emoji   = SPORT_EMOJI[sport] || '🏆';
+  const sportCard = {
+    name: `${emoji} ${playerName}`,
+    game: 'sports',
+    images: { small: '', large: '' },
+    setName: [year, brand].filter(Boolean).join(' '),
+    number: cardnum,
+    rarity: sport,
+    priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
+    source: 'Manual',
+    updatedAt: 'Enter via override',
+  };
+  selectedCard = sportCard;
+  loadCardUI(sportCard);
+}
+
+
 // ── Auto-load sports card on form field changes ──
 ['sp_player','sp_year','sp_brand','sp_cardnum','sp_sport','sp_grade'].forEach(id => {
+  // Also sync player name → sports search input so they stay in sync
+  if (id === 'sp_player') {
+    document.getElementById(id)?.addEventListener('input', () => {
+      const val = document.getElementById('sp_player')?.value || '';
+      const ssi = document.getElementById('sportsSearchInput');
+      if (ssi) ssi.value = val;
+    });
+  }
   document.getElementById(id)?.addEventListener('change', () => {
     const player  = document.getElementById('sp_player').value.trim();
     if (!player) return;
@@ -2225,7 +2456,17 @@ function calc() {
   resultsArea.innerHTML = html;
 }
 
-function setSort(m) { sortMode = m; calc(); }
+function setSort(m) {
+  sortMode = m;
+  // Only recalc if there's a price to work with
+  const price = getEffectivePrice();
+  if (price > 0) {
+    calc();
+  } else {
+    // Just update the button active state visually
+    document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(m === 'payout' ? 'payout' : '%')));
+  }
+}
 
 function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
@@ -2233,15 +2474,16 @@ function fmt(n) {
 }
 
 function showIntro() {
-  if (activeGame === 'sports' && !priceOverride.value) {
+  if (activeGame === 'sports') {
     resultsArea.innerHTML = `<div class="intro-state">
       <div class="intro-icon">⚾</div>
       <div class="intro-h">Search eBay comps, then enter your price</div>
-      <p class="intro-p">Click "Find eBay Sold Comps" to research your card's market value, then enter a price in the <strong>Override field above</strong> to see platform payouts.</p>
+      <p class="intro-p">Use the <strong>Search eBay</strong> bar above to find sold comps for your card, then type a price in the <strong>Override field</strong> to see platform payouts.</p>
     </div>`;
-    // Highlight the override field to guide the user
-    priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
-    setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
+    if (selectedCard && !priceOverride.value) {
+      priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
+      setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
+    }
     return;
   }
   if (activeGame === 'pokemonjp' && !priceOverride.value) {
@@ -2250,19 +2492,29 @@ function showIntro() {
       <div class="intro-h">Search a JP card, click JP COMPS</div>
       <p class="intro-p">Type a card name, then click the gold JP COMPS row to open eBay Japanese sold listings. Use the <strong>Override field</strong> to enter the JP price you find.</p>
     </div>`;
-    priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
-    setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
+    if (selectedCard) {
+      priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
+      setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
+    }
+    return;
+  }
+  if (!selectedCard && !priceOverride.value) {
+    resultsArea.innerHTML = `<div class="intro-state">
+      <div class="intro-icon">🃏</div>
+      <div class="intro-h">Search for a card to get started</div>
+      <p class="intro-p">Find any Pokémon, Magic, Yu-Gi-Oh!, or sports card and see exactly where to sell it for maximum profit.</p>
+    </div>`;
     return;
   }
   resultsArea.innerHTML = `<div class="intro-state">
     <div class="intro-icon">💰</div>
     <div class="intro-h">Enter a sale price to calculate</div>
-    <p class="intro-p">Type a price in the <strong>Override field above</strong>, or search for a card to get its market price — then hit <strong>⚡ Calculate</strong> to see platform payouts.</p>
+    <p class="intro-p">Type a price in the <strong>Override field above</strong>, or select a variant to auto-fill — then hit <strong>⚡ Calculate</strong>.</p>
   </div>`;
-  // Pulse-highlight the override field
-  priceOverride.focus();
-  priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
-  setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
+  if (!priceOverride.value) {
+    priceOverride.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { priceOverride.style.boxShadow = ''; }, 2000);
+  }
 }
 
 /* ─── THEME TOGGLE ─── */
@@ -2550,7 +2802,8 @@ function applyGoogleUser() {
 }
 
 function signOut() {
-  if (!confirm('Sign out of ' + (googleUser?.name || 'your account') + '?')) return;
+  const name = googleUser?.name || 'your account';
+  if (!window.confirm('Sign out of ' + name + '?')) return;
   googleUser = null;
   // Clear persisted session
   try { localStorage.removeItem('cardsell_google_user'); } catch(e) {}
@@ -2568,8 +2821,15 @@ function signOut() {
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
+  // Reset file input — replace the element so same file can be scanned again
   const fi = document.getElementById('scanFileInput');
-  if (fi) fi.value = '';
+  if (fi) {
+    fi.value = '';
+    // Force reset by replacing the input (necessary for some browsers)
+    const clone = fi.cloneNode(true);
+    fi.parentNode.replaceChild(clone, fi);
+    clone.addEventListener('change', function() { processScanImage(this); });
+  }
 }
 
 async function processScanImage(input) {
@@ -2661,7 +2921,8 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
       });
     }
     statusEl.textContent = 'Reading card text…';
-    const imgUrl = objectUrl || URL.createObjectURL(file);
+    const imgUrl = objectUrl || (file ? URL.createObjectURL(file) : null);
+    if (!imgUrl) { statusEl.textContent = 'No image to process.'; return; }
     const { data: { text } } = await Tesseract.recognize(imgUrl, 'eng', {
       logger: m => { if (m.status === 'recognizing text') statusEl.textContent = 'Reading… ' + Math.round(m.progress * 100) + '%'; }
     });
@@ -2721,7 +2982,17 @@ function savePortData(data) {
 }
 
 // Init on load
-window.addEventListener('load', initGoogleSignIn);
+window.addEventListener('load', () => {
+  initGoogleSignIn();
+  updateKeyStatus();  // show correct status dot for saved API key
+  // Pre-populate settings inputs with saved values
+  const tplInput = document.getElementById('tplKeyInput');
+  if (tplInput && window.tplApiKey) tplInput.value = window.tplApiKey;
+  const oaiInput = document.getElementById('openAiKeyInput');
+  if (oaiInput && window._openAiKey) oaiInput.value = window._openAiKey;
+  const gcInput = document.getElementById('googleClientIdInput');
+  if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
+});
 
 // ── Keyboard: Escape closes modal ──
 document.addEventListener('keydown', e => {
