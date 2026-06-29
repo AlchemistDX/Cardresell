@@ -2469,20 +2469,27 @@ function handleGoogleSignIn(response) {
   const payload = JSON.parse(atob(response.credential.split('.')[1]));
   googleUser = { name: payload.name, email: payload.email, avatar: payload.picture, sub: payload.sub };
   
-  // Update UI
+  // Persist session so reload doesn't log user out
+  try { localStorage.setItem('cardsell_google_user', JSON.stringify(googleUser)); } catch(e) {}
+
+  applyGoogleUser();
+  loadUserData();
+}
+
+function applyGoogleUser() {
+  if (!googleUser) return;
   document.getElementById('googleSignInBtn').style.display = 'none';
   const userBtn = document.getElementById('googleUserBtn');
   userBtn.style.display = 'flex';
   document.getElementById('googleAvatar').src = googleUser.avatar;
   document.getElementById('googleName').textContent = googleUser.name.split(' ')[0];
-  
-  // Load this user's flip/portfolio data
-  loadUserData();
 }
 
 function signOut() {
   if (!confirm('Sign out of ' + (googleUser?.name || 'your account') + '?')) return;
   googleUser = null;
+  // Clear persisted session
+  try { localStorage.removeItem('cardsell_google_user'); } catch(e) {}
   document.getElementById('googleSignInBtn').style.display = 'flex';
   document.getElementById('googleUserBtn').style.display = 'none';
   document.getElementById('googleAvatar').src = '';
@@ -2490,6 +2497,22 @@ function signOut() {
   // Re-render flips view with no-user state
   if (document.getElementById('flipsView').classList.contains('active')) renderFlipsView();
 }
+
+// Restore Google session on page load
+(function restoreGoogleSession() {
+  try {
+    const saved = localStorage.getItem('cardsell_google_user');
+    if (saved) {
+      googleUser = JSON.parse(saved);
+      // Wait for DOM to be ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applyGoogleUser);
+      } else {
+        applyGoogleUser();
+      }
+    }
+  } catch(e) {}
+})();
 
 function getUserKey(suffix) {
   return googleUser ? 'cardsell_' + googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
