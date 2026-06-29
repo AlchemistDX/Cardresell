@@ -776,9 +776,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <!-- Grade selector -->
         <div id="gradeRow" style="display:none;margin-top:.625rem">
           <select id="gradeSelect" onchange="updateGradeLabel();syncGradeToPrintSelect()">
-            <option value="10">Grade 10 / Gem Mint</option>
+            <option value="10" selected>Grade 10 / Gem Mint</option>
             <option value="9.5">Grade 9.5 (BGS Gem)</option>
-            <option value="9" selected>Grade 9 / Mint</option>
+            <option value="9">Grade 9 / Mint</option>
             <option value="8.5">Grade 8.5</option>
             <option value="8">Grade 8</option>
             <option value="7">Grade 7</option>
@@ -2403,8 +2403,8 @@ function updateGradeLabel() {
   const grader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const grade = document.getElementById('gradeSelect').value;
   if (gradeLabel) {
-    const names = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC' };
-    gradeLabel.textContent = `${names[grader] || ''} ${grade}`;
+    const names = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
+    gradeLabel.textContent = `${names[grader] || grader.toUpperCase()} ${grade}`;
   }
 }
 
