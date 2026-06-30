@@ -520,6 +520,49 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pricing-close{display:flex;justify-content:center;margin-top:.5rem}
 .pricing-close-btn{padding:.45rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:99px;font-size:.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;transition:all .15s}
 .pricing-close-btn:hover{border-color:var(--text-muted);color:var(--text)}
+/* --- PRO GATE OVERLAY (blurs platform results for free users) --- */
+.pro-gate-overlay{position:relative;margin-top:-2rem;padding:2.5rem 1rem 1.5rem;display:flex;align-items:center;justify-content:center;background:linear-gradient(to bottom,transparent,var(--bg) 40%);border-radius:var(--radius-xl)}
+.pro-gate-inner{text-align:center;padding:1.5rem;max-width:320px}
+.pro-gate-icon{font-size:2rem;margin-bottom:.6rem}
+.pro-gate-title{font-size:.95rem;font-weight:800;color:var(--text);margin-bottom:.35rem;letter-spacing:-.015em}
+.pro-gate-sub{font-size:.78rem;color:var(--text-muted);line-height:1.5;margin-bottom:1rem}
+.pro-gate-btn{padding:.55rem 1.25rem;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;border:none;border-radius:99px;font-size:.82rem;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(245,197,24,.4);transition:filter .15s}
+.pro-gate-btn:hover{filter:brightness(1.08)}
+
+/* --- BULK LOOKUP --- */
+.bulk-section{margin-top:1.25rem;padding:1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.bulk-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);margin-bottom:.6rem}
+.bulk-textarea{width:100%;min-height:90px;padding:.6rem .75rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:.8rem;color:var(--text);resize:vertical;font-family:var(--mono);line-height:1.5;outline:none;transition:border-color .15s;box-sizing:border-box}
+.bulk-textarea:focus{border-color:var(--gold)}
+.bulk-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.6rem;flex-wrap:wrap}
+.bulk-hint{font-size:.72rem;color:var(--text-faint);line-height:1.4}
+.bulk-btn{flex-shrink:0;padding:.45rem 1rem;background:var(--gold);color:#000;border:none;border-radius:99px;font-size:.78rem;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .15s}
+.bulk-btn:hover{background:var(--gold-h)}
+.bulk-btn:disabled{opacity:.5;cursor:not-allowed}
+.bulk-results{margin-top:.85rem;display:flex;flex-direction:column;gap:.45rem}
+.bulk-card-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .7rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.8rem;cursor:pointer;transition:border-color .15s}
+.bulk-card-row:hover{border-color:var(--gold)}
+.bulk-card-name{font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bulk-card-price{font-family:var(--mono);font-weight:700;color:var(--green);flex-shrink:0}
+.bulk-card-price.unknown{color:var(--text-faint);font-weight:400}
+
+/* --- SCAN GATE MODAL --- */
+.scan-gate-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.scan-gate-overlay.open{opacity:1;pointer-events:auto}
+.scan-gate-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.75rem 1.5rem;width:100%;max-width:380px;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1);text-align:center}
+.scan-gate-overlay.open .scan-gate-box{transform:translateY(0)}
+.scan-gate-icon{font-size:2.5rem;margin-bottom:.75rem}
+.scan-gate-title{font-size:1rem;font-weight:800;color:var(--text);margin-bottom:.35rem}
+.scan-gate-sub{font-size:.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:1.25rem}
+.scan-gate-options{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem}
+.scan-gate-opt{display:flex;align-items:center;justify-content:space-between;padding:.7rem .9rem;border:1.5px solid var(--border);border-radius:var(--radius-md);cursor:pointer;transition:border-color .15s;text-align:left}
+.scan-gate-opt:hover{border-color:var(--gold)}
+.scan-gate-opt-info{flex:1}
+.scan-gate-opt-name{font-size:.85rem;font-weight:700;color:var(--text)}
+.scan-gate-opt-desc{font-size:.73rem;color:var(--text-muted);margin-top:.1rem}
+.scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
+.scan-gate-cancel{font-size:.78rem;color:var(--text-faint);cursor:pointer;text-decoration:underline;background:none;border:none;padding:.25rem}
+
 /* --- TOAST --- */
 .cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;white-space:nowrap}
 .cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -628,7 +671,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </span>
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
-    <button id="scanBtn" class="scan-btn" disabled title="Scanner coming soon" style="opacity:.4;cursor:not-allowed">
+    <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="AI Graded Scan — $1.50">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
@@ -637,8 +680,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; CardResell PRO</span> &mdash; AI scanning + 5 graded scans/mo.<br>
-      <span style="font-size:.73rem;color:var(--text-muted)">$4.99/mo &middot; Cancel anytime</span>
+      <span>&#11088; CardResell PRO</span> &mdash; Full fee breakdown + unlimited flip tracking.<br>
+      <span style="font-size:.73rem;color:var(--text-muted)">$9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">View Plans</button>
     <button class="promo-banner-close" onclick="dismissPromoBanner()" title="Dismiss">&times;</button>
@@ -670,6 +713,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
   <div class="results-drop">
     <div id="dropList" class="drop-list" role="listbox"></div>
+  </div>
+
+  <!-- BULK PRICE LOOKUP -->
+  <div class="bulk-section" id="bulkSection">
+    <div class="bulk-title">&#128195; Bulk Price Lookup</div>
+    <textarea id="bulkInput" class="bulk-textarea" placeholder="Charizard VMAX&#10;Pikachu V&#10;Mew ex&#10;Black Lotus&#10;...one card per line, up to 25"></textarea>
+    <div class="bulk-row">
+      <div class="bulk-hint">Free users: 3 cards &middot; <span style="color:var(--gold);font-weight:700">Pro: 25 cards instantly</span></div>
+      <button id="bulkBtn" class="bulk-btn" onclick="runBulkLookup()">Look Up Prices</button>
+    </div>
+    <div id="bulkResults" class="bulk-results"></div>
   </div>
 
   <!-- Sports card entry form (hidden by default) -->
@@ -1099,14 +1153,40 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div><!-- /flipsView -->
 
 <!-- ADD FLIP / ADD HOLD MODAL -->
+<!-- SCAN GATE MODAL -->
+<div class="scan-gate-overlay" id="scanGateOverlay" onclick="closeScanGate(event)">
+  <div class="scan-gate-box">
+    <div class="scan-gate-icon">&#128247;</div>
+    <div class="scan-gate-title">AI Card Grader</div>
+    <div class="scan-gate-sub">Upload a photo &mdash; our AI analyzes condition, centering &amp; surface wear to estimate your PSA grade.</div>
+    <div class="scan-gate-options">
+      <div class="scan-gate-opt" onclick="handleScanOption('pay')">
+        <div class="scan-gate-opt-info">
+          <div class="scan-gate-opt-name">&#128197; Single Graded Scan</div>
+          <div class="scan-gate-opt-desc">Full condition report &middot; No subscription needed</div>
+        </div>
+        <div class="scan-gate-opt-price">$1.50</div>
+      </div>
+      <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt">
+        <div class="scan-gate-opt-info">
+          <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 10 scans/mo included</div>
+          <div class="scan-gate-opt-desc">+ Full fee breakdown &amp; unlimited flip tracking</div>
+        </div>
+        <div class="scan-gate-opt-price">$9.99/mo</div>
+      </div>
+    </div>
+    <button class="scan-gate-cancel" onclick="closeScanGate()">Maybe later</button>
+  </div>
+</div>
+
 <!-- ============================================================
      PRICING / SHOP MODAL
      ============================================================ -->
 <div class="pricing-overlay" id="pricingOverlay" onclick="closePricingModal(event)">
   <div class="pricing-box">
     <div class="pricing-header">
-      <div class="pricing-title">&#11088; Upgrade Your Lookups</div>
-      <div class="pricing-sub">Scan cards with AI &mdash; quick identify or full grade report</div>
+      <div class="pricing-title">&#11088; CardResell Pro</div>
+      <div class="pricing-sub">Full platform fee breakdown, unlimited flip tracking &amp; AI graded scans</div>
     </div>
     <div class="pricing-cards">
       <!-- FREE plan -->
@@ -1116,9 +1196,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <ul class="plan-features">
           <li>Card price lookup</li>
           <li>Flip calculator</li>
-          <li>Sell links (eBay, Mercari&hellip;)</li>
-          <li class="faded">AI card scanner</li>
-          <li class="faded">Graded scan reports</li>
+          <li>5 flips tracked</li>
+          <li class="faded">Platform fee breakdown</li>
+          <li class="faded">Unlimited flip tracking</li>
+          <li class="faded">AI graded scans</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -1126,30 +1207,30 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div class="plan-card featured">
         <div class="plan-badge">BEST VALUE</div>
         <div class="plan-name">Pro</div>
-        <div class="plan-price"><sup>$</sup>4<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
+        <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
         <ul class="plan-features">
-          <li>Everything in Free</li>
-          <li>Unlimited Quick Identify</li>
-          <li>5 free Graded Scans/mo</li>
+          <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
+          <li>Unlimited flip &amp; portfolio tracking</li>
+          <li>10 free Graded Scans/mo</li>
+          <li>Bulk price lookup (25 cards)</li>
           <li>PRO badge on account</li>
-          <li>Priority support</li>
         </ul>
         <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
-          <span id="pricingProBtnText">Get Pro &mdash; $4.99/mo</span>
+          <span id="pricingProBtnText">Get Pro &mdash; $9.99/mo</span>
         </button>
       </div>
     </div>
     <hr class="pricing-divider">
-    <!-- Per-scan credit purchase -->
+    <!-- Pay-per-use options -->
     <div class="scan-credit-row">
       <div class="scan-credit-info">
-        <strong>Extra Graded Scan</strong><br>
-        $1.50 per scan &middot; After your 5 free/mo are used
+        <strong>AI Graded Scan</strong><br>
+        $1.50 per scan &middot; No subscription needed
       </div>
       <button class="scan-credit-buy" onclick="startScanCheckout()">Buy 1 Scan &mdash; $1.50</button>
     </div>
     <div style="font-size:.72rem;color:var(--text-faint);text-align:center;margin-bottom:1rem;line-height:1.5">
-      Graded Scans use AI to analyze condition, centering &amp; surface. Quick Identify (name + set) is unlimited with Pro.
+      Graded Scans use AI to analyze condition, centering &amp; surface wear &mdash; tells you if it&apos;s worth grading at PSA.
     </div>
     <div class="pricing-close">
       <button class="pricing-close-btn" onclick="closePricingModal()">Maybe later</button>
@@ -3062,6 +3143,20 @@ function calc() {
     </${cardTag}>`;
   });
 
+  // Pro gate — blur platform details for free users
+  if (!window._isPro) {
+    html += `</div>
+    <div class="pro-gate-overlay">
+      <div class="pro-gate-inner">
+        <div class="pro-gate-icon">&#11088;</div>
+        <div class="pro-gate-title">See which platform pays you most</div>
+        <div class="pro-gate-sub">Full fee breakdown for eBay, Mercari, StockX &amp; COMC — Pro only</div>
+        <button class="pro-gate-btn" onclick="openPricingModal('calc_gate')">Unlock with Pro &mdash; $9.99/mo</button>
+      </div>
+    </div>`;
+    resultsArea.innerHTML = html;
+    return;
+  }
   html += `</div>`;
 
   // Bar chart
@@ -3247,6 +3342,12 @@ function saveFlipEntry() {
     const platform  = document.getElementById('mPlatform').value;
     const profit    = sellPrice - buyPrice;
     const flips = loadFlipsData();
+    // Free users capped at 5 flips
+    if (!window._isPro && flips.length >= 5) {
+      document.getElementById('flipModal').classList.remove('open');
+      setTimeout(() => openPricingModal('flips_cap'), 200);
+      return;
+    }
     flips.push({ id: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, profit, platform, date });
     saveFlipsData(flips);
   }
@@ -3889,6 +3990,105 @@ function showToast(msg, duration) {
   }
 })();
 
+
+/* =========================================================
+   SCAN GATE — $1.50 pay-per-use graded scan
+   ========================================================= */
+
+function openGradedScanGate() {
+  if (!googleUser) {
+    // Must be signed in
+    showToast('Sign in with Google first to use the scanner');
+    return;
+  }
+  // If already Pro with credits, go straight to scan
+  if (window._isPro && (window._freeScansLeft > 0 || window._scanCredits > 0)) {
+    document.getElementById('scanFileInput').click();
+    return;
+  }
+  // Show gate modal
+  document.getElementById('scanGateOverlay').classList.add('open');
+  // If already Pro, hide the Pro upsell option
+  const proOpt = document.getElementById('scanGateProOpt');
+  if (window._isPro && proOpt) proOpt.style.display = 'none';
+}
+
+function closeScanGate(evt) {
+  if (evt && evt.target !== document.getElementById('scanGateOverlay')) return;
+  document.getElementById('scanGateOverlay').classList.remove('open');
+}
+
+function handleScanOption(choice) {
+  document.getElementById('scanGateOverlay').classList.remove('open');
+  if (choice === 'pay') {
+    startScanCheckout();
+  } else if (choice === 'pro') {
+    openPricingModal('scan_gate');
+  }
+}
+
+/* =========================================================
+   BULK PRICE LOOKUP — free: 3 cards, Pro: 25 cards
+   ========================================================= */
+
+async function runBulkLookup() {
+  const input = document.getElementById('bulkInput').value.trim();
+  if (!input) { showToast('Enter at least one card name'); return; }
+
+  const lines = input.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+  if (!lines.length) { showToast('Enter at least one card name'); return; }
+
+  const limit = window._isPro ? 25 : 3;
+  const cards = lines.slice(0, limit);
+
+  if (!window._isPro && lines.length > 3) {
+    showToast('\u2605 Pro unlocks up to 25 cards — showing first 3');
+  }
+
+  const btn = document.getElementById('bulkBtn');
+  const resultsEl = document.getElementById('bulkResults');
+  btn.disabled = true;
+  btn.textContent = 'Looking up...';
+  resultsEl.innerHTML = cards.map(c => `<div class="bulk-card-row"><span class="bulk-card-name">${esc(c)}</span><span class="bulk-card-price unknown">searching...</span></div>`).join('');
+
+  // Look up each card in parallel using existing search logic
+  const results = await Promise.all(cards.map(async (cardName) => {
+    try {
+      // Use PokeTrace / TCG API via our existing endpoint
+      const r = await fetch('/api/poketrace?' + new URLSearchParams({ q: cardName, game: 'pokemon' }));
+      if (!r.ok) return { name: cardName, price: null };
+      const d = await r.json();
+      // Pull first result price
+      const first = d?.results?.[0] || d?.[0];
+      const price = first?.marketPrice || first?.price || first?.tcgPlayerPrice || null;
+      return { name: cardName, price };
+    } catch(e) { return { name: cardName, price: null }; }
+  }));
+
+  resultsEl.innerHTML = results.map(r => `
+    <div class="bulk-card-row" onclick="document.getElementById('searchInput').value=${JSON.stringify(r.name)};document.getElementById('searchInput').dispatchEvent(new Event('input'));setTimeout(()=>document.getElementById('searchBtn').click(),200);document.getElementById('bulkSection').scrollIntoView({behavior:'smooth'})">
+      <span class="bulk-card-name">${esc(r.name)}</span>
+      <span class="bulk-card-price ${r.price ? '' : 'unknown'}">${r.price ? '$' + parseFloat(r.price).toFixed(2) : 'Tap to search'}</span>
+    </div>`).join('');
+
+  if (!window._isPro && lines.length > 3) {
+    resultsEl.innerHTML += `<div style="margin-top:.5rem;padding:.6rem .75rem;background:linear-gradient(135deg,rgba(184,134,11,.1),rgba(245,197,24,.06));border:1px solid rgba(245,197,24,.25);border-radius:var(--radius-md);font-size:.76rem;color:var(--text-muted);text-align:center">
+      <span style="color:var(--gold);font-weight:700">&#11088; Pro unlocks all ${lines.length} cards</span> &mdash; <span style="cursor:pointer;text-decoration:underline" onclick="openPricingModal('bulk_gate')">Upgrade for $9.99/mo</span>
+    </div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Look Up Prices';
+}
+
+/* =========================================================
+   FLIP CAP — show upsell when free user hits 5 flips
+   ========================================================= */
+
+function showFlipCapModal() {
+  openPricingModal('flips_cap');
+}
+
 // Init on load
 window.addEventListener('load', () => {
   initGoogleSignIn();
@@ -3910,6 +4110,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     document.getElementById('flipModal').classList.remove('open');
     document.getElementById('pricingOverlay')?.classList.remove('open');
+    document.getElementById('scanGateOverlay')?.classList.remove('open');
   }
 });
 
