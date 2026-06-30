@@ -164,8 +164,12 @@ img{display:block;max-width:100%;height:auto}
 
 /* category pills */
 .cat-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}
-.cat-pill{padding:.28rem .75rem;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:.73rem;font-weight:500;color:var(--text-muted);transition:all var(--ease);cursor:pointer;white-space:nowrap}
+.cat-pill{display:none!important;padding:.28rem .75rem;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:.73rem;font-weight:500;color:var(--text-muted);transition:all var(--ease);cursor:pointer;white-space:nowrap}
 .cat-pill:hover,.cat-pill.active{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600}
+.game-select-wrap{position:relative;display:inline-flex;align-items:center}
+.game-select{appearance:none;-webkit-appearance:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.4rem 2rem .4rem .75rem;font-size:.8rem;font-weight:600;color:var(--text);cursor:pointer;transition:border-color var(--ease),background var(--ease);outline:none;min-width:160px}
+.game-select:focus,.game-select:hover{border-color:var(--gold);background:var(--gold-hi)}
+.game-select-arrow{position:absolute;right:.55rem;pointer-events:none;color:var(--text-muted)}
 
 /* ─── SEARCH RESULTS DROPDOWN ─── */
 .results-drop{position:relative;z-index:20}
@@ -458,6 +462,63 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .fl-add-btn:active{transform:scale(.97)}
 .fl-sub-btn{display:flex;align-items:center;gap:.4rem;padding:.4rem .85rem;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:var(--radius-lg);font-size:.78rem;font-weight:600;transition:all var(--ease)}
 .fl-sub-btn:hover{border-color:var(--gold);color:var(--gold)}
+
+/* --- PRO BADGE (visible only for paying Pro users) --- */
+.pro-badge{display:none;align-items:center;gap:.25rem;padding:.18rem .55rem;background:linear-gradient(135deg,#b8860b,#f5c518,#b8860b);color:#000;border-radius:99px;font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-shadow:0 1px 4px rgba(245,197,24,.35)}
+.pro-badge.visible{display:flex}
+/* --- GET PRO BUTTON (header, non-pro signed-in users) --- */
+.get-pro-btn{display:none;align-items:center;gap:.3rem;padding:.3rem .75rem;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;border-radius:99px;font-size:.72rem;font-weight:800;letter-spacing:.02em;white-space:nowrap;cursor:pointer;border:none;transition:filter .15s ease,transform .12s ease;box-shadow:0 1px 6px rgba(245,197,24,.4)}
+.get-pro-btn:hover{filter:brightness(1.08)}
+.get-pro-btn:active{transform:scale(.96)}
+.get-pro-btn.visible{display:flex}
+/* --- PROMO BANNER --- */
+.promo-banner{display:none;align-items:center;justify-content:space-between;gap:.75rem;margin:.6rem 0 .35rem;padding:.55rem .9rem;background:linear-gradient(135deg,rgba(184,134,11,.12),rgba(245,197,24,.08));border:1px solid rgba(245,197,24,.28);border-radius:var(--radius-lg);font-size:.78rem}
+.promo-banner.visible{display:flex}
+.promo-banner-text{color:var(--text);font-weight:600;line-height:1.4}
+.promo-banner-text span{color:var(--gold)}
+.promo-banner-cta{flex-shrink:0;padding:.3rem .85rem;background:var(--gold);color:#000;border-radius:99px;font-size:.74rem;font-weight:800;cursor:pointer;white-space:nowrap;border:none;transition:background .15s}
+.promo-banner-cta:hover{background:var(--gold-h)}
+.promo-banner-close{flex-shrink:0;background:none;border:none;color:var(--text-faint);font-size:1rem;cursor:pointer;padding:0 .1rem;line-height:1}
+/* --- PRICING MODAL --- */
+.pricing-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.pricing-overlay.open{opacity:1;pointer-events:auto}
+.pricing-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.75rem 1.5rem;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.pricing-overlay.open .pricing-box{transform:translateY(0)}
+.pricing-header{text-align:center;margin-bottom:1.5rem}
+.pricing-title{font-size:1.2rem;font-weight:800;letter-spacing:-.025em;color:var(--text);margin-bottom:.3rem}
+.pricing-sub{font-size:.82rem;color:var(--text-muted);line-height:1.5}
+.pricing-cards{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.25rem}
+@media(max-width:420px){.pricing-cards{grid-template-columns:1fr}}
+.plan-card{border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:1.1rem;position:relative;transition:border-color .2s}
+.plan-card.featured{border-color:var(--gold);background:linear-gradient(160deg,rgba(245,197,24,.06),transparent)}
+.plan-badge{position:absolute;top:-.65rem;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.6rem;font-weight:800;padding:.15rem .6rem;border-radius:99px;white-space:nowrap;letter-spacing:.05em}
+.plan-name{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.35rem}
+.plan-price{font-size:1.6rem;font-weight:800;color:var(--text);letter-spacing:-.03em;line-height:1}
+.plan-price sup{font-size:.85rem;vertical-align:super}
+.plan-price sub{font-size:.7rem;font-weight:500;color:var(--text-muted)}
+.plan-features{list-style:none;padding:0;margin:.85rem 0 1.1rem;display:flex;flex-direction:column;gap:.45rem}
+.plan-features li{font-size:.78rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:.4rem;line-height:1.4}
+.plan-features li::before{content:"\2713";color:var(--gold);font-weight:700;flex-shrink:0;margin-top:.05rem}
+.plan-features li.faded::before{content:"\2013";color:var(--text-faint)}
+.plan-features li.faded{color:var(--text-faint)}
+.plan-btn{width:100%;padding:.6rem;border-radius:var(--radius-md);font-size:.82rem;font-weight:800;cursor:pointer;transition:all .15s ease;border:none}
+.plan-btn.free-btn{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border)}
+.plan-btn.free-btn:hover{border-color:var(--text-muted)}
+.plan-btn.pro-btn{background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;box-shadow:0 2px 8px rgba(245,197,24,.35)}
+.plan-btn.pro-btn:hover{filter:brightness(1.07)}
+.plan-btn.pro-btn:active{transform:scale(.97)}
+.pricing-divider{border:none;border-top:1px solid var(--border);margin:.5rem 0 1rem}
+.scan-credit-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem .9rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.85rem}
+.scan-credit-info{font-size:.8rem;color:var(--text-muted);line-height:1.45}
+.scan-credit-info strong{color:var(--text);font-weight:700}
+.scan-credit-buy{flex-shrink:0;padding:.4rem .9rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
+.scan-credit-buy:hover{background:var(--gold-hi);border-color:var(--gold)}
+.pricing-close{display:flex;justify-content:center;margin-top:.5rem}
+.pricing-close-btn{padding:.45rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:99px;font-size:.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;transition:all .15s}
+.pricing-close-btn:hover{border-color:var(--text-muted);color:var(--text)}
+/* --- TOAST --- */
+.cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;white-space:nowrap}
+.cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   </style>
   <!-- Google Sign-In -->
   <meta name="google-site-verification" content="vbXUqHxcuqg3LaCivRcNMtFPReLSMfWbid1Vi_QX6Yc" />
@@ -479,13 +540,21 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <span class="logo-text">Card<span>Sell</span></span>
   </div>
   <div class="hdr-right">
-    <div id="googleUserBtn" style="display:none;align-items:center;gap:.5rem;cursor:pointer" onclick="signOut()">
-      <img id="googleAvatar" src="" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold-border)" />
-      <span id="googleName" style="font-size:.75rem;font-weight:600;color:var(--text-muted);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <div id="googleUserBtn" style="display:none;align-items:center;gap:.5rem">
+      <span onclick="signOut()" style="display:flex;align-items:center;gap:.4rem;cursor:pointer" title="Tap to sign out">
+        <img id="googleAvatar" src="" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold-border)" />
+        <span id="googleName" style="font-size:.75rem;font-weight:600;color:var(--text-muted);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      </span>
+      <span id="proBadge" class="pro-badge">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        PRO
+      </span>
     </div>
+    <button id="getProBtn" class="get-pro-btn" onclick="openPricingModal('header')" title="Upgrade to Pro">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      Get Pro
+    </button>
     <div id="googleSignInBtn" style="display:flex"></div>
-    <span class="badge">2026 Fees</span>
-    <span class="badge-fulldb" id="badgeFulldb">🔓 Full DB</span>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
     <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -526,7 +595,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
   <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
     <div class="settings-title">📷 AI Card Scanner (optional)</div>
-    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:.5rem">The CardSell scanner uses CardGrader.AI to identify your card, predict its PSA grade (centering, corners, edges, surface), and estimate market value — all from one photo. Sign in with Google to scan.</div>
+    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:.5rem">Add an OpenAI API key to enable AI-powered card scanning. Without it, the scanner uses basic text reading. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--gold)">platform.openai.com</a> — costs ~$0.001 per scan.</div>
     <div class="settings-row">
       <input type="password" id="openAiKeyInput" class="settings-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
       <button class="settings-save-btn" onclick="saveOpenAiKey()">Save</button>
@@ -551,63 +620,45 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </span>
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
-    <span class="tpl-lock-indicator" id="tplLockIndicator">🔓 300K+ DB</span>
-    <button id="scanBtn" class="scan-btn" onclick="openScanner()" title="AI Card Scanner — identifies card, predicts grade & value">
+    <button id="scanBtn" class="scan-btn" onclick="openScanner()" title="Scan card with camera">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
     <button id="searchBtn" class="search-btn">Search</button>
   </div>
-  <!-- Hidden file inputs — one per scan mode -->
-  <input type="file" id="scanFileInputQuick"  accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this,'identify')" />
-  <input type="file" id="scanFileInputGraded" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this,'full')" />
-
-  <!-- Scan mode picker modal -->
-  <div id="scanModeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:center;justify-content:center;padding:1.5rem">
-    <div style="background:#1a1a17;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:1.75rem 1.5rem;width:min(92vw,360px);text-align:center">
-      <div style="font-size:1.5rem;margin-bottom:.4rem">📷</div>
-      <div style="font-weight:800;font-size:1.1rem;color:#fff;margin-bottom:.3rem">Scan a Card</div>
-      <div style="font-size:.8rem;color:rgba(255,255,255,.5);margin-bottom:1.5rem">Choose how much detail you need</div>
-
-      <!-- Quick Identify -->
-      <button onclick="startScan('identify')" style="width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:1rem;margin-bottom:.75rem;cursor:pointer;text-align:left;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.12)'" onmouseout="this.style.background='rgba(255,255,255,.07)'">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem">
-          <span style="font-weight:700;color:#fff;font-size:.95rem">⚡ Quick Identify</span>
-          <span style="background:rgba(74,222,128,.15);color:#4ade80;font-size:.7rem;font-weight:700;padding:.2rem .5rem;border-radius:99px">FREE</span>
-        </div>
-        <div style="font-size:.78rem;color:rgba(255,255,255,.55);line-height:1.4">Identifies the card name, set &amp; number. Auto-fills the calculator instantly. Best for quick flip checks.</div>
-      </button>
-
-      <!-- Graded Scan -->
-      <button onclick="startScan('full')" style="width:100%;background:rgba(232,160,32,.08);border:1px solid rgba(232,160,32,.3);border-radius:14px;padding:1rem;margin-bottom:1.25rem;cursor:pointer;text-align:left;transition:background .15s" onmouseover="this.style.background='rgba(232,160,32,.15)'" onmouseout="this.style.background='rgba(232,160,32,.08)'">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem">
-          <span style="font-weight:700;color:var(--gold);font-size:.95rem">🏆 Graded Scan</span>
-          <span style="background:rgba(232,160,32,.2);color:var(--gold);font-size:.7rem;font-weight:700;padding:.2rem .5rem;border-radius:99px">$1 · PRO</span>
-        </div>
-        <div style="font-size:.78rem;color:rgba(255,255,255,.55);line-height:1.4">Full AI grade prediction — centering, corners, edges, surface. Estimates PSA grade &amp; raw/graded market value.</div>
-      </button>
-
-      <button onclick="closeScanModeModal()" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:.85rem;cursor:pointer;padding:.25rem .5rem">Cancel</button>
+  <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
+  <div id="promoBanner" class="promo-banner">
+    <div class="promo-banner-text">
+      <span>&#11088; CardResell PRO</span> &mdash; AI scanning + 5 graded scans/mo.<br>
+      <span style="font-size:.73rem;color:var(--text-muted)">$4.99/mo &middot; Cancel anytime</span>
     </div>
+    <button class="promo-banner-cta" onclick="openPricingModal('banner')">View Plans</button>
+    <button class="promo-banner-close" onclick="dismissPromoBanner()" title="Dismiss">&times;</button>
   </div>
-
-  <!-- Scan progress overlay -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
-    <div id="scanModeTag" style="font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:99px;margin-bottom:-.5rem"></div>
-    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(90vw,340px)">
+  <!-- Camera scan overlay -->
+  <!-- Hidden file input — opens native camera on mobile -->
+  <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
+  <!-- Scan status modal -->
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
+    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(90vw,380px)">
       <img id="scanPreviewImg" style="width:100%;border-radius:12px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card preview" />
     </div>
-    <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Analyzing…</div>
+    <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
     <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
   </div>
-  <div class="cat-row" id="catRow">
-    <span class="cat-pill active" data-game="pokemon">Pokémon EN</span>
-    <span class="cat-pill" data-game="pokemonjp">Pokémon JP</span>
-    <span class="cat-pill" data-game="mtg">Magic: TG</span>
-    <span class="cat-pill" data-game="yugioh">Yu-Gi-Oh!</span>
-    <span class="cat-pill" data-game="sports">Sports Cards</span>
-    <span class="cat-pill" data-game="other">Other TCG</span>
+  <div class="cat-row" id="catRow" style="margin-top:.6rem">
+    <div class="game-select-wrap">
+      <select id="gameSelect" class="game-select" onchange="onGameSelectChange(this.value)">
+        <option value="pokemon">Pokémon EN</option>
+        <option value="pokemonjp">Pokémon JP</option>
+        <option value="mtg">Magic: The Gathering</option>
+        <option value="yugioh">Yu-Gi-Oh!</option>
+        <option value="sports">Sports Cards</option>
+        <option value="other">Other TCG</option>
+      </select>
+      <svg class="game-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
   </div>
   <div class="results-drop">
     <div id="dropList" class="drop-list" role="listbox"></div>
@@ -1040,6 +1091,67 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div><!-- /flipsView -->
 
 <!-- ADD FLIP / ADD HOLD MODAL -->
+<!-- ============================================================
+     PRICING / SHOP MODAL
+     ============================================================ -->
+<div class="pricing-overlay" id="pricingOverlay" onclick="closePricingModal(event)">
+  <div class="pricing-box">
+    <div class="pricing-header">
+      <div class="pricing-title">&#11088; Upgrade Your Lookups</div>
+      <div class="pricing-sub">Scan cards with AI &mdash; quick identify or full grade report</div>
+    </div>
+    <div class="pricing-cards">
+      <!-- FREE plan -->
+      <div class="plan-card">
+        <div class="plan-name">Free</div>
+        <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
+        <ul class="plan-features">
+          <li>Card price lookup</li>
+          <li>Flip calculator</li>
+          <li>Sell links (eBay, Mercari&hellip;)</li>
+          <li class="faded">AI card scanner</li>
+          <li class="faded">Graded scan reports</li>
+        </ul>
+        <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
+      </div>
+      <!-- PRO plan -->
+      <div class="plan-card featured">
+        <div class="plan-badge">BEST VALUE</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price"><sup>$</sup>4<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
+        <ul class="plan-features">
+          <li>Everything in Free</li>
+          <li>Unlimited Quick Identify</li>
+          <li>5 free Graded Scans/mo</li>
+          <li>PRO badge on account</li>
+          <li>Priority support</li>
+        </ul>
+        <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
+          <span id="pricingProBtnText">Get Pro &mdash; $4.99/mo</span>
+        </button>
+      </div>
+    </div>
+    <hr class="pricing-divider">
+    <!-- Per-scan credit purchase -->
+    <div class="scan-credit-row">
+      <div class="scan-credit-info">
+        <strong>Extra Graded Scan</strong><br>
+        $1.50 per scan &middot; After your 5 free/mo are used
+      </div>
+      <button class="scan-credit-buy" onclick="startScanCheckout()">Buy 1 Scan &mdash; $1.50</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--text-faint);text-align:center;margin-bottom:1rem;line-height:1.5">
+      Graded Scans use AI to analyze condition, centering &amp; surface. Quick Identify (name + set) is unlimited with Pro.
+    </div>
+    <div class="pricing-close">
+      <button class="pricing-close-btn" onclick="closePricingModal()">Maybe later</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="csToast" class="cs-toast"></div>
+
 <div class="modal-overlay" id="flipModal" onclick="closeFlipModal(event)">
   <div class="modal-box">
     <div class="modal-title" id="modalTitle">Log a Flip</div>
@@ -1428,10 +1540,28 @@ const SPORT_EMOJI = {
 };
 
 // ── Category pills ──
+function onGameSelectChange(game) {
+  // Mirror the old cat-pill click behavior
+  const pill = document.querySelector(`#catRow .cat-pill[data-game="${game}"]`);
+  if (pill) {
+    pill.click();
+  } else {
+    // Direct trigger if pills are gone
+    switchGame(game);
+  }
+  // Update select to match
+  const sel = document.getElementById('gameSelect');
+  if (sel && sel.value !== game) sel.value = game;
+}
+
+// Keep hidden pills in DOM for JS compatibility — sync select when pill changes
 document.querySelectorAll('#catRow .cat-pill').forEach(p => {
   p.addEventListener('click', () => {
     document.querySelectorAll('#catRow .cat-pill').forEach(x => x.classList.remove('active'));
     p.classList.add('active');
+    // Sync dropdown
+    const selEl = document.getElementById('gameSelect');
+    if (selEl) selEl.value = p.dataset.game;
     activeGame = p.dataset.game;
     dropList.classList.remove('open');
     dropList.innerHTML = '';
@@ -1528,148 +1658,40 @@ async function doSearch(q) {
   }
 }
 
-/* ── PokeTrace fetch helper ── */
-async function fetchPokeTrace(q, limit = 12) {
-  try {
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 6000);
-    const r = await fetch(`/api/poketrace?q=${encodeURIComponent(q)}&limit=${limit}`, { signal: ctrl.signal });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.cards || null;
-  } catch(e) { return null; }
-}
-
-function poketraceToNormalized(pt) {
-  const condMap = {
-    'Near Mint':         'Near Mint (NM)',
-    'Lightly Played':    'Lightly Played (LP)',
-    'Moderately Played': 'Moderately Played (MP)',
-    'Heavily Played':    'Heavily Played (HP)',
-    'Damaged':           'Damaged (DM)',
-  };
-  const priceVariants = [];
-  const cp = pt.conditionPrices || {};
-  for (const [label, data] of Object.entries(cp)) {
-    const mkt = data.ebay_avg7d ?? data.tcg_avg ?? null;
-    const low  = data.ebay_low ?? data.tcg_low ?? null;
-    const high = data.ebay_high ?? mkt;
-    if (mkt !== null) {
-      priceVariants.push({
-        key: label.toLowerCase().replace(/[^a-z]/g,'_'),
-        label: condMap[label] || label,
-        market: mkt, low, mid: mkt, high,
-        _ebay_sales: data.ebay_sales,
-      });
-    }
-  }
-  if (!priceVariants.length) {
-    priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
-  }
-  return {
-    name: pt.name,
-    game: 'pokemon',
-    images: { small: pt.image || '', large: pt.image || '' },
-    setName: pt.set || '',
-    number: pt.number || '',
-    rarity: pt.rarity || '',
-    variant: pt.variant || '',
-    priceVariants,
-    source: 'PokeTrace (eBay sold)',
-    updatedAt: pt.lastUpdated ? pt.lastUpdated.slice(0,10) : 'live',
-    marketplaceUrls: pt.marketplaceUrls || {},
-    _poketraceId: pt.id,
-  };
-}
-
-/* ── Pokémon API (TPL + PokeTrace eBay comps + PokemonTCG.io fallback) ── */
+/* ── Pokémon API (PokemonTCG.io) ── */
 async function searchPokemon(q) {
-  // Run TPL + PokeTrace in parallel — fastest path, maximum coverage
-  const [tplData, ptData] = await Promise.all([
-    searchWithTPL(q, 'pokemon').catch(() => null),
-    fetchPokeTrace(q, 12).catch(() => null),
-  ]);
-
-  window._searchCards = {};
-  let idx = 0;
-  const items = [];
-
-  // Build PokeTrace lookup: "name|number" → ptCard for cross-enrichment
-  const ptMap = {};
-  if (ptData) {
-    for (const pt of ptData) {
-      const k = `${(pt.name||'').toLowerCase()}|${(pt.number||'').toLowerCase()}`;
-      ptMap[k] = pt;
-    }
-  }
-
-  if (tplData && tplData.length) {
-    for (const c of tplData) {
-      const i = idx++;
-      const ptKey = `${(c.name||'').toLowerCase()}|${(c.number||c.card_number||'').toLowerCase()}`;
-      const ptMatch = ptMap[ptKey];
-      const nmTpl  = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
-      const nmEbay = ptMatch?.ebayNmAvg7d ?? null;
-      const displayPrice = nmEbay ?? nmTpl;
-      const priceLabel   = nmEbay ? 'eBay' : nmTpl ? 'TCG' : null;
-      const img = ptMatch?.image || c.image_url || '';
-      window._searchCards[i] = { _tpl: c, _pt: ptMatch || null, game: 'pokemon' };
-      items.push(`<div class="drop-item" data-idx="${i}" role="option">
-        ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
+  // Try TCGPriceLookup first if key is set
+  const tplData = await searchWithTPL(q, 'pokemon');
+  if (tplData) {
+    window._searchCards = {};
+    dropList.innerHTML = tplData.map((c, i) => {
+      window._searchCards[i] = { _tpl: c, game: 'pokemon' };
+      const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+      return `<div class="drop-item" data-idx="${i}" role="option">
+        <div class="drop-thumb-ph">🃏</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL${nmEbay?' + eBay':''}</span></div>
+          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
         </div>
-        ${displayPrice !== null
-          ? `<span class="drop-price">$${displayPrice.toFixed(2)}<span style="font-size:.6rem;opacity:.6;margin-left:.2rem">${priceLabel||''}</span></span>`
-          : `<span class="drop-no-price">No price</span>`}
-      </div>`);
-    }
-    dropList.innerHTML = items.join('');
+        ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
+      </div>`;
+    }).join('');
     attachDropHandlers(i => {
       const entry = window._searchCards[i];
-      const base = tplCardToNormalized(entry._tpl, 'pokemon', entry._pt?.image || entry._imgSmall || '');
-      if (entry._pt) {
-        const ptNorm = poketraceToNormalized(entry._pt);
-        const hasNm = base.priceVariants.some(v => v.key === 'near_mint' && v.market);
-        if (!hasNm && ptNorm.priceVariants[0]?.market) {
-          base.priceVariants.unshift(ptNorm.priceVariants[0]);
-        }
-        if (ptNorm.marketplaceUrls?.ebay) base._ptEbayUrl = ptNorm.marketplaceUrls.ebay;
-      }
-      return base;
+      return tplCardToNormalized(entry._tpl, 'pokemon', entry._imgSmall || '');
     });
-    const stillMissing = tplData.filter((_, i) => !window._searchCards[i]?._pt?.image && !tplData[i]?.image_url);
-    if (stillMissing.length) injectPokemonImages(tplData, 'pokemon');
+    // Fetch images in background without blocking the dropdown
+    injectPokemonImages(tplData, 'pokemon');
     return;
   }
 
-  // TPL unavailable — PokeTrace as primary
-  if (ptData && ptData.length) {
-    for (const pt of ptData) {
-      const i = idx++;
-      window._searchCards[i] = { _pt: pt, game: 'pokemon' };
-      const price = pt.marketPrice;
-      items.push(`<div class="drop-item" data-idx="${i}" role="option">
-        ${pt.image ? `<img class="drop-thumb" src="${pt.image}" loading="eager" alt="${esc(pt.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
-        <div class="drop-info">
-          <div class="drop-name">${esc(pt.name)}</div>
-          <div class="drop-meta">${esc(pt.set||'')}${pt.number?' · #'+esc(pt.number):''}${pt.rarity?' · '+esc(pt.rarity):''} <span style="font-size:.68rem;color:#4ade80">eBay sold</span></div>
-        </div>
-        ${price !== null ? `<span class="drop-price">$${price.toFixed(2)}<span style="font-size:.6rem;opacity:.6;margin-left:.2rem">eBay</span></span>` : `<span class="drop-no-price">No price</span>`}
-      </div>`);
-    }
-    dropList.innerHTML = items.join('');
-    attachDropHandlers(i => poketraceToNormalized(window._searchCards[i]._pt));
-    return;
-  }
-
-  // Final fallback: PokemonTCG.io
+  // Fallback: PokemonTCG.io
   const url = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
   const r = await fetch(url);
   const data = await r.json();
   let cards = data.data || [];
 
+  // Sort: exact match first, then by rarity (rarest first), then by set date desc
   const ql = q.toLowerCase().trim();
   const rarityScore = r => {
     const t = (r || '').toLowerCase();
@@ -1698,8 +1720,10 @@ async function searchPokemon(q) {
     };
     const na = nameScore(a), nb = nameScore(b);
     if (na !== nb) return na - nb;
+    // Within same name-match tier: rarest first
     const ra = rarityScore(a.rarity), rb = rarityScore(b.rarity);
     if (ra !== rb) return ra - rb;
+    // Then newest set first
     const da = a.set?.releaseDate || '0000-00-00';
     const db = b.set?.releaseDate || '0000-00-00';
     return db.localeCompare(da);
@@ -1756,78 +1780,86 @@ async function searchPokemon(q) {
   });
 }
 
-/* ── TCGdex JP image fetch helper ── */
-async function fetchTCGdexJP(q) {
-  // TCGdex has 172 JP sets with card images — search by Japanese name or romanized name
-  try {
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch(`https://api.tcgdex.net/v2/ja/cards?name=${encodeURIComponent(q)}&page=1`, { signal: ctrl.signal });
-    if (!r.ok) return [];
-    const data = await r.json();
-    return Array.isArray(data) ? data.slice(0, 15) : [];
-  } catch(e) { return []; }
-}
-
-/* ── Pokémon JP (TPL JP 34k cards + TCGdex images + eBay fallback) ── */
+/* ── Pokémon JP (TCGdex + eBay fallback) ── */
 async function searchPokemonJP(q) {
+  // Strategy 0: Try TCGPriceLookup (pokemon-jp) if key is set
+  const tplData = await searchWithTPL(q, 'pokemon-jp');
+
+  // Strategy 1: Try TCGdex for JP cards (has some JP sets)
+  // Strategy 2: For any card, always show eBay JP comps as the primary resource
+  // We use PokemonTCG.io with a JP-friendly search (returns EN results) + eBay deep-link
+
+  // First, try PokemonTCG.io for EN art reference / image (with 5s timeout)
+  let enCards = [];
+  try {
+    const enUrl = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=20&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+    const enCtrl = new AbortController();
+    const enTimeout = setTimeout(() => enCtrl.abort(), 5000);
+    const enR = await fetch(enUrl, { signal: enCtrl.signal });
+    clearTimeout(enTimeout);
+    const enData = await enR.json();
+    enCards = (enData.data || []).slice(0, 5); // just for images
+  } catch(e) { /* silently ignore timeout or network errors */ }
+
+  // Build JP search results — always show an eBay JP search card first
   window._searchCards = {};
   const items = [];
 
-  // Run TPL JP and TCGdex in parallel for speed
-  const [tplData, tcgdexCards] = await Promise.all([
-    searchWithTPL(q, 'pokemon-jp').catch(() => null),
-    fetchTCGdexJP(q).catch(() => []),
-  ]);
-
-  // Slot 0: eBay JP comps quick-link (always shown at top)
-  window._searchCards[0] = { _jpCard: true, name: q, jpQuery: q, game: 'pokemonjp' };
-  items.push(`<div class="drop-item" data-idx="0" role="option" style="border-left:3px solid var(--gold)">
-    <div class="drop-thumb-ph" style="font-size:1rem;font-weight:700;color:var(--gold)">JP</div>
+  // Always add an eBay JP comps card at top
+  const ebayIdx = 0;
+  window._searchCards[ebayIdx] = {
+    _jpCard: true,
+    name: q,
+    jpQuery: q,
+    game: 'pokemonjp',
+  };
+  items.push(`<div class="drop-item" data-idx="${ebayIdx}" role="option" style="border-left:3px solid var(--gold)">
+    <div class="drop-thumb-ph" style="font-size:1.3rem">JP</div>
     <div class="drop-info">
       <div class="drop-name">${esc(q)} <span style="font-size:.75rem;color:var(--gold);font-weight:700">ジャパニーズ</span></div>
-      <div class="drop-meta">eBay JP sold comps + PSA graded prices</div>
+      <div class="drop-meta">Click to view eBay JP sold comps + PSA grade prices</div>
     </div>
-    <span class="drop-price" style="background:var(--gold);color:#000;font-size:.7rem;padding:.2rem .5rem;border-radius:.4rem;font-weight:700">COMPS</span>
+    <span class="drop-price" style="background:var(--gold);color:#fff;font-size:.7rem;padding:.2rem .5rem;border-radius:.4rem">JP COMPS</span>
   </div>`);
 
-  // TPL JP results: 34,327 JP cards with real price data + CDN images
+  // If TPL returned real JP data, show those cards (real JP database)
   if (tplData && tplData.length) {
-    // Build a TCGdex image lookup by number for enrichment
-    const dexImgMap = {};
-    tcgdexCards.forEach(c => {
-      if (c.localId) dexImgMap[c.localId.toLowerCase()] = c.image ? c.image + '/low.webp' : '';
-    });
-
+    let offset = 1;
     tplData.forEach((c, i) => {
-      const idx = i + 1;
+      const idx = offset + i;
       window._searchCards[idx] = { _tpl: c, game: 'pokemonjp' };
       const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
-      // Use TPL CDN image first, enrich with TCGdex if available
-      const cardNum = (c.number || '').split('/')[0].toLowerCase();
-      const imgSrc = c.image_url || dexImgMap[cardNum] || '';
       items.push(`<div class="drop-item" data-idx="${idx}" role="option">
-        ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}" onerror="this.style.display='none'"/>` : `<div class="drop-thumb-ph" style="font-size:.7rem;color:var(--gold);font-weight:700">JP</div>`}
+        <div class="drop-thumb-ph">🃏</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.number ? ' · #' + esc(c.number) : ''}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.65rem;color:var(--gold);font-weight:700">JP</span></div>
+          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL JP</span></div>
         </div>
-        ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">—</span>`}
+        ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`);
     });
-  } else if (tcgdexCards.length) {
-    // TCGdex fallback: JP card data with images (no price data, but shows the card)
-    tcgdexCards.forEach((c, i) => {
-      const idx = i + 1;
-      window._searchCards[idx] = { _tcgdex: c, game: 'pokemonjp' };
-      const imgSrc = c.image ? c.image + '/low.webp' : '';
+  } else {
+    // Add EN cards as reference (art/image only, note they are English)
+    let offset = 1;
+    enCards.forEach((c, i) => {
+      const idx = offset + i;
+      window._searchCards[idx] = { _raw: c, game: 'pokemonjp', _isEnRef: true };
+      const prices = c.tcgplayer?.prices || {};
+      let bestPrice = null;
+      for (const v of Object.keys(prices)) {
+        const p = prices[v]?.market || prices[v]?.mid;
+        if (p && (!bestPrice || p > bestPrice)) bestPrice = p;
+      }
+      const img = c.images?.small;
+      const setName = c.set?.name || '';
+      const num = c.number ? `#${c.number}` : '';
       items.push(`<div class="drop-item" data-idx="${idx}" role="option">
-        ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}" onerror="this.style.display='none'"/>` : `<div class="drop-thumb-ph" style="font-size:.7rem;color:var(--gold)">JP</div>`}
+        ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🏃</div>`}
         <div class="drop-info">
-          <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set?.name || '')}${c.localId ? ' · #' + esc(c.localId) : ''} <span style="font-size:.65rem;color:var(--gold);font-weight:700">TCGdex JP</span></div>
+          <div class="drop-name">${esc(c.name)} <span style="font-size:.7rem;color:var(--text-muted)">[EN ref]</span></div>
+          <div class="drop-meta">${esc(setName)}${num ? ' · ' + num : ''} · <em>English version — use JP COMPS for JP pricing</em></div>
         </div>
-        <span class="drop-no-price">—</span>
+        ${bestPrice ? `<span class="drop-price">$${bestPrice.toFixed(2)} EN</span>` : `<span class="drop-no-price">EN only</span>`}
       </div>`);
     });
   }
@@ -1866,26 +1898,32 @@ async function searchPokemonJP(q) {
         _jpPCUrl: pcUrl,
       };
     } else if (entry._tpl) {
-      // Real JP card from TPL — use image_url directly
-      return tplCardToNormalized(entry._tpl, 'pokemonjp', entry._tpl.image_url || '');
-    } else if (entry._tcgdex) {
-      // TCGdex JP card — has image but no price data
-      const c = entry._tcgdex;
-      const imgSrc = c.image ? c.image + '/high.webp' : '';
-      return {
-        name: c.name,
-        game: 'pokemonjp',
-        images: { small: imgSrc, large: imgSrc },
-        setName: c.set?.name || '',
-        number: c.localId || '',
-        rarity: c.rarity || '',
-        priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
-        source: 'TCGdex JP',
-        updatedAt: 'Use eBay JP COMPS for price',
-      };
+      // Real JP card from TPL
+      return tplCardToNormalized(entry._tpl, 'pokemonjp', '');
     } else {
-      // Fallback
-      return { name: q, game: 'pokemonjp', images: { small: '', large: '' }, setName: '', number: '', rarity: '', priceVariants: [{ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null }], source: 'Manual', updatedAt: '' };
+      // EN reference card
+      const c = entry._raw;
+      const prices = c.tcgplayer?.prices || {};
+      const priceVariants = Object.keys(prices).map(key => ({
+        key,
+        label: formatVariantName(key) + ' (EN)',
+        market: prices[key]?.market ?? null,
+        low:    prices[key]?.low ?? null,
+        mid:    prices[key]?.mid ?? null,
+        high:   prices[key]?.high ?? null,
+      }));
+      if (!priceVariants.length) priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
+      return {
+        name: c.name + ' (JP — use Override for JP price)',
+        game: 'pokemonjp',
+        images: { small: c.images?.small || '', large: c.images?.large || '' },
+        setName: (c.set?.name || '') + ' [English ref]',
+        number: c.number || '',
+        rarity: c.rarity || '',
+        priceVariants,
+        source: 'TCGPlayer (EN)',
+        updatedAt: c.tcgplayer?.updatedAt || '',
+      };
     }
   });
 }
@@ -2191,86 +2229,54 @@ let _sportsSearchTimeout = null;
 async function doSportsSearchLive(q) {
   const sdl = document.getElementById('sportsDropList');
   if (!sdl) return;
-  sdl.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Fetching sold comps&hellip;</div>';
+  sdl.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Searching eBay sold&hellip;</div>';
   sdl.classList.add('open');
 
   const sport  = document.getElementById('sp_sport')?.value || 'Baseball';
   const year   = document.getElementById('sp_year')?.value?.trim() || '';
   const brand  = document.getElementById('sp_brand')?.value?.trim() || '';
   const grade  = document.getElementById('sp_grade')?.value || 'Raw/Ungraded';
-
-  // Call /api/sports — returns live eBay sold data if EBAY_APP_ID is set, else links
-  let apiData = null;
-  try {
-    const params = new URLSearchParams({ q, sport, year, brand, grade });
-    const r = await fetch('/api/sports?' + params.toString());
-    if (r.ok) apiData = await r.json();
-  } catch(e) { /* fall through to link mode */ }
+  const gradeLabel = grade !== 'Raw/Ungraded' ? grade : '';
+  const queryParts = [q, year, brand, gradeLabel, sport + ' card'].filter(Boolean);
+  const ebayQuery  = queryParts.join(' ');
+  const ebayUrl    = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(ebayQuery)}&_sacat=212&LH_Sold=1&LH_Complete=1`;
 
   let html = '';
-  const ebayBaseUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([q,year,brand,grade!=='Raw/Ungraded'?grade:'',sport+' card'].filter(Boolean).join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`;
 
-  // ── LIVE DATA MODE: show inline stats + recent sales ──
-  if (apiData?.mode === 'data' && apiData.stats) {
-    const s = apiData.stats;
-    html += `<div style="padding:.75rem 1rem;background:var(--surface-2);border-bottom:1px solid var(--border)">
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;color:var(--text-faint);margin-bottom:.5rem">EBAY SOLD COMPS — LAST ${s.count} SALES</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;text-align:center">
-        <div><div style="font-size:1.05rem;font-weight:700;color:var(--gold)">$${s.avg.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">AVG</div></div>
-        <div><div style="font-size:1.05rem;font-weight:700;color:#4ade80">$${s.low.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">LOW</div></div>
-        <div><div style="font-size:1.05rem;font-weight:700;color:#f87171">$${s.high.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">HIGH</div></div>
-        <div><div style="font-size:1.05rem;font-weight:700;color:var(--text)">$${s.median.toFixed(2)}</div><div style="font-size:.65rem;color:var(--text-faint)">MEDIAN</div></div>
-      </div>
-    </div>`;
-    // Use avg as the card's market price
-    apiData.sales.slice(0,5).forEach((sale, i) => {
-      const d = sale.date ? new Date(sale.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-      html += `<div class="drop-item" data-sports-idx="sale-${i}" data-sale-price="${sale.price}" data-ebay-url="${esc(sale.url)}" style="cursor:pointer">
-        ${sale.img ? `<img class="drop-thumb" src="${esc(sale.img)}" loading="eager" style="object-fit:contain"/>` : `<div class="drop-thumb-ph" style="font-size:.9rem">🏆</div>`}
-        <div class="drop-info">
-          <div class="drop-name" style="font-size:.82rem;line-height:1.3">${esc(sale.title.length>55?sale.title.slice(0,55)+'…':sale.title)}</div>
-          <div class="drop-meta">${esc(sale.condition)}${d?' · '+d:''}</div>
-        </div>
-        <span class="drop-price" style="color:#4ade80">$${sale.price.toFixed(2)}</span>
-      </div>`;
-    });
-    // "Load into calculator" row
-    html += `<div class="drop-item" data-sports-idx="use-avg" data-avg-price="${s.avg}" style="border-top:1px solid var(--border);cursor:pointer;border-left:3px solid var(--gold)">
-      <div class="drop-thumb-ph" style="font-size:1rem">✓</div>
+  // Direct eBay search row
+  html += `<div class="drop-item" data-sports-idx="ebay-direct" style="border-left:3px solid var(--gold);cursor:pointer">
+    <div class="drop-thumb-ph" style="font-size:1.1rem">🛒</div>
+    <div class="drop-info">
+      <div class="drop-name">${esc(q)} <span style="font-size:.72rem;color:var(--gold);font-weight:700">SEARCH EBAY SOLD</span></div>
+      <div class="drop-meta">Open eBay sold listings for: ${esc(queryParts.slice(0,3).join(' '))}</div>
+    </div>
+    <span style="background:var(--gold);color:#fff;font-size:.68rem;font-weight:700;padding:.2rem .5rem;border-radius:.4rem;white-space:nowrap">Sold Comps</span>
+  </div>`;
+
+  // Grade-specific eBay searches
+  const gradeOpts = ['Raw/Ungraded','PSA 10','PSA 9','PSA 8','BGS 9.5','CGC 9.5'];
+  gradeOpts.forEach((g, i) => {
+    const gq = g !== 'Raw/Ungraded' ? g : '';
+    const gParts = [q, year, brand, gq, sport + ' card'].filter(Boolean);
+    const gUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(gParts.join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`;
+    const glabel = g === 'Raw/Ungraded' ? 'Raw / Ungraded' : g;
+    html += `<div class="drop-item" data-sports-idx="ebay-grade-${i}" data-ebay-url="${esc(gUrl)}" data-grade-val="${esc(g)}" style="cursor:pointer">
+      <div class="drop-thumb-ph" style="font-size:.95rem">🏷️</div>
       <div class="drop-info">
-        <div class="drop-name" style="color:var(--gold);font-weight:700">Use avg $${s.avg.toFixed(2)} in calculator</div>
-        <div class="drop-meta">Sets market value based on ${s.count} recent eBay sales</div>
+        <div class="drop-name">${esc(q)} — <span style="font-weight:600">${esc(glabel)}</span></div>
+        <div class="drop-meta">eBay sold comps for this grade</div>
       </div>
+      <span style="font-size:.68rem;color:var(--text-muted)">eBay →</span>
     </div>`;
-  } else {
-    // ── LINKS MODE: no eBay app ID yet, show grade-specific search links ──
-    const links = apiData?.results || [
-      { label: 'Raw / Ungraded', ebayUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([q,year,brand,sport+' card'].filter(Boolean).join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1` },
-      ...['PSA 10','PSA 9','PSA 8','BGS 9.5','CGC 9.5'].map(g => ({
-        label: g,
-        ebayUrl: `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent([q,year,brand,g,sport+' card'].filter(Boolean).join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`
-      }))
-    ];
-    html += `<div style="padding:.5rem 1rem .25rem;font-size:.7rem;color:var(--text-faint);border-bottom:1px solid var(--border)">EBAY SOLD COMPS BY GRADE</div>`;
-    links.forEach((link, i) => {
-      html += `<div class="drop-item" data-sports-idx="link-${i}" data-ebay-url="${esc(link.ebayUrl)}" style="cursor:pointer">
-        <div class="drop-thumb-ph" style="font-size:.9rem">🏷️</div>
-        <div class="drop-info">
-          <div class="drop-name">${esc(q)} <span style="font-weight:700;color:var(--gold)">${esc(link.label)}</span></div>
-          <div class="drop-meta">View eBay sold listings</div>
-        </div>
-        <span style="font-size:.68rem;color:var(--text-muted)">eBay →</span>
-      </div>`;
-    });
-  }
+  });
 
-  // Always add a PriceCharting row at bottom
-  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(q+' '+sport)}&type=prices`;
+  // PriceCharting search link
+  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(q + ' ' + sport)}&type=prices`;
   html += `<div class="drop-item" data-sports-idx="pricecharting" data-pc-url="${esc(pcUrl)}" style="cursor:pointer">
-    <div class="drop-thumb-ph" style="font-size:.9rem">📊</div>
+    <div class="drop-thumb-ph" style="font-size:.95rem">📊</div>
     <div class="drop-info">
       <div class="drop-name">${esc(q)} on PriceCharting</div>
-      <div class="drop-meta">Cross-reference graded prices</div>
+      <div class="drop-meta">Cross-reference prices (especially graded)</div>
     </div>
     <span style="font-size:.68rem;color:var(--text-muted)">PC →</span>
   </div>`;
@@ -2282,24 +2288,29 @@ async function doSportsSearchLive(q) {
   sdl.querySelectorAll('.drop-item').forEach(el => {
     el.addEventListener('click', () => {
       const idx = el.dataset.sportsIdx;
-      if (idx === 'pricecharting') {
-        window.open(el.dataset.pcUrl, '_blank');
+      if (idx === 'ebay-direct') {
+        window.open(buildEbayUrl(ebayUrl), '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
-      } else if (idx === 'use-avg') {
-        // Set the override price to the avg sold price
-        const avg = parseFloat(el.dataset.avgPrice);
-        const priceOverride = document.getElementById('priceOverride');
-        if (priceOverride && avg) {
-          priceOverride.value = avg.toFixed(2);
-          priceOverride.dispatchEvent(new Event('input'));
-        }
-        loadSportsCardFromSearch(q, avg);
-      } else if (idx && idx.startsWith('sale-')) {
-        window.open(buildEbayUrl(el.dataset.ebayUrl), '_blank');
-        const salePrice = parseFloat(el.dataset.salePrice);
-        loadSportsCardFromSearch(q, salePrice);
+      } else if (idx === 'pricecharting') {
+        window.open(el.dataset.pcUrl, '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        loadSportsCardFromSearch(q);
       } else if (el.dataset.ebayUrl) {
         window.open(buildEbayUrl(el.dataset.ebayUrl), '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        // Set grade dropdown
+        const gradeVal = el.dataset.gradeVal;
+        if (gradeVal) {
+          const spGrade = document.getElementById('sp_grade');
+          if (spGrade) {
+            const opt = Array.from(spGrade.options).find(o => o.value === gradeVal);
+            if (opt) spGrade.value = opt.value;
+          }
+        }
         loadSportsCardFromSearch(q);
       }
       sdl.classList.remove('open');
@@ -2321,7 +2332,7 @@ function doSportsSearch() {
   doSportsSearchLive(q);
 }
 
-function loadSportsCardFromSearch(playerName, avgPrice = null) {
+function loadSportsCardFromSearch(playerName) {
   const year    = document.getElementById('sp_year')?.value?.trim() || '';
   const brand   = document.getElementById('sp_brand')?.value?.trim() || '';
   const cardnum = document.getElementById('sp_cardnum')?.value?.trim() || '';
@@ -2334,9 +2345,9 @@ function loadSportsCardFromSearch(playerName, avgPrice = null) {
     setName: [year, brand].filter(Boolean).join(' '),
     number: cardnum,
     rarity: sport,
-    priceVariants: [{ key: 'ebay_sold', label: avgPrice ? `eBay Avg Sold $${avgPrice.toFixed(2)}` : 'Manual / Override', market: avgPrice, low: null, mid: avgPrice, high: null }],
-    source: avgPrice ? 'eBay Sold Comps' : 'Manual',
-    updatedAt: avgPrice ? 'Recent eBay sales' : 'Enter via override',
+    priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
+    source: 'Manual',
+    updatedAt: 'Enter via override',
   };
   selectedCard = sportCard;
   loadCardUI(sportCard);
@@ -3410,6 +3421,8 @@ function applyGoogleUser() {
   userBtn.style.display = 'flex';
   document.getElementById('googleAvatar').src = googleUser.avatar;
   document.getElementById('googleName').textContent = googleUser.name.split(' ')[0];
+  // Check pro status after UI is applied
+  checkProStatus();
 }
 
 function signOut() {
@@ -3424,6 +3437,10 @@ function signOut() {
   document.getElementById('googleUserBtn').style.display = 'none';
   document.getElementById('googleAvatar').src = '';
   document.getElementById('googleName').textContent = '';
+  window._isPro = false;
+  window._freeScansLeft = 0;
+  window._scanCredits = 0;
+  updateProUI();
   // Re-render flips view with no-user state
   if (document.getElementById('flipsView').classList.contains('active')) renderFlipsView();
 }
@@ -3435,13 +3452,13 @@ function signOut() {
 // ── Scanner gate — requires Google sign-in ──
 function openScanner() {
   if (!googleUser) {
-    // Show sign-in prompt in scan overlay
+    // Show a friendly prompt instead of just doing nothing
     const overlay  = document.getElementById('scanOverlay');
     const statusEl = document.getElementById('scanStatus');
     const resultEl = document.getElementById('scanResult');
     const prevWrap = document.getElementById('scanPreviewWrap');
     prevWrap.style.display = 'none';
-    resultEl.innerHTML = '';
+    resultEl.textContent = '';
     statusEl.innerHTML = `
       <div style="text-align:center;padding:1rem">
         <div style="font-size:2rem;margin-bottom:.75rem">📷</div>
@@ -3452,41 +3469,30 @@ function openScanner() {
     overlay.style.display = 'flex';
     return;
   }
-  // Show mode picker
-  document.getElementById('scanModeModal').style.display = 'flex';
-}
-
-function closeScanModeModal() {
-  document.getElementById('scanModeModal').style.display = 'none';
-}
-
-function startScan(mode) {
-  closeScanModeModal();
-  const inputId = mode === 'identify' ? 'scanFileInputQuick' : 'scanFileInputGraded';
-  document.getElementById(inputId).click();
+  document.getElementById('scanFileInput').click();
 }
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
-  document.getElementById('scanModeModal').style.display = 'none';
-  // Reset both file inputs so same file can be re-scanned
-  ['scanFileInputQuick','scanFileInputGraded'].forEach(id => {
-    const fi = document.getElementById(id);
-    if (!fi) return;
+  // Reset file input — replace the element so same file can be scanned again
+  const fi = document.getElementById('scanFileInput');
+  if (fi) {
     fi.value = '';
+    // Force reset by replacing the input (necessary for some browsers)
     const clone = fi.cloneNode(true);
     fi.parentNode.replaceChild(clone, fi);
-    const mode = id === 'scanFileInputQuick' ? 'identify' : 'full';
-    clone.addEventListener('change', function() { processScanImage(this, mode); });
-  });
+    clone.addEventListener('change', function() { processScanImage(this); });
+  }
 }
 
-async function processScanImage(input, mode = 'identify') {
+async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
+  // Double-check auth (belt + suspenders)
   if (!googleUser) { openScanner(); return; }
 
+  // If user profile is restored but token expired, catch it early
   if (!window._googleIdToken) {
     const overlay2 = document.getElementById('scanOverlay');
     const statusEl2 = document.getElementById('scanStatus');
@@ -3497,28 +3503,15 @@ async function processScanImage(input, mode = 'identify') {
     return;
   }
 
-  const isGraded = mode === 'full';
   const overlay  = document.getElementById('scanOverlay');
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
   const prevWrap = document.getElementById('scanPreviewWrap');
   const prevImg  = document.getElementById('scanPreviewImg');
-  const modeTag  = document.getElementById('scanModeTag');
-
-  // Show mode badge
-  if (modeTag) {
-    if (isGraded) {
-      modeTag.textContent = '🏆 Graded Scan';
-      modeTag.style.cssText = 'font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:99px;margin-bottom:-.5rem;background:rgba(232,160,32,.2);color:var(--gold)';
-    } else {
-      modeTag.textContent = '⚡ Quick Identify';
-      modeTag.style.cssText = 'font-size:.72rem;font-weight:700;padding:.25rem .75rem;border-radius:99px;margin-bottom:-.5rem;background:rgba(74,222,128,.15);color:#4ade80';
-    }
-  }
 
   overlay.style.display = 'flex';
-  resultEl.innerHTML = '';
-  statusEl.textContent = 'Uploading photo…';
+  resultEl.textContent = '';
+  statusEl.textContent = 'Analyzing card…';
 
   const objectUrl = URL.createObjectURL(file);
   prevImg.src = objectUrl;
@@ -3531,39 +3524,32 @@ async function processScanImage(input, mode = 'identify') {
     reader.readAsDataURL(file);
   });
 
-  // Animated phases — different messaging per mode
-  const quickPhases = ['Uploading photo…','AI is identifying the card…','Matching against 300K+ cards…','Almost done…'];
-  const gradedPhases = ['Uploading photo…','AI is identifying the card…','Analyzing centering & corners…','Checking edges & surface…','Pulling market comps…','Finalizing grade prediction…'];
-  const phases = isGraded ? gradedPhases : quickPhases;
-  let phaseIdx = 0;
-  statusEl.textContent = phases[0];
-  const phaseTimer = setInterval(() => {
-    phaseIdx = Math.min(phaseIdx + 1, phases.length - 1);
-    statusEl.textContent = phases[phaseIdx];
-  }, isGraded ? 12000 : 8000);
-
   try {
+    statusEl.textContent = 'AI is identifying the card…';
+
+    // Get the Google ID token to authenticate the server request
     const idToken = window._googleIdToken || '';
+
+    // Call our secure server-side proxy (CardSight key never in frontend)
     const response = await fetch('/api/scan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-      body: JSON.stringify({ imageBase64: base64, mimeType: file.type, module: mode })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
     });
 
-    clearInterval(phaseTimer);
-
     if (response.status === 401) {
+      // Token expired — clear it and prompt a fresh Google sign-in
       window._googleIdToken = null;
       try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
       statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again, then scan.</span>';
+      // Show sign-in button inside the overlay
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-    if (response.status === 402) {
-      statusEl.innerHTML = '<span style="color:#f87171">Scanner credits used up.</span>';
-      resultEl.innerHTML = '<span style="font-size:.8rem;color:rgba(255,255,255,.6)">Contact will@cardresell.org to top up.</span>';
-      return;
-    }
+
     if (!response.ok) {
       let errMsg = 'Scan failed. Try a clearer photo.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
@@ -3571,73 +3557,56 @@ async function processScanImage(input, mode = 'identify') {
     }
 
     const data = await response.json();
-    const cardName = data.cardName || '';
+    const detection = data?.detections?.[0];
+    const card = detection?.card || {};
+    const cardName = card.name || '';
 
     if (!cardName) {
       statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
 
-    // ── Quick Identify result ──
-    if (!isGraded) {
-      statusEl.innerHTML = `
-        <div style="text-align:center">
-          <div style="color:#4ade80;font-weight:700;font-size:1rem;margin-bottom:.25rem">✓ ${esc(cardName)}${data.cardNumber ? ' #' + esc(data.cardNumber) : ''}</div>
-          <div style="font-size:.8rem;color:rgba(255,255,255,.65)">${esc(data.setName||'')}${data.year?' · '+data.year:''}</div>
-          ${data.parallel ? `<div style="font-size:.75rem;color:var(--gold);margin-top:.2rem">${esc(data.parallel)}</div>` : ''}
-        </div>`;
+    // Build a rich search query using everything CardSight returned
+    const cardNumber = card.number || '';
+    const setAbbrev = card.fields?.find(f => f.key === 'SET_ABBREVIATION')?.value || '';
+    const releaseName = card.releaseName || '';
+    const confidence = detection?.confidence || '';
+    const grader = detection?.grading?.company?.name || '';
 
-    // ── Graded Scan result ──
-    } else {
-      const grade = data.predictedGrade ?? data.grade ?? null;
-      const gradeStr = grade !== null ? ` · AI grade: ${grade}` : '';
-      const rawVal = data.rawEstimate ? ` · ~$${data.rawEstimate.toFixed(0)} raw` : '';
+    // Smart search string: "Spiritomb TG09 Lost Origin" hits the right variant every time
+    let searchQuery = cardName;
+    if (cardNumber) searchQuery += ' ' + cardNumber;
+    if (setAbbrev) searchQuery += ' ' + setAbbrev;
+    else if (releaseName) searchQuery += ' ' + releaseName;
 
-      statusEl.innerHTML = `
-        <div style="text-align:center">
-          <div style="color:#4ade80;font-weight:700;font-size:1rem;margin-bottom:.3rem">✓ ${esc(cardName)}${data.cardNumber ? ' #' + esc(data.cardNumber) : ''}</div>
-          <div style="font-size:.8rem;color:rgba(255,255,255,.75);margin-bottom:.5rem">${esc(data.setName||'')}${data.year?' · '+data.year:''}${gradeStr}${rawVal}</div>
-          ${data.subGrades ? `
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.3rem;margin-bottom:.5rem;font-size:.72rem;max-width:280px;margin-left:auto;margin-right:auto">
-            ${Object.entries(data.subGrades).map(([k,v]) =>
-              `<div style="background:rgba(255,255,255,.08);border-radius:6px;padding:.3rem .2rem">
-                <div style="color:rgba(255,255,255,.5);text-transform:capitalize;font-size:.65rem">${k}</div>
-                <div style="color:#fff;font-weight:700">${v}</div>
-              </div>`
-            ).join('')}
-          </div>` : ''}
-          ${data.gradeSummary ? `<div style="font-size:.75rem;color:rgba(255,255,255,.55);font-style:italic;margin-bottom:.35rem">"${esc(data.gradeSummary)}"</div>` : ''}
-          ${data.gradingRecommendation ? `<div style="font-size:.75rem;color:var(--gold)">📊 ${esc(data.gradingRecommendation)}</div>` : ''}
-        </div>`;
+    const graderLabel = grader ? ` · ${grader} slab detected` : '';
+    statusEl.innerHTML = `<span style="color:#4ade80">✓ ${cardName}${cardNumber ? ' #' + cardNumber : ''}</span><br><span style="font-size:.8rem;opacity:.7">${releaseName}${graderLabel} · ${confidence} confidence</span>`;
+    resultEl.textContent = 'Searching…';
 
-      const grade2 = data.predictedGrade ?? data.grade ?? null;
-      window._scanTargetGrade = grade2 !== null ? String(Math.round(grade2)) : '';
-      if (grade2 !== null) window._scanAutoGrade = Math.round(grade2 * 2) / 2;
-    }
+    // Store scan metadata so post-search auto-select can pick the exact card
+    window._scanTargetNumber = cardNumber;   // e.g. "TG09"
+    window._scanTargetName   = cardName;     // e.g. "Spiritomb"
+    window._scanTargetGrader = grader;       // e.g. "PSA"
+    window._scanTargetGrade  = detection?.grading?.grade?.value || ''; // e.g. "9"
 
-    window._scanTargetNumber = data.cardNumber || '';
-    window._scanTargetName   = cardName;
-    window._scanTargetGrader = 'PSA';
-    resultEl.textContent = 'Loading card…';
-
-    const delay = isGraded ? 3000 : 1500;
     setTimeout(() => {
       cancelScan();
       URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
-      const searchQ = (cardName + (data.cardNumber ? ' ' + data.cardNumber : '') + (data.setName ? ' ' + data.setName.split(':')[0].trim() : '')).trim();
-      searchInput.value = searchQ;
+      // Search just the card name — broader match, we'll filter by number below
+      searchInput.value = cardName.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, delay);
+    }, 1200);
 
   } catch(err) {
-    clearInterval(phaseTimer);
     console.error('Scan error:', err);
     const isNetErr = err instanceof TypeError && err.message.includes('fetch');
-    statusEl.innerHTML = isNetErr
-      ? '<span style="color:#f87171">Network error — check your connection and try again.</span>'
-      : `<span style="color:#f87171">${esc(err.message || 'Could not identify the card. Try a clearer photo.')}</span>`;
+    if (isNetErr) {
+      statusEl.innerHTML = '<span style="color:#f87171">Network error — check your connection and try again.</span>';
+    } else {
+      statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+    }
   }
 }
 
@@ -3727,10 +3696,194 @@ function savePortData(data) {
   try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(data)); } catch(e) {}
 }
 
+
+
+/* =========================================================
+   PRO / PAYWALL — Shop, checkout, status
+   ========================================================= */
+
+window._isPro = false;
+window._freeScansLeft = 0;
+window._scanCredits = 0; // paid scan credits
+
+// ── Check Pro status from server ──
+async function checkProStatus() {
+  if (!googleUser || !window._googleIdToken) return;
+  try {
+    const r = await fetch('/api/pro-status', {
+      headers: { 'Authorization': 'Bearer ' + window._googleIdToken }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    window._isPro = d.isPro === true;
+    window._freeScansLeft = d.freeScansLeft || 0;
+    window._scanCredits = d.paidScansLeft || 0;
+  } catch(e) { /* non-blocking */ }
+  updateProUI();
+}
+
+// ── Update all Pro-related UI elements ──
+function updateProUI() {
+  const proBadge   = document.getElementById('proBadge');
+  const getProBtn  = document.getElementById('getProBtn');
+  const promoBanner= document.getElementById('promoBanner');
+
+  if (!googleUser) {
+    // Not signed in — hide everything
+    proBadge?.classList.remove('visible');
+    getProBtn?.classList.remove('visible');
+    promoBanner?.classList.remove('visible');
+    return;
+  }
+
+  if (window._isPro) {
+    // Signed in + Pro
+    proBadge?.classList.add('visible');
+    getProBtn?.classList.remove('visible');
+    promoBanner?.classList.remove('visible');
+  } else {
+    // Signed in but free
+    proBadge?.classList.remove('visible');
+    getProBtn?.classList.add('visible');
+    // Show banner unless dismissed this session
+    const dismissed = sessionStorage.getItem('cs_banner_dismissed');
+    if (!dismissed) {
+      promoBanner?.classList.add('visible');
+    }
+    // Update pricing modal Pro button label
+    const pricingProBtnText = document.getElementById('pricingProBtnText');
+    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $4.99/mo';
+  }
+}
+
+function dismissPromoBanner() {
+  document.getElementById('promoBanner')?.classList.remove('visible');
+  try { sessionStorage.setItem('cs_banner_dismissed', '1'); } catch(e) {}
+}
+
+// ── Open / close pricing modal ──
+function openPricingModal(source) {
+  const overlay = document.getElementById('pricingOverlay');
+  if (overlay) overlay.classList.add('open');
+
+  // If already Pro, update the button to reflect that
+  if (window._isPro) {
+    const btn = document.getElementById('pricingProBtn');
+    const txt = document.getElementById('pricingProBtnText');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'default'; }
+    if (txt) txt.textContent = '✓ Already Pro';
+  }
+}
+
+function closePricingModal(evt) {
+  if (evt && evt.target !== document.getElementById('pricingOverlay')) return;
+  document.getElementById('pricingOverlay')?.classList.remove('open');
+}
+
+// ── Start Pro subscription checkout ──
+async function startProCheckout() {
+  if (!googleUser) {
+    closePricingModal();
+    // Trigger Google sign-in
+    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 200);
+    return;
+  }
+  const btn = document.getElementById('pricingProBtn');
+  const txt = document.getElementById('pricingProBtnText');
+  if (btn) btn.disabled = true;
+  if (txt) txt.textContent = 'Redirecting...';
+
+  try {
+    const r = await fetch('/api/stripe-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (window._googleIdToken || '')
+      },
+      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = 'Get Pro — $4.99/mo';
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    if (btn) btn.disabled = false;
+    if (txt) txt.textContent = 'Get Pro — $4.99/mo';
+  }
+}
+
+// ── Start per-scan checkout ──
+async function startScanCheckout() {
+  if (!googleUser) {
+    closePricingModal();
+    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 200);
+    return;
+  }
+  const btn = document.querySelector('.scan-credit-buy');
+  if (btn) { btn.disabled = true; btn.textContent = 'Redirecting...'; }
+
+  try {
+    const r = await fetch('/api/stripe-scan-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (window._googleIdToken || '')
+      },
+      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Buy 1 Scan — $1.50'; }
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Buy 1 Scan — $1.50'; }
+  }
+}
+
+// ── Toast helper ──
+function showToast(msg, duration) {
+  const t = document.getElementById('csToast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), duration || 3500);
+}
+
+// ── Handle return from Stripe ──
+(function handleStripeReturn() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('pro') === '1') {
+    window._isPro = true;
+    window._freeScansLeft = 5;
+    updateProUI();
+    showToast('⭐ Welcome to CardResell Pro! 5 graded scans added.', 5000);
+    // Clean URL
+    history.replaceState({}, '', window.location.pathname);
+  }
+  if (params.get('scan_paid') === '1') {
+    window._scanCredits = (window._scanCredits || 0) + 1;
+    showToast('✔ Scan credit added! You have ' + window._scanCredits + ' graded scan(s) ready.', 5000);
+    history.replaceState({}, '', window.location.pathname);
+  }
+})();
+
 // Init on load
 window.addEventListener('load', () => {
   initGoogleSignIn();
   updateKeyStatus();  // show correct status dot for saved API key
+  // If session was restored (user was already signed in), run Pro check
+  if (googleUser && window._googleIdToken) checkProStatus();
+  else updateProUI(); // still update UI to hide/show buttons correctly
   // Pre-populate settings inputs with saved values
   const tplInput = document.getElementById('tplKeyInput');
   if (tplInput && window.tplApiKey) tplInput.value = window.tplApiKey;
@@ -3742,7 +3895,10 @@ window.addEventListener('load', () => {
 
 // ── Keyboard: Escape closes modal ──
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('flipModal').classList.remove('open');
+  if (e.key === 'Escape') {
+    document.getElementById('flipModal').classList.remove('open');
+    document.getElementById('pricingOverlay')?.classList.remove('open');
+  }
 });
 
 </script>
