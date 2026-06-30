@@ -641,11 +641,25 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- SETTINGS PANEL -->
 <div class="settings-panel" id="settingsPanel">
+  <!-- SCAN CREDITS -->
   <div class="settings-inner">
+    <div class="settings-title">📷 Scan Credits</div>
+    <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.65rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.6rem">
+      <div>
+        <div style="font-size:.88rem;font-weight:700;color:var(--text)" id="settingsScanCount">— scans remaining</div>
+        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem" id="settingsScanSub">Sign in to check your balance</div>
+      </div>
+      <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.42rem 1rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='var(--gold-hi)'" onmouseout="this.style.background='var(--surface)'">Buy 1 Scan — $1.50</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--text-muted);line-height:1.5">💡 Pro users get <strong style="color:var(--text)">10 free scans/mo</strong>. Additional scans are $1.50 each. Credits never expire.</div>
+  </div>
+  <!-- TCGPriceLookup API Key -->
+  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
     <div class="settings-title">TCGPriceLookup API Key</div>
     <div class="settings-row">
-      <input type="text" id="tplKeyInput" class="settings-input" placeholder="tpl_live_xxxxxxxxxxxx" autocomplete="off" spellcheck="false" />
-      <button class="settings-save-btn" onclick="saveTPLKey()">Save Key</button>
+      <input type="password" id="tplKeyInput" class="settings-input" placeholder="tcg_xxxxxxxxxxxx" autocomplete="off" spellcheck="false" />
+      <button class="settings-save-btn" onclick="toggleTplKeyVisibility()" id="tplRevealBtn" title="Show/hide key" style="min-width:2.6rem;padding:.5rem .65rem;font-size:.82rem">👁</button>
+      <button class="settings-save-btn" onclick="saveTPLKey()">Save</button>
     </div>
     <div class="settings-status" id="settingsStatus">
       <span class="status-dot inactive" id="statusDot"></span>
@@ -653,6 +667,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <a href="https://tcgpricelookup.com" target="_blank" rel="noopener" class="settings-link">Get free key →</a>
   </div>
+  <!-- Google Sign-In Setup -->
   <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
     <div class="settings-title">🔑 Google Sign-In Setup</div>
     <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:.5rem">
@@ -669,15 +684,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <button class="settings-save-btn" onclick="saveGoogleClientId()">Save</button>
     </div>
     <div id="googleIdStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Paste your Google OAuth Client ID above, then reload the page.</div>
-  </div>
-  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
-    <div class="settings-title">📷 AI Card Scanner (optional)</div>
-    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.5;margin-bottom:.5rem">Add an OpenAI API key to enable AI-powered card scanning. Without it, the scanner uses basic text reading. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--gold)">platform.openai.com</a> — costs ~$0.001 per scan.</div>
-    <div class="settings-row">
-      <input type="password" id="openAiKeyInput" class="settings-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
-      <button class="settings-save-btn" onclick="saveOpenAiKey()">Save</button>
-    </div>
-    <div id="openAiKeyStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem"></div>
   </div>
 </div>
 
@@ -1415,13 +1421,69 @@ function saveOpenAiKey() {
         const gcInput = document.getElementById('googleClientIdInput');
         if (gcInput) gcInput.value = _SAVED_CLIENT_ID || '';
         const tplInput = document.getElementById('tplKeyInput');
-        if (tplInput) tplInput.value = window.tplApiKey || '';
-        const oaiInput = document.getElementById('openAiKeyInput');
-        if (oaiInput) oaiInput.value = window._openAiKey || '';
+        // Always show masked — user must click eye to reveal
+        if (tplInput) {
+          tplInput.type = 'password';
+          tplInput.value = window.tplApiKey || '';
+        }
+        const revealBtn = document.getElementById('tplRevealBtn');
+        if (revealBtn) revealBtn.textContent = '\uD83D\uDC41';
+        // Load scan credits
+        loadSettingsScanCredits();
       }
     });
   }
 })();
+
+// ── Toggle TPL key visibility ──
+function toggleTplKeyVisibility() {
+  const input = document.getElementById('tplKeyInput');
+  const btn   = document.getElementById('tplRevealBtn');
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (btn) btn.textContent = '\uD83D\uDE48'; // see-no-evil = hide
+  } else {
+    input.type = 'password';
+    if (btn) btn.textContent = '\uD83D\uDC41'; // eye = show
+  }
+}
+
+// ── Load scan credits into settings panel ──
+async function loadSettingsScanCredits() {
+  const countEl = document.getElementById('settingsScanCount');
+  const subEl   = document.getElementById('settingsScanSub');
+  if (!countEl) return;
+  const email = window._userEmail;
+  if (!email) {
+    countEl.textContent = '— scans remaining';
+    if (subEl) subEl.textContent = 'Sign in to check your balance';
+    return;
+  }
+  countEl.textContent = 'Loading…';
+  if (subEl) subEl.textContent = '';
+  try {
+    const res = await fetch('/api/scan-credits?email=' + encodeURIComponent(email));
+    const data = await res.json();
+    const credits = typeof data.credits === 'number' ? data.credits : 0;
+    const isPro   = data.isPro || false;
+    countEl.textContent = credits === 1 ? '1 scan remaining' : `${credits} scans remaining`;
+    if (subEl) {
+      if (isPro && credits > 0) {
+        subEl.textContent = 'Includes your Pro monthly scans';
+      } else if (credits === 0) {
+        subEl.textContent = 'Out of scans — buy more below';
+        subEl.style.color = 'var(--red, #f87171)';
+      } else {
+        subEl.textContent = 'Pay-per-use scans ($1.50 each)';
+        subEl.style.color = '';
+      }
+    }
+  } catch(e) {
+    countEl.textContent = '— scans remaining';
+    if (subEl) subEl.textContent = 'Could not load — try again';
+  }
+}
 
 // ── Save TPL key ──
 function saveTPLKey() {
