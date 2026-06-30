@@ -471,6 +471,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .get-pro-btn:hover{filter:brightness(1.08)}
 .get-pro-btn:active{transform:scale(.96)}
 .get-pro-btn.visible{display:flex}
+/* --- SHOP HEADER BUTTON (always visible) --- */
+.shop-header-btn{display:flex;align-items:center;gap:.3rem;padding:.3rem .75rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.72rem;font-weight:700;white-space:nowrap;cursor:pointer;transition:all .15s ease}
+.shop-header-btn:hover{background:var(--gold-hi);border-color:var(--gold)}
+.shop-header-btn:active{transform:scale(.96)}
 /* --- PROMO BANNER --- */
 .promo-banner{display:none;align-items:center;justify-content:space-between;gap:.75rem;margin:.6rem 0 .35rem;padding:.55rem .9rem;background:linear-gradient(135deg,rgba(184,134,11,.12),rgba(245,197,24,.08));border:1px solid rgba(245,197,24,.28);border-radius:var(--radius-lg);font-size:.78rem}
 .promo-banner.visible{display:flex}
@@ -553,6 +557,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <button id="getProBtn" class="get-pro-btn" onclick="openPricingModal('header')" title="Upgrade to Pro">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       Get Pro
+    </button>
+    <button id="shopBtn" class="shop-header-btn" onclick="openPricingModal('shopbtn')" title="Plans &amp; Pricing">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+      Shop
     </button>
     <div id="googleSignInBtn" style="display:flex"></div>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
@@ -3726,25 +3734,29 @@ async function checkProStatus() {
 function updateProUI() {
   const proBadge   = document.getElementById('proBadge');
   const getProBtn  = document.getElementById('getProBtn');
+  const shopBtn    = document.getElementById('shopBtn');
   const promoBanner= document.getElementById('promoBanner');
 
   if (!googleUser) {
-    // Not signed in — hide everything
+    // Not signed in — hide per-user badges, keep Shop visible
     proBadge?.classList.remove('visible');
     getProBtn?.classList.remove('visible');
     promoBanner?.classList.remove('visible');
+    if (shopBtn) shopBtn.style.display = 'flex';
     return;
   }
 
   if (window._isPro) {
-    // Signed in + Pro
+    // Signed in + Pro — show badge, hide shop btn & banner
     proBadge?.classList.add('visible');
     getProBtn?.classList.remove('visible');
     promoBanner?.classList.remove('visible');
+    if (shopBtn) shopBtn.style.display = 'none'; // already Pro, no need
   } else {
-    // Signed in but free
+    // Signed in but free — show Get Pro + banner + shop btn
     proBadge?.classList.remove('visible');
     getProBtn?.classList.add('visible');
+    if (shopBtn) shopBtn.style.display = 'none'; // Get Pro btn replaces it
     // Show banner unless dismissed this session
     const dismissed = sessionStorage.getItem('cs_banner_dismissed');
     if (!dismissed) {
