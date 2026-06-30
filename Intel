@@ -1,0 +1,67 @@
+I'll make all the changes now. Let me work through them carefully, one fix at a time, so each is correct. Let me start by examining the exact code around each issue before editing.
+
+Now I can see the issues precisely. The `$4.99` strings are in JavaScript that dynamically sets button text — those would *override* your correct `$9.99` HTML at runtime, so they're actively showing the wrong price to users. Let me fix all three `$4.99` instances first.
+
+That's the active bug fixed — all three `$4.99` strings now say `$9.99`, so the button will no longer flip to the wrong price at runtime. 
+
+Now let me verify the price fixes are complete and check the `$19.99` one, which is a *different* thing (it's the third-party TCGPriceLookup API, not your Pro plan).
+
+Good — all `$4.99` are gone, your Pro price reads `$9.99` consistently in 9 places. 
+
+About the `$19.99`: that one is **correct and should stay** — it's not your Pro plan. It's pointing users to TCGPriceLookup's third-party API (the link goes to `tcgpricelookup.com/tcg-api`) for real graded prices. Different product, different company, so leaving it alone is right. I won't touch it.
+
+Now let me tackle the bigger one — the **free-tier aha moment**. Let me find exactly how the fee breakdown is currently gated so I can unlock it for the first lookup.
+
+Now I understand the gating exactly. When a free user runs the calculator, **all** platform results get blurred behind the Pro overlay — they never see a single fee breakdown. This is precisely the "aha moment locked away" problem.
+
+I'll implement a **free-trial counter**: free users get their **first 2 lookups fully unlocked** (they see the complete fee breakdown and feel the magic), then the gate kicks in. This is the standard "let them taste the value first" conversion pattern. Let me build it.
+
+That's the aha-moment fix in. Free users now get 2 full fee breakdowns (with a counter nudging them toward Pro), then the gate. One thing to note: the free plan card says "Platform fee breakdown" as faded/locked — let me update that copy to reflect the new "first 2 free" reality so it's honest and actually entices.
+
+Now the EPN affiliate links. Let me look at how the eBay links are currently built so I can wrap them with your affiliate tracking. Since you may not have your EPN campaign ID yet, I'll set it up with a clearly-marked variable at the top that you just fill in once — clean and future-proof.
+
+You already have a `buildEbayUrl()` function that all eBay links pass through — that's perfect, it's the single chokepoint where affiliate tracking belongs. Let me see what it currently does.
+
+This is great news — **your affiliate infrastructure is already fully built and correct.** `buildEbayUrl()` already wraps every eBay link with EPN `campid`, `toolid`, and `customid`, and `buildTcgpUrl()` does the same for TCGPlayer. The code is properly written and every eBay link already routes through it. The *only* thing missing is the actual ID values — they read from `window.CARDSELL_EPN_CAMPID` and `window.CARDSELL_TCGP_AFFID`, which aren't set anywhere yet. So affiliate monetization is one config line away from being live. Let me check where window config is set and find the right spot.
+
+Even better news — **your EPN affiliate ID is already set!** Line 1372: `window.CARDSELL_EPN_CAMPID = '5339158497'`. So your eBay affiliate monetization is **already live and working** — every eBay link in your app is already carrying your EPN tracking. You're earning (or set up to earn) on eBay clicks right now. I don't need to change anything there.
+
+A couple of affiliate slots *are* still empty and represent money you're leaving on the table — let me point those out rather than fake them:
+- `CARDSELL_TCGP_AFFID = ''` — your **TCGPlayer affiliate ID is blank**, so TCGPlayer links aren't monetized. If you have/get a TCGplayer affiliate account, drop the ID here and those links start earning too.
+- `CARDSELL_AFFIL_PSA/CGC/BGS/SGC = '#'` — your **grading-company affiliate links are placeholders**. Those "Submit to PSA/CGC/BGS" buttons go nowhere useful right now. If you sign up for their affiliate/referral programs (Awin/ShareASale), paste the URLs here and those convert too.
+
+I won't put fake IDs in — those are accounts you need to create, then fill in the values. But the *plumbing* is 100% done and waiting.
+
+Now let me verify everything I changed is intact and the file is valid, then package it up for you.
+
+All changes verified and the file structure is intact. Let me do one final safety check — confirm the JavaScript I added has balanced braces and won't throw a syntax error — then package it for you.
+
+JavaScript syntax is valid — no errors introduced. Everything's clean. Let me package the corrected file for you.
+
+Done — here's your corrected `index.html`. Download it and replace the one in your GitHub repo, and Vercel will auto-deploy the changes.
+
+**What I changed:**
+
+1. **🔴 Fixed the price bug.** All three `$4.99` strings (in the JavaScript that sets the button text) now say **$9.99**, matching the rest of your app. This was actively showing the wrong price to users at runtime — now it's consistent everywhere. *(The one `$19.99` I left alone on purpose — that's the third-party TCGPriceLookup API link, not your Pro plan.)*
+
+2. **🟠 Unlocked your aha moment.** Free users now get their **first 2 full fee breakdowns** — they see the complete eBay/Mercari/StockX/COMC comparison and feel the magic — *then* the Pro gate kicks in. There's a counter nudging them ("⭐ 1 free fee breakdown left...") that turns into an upgrade prompt. This is the big conversion lever: you can't sell the wow if they never see it.
+
+3. **🟠 Updated the free plan copy** in the pricing modal to honestly show "2 free fee breakdowns" instead of a fully-locked feature — so it both tells the truth and entices.
+
+**What I found already done (good news — you're further along than you thought):**
+
+- ✅ **Your eBay EPN affiliate tracking is already LIVE** — campaign ID `5339158497` is set, and every eBay link already routes through `buildEbayUrl()` carrying your tracking. You're already earning on eBay clicks.
+- ✅ Your architecture and security are genuinely solid — server-side API keys, Stripe signature verification, Google token validation. No notes.
+
+**Money you're still leaving on the table** (these need *you* to create accounts, then paste IDs — I can't fake them):
+- **TCGPlayer affiliate** — `CARDSELL_TCGP_AFFID` is blank (line ~1373). Get a TCGplayer affiliate account, paste the ID, those links start earning.
+- **Grading affiliates** — PSA/CGC/BGS/SGC links are placeholders (`'#'`, lines ~1377-1380). Sign up for their referral programs, paste the URLs.
+
+**To deploy:**
+1. **Back up your current `index.html`** first (just in case — though GitHub keeps history too).
+2. Replace `index.html` in your repo with this one.
+3. Vercel auto-deploys. Test the site: run a couple calculator lookups while signed out to see the free-trial flow, and confirm the Pro button says $9.99 everywhere.
+
+**One thing to verify on your end that I can't see:** make sure your **Stripe `STRIPE_PRICE_ID` is actually set to $9.99/mo**. The displayed price now says $9.99 everywhere, but the *real charge* comes from that Stripe environment variable — if it's still set to an old price, the charge won't match what users see. Check that in your Stripe dashboard.
+
+Want me to tackle anything else next — like reducing the onboarding key friction (the three-API-key problem), or making the eBay sold comps more prominent on the free tier to drive those affiliate clicks?
