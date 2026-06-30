@@ -563,6 +563,32 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
 .scan-gate-cancel{font-size:.78rem;color:var(--text-faint);cursor:pointer;text-decoration:underline;background:none;border:none;padding:.25rem}
 
+/* --- GRADING AFFILIATE CTA --- */
+.grade-cta-banner{display:none;margin:.85rem 0 .25rem;padding:.9rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.08) 0%,rgba(196,122,0,.04) 100%);border:1px solid rgba(196,122,0,.3);border-radius:var(--radius-lg);animation:fadeSlideUp .3s ease}
+.grade-cta-banner.show{display:block}
+@keyframes fadeSlideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.grade-cta-label{font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem}
+.grade-cta-headline{font-size:.9rem;font-weight:700;color:var(--text);margin-bottom:.2rem;line-height:1.35}
+.grade-cta-sub{font-size:.75rem;color:var(--text-muted);line-height:1.45;margin-bottom:.75rem}
+.grade-cta-btns{display:flex;flex-wrap:wrap;gap:.45rem}
+.grade-cta-btn{display:inline-flex;align-items:center;gap:.35rem;padding:.42rem .85rem;border-radius:99px;font-size:.75rem;font-weight:700;text-decoration:none;transition:all .15s;white-space:nowrap}
+.grade-cta-btn.psa{background:#1a3a6e;color:#fff;border:1.5px solid #2a5298}
+.grade-cta-btn.psa:hover{background:#2a5298}
+.grade-cta-btn.cgc{background:#7c2d12;color:#fff;border:1.5px solid #b45309}
+.grade-cta-btn.cgc:hover{background:#9a3412}
+.grade-cta-btn.bgs{background:#1e3a2f;color:#fff;border:1.5px solid #16a34a}
+.grade-cta-btn.bgs:hover{background:#166534}
+.grade-cta-btn.sgc{background:#312e81;color:#fff;border:1.5px solid #6366f1}
+.grade-cta-btn.sgc:hover{background:#4338ca}
+.grade-cta-dismiss{float:right;background:none;border:none;color:var(--text-faint);font-size:.78rem;cursor:pointer;padding:.1rem .3rem;line-height:1;margin-top:-2px}
+.grade-cta-dismiss:hover{color:var(--text-muted)}
+/* Scan overlay CTA (inside the dark overlay) */
+#scanGradeCTA{display:none;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:.85rem 1rem;max-width:340px;width:100%;text-align:center;margin-top:-.25rem}
+#scanGradeCTA.show{display:block}
+#scanGradeCTA .sgc-label{font-size:.65rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem}
+#scanGradeCTA .sgc-headline{font-size:.9rem;font-weight:700;color:#fff;margin-bottom:.3rem;line-height:1.3}
+#scanGradeCTA .sgc-sub{font-size:.73rem;color:rgba(255,255,255,.6);margin-bottom:.65rem;line-height:1.4}
+#scanGradeCTA .sgc-btns{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center}
 /* --- TOAST --- */
 .cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;white-space:nowrap}
 .cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -696,6 +722,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
+    <!-- Grading affiliate CTA — shown after scan when card is raw or grader detected -->
+    <div id="scanGradeCTA">
+      <div class="sgc-label">&#127942; Official Grading</div>
+      <div class="sgc-headline" id="scanGradeCTAHeadline">Like the estimated grade? Get it official.</div>
+      <div class="sgc-sub">Submit to a grading company and unlock true market value.</div>
+      <div class="sgc-btns" id="scanGradeCTABtns">
+        <a href="#" id="sgcPSABtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn psa">&#127942; Submit to PSA</a>
+        <a href="#" id="sgcCGCBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn cgc">&#127942; Submit to CGC</a>
+        <a href="#" id="sgcBGSBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn bgs">&#127942; Submit to BGS</a>
+      </div>
+    </div>
     <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
   </div>
   <div class="cat-row" id="catRow" style="margin-top:.6rem">
@@ -909,7 +946,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             <span id="gradedUpsellLabel">Get API key → $19.99/mo for real graded prices</span>
           </a>
           <!-- Secondary links -->
-          <div style="display:flex;flex-wrap:wrap;gap:.4rem">
+          <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem">
             <a id="gradedTplLink" href="https://tcgpricelookup.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;font-weight:600;color:var(--text-muted);text-decoration:none;padding:.25rem .55rem;border:1px solid var(--divider);border-radius:99px">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               TCGPriceLookup (free web lookup)
@@ -918,6 +955,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               <span id="gradedCompsLinkLabel">eBay sold →</span>
             </a>
+          </div>
+          <!-- Affiliate grading CTA — shows inside the graded banner -->
+          <div id="inlineBannerGradeCTA" style="padding-top:.55rem;border-top:1px solid rgba(196,122,0,.2)">
+            <div style="font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem">✨ Get It Officially Graded</div>
+            <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.55rem;line-height:1.4">Graded slabs sell for 2–5× more. Submit this card to a certified grading company.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:.4rem">
+              <a id="inlinePSABtn" href="#" target="_blank" rel="noopener sponsored" class="grade-cta-btn psa">★ Submit to PSA</a>
+              <a id="inlineCGCBtn" href="#" target="_blank" rel="noopener sponsored" class="grade-cta-btn cgc">Submit to CGC</a>
+              <a id="inlineBGSBtn" href="#" target="_blank" rel="noopener sponsored" class="grade-cta-btn bgs">BGS / Beckett</a>
+            </div>
           </div>
         </div>
         <!-- JP quick links (shown only for pokemonjp game) -->
@@ -1088,6 +1135,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </aside>
 
   <!-- RIGHT: RESULTS -->
+  <!-- Grading affiliate CTA banner (shown after a scan result, persistent until dismissed) -->
+  <div id="gradingCtaBanner" class="grade-cta-banner">
+    <button class="grade-cta-dismiss" onclick="dismissGradingCta()" title="Dismiss">×</button>
+    <div class="grade-cta-label">&#127942; Get It Graded</div>
+    <div class="grade-cta-headline" id="gradingCtaHeadline">Want an official grade on this card?</div>
+    <div class="grade-cta-sub">Graded cards sell for 2–5× raw prices. Submit to a certified grading company and unlock true market value.</div>
+    <div class="grade-cta-btns">
+      <a href="#" id="bannerPSABtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn psa">&#127942; PSA Grading</a>
+      <a href="#" id="bannerCGCBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn cgc">CGC Grading</a>
+      <a href="#" id="bannerBGSBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn bgs">BGS / Beckett</a>
+      <a href="#" id="bannerSGCBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn sgc">SGC Grading</a>
+    </div>
+  </div>
   <div class="results-area" id="resultsArea">
     <div class="intro-state">
       <div class="intro-icon">🃏</div>
@@ -1312,6 +1372,11 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
 window.CARDSELL_TCGP_AFFID = '';
 window.CARDSELL_SCANNER_KEY = '';
 window.CARDSELL_GOOGLE_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
+// ── Affiliate Links (replace # with your Awin/ShareASale links when approved) ──
+window.CARDSELL_AFFIL_PSA  = '#'; // PSA affiliate URL (Awin/ShareASale)
+window.CARDSELL_AFFIL_CGC  = '#'; // CGC affiliate URL (Awin/ShareASale)
+window.CARDSELL_AFFIL_BGS  = '#'; // BGS/Beckett affiliate URL
+window.CARDSELL_AFFIL_SGC  = '#'; // SGC affiliate URL
 </script>
 <script>
 /* ═══════════════════════════════════════════
@@ -1714,6 +1779,8 @@ searchInput.addEventListener('keydown', e => {
 
 document.getElementById('searchBtn').addEventListener('click', () => {
   clearTimeout(searchTimeout);
+  // If this is a manual search (not from scan), hide grading CTA banner
+  if (!window._pendingScanBannerCard) hideGradingCtaBanner();
   doSearch(searchInput.value.trim());
 });
 
@@ -2481,6 +2548,13 @@ function loadSportsCardFromSearch(playerName) {
 function loadCardUI(card) {
   const isSports  = card.game === 'sports';
   const isJPCard  = card.game === 'pokemonjp';
+
+  // If this card was loaded via a scan, show grading CTA banner
+  if (window._pendingScanBannerCard) {
+    const pending = window._pendingScanBannerCard;
+    window._pendingScanBannerCard = null;
+    showGradingCtaBanner(card.name || pending);
+  }
 
   // Reset graded pills to Raw/Ungraded on every new card load
   document.querySelectorAll('#gradedPills .pill').forEach(p => p.classList.remove('sel'));
@@ -3583,6 +3657,9 @@ function openScanner() {
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
+  // Hide the grading CTA in the overlay
+  const gradeCTA = document.getElementById('scanGradeCTA');
+  if (gradeCTA) gradeCTA.classList.remove('show');
   // Reset file input — replace the element so same file can be scanned again
   const fi = document.getElementById('scanFileInput');
   if (fi) {
@@ -3592,6 +3669,63 @@ function cancelScan() {
     fi.parentNode.replaceChild(clone, fi);
     clone.addEventListener('change', function() { processScanImage(this); });
   }
+}
+
+// ── Affiliate grading CTA helpers ──
+function _affiliateLinks() {
+  return {
+    psa: window.CARDSELL_AFFIL_PSA || '#',
+    cgc: window.CARDSELL_AFFIL_CGC || '#',
+    bgs: window.CARDSELL_AFFIL_BGS || '#',
+    sgc: window.CARDSELL_AFFIL_SGC || '#'
+  };
+}
+
+function showScanGradeCTA(cardName, grader, grade) {
+  const cta = document.getElementById('scanGradeCTA');
+  if (!cta) return;
+  const links = _affiliateLinks();
+  // Update headline based on whether we detected a grader already
+  const headline = document.getElementById('scanGradeCTAHeadline');
+  if (grader && grade) {
+    if (headline) headline.textContent = `Detected ${grader} ${grade} — Get it officially certified!`;
+  } else if (grader) {
+    if (headline) headline.textContent = `Detected a ${grader} slab — Get it officially certified!`;
+  } else {
+    if (headline) headline.textContent = `${cardName ? cardName + ' — ' : ''}Get it officially graded!`;
+  }
+  // Wire affiliate links
+  const p = document.getElementById('sgcPSABtn'); if (p) p.href = links.psa;
+  const c = document.getElementById('sgcCGCBtn'); if (c) c.href = links.cgc;
+  const b = document.getElementById('sgcBGSBtn'); if (b) b.href = links.bgs;
+  cta.classList.add('show');
+}
+
+function showGradingCtaBanner(cardName) {
+  const banner = document.getElementById('gradingCtaBanner');
+  if (!banner) return;
+  const links = _affiliateLinks();
+  const headline = document.getElementById('gradingCtaHeadline');
+  if (headline && cardName) headline.textContent = `Want an official grade on ${cardName}?`;
+  // Wire affiliate links
+  const p = document.getElementById('bannerPSABtn'); if (p) p.href = links.psa;
+  const c = document.getElementById('bannerCGCBtn'); if (c) c.href = links.cgc;
+  const b = document.getElementById('bannerBGSBtn'); if (b) b.href = links.bgs;
+  const s = document.getElementById('bannerSGCBtn'); if (s) s.href = links.sgc;
+  // Also wire inline banner buttons in gradedCompsBanner
+  const ip = document.getElementById('inlinePSABtn'); if (ip) ip.href = links.psa;
+  const ic = document.getElementById('inlineCGCBtn'); if (ic) ic.href = links.cgc;
+  const ib = document.getElementById('inlineBGSBtn'); if (ib) ib.href = links.bgs;
+  banner.classList.add('show');
+}
+
+function hideGradingCtaBanner() {
+  const banner = document.getElementById('gradingCtaBanner');
+  if (banner) banner.classList.remove('show');
+}
+
+function dismissGradingCta() {
+  hideGradingCtaBanner();
 }
 
 async function processScanImage(input) {
@@ -3689,14 +3823,21 @@ async function processScanImage(input) {
     else if (releaseName) searchQuery += ' ' + releaseName;
 
     const graderLabel = grader ? ` · ${grader} slab detected` : '';
+    const detectedGrade = detection?.grading?.grade?.value || '';
     statusEl.innerHTML = `<span style="color:#4ade80">✓ ${cardName}${cardNumber ? ' #' + cardNumber : ''}</span><br><span style="font-size:.8rem;opacity:.7">${releaseName}${graderLabel} · ${confidence} confidence</span>`;
     resultEl.textContent = 'Searching…';
+
+    // Show grading affiliate CTA in the overlay
+    showScanGradeCTA(cardName, grader, detectedGrade);
 
     // Store scan metadata so post-search auto-select can pick the exact card
     window._scanTargetNumber = cardNumber;   // e.g. "TG09"
     window._scanTargetName   = cardName;     // e.g. "Spiritomb"
     window._scanTargetGrader = grader;       // e.g. "PSA"
-    window._scanTargetGrade  = detection?.grading?.grade?.value || ''; // e.g. "9"
+    window._scanTargetGrade  = detectedGrade;
+
+    // After scan result is shown, also queue the banner for when results load
+    window._pendingScanBannerCard = cardName;
 
     setTimeout(() => {
       cancelScan();
@@ -3706,7 +3847,7 @@ async function processScanImage(input) {
       searchInput.value = cardName.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 1200);
+    }, 1600); // slightly longer so user sees grading CTA before overlay closes
 
   } catch(err) {
     console.error('Scan error:', err);
