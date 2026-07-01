@@ -181,24 +181,25 @@ img{display:block;max-width:100%;height:auto}
 .catalog-input{width:100%;padding:.6rem .85rem .6rem 2.3rem;background:var(--surface-2);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.9rem;color:var(--text);outline:none;transition:border-color var(--ease)}
 .catalog-input:focus{border-color:var(--gold)}
 .catalog-query-label{font-size:.72rem;color:var(--text-muted);padding:.5rem 1rem .25rem;flex-shrink:0}
-/* Catalog grid — Collectr-style portrait card scroll */
-.catalog-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.55rem;padding:.75rem;overflow-y:auto;overflow-x:hidden;flex:1;width:100%}
+/* Catalog grid — Collectr-style: card art on top, info below */
+.catalog-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem;padding:.75rem;overflow-y:auto;overflow-x:hidden;flex:1;width:100%;align-content:start}
 @media(min-width:540px){.catalog-grid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:820px){.catalog-grid{grid-template-columns:repeat(4,1fr);gap:.85rem;padding:1rem}}
-/* Card = full-bleed art, no border box */
-.catalog-card{position:relative;cursor:pointer;border-radius:10px;overflow:hidden;aspect-ratio:63/88;background:#111;flex-shrink:0;transition:transform .15s,box-shadow .15s}
-.catalog-card:active{transform:scale(.95)}
-.catalog-card:hover{transform:scale(.97);box-shadow:0 0 0 2px var(--gold)}
-.catalog-card-img-wrap{position:absolute;inset:0;width:100%;height:100%}
-.catalog-card-img-wrap img{width:100%;height:100%;object-fit:cover;display:block;border-radius:10px}
+/* Each card: dark tile, art on top, info below */
+.catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
+.catalog-card:active{transform:scale(.96)}
+.catalog-card:hover{border-color:var(--gold)}
+/* Image area — fixed portrait aspect ratio */
+.catalog-card-img-wrap{width:100%;aspect-ratio:63/88;background:#0d0d0f;display:flex;align-items:center;justify-content:center;padding:.5rem;box-sizing:border-box;flex-shrink:0}
+.catalog-card-img-wrap img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px}
 .catalog-card-img-wrap img:not([src]){opacity:0}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 .catalog-card-img-wrap.loading{background:linear-gradient(90deg,#1e1e20 25%,#2a2a2e 50%,#1e1e20 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
-/* Bottom overlay for name + price */
-.catalog-card-body{position:absolute;bottom:0;left:0;right:0;padding:.4rem .5rem .45rem;background:linear-gradient(to top,rgba(0,0,0,.82) 0%,rgba(0,0,0,.5) 60%,transparent 100%);border-radius:0 0 10px 10px}
-.catalog-card-name{font-size:.75rem;font-weight:700;color:#fff;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-.catalog-card-meta{font-size:.62rem;color:rgba(255,255,255,.65);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.8)}
-.catalog-card-price{font-size:.78rem;font-weight:800;color:var(--gold);margin-top:.15rem;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+/* Info area — below image */
+.catalog-card-body{padding:.5rem .6rem .6rem;display:flex;flex-direction:column;gap:.15rem;flex:1}
+.catalog-card-name{font-size:.82rem;font-weight:800;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.catalog-card-meta{font-size:.68rem;color:var(--text-muted);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.catalog-card-price{font-size:.85rem;font-weight:800;color:var(--gold);margin-top:.2rem}
 .catalog-empty{grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem}
 /* Pagination bar */
 .catalog-pagination{display:flex;align-items:center;justify-content:center;gap:.75rem;padding:.75rem 1rem;flex-shrink:0;border-top:1px solid var(--border);background:var(--surface)}
