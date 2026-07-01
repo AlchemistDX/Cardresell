@@ -56,29 +56,31 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 3. Get image ──
-  const { imageBase64, mimeType } = req.body || {};
+  // ── 3. Get images (front required, back required by CardGrader) ──
+  const { imageBase64, mimeType, backBase64, backMimeType } = req.body || {};
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
+  if (!backBase64)  return res.status(400).json({ error: 'Back photo required. Please photograph both sides of the card.' });
 
   // ── 4. Submit scan to CardGrader.AI ──
   const cgKey = process.env.CARDGRADER_API_KEY;
   if (!cgKey) return res.status(500).json({ error: 'Scanner not configured.' });
 
   try {
-    const imageBuffer = Buffer.from(imageBase64, 'base64');
-    const mime = mimeType || 'image/jpeg';
-    const boundary = '----CardSellBoundary' + Date.now();
+    const frontBuffer = Buffer.from(imageBase64, 'base64');
+    const backBuffer  = Buffer.from(backBase64,  'base64');
+    const frontMime   = mimeType     || 'image/jpeg';
+    const backMime    = backMimeType || 'image/jpeg';
+    const boundary    = '----CardSellBoundary' + Date.now();
     const idempotencyKey = `cs-${key.slice(0, 16)}-${Date.now()}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
 
-    // Build multipart body
-    const header = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="front"; filename="card.jpg"\r\nContent-Type: ${mime}\r\n\r\n`
-    );
-    const modulePart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\nfull`
-    );
-    const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body   = Buffer.concat([header, imageBuffer, modulePart, footer]);
+    // Build multipart body with front + back + modules
+    const frontHeader  = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="front"; filename="front.jpg"\r\nContent-Type: ${frontMime}\r\n\r\n`);
+    const frontFooter  = Buffer.from(`\r\n`);
+    const backHeader   = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="back"; filename="back.jpg"\r\nContent-Type: ${backMime}\r\n\r\n`);
+    const backFooter   = Buffer.from(`\r\n`);
+    const modulePart   = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\nfull`);
+    const finalBoundary = Buffer.from(`\r\n--${boundary}--\r\n`);
+    const body = Buffer.concat([frontHeader, frontBuffer, frontFooter, backHeader, backBuffer, backFooter, modulePart, finalBoundary]);
 
     const cgRes = await fetch('https://cardgrader.ai/v1/scans', {
       method: 'POST',

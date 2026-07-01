@@ -703,10 +703,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Camera scan overlay -->
   <!-- Hidden file input — opens native camera on mobile -->
   <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
+  <input type="file" id="scanBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanBack(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
-    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(90vw,380px)">
-      <img id="scanPreviewImg" style="width:100%;border-radius:12px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card preview" />
+    <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
+      <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
+        <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Front of card" />
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5);margin-top:.25rem">FRONT</div>
+      </div>
+      <div id="scanBackPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
+        <img id="scanBackPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Back of card" />
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5);margin-top:.25rem">BACK</div>
+      </div>
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
@@ -3713,17 +3721,31 @@ function openScanner() {
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
+  // Reset back photo preview
+  const backWrap = document.getElementById('scanBackPreviewWrap');
+  if (backWrap) backWrap.style.display = 'none';
   // Hide the grading CTA in the overlay
   const gradeCTA = document.getElementById('scanGradeCTA');
   if (gradeCTA) gradeCTA.classList.remove('show');
-  // Reset file input — replace the element so same file can be scanned again
+  // Clear stored scan state
+  window._scanFrontBase64 = null;
+  window._scanFrontMime   = null;
+  window._scanFrontUrl    = null;
+  // Reset front file input
   const fi = document.getElementById('scanFileInput');
   if (fi) {
     fi.value = '';
-    // Force reset by replacing the input (necessary for some browsers)
     const clone = fi.cloneNode(true);
     fi.parentNode.replaceChild(clone, fi);
     clone.addEventListener('change', function() { processScanImage(this); });
+  }
+  // Reset back file input
+  const fib = document.getElementById('scanBackFileInput');
+  if (fib) {
+    fib.value = '';
+    const cloneB = fib.cloneNode(true);
+    fib.parentNode.replaceChild(cloneB, fib);
+    cloneB.addEventListener('change', function() { processScanBack(this); });
   }
 }
 
@@ -3788,10 +3810,8 @@ async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
-  // Double-check auth (belt + suspenders)
   if (!googleUser) { openScanner(); return; }
 
-  // If user profile is restored but token expired, catch it early
   if (!window._googleIdToken) {
     const overlay2 = document.getElementById('scanOverlay');
     const statusEl2 = document.getElementById('scanStatus');
@@ -3808,37 +3828,80 @@ async function processScanImage(input) {
   const prevWrap = document.getElementById('scanPreviewWrap');
   const prevImg  = document.getElementById('scanPreviewImg');
 
+  // Show the overlay and front preview
   overlay.style.display = 'flex';
   resultEl.textContent = '';
-  statusEl.textContent = 'Analyzing card…';
 
-  const objectUrl = URL.createObjectURL(file);
-  prevImg.src = objectUrl;
+  const frontObjectUrl = URL.createObjectURL(file);
+  prevImg.src = frontObjectUrl;
   prevWrap.style.display = 'block';
 
-  const base64 = await new Promise((resolve, reject) => {
+  // Store front image base64
+  const frontBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  window._scanFrontBase64 = frontBase64;
+  window._scanFrontMime   = file.type;
+  window._scanFrontUrl    = frontObjectUrl;
+
+  // Prompt for back photo
+  statusEl.innerHTML = '<span style="color:#4ade80">✓ Front photo captured</span><br><span style="font-size:.85rem;opacity:.8">Now take a photo of the BACK of the card</span>';
+  resultEl.innerHTML = '<button onclick="document.getElementById(\'scanBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">📷 Take Back Photo</button>';
+}
+
+async function processScanBack(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const overlay  = document.getElementById('scanOverlay');
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const backWrap  = document.getElementById('scanBackPreviewWrap');
+  const backImg   = document.getElementById('scanBackPreviewImg');
+
+  const backObjectUrl = URL.createObjectURL(file);
+  backImg.src = backObjectUrl;
+  backWrap.style.display = 'block';
+  resultEl.textContent = '';
+
+  const backBase64 = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => resolve(e.target.result.split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 
+  const frontBase64 = window._scanFrontBase64;
+  const frontMime   = window._scanFrontMime || 'image/jpeg';
+  const backMime    = file.type || 'image/jpeg';
+  const frontUrl    = window._scanFrontUrl;
+
+  if (!frontBase64) {
+    statusEl.textContent = 'Front photo missing. Please start over.';
+    return;
+  }
+
+  const idToken = window._googleIdToken || '';
+
   try {
-    statusEl.textContent = 'AI is identifying the card…';
+    // ── Submit scan to CardGrader.AI (async, requires front+back) ──
+    statusEl.textContent = 'Submitting both photos to AI grader…';
 
-    // Get the Google ID token to authenticate the server request
-    const idToken = window._googleIdToken || '';
-
-    // Call our secure server-side proxy (CardSight key never in frontend)
-    // ── Submit scan to CardGrader.AI (async) ──
-    statusEl.textContent = 'Submitting card to AI grader…';
     const response = await fetch('/api/scan', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': 'Bearer ' + idToken
       },
-      body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+      body: JSON.stringify({
+        imageBase64:     frontBase64,
+        mimeType:        frontMime,
+        backBase64:      backBase64,
+        backMimeType:    backMime,
+      })
     });
 
     if (response.status === 401) {
@@ -3856,7 +3919,7 @@ async function processScanImage(input) {
     }
 
     if (!response.ok) {
-      let errMsg = 'Scan failed. Try a clearer photo.';
+      let errMsg = 'Scan failed. Try again with clearer photos.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
       throw new Error(errMsg);
     }
@@ -3865,17 +3928,15 @@ async function processScanImage(input) {
     const scanId = submitData.scanId;
     if (!scanId) throw new Error('Scanner did not return a scan ID. Please try again.');
 
-    // ── Poll /api/scan-result until completed (up to ~3 minutes) ──
-    statusEl.textContent = 'AI is grading your card… (this takes 30–90 seconds)';
-    resultEl.innerHTML = '<span style="font-size:.75rem;opacity:.55">Scanning in progress — please keep this page open.</span>';
+    // ── Poll /api/scan-result until completed ──
+    statusEl.textContent = 'AI is grading your card… (30–90 seconds)';
+    resultEl.innerHTML = '<span style="font-size:.75rem;opacity:.55">Keep this page open while grading…</span>';
 
     let pollAttempts = 0;
-    const maxAttempts = 60; // 60 × 3s = 3 minutes
-
     const scanResult = await new Promise((resolve, reject) => {
       const poll = async () => {
         pollAttempts++;
-        if (pollAttempts > maxAttempts) { reject(new Error('Scan timed out. Please try again.')); return; }
+        if (pollAttempts > 60) { reject(new Error('Scan timed out. Please try again.')); return; }
         try {
           const pr = await fetch('/api/scan-result?id=' + encodeURIComponent(scanId));
           if (!pr.ok) { setTimeout(poll, 3000); return; }
@@ -3885,12 +3946,12 @@ async function processScanImage(input) {
             setTimeout(poll, 3000);
           } else if (pd.status === 'processing') {
             const pct = pd.progress ? ' ' + pd.progress + '%' : '';
-            statusEl.textContent = 'AI is analyzing the card…' + pct + ' (' + (pollAttempts * 3) + 's)';
+            statusEl.textContent = 'Analyzing card…' + pct + ' (' + (pollAttempts * 3) + 's)';
             setTimeout(poll, 3000);
           } else if (pd.status === 'completed') {
             resolve(pd.result);
           } else if (pd.status === 'failed') {
-            reject(new Error(pd.error || 'Scan could not be completed. Try a clearer photo.'));
+            reject(new Error(pd.error || 'Scan could not be completed. Try clearer photos.'));
           } else {
             setTimeout(poll, 3000);
           }
@@ -3914,7 +3975,7 @@ async function processScanImage(input) {
     const gradingRec  = scanResult.grading_recommendation || '';
 
     if (!cardName) {
-      statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
+      statusEl.textContent = 'Could not identify the card. Try better lighting or clearer photos.';
       return;
     }
 
@@ -3948,7 +4009,8 @@ async function processScanImage(input) {
 
     setTimeout(() => {
       cancelScan();
-      URL.revokeObjectURL(objectUrl);
+      URL.revokeObjectURL(frontUrl);
+      URL.revokeObjectURL(backObjectUrl);
       const searchInput = document.getElementById('searchInput');
       searchInput.value = cardName.trim();
       searchInput.dispatchEvent(new Event('input'));
@@ -3961,7 +4023,7 @@ async function processScanImage(input) {
     if (isNetErr) {
       statusEl.innerHTML = '<span style="color:#f87171">Network error — check your connection and try again.</span>';
     } else {
-      statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+      statusEl.textContent = err.message || 'Could not grade the card. Try clearer photos.';
     }
   }
 }
