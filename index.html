@@ -653,6 +653,24 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <div style="font-size:.72rem;color:var(--text-muted);line-height:1.5">💡 Pro users get <strong style="color:var(--text)">10 free scans/mo</strong>. Additional scans are $1.50 each. Credits never expire.</div>
   </div>
+  <!-- AI SCANNER INFO -->
+  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
+    <div class="settings-title">🤖 AI Card Scanner</div>
+    <div style="font-size:.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:.65rem">Point your camera at any Pokémon or sports card — our AI identifies it instantly and pulls live market prices. <strong style="color:var(--text)">Front photo only, results in ~3 seconds.</strong></div>
+    <div style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:.65rem">
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Identifies card name, set &amp; number</div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Auto-searches live market prices</div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Works on Pokémon, sports &amp; MTG cards</div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Credits never expire</div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.65rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+      <div>
+        <div style="font-size:.85rem;font-weight:700;color:var(--text)">$1.50 per scan</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.1rem">Pro: 10 free/mo included</div>
+      </div>
+      <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.42rem 1rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.75rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy a Scan</button>
+    </div>
+  </div>
   <!-- TCGPriceLookup API Key -->
   <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
     <div class="settings-title">TCGPriceLookup API Key</div>
@@ -714,13 +732,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
     <!-- Grading affiliate CTA — shown after scan when card is raw or grader detected -->
     <div id="scanGradeCTA">
-      <div class="sgc-label">&#127942; Official Grading</div>
-      <div class="sgc-headline" id="scanGradeCTAHeadline">Like the estimated grade? Get it official.</div>
-      <div class="sgc-sub">Submit to a grading company and unlock true market value.</div>
+      <div class="sgc-label">&#127942; Get It Graded</div>
+      <div class="sgc-headline" id="scanGradeCTAHeadline">Worth grading? Submit now.</div>
+      <div class="sgc-sub">Official grades unlock 2–5× higher resale value.</div>
       <div class="sgc-btns" id="scanGradeCTABtns">
-        <a href="#" id="sgcPSABtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn psa">&#127942; Submit to PSA</a>
-        <a href="#" id="sgcCGCBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn cgc">&#127942; Submit to CGC</a>
-        <a href="#" id="sgcBGSBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn bgs">&#127942; Submit to BGS</a>
+        <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
+        <a href="https://www.cgccomics.com/cards/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
+        <a href="https://www.beckett.com/grading/submit" id="sgcBGSBtn" target="_blank" rel="noopener" class="grade-cta-btn bgs">&#127942; BGS</a>
+        <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
       </div>
     </div>
     <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
@@ -1362,11 +1381,11 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
 window.CARDSELL_TCGP_AFFID = '';
 window.CARDSELL_SCANNER_KEY = '';
 window.CARDSELL_GOOGLE_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
-// ── Affiliate Links (replace # with your Awin/ShareASale links when approved) ──
-window.CARDSELL_AFFIL_PSA  = '#'; // PSA affiliate URL (Awin/ShareASale)
-window.CARDSELL_AFFIL_CGC  = '#'; // CGC affiliate URL (Awin/ShareASale)
-window.CARDSELL_AFFIL_BGS  = '#'; // BGS/Beckett affiliate URL
-window.CARDSELL_AFFIL_SGC  = '#'; // SGC affiliate URL
+// ── Affiliate Links (replace with Awin/ShareASale links when approved) ──
+window.CARDSELL_AFFIL_PSA  = 'https://www.psacard.com/submit'; // PSA submission page
+window.CARDSELL_AFFIL_CGC  = 'https://www.cgccomics.com/cards/submit/'; // CGC submission page
+window.CARDSELL_AFFIL_BGS  = 'https://www.beckett.com/grading/submit'; // BGS/Beckett submission page
+window.CARDSELL_AFFIL_SGC  = 'https://www.gosgc.com/submit-cards'; // SGC submission page
 </script>
 <script>
 /* ═══════════════════════════════════════════
