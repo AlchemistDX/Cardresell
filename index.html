@@ -4701,16 +4701,9 @@ function loadExampleCard() {
   }, 300);
 }
 
-// Auto-load example card for first-time visitors only
-(function maybeLoadExample() {
-  try {
-    if (!localStorage.getItem('cardsell_seen')) {
-      localStorage.setItem('cardsell_seen', '1');
-      // Small delay so the page fully renders first
-      setTimeout(loadExampleCard, 1200);
-    }
-  } catch(e) {}
-})();
+// NOTE: The example card is opt-in only. Users click "Try an example →" in the
+// How-It-Works bar to trigger loadExampleCard(). We do not auto-fill the search
+// input on page load — a pre-populated field the user has to delete is bad UX.
 
 function loadUserData() {
   // Reload flips view if it's active so it shows the signed-in user's data
@@ -5484,7 +5477,10 @@ function _catalogPageNav(delta) {
 async function fetchCatalogPokemon(q, _isFallback) {
   const grid = document.getElementById('catalogGrid');
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  // 25s timeout — pokemontcg.io occasionally takes 10-15s on cold cache, and
+  // mobile connections need extra headroom. Anything shorter caused visible
+  // "Search timed out" messages on flaky Wi-Fi.
+  const timer = setTimeout(() => controller.abort(), 25000);
 
   // Split query on whitespace so "Charizard ex" → primary="Charizard", suffix=" ex"
   // The pokemontcg.io API doesn't reliably match "Charizard ex" as a name substring;
