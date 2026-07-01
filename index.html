@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CardSell — Find Your Card's Value &amp; Best Platform to Sell</title>
+  <title>CardResell — Find Your Card's Value &amp; Best Platform to Sell</title>
   <meta name="description" content="Search any Pokémon, Magic, Yu-Gi-Oh!, sports, or TCG card, get live market value, and instantly see which platform pays you the most after all 2026 fees." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -603,14 +603,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- HEADER -->
 <header class="hdr">
   <div class="logo">
-    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="CardSell logo">
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-label="CardResell logo">
       <rect width="32" height="32" rx="8" fill="currentColor" opacity=".08"/>
       <rect x="6" y="5" width="14" height="19" rx="2" stroke="var(--gold)" stroke-width="1.8" fill="none"/>
       <line x1="8.5" y1="9" x2="17.5" y2="9" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round" opacity=".6"/>
       <line x1="8.5" y1="12" x2="14" y2="12" stroke="var(--gold)" stroke-width="1.2" stroke-linecap="round" opacity=".4"/>
       <path d="M19 18 L26 18 M23 15 L26 18 L23 21" stroke="var(--gold)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    <span class="logo-text">Card<span>Sell</span></span>
+    <span class="logo-text">Card<span>Resell</span></span>
   </div>
   <div class="hdr-right">
     <div id="googleUserBtn" style="display:none;align-items:center;gap:.5rem">
@@ -671,19 +671,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.42rem 1rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.75rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy a Scan</button>
     </div>
   </div>
-  <!-- TCGPriceLookup API Key -->
-  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
-    <div class="settings-title">TCGPriceLookup API Key</div>
-    <div class="settings-row">
-      <input type="password" id="tplKeyInput" class="settings-input" placeholder="tcg_xxxxxxxxxxxx" autocomplete="off" spellcheck="false" />
-      <button class="settings-save-btn" onclick="toggleTplKeyVisibility()" id="tplRevealBtn" title="Show/hide key" style="min-width:2.6rem;padding:.5rem .65rem;font-size:.82rem">👁</button>
-      <button class="settings-save-btn" onclick="saveTPLKey()">Save</button>
-    </div>
-    <div class="settings-status" id="settingsStatus">
-      <span class="status-dot inactive" id="statusDot"></span>
-      <span id="statusText">No key — using free sources. Get a free key at tcgpricelookup.com</span>
-    </div>
-    <a href="https://tcgpricelookup.com" target="_blank" rel="noopener" class="settings-link">Get free key →</a>
+  <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
+  <div id="tplKeySection" style="display:none">
+    <input type="password" id="tplKeyInput" autocomplete="off" spellcheck="false" />
+    <button id="tplRevealBtn"></button>
+    <div id="settingsStatus"><span class="status-dot inactive" id="statusDot"></span><span id="statusText"></span></div>
   </div>
 </div>
 
@@ -973,16 +965,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
               <span id="gradedCompsLinkLabel">eBay sold →</span>
             </a>
           </div>
-          <!-- Affiliate grading CTA — shows inside the graded banner -->
-          <div id="inlineBannerGradeCTA" style="padding-top:.55rem;border-top:1px solid rgba(196,122,0,.2)">
-            <div style="font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem">✨ Get It Officially Graded</div>
-            <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.55rem;line-height:1.4">Graded slabs sell for 2–5× more. Submit this card to a certified grading company.</div>
-            <div style="display:flex;flex-wrap:wrap;gap:.4rem">
-              <a id="inlinePSABtn" href="#" target="_blank" rel="noopener sponsored" class="grade-cta-btn psa">★ Submit to PSA</a>
-              <a id="inlineCGCBtn" href="#" target="_blank" rel="noopener sponsored" class="grade-cta-btn cgc">Submit to CGC</a>
-              <a id="inlineBGSBtn" href="#" target="_blank" rel="noopener sponsored" class="grade-cta-btn bgs">BGS / Beckett</a>
-            </div>
-          </div>
+          <!-- Inline grading CTA removed — grading CTA lives only in #scanGradeCTA (post-scan overlay) -->
         </div>
         <!-- JP quick links (shown only for pokemonjp game) -->
         <div id="jpLinksPanel" style="display:none;margin:.75rem 0;padding:.75rem 1rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:.625rem">
@@ -1153,18 +1136,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
   <!-- RIGHT: RESULTS -->
   <!-- Grading affiliate CTA banner (shown after a scan result, persistent until dismissed) -->
-  <div id="gradingCtaBanner" class="grade-cta-banner">
-    <button class="grade-cta-dismiss" onclick="dismissGradingCta()" title="Dismiss">×</button>
-    <div class="grade-cta-label">&#127942; Get It Graded</div>
-    <div class="grade-cta-headline" id="gradingCtaHeadline">Want an official grade on this card?</div>
-    <div class="grade-cta-sub">Graded cards sell for 2–5× raw prices. Submit to a certified grading company and unlock true market value.</div>
-    <div class="grade-cta-btns">
-      <a href="#" id="bannerPSABtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn psa">&#127942; PSA Grading</a>
-      <a href="#" id="bannerCGCBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn cgc">CGC Grading</a>
-      <a href="#" id="bannerBGSBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn bgs">BGS / Beckett</a>
-      <a href="#" id="bannerSGCBtn" target="_blank" rel="noopener sponsored" class="grade-cta-btn sgc">SGC Grading</a>
-    </div>
-  </div>
+  <!-- Grading CTA banner removed — grading CTA lives only in #scanGradeCTA (post-scan overlay) -->
   <div class="results-area" id="resultsArea">
     <div class="intro-state">
       <div class="intro-icon">🃏</div>
@@ -1383,7 +1355,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div><!-- /wrap -->
 
 <script>
-// CardSell API Configuration (inlined — no separate file needed)
+// CardResell API Configuration (inlined — no separate file needed)
 window.CARDSELL_TPL_KEY = 'tcg_37ca6c972d0251c5372b395faa9f71a92a11096872d78e12';
 window.CARDSELL_EPN_CAMPID = '5339158497';
 window.CARDSELL_TCGP_AFFID = '';
@@ -1402,7 +1374,7 @@ window.CARDSELL_AFFIL_SGC  = 'https://www.gosgc.com/submit-cards'; // SGC submis
 
 // ── TCGPriceLookup API Key (JS variable only, resets on reload) ──
 // Load saved API key from localStorage on startup
-window.tplApiKey = (() => { try { return localStorage.getItem('cardsell_tpl_key') || window.CARDSELL_TPL_KEY || ''; } catch(e) { return window.CARDSELL_TPL_KEY || ''; } })();
+window.tplApiKey = window.CARDSELL_TPL_KEY || ''; // Key is baked in — no UI needed
 // Load saved OpenAI key for AI card scanning
 window._openAiKey = (() => { try { return localStorage.getItem('cardsell_openai_key') || ''; } catch(e) { return ''; } })();
 
@@ -2328,7 +2300,21 @@ function attachDropHandlers(cardFactory) {
       selectedCard = card;
       dropList.classList.remove('open');
       searchInput.value = card.name;
+      // Auto-populate price override from the displayed price in this result row
+      const priceSpan = el.querySelector('.drop-price');
+      const displayedPrice = priceSpan ? parseFloat(priceSpan.textContent.replace(/[^0-9.]/g, '')) : NaN;
       loadCardUI(card);
+      // Set override AFTER loadCardUI (which clears it) so it takes effect
+      if (!isNaN(displayedPrice) && displayedPrice > 0) {
+        const ovField = document.getElementById('priceOverride');
+        if (ovField) {
+          ovField.value = displayedPrice.toFixed(2);
+          calc(); // Recalc with the override price
+          // Brief gold flash to signal auto-fill
+          ovField.style.boxShadow = '0 0 0 2px var(--gold)';
+          setTimeout(() => { ovField.style.boxShadow = ''; }, 1800);
+        }
+      }
     });
   });
 
@@ -2634,6 +2620,9 @@ function loadCardUI(card) {
     window._pendingScanBannerCard = null;
     showGradingCtaBanner(card.name || pending);
   }
+
+  // Clear price override on new card load (will be re-set by auto-populate in attachDropHandlers)
+  if (priceOverride) priceOverride.value = '';
 
   // Reset graded pills to Raw/Ungraded on every new card load
   document.querySelectorAll('#gradedPills .pill').forEach(p => p.classList.remove('sel'));
@@ -3222,7 +3211,7 @@ function calc() {
     html += `<div class="winner">
       <div class="winner-icon">${PLATFORMS[winner.pid].emoji}</div>
       <div class="winner-info">
-        <div class="winner-label">Best Net Payout</div>
+        <div class="winner-label">${window._isPro ? 'Best Net Payout' : 'eBay Net Payout'}</div>
         <div class="winner-name">${PLATFORMS[winner.pid].name}</div>
         ${hasCost
           ? `<div class="winner-sub">Profit: <strong style="color:${winner.grossProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(winner.grossProfit)}</strong> · Margin: ${winner.margin.toFixed(1)}%</div>`
@@ -3232,17 +3221,22 @@ function calc() {
     </div>`;
   }
 
-  // Sort bar
-  html += `<div class="sort-row">
-    <span class="sort-label">Sort by:</span>
-    <div class="sort-btns">
-      <button class="sort-btn ${sortMode==='payout'?'active':''}" onclick="setSort('payout')">Net Payout</button>
-      <button class="sort-btn ${sortMode==='margin'?'active':''}" onclick="setSort('margin')">Profit %</button>
-    </div>
-  </div>
-  <div class="plat-grid">`;
+  // Sort bar — only meaningful for Pro (multiple platforms)
+  if (window._isPro) {
+    html += `<div class="sort-row">
+      <span class="sort-label">Sort by:</span>
+      <div class="sort-btns">
+        <button class="sort-btn ${sortMode==='payout'?'active':''}" onclick="setSort('payout')">Net Payout</button>
+        <button class="sort-btn ${sortMode==='margin'?'active':''}" onclick="setSort('margin')">Profit %</button>
+      </div>
+    </div>`;
+  }
+  html += `<div class="plat-grid">`;
 
-  sorted.forEach(r => {
+  // Free users: only show eBay card + upsell for other platforms
+  const displaySorted = window._isPro ? sorted : sorted.filter(r => r.pid === 'ebay');
+
+  displaySorted.forEach(r => {
     const info   = PLATFORMS[r.pid];
     const isWin  = r.eligible && winner && r.pid === winner.pid;
     const isWrst = r.eligible && worst  && r.pid === worst.pid && eligible.length > 1;
@@ -3296,17 +3290,40 @@ function calc() {
     </${cardTag}>`;
   });
 
-  // Pro gate — blur platform details for free users
+  // Pro gate — show blurred platform previews to entice upgrade
   if (!window._isPro) {
-    html += `</div>
-    <div class="pro-gate-overlay">
-      <div class="pro-gate-inner">
-        <div class="pro-gate-icon">&#11088;</div>
-        <div class="pro-gate-title">See which platform pays you most</div>
-        <div class="pro-gate-sub">Full fee breakdown for eBay, Mercari, StockX &amp; COMC — Pro only</div>
-        <button class="pro-gate-btn" onclick="openPricingModal('calc_gate')">Unlock with Pro &mdash; $9.99/mo</button>
+    // Calculate real payouts for the other platforms (we just won't show the real numbers clearly)
+    const proOnlyResults = results.filter(r => r.pid !== 'ebay' && r.eligible);
+    proOnlyResults.sort((a, b) => b.netPayout - a.netPayout);
+    const topAlt = proOnlyResults[0]; // best non-eBay payout
+    const ebayPayout = results.find(r => r.pid === 'ebay')?.netPayout ?? 0;
+    const mightEarnMore = topAlt && topAlt.netPayout > ebayPayout;
+
+    // Build blurred preview rows for each locked platform
+    const blurRows = proOnlyResults.map(r => {
+      const info = PLATFORMS[r.pid];
+      const isBetter = r.netPayout > ebayPayout;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
+        <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">${info.emoji} ${info.name}</span>
+        <span style="font-family:var(--mono);font-size:.88rem;font-weight:700;filter:blur(5px);user-select:none;color:${isBetter?'var(--green)':'var(--text)'}">${fmt(r.netPayout)}</span>
+      </div>`;
+    }).join('');
+
+    html += `
+    <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="openPricingModal('calc_gate')">
+      <div class="plat-accent" style="background:linear-gradient(135deg,#b8860b,#f5c518)"></div>
+      <div class="plat-hdr" style="margin-bottom:.3rem">
+        <span class="plat-name">&#11088; 4 More Platforms</span>
+        <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">PRO</span>
+      </div>
+      ${mightEarnMore ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; Another platform might pay more</div>` : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
+      <div style="opacity:.85">${blurRows}</div>
+      <div style="text-align:center;margin-top:.75rem">
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock All Platforms — $9.99/mo</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">Mercari · Poshmark · StockX · COMC + bar chart + unlimited flip tracking</div>
       </div>
     </div>`;
+    html += `</div>`;
     resultsArea.innerHTML = html;
     return;
   }
