@@ -64,28 +64,44 @@ export default async function handler(req, res) {
   if (!openaiKey) return res.status(500).json({ error: 'Scanner not configured.' });
 
   const isGradeMode = mode === 'grade';
+  const { backBase64, backMimeType } = req.body || {};
 
   // ── 4. Call GPT-4o Vision ──
   try {
     const mime   = mimeType || 'image/jpeg';
     const dataUrl = `data:${mime};base64,${imageBase64}`;
+    const backDataUrl = backBase64 ? `data:${backMimeType || 'image/jpeg'};base64,${backBase64}` : null;
 
     const prompt = isGradeMode
-      ? `You are a professional trading card grader with expertise in PSA, BGS, and CGC grading standards. Analyze this card image carefully and provide a detailed condition report.
+      ? `You are a strict, professional trading card grader trained to PSA standards. You are analyzing ${backDataUrl ? 'TWO images: the front AND back of a card' : 'ONE image: the FRONT of a card only (back not provided)'}.
 
-Evaluate these specific areas:
-1. card_name: The card name (e.g. "Charizard VMAX", "LeBron James")
-2. centering: Left/right and top/bottom centering as a percentage estimate (e.g. "60/40")
-3. corners: Condition of all 4 corners - look for wear, creases, fraying ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
-4. edges: Condition of all 4 edges - look for chips, nicks, roughness ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
-5. surface: Front surface condition - scratches, print lines, dents, stains ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
-6. psa_estimate: Your estimated PSA grade as a number (1-10, can use 9.5 for BGS)
-7. grade_label: Grade label ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Poor")
-8. grade_notes: 1-2 sentence explanation of what's limiting the grade, or why it grades high
-9. worth_grading: true or false - is it worth the cost to submit for professional grading?
+BEFORE grading, understand this critical reality:
+- PSA 10 (Gem Mint) is EXTREMELY rare — fewer than 5% of submitted cards receive it
+- PSA 9 is already excellent — most well-kept cards land at PSA 8 or below
+- Any visible flaw — even minor corner wear, off-centering, a single scratch — drops the grade significantly
+- Be STRICT and REALISTIC. It is better to underestimate than overestimate
+- If the image quality is poor or you cannot clearly see the card, say so in grade_notes and give a conservative grade
 
-Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":9,"grade_label":"...","grade_notes":"...","worth_grading":true}`
+Grading scale:
+- PSA 10: Perfectly centered (50/50 to 55/45), zero corner wear, zero edge chips, zero surface scratches under any light
+- PSA 9: Near perfect, possibly one tiny flaw barely visible
+- PSA 8: Light corner wear OR slight off-centering OR minor surface issue
+- PSA 7: Noticeable corner wear AND/OR moderate centering issues
+- PSA 6 or below: Clear visible damage, heavy wear, major centering issues
+
+Evaluate and return:
+1. card_name: The card name
+2. centering: Estimate left/right and top/bottom as percentage (e.g. "60/40 L/R, 55/45 T/B")
+3. corners: Describe all 4 corners specifically — any whitening, bends, fraying ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
+4. edges: Describe all 4 edges — chips, roughness, nicks ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
+5. surface: Front surface — scratches, print lines, holo damage, stains ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
+6. psa_estimate: A realistic integer grade 1-10. DO NOT default to 10. Be strict.
+7. grade_label: ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Good", "Poor")
+8. grade_notes: 1-2 sentences on the SPECIFIC flaws observed (or why it earns a high grade if truly flawless)
+9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
+
+Respond ONLY with valid JSON:
+{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false}`
       : `You are a trading card expert. Look at this card image and extract:
 1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
 2. card_number: The card number (e.g. "079/078", "025/165")
@@ -114,6 +130,11 @@ Respond ONLY with valid JSON, no explanation:
                 type: 'image_url',
                 image_url: { url: dataUrl, detail: 'high' }
               },
+              // Include back image for grade mode if provided
+              ...(isGradeMode && backDataUrl ? [{
+                type: 'image_url',
+                image_url: { url: backDataUrl, detail: 'high' }
+              }] : []),
               { type: 'text', text: prompt }
             ]
           }

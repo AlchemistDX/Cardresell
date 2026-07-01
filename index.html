@@ -728,6 +728,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Hidden file input — opens native camera on mobile -->
   <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
   <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
+  <input type="file" id="gradeBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
@@ -3743,6 +3744,10 @@ function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
   const gradeCTA = document.getElementById('scanGradeCTA');
   if (gradeCTA) gradeCTA.classList.remove('show');
+  // Clear grade front state
+  window._gradeFrontBase64 = null;
+  if (window._gradeFrontUrl) { try { URL.revokeObjectURL(window._gradeFrontUrl); } catch(e) {} window._gradeFrontUrl = null; }
+  // Reset scan file input
   const fi = document.getElementById('scanFileInput');
   if (fi) {
     fi.value = '';
@@ -3750,6 +3755,13 @@ function cancelScan() {
     fi.parentNode.replaceChild(clone, fi);
     clone.addEventListener('change', function() { processScanImage(this); });
   }
+  // Reset grade file inputs
+  ['gradeFileInput','gradeBackFileInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; const c = el.cloneNode(true); el.parentNode.replaceChild(c, el); }
+  });
+  document.getElementById('gradeFileInput')?.addEventListener('change', function() { processGradeImage(this); });
+  document.getElementById('gradeBackFileInput')?.addEventListener('change', function() { processGradeBack(this); });
 }
 
 // ── Affiliate grading CTA helpers ──
@@ -3922,6 +3934,11 @@ function openGradeScanGate() {
 }
 
 // ── Process grade image ──
+// ── Grade scan — stored front image ──
+window._gradeFrontBase64 = null;
+window._gradeFrontUrl    = null;
+
+// Step 1: Front photo captured
 async function processGradeImage(input) {
   const file = input.files[0];
   if (!file) return;
@@ -3929,8 +3946,8 @@ async function processGradeImage(input) {
   if (!googleUser) { openGradeScanGate(); return; }
 
   if (!window._googleIdToken) {
-    const overlay2 = document.getElementById('scanOverlay');
-    overlay2.style.display = 'flex';
+    const ov = document.getElementById('scanOverlay');
+    ov.style.display = 'flex';
     document.getElementById('scanStatus').innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again.</span>';
     document.getElementById('scanResult').innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
     return;
@@ -3944,13 +3961,36 @@ async function processGradeImage(input) {
 
   overlay.style.display = 'flex';
   resultEl.textContent = '';
-  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 AI Grade Estimator</span><br><span style="font-size:.8rem;opacity:.7">Analyzing condition\u2026</span>';
 
-  const objectUrl = URL.createObjectURL(file);
-  prevImg.src = objectUrl;
+  const frontUrl = URL.createObjectURL(file);
+  prevImg.src = frontUrl;
   prevWrap.style.display = 'block';
 
-  const imageBase64 = await compressImage(file, 1000);
+  window._gradeFrontBase64 = await compressImage(file, 1000);
+  window._gradeFrontUrl    = frontUrl;
+
+  statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span><br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 take the BACK photo</span>';
+  resultEl.innerHTML = '<button onclick="document.getElementById(\'gradeBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
+}
+
+// Step 2: Back photo captured — submit both
+async function processGradeBack(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+
+  const frontBase64 = window._gradeFrontBase64;
+  if (!frontBase64) {
+    statusEl.textContent = 'Front photo missing. Please start over.';
+    return;
+  }
+
+  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 AI Grade Estimator</span><br><span style="font-size:.8rem;opacity:.7">Analyzing front + back\u2026</span>';
+  resultEl.textContent = '';
+
+  const backBase64 = await compressImage(file, 1000);
   const idToken = window._googleIdToken || '';
 
   try {
@@ -3961,8 +4001,10 @@ async function processGradeImage(input) {
         'Authorization': 'Bearer ' + idToken
       },
       body: JSON.stringify({
-        imageBase64,
+        imageBase64: frontBase64,
         mimeType: 'image/jpeg',
+        backBase64,
+        backMimeType: 'image/jpeg',
         mode: 'grade',
       })
     });
@@ -3973,13 +4015,9 @@ async function processGradeImage(input) {
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-    if (response.status === 402) {
-      cancelScan();
-      openGradedScanGate();
-      return;
-    }
+    if (response.status === 402) { cancelScan(); openGradedScanGate(); return; }
     if (!response.ok) {
-      let errMsg = 'Could not grade card. Try a clearer photo.';
+      let errMsg = 'Could not grade card. Try clearer photos.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
       throw new Error(errMsg);
     }
@@ -3990,7 +4028,6 @@ async function processGradeImage(input) {
     const notes = data.grade_notes || '';
     const worth = data.worth_grading;
 
-    // Grade color: 10=gem green, 8-9=teal, 6-7=yellow, <6=red
     const gradeColor = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
 
     statusEl.innerHTML =
@@ -3998,7 +4035,6 @@ async function processGradeImage(input) {
       ' <span style="color:rgba(255,255,255,.6);font-size:.82rem">' + label + '</span><br>' +
       '<span style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.2rem;display:block">' + (data.card_name || '') + '</span>';
 
-    // Sub-grade breakdown
     resultEl.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem;text-align:left;font-size:.74rem;margin:.1rem 0 .5rem">' +
         '<span style="color:rgba(255,255,255,.45)">Centering</span><span style="color:#fff;font-weight:600">' + data.centering + '</span>' +
@@ -4012,10 +4048,8 @@ async function processGradeImage(input) {
         : '<div style="font-size:.74rem;color:#fb923c">May not be worth grading costs</div>'
       );
 
-    // Show grading CTA with submission links
     showScanGradeCTA(data.card_name, '', psa);
 
-    // Also kick off a price search for this card
     window._pendingScanBannerCard = data.card_name;
     if (data.card_name) {
       setTimeout(() => {
@@ -4026,18 +4060,20 @@ async function processGradeImage(input) {
       }, 3500);
     }
 
-    // Reset grade file input
-    const fi = document.getElementById('gradeFileInput');
+    window._gradeFrontBase64 = null;
+    if (window._gradeFrontUrl) { URL.revokeObjectURL(window._gradeFrontUrl); window._gradeFrontUrl = null; }
+
+    const fi = document.getElementById('gradeBackFileInput');
     if (fi) {
       fi.value = '';
       const clone = fi.cloneNode(true);
       fi.parentNode.replaceChild(clone, fi);
-      clone.addEventListener('change', function() { processGradeImage(this); });
+      clone.addEventListener('change', function() { processGradeBack(this); });
     }
 
   } catch(err) {
     console.error('Grade error:', err);
-    statusEl.textContent = err.message || 'Could not grade the card. Try a clearer photo.';
+    statusEl.textContent = err.message || 'Could not grade the card. Try clearer photos.';
   }
 }
 
