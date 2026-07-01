@@ -170,6 +170,40 @@ export default async function handler(req, res) {
       return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
     }
 
+    // ── verify_grade_pack_payment: Stripe session → grant Grade Scan credits ('paid_left') ──
+    if (action === 'verify_grade_pack_payment') {
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
+      try {
+        const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${stripeKey}` }
+        });
+        if (!r.ok) return res.status(400).json({ error: 'Could not verify payment' });
+        const session = await r.json();
+        if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
+        if (session.metadata?.type !== 'grade_pack') return res.status(400).json({ error: 'Not a grade pack payment' });
+        if (session.metadata?.credited === 'true') {
+          const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
+        }
+        const tierMap = { '3': 3, '10': 10, '25': 25 };
+        const qty = tierMap[session.metadata?.tier] || 3;
+        await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `metadata[credited]=true&metadata[credited_to]=${encodeURIComponent(key)}`
+        });
+        if (hasKV) {
+          const current = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, current + qty);
+          return res.status(200).json({ success: true, credits: current + qty, added: qty });
+        }
+        return res.status(200).json({ success: true, credits: qty, added: qty });
+      } catch(e) {
+        return res.status(500).json({ error: 'Verification failed: ' + e.message });
+      }
+    }
+
     // ── verify_id_payment: Stripe session → grant ID scan credits ──
     if (action === 'verify_id_payment') {
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
