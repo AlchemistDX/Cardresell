@@ -2,7 +2,7 @@
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
 
-const FREE_SCANS_PER_MONTH = 5;
+const FREE_SCANS_PER_MONTH = 10;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -27,8 +27,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 });
   }
 
-  const kvUrl   = process.env.VERCEL_KV_REST_API_URL;
-  const kvToken = process.env.VERCEL_KV_REST_API_TOKEN;
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
 
   let isPro = false, proStatus = 'none';
 
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
   // 3. Get scan credits (only meaningful for Pro users)
   let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0;
   if (isPro && kvUrl && kvToken) {
-    const monthKey = `scans:${userSub}:${getMonthStamp()}:free_used`;
+    const monthKey = `scans:${userSub}:free_used_${getMonthStamp()}`;
     freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
     freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);

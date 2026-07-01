@@ -1,156 +1,199 @@
-// /api/scan — CardGrader.AI proxy (replaced CardSight)
-// Submits card photo, polls until complete, returns normalized result
-// CardGrader.AI docs: https://cardgrader.ai/api-docs
-// Module: "full" = identification + AI grade + pricing (2 credits/scan)
-// Polling: async queue, 30–120s typical, poll GET /v1/scans/{id}
+// /api/scan — CardGrader.AI proxy (async submit + poll)
+// POST: validates auth, checks/consumes credit, submits scan to CardGrader, returns { scanId }
+// The frontend then polls /api/scan-result?id={scanId} until completed.
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ── 1. Verify Google ID token ──
-  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  if (!idToken) {
-    return res.status(401).json({ error: 'Sign in with Google to use the scanner.' });
-  }
-  try {
-    const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!googleRes.ok) {
-      return res.status(401).json({ error: 'Invalid Google session. Please sign in again.' });
-    }
-    const tokenInfo = await googleRes.json();
-    const expectedClientId = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
-    if (tokenInfo.aud !== expectedClientId) {
-      return res.status(401).json({ error: 'Unauthorized.' });
-    }
-  } catch (err) {
-    return res.status(401).json({ error: 'Could not verify Google sign-in.' });
+  // ── 1. Auth: verify Google ID token or accept email fallback ──
+  const idToken   = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  const bodyEmail = req.body?.email || '';
+  const bodySub   = req.body?.googleSub || '';
+
+  let userEmail = bodyEmail;
+  let googleSub = bodySub;
+
+  if (idToken && idToken.length > 20) {
+    try {
+      const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      if (googleRes.ok) {
+        const info = await googleRes.json();
+        const expectedClientId = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
+        if (info.aud === expectedClientId) {
+          userEmail = info.email || userEmail;
+          googleSub = info.sub  || googleSub;
+        }
+      }
+    } catch(e) { /* fallback to email */ }
   }
 
-  // ── 2. Get image from request ──
+  if (!userEmail) {
+    return res.status(401).json({ error: 'Sign in with Google to use the scanner.' });
+  }
+
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+  const hasKV   = !!(kvUrl && kvToken);
+  const key     = googleSub || userEmail;
+
+  // ── 2. Check & consume a scan credit ──
+  if (hasKV) {
+    const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const isPro   = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
+    const stamp   = getMonthStamp();
+    const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
+    const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
+
+    if (freeLeft <= 0 && paid <= 0) {
+      return res.status(402).json({ error: 'No scan credits remaining. Purchase a scan to continue.', needsPayment: true });
+    }
+
+    // Consume credit (free first, then paid)
+    if (freeLeft > 0) {
+      await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+    } else {
+      await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
+    }
+  }
+
+  // ── 3. Get image ──
   const { imageBase64, mimeType } = req.body || {};
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
 
+  // ── 4. Submit scan to CardGrader.AI ──
   const cgKey = process.env.CARDGRADER_API_KEY;
-  if (!cgKey) return res.status(503).json({ error: 'Scanner not configured.' });
-
-  const CG_BASE = 'https://cardgrader.ai/v1';
-  const authHeader = { 'Authorization': `Bearer ${cgKey}` };
+  if (!cgKey) return res.status(500).json({ error: 'Scanner not configured.' });
 
   try {
-    // ── 3. Submit scan to CardGrader.AI ──
     const imageBuffer = Buffer.from(imageBase64, 'base64');
     const mime = mimeType || 'image/jpeg';
-    const boundary = '----CGBoundary' + Date.now();
+    const boundary = '----CardSellBoundary' + Date.now();
+    const idempotencyKey = `cs-${key.slice(0, 16)}-${Date.now()}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
 
+    // Build multipart body
     const header = Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="front"; filename="card.jpg"\r\nContent-Type: ${mime}\r\n\r\n`
     );
-    // module: "identify" (1 credit, card ID only) or "full" (2 credits, ID+grade+value)
-    const scanModule = (req.body.module === 'identify') ? 'identify' : 'full';
     const modulePart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\n${scanModule}`
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\nfull`
     );
     const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat([header, imageBuffer, modulePart, footer]);
+    const body   = Buffer.concat([header, imageBuffer, modulePart, footer]);
 
-    const idempotencyKey = 'cs-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-
-    const submitRes = await fetch(`${CG_BASE}/scans`, {
+    const cgRes = await fetch('https://cardgrader.ai/v1/scans', {
       method: 'POST',
       headers: {
-        ...authHeader,
+        'Authorization': `Bearer ${cgKey}`,
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': body.length.toString(),
         'Idempotency-Key': idempotencyKey,
       },
       body,
     });
 
-    if (!submitRes.ok) {
-      const errText = await submitRes.text();
-      console.error('CardGrader submit error:', submitRes.status, errText);
-      if (submitRes.status === 402) {
-        return res.status(402).json({ error: 'Scanner credits used up. Please top up at cardgrader.ai.' });
+    if (!cgRes.ok) {
+      const errText = await cgRes.text();
+      console.error('CardGrader submit error:', cgRes.status, errText);
+
+      // Refund credit if submission failed
+      if (hasKV) {
+        const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
       }
-      return res.status(502).json({ error: 'Scan submission failed. Try a clearer photo.' });
+
+      // Handle specific error codes
+      if (cgRes.status === 402) {
+        return res.status(502).json({ error: 'Card scanner service credit issue. Please try again later.' });
+      }
+      return res.status(502).json({ error: 'Card scan failed. Try a clearer photo of the card.' });
     }
 
-    const submitted = await submitRes.json();
-    const scanId = submitted.id;
-    if (!scanId) return res.status(502).json({ error: 'No scan ID returned.' });
+    const result = await cgRes.json();
+    // Returns: { id, status: "queued", modules, creditsCharged, creditsRemaining, links }
+    const scanId = result.id;
 
-    // ── 4. Poll until complete (max 110s, every 4s) ──
-    const MAX_POLLS = 27;
-    const POLL_INTERVAL = 4000;
-    let result = null;
-
-    for (let i = 0; i < MAX_POLLS; i++) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-
-      const pollRes = await fetch(`${CG_BASE}/scans/${scanId}`, { headers: authHeader });
-      if (!pollRes.ok) {
-        console.error('CardGrader poll error:', pollRes.status);
-        continue;
-      }
-      const pollData = await pollRes.json();
-
-      if (pollData.status === 'completed') {
-        result = pollData;
-        break;
-      }
-      if (pollData.status === 'failed') {
-        return res.status(502).json({ error: 'Scan failed. Try a clearer, well-lit photo.' });
-      }
-      // status: queued / processing — keep polling
+    if (!scanId) {
+      console.error('CardGrader no scan ID:', result);
+      return res.status(502).json({ error: 'Scanner did not return a scan ID. Please try again.' });
     }
 
-    if (!result) {
-      return res.status(504).json({ error: 'Scan timed out. Try again with a clearer photo.' });
-    }
+    console.log('CardGrader scan submitted:', JSON.stringify({ scanId, status: result.status, key }));
 
-    // ── 5. Normalize response for frontend ──
-    const id = result.identification || {};
-    const grading = result.grading || {};
-    const value = result.value || {};
+    // Return scan ID — frontend will poll /api/scan-result?id={scanId}
+    return res.status(202).json({ scanId, status: result.status || 'queued' });
 
-    return res.status(200).json({
-      // Card identity
-      cardName:   id.name || '',
-      cardNumber: id.number || '',
-      setName:    id.set || '',
-      year:       id.year || '',
-      category:   id.category || '',
-      parallel:   id.parallel || '',
-      subject:    id.subject || '',
-
-      // AI grade prediction
-      grade:          grading.grade ?? null,
-      predictedGrade: grading.predictedGrade ?? null,
-      subGrades:      grading.subGrades || null,
-      gradeSummary:   grading.summary || '',
-      gradeJustification: grading.justification || '',
-
-      // Pricing from real sold comps
-      rawEstimate:    value.rawEstimate ?? null,
-      gradedEstimate: value.gradedEstimate ?? null,
-      gradedValueSpread: value.gradedValueSpread || [],
-      currency:       value.currency || 'USD',
-
-      // Market insights
-      gradingRecommendation: result.market?.gradingRecommendation || '',
-      marketInsights:        result.market?.insights || '',
-
-      // Meta
-      creditsRemaining: submitted.creditsRemaining ?? null,
-      scanId,
-    });
-
-  } catch (err) {
-    console.error('Scan proxy error:', err);
-    return res.status(500).json({ error: 'Scanner temporarily unavailable.' });
+  } catch(err) {
+    console.error('Scan error:', err);
+    return res.status(500).json({ error: 'Scanner temporarily unavailable. Please try again.' });
   }
+}
+
+// ── KV helpers ──
+function getMonthStamp() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}_${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+async function getKVInt(kvUrl, kvToken, key) {
+  try {
+    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+    const d = await r.json();
+    const raw = d.result;
+    if (raw === null || raw === undefined) return 0;
+    if (typeof raw === 'string' && raw.startsWith('[')) {
+      try { return parseInt(JSON.parse(raw)[0]) || 0; } catch(e) {}
+    }
+    return parseInt(raw) || 0;
+  } catch(e) { return 0; }
+}
+
+async function setKV(kvUrl, kvToken, key, value) {
+  try {
+    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(value))}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+  } catch(e) {}
+}
+
+async function incrKV(kvUrl, kvToken, key) {
+  try {
+    await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+  } catch(e) {}
+}
+
+async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {
+  if (kvUrl && kvToken && googleSub) {
+    try {
+      const r = await fetch(`${kvUrl}/get/${encodeURIComponent(`pro:${googleSub}`)}`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      const d = await r.json();
+      if (d.result) {
+        const rec = JSON.parse(d.result);
+        if (rec.status === 'active') return true;
+      }
+    } catch(e) {}
+  }
+  if (!stripeKey || !email) return false;
+  try {
+    const r = await fetch(
+      `https://api.stripe.com/v1/customers/search?query=email:"${email}"&limit=1`,
+      { headers: { Authorization: `Bearer ${stripeKey}` } }
+    );
+    if (!r.ok) return false;
+    const d = await r.json();
+    const cust = d.data?.[0];
+    if (!cust) return false;
+    const subR = await fetch(
+      `https://api.stripe.com/v1/subscriptions?customer=${cust.id}&status=active&limit=1`,
+      { headers: { Authorization: `Bearer ${stripeKey}` } }
+    );
+    const subD = await subR.json();
+    return (subD.data?.length || 0) > 0;
+  } catch(e) { return false; }
 }

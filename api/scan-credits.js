@@ -1,9 +1,8 @@
-// /api/scan-credits — Get and update free graded scan credits for a Pro user
-// GET  → returns { freeScansUsed, freeScansTotal, freeScansLeft, isPro }
-// POST { action: 'use' } → decrements free scan count, returns updated state
-// POST { action: 'add', amount: N } → adds paid scans (called after webhook confirms payment)
-
-const FREE_SCANS_PER_MONTH = 5;
+// /api/scan-credits — Scan credit management
+// GET  ?email=x&sub=y  → returns { credits, isPro }
+// POST { action: 'use', email, googleSub }         → use a credit
+// POST { action: 'verify_payment', sessionId, email, googleSub } → verify Stripe payment & grant credit
+// POST { action: 'add', email, googleSub, amount } → add credits (webhook)
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,104 +10,218 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Verify Google ID token
-  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  if (!idToken) return res.status(401).json({ error: 'Not signed in.' });
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  const kvUrl     = process.env.KV_REST_API_URL;
+  const kvToken   = process.env.KV_REST_API_TOKEN;
+  const hasKV     = !!(kvUrl && kvToken);
 
-  let userSub, userEmail;
-  try {
-    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!r.ok) return res.status(401).json({ error: 'Invalid session.' });
-    const info = await r.json();
-    const expectedClientId = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
-    if (info.aud !== expectedClientId) return res.status(401).json({ error: 'Unauthorized.' });
-    userSub   = info.sub;
-    userEmail = info.email;
-  } catch(e) {
-    return res.status(401).json({ error: 'Could not verify sign-in.' });
-  }
-
-  const kvUrl   = process.env.VERCEL_KV_REST_API_URL;
-  const kvToken = process.env.VERCEL_KV_REST_API_TOKEN;
-
-  // Check Pro status
-  const proRecord = await getKV(kvUrl, kvToken, `pro:${userSub}`);
-  const isPro = proRecord?.status === 'active';
-
-  // Get current month key — resets automatically each month
-  const monthKey = `scans:${userSub}:${getMonthStamp()}`;
-
+  // ── GET: return credit balance ──
   if (req.method === 'GET') {
-    const freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey + ':free_used');
-    const paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
-    const freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
+    const email     = req.query?.email || '';
+    const googleSub = req.query?.sub   || '';
+    if (!email) return res.status(400).json({ error: 'email required' });
 
+    const isPro = await checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email);
+
+    if (!hasKV) {
+      // No KV: count credited Stripe sessions directly
+      const paidCredits = await countStripeCredits(stripeKey, email, googleSub);
+      const freeCredits = isPro ? 10 : 0; // can't track usage without KV, show as available
+      return res.status(200).json({
+        credits: paidCredits + freeCredits,
+        isPro,
+        paidCredits,
+        freeCredits,
+        kvAvailable: false,
+      });
+    }
+
+    const key     = googleSub || email;
+    const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const stamp   = getMonthStamp();
+    const proFree = isPro
+      ? Math.max(0, 10 - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
+      : 0;
     return res.status(200).json({
+      credits: paid + proFree,
       isPro,
-      freeScansUsed,
-      freeScansTotal: FREE_SCANS_PER_MONTH,
-      freeScansLeft,
-      paidScansLeft,
-      totalScansLeft: freeScansLeft + paidScansLeft,
+      paidCredits: paid,
+      freeCredits: proFree,
+      kvAvailable: true,
     });
   }
 
+  // ── POST ──
   if (req.method === 'POST') {
-    const { action, amount } = req.body || {};
+    const body = req.body || {};
+    const { action, email, googleSub, sessionId, amount } = body;
+    const key = googleSub || email;
 
-    if (action === 'use') {
-      // Use a free scan (called when scan starts)
-      const freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey + ':free_used');
-      const paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
-      const freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
+    // ── verify_payment: Stripe session → grant 1 credit ──
+    if (action === 'verify_payment') {
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
 
-      if (freeScansLeft > 0) {
-        // Use a free scan
-        await incrKV(kvUrl, kvToken, monthKey + ':free_used');
-        // Set expiry to end of next month so it auto-cleans
-        await expireKV(kvUrl, kvToken, monthKey + ':free_used', 60 * 60 * 24 * 62);
-        return res.status(200).json({
-          success: true,
-          charged: false,
-          freeScansLeft: freeScansLeft - 1,
-          paidScansLeft,
-          message: `Free scan used. ${freeScansLeft - 1} free scans remaining this month.`,
+      try {
+        const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${stripeKey}` }
         });
-      } else if (paidScansLeft > 0) {
-        // Use a paid scan credit
-        await decrKV(kvUrl, kvToken, `scans:${userSub}:paid_left`);
-        return res.status(200).json({
-          success: true,
-          charged: false,
-          usedPaid: true,
-          freeScansLeft: 0,
-          paidScansLeft: paidScansLeft - 1,
-          message: `Paid scan credit used. ${paidScansLeft - 1} paid scans remaining.`,
+        if (!r.ok) return res.status(400).json({ error: 'Could not verify payment' });
+        const session = await r.json();
+
+        if (session.payment_status !== 'paid') {
+          return res.status(400).json({ error: 'Payment not completed', status: session.payment_status });
+        }
+        if (session.metadata?.type !== 'graded_scan') {
+          return res.status(400).json({ error: 'Not a scan payment' });
+        }
+        // Prevent double-credit
+        if (session.metadata?.credited === 'true') {
+          const currentCredits = hasKV ? await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`) : 1;
+          return res.status(200).json({ success: true, alreadyCredited: true, credits: currentCredits });
+        }
+
+        // Mark as credited on the Stripe session (works with or without KV)
+        await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${stripeKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: `metadata[credited]=true&metadata[credited_to]=${encodeURIComponent(key)}`
         });
-      } else {
-        // No scans left — needs to pay
-        return res.status(402).json({
-          success: false,
-          needsPayment: true,
-          freeScansLeft: 0,
-          paidScansLeft: 0,
-          message: 'No scans remaining. Purchase a scan for $1.50.',
-        });
+
+        if (hasKV) {
+          const current = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, current + 1);
+          console.log('SCAN_CREDIT_GRANTED_KV:', JSON.stringify({ key, sessionId }));
+          return res.status(200).json({ success: true, credits: current + 1 });
+        } else {
+          console.log('SCAN_CREDIT_GRANTED_STRIPE:', JSON.stringify({ key, sessionId }));
+          return res.status(200).json({ success: true, credits: 1 });
+        }
+      } catch(e) {
+        console.error('verify_payment error:', e);
+        return res.status(500).json({ error: 'Verification failed: ' + e.message });
       }
     }
 
-    if (action === 'add') {
-      // Add paid scan credits (called after successful Stripe payment)
-      const n = parseInt(amount) || 1;
-      const current = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
-      await setKV(kvUrl, kvToken, `scans:${userSub}:paid_left`, current + n);
-      return res.status(200).json({ success: true, paidScansLeft: current + n });
+    // ── use: decrement a credit before scanning ──
+    if (action === 'use') {
+      if (!hasKV) {
+        // Without KV: verify user has at least 1 Stripe credit then allow
+        const paid = await countStripeCredits(stripeKey, email, googleSub);
+        if (paid < 1) {
+          const isPro = await checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email);
+          if (!isPro) return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
+        }
+        return res.status(200).json({ success: true, credits: paid });
+      }
+
+      const isPro    = await checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email);
+      const stamp    = getMonthStamp();
+      const monthKey = `scans:${key}:free_used_${stamp}`;
+      const freeUsed = await getKVInt(kvUrl, kvToken, monthKey);
+      const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
+      const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+
+      if (freeLeft > 0) {
+        await incrKV(kvUrl, kvToken, monthKey);
+        return res.status(200).json({ success: true, charged: false, credits: freeLeft - 1 + paid });
+      } else if (paid > 0) {
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
+        return res.status(200).json({ success: true, charged: false, usedPaid: true, credits: paid - 1 });
+      } else {
+        return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
+      }
     }
 
-    return res.status(400).json({ error: 'Unknown action.' });
+    // ── add: grant credits (called by webhook) ──
+    if (action === 'add') {
+      const n = parseInt(amount) || 1;
+      if (hasKV) {
+        const current = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, current + n);
+        return res.status(200).json({ success: true, credits: current + n });
+      }
+      return res.status(200).json({ success: true, credits: n });
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
   }
 
   return res.status(405).end();
+}
+
+// Count paid scan credits from Stripe (fallback when no KV)
+// Searches checkout sessions by google_sub in metadata — reliable for all checkout types
+async function countStripeCredits(stripeKey, email, googleSub) {
+  if (!stripeKey) return 0;
+  try {
+    // Use Stripe Search API to find sessions credited to this user's google_sub
+    const queries = [];
+    if (googleSub) {
+      queries.push(
+        `https://api.stripe.com/v1/checkout/sessions/search?query=metadata[%27google_sub%27]:%27${encodeURIComponent(googleSub)}%27+AND+metadata[%27credited%27]:%27true%27&limit=25`
+      );
+    }
+    if (email) {
+      queries.push(
+        `https://api.stripe.com/v1/checkout/sessions/search?query=metadata[%27credited%27]:%27true%27+AND+customer_email:%27${encodeURIComponent(email)}%27&limit=25`
+      );
+    }
+    const sessionIds = new Set();
+    let count = 0;
+    for (const url of queries) {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${stripeKey}` } });
+      if (!r.ok) continue;
+      const data = await r.json();
+      for (const s of (data.data || [])) {
+        if (!sessionIds.has(s.id) &&
+            s.payment_status === 'paid' &&
+            s.metadata?.type === 'graded_scan' &&
+            s.metadata?.credited === 'true') {
+          sessionIds.add(s.id);
+          count++;
+        }
+      }
+    }
+    return count;
+  } catch(e) { return 0; }
+}
+
+async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {
+  // KV first
+  if (kvUrl && kvToken && googleSub) {
+    try {
+      const r = await fetch(`${kvUrl}/get/${encodeURIComponent(`pro:${googleSub}`)}`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      const d = await r.json();
+      if (d.result) {
+        const rec = JSON.parse(d.result);
+        if (rec.status === 'active') return true;
+      }
+    } catch(e) {}
+  }
+  // Stripe fallback
+  if (!stripeKey || !email) return false;
+  try {
+    const r = await fetch(
+      `https://api.stripe.com/v1/customers/search?query=email:"${email}"&limit=1`,
+      { headers: { Authorization: `Bearer ${stripeKey}` } }
+    );
+    if (!r.ok) return false;
+    const d = await r.json();
+    const cust = d.data?.[0];
+    if (!cust) return false;
+    const subR = await fetch(
+      `https://api.stripe.com/v1/subscriptions?customer=${cust.id}&status=active&limit=1`,
+      { headers: { Authorization: `Bearer ${stripeKey}` } }
+    );
+    const subD = await subR.json();
+    return (subD.data?.length || 0) > 0;
+  } catch(e) { return false; }
 }
 
 function getMonthStamp() {
@@ -116,66 +229,38 @@ function getMonthStamp() {
   return `${d.getUTCFullYear()}_${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-async function getKV(kvUrl, kvToken, key) {
-  if (!kvUrl || !kvToken) return null;
-  try {
-    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${kvToken}` },
-    });
-    const data = await r.json();
-    if (data.result) return JSON.parse(data.result);
-  } catch(e) {}
-  return null;
-}
-
 async function getKVInt(kvUrl, kvToken, key) {
-  if (!kvUrl || !kvToken) return 0;
   try {
     const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${kvToken}` },
+      headers: { Authorization: `Bearer ${kvToken}` }
     });
-    const data = await r.json();
-    return parseInt(data.result) || 0;
+    const d = await r.json();
+    // Upstash returns result as string — parse it
+    const raw = d.result;
+    if (raw === null || raw === undefined) return 0;
+    // Handle case where value was accidentally stored as JSON array string
+    if (typeof raw === 'string' && raw.startsWith('[')) {
+      try { return parseInt(JSON.parse(raw)[0]) || 0; } catch(e) {}
+    }
+    return parseInt(raw) || 0;
   } catch(e) { return 0; }
 }
 
 async function setKV(kvUrl, kvToken, key, value) {
-  if (!kvUrl || !kvToken) return;
   try {
-    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
+    // Upstash REST: POST /set/key with value as plain string in body array
+    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(value))}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([String(value)]),
+      headers: { Authorization: `Bearer ${kvToken}` }
     });
   } catch(e) {}
 }
 
 async function incrKV(kvUrl, kvToken, key) {
-  if (!kvUrl || !kvToken) return;
   try {
     await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}` },
-    });
-  } catch(e) {}
-}
-
-async function decrKV(kvUrl, kvToken, key) {
-  if (!kvUrl || !kvToken) return;
-  try {
-    await fetch(`${kvUrl}/decr/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}` },
-    });
-  } catch(e) {}
-}
-
-async function expireKV(kvUrl, kvToken, key, seconds) {
-  if (!kvUrl || !kvToken) return;
-  try {
-    await fetch(`${kvUrl}/expire/${encodeURIComponent(key)}/${seconds}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}` },
+      headers: { Authorization: `Bearer ${kvToken}` }
     });
   } catch(e) {}
 }

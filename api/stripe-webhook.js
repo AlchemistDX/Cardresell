@@ -71,16 +71,15 @@ export default async function handler(req, res) {
 }
 
 async function storeProUser(googleSub, email, subscriptionId, status) {
-  const kvUrl   = process.env.VERCEL_KV_REST_API_URL;
-  const kvToken = process.env.VERCEL_KV_REST_API_TOKEN;
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
   if (kvUrl && kvToken) {
     try {
       const key = `pro:${googleSub}`;
       const val = JSON.stringify({ email, subscriptionId, status, updatedAt: new Date().toISOString() });
-      await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
+      await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(val)}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([val]),
+        headers: { Authorization: `Bearer ${kvToken}` },
       });
     } catch(e) { console.error('KV store error:', e); }
   } else {
@@ -89,8 +88,8 @@ async function storeProUser(googleSub, email, subscriptionId, status) {
 }
 
 async function addPaidScanCredit(googleSub, amount) {
-  const kvUrl   = process.env.VERCEL_KV_REST_API_URL;
-  const kvToken = process.env.VERCEL_KV_REST_API_TOKEN;
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
   if (!kvUrl || !kvToken) {
     console.log('SCAN_CREDIT:', JSON.stringify({ googleSub, amount }));
     return;
@@ -98,10 +97,9 @@ async function addPaidScanCredit(googleSub, amount) {
   try {
     const key     = `scans:${googleSub}:paid_left`;
     const current = await getKVInt(kvUrl, kvToken, key);
-    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
+    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(current + amount))}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([String(current + amount)]),
+      headers: { Authorization: `Bearer ${kvToken}` },
     });
   } catch(e) { console.error('KV scan credit error:', e); }
 }
@@ -112,7 +110,12 @@ async function getKVInt(kvUrl, kvToken, key) {
       headers: { Authorization: `Bearer ${kvToken}` },
     });
     const data = await r.json();
-    return parseInt(data.result) || 0;
+    const raw = data.result;
+    if (raw === null || raw === undefined) return 0;
+    if (typeof raw === 'string' && raw.startsWith('[')) {
+      try { return parseInt(JSON.parse(raw)[0]) || 0; } catch(e) {}
+    }
+    return parseInt(raw) || 0;
   } catch(e) { return 0; }
 }
 

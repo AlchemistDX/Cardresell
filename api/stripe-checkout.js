@@ -1,6 +1,6 @@
 // /api/stripe-checkout — Create Stripe Checkout for Pro subscription ($4.99/mo)
-// POST (Authorization: Bearer <google_id_token>)
-// Returns: { url }
+// POST body: { email, userId, name? }
+// Authorization: Bearer <google_id_token>  (optional — used if present, falls back to body email)
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,24 +9,39 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const body = req.body || {};
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  if (!idToken) return res.status(401).json({ error: 'Sign in with Google first.' });
 
-  let userEmail, userSub, userName;
-  try {
-    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!r.ok) return res.status(401).json({ error: 'Invalid Google session.' });
-    const info = await r.json();
-    if (info.aud !== '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com')
-      return res.status(401).json({ error: 'Unauthorized.' });
-    userEmail = info.email; userSub = info.sub; userName = info.name || '';
-  } catch(e) { return res.status(401).json({ error: 'Could not verify sign-in.' }); }
+  let userEmail = body.email || '';
+  let userSub   = body.userId || '';
+  let userName  = body.name || '';
+
+  // Try to verify via Google token if present — but fall back to body email if token is expired
+  if (idToken && idToken.length > 20) {
+    try {
+      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      if (r.ok) {
+        const info = await r.json();
+        if (info.email) {
+          userEmail = info.email;
+          userSub   = info.sub || userSub;
+          userName  = info.name || userName;
+        }
+      }
+      // If token is expired or invalid, we still continue with body email below
+    } catch(e) { /* non-blocking — fall through to body email */ }
+  }
+
+  // Must have an email to create a checkout session
+  if (!userEmail || !userEmail.includes('@')) {
+    return res.status(401).json({ error: 'Sign in with Google first.' });
+  }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const priceId   = process.env.STRIPE_PRICE_ID;
   if (!stripeKey || !priceId) return res.status(503).json({ error: 'Payments not configured yet.' });
 
-  const origin  = req.headers.origin || 'https://cardresell.org';
+  const origin  = (req.headers.origin || 'https://www.cardresell.org').replace(/\/$/, '');
   const success = `${origin}/?pro=1`;
   const cancel  = `${origin}/`;
 
@@ -45,17 +60,22 @@ export default async function handler(req, res) {
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Authorization': `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
       body: params.toString(),
     });
 
     if (!stripeRes.ok) {
       const err = await stripeRes.json();
+      console.error('Stripe error:', err);
       return res.status(502).json({ error: err.error?.message || 'Payment setup failed.' });
     }
     const session = await stripeRes.json();
     return res.status(200).json({ url: session.url, sessionId: session.id });
   } catch(e) {
+    console.error('Checkout exception:', e);
     return res.status(500).json({ error: 'Could not create checkout session.' });
   }
 }

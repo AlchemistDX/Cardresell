@@ -1,2 +1,4 @@
 config.js
 *.bak
+.env*.local
+.vercel

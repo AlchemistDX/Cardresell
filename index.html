@@ -667,24 +667,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <a href="https://tcgpricelookup.com" target="_blank" rel="noopener" class="settings-link">Get free key →</a>
   </div>
-  <!-- Google Sign-In Setup -->
-  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
-    <div class="settings-title">🔑 Google Sign-In Setup</div>
-    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:.5rem">
-      To enable Google Sign-In and save your flip data per account:
-      <ol style="margin:.4rem 0 0 1.1rem;padding:0;">
-        <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener" style="color:var(--gold)">console.cloud.google.com</a></li>
-        <li>Create a project → APIs &amp; Services → OAuth 2.0 Client IDs</li>
-        <li>Add your site URL as an authorized JavaScript origin</li>
-        <li>Copy your Client ID and paste it below</li>
-      </ol>
-    </div>
-    <div class="settings-row">
-      <input type="text" id="googleClientIdInput" class="settings-input" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false" />
-      <button class="settings-save-btn" onclick="saveGoogleClientId()">Save</button>
-    </div>
-    <div id="googleIdStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Paste your Google OAuth Client ID above, then reload the page.</div>
-  </div>
 </div>
 
 
@@ -1262,9 +1244,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <ul class="plan-features">
           <li>Card price lookup</li>
           <li>Flip calculator</li>
-          <li>2 free fee breakdowns</li>
           <li>5 flips tracked</li>
-          <li class="faded">Unlimited fee breakdowns</li>
+          <li class="faded">Platform fee breakdown</li>
           <li class="faded">Unlimited flip tracking</li>
           <li class="faded">AI graded scans</li>
         </ul>
@@ -1428,7 +1409,7 @@ function saveOpenAiKey() {
         }
         const revealBtn = document.getElementById('tplRevealBtn');
         if (revealBtn) revealBtn.textContent = '\uD83D\uDC41';
-        // Load scan credits
+        // Load scan credits — pass current email/sub
         loadSettingsScanCredits();
       }
     });
@@ -1454,7 +1435,11 @@ async function loadSettingsScanCredits() {
   const countEl = document.getElementById('settingsScanCount');
   const subEl   = document.getElementById('settingsScanSub');
   if (!countEl) return;
-  const email = window._userEmail;
+
+  // Try multiple sources for email/sub in case timing is off
+  const email     = window._userEmail || window.googleUser?.email || '';
+  const googleSub = window.googleUser?.sub || window.googleUser?.id || window._googleSub || '';
+
   if (!email) {
     countEl.textContent = '— scans remaining';
     if (subEl) subEl.textContent = 'Sign in to check your balance';
@@ -1463,7 +1448,9 @@ async function loadSettingsScanCredits() {
   countEl.textContent = 'Loading…';
   if (subEl) subEl.textContent = '';
   try {
-    const res = await fetch('/api/scan-credits?email=' + encodeURIComponent(email));
+    const params = new URLSearchParams({ email });
+    if (googleSub) params.set('sub', googleSub);
+    const res = await fetch('/api/scan-credits?' + params.toString());
     const data = await res.json();
     const credits = typeof data.credits === 'number' ? data.credits : 0;
     const isPro   = data.isPro || false;
@@ -3280,35 +3267,16 @@ function calc() {
     </${cardTag}>`;
   });
 
-  // Pro gate — free users get their first 2 full lookups (the "aha moment"),
-  // then the fee breakdown is gated. Lets people FEEL the value before paywalling.
-  const FREE_FULL_LOOKUPS = 2;
-  let freeLookupsUsed = parseInt(localStorage.getItem('cr_free_lookups_used') || '0', 10);
-
-  if (!window._isPro && freeLookupsUsed >= FREE_FULL_LOOKUPS) {
+  // Pro gate — blur platform details for free users
+  if (!window._isPro) {
     html += `</div>
     <div class="pro-gate-overlay">
       <div class="pro-gate-inner">
         <div class="pro-gate-icon">&#11088;</div>
         <div class="pro-gate-title">See which platform pays you most</div>
-        <div class="pro-gate-sub">You've used your ${FREE_FULL_LOOKUPS} free fee breakdowns. Unlock unlimited eBay, Mercari, StockX &amp; COMC comparisons with Pro.</div>
+        <div class="pro-gate-sub">Full fee breakdown for eBay, Mercari, StockX &amp; COMC — Pro only</div>
         <button class="pro-gate-btn" onclick="openPricingModal('calc_gate')">Unlock with Pro &mdash; $9.99/mo</button>
       </div>
-    </div>`;
-    resultsArea.innerHTML = html;
-    return;
-  }
-
-  // Free user inside their free allowance — count this lookup and show full results
-  if (!window._isPro) {
-    freeLookupsUsed++;
-    localStorage.setItem('cr_free_lookups_used', String(freeLookupsUsed));
-    const left = Math.max(0, FREE_FULL_LOOKUPS - freeLookupsUsed);
-    html += `</div>
-    <div class="free-trial-note" style="margin-top:.85rem;padding:.7rem .9rem;background:var(--gold-hi,rgba(196,122,0,.08));border:1px solid var(--gold-border);border-radius:var(--radius-lg);font-size:.78rem;color:var(--text-muted);text-align:center;line-height:1.5">
-      ${left > 0
-        ? `&#11088; <strong style="color:var(--gold)">${left} free fee breakdown${left === 1 ? '' : 's'} left.</strong> Pro unlocks unlimited comparisons + AI graded scans.`
-        : `&#11088; <strong style="color:var(--gold)">That was your last free breakdown.</strong> <a href="#" onclick="openPricingModal('calc_softgate');return false;" style="color:var(--gold);font-weight:700;text-decoration:underline">Get Pro &mdash; $9.99/mo</a> for unlimited.`}
     </div>`;
     resultsArea.innerHTML = html;
     return;
@@ -3669,7 +3637,9 @@ function handleGoogleSignIn(response) {
   googleUser = { name: payload.name, email: payload.email, avatar: payload.picture, sub: payload.sub };
   // Store ID token for scanner auth proxy
   window._googleIdToken = response.credential;
-  
+  window._userEmail = payload.email;
+  window._googleSub = payload.sub;
+
   // Persist session so reload doesn't log user out
   try { localStorage.setItem('cardsell_google_user', JSON.stringify(googleUser)); } catch(e) {}
   // Persist token in sessionStorage — valid ~1hr, gone when tab closes
@@ -3677,6 +3647,10 @@ function handleGoogleSignIn(response) {
 
   applyGoogleUser();
   loadUserData();
+  // Refresh scan credits if settings panel happens to be open
+  if (document.getElementById('settingsPanel')?.classList.contains('open')) {
+    loadSettingsScanCredits();
+  }
 }
 
 function applyGoogleUser() {
@@ -3856,6 +3830,8 @@ async function processScanImage(input) {
     const idToken = window._googleIdToken || '';
 
     // Call our secure server-side proxy (CardSight key never in frontend)
+    // ── Submit scan to CardGrader.AI (async) ──
+    statusEl.textContent = 'Submitting card to AI grader…';
     const response = await fetch('/api/scan', {
       method: 'POST',
       headers: {
@@ -3866,12 +3842,16 @@ async function processScanImage(input) {
     });
 
     if (response.status === 401) {
-      // Token expired — clear it and prompt a fresh Google sign-in
       window._googleIdToken = null;
       try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
       statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again, then scan.</span>';
-      // Show sign-in button inside the overlay
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
+      return;
+    }
+
+    if (response.status === 402) {
+      cancelScan();
+      openGradedScanGate();
       return;
     }
 
@@ -3881,55 +3861,99 @@ async function processScanImage(input) {
       throw new Error(errMsg);
     }
 
-    const data = await response.json();
-    const detection = data?.detections?.[0];
-    const card = detection?.card || {};
-    const cardName = card.name || '';
+    const submitData = await response.json();
+    const scanId = submitData.scanId;
+    if (!scanId) throw new Error('Scanner did not return a scan ID. Please try again.');
+
+    // ── Poll /api/scan-result until completed (up to ~3 minutes) ──
+    statusEl.textContent = 'AI is grading your card… (this takes 30–90 seconds)';
+    resultEl.innerHTML = '<span style="font-size:.75rem;opacity:.55">Scanning in progress — please keep this page open.</span>';
+
+    let pollAttempts = 0;
+    const maxAttempts = 60; // 60 × 3s = 3 minutes
+
+    const scanResult = await new Promise((resolve, reject) => {
+      const poll = async () => {
+        pollAttempts++;
+        if (pollAttempts > maxAttempts) { reject(new Error('Scan timed out. Please try again.')); return; }
+        try {
+          const pr = await fetch('/api/scan-result?id=' + encodeURIComponent(scanId));
+          if (!pr.ok) { setTimeout(poll, 3000); return; }
+          const pd = await pr.json();
+          if (pd.status === 'queued') {
+            statusEl.textContent = 'AI scan queued… (' + (pollAttempts * 3) + 's)';
+            setTimeout(poll, 3000);
+          } else if (pd.status === 'processing') {
+            const pct = pd.progress ? ' ' + pd.progress + '%' : '';
+            statusEl.textContent = 'AI is analyzing the card…' + pct + ' (' + (pollAttempts * 3) + 's)';
+            setTimeout(poll, 3000);
+          } else if (pd.status === 'completed') {
+            resolve(pd.result);
+          } else if (pd.status === 'failed') {
+            reject(new Error(pd.error || 'Scan could not be completed. Try a clearer photo.'));
+          } else {
+            setTimeout(poll, 3000);
+          }
+        } catch(e) { setTimeout(poll, 3000); }
+      };
+      poll();
+    });
+
+    // ── Process completed result ──
+    const cardName    = scanResult.card_name   || '';
+    const cardNumber  = scanResult.card_number || '';
+    const setName     = scanResult.set_name    || '';
+    const grade       = scanResult.grade;
+    const grLabel     = scanResult.grade_label || '';
+    const rawValue    = scanResult.raw_value;
+    const gradedValue = scanResult.graded_value;
+    const centering   = scanResult.centering;
+    const corners     = scanResult.corners;
+    const edges       = scanResult.edges;
+    const surface     = scanResult.surface;
+    const gradingRec  = scanResult.grading_recommendation || '';
 
     if (!cardName) {
       statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
 
-    // Build a rich search query using everything CardSight returned
-    const cardNumber = card.number || '';
-    const setAbbrev = card.fields?.find(f => f.key === 'SET_ABBREVIATION')?.value || '';
-    const releaseName = card.releaseName || '';
-    const confidence = detection?.confidence || '';
-    const grader = detection?.grading?.company?.name || '';
+    let gradeDisplay = '';
+    if (grade !== null && grade !== undefined) {
+      gradeDisplay = '<span style="color:#4ade80;font-weight:800"> · Grade: ' + grade + '/10' + (grLabel ? ' (' + grLabel + ')' : '') + '</span>';
+    }
+    let subGradeDisplay = '';
+    if (centering !== null && centering !== undefined) {
+      subGradeDisplay = '<div style="font-size:.73rem;opacity:.65;margin-top:.25rem">Centering ' + centering + ' · Corners ' + corners + ' · Edges ' + edges + ' · Surface ' + surface + '</div>';
+    }
+    let valueDisplay = '';
+    if (rawValue || gradedValue) {
+      valueDisplay = '<div style="font-size:.78rem;margin-top:.25rem;color:rgba(255,255,255,.75)">';
+      if (rawValue) valueDisplay += 'Raw est: <strong style="color:#fff">$' + Number(rawValue).toFixed(2) + '</strong>';
+      if (rawValue && gradedValue) valueDisplay += ' · ';
+      if (gradedValue) valueDisplay += 'Graded est: <strong style="color:#4ade80">$' + Number(gradedValue).toFixed(2) + '</strong>';
+      valueDisplay += '</div>';
+    }
 
-    // Smart search string: "Spiritomb TG09 Lost Origin" hits the right variant every time
-    let searchQuery = cardName;
-    if (cardNumber) searchQuery += ' ' + cardNumber;
-    if (setAbbrev) searchQuery += ' ' + setAbbrev;
-    else if (releaseName) searchQuery += ' ' + releaseName;
+    statusEl.innerHTML = '<span style="color:#4ade80">✓ ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span>' + gradeDisplay + '<br><span style="font-size:.8rem;opacity:.7">' + setName + '</span>' + subGradeDisplay + valueDisplay;
+    resultEl.innerHTML = gradingRec ? '<span style="font-size:.78rem;opacity:.75">' + gradingRec + '</span>' : 'Searching market prices…';
 
-    const graderLabel = grader ? ` · ${grader} slab detected` : '';
-    const detectedGrade = detection?.grading?.grade?.value || '';
-    statusEl.innerHTML = `<span style="color:#4ade80">✓ ${cardName}${cardNumber ? ' #' + cardNumber : ''}</span><br><span style="font-size:.8rem;opacity:.7">${releaseName}${graderLabel} · ${confidence} confidence</span>`;
-    resultEl.textContent = 'Searching…';
+    showScanGradeCTA(cardName, '', grade);
 
-    // Show grading affiliate CTA in the overlay
-    showScanGradeCTA(cardName, grader, detectedGrade);
-
-    // Store scan metadata so post-search auto-select can pick the exact card
-    window._scanTargetNumber = cardNumber;   // e.g. "TG09"
-    window._scanTargetName   = cardName;     // e.g. "Spiritomb"
-    window._scanTargetGrader = grader;       // e.g. "PSA"
-    window._scanTargetGrade  = detectedGrade;
-
-    // After scan result is shown, also queue the banner for when results load
+    window._scanTargetNumber = cardNumber;
+    window._scanTargetName   = cardName;
+    window._scanTargetGrader = '';
+    window._scanTargetGrade  = grade;
     window._pendingScanBannerCard = cardName;
 
     setTimeout(() => {
       cancelScan();
       URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
-      // Search just the card name — broader match, we'll filter by number below
       searchInput.value = cardName.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 1600); // slightly longer so user sees grading CTA before overlay closes
+    }, 2500);
 
   } catch(err) {
     console.error('Scan error:', err);
@@ -3981,6 +4005,9 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     const saved = localStorage.getItem('cardsell_google_user');
     if (saved) {
       googleUser = JSON.parse(saved);
+      // Set global email/sub for credits and scan auth
+      window._userEmail = googleUser.email || '';
+      window._googleSub = googleUser.sub   || '';
       // Also restore the ID token from sessionStorage if still there
       const savedToken = sessionStorage.getItem('cardsell_id_token');
       if (savedToken) {
@@ -4088,7 +4115,7 @@ function updateProUI() {
     }
     // Update pricing modal Pro button label
     const pricingProBtnText = document.getElementById('pricingProBtnText');
-    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $9.99/mo';
+    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $4.99/mo';
   }
 }
 
@@ -4144,12 +4171,12 @@ async function startProCheckout() {
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       if (btn) btn.disabled = false;
-      if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+      if (txt) txt.textContent = 'Get Pro — $4.99/mo';
     }
   } catch(e) {
     showToast('⚠️ Network error. Try again.');
     if (btn) btn.disabled = false;
-    if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+    if (txt) txt.textContent = 'Get Pro — $4.99/mo';
   }
 }
 
@@ -4202,14 +4229,44 @@ function showToast(msg, duration) {
     window._isPro = true;
     window._freeScansLeft = 5;
     updateProUI();
-    showToast('⭐ Welcome to CardResell Pro! 5 graded scans added.', 5000);
+    showToast('⭐ Welcome to CardResell Pro! 10 graded scans added.', 5000);
     // Clean URL
     history.replaceState({}, '', window.location.pathname);
   }
   if (params.get('scan_paid') === '1') {
-    window._scanCredits = (window._scanCredits || 0) + 1;
-    showToast('✔ Scan credit added! You have ' + window._scanCredits + ' graded scan(s) ready.', 5000);
+    const sessionId = params.get('session_id') || '';
     history.replaceState({}, '', window.location.pathname);
+    // Verify payment with Stripe and grant the credit
+    (async () => {
+      const email     = window._userEmail || '';
+      const googleSub = googleUser?.sub || googleUser?.id || '';
+      if (!sessionId || !email) {
+        // No session ID — can't verify, show generic message and refresh credits
+        showToast('\u2714 Payment received! Verifying your scan credit…', 4000);
+        return;
+      }
+      try {
+        showToast('\u231b Confirming your scan credit…', 3000);
+        const r = await fetch('/api/scan-credits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'verify_payment', sessionId, email, googleSub })
+        });
+        const data = await r.json();
+        if (data.success) {
+          window._scanCredits = (window._scanCredits || 0) + (data.alreadyCredited ? 0 : 1);
+          showToast('\u2705 Scan credit confirmed! Tap Scan to use it.', 5000);
+          // Refresh credit display in settings if open
+          loadSettingsScanCredits?.();
+        } else {
+          showToast('\u26a0\ufe0f Payment received but credit verification failed. Contact support.', 6000);
+          console.error('Credit verify failed:', data);
+        }
+      } catch(e) {
+        showToast('\u2714 Payment received — your scan credit is being processed.', 5000);
+        console.error('Credit verify error:', e);
+      }
+    })();
   }
 })();
 
