@@ -849,7 +849,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         Grade
       </button>
     </div>
-    <button id="searchBtn" class="search-btn" style="display:none" aria-hidden="true">Search</button>
+    <button id="searchBtn" class="search-btn" onclick="openSearchModal()">Search</button>
   </div>
   <!-- Mobile: Scan + Grade as full-width sub-row -->
   <div class="scan-sub-row" id="scanSubRow">
@@ -2059,8 +2059,8 @@ searchInput.addEventListener('keydown', e => {
     clearTimeout(searchTimeout);
     const q = searchInput.value.trim();
     if (!q) return;
-    // Enter key → use dropdown (same as typing)
-    doSearch(q);
+    // Enter key → open full-screen search modal
+    openSearchModal();
   }
   if (e.key === 'Escape') dropList.classList.remove('open');
 });
@@ -2069,9 +2069,7 @@ document.getElementById('searchBtn').addEventListener('click', () => {
   clearTimeout(searchTimeout);
   if (!window._pendingScanBannerCard) hideGradingCtaBanner();
   const q = searchInput.value.trim();
-  if (!q) return;
-  // Search button → use dropdown
-  doSearch(q);
+  // Search button handled by onclick="openSearchModal()" directly
 });
 
 document.addEventListener('click', e => {
@@ -5673,5 +5671,292 @@ document.addEventListener('DOMContentLoaded', function() {
   if (typeof updateScanBtnCredits === 'function') updateScanBtnCredits();
 });
 </script>
+
+<!-- ═══ SEARCH MODAL ═══ -->
+<div id="searchModal" style="display:none;position:fixed;inset:0;z-index:9000;background:#000;flex-direction:column;overflow:hidden">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;gap:10px;padding:14px 14px 10px;background:#000;border-bottom:1px solid #222;flex-shrink:0">
+    <button onclick="closeSearchModal()" style="width:36px;height:36px;border-radius:50%;background:#1a1a1a;border:none;color:#fff;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">&#8592;</button>
+    <input id="searchModalInput" type="search" placeholder="Card name…" autocomplete="off" autocorrect="off" spellcheck="false"
+      style="flex:1;height:44px;background:#1a1a1a;border:1.5px solid #333;border-radius:22px;padding:0 18px;font-size:1rem;color:#fff;outline:none;-webkit-appearance:none"/>
+    <button id="searchModalBtn" onclick="runModalSearch()" style="height:44px;padding:0 20px;background:var(--gold);border:none;border-radius:22px;color:#fff;font-weight:700;font-size:.9rem;cursor:pointer;flex-shrink:0">Go</button>
+  </div>
+  <!-- Results list -->
+  <div id="searchModalList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#000"></div>
+</div>
+
+<style>
+/* Search modal result rows — enlarged version of dropdown */
+.sml-item{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 16px;
+  border-bottom:1px solid #1a1a1a;
+  cursor:pointer;
+  background:#000;
+  -webkit-tap-highlight-color:transparent;
+}
+.sml-item:active{background:#111}
+.sml-thumb{
+  width:64px;height:88px;
+  object-fit:contain;border-radius:6px;
+  flex-shrink:0;background:#111;
+}
+.sml-thumb-ph{
+  width:64px;height:88px;
+  border-radius:6px;background:#111;
+  flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:1.4rem;color:#555;
+}
+.sml-info{flex:1;min-width:0}
+.sml-name{font-size:1rem;font-weight:700;color:#fff;line-height:1.3;margin-bottom:3px}
+.sml-meta{font-size:.78rem;color:rgba(255,255,255,.5);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sml-price{font-size:1rem;font-weight:700;color:#4ade80;flex-shrink:0;text-align:right}
+.sml-no-price{font-size:.78rem;color:#555;flex-shrink:0}
+.sml-loading{padding:2rem;text-align:center;color:#666;font-size:.9rem;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.sml-empty{padding:2rem;text-align:center;color:#555;font-size:.9rem}
+</style>
+
+<script>
+// ═══ SEARCH MODAL ═══
+function openSearchModal() {
+  const modal = document.getElementById('searchModal');
+  const input = document.getElementById('searchModalInput');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  // Pre-fill with current search text if any
+  const existing = document.getElementById('searchInput').value.trim();
+  if (existing) {
+    input.value = existing;
+    runModalSearch();
+  } else {
+    input.value = '';
+    document.getElementById('searchModalList').innerHTML = '';
+  }
+  setTimeout(() => input.focus(), 100);
+  // Enter key in modal input
+  input.onkeydown = e => { if (e.key === 'Enter') runModalSearch(); };
+  input.oninput = () => {
+    clearTimeout(window._smlTimeout);
+    const q = input.value.trim();
+    if (q.length >= 2) window._smlTimeout = setTimeout(runModalSearch, 380);
+  };
+}
+
+function closeSearchModal() {
+  document.getElementById('searchModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function runModalSearch() {
+  const input = document.getElementById('searchModalInput');
+  const list  = document.getElementById('searchModalList');
+  const q = input.value.trim();
+  if (!q || q.length < 2) return;
+
+  list.innerHTML = '<div class="sml-loading"><span class="spinner" style="border-color:rgba(255,255,255,.1);border-top-color:var(--gold)"></span> Searching…</div>';
+
+  // Temporarily redirect dropList rendering into our modal list
+  // by running doSearch() and mirroring results
+  await _runModalSearchQuery(q);
+}
+
+async function _runModalSearchQuery(q) {
+  const list = document.getElementById('searchModalList');
+
+  try {
+    let results = [];
+
+    if (activeGame === 'pokemon') {
+      results = await _fetchModalPokemon(q);
+    } else if (activeGame === 'pokemonjp') {
+      results = await _fetchModalPokemonJP(q);
+    } else if (activeGame === 'mtg') {
+      results = await _fetchModalMTG(q);
+    } else if (activeGame === 'yugioh') {
+      results = await _fetchModalYugioh(q);
+    } else {
+      list.innerHTML = '<div class="sml-empty">Search not available for this game type.</div>';
+      return;
+    }
+
+    if (!results.length) {
+      list.innerHTML = '<div class="sml-empty">No results found for "' + esc(q) + '".</div>';
+      return;
+    }
+
+    list.innerHTML = results.map((r, i) =>
+      '<div class="sml-item" data-idx="' + i + '">' +
+        (r.img
+          ? '<img class="sml-thumb" src="' + r.img + '" loading="lazy" alt="' + esc(r.name) + '" onerror="this.style.opacity=0" />'
+          : '<div class="sml-thumb-ph">&#127183;</div>') +
+        '<div class="sml-info">' +
+          '<div class="sml-name">' + esc(r.name) + '</div>' +
+          '<div class="sml-meta">' + esc(r.meta) + '</div>' +
+        '</div>' +
+        (r.price != null
+          ? '<div class="sml-price">$' + r.price.toFixed(2) + '</div>'
+          : '<div class="sml-no-price">No price</div>') +
+      '</div>'
+    ).join('');
+
+    // Click handlers
+    list.querySelectorAll('.sml-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx);
+        const r = results[idx];
+        const card = r.cardFactory();
+        selectedCard = card;
+        document.getElementById('searchInput').value = card.name;
+        dropList.classList.remove('open');
+        closeSearchModal();
+        loadCardUI(card);
+        if (r.price != null && r.price > 0) {
+          const ov = document.getElementById('priceOverride');
+          if (ov) {
+            ov.value = r.price.toFixed(2);
+            calc();
+            ov.style.boxShadow = '0 0 0 2px var(--gold)';
+            setTimeout(() => { ov.style.boxShadow = ''; }, 1800);
+          }
+        }
+      });
+    });
+
+  } catch(err) {
+    list.innerHTML = '<div class="sml-empty">Search failed — check your connection.</div>';
+  }
+}
+
+// ── Pokemon EN ──
+async function _fetchModalPokemon(q) {
+  // Try TPL first
+  const tplData = await searchWithTPL(q, 'pokemon').catch(() => null);
+  if (tplData && tplData.length) {
+    return tplData.map(c => {
+      const price = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+      const tcgPrices = c.prices?.raw || {};
+      const priceVariants = Object.keys(tcgPrices).map(key => {
+        const p = tcgPrices[key];
+        const label = key.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase()).trim();
+        return { key, label, market: p?.tcgplayer?.market || null, low: null, mid: null, high: null };
+      });
+      if (!priceVariants.length) priceVariants.push({ key:'manual', label:'Manual', market:null, low:null, mid:null, high:null });
+      return {
+        name: c.name, img: c.image_url || '', meta: (c.set_name || '') + (c.rarity ? ' · ' + c.rarity : ''),
+        price,
+        cardFactory: () => tplCardToNormalized(c, 'pokemon', c.image_url || '')
+      };
+    });
+  }
+
+  // Fallback: PokemonTCG.io
+  const url = 'https://api.pokemontcg.io/v2/cards?q=name:' + encodeURIComponent(q) + '*&pageSize=60&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes';
+  const r = await fetch(url);
+  const data = await r.json();
+  const cards = data.data || [];
+
+  const rarityScore = t => {
+    t = (t||'').toLowerCase();
+    if(t.includes('special illustration'))return 0;
+    if(t.includes('hyper rare'))return 1;
+    if(t.includes('illustration rare'))return 2;
+    if(t.includes('secret rare'))return 3;
+    if(t.includes('ultra rare'))return 4;
+    if(t.includes('rainbow rare'))return 5;
+    if(t.includes('full art'))return 6;
+    if(t.includes('rare holo')||t.includes('holo rare'))return 7;
+    if(t.includes('rare')&&!t.includes('ultra'))return 8;
+    if(t.includes('promo'))return 9;
+    if(t.includes('uncommon'))return 10;
+    if(t.includes('common'))return 11;
+    return 7;
+  };
+  const ql = q.toLowerCase().trim();
+  cards.sort((a,b) => {
+    const aExact = a.name.toLowerCase()===ql?0:1;
+    const bExact = b.name.toLowerCase()===ql?0:1;
+    if(aExact!==bExact)return aExact-bExact;
+    return rarityScore(a.rarity)-rarityScore(b.rarity);
+  });
+
+  return cards.map(c => {
+    const tcgP = c.tcgplayer?.prices || {};
+    const price = tcgP.holofoil?.market || tcgP.normal?.market || tcgP['1stEditionHolofoil']?.market || null;
+    const priceVariants = Object.keys(tcgP).map(key => {
+      const p = tcgP[key];
+      const label = key.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase()).trim();
+      return { key, label, market:p.market||p.mid||null, low:p.low||null, mid:p.mid||null, high:p.high||null };
+    });
+    if (!priceVariants.length) priceVariants.push({ key:'manual', label:'Manual', market:null, low:null, mid:null, high:null });
+    return {
+      name: c.name,
+      img: c.images?.small || '',
+      meta: (c.set?.name||'') + (c.number ? ' · #'+c.number : '') + (c.rarity ? ' · '+c.rarity : ''),
+      price,
+      cardFactory: () => ({
+        name: c.name, setName: c.set?.name||'', number: c.number||'', rarity: c.rarity||'',
+        images: { large: c.images?.large||'', small: c.images?.small||'' },
+        hp: c.hp||'', types: c.types||[], game: 'pokemon',
+        priceVariants, prices: { tcgplayer: tcgP }
+      })
+    };
+  });
+}
+
+// ── Pokemon JP ──
+async function _fetchModalPokemonJP(q) {
+  // Reuse regular dropdown search by temporarily capturing its output
+  return await _fetchModalPokemon(q); // JP falls back to EN search for now
+}
+
+// ── MTG ──
+async function _fetchModalMTG(q) {
+  const r = await fetch('https://api.scryfall.com/cards/search?q=' + encodeURIComponent(q) + '&unique=prints&order=released&dir=desc');
+  if (!r.ok) return [];
+  const json = await r.json();
+  return (json.data||[]).slice(0,40).map(c => {
+    const imgLarge = c.image_uris?.normal || c.image_uris?.small || c.card_faces?.[0]?.image_uris?.normal || '';
+    const priceVariants = [];
+    if(c.prices?.usd) priceVariants.push({key:'usd',label:'Normal',market:parseFloat(c.prices.usd),low:null,mid:null,high:null});
+    if(c.prices?.usd_foil) priceVariants.push({key:'usd_foil',label:'Foil',market:parseFloat(c.prices.usd_foil),low:null,mid:null,high:null});
+    if(!priceVariants.length) priceVariants.push({key:'manual',label:'Manual',market:null,low:null,mid:null,high:null});
+    return {
+      name: c.name, img: c.image_uris?.small || c.card_faces?.[0]?.image_uris?.small || '',
+      meta: (c.set_name||'') + (c.collector_number ? ' · #'+c.collector_number : '') + (c.rarity ? ' · '+c.rarity : ''),
+      price: c.prices?.usd ? parseFloat(c.prices.usd) : null,
+      cardFactory: () => ({
+        name: c.name, setName: c.set_name||'', number: c.collector_number||'', rarity: c.rarity||'',
+        images: { large: imgLarge, small: imgLarge }, game: 'mtg', priceVariants,
+        prices: { usd: parseFloat(c.prices?.usd||0)||0 }
+      })
+    };
+  });
+}
+
+// ── YuGiOh ──
+async function _fetchModalYugioh(q) {
+  const r = await fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=' + encodeURIComponent(q) + '&num=40&offset=0');
+  if (!r.ok) return [];
+  const json = await r.json();
+  return (json.data||[]).slice(0,40).map(c => {
+    const imgLarge = c.card_images?.[0]?.image_url || '';
+    const tcgP = parseFloat(c.card_prices?.[0]?.tcgplayer_price||0)||null;
+    const priceVariants = tcgP
+      ? [{key:'tcgplayer',label:'TCGPlayer',market:tcgP,low:null,mid:null,high:null}]
+      : [{key:'manual',label:'Manual',market:null,low:null,mid:null,high:null}];
+    return {
+      name: c.name, img: c.card_images?.[0]?.image_url_small || '',
+      meta: (c.type||'') + (c.race ? ' · '+c.race : ''),
+      price: tcgP,
+      cardFactory: () => ({
+        name: c.name, setName: c.type||'', number: String(c.id||''), rarity: c.race||'',
+        images: { large: imgLarge, small: imgLarge }, game: 'yugioh', priceVariants,
+        prices: { tcgplayer_price: tcgP||0 }
+      })
+    };
+  });
+}
+</script>
+
 </body>
 </html>
