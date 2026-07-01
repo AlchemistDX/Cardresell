@@ -4048,6 +4048,19 @@ function cancelScan() {
   });
   document.getElementById('gradeFileInput')?.addEventListener('change', function() { processGradeImage(this); });
   document.getElementById('gradeBackFileInput')?.addEventListener('change', function() { processGradeBack(this); });
+
+  // If ID scan identified a card, pre-fill search bar so it's ready to use
+  // User stays on the main screen — no forced catalog jump
+  if (window._pendingIdScanCard) {
+    const pending = window._pendingIdScanCard;
+    window._pendingIdScanCard = null;
+    const si = document.getElementById('searchInput');
+    if (si) {
+      si.value = pending.name;
+      // Trigger autocomplete dropdown without opening catalog
+      si.dispatchEvent(new Event('input'));
+    }
+  }
 }
 
 // ── Affiliate grading CTA helpers ──
@@ -4196,14 +4209,11 @@ async function processScanImage(input) {
     window._scanTargetGrade  = null;
     window._pendingScanBannerCard = cardName;
 
-    setTimeout(() => {
-      cancelScan();
-      URL.revokeObjectURL(objectUrl);
-      const searchInput = document.getElementById('searchInput');
-      searchInput.value = cardName.trim();
-      searchInput.dispatchEvent(new Event('input'));
-      setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 1800);
+    // Silently load the card into the calculator in the background
+    // so when the user closes the scan overlay it's already selected.
+    // Do NOT auto-open catalog — let the user decide what to do next.
+    window._pendingIdScanCard = { name: cardName, number: cardNumber, set: setName, rarity, hp };
+    URL.revokeObjectURL(objectUrl);
 
   } catch(err) {
     console.error('Scan error:', err);
