@@ -618,6 +618,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .grade-cta-btn.bgs:hover{background:#166534}
 .grade-cta-btn.sgc{background:#312e81;color:#fff;border:1.5px solid #6366f1}
 .grade-cta-btn.sgc:hover{background:#4338ca}
+.grade-cta-btn.our-grade{background:var(--gold);color:#111;border:1.5px solid var(--gold);padding:.6rem 1.15rem;font-size:.85rem;box-shadow:0 2px 12px rgba(196,122,0,.35);cursor:pointer}
+.grade-cta-btn.our-grade:hover{background:#e59617;border-color:#e59617}
 .grade-cta-dismiss{float:right;background:none;border:none;color:var(--text-faint);font-size:.78rem;cursor:pointer;padding:.1rem .3rem;line-height:1;margin-top:-2px}
 .grade-cta-dismiss:hover{color:var(--text-muted)}
 /* Scan overlay CTA (inside the dark overlay) */
@@ -835,16 +837,22 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
-    <!-- Grading affiliate CTA — shown after scan when card is raw or grader detected -->
+    <!-- Post-scan CTA — promotes our in-app Grade Scan first; official grading is a collapsible secondary path -->
     <div id="scanGradeCTA">
-      <div class="sgc-label">&#127942; Get It Graded</div>
-      <div class="sgc-headline" id="scanGradeCTAHeadline">Worth grading? Submit now.</div>
-      <div class="sgc-sub">Official grades unlock 2–5× higher resale value.</div>
+      <div class="sgc-label">&#127941; Curious about the grade?</div>
+      <div class="sgc-headline" id="scanGradeCTAHeadline">See if it's worth grading — in seconds.</div>
+      <div class="sgc-sub">Our AI checks centering, corners, edges &amp; surface and gives you an estimated PSA-scale grade before you spend $20+ on official submission.</div>
       <div class="sgc-btns" id="scanGradeCTABtns">
-        <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
-        <a href="https://www.cgccomics.com/cards/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
-        <a href="https://www.beckett.com/grading/submit" id="sgcBGSBtn" target="_blank" rel="noopener" class="grade-cta-btn bgs">&#127942; BGS</a>
-        <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
+        <button type="button" id="sgcOurGradeBtn" onclick="launchGradeScanFromCTA()" class="grade-cta-btn our-grade">&#127941; Get Estimated Grade &middot; $1.50</button>
+      </div>
+      <div style="margin-top:.55rem">
+        <button type="button" id="sgcOfficialToggle" onclick="toggleOfficialGradersRow()" style="background:none;border:none;color:rgba(255,255,255,.55);font-size:.68rem;font-weight:600;cursor:pointer;text-decoration:underline;padding:.15rem .35rem">Already ready to submit? See official graders →</button>
+        <div id="sgcOfficialRow" style="display:none;margin-top:.5rem;flex-wrap:wrap;gap:.35rem;justify-content:center">
+          <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
+          <a href="https://www.cgccomics.com/cards/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
+          <a href="https://www.beckett.com/grading/submit" id="sgcBGSBtn" target="_blank" rel="noopener" class="grade-cta-btn bgs">&#127942; BGS</a>
+          <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
+        </div>
       </div>
     </div>
     <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
@@ -4251,20 +4259,75 @@ function showScanGradeCTA(cardName, grader, grade) {
   const cta = document.getElementById('scanGradeCTA');
   if (!cta) return;
   const links = _affiliateLinks();
-  // Update headline based on whether we detected a grader already
-  const headline = document.getElementById('scanGradeCTAHeadline');
-  if (grader && grade) {
-    if (headline) headline.textContent = `Detected ${grader} ${grade} — Get it officially certified!`;
+  const label      = cta.querySelector('.sgc-label');
+  const headline   = document.getElementById('scanGradeCTAHeadline');
+  const sub        = cta.querySelector('.sgc-sub');
+  const ourBtn     = document.getElementById('sgcOurGradeBtn');
+  const toggle     = document.getElementById('sgcOfficialToggle');
+  const officialRow = document.getElementById('sgcOfficialRow');
+
+  if (grader === 'estimate' && grade) {
+    // Post Grade-Scan flow: we just gave the estimate and it looks worth submitting.
+    if (label)    label.innerHTML     = '&#127942; Ready to Submit?';
+    if (headline) headline.textContent = `Estimated ${grade} — send it in for an official grade.`;
+    if (sub)      sub.textContent     = 'A high estimate means it\'s a strong candidate for official grading. Submit to any of these grading services.';
+    if (ourBtn)   ourBtn.style.display = 'none';
+    if (toggle)   toggle.style.display = 'none';
+    if (officialRow) officialRow.style.display = 'flex';
+  } else if (grader && grade) {
+    // Card is already slabbed — our Grade Scan can't improve on an existing grade,
+    // so surface the official grader path directly.
+    if (label)    label.innerHTML     = '&#127942; Already Graded';
+    if (headline) headline.textContent = `Detected ${grader} ${grade} — need re-holdering or cross-over?`;
+    if (sub)      sub.textContent     = 'Submit for re-grade, cross-over, or a fresh review at any of these grading services.';
+    if (ourBtn)   ourBtn.style.display = 'none';
+    if (toggle)   toggle.style.display = 'none';
+    if (officialRow) officialRow.style.display = 'flex';
   } else if (grader) {
-    if (headline) headline.textContent = `Detected a ${grader} slab — Get it officially certified!`;
+    if (label)    label.innerHTML     = '&#127942; Slabbed Card';
+    if (headline) headline.textContent = `Detected a ${grader} slab — want to re-submit?`;
+    if (sub)      sub.textContent     = 'Cross-over, re-grade, or submit fresh at any of these grading services.';
+    if (ourBtn)   ourBtn.style.display = 'none';
+    if (toggle)   toggle.style.display = 'none';
+    if (officialRow) officialRow.style.display = 'flex';
   } else {
-    if (headline) headline.textContent = `${cardName ? cardName + ' — ' : ''}Get it officially graded!`;
+    // Raw card — default flow: promote our in-app Grade Scan first
+    if (label)    label.innerHTML     = '&#127941; Curious about the grade?';
+    if (headline) headline.textContent = cardName
+      ? `${cardName} — see if it's worth grading.`
+      : "See if it's worth grading — in seconds.";
+    if (sub)      sub.textContent     = 'Our AI checks centering, corners, edges & surface and gives you an estimated PSA-scale grade before you spend $20+ on official submission.';
+    if (ourBtn)   ourBtn.style.display = '';
+    if (toggle)   { toggle.style.display = ''; toggle.textContent = 'Already ready to submit? See official graders →'; }
+    if (officialRow) officialRow.style.display = 'none';
   }
-  // Wire affiliate links
+
+  // Wire affiliate links regardless (so the collapsible row is ready when opened)
   const p = document.getElementById('sgcPSABtn'); if (p) p.href = links.psa;
   const c = document.getElementById('sgcCGCBtn'); if (c) c.href = links.cgc;
   const b = document.getElementById('sgcBGSBtn'); if (b) b.href = links.bgs;
+  const s = document.getElementById('sgcSGCBtn'); if (s) s.href = links.sgc;
   cta.classList.add('show');
+}
+
+// Toggle the collapsed PSA/CGC/BGS/SGC row inside #scanGradeCTA
+function toggleOfficialGradersRow() {
+  const row = document.getElementById('sgcOfficialRow');
+  const toggle = document.getElementById('sgcOfficialToggle');
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'flex';
+  if (toggle) toggle.textContent = open
+    ? 'Already ready to submit? See official graders →'
+    : 'Hide official graders';
+}
+
+// From the post-scan CTA, launch our own Grade Scan flow
+function launchGradeScanFromCTA() {
+  // Close the scan overlay first so Grade Scan gate isn't stacked underneath
+  cancelScan();
+  // Slight delay so the overlay animation finishes before the file picker opens
+  setTimeout(() => openGradeScanGate(), 200);
 }
 
 function showGradingCtaBanner(cardName) {
@@ -4544,7 +4607,12 @@ async function processGradeBack(input) {
         : '<div style="font-size:.74rem;color:#fb923c">May not be worth grading costs</div>'
       );
 
-    showScanGradeCTA(data.card_name, '', psa);
+    // Grade Scan just gave the estimate — don't upsell our own Grade Scan again.
+    // If the estimate says the card is worth submitting, promote the official
+    // grading services (using the slabbed-card branch of showScanGradeCTA).
+    if (worth) {
+      showScanGradeCTA(data.card_name, 'estimate', psa);
+    }
 
     window._pendingScanBannerCard = data.card_name;
     if (data.card_name) {
