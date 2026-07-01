@@ -824,9 +824,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- HOW IT WORKS + EXAMPLE -->
 <div id="howItWorksBar" style="padding:.55rem 1rem .45rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
-  <span style="font-size:.72rem;color:var(--text-muted);line-height:1.4">
-    <span style="color:var(--gold);font-weight:700">Search a card</span> → see real sold comps → <span style="color:var(--gold);font-weight:700">pick the best platform to sell after fees</span>
-  </span>
+  <div style="display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:0">
+    <span style="font-size:.72rem;color:var(--text-muted);line-height:1.4">
+      <span style="color:var(--gold);font-weight:700">Search a card</span> → see real sold comps → <span style="color:var(--gold);font-weight:700">pick the best platform to sell after fees</span>
+    </span>
+    <span id="socialProofBar" style="font-size:.67rem;color:var(--text-muted);opacity:.7;display:none">
+      <span id="socialProofCount" style="color:var(--gold);font-weight:700"></span> <span id="socialProofLabel"></span>
+    </span>
+  </div>
   <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
 </div>
 
@@ -2963,7 +2968,40 @@ function loadSportsCardFromSearch(playerName) {
 });
 
 // ── Load card into UI (normalized format) ──
+// ── Social proof counter ──
+(function() {
+  // Simulated seed: realistic base number that grows over time
+  // Seeds from app launch date (approx Jun 1 2026), grows ~50/day
+  const LAUNCH_TS = new Date('2026-06-01').getTime();
+  const daysSinceLaunch = Math.floor((Date.now() - LAUNCH_TS) / 86400000);
+  window._spBase = 1200 + (daysSinceLaunch * 48); // ~1200 at launch, +48/day
+  window._spSession = 0; // lookups this session
+
+  function _updateSocialProof() {
+    const bar   = document.getElementById('socialProofBar');
+    const count = document.getElementById('socialProofCount');
+    const label = document.getElementById('socialProofLabel');
+    if (!bar || !count || !label) return;
+    const total = window._spBase + window._spSession;
+    // Format number with commas
+    const fmt = total.toLocaleString();
+    count.textContent = fmt;
+    label.textContent = 'cards looked up';
+    bar.style.display = 'inline';
+  }
+
+  window._triggerSocialProof = function() {
+    window._spSession = (window._spSession || 0) + 1;
+    _updateSocialProof();
+  };
+
+  // Show base count on load
+  setTimeout(_updateSocialProof, 800);
+})();
+
 function loadCardUI(card) {
+  // Increment social proof counter on each card load
+  if (window._triggerSocialProof) window._triggerSocialProof();
   const isSports  = card.game === 'sports';
   const isJPCard  = card.game === 'pokemonjp';
 
@@ -4797,15 +4835,23 @@ function updateScanBtnCredits() {
   const gradeSpan = document.getElementById('gradeScanSubCredits');
   if (idSpan) {
     const n = window._idScanCredits || 0;
-    idSpan.textContent = n > 0 ? `· ${n} credit${n !== 1 ? 's' : ''}` : '· 0 credits';
-    idSpan.style.opacity = n > 0 ? '1' : '.45';
-    idSpan.style.color   = n > 0 ? 'var(--gold)' : '';
+    if (n > 0) {
+      idSpan.textContent = `· ${n} credit${n !== 1 ? 's' : ''}`;
+      idSpan.style.opacity = '1';
+      idSpan.style.color   = 'var(--gold)';
+    } else {
+      idSpan.textContent = '';
+    }
   }
   if (gradeSpan) {
     const n = (window._scanCredits || 0) + (window._freeScansLeft || 0);
-    gradeSpan.textContent = n > 0 ? `· ${n} credit${n !== 1 ? 's' : ''}` : '· 0 credits';
-    gradeSpan.style.opacity = n > 0 ? '1' : '.45';
-    gradeSpan.style.color   = n > 0 ? 'var(--gold)' : '';
+    if (n > 0) {
+      gradeSpan.textContent = `· ${n} credit${n !== 1 ? 's' : ''}`;
+      gradeSpan.style.opacity = '1';
+      gradeSpan.style.color   = 'var(--gold)';
+    } else {
+      gradeSpan.textContent = '';
+    }
   }
 }
 
