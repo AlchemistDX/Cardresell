@@ -5934,43 +5934,79 @@ function _catalogPageNav(delta) {
 
 async function fetchCatalogPokemon(q, _isFallback) {
   const grid = document.getElementById('catalogGrid');
-  const controller = new AbortController();
-  // 25s timeout — pokemontcg.io occasionally takes 10-15s on cold cache, and
-  // mobile connections need extra headroom. Anything shorter caused visible
-  // "Search timed out" messages on flaky Wi-Fi.
-  const timer = setTimeout(() => controller.abort(), 25000);
 
-  // Split query on whitespace so "Charizard ex" → primary="Charizard", suffix=" ex"
-  // The pokemontcg.io API doesn't reliably match "Charizard ex" as a name substring;
-  // it works better as name:charizard* and we filter the suffix client-side if given.
-  const trimmed  = (q || '').trim();
-  const parts    = trimmed.split(/\s+/);
-  const primary  = parts[0] || trimmed;
+  // Normalize the query. pokemontcg.io indexes card names as lowercase "ex"
+  // (e.g. "Lillie's Clefairy ex"). If the caller passed "eX" or "EX"
+  // (from Grade Scan AI output), lowercase it so exact-phrase matching works.
+  const trimmed = (q || '').trim().replace(/\b(eX|EX|Ex)\b/g, 'ex');
+  const parts = trimmed.split(/\s+/);
+  const primary = parts[0] || trimmed;
   const remainder = parts.slice(1).join(' ').trim().toLowerCase();
 
-  try {
-    // Prefer the whole-word exact match (name:"mew") first so we don't get
-    // Mewtwo/Meowth in the top slots. Fall back to prefix wildcard if the
-    // exact-token query returns nothing (rare edge cases like partial typing).
-    let res = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=name:%22${encodeURIComponent(primary)}%22&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
-      { signal: controller.signal }
-    );
-    let json = res.ok ? await res.json() : { data: [] };
-    let data = json.data || [];
-
-    // If exact-token search returns nothing, retry with the prefix wildcard
-    if (!data.length) {
-      res = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(primary)}*&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
-        { signal: controller.signal }
+  // Helper: fetch with per-attempt timeout. pokemontcg.io occasionally hangs
+  // for 15-25s on bare single-token queries with punctuation (like
+  // name:"Lillie's") while a multi-word phrase ("Lillie's Clefairy") returns
+  // in 3-4s. So we cap each attempt at 12s and try broader/narrower shapes.
+  async function tryFetch(qStr, timeoutMs) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(qStr)}&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
+        { signal: ctl.signal }
       );
-      json = res.ok ? await res.json() : { data: [] };
-      data = json.data || [];
+      clearTimeout(t);
+      if (!r.ok) return null;
+      const j = await r.json();
+      return j.data || [];
+    } catch(e) { clearTimeout(t); return null; }
+  }
+
+  try {
+    let data = null;
+    let anySuccess = false;
+    const record = r => { if (r !== null) anySuccess = true; return r; };
+
+    // Build the list of query shapes we'll race in parallel. pokemontcg.io
+    // is unpredictable — exact phrase matches sometimes return in 400ms,
+    // sometimes hang 15s. Running shapes in parallel means whichever one
+    // returns first wins, and we don't sit on a slow one.
+    const strippedPrimary = primary.replace(/['\u2019]/g, '').toLowerCase();
+    const queryShapes = [
+      // Prefix wildcard on primary — fastest for most cases (Charizard, Mew).
+      `name:${primary}*`,
+      // Exact single-token — keeps ranking tight.
+      `name:"${primary}"`,
+    ];
+    // Full-phrase match (only if multi-word input from Grade Scan).
+    if (parts.length > 1) queryShapes.unshift(`name:"${trimmed}"`);
+    // Apostrophe fallback (`name:lillie*` for `Lillie's`) — known-fast escape hatch.
+    if (strippedPrimary && strippedPrimary !== primary.toLowerCase() && strippedPrimary.length >= 3) {
+      queryShapes.push(`name:${strippedPrimary}*`);
     }
 
-    clearTimeout(timer);
-    if (!res.ok && !data.length) throw new Error('API error');
+    // Race all shapes in parallel with a 15s ceiling. Winner is the FIRST
+    // fetch that returns a non-empty array. If all resolve empty, we still
+    // report success (no results found) rather than "search timed out."
+    const promises = queryShapes.map(shape => tryFetch(shape, 15000));
+
+    data = await new Promise(resolve => {
+      let pending = promises.length;
+      let bestEmpty = null; // remember an empty [] in case nothing non-empty comes back
+      promises.forEach(p => p.then(r => {
+        pending--;
+        if (r !== null) anySuccess = true;
+        if (r && r.length) return resolve(r);          // first non-empty wins
+        if (r && !r.length) bestEmpty = r;             // remember empty success
+        if (pending === 0) resolve(bestEmpty);         // all done — return empty or null
+      }));
+    });
+
+    // If every strategy hard-failed (all null — network/abort), throw so the
+    // catch handler shows the retry button. If any strategy returned []
+    // (successful but no matches), fall through to the no-results UI.
+    if (!anySuccess) throw new Error('API error');
+    data = data || [];
 
     // If the user typed additional tokens (e.g. "ex", "vmax"), filter to matching names first
     let usedFallback = false;
@@ -6019,20 +6055,14 @@ async function fetchCatalogPokemon(q, _isFallback) {
       };
     });
   } catch(err) {
-    clearTimeout(timer);
-    // Distinguish real network failures from server-side/API errors
-    const isNetwork = err.name === 'AbortError' || err.message === 'Failed to fetch' || (typeof navigator !== 'undefined' && navigator.onLine === false);
-    if (isNetwork) {
-      grid.innerHTML = `<div class="catalog-empty">Search timed out — please check your connection.<br><br><button class="catalog-pg-btn" onclick="fetchCatalogPokemon('${esc(q).replace(/'/g,"\\'")}')">Try again</button></div>`;
-    } else if (!_isFallback && q.includes(' ')) {
-      // Server returned an error on a multi-word query — try just the first word
-      const primary = q.trim().split(/\s+/)[0];
+    // All four fetch strategies aborted or errored. Show a retry button.
+    if (!_isFallback && q.includes(' ')) {
+      const p = q.trim().split(/\s+/)[0];
       const label = document.getElementById('catalogQueryLabel');
-      if (label) label.innerHTML = `Showing results for <strong>"${esc(primary)}"</strong> — <em>"${esc(q)}"</em> couldn’t be matched exactly`;
-      return fetchCatalogPokemon(primary, true);
-    } else {
-      grid.innerHTML = `<div class="catalog-empty">We couldn’t find results for <strong>"${esc(q)}"</strong>.<br><br>Try a shorter name, or browse by set.</div>`;
+      if (label) label.innerHTML = `Showing results for <strong>"${esc(p)}"</strong> — <em>"${esc(q)}"</em> couldn’t be matched exactly`;
+      return fetchCatalogPokemon(p, true);
     }
+    grid.innerHTML = `<div class="catalog-empty">Search is slow right now — the card database is having a moment.<br><br><button class="catalog-pg-btn" onclick="fetchCatalogPokemon('${esc(q).replace(/'/g,"\\'")}')">Try again</button></div>`;
   }
 }
 
