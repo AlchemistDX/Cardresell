@@ -786,12 +786,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- Graded Scan -->
     <div style="margin-bottom:.55rem">
       <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">Estimated Grade Scanner</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
-        <div>
-          <div style="font-size:.82rem;font-weight:700;color:var(--text)">From $2.49 / 5 scans</div>
-          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Centering, corners, edges, surface + PSA/BGS/CGC estimate</div>
-        </div>
-        <button onclick="openGradeScanModal()" style="flex-shrink:0;padding:.38rem .9rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.73rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy Pack</button>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">Centering, corners, edges, surface + PSA/BGS/CGC estimate</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button onclick="startGradeScanCheckout('5')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>5 scans</div><div style="color:var(--gold);font-weight:800">$2.49</div>
+        </button>
+        <button onclick="startGradeScanCheckout('20')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
+          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
+          <div>20 scans</div><div style="color:var(--gold);font-weight:800">$7.99</div>
+        </button>
+        <button onclick="startGradeScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$14.99</div>
+        </button>
       </div>
     </div>
 
