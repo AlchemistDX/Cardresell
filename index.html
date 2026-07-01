@@ -1052,14 +1052,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             <span id="roiChevron" style="font-size:.7rem;color:var(--text-faint);transition:transform .2s">&#9660;</span>
           </div>
           <div id="roiBody">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;margin-bottom:.6rem">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .6rem;margin-bottom:.6rem">
               <div>
                 <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.2rem">Raw price (your override)</div>
                 <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="roiRawPrice">—</div>
               </div>
               <div>
                 <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.2rem">Graded comp (PSA 10 est.)</div>
-                <input id="roiGradedPrice" type="number" step="0.01" min="0" placeholder="Enter PSA 10 price"
+                <input id="roiGradedPrice" type="number" step="0.01" min="0" placeholder="PSA 10 sold price"
                   style="width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:.4rem;padding:.3rem .5rem;font-size:.8rem;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"
                   oninput="calcGradingRoi()" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'" />
               </div>
