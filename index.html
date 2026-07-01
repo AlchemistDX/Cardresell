@@ -2474,8 +2474,12 @@ async function fetchAndApplySoldComps(forceRefresh) {
     // If card changed while fetching, abort
     if (_compsAbortCard !== cardKey) return;
 
-    if (!data.count || data.count === 0) {
-      statusTxt.innerHTML = 'No recent eBay sales found — set price manually';
+    if (!data.count || data.count === 0 || data.error) {
+      const fbQuery2 = encodeURIComponent([card.name, card.setName].filter(Boolean).join(' '));
+      const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
+      statusTxt.innerHTML =
+        `No recent sales found · ` +
+        `<a href="${fbUrl2}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
       statusEl.style.display = 'flex';
       return;
     }
@@ -2500,7 +2504,12 @@ async function fetchAndApplySoldComps(forceRefresh) {
 
   } catch(e) {
     if (_compsAbortCard !== cardKey) return;
-    statusTxt.textContent = 'Could not load eBay comps — set price manually';
+    // Show a direct eBay sold link as fallback
+    const fbQuery = encodeURIComponent([card.name, card.setName].filter(Boolean).join(' '));
+    const fbUrl   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
+    statusTxt.innerHTML =
+      `Auto-comps unavailable · ` +
+      `<a href="${fbUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
     statusEl.style.display = 'flex';
     console.error('fetchAndApplySoldComps error:', e);
   }
