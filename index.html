@@ -778,14 +778,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
 
-<!-- HOW IT WORKS + EXAMPLE -->
-<div id="howItWorksBar" style="padding:.55rem 1rem .45rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
-  <span style="font-size:.72rem;color:var(--text-muted);line-height:1.4">
-    <span style="color:var(--gold);font-weight:700">Search a card</span> → see real sold comps → <span style="color:var(--gold);font-weight:700">pick the best platform to sell after fees</span>
-  </span>
-  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
-</div>
-
 <section class="search-area">
   <div id="searchRow" class="search-row">
     <div class="search-box">
@@ -6046,12 +6038,31 @@ async function fetchCatalogPokemon(q, _isFallback) {
       _raw: c
     }));
     _renderCatalogGrid(cards, i => {
+      // Build the same card shape the dropdown flow uses (see searchPokemon
+      // ~L2291). loadCardUI expects images.{large,small}, priceVariants, setName.
       const raw = data[i];
+      const prices = raw.tcgplayer?.prices || {};
+      const priceVariants = Object.keys(prices).map(key => ({
+        key,
+        label: formatVariantName(key),
+        market: prices[key]?.market ?? null,
+        low:    prices[key]?.low ?? null,
+        mid:    prices[key]?.mid ?? null,
+        high:   prices[key]?.high ?? null,
+      }));
+      if (!priceVariants.length) {
+        priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
+      }
       return {
-        name: raw.name, set: raw.set?.name || '', number: raw.number || '',
-        img: raw.images?.large || raw.images?.small || '',
-        hp: raw.hp, types: raw.types, game: 'pokemon',
-        prices: { tcgplayer: raw.tcgplayer?.prices || {} }
+        name: raw.name,
+        game: 'pokemon',
+        images: { small: raw.images?.small || '', large: raw.images?.large || raw.images?.small || '' },
+        setName: raw.set?.name || '',
+        number: raw.number || '',
+        rarity: raw.rarity || '',
+        priceVariants,
+        source: 'TCGPlayer',
+        updatedAt: raw.tcgplayer?.updatedAt || '',
       };
     });
   } catch(err) {
