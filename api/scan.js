@@ -43,6 +43,9 @@ export default async function handler(req, res) {
   const isIdentifyMode = !isGradeMode; // identify is the default
 
   // ── 2. Check & consume a scan credit ──
+  // Track WHICH bucket we drew from so we can refund the exact same bucket on failure.
+  // 'id_paid' | 'grade_paid' | 'grade_free_<stamp>' | null (nothing consumed)
+  let creditsDrawnFrom = null;
   if (hasKV) {
     const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
@@ -53,6 +56,7 @@ export default async function handler(req, res) {
         return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
       }
       await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
+      creditsDrawnFrom = 'id_paid';
     } else {
       // Graded scans: draw from Pro free bucket first, then paid_left
       const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
@@ -65,10 +69,36 @@ export default async function handler(req, res) {
       }
       if (freeLeft > 0) {
         await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        creditsDrawnFrom = `grade_free_${stamp}`;
       } else {
         await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
+        creditsDrawnFrom = 'grade_paid';
       }
     }
+  }
+
+  // Helper: refund the exact bucket we drew from. Safe to call multiple times
+  // as long as `creditsDrawnFrom` is nulled after the first refund.
+  async function refundCredit(reason) {
+    if (!hasKV || !creditsDrawnFrom) return;
+    try {
+      if (creditsDrawnFrom === 'id_paid') {
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, cur + 1);
+      } else if (creditsDrawnFrom === 'grade_paid') {
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, cur + 1);
+      } else if (creditsDrawnFrom.startsWith('grade_free_')) {
+        const stamp = creditsDrawnFrom.replace('grade_free_', '');
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        // Free bucket is a counter of USES, so refund decrements it.
+        if (cur > 0) await setKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`, cur - 1);
+      }
+      console.log('Refunded credit:', creditsDrawnFrom, 'reason:', reason);
+    } catch(e) {
+      console.error('Refund failed:', e);
+    }
+    creditsDrawnFrom = null;
   }
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
 
@@ -156,12 +186,8 @@ Respond ONLY with valid JSON, no explanation:
     if (!openaiRes.ok) {
       const errText = await openaiRes.text();
       console.error('OpenAI error:', openaiRes.status, errText);
-      // Refund credit on OpenAI failure
-      if (hasKV) {
-        const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
-      }
-      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.' });
+      await refundCredit('openai_error');
+      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.', refunded: true });
     }
 
     const openaiData = await openaiRes.json();
@@ -175,11 +201,13 @@ Respond ONLY with valid JSON, no explanation:
       cardInfo = JSON.parse(cleaned);
     } catch(e) {
       console.error('GPT-4o parse error:', content);
-      return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo.' });
+      await refundCredit('parse_error');
+      return res.status(502).json({ error: 'Could not read the card. Your credit was refunded — try a clearer photo.', refunded: true });
     }
 
     if (!cardInfo.card_name) {
-      return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting.' });
+      await refundCredit('no_card_name');
+      return res.status(422).json({ error: 'Could not identify the card. Your credit was refunded — try a clearer photo with better lighting.', refunded: true });
     }
 
     if (isGradeMode) {
@@ -211,7 +239,8 @@ Respond ONLY with valid JSON, no explanation:
 
   } catch(err) {
     console.error('Scan error:', err);
-    return res.status(500).json({ error: 'Scanner temporarily unavailable. Please try again.' });
+    await refundCredit('unexpected');
+    return res.status(500).json({ error: 'Scanner temporarily unavailable. Your credit was refunded — please try again.', refunded: true });
   }
 }
 

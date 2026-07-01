@@ -4444,16 +4444,25 @@ async function processScanImage(input) {
     }
 
     if (response.status === 402) {
-      cancelScan();
-      _setScanGateMode('identify');
-      document.getElementById('scanGateOverlay').classList.add('open');
+      statusEl.innerHTML = '<span style="color:#f87171;font-weight:800">Out of ID scan credits</span>';
+      resultEl.innerHTML =
+        '<div style="font-size:.78rem;color:rgba(255,255,255,.7);margin:.35rem 0 .65rem;line-height:1.4">You have no Card ID scan credits left. Nothing was charged.</div>' +
+        '<div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">' +
+          '<button onclick="cancelScan();openPricingModal(\'id_out\')" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.2rem;font-weight:800;font-size:.85rem;cursor:pointer">Get more credits</button>' +
+          '<button onclick="cancelScan()" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.55rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>' +
+        '</div>';
       return;
     }
 
     if (!response.ok) {
       let errMsg = 'Scan failed. Try a clearer photo.';
-      try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
-      throw new Error(errMsg);
+      let refunded = false;
+      try { const e = await response.json(); errMsg = e.error || errMsg; refunded = !!e.refunded; } catch(e) {}
+      statusEl.innerHTML = '<span style="color:#f87171;font-weight:700">' + errMsg + '</span>' +
+        (refunded ? '<br><span style="color:#4ade80;font-size:.75rem;font-weight:700">\u2713 Credit refunded</span>' : '');
+      resultEl.innerHTML = '<button onclick="cancelScan()" style="margin-top:.5rem;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.5rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>';
+      if (refunded && typeof loadSettingsScanCredits === 'function') { try { loadSettingsScanCredits(); } catch(e) {} }
+      return;
     }
 
     const data = await response.json();
@@ -4608,11 +4617,27 @@ async function processGradeBack(input) {
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-    if (response.status === 402) { cancelScan(); _setScanGateMode('grade'); document.getElementById('scanGateOverlay').classList.add('open'); return; }
+    if (response.status === 402) {
+      // Out of grading credits — do NOT auto-slam the shop. Show a clear in-context message with a button.
+      statusEl.innerHTML = '<span style="color:#f87171;font-weight:800">Out of grading credits</span>';
+      resultEl.innerHTML =
+        '<div style="font-size:.78rem;color:rgba(255,255,255,.7);margin:.35rem 0 .65rem;line-height:1.4">You have no Estimated Grade credits left. Nothing was charged.</div>' +
+        '<div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">' +
+          '<button onclick="cancelScan();openPricingModal(\'grade_out\')" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.2rem;font-weight:800;font-size:.85rem;cursor:pointer">Get more credits</button>' +
+          '<button onclick="cancelScan()" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.55rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>' +
+        '</div>';
+      return;
+    }
     if (!response.ok) {
       let errMsg = 'Could not grade card. Try clearer photos.';
-      try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
-      throw new Error(errMsg);
+      let refunded = false;
+      try { const e = await response.json(); errMsg = e.error || errMsg; refunded = !!e.refunded; } catch(e) {}
+      statusEl.innerHTML = '<span style="color:#f87171;font-weight:700">' + errMsg + '</span>' +
+        (refunded ? '<br><span style="color:#4ade80;font-size:.75rem;font-weight:700">\u2713 Credit refunded</span>' : '');
+      resultEl.innerHTML = '<button onclick="cancelScan()" style="margin-top:.5rem;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.5rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>';
+      // Refresh the credit counter so user sees the refund immediately
+      if (refunded && typeof loadSettingsScanCredits === 'function') { try { loadSettingsScanCredits(); } catch(e) {} }
+      return;
     }
 
     const data = await response.json();
