@@ -1045,6 +1045,50 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           </select>
         </div>
 
+        <!-- Grading ROI Calculator — shown when Raw/Ungraded selected -->
+        <div id="gradingRoiPanel" style="display:none;margin-top:.875rem;padding:.85rem 1rem;background:rgba(196,122,0,.06);border:1.5px solid rgba(196,122,0,.22);border-radius:.75rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;cursor:pointer" onclick="toggleRoiPanel()">
+            <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--gold)">&#127942; Is It Worth Grading?</div>
+            <span id="roiChevron" style="font-size:.7rem;color:var(--text-faint);transition:transform .2s">&#9660;</span>
+          </div>
+          <div id="roiBody">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;margin-bottom:.6rem">
+              <div>
+                <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.2rem">Raw price (your override)</div>
+                <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="roiRawPrice">—</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.2rem">Graded comp (PSA 10 est.)</div>
+                <input id="roiGradedPrice" type="number" step="0.01" min="0" placeholder="Enter PSA 10 price"
+                  style="width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:.4rem;padding:.3rem .5rem;font-size:.8rem;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"
+                  oninput="calcGradingRoi()" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'" />
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.2rem">Grading cost ($)</div>
+                <input id="roiGradingCost" type="number" step="0.01" min="0" value="25"
+                  style="width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:.4rem;padding:.3rem .5rem;font-size:.8rem;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"
+                  oninput="calcGradingRoi()" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'" />
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.2rem">Platform fees ~%</div>
+                <input id="roiFeesPct" type="number" step="0.1" min="0" max="50" value="13"
+                  style="width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:.4rem;padding:.3rem .5rem;font-size:.8rem;font-weight:700;color:var(--text);outline:none;box-sizing:border-box"
+                  oninput="calcGradingRoi()" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'" />
+              </div>
+            </div>
+            <!-- Grading service links -->
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.65rem">
+              <a href="https://www.psacard.com/submit" target="_blank" rel="noopener" style="font-size:.65rem;font-weight:700;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.2rem .55rem;text-decoration:none">PSA</a>
+              <a href="https://www.cgccomics.com/cards/submit/" target="_blank" rel="noopener" style="font-size:.65rem;font-weight:700;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.2rem .55rem;text-decoration:none">CGC</a>
+              <a href="https://www.beckett.com/grading/submit" target="_blank" rel="noopener" style="font-size:.65rem;font-weight:700;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.2rem .55rem;text-decoration:none">BGS</a>
+              <a href="https://www.gosgc.com/submit-cards" target="_blank" rel="noopener" style="font-size:.65rem;font-weight:700;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.2rem .55rem;text-decoration:none">SGC</a>
+              <a href="https://www.acegrading.com/submit" target="_blank" rel="noopener" style="font-size:.65rem;font-weight:700;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.2rem .55rem;text-decoration:none">ACE</a>
+            </div>
+            <!-- Result verdict -->
+            <div id="roiVerdict" style="display:none;padding:.6rem .75rem;border-radius:.5rem;font-size:.78rem;font-weight:600;line-height:1.5"></div>
+          </div>
+        </div>
+
         <div class="sep"></div>
 
         <!-- Shipping -->
@@ -2422,7 +2466,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
   if (!selectedCard) return;
 
   const card    = selectedCard;
-  const cardKey = (card.name || '') + '|' + (card.setName || '') + '|' + (card.game || '');
+  const cardKey = (card.name || '') + '|' + (card.setName || '') + '|' + (card.number || '') + '|' + (card.game || '');
 
   // Skip sports (they use manual override) and JP (different market)
   if (card.game === 'sports' || card.game === 'pokemonjp') return;
@@ -2439,8 +2483,10 @@ async function fetchAndApplySoldComps(forceRefresh) {
   statusEl.style.display = 'flex';
   statusTxt.textContent = '⏳ Fetching eBay sold comps…';
 
-  // Build search query: card name + set name
-  const q = [card.name, card.setName].filter(Boolean).join(' ');
+  // Build search query: card name + set name + card number for precision
+  // e.g. "Lacey Stellar Crown 172" instead of just "Lacey Stellar Crown"
+  const cardNum = card.number ? card.number.replace(/^0+/, '') : ''; // strip leading zeros
+  const q = [card.name, card.setName, cardNum].filter(Boolean).join(' ');
 
   // Check if a graded pill is selected
   const selGradePill = document.querySelector('#gradedPills .pill.sel');
@@ -2458,7 +2504,8 @@ async function fetchAndApplySoldComps(forceRefresh) {
     if (_compsAbortCard !== cardKey) return;
 
     if (!data.count || data.count === 0 || data.error) {
-      const fbQuery2 = encodeURIComponent([card.name, card.setName].filter(Boolean).join(' '));
+      const _num2 = card.number ? card.number.replace(/^0+/, '') : '';
+      const fbQuery2 = encodeURIComponent([card.name, card.setName, _num2].filter(Boolean).join(' '));
       const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
       statusTxt.innerHTML =
         `No recent sales found · ` +
@@ -2488,7 +2535,8 @@ async function fetchAndApplySoldComps(forceRefresh) {
   } catch(e) {
     if (_compsAbortCard !== cardKey) return;
     // Fallback: use TCGPlayer market price as reference, link to eBay sold
-    const fbQuery = encodeURIComponent([card.name, card.setName].filter(Boolean).join(' '));
+    const _num3 = card.number ? card.number.replace(/^0+/, '') : '';
+    const fbQuery = encodeURIComponent([card.name, card.setName, _num3].filter(Boolean).join(' '));
     const fbUrl   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
     // Try to get TCG market price from the price display
     const tcgPriceEl = document.getElementById('cardPriceDisplay');
@@ -3166,6 +3214,13 @@ function updateSellLinks(card) {
 }
 
 function toggleGrade() {
+  // Show grading ROI panel only when Raw is selected
+  const selPill = document.querySelector('#gradedPills .pill.sel');
+  if (selPill?.dataset?.val === 'no') {
+    showGradingRoi();
+  } else {
+    hideGradingRoi();
+  }
   const grader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const isGraded = grader !== 'no';
   gradeRow.style.display = isGraded ? 'block' : 'none';
@@ -4759,6 +4814,108 @@ function handleScanOption(choice) {
   }
 }
 
+
+/* =========================================================
+   GRADING ROI CALCULATOR
+   ========================================================= */
+
+function toggleRoiPanel() {
+  const body    = document.getElementById('roiBody');
+  const chevron = document.getElementById('roiChevron');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display    = open ? 'none' : '';
+  chevron.style.transform = open ? 'rotate(-90deg)' : '';
+}
+
+function showGradingRoi() {
+  const panel = document.getElementById('gradingRoiPanel');
+  if (!panel) return;
+  panel.style.display = '';
+  // Pre-fill raw price from override field
+  const ov = document.getElementById('priceOverride');
+  const rawEl = document.getElementById('roiRawPrice');
+  const raw = parseFloat(ov?.value);
+  if (rawEl) rawEl.textContent = raw > 0 ? '$' + raw.toFixed(2) : '—';
+  calcGradingRoi();
+}
+
+function hideGradingRoi() {
+  const panel = document.getElementById('gradingRoiPanel');
+  if (panel) panel.style.display = 'none';
+}
+
+function calcGradingRoi() {
+  const ov          = document.getElementById('priceOverride');
+  const gradedInput = document.getElementById('roiGradedPrice');
+  const costInput   = document.getElementById('roiGradingCost');
+  const feesInput   = document.getElementById('roiFeesPct');
+  const rawEl       = document.getElementById('roiRawPrice');
+  const verdict     = document.getElementById('roiVerdict');
+  if (!verdict) return;
+
+  const rawPrice    = parseFloat(ov?.value) || 0;
+  const gradedPrice = parseFloat(gradedInput?.value) || 0;
+  const gradingCost = parseFloat(costInput?.value) || 25;
+  const feesPct     = parseFloat(feesInput?.value) || 13;
+
+  // Update raw display in case override changed
+  if (rawEl) rawEl.textContent = rawPrice > 0 ? '$' + rawPrice.toFixed(2) : '—';
+
+  if (rawPrice <= 0 || gradedPrice <= 0) {
+    verdict.style.display = 'none';
+    return;
+  }
+
+  // Net after fees
+  const rawNet    = rawPrice    * (1 - feesPct / 100);
+  const gradedNet = gradedPrice * (1 - feesPct / 100);
+
+  // ROI = (gradedNet - rawNet - gradingCost)
+  const roi           = gradedNet - rawNet - gradingCost;
+  const breakEvenGrade = rawNet + gradingCost; // minimum graded price needed to break even
+  const breakEvenSell  = breakEvenGrade / (1 - feesPct / 100);
+  const roiPct         = rawPrice > 0 ? (roi / rawPrice * 100) : 0;
+
+  verdict.style.display = '';
+
+  if (roi > 0) {
+    verdict.style.background = 'rgba(34,197,94,.1)';
+    verdict.style.border     = '1px solid rgba(34,197,94,.3)';
+    verdict.style.color      = '#4ade80';
+    verdict.innerHTML =
+      `<strong>Worth grading</strong> — expected gain: <strong>$${roi.toFixed(2)}</strong> (+${roiPct.toFixed(0)}%)<br>` +
+      `<span style="font-size:.72rem;font-weight:400;color:var(--text-muted)">` +
+      `Raw net $${rawNet.toFixed(2)} → Graded net $${gradedNet.toFixed(2)} − $${gradingCost.toFixed(2)} grading = <strong style="color:#4ade80">+$${roi.toFixed(2)}</strong>` +
+      `</span>`;
+  } else if (roi > -5) {
+    verdict.style.background = 'rgba(234,179,8,.08)';
+    verdict.style.border     = '1px solid rgba(234,179,8,.3)';
+    verdict.style.color      = 'var(--gold)';
+    verdict.innerHTML =
+      `<strong>Borderline</strong> — grading costs about break even<br>` +
+      `<span style="font-size:.72rem;font-weight:400;color:var(--text-muted)">` +
+      `Need to sell graded above <strong>$${breakEvenSell.toFixed(2)}</strong> to profit after ${feesPct}% fees + $${gradingCost} grading` +
+      `</span>`;
+  } else {
+    verdict.style.background = 'rgba(239,68,68,.08)';
+    verdict.style.border     = '1px solid rgba(239,68,68,.25)';
+    verdict.style.color      = '#f87171';
+    verdict.innerHTML =
+      `<strong>Not worth grading</strong> — expected loss: <strong>$${Math.abs(roi).toFixed(2)}</strong><br>` +
+      `<span style="font-size:.72rem;font-weight:400;color:var(--text-muted)">` +
+      `Need PSA 10 to sell above <strong>$${breakEvenSell.toFixed(2)}</strong> just to break even` +
+      `</span>`;
+  }
+}
+
+// Keep ROI raw price in sync when override changes
+document.getElementById('priceOverride')?.addEventListener('input', () => {
+  const rawEl = document.getElementById('roiRawPrice');
+  const ov = parseFloat(document.getElementById('priceOverride')?.value);
+  if (rawEl) rawEl.textContent = ov > 0 ? '$' + ov.toFixed(2) : '—';
+  calcGradingRoi();
+});
 
 /* =========================================================
    FLIP CAP — show upsell when free user hits 5 flips
