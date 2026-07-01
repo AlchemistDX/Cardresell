@@ -4333,12 +4333,20 @@ async function _loadScannedCardExact(pending) {
     }
   }
 
-  // Detect "secret rare" from the scan: number like 177/159 where numerator > denominator.
-  // If the AI OCR'd a bogus number and we can't match exactly, prefer the highest-numbered
-  // variant of the card (which is usually the Special Illustration Rare / secret rare).
+  // Detect "secret rare" in two ways:
+  //  a) Number like 177/159 where numerator > denominator (physical secret-rare marker).
+  //  b) AI reported rarity as any variant that means "beyond normal print run" —
+  //     Secret Rare, Hyper Rare, Rainbow Rare, Special Illustration, Illustration Rare, etc.
+  //     PokemonTCG.io uses very specific rarity labels ("Special Illustration Rare")
+  //     that rarely match the loose language the AI uses ("Secret Rare"), so we treat
+  //     the whole family as one signal.
   const numRaw = (number || '').trim();
   const setSizeMatch = numRaw.match(/^(\d+)\/(\d+)$/);
-  const looksSecretRare = setSizeMatch && parseInt(setSizeMatch[1],10) > parseInt(setSizeMatch[2],10);
+  const rarityLc = (rarity || '').toLowerCase();
+  const secretRareRarityHints = ['secret','hyper','rainbow','illustration','alternate','alt art','gold','shiny'];
+  const rarityLooksSecret = rarityLc && secretRareRarityHints.some(h => rarityLc.includes(h));
+  const looksSecretRare = (setSizeMatch && parseInt(setSizeMatch[1],10) > parseInt(setSizeMatch[2],10))
+                       || rarityLooksSecret;
 
   // Rank candidates. Order matters:
   //  1. Exact number match (best case)
