@@ -1778,7 +1778,7 @@ async function injectPokemonImages(cards, gameSlug) {
 async function searchWithTPL(q, gameSlug) {
   if (!window.tplApiKey) return null;
   try {
-    const url = `https://api.tcgpricelookup.com/v1/cards/search?q=${encodeURIComponent(q)}&game=${gameSlug}&limit=20`;
+    const url = `https://api.tcgpricelookup.com/v1/cards/search?q=${encodeURIComponent(q)}&game=${gameSlug}&limit=100`;
     const r = await fetch(url, { headers: { 'X-API-Key': window.tplApiKey } });
     if (!r.ok) return null;
     const json = await r.json();
@@ -5958,7 +5958,7 @@ async function _fetchModalPokemon(q) {
   }
 
   // Fallback: PokemonTCG.io
-  const url = 'https://api.pokemontcg.io/v2/cards?q=name:' + encodeURIComponent(q) + '*&pageSize=60&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes';
+  const url = 'https://api.pokemontcg.io/v2/cards?q=name:' + encodeURIComponent(q) + '*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes';
   const r = await fetch(url);
   const data = await r.json();
   const cards = data.data || [];
@@ -6019,10 +6019,17 @@ async function _fetchModalPokemonJP(q) {
 
 // ── MTG ──
 async function _fetchModalMTG(q) {
-  const r = await fetch('https://api.scryfall.com/cards/search?q=' + encodeURIComponent(q) + '&unique=prints&order=released&dir=desc');
-  if (!r.ok) return [];
-  const json = await r.json();
-  return (json.data||[]).slice(0,40).map(c => {
+  // Fetch all Scryfall pages (175 cards/page) up to 400 results
+  let allCards = [];
+  let url = 'https://api.scryfall.com/cards/search?q=' + encodeURIComponent(q) + '&unique=prints&order=released&dir=desc';
+  while (url && allCards.length < 400) {
+    const r = await fetch(url);
+    if (!r.ok) break;
+    const json = await r.json();
+    allCards = allCards.concat(json.data || []);
+    url = json.has_more ? json.next_page : null;
+  }
+  return allCards.map(c => {
     const imgLarge = c.image_uris?.normal || c.image_uris?.small || c.card_faces?.[0]?.image_uris?.normal || '';
     const priceVariants = [];
     if(c.prices?.usd) priceVariants.push({key:'usd',label:'Normal',market:parseFloat(c.prices.usd),low:null,mid:null,high:null});
@@ -6043,10 +6050,10 @@ async function _fetchModalMTG(q) {
 
 // ── YuGiOh ──
 async function _fetchModalYugioh(q) {
-  const r = await fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=' + encodeURIComponent(q) + '&num=40&offset=0');
+  const r = await fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=' + encodeURIComponent(q) + '&num=100&offset=0');
   if (!r.ok) return [];
   const json = await r.json();
-  return (json.data||[]).slice(0,40).map(c => {
+  return (json.data||[]).map(c => {
     const imgLarge = c.card_images?.[0]?.image_url || '';
     const tcgP = parseFloat(c.card_prices?.[0]?.tcgplayer_price||0)||null;
     const priceVariants = tcgP
