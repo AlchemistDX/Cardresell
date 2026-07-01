@@ -5513,11 +5513,27 @@ async function fetchCatalogPokemon(q) {
       }));
       _renderCatalogGrid(cards, i => {
         const raw = data[i];
+        // Build priceVariants exactly like the dropdown search does
+        const tcgPrices = raw.tcgplayer?.prices || {};
+        const priceVariants = Object.keys(tcgPrices).map(key => {
+          const p = tcgPrices[key];
+          const label = key.replace(/([A-Z])/g, ' $1')
+                           .replace('1st Edition', '1st Ed')
+                           .replace(/^./, s => s.toUpperCase()).trim();
+          return { key, label, market: p.market || p.mid || null, low: p.low || null, mid: p.mid || null, high: p.high || null };
+        });
+        if (!priceVariants.length) priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
         return {
-          name: raw.name, set: raw.set?.name || '', number: raw.number || '',
-          img: raw.images?.large || raw.images?.small || '',
-          hp: raw.hp, types: raw.types, game: 'pokemon',
-          prices: { tcgplayer: raw.tcgplayer?.prices || {} }
+          name: raw.name,
+          setName: raw.set?.name || '',
+          number: raw.number || '',
+          rarity: raw.rarity || '',
+          images: { large: raw.images?.large || '', small: raw.images?.small || '' },
+          hp: raw.hp || '',
+          types: raw.types || [],
+          game: 'pokemon',
+          priceVariants,
+          prices: { tcgplayer: tcgPrices }
         };
       });
       return; // success
@@ -5575,10 +5591,20 @@ async function fetchCatalogMTG(q) {
   }));
   _renderCatalogGrid(cards, i => {
     const raw = data[i];
+    const imgLarge = raw.image_uris?.normal || raw.image_uris?.small || raw.card_faces?.[0]?.image_uris?.normal || '';
+    const priceVariants = [];
+    if (raw.prices?.usd)        priceVariants.push({ key:'usd',        label:'Normal',     market: parseFloat(raw.prices.usd),        low: null, mid: null, high: null });
+    if (raw.prices?.usd_foil)   priceVariants.push({ key:'usd_foil',   label:'Foil',        market: parseFloat(raw.prices.usd_foil),   low: null, mid: null, high: null });
+    if (raw.prices?.usd_etched) priceVariants.push({ key:'usd_etched', label:'Etched Foil', market: parseFloat(raw.prices.usd_etched), low: null, mid: null, high: null });
+    if (!priceVariants.length)  priceVariants.push({ key:'manual', label:'Manual', market: null, low: null, mid: null, high: null });
     return {
-      name: raw.name, set: raw.set_name || '', number: raw.collector_number || '',
-      img: raw.image_uris?.normal || raw.image_uris?.small || (raw.card_faces?.[0]?.image_uris?.normal) || '',
+      name: raw.name,
+      setName: raw.set_name || '',
+      number: raw.collector_number || '',
+      rarity: raw.rarity || '',
+      images: { large: imgLarge, small: imgLarge },
       game: 'mtg',
+      priceVariants,
       prices: { usd: parseFloat(raw.prices?.usd || 0) || 0 }
     };
   });
@@ -5596,11 +5622,19 @@ async function fetchCatalogYugioh(q) {
   });
   _renderCatalogGrid(cards, i => {
     const raw = data[i];
+    const imgLarge = raw.card_images?.[0]?.image_url || raw.card_images?.[0]?.image_url_small || '';
+    const tcgP = parseFloat(raw.card_prices?.[0]?.tcgplayer_price || 0) || null;
+    const priceVariants = tcgP ? [{ key:'tcgplayer', label:'TCGPlayer', market: tcgP, low: null, mid: null, high: null }]
+                                : [{ key:'manual', label:'Manual', market: null, low: null, mid: null, high: null }];
     return {
-      name: raw.name, set: raw.type || '', number: String(raw.id || ''),
-      img: raw.card_images?.[0]?.image_url || raw.card_images?.[0]?.image_url_small || '',
+      name: raw.name,
+      setName: raw.type || '',
+      number: String(raw.id || ''),
+      rarity: raw.race || '',
+      images: { large: imgLarge, small: imgLarge },
       game: 'yugioh',
-      prices: { tcgplayer_price: parseFloat(raw.card_prices?.[0]?.tcgplayer_price || 0) || 0 }
+      priceVariants,
+      prices: { tcgplayer_price: tcgP || 0 }
     };
   });
 }
