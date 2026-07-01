@@ -37,33 +37,44 @@ export default async function handler(req, res) {
   const hasKV   = !!(kvUrl && kvToken);
   const key     = googleSub || userEmail;
 
+  // ── 3. Get image + mode (read early so credit logic can branch) ──
+  const { imageBase64, mimeType, mode } = req.body || {};
+  const isGradeMode    = mode === 'grade';
+  const isIdentifyMode = !isGradeMode; // identify is the default
+
   // ── 2. Check & consume a scan credit ──
   if (hasKV) {
-    const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-    const isPro    = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
-    const stamp    = getMonthStamp();
-    const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
-    const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
+    const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
-    if (freeLeft <= 0 && paid <= 0) {
-      return res.status(402).json({ error: 'No scan credits remaining.', needsPayment: true });
-    }
-
-    if (freeLeft > 0) {
-      await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+    if (isIdentifyMode) {
+      // ID scans: draw from id_paid_left bucket
+      const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+      if (idPaid <= 0) {
+        return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
+      }
+      await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
     } else {
-      await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
+      // Graded scans: draw from Pro free bucket first, then paid_left
+      const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+      const stamp    = getMonthStamp();
+      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
+      const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
+
+      if (freeLeft <= 0 && paid <= 0) {
+        return res.status(402).json({ error: 'No grading credits remaining.', needsPayment: true, mode: 'grade' });
+      }
+      if (freeLeft > 0) {
+        await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+      } else {
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
+      }
     }
   }
-
-  // ── 3. Get image ──
-  const { imageBase64, mimeType, mode } = req.body || {};
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
 
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) return res.status(500).json({ error: 'Scanner not configured.' });
 
-  const isGradeMode = mode === 'grade';
   const { backBase64, backMimeType } = req.body || {};
 
   // ── 4. Call GPT-4o Vision ──

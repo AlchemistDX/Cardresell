@@ -73,10 +73,11 @@ export default async function handler(req, res) {
   }
 
   // 3. Get scan credits — always fetch paid credits; free credits only for Pro
-  let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0;
+  let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0;
   if (kvUrl && kvToken) {
     // Always check paid credits (any user who bought a scan)
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
+    idPaidLeft    = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_paid_left`);
     if (isPro) {
       const monthKey = `scans:${userSub}:free_used_${getMonthStamp()}`;
       freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
@@ -95,6 +96,7 @@ export default async function handler(req, res) {
     freeScansUsed,
     freeScansTotal: FREE_SCANS_PER_MONTH,
     paidScansLeft,
+    idPaidLeft,
     totalScansLeft: freeScansLeft + paidScansLeft,
   });
 }

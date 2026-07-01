@@ -667,17 +667,26 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <!-- ID Scan -->
     <div style="margin-bottom:.65rem">
-      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🔍 Identification Scan</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
-        <div>
-          <div style="font-size:.82rem;font-weight:700;color:var(--text)">$5 / 50 scans</div>
-          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Single photo · Card ID + live prices</div>
-        </div>
-        <button disabled style="flex-shrink:0;padding:.38rem .9rem;background:var(--surface);border:1.5px solid var(--border);color:var(--text-faint);border-radius:99px;font-size:.73rem;font-weight:700;cursor:not-allowed;white-space:nowrap">Coming Soon</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
+        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">🔍 Identification Scan</div>
+        <div style="font-size:.68rem;color:var(--text-muted)" id="idScanBalance"></div>
+      </div>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">Single photo · Card name, set &amp; live prices</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1</div>
+        </button>
+        <button onclick="startIdScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
+          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
+          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$5</div>
+        </button>
+        <button onclick="startIdScanCheckout('100')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$9</div>
+        </button>
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free grading estimates/mo</strong>. All credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free grading estimates/mo</strong>. ID scan credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -1441,8 +1450,9 @@ function toggleTplKeyVisibility() {
 
 // ── Load scan credits into settings panel ──
 async function loadSettingsScanCredits() {
-  const countEl = document.getElementById('settingsScanCount');
-  const subEl   = document.getElementById('settingsScanSub');
+  const countEl   = document.getElementById('settingsScanCount');
+  const subEl     = document.getElementById('settingsScanSub');
+  const idBalEl   = document.getElementById('idScanBalance');
   if (!countEl) return;
 
   // Try multiple sources for email/sub in case timing is off
@@ -1452,17 +1462,25 @@ async function loadSettingsScanCredits() {
   if (!email) {
     countEl.textContent = '— scans remaining';
     if (subEl) subEl.textContent = 'Sign in to check your balance';
+    if (idBalEl) idBalEl.textContent = '';
     return;
   }
   countEl.textContent = 'Loading…';
   if (subEl) subEl.textContent = '';
+  if (idBalEl) idBalEl.textContent = 'Loading…';
   try {
     const params = new URLSearchParams({ email });
     if (googleSub) params.set('sub', googleSub);
     const res = await fetch('/api/scan-credits?' + params.toString());
     const data = await res.json();
-    const credits = typeof data.credits === 'number' ? data.credits : 0;
-    const isPro   = data.isPro || false;
+    const credits   = typeof data.credits   === 'number' ? data.credits   : 0;
+    const idCredits = typeof data.idCredits === 'number' ? data.idCredits : 0;
+    const isPro     = data.isPro || false;
+
+    // Store ID credits globally for gate logic
+    window._idScanCredits = idCredits;
+
+    // Grading scan balance
     countEl.textContent = credits === 1 ? '1 scan remaining' : `${credits} scans remaining`;
     if (subEl) {
       if (isPro && credits > 0) {
@@ -1475,9 +1493,21 @@ async function loadSettingsScanCredits() {
         subEl.style.color = '';
       }
     }
+
+    // ID scan balance
+    if (idBalEl) {
+      if (idCredits === 0) {
+        idBalEl.textContent = 'No credits';
+        idBalEl.style.color = 'var(--red, #f87171)';
+      } else {
+        idBalEl.textContent = idCredits === 1 ? '1 credit left' : `${idCredits} credits left`;
+        idBalEl.style.color = 'var(--gold)';
+      }
+    }
   } catch(e) {
     countEl.textContent = '— scans remaining';
     if (subEl) subEl.textContent = 'Could not load — try again';
+    if (idBalEl) idBalEl.textContent = '';
   }
 }
 
@@ -4249,7 +4279,8 @@ function savePortData(data) {
 
 window._isPro = false;
 window._freeScansLeft = 0;
-window._scanCredits = 0; // paid scan credits
+window._scanCredits = 0;   // paid grading scan credits
+window._idScanCredits = 0; // paid ID scan credits
 
 // ── Check Pro status from server ──
 async function checkProStatus() {
@@ -4263,6 +4294,7 @@ async function checkProStatus() {
     window._isPro = d.isPro === true;
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
+    window._idScanCredits = d.idPaidLeft || 0;
   } catch(e) { /* non-blocking */ }
   updateProUI();
 }
@@ -4398,6 +4430,53 @@ async function startScanCheckout() {
   }
 }
 
+// ── Start ID scan tier checkout ──
+async function startIdScanCheckout(tier) {
+  if (!googleUser) {
+    showToast('Sign in with Google first to buy ID scan credits.');
+    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
+    return;
+  }
+  // Disable all three tier buttons while redirecting
+  const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
+  tierBtns.forEach(b => { b.disabled = true; });
+  const clickedBtn = document.querySelector(`[onclick="startIdScanCheckout('${tier}')"]`);
+  if (clickedBtn) {
+    const priceEl = clickedBtn.querySelector('div:last-child');
+    if (priceEl) priceEl.textContent = 'Redirecting…';
+  }
+  try {
+    const r = await fetch('/api/stripe-id-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (window._googleIdToken || '')
+      },
+      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      tierBtns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) {
+        const priceEl = clickedBtn.querySelector('div:last-child');
+        const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
+        if (priceEl) priceEl.textContent = priceMap[tier] || '$1';
+      }
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) {
+      const priceEl = clickedBtn.querySelector('div:last-child');
+      const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
+      if (priceEl) priceEl.textContent = priceMap[tier] || '$1';
+    }
+  }
+}
+
 // ── Toast helper ──
 function showToast(msg, duration) {
   const t = document.getElementById('csToast');
@@ -4451,6 +4530,48 @@ function showToast(msg, duration) {
       } catch(e) {
         showToast('\u2714 Payment received — your scan credit is being processed.', 5000);
         console.error('Credit verify error:', e);
+      }
+    })();
+  }
+})();
+
+// ── Handle return from Stripe — ID scan purchase ──
+(function handleIdScanReturn() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('id_scan_paid') === '1') {
+    const sessionId = params.get('session_id') || '';
+    history.replaceState({}, '', window.location.pathname);
+    (async () => {
+      const email     = window._userEmail || '';
+      const googleSub = googleUser?.sub || googleUser?.id || '';
+      if (!sessionId || !email) {
+        showToast('\u2705 ID scan credits purchased! Loading balance\u2026', 4000);
+        setTimeout(() => loadSettingsScanCredits?.(), 1500);
+        return;
+      }
+      try {
+        showToast('\u23f3 Confirming your ID scan credits\u2026', 3000);
+        const r = await fetch('/api/scan-credits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'verify_id_payment', sessionId, email, googleSub })
+        });
+        const data = await r.json();
+        if (data.success) {
+          const added = data.added || 0;
+          window._idScanCredits = data.credits || 0;
+          const msg = data.alreadyCredited
+            ? '\u2705 ID scan credits already applied to your account.'
+            : `\u2705 ${added} ID scan credits added! Ready to use.`;
+          showToast(msg, 5000);
+          loadSettingsScanCredits?.();
+        } else {
+          showToast('\u26a0\ufe0f Payment received but credit verification failed. Contact support.', 6000);
+          console.error('ID credit verify failed:', data);
+        }
+      } catch(e) {
+        showToast('\u2705 ID scan credits purchased \u2014 balance updating shortly.', 5000);
+        console.error('ID credit verify error:', e);
       }
     })();
   }

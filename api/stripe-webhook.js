@@ -41,9 +41,15 @@ export default async function handler(req, res) {
 
     if (googleSub) {
       if (paymentType === 'graded_scan') {
-        // Per-scan payment — add 1 paid scan credit
-        await addPaidScanCredit(googleSub, 1);
-        console.log('SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email }));
+        // Per-scan payment — add 1 graded scan credit
+        await addPaidScanCredit(googleSub, 1, 'graded');
+        console.log('GRADED_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email }));
+      } else if (paymentType === 'id_scan') {
+        // ID scan bundle — credit based on tier
+        const tierMap = { '10': 10, '50': 50, '100': 100 };
+        const qty = tierMap[obj.metadata?.tier] || 10;
+        await addPaidScanCredit(googleSub, qty, 'id');
+        console.log('ID_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email, qty }));
       } else if (obj.mode === 'subscription') {
         const subscriptionId = obj.subscription || obj.id;
         await storeProUser(googleSub, email, subscriptionId, 'active');
@@ -87,15 +93,16 @@ async function storeProUser(googleSub, email, subscriptionId, status) {
   }
 }
 
-async function addPaidScanCredit(googleSub, amount) {
+async function addPaidScanCredit(googleSub, amount, type = 'graded') {
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
   if (!kvUrl || !kvToken) {
-    console.log('SCAN_CREDIT:', JSON.stringify({ googleSub, amount }));
+    console.log('SCAN_CREDIT:', JSON.stringify({ googleSub, amount, type }));
     return;
   }
   try {
-    const key     = `scans:${googleSub}:paid_left`;
+    // graded scans: scans:{sub}:paid_left   id scans: scans:{sub}:id_paid_left
+    const key     = type === 'id' ? `scans:${googleSub}:id_paid_left` : `scans:${googleSub}:paid_left`;
     const current = await getKVInt(kvUrl, kvToken, key);
     await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(current + amount))}`, {
       method: 'POST',

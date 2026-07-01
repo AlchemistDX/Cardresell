@@ -38,12 +38,14 @@ export default async function handler(req, res) {
 
     const key     = googleSub || email;
     const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const idPaid  = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
     const stamp   = getMonthStamp();
     const proFree = isPro
       ? Math.max(0, 10 - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
       : 0;
     return res.status(200).json({
       credits: paid + proFree,
+      idCredits: idPaid,
       isPro,
       paidCredits: paid,
       freeCredits: proFree,
@@ -133,6 +135,51 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, charged: false, usedPaid: true, credits: paid - 1 });
       } else {
         return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
+      }
+    }
+
+    // ── use_id: decrement an ID scan credit ──
+    if (action === 'use_id') {
+      if (!hasKV) return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
+      const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+      if (idPaid > 0) {
+        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
+        return res.status(200).json({ success: true, credits: idPaid - 1 });
+      }
+      return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
+    }
+
+    // ── verify_id_payment: Stripe session → grant ID scan credits ──
+    if (action === 'verify_id_payment') {
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
+      try {
+        const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${stripeKey}` }
+        });
+        if (!r.ok) return res.status(400).json({ error: 'Could not verify payment' });
+        const session = await r.json();
+        if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
+        if (session.metadata?.type !== 'id_scan') return res.status(400).json({ error: 'Not an ID scan payment' });
+        if (session.metadata?.credited === 'true') {
+          const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+          return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
+        }
+        const tierMap = { '10': 10, '50': 50, '100': 100 };
+        const qty = tierMap[session.metadata?.tier] || 10;
+        await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `metadata[credited]=true&metadata[credited_to]=${encodeURIComponent(key)}`
+        });
+        if (hasKV) {
+          const current = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+          await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, current + qty);
+          return res.status(200).json({ success: true, credits: current + qty, added: qty });
+        }
+        return res.status(200).json({ success: true, credits: qty, added: qty });
+      } catch(e) {
+        return res.status(500).json({ error: 'Verification failed: ' + e.message });
       }
     }
 
