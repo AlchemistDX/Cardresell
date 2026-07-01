@@ -696,6 +696,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div>
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
+
+<!-- HOW IT WORKS + EXAMPLE -->
+<div id="howItWorksBar" style="padding:.55rem 1rem .45rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
+  <span style="font-size:.72rem;color:var(--text-muted);line-height:1.4">
+    <span style="color:var(--gold);font-weight:700">Search a card</span> → see real sold comps → <span style="color:var(--gold);font-weight:700">pick the best platform to sell after fees</span>
+  </span>
+  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
+</div>
+
 <section class="search-area">
   <div id="searchRow" class="search-row">
     <div class="search-box">
@@ -2478,12 +2487,27 @@ async function fetchAndApplySoldComps(forceRefresh) {
 
   } catch(e) {
     if (_compsAbortCard !== cardKey) return;
-    // Show a direct eBay sold link as fallback
+    // Fallback: use TCGPlayer market price as reference, link to eBay sold
     const fbQuery = encodeURIComponent([card.name, card.setName].filter(Boolean).join(' '));
     const fbUrl   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
-    statusTxt.innerHTML =
-      `Auto-comps unavailable · ` +
-      `<a href="${fbUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
+    // Try to get TCG market price from the price display
+    const tcgPriceEl = document.getElementById('cardPriceDisplay');
+    const tcgRaw = tcgPriceEl?.dataset?.market || tcgPriceEl?.textContent?.replace(/[^0-9.]/g,'');
+    const tcgPrice = parseFloat(tcgRaw);
+    if (tcgPrice > 0) {
+      // Auto-populate override with TCG market price as starting reference
+      const ovField = document.getElementById('priceOverride');
+      if (ovField && !ovField.value) {
+        ovField.value = tcgPrice.toFixed(2);
+        calc();
+      }
+      statusTxt.innerHTML =
+        `Using TCGPlayer market price · ` +
+        `<a href="${fbUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
+    } else {
+      statusTxt.innerHTML =
+        `<a href="${fbUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
+    }
     statusEl.style.display = 'flex';
     console.error('fetchAndApplySoldComps error:', e);
   }
@@ -3321,18 +3345,21 @@ function calc() {
   let html = '';
 
   // Winner banner
-  if (winner) {
+  // Free users always see eBay in the banner — Pro sees the actual best platform
+  const bannerResult = window._isPro ? winner : (results.find(r => r.pid === 'ebay' && r.eligible) || winner);
+  if (bannerResult) {
     const hasCost = itemCost > 0;
+    const bannerLabel = window._isPro ? 'Best Net Payout' : 'eBay Net Payout';
     html += `<div class="winner">
-      <div class="winner-icon">${PLATFORMS[winner.pid].emoji}</div>
+      <div class="winner-icon">${PLATFORMS[bannerResult.pid].emoji}</div>
       <div class="winner-info">
-        <div class="winner-label">${window._isPro ? 'Best Net Payout' : 'eBay Net Payout'}</div>
-        <div class="winner-name">${PLATFORMS[winner.pid].name}</div>
+        <div class="winner-label">${bannerLabel}</div>
+        <div class="winner-name">${PLATFORMS[bannerResult.pid].name}</div>
         ${hasCost
-          ? `<div class="winner-sub">Profit: <strong style="color:${winner.grossProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(winner.grossProfit)}</strong> · Margin: ${winner.margin.toFixed(1)}%</div>`
+          ? `<div class="winner-sub">Profit: <strong style="color:${bannerResult.grossProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(bannerResult.grossProfit)}</strong> · Margin: ${bannerResult.margin.toFixed(1)}%</div>`
           : `<div class="winner-sub">After all 2026 platform fees</div>`}
       </div>
-      <div class="winner-payout">${fmt(winner.netPayout)}</div>
+      <div class="winner-payout">${fmt(bannerResult.netPayout)}</div>
     </div>`;
   }
 
@@ -3348,7 +3375,7 @@ function calc() {
   }
   html += `<div class="plat-grid">`;
 
-  // Free users: only show eBay card + upsell for other platforms
+  // Free users: only show eBay card — other platforms locked behind Pro gate
   const displaySorted = window._isPro ? sorted : sorted.filter(r => r.pid === 'ebay');
 
   displaySorted.forEach(r => {
@@ -3405,16 +3432,15 @@ function calc() {
     </${cardTag}>`;
   });
 
-  // Pro gate — show blurred platform previews to entice upgrade
+  // Pro gate — non-eBay platforms blurred to entice upgrade
   if (!window._isPro) {
-    // Calculate real payouts for the other platforms (we just won't show the real numbers clearly)
     const proOnlyResults = results.filter(r => r.pid !== 'ebay' && r.eligible);
     proOnlyResults.sort((a, b) => b.netPayout - a.netPayout);
-    const topAlt = proOnlyResults[0]; // best non-eBay payout
     const ebayPayout = results.find(r => r.pid === 'ebay')?.netPayout ?? 0;
-    const mightEarnMore = topAlt && topAlt.netPayout > ebayPayout;
+    const mightEarnMore = proOnlyResults[0] && proOnlyResults[0].netPayout > ebayPayout;
+    const bestAlt = proOnlyResults[0];
+    const diff = bestAlt ? (bestAlt.netPayout - ebayPayout) : 0;
 
-    // Build blurred preview rows for each locked platform
     const blurRows = proOnlyResults.map(r => {
       const info = PLATFORMS[r.pid];
       const isBetter = r.netPayout > ebayPayout;
@@ -3431,7 +3457,11 @@ function calc() {
         <span class="plat-name">&#11088; 4 More Platforms</span>
         <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">PRO</span>
       </div>
-      ${mightEarnMore ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; Another platform might pay more</div>` : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
+      ${mightEarnMore && diff > 0.5
+          ? `<div style="font-size:.76rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; You could net <strong>$${diff.toFixed(2)} more</strong> on another platform</div>`
+          : mightEarnMore
+            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; Another platform pays more than eBay</div>`
+            : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
         <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock All Platforms — $9.99/mo</button>
@@ -4328,6 +4358,51 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 function getUserKey(suffix) {
   return googleUser ? 'cardsell_' + googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
 }
+
+/* =========================================================
+   EXAMPLE CARD — pre-loads Charizard ex so new visitors
+   see the full value loop immediately
+   ========================================================= */
+function loadExampleCard() {
+  // Hide the "how it works" bar once used
+  const bar = document.getElementById('howItWorksBar');
+  if (bar) bar.style.display = 'none';
+
+  // Trigger a search for a popular card
+  const searchInput = document.getElementById('searchInput');
+  if (!searchInput) return;
+  searchInput.value = 'Charizard ex';
+  searchInput.dispatchEvent(new Event('input'));
+  setTimeout(() => {
+    document.getElementById('searchBtn')?.click();
+    // After results load, auto-pick the first result
+    setTimeout(() => {
+      const firstResult = document.querySelector('#dropList .drop-item');
+      if (firstResult) {
+        firstResult.click();
+        // Set a realistic sell price so calc shows real numbers
+        setTimeout(() => {
+          const ov = document.getElementById('priceOverride');
+          if (ov && (!ov.value || parseFloat(ov.value) === 0)) {
+            ov.value = '28.00';
+            calc();
+          }
+        }, 800);
+      }
+    }, 900);
+  }, 300);
+}
+
+// Auto-load example card for first-time visitors only
+(function maybeLoadExample() {
+  try {
+    if (!localStorage.getItem('cardsell_seen')) {
+      localStorage.setItem('cardsell_seen', '1');
+      // Small delay so the page fully renders first
+      setTimeout(loadExampleCard, 1200);
+    }
+  } catch(e) {}
+})();
 
 function loadUserData() {
   // Reload flips view if it's active so it shows the signed-in user's data
