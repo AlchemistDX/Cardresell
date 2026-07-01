@@ -1570,6 +1570,8 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
 window.CARDSELL_TCGP_AFFID = '';
 window.CARDSELL_SCANNER_KEY = '';
 window.CARDSELL_GOOGLE_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
+// PokemonTCG.io API key — free at dev.pokemontcg.io (raises limit from 1k to 20k/day)
+window.CARDSELL_PTCG_KEY = ''; // <-- paste your key here
 // ── Affiliate Links (replace with Awin/ShareASale links when approved) ──
 window.CARDSELL_AFFIL_PSA  = 'https://www.psacard.com/submit'; // PSA submission page
 window.CARDSELL_AFFIL_CGC  = 'https://www.cgccomics.com/cards/submit/'; // CGC submission page
@@ -5471,47 +5473,66 @@ function _catalogPageNav(delta) { /* legacy stub */ }
 
 async function fetchCatalogPokemon(q) {
   const grid = document.getElementById('catalogGrid');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
-  try {
-    const res = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=100&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
-      { signal: controller.signal }
-    );
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('API error');
-    const json = await res.json();
-    const data = json.data || [];
-    if (!data.length) {
-      grid.innerHTML = '<div class="catalog-empty">No Pokémon cards found for "' + esc(q) + '". Try a different name.</div>';
-      return;
-    }
-    const cards = data.map(c => ({
-      name: c.name, set: c.set?.name || '', number: c.number || '',
-      _price: c.tcgplayer?.prices?.holofoil?.market ||
-              c.tcgplayer?.prices?.normal?.market ||
-              c.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
-              c.cardmarket?.prices?.averageSellPrice || null,
-      _img: c.images?.large || c.images?.small || '', // large = portrait full-art image
-      rarity: c.rarity || '',
-      _raw: c
-    }));
-    _renderCatalogGrid(cards, i => {
-      const raw = data[i];
-      return {
-        name: raw.name, set: raw.set?.name || '', number: raw.number || '',
-        img: raw.images?.large || raw.images?.small || '',
-        hp: raw.hp, types: raw.types, game: 'pokemon',
-        prices: { tcgplayer: raw.tcgplayer?.prices || {} }
-      };
-    });
-  } catch(err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') {
-      grid.innerHTML = '<div class="catalog-empty">Search timed out — check your connection and try again.</div>';
-    } else {
-      grid.innerHTML = '<div class="catalog-empty">Could not load cards. Check your connection and try again.</div>';
+  // Build headers — attach PokemonTCG.io key if configured (raises limit to 20k/day)
+  const ptcgKey = window.CARDSELL_PTCG_KEY || '';
+  const fetchHeaders = ptcgKey ? { 'X-Api-Key': ptcgKey } : {};
+
+  // Attempt fetch with up to 2 tries (handles transient rate-limit / slow mobile)
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 18000); // 18s — generous for slow connections
+    try {
+      const res = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=100&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
+        { signal: controller.signal, headers: fetchHeaders }
+      );
+      clearTimeout(timer);
+      if (res.status === 429) {
+        // Rate limited — wait 2s and retry once
+        if (attempt < 2) { await new Promise(r => setTimeout(r, 2000)); continue; }
+        grid.innerHTML = '<div class="catalog-empty">Too many requests — please wait a moment and try again.</div>';
+        return;
+      }
+      if (!res.ok) throw new Error('API error ' + res.status);
+      const json = await res.json();
+      const data = json.data || [];
+      if (!data.length) {
+        grid.innerHTML = '<div class="catalog-empty">No Pokémon cards found for "' + esc(q) + '". Try a different name.</div>';
+        return;
+      }
+      const cards = data.map(c => ({
+        name: c.name, set: c.set?.name || '', number: c.number || '',
+        _price: c.tcgplayer?.prices?.holofoil?.market ||
+                c.tcgplayer?.prices?.normal?.market ||
+                c.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
+                c.cardmarket?.prices?.averageSellPrice || null,
+        _img: c.images?.large || c.images?.small || '',
+        rarity: c.rarity || '',
+        _raw: c
+      }));
+      _renderCatalogGrid(cards, i => {
+        const raw = data[i];
+        return {
+          name: raw.name, set: raw.set?.name || '', number: raw.number || '',
+          img: raw.images?.large || raw.images?.small || '',
+          hp: raw.hp, types: raw.types, game: 'pokemon',
+          prices: { tcgplayer: raw.tcgplayer?.prices || {} }
+        };
+      });
+      return; // success
+    } catch(err) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        if (attempt < 2) {
+          // Show retry message and try again
+          grid.innerHTML = '<div class="catalog-empty" style="color:var(--text-muted)">Loading... retrying</div>';
+          continue;
+        }
+        grid.innerHTML = '<div class="catalog-empty">Search timed out — try again or check your connection.</div>';
+      } else {
+        grid.innerHTML = '<div class="catalog-empty">Could not load cards. Check your connection and try again.</div>';
+      }
     }
   }
 }
