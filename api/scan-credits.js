@@ -36,20 +36,25 @@ export default async function handler(req, res) {
       });
     }
 
-    const key     = googleSub || email;
-    const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-    const idPaid  = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-    const stamp   = getMonthStamp();
-    const proFree = isPro
+    const key      = googleSub || email;
+    const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const idPaid   = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+    const stamp    = getMonthStamp();
+    const proFree  = isPro
       ? Math.max(0, 10 - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
       : 0;
+    const proIdFree = isPro
+      ? Math.max(0, 20 - await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`))
+      : 0;
     return res.status(200).json({
-      credits: paid + proFree,
-      idCredits: idPaid,
+      credits:      paid + proFree,
+      idCredits:    idPaid + proIdFree,
       isPro,
-      paidCredits: paid,
-      freeCredits: proFree,
-      kvAvailable: true,
+      paidCredits:  paid,
+      freeCredits:  proFree,
+      idPaidCredits: idPaid,
+      idFreeCredits: proIdFree,
+      kvAvailable:  true,
     });
   }
 

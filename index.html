@@ -755,7 +755,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Grade Scans/mo</strong>. Card Lookup credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">20 free Card Lookups + 10 free Grade Scans/mo</strong>. Paid credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -1426,6 +1426,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <ul class="plan-features">
           <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
           <li>Unlimited flip &amp; portfolio tracking</li>
+          <li>20 free Card Lookups/mo</li>
           <li>10 free Estimated Grade Scans/mo</li>
           <li>PRO badge on account</li>
         </ul>
@@ -1678,8 +1679,10 @@ async function loadSettingsScanCredits() {
     const res  = await fetch('/api/scan-credits?' + params.toString());
     const data = await res.json();
     const credits   = typeof data.credits   === 'number' ? data.credits   : 0;
-    const idCredits = typeof data.idCredits === 'number' ? data.idCredits : 0;
-    const isPro     = data.isPro || false;
+    const idCredits     = typeof data.idCredits     === 'number' ? data.idCredits     : 0;
+    const idPaidCredits = typeof data.idPaidCredits === 'number' ? data.idPaidCredits : idCredits;
+    const idFreeCredits = typeof data.idFreeCredits === 'number' ? data.idFreeCredits : 0;
+    const isPro         = data.isPro || false;
 
     window._idScanCredits = idCredits;
     window._scanCredits = credits;
@@ -1707,8 +1710,19 @@ async function loadSettingsScanCredits() {
       idCountEl.style.color = idCredits === 0 ? 'var(--red, #f87171)' : 'var(--gold)';
     }
     if (idSubEl) {
-      idSubEl.textContent  = idCredits === 0 ? 'None left — buy below' : 'Never expire';
-      idSubEl.style.color  = idCredits === 0 ? 'var(--red, #f87171)' : '';
+      if (idCredits === 0) {
+        idSubEl.textContent = 'None left — buy below';
+        idSubEl.style.color = 'var(--red, #f87171)';
+      } else if (isPro && idFreeCredits > 0 && idPaidCredits > 0) {
+        idSubEl.textContent = idFreeCredits + ' Pro + ' + idPaidCredits + ' paid';
+        idSubEl.style.color = '';
+      } else if (isPro && idFreeCredits > 0) {
+        idSubEl.textContent = 'Pro monthly included';
+        idSubEl.style.color = '';
+      } else {
+        idSubEl.textContent = 'Never expire';
+        idSubEl.style.color = '';
+      }
     }
   } catch(e) {
     countEl.textContent = '—';
@@ -4874,7 +4888,8 @@ async function checkProStatus() {
     window._isPro = d.isPro === true;
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
-    window._idScanCredits = d.idPaidLeft || 0;
+    window._idFreeScansLeft = d.idFreeScansLeft || 0;
+    window._idScanCredits = (d.idPaidLeft || 0) + (d.idFreeScansLeft || 0);
   } catch(e) { /* non-blocking */ }
   updateProUI();
   updateScanBtnCredits();
@@ -5169,7 +5184,7 @@ function showToast(msg, duration) {
     window._isPro = true;
     window._freeScansLeft = 5;
     updateProUI();
-    showToast('⭐ Welcome to CardResell Pro! 10 Estimated Grade Scans added.', 5000);
+    showToast('⭐ Welcome to CardResell Pro! 20 Card Lookups + 10 Grade Scans added.', 5000);
     // Clean URL
     history.replaceState({}, '', window.location.pathname);
   }
