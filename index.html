@@ -641,35 +641,43 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- SETTINGS PANEL -->
 <div class="settings-panel" id="settingsPanel">
-  <!-- SCAN CREDITS -->
+  <!-- AI SCANNER — unified section -->
   <div class="settings-inner">
-    <div class="settings-title">📷 Scan Credits</div>
-    <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.65rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.6rem">
-      <div>
-        <div style="font-size:.88rem;font-weight:700;color:var(--text)" id="settingsScanCount">— scans remaining</div>
-        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem" id="settingsScanSub">Sign in to check your balance</div>
-      </div>
-      <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.42rem 1rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s" onmouseover="this.style.background='var(--gold-hi)'" onmouseout="this.style.background='var(--surface)'">Buy 1 Scan — $1.50</button>
-    </div>
-    <div style="font-size:.72rem;color:var(--text-muted);line-height:1.5">💡 Pro users get <strong style="color:var(--text)">10 free scans/mo</strong>. Additional scans are $1.50 each. Credits never expire.</div>
-  </div>
-  <!-- AI SCANNER INFO -->
-  <div class="settings-inner" style="margin-top:.75rem;border-top:1px solid var(--border);padding-top:.875rem">
     <div class="settings-title">🤖 AI Card Scanner</div>
-    <div style="font-size:.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:.65rem">Point your camera at any Pokémon or sports card — our AI identifies it instantly and pulls live market prices. <strong style="color:var(--text)">Front photo only, results in ~3 seconds.</strong></div>
-    <div style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:.65rem">
-      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Identifies card name, set &amp; number</div>
-      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Auto-searches live market prices</div>
-      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Works on Pokémon, sports &amp; MTG cards</div>
-      <div style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:var(--text-muted)"><span style="color:var(--gold);font-weight:700">✓</span> Credits never expire</div>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.65rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+
+    <!-- Credit balance row -->
+    <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.75rem">
       <div>
-        <div style="font-size:.85rem;font-weight:700;color:var(--text)">$1.50 per scan</div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.1rem">Pro: 10 free/mo included</div>
+        <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="settingsScanCount">— scans remaining</div>
+        <div style="font-size:.68rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check your balance</div>
       </div>
-      <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.42rem 1rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.75rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy a Scan</button>
     </div>
+
+    <!-- Graded Scan -->
+    <div style="margin-bottom:.55rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🏅 Graded Scan</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div>
+          <div style="font-size:.82rem;font-weight:700;color:var(--text)">$1.50 / scan</div>
+          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Front + back photo · PSA/BGS/CGC estimate</div>
+        </div>
+        <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.38rem .9rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.73rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy 1 — $1.50</button>
+      </div>
+    </div>
+
+    <!-- ID Scan -->
+    <div style="margin-bottom:.65rem">
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🔍 Identification Scan</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div>
+          <div style="font-size:.82rem;font-weight:700;color:var(--text)">$10 / 100 scans</div>
+          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Single photo · Instant name + price lookup</div>
+        </div>
+        <button disabled style="flex-shrink:0;padding:.38rem .9rem;background:var(--surface);border:1.5px solid var(--border);color:var(--text-faint);border-radius:99px;font-size:.73rem;font-weight:700;cursor:not-allowed;white-space:nowrap">Coming Soon</button>
+      </div>
+    </div>
+
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free graded scans/mo</strong>. All credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
