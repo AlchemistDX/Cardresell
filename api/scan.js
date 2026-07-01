@@ -45,6 +45,11 @@ export default async function handler(req, res) {
   // ── 2. Check & consume a scan credit ──
   // Track WHICH bucket we drew from so we can refund the exact same bucket on failure.
   // 'id_paid' | 'id_free_<stamp>' | 'grade_paid' | 'grade_free_<stamp>' | null (nothing consumed)
+  //
+  // IMPORTANT: Consumption uses atomic Upstash DECR / INCR so two concurrent scans
+  // from the same user can't both read the same balance and each write balance-1
+  // (the demo "bought 2 credits, only 1 usable" bug). If DECR takes the balance
+  // below 0 we roll it back with INCR before returning 402.
   let creditsDrawnFrom = null;
   // Pro-plan monthly free allowances
   const ID_FREE_PER_MONTH    = 20;
@@ -54,36 +59,62 @@ export default async function handler(req, res) {
 
     if (isIdentifyMode) {
       // ID scans: Pro users draw from id_free_used_<stamp> bucket first (20/mo), then id_paid_left
-      const stamp      = getMonthStamp();
-      const idFreeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : ID_FREE_PER_MONTH;
-      const idFreeLeft = isPro ? Math.max(0, ID_FREE_PER_MONTH - idFreeUsed) : 0;
-      const idPaid     = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-      if (idFreeLeft <= 0 && idPaid <= 0) {
-        return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
+      const stamp = getMonthStamp();
+      let consumed = false;
+
+      if (isPro) {
+        // Atomically increment used-counter, then check we stayed under the cap.
+        const usedAfter = await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+        if (usedAfter !== null && usedAfter <= ID_FREE_PER_MONTH) {
+          creditsDrawnFrom = `id_free_${stamp}`;
+          consumed = true;
+        } else if (usedAfter !== null) {
+          // Went over the free cap — roll back the increment.
+          await decrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+        }
       }
-      if (idFreeLeft > 0) {
-        await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
-        creditsDrawnFrom = `id_free_${stamp}`;
-      } else {
-        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
-        creditsDrawnFrom = 'id_paid';
+
+      if (!consumed) {
+        // Atomically decrement paid balance; if we went below 0 someone else took the last one.
+        const paidAfter = await decrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+        if (paidAfter !== null && paidAfter >= 0) {
+          creditsDrawnFrom = 'id_paid';
+          consumed = true;
+        } else if (paidAfter !== null) {
+          await incrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+        }
+      }
+
+      if (!consumed) {
+        return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
       }
     } else {
       // Graded scans: draw from Pro free bucket first, then paid_left
-      const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-      const stamp    = getMonthStamp();
-      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : GRADE_FREE_PER_MONTH;
-      const freeLeft = isPro ? Math.max(0, GRADE_FREE_PER_MONTH - freeUsed) : 0;
+      const stamp = getMonthStamp();
+      let consumed = false;
 
-      if (freeLeft <= 0 && paid <= 0) {
-        return res.status(402).json({ error: 'No grading credits remaining.', needsPayment: true, mode: 'grade' });
+      if (isPro) {
+        const usedAfter = await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        if (usedAfter !== null && usedAfter <= GRADE_FREE_PER_MONTH) {
+          creditsDrawnFrom = `grade_free_${stamp}`;
+          consumed = true;
+        } else if (usedAfter !== null) {
+          await decrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        }
       }
-      if (freeLeft > 0) {
-        await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
-        creditsDrawnFrom = `grade_free_${stamp}`;
-      } else {
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
-        creditsDrawnFrom = 'grade_paid';
+
+      if (!consumed) {
+        const paidAfter = await decrKV(kvUrl, kvToken, `scans:${key}:paid_left`);
+        if (paidAfter !== null && paidAfter >= 0) {
+          creditsDrawnFrom = 'grade_paid';
+          consumed = true;
+        } else if (paidAfter !== null) {
+          await incrKV(kvUrl, kvToken, `scans:${key}:paid_left`);
+        }
+      }
+
+      if (!consumed) {
+        return res.status(402).json({ error: 'No grading credits remaining.', needsPayment: true, mode: 'grade' });
       }
     }
   }
@@ -94,20 +125,16 @@ export default async function handler(req, res) {
     if (!hasKV || !creditsDrawnFrom) return;
     try {
       if (creditsDrawnFrom === 'id_paid') {
-        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, cur + 1);
+        await incrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
       } else if (creditsDrawnFrom === 'grade_paid') {
-        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, cur + 1);
+        await incrKV(kvUrl, kvToken, `scans:${key}:paid_left`);
       } else if (creditsDrawnFrom.startsWith('grade_free_')) {
         const stamp = creditsDrawnFrom.replace('grade_free_', '');
-        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
         // Free bucket is a counter of USES, so refund decrements it.
-        if (cur > 0) await setKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`, cur - 1);
+        await decrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
       } else if (creditsDrawnFrom.startsWith('id_free_')) {
         const stamp = creditsDrawnFrom.replace('id_free_', '');
-        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
-        if (cur > 0) await setKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`, cur - 1);
+        await decrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
       }
       console.log('Refunded credit:', creditsDrawnFrom, 'reason:', reason);
     } catch(e) {
@@ -289,13 +316,36 @@ async function setKV(kvUrl, kvToken, key, value) {
   } catch(e) {}
 }
 
+// Atomic Upstash INCR — returns the value AFTER increment, or null on failure.
 async function incrKV(kvUrl, kvToken, key) {
   try {
-    await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
+    const r = await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${kvToken}` }
     });
-  } catch(e) {}
+    if (!r.ok) return null;
+    const d = await r.json();
+    const v = d?.result;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') { const n = parseInt(v); return isNaN(n) ? null : n; }
+    return null;
+  } catch(e) { return null; }
+}
+
+// Atomic Upstash DECR — returns the value AFTER decrement, or null on failure.
+async function decrKV(kvUrl, kvToken, key) {
+  try {
+    const r = await fetch(`${kvUrl}/decr/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const v = d?.result;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') { const n = parseInt(v); return isNaN(n) ? null : n; }
+    return null;
+  } catch(e) { return null; }
 }
 
 async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {
