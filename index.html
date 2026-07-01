@@ -1294,16 +1294,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
                 <option value="yes">Yes (−10% FVF)</option>
               </select>
             </div>
-            <div>
-              <div class="field-label" style="margin-top:0;display:none">StockX Seller Level</div>
-              <select id="stockxLevel" onchange="calc()" style="display:none">
-                <option value="1">Level 1 — 9% + 3%</option>
-                <option value="2">Level 2 — 8.5% + 3%</option>
-                <option value="3">Level 3 — 8% + 3%</option>
-                <option value="4">Level 4 — 7.5% + 3%</option>
-                <option value="5">Level 5 — 7% + 3%</option>
-              </select>
-            </div>
+
             <div>
               <div class="field-label" style="margin-top:0">COMC Submission Tier</div>
               <select id="comcService" onchange="calc()">
@@ -3685,7 +3676,7 @@ function calc() {
       ${itemCost > 0
         ? `<div class="plat-sub">Profit: <span style="color:${r.grossProfit>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(r.grossProfit)}</span> · <span style="${r.margin>=0?'color:var(--green)':'color:var(--red)'}">${r.margin.toFixed(1)}%</span></div>`
         : `<div class="plat-sub">After all fees &amp; shipping</div>`}
-      ${r.note ? `<div class="${r.pid === 'stockx' && isSports ? 'note-warn' : 'note-italic'}">${r.note}</div>` : ''}
+      ${r.note ? `<div class="note-italic">${r.note}</div>` : ''}
       <div class="fee-block">
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
