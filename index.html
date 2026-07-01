@@ -973,17 +973,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             <span id="gradedBannerTitle" style="font-size:.8rem;font-weight:600;color:var(--text)">No graded sales data for this card</span>
           </div>
           <div id="gradedCompsNote" style="font-size:.75rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.4"></div>
-          <!-- CTA: get key -->
-          <a id="gradedUpsellBtn" href="https://tcgpricelookup.com/tcg-api" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:700;color:#fff;background:var(--gold);padding:.45rem .9rem;border-radius:.5rem;text-decoration:none;margin-bottom:.5rem;width:fit-content">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span id="gradedUpsellLabel">Get API key → $19.99/mo for real graded prices</span>
-          </a>
+          <!-- CTA: fetch graded comps from eBay -->
+          <button id="gradedUpsellBtn" onclick="fetchAndApplySoldComps(true)" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:700;color:#000;background:var(--gold);padding:.45rem .9rem;border-radius:.5rem;border:none;cursor:pointer;margin-bottom:.5rem;width:fit-content">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <span id="gradedUpsellLabel">Search eBay sold comps for this grade</span>
+          </button>
           <!-- Secondary links -->
           <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem">
-            <a id="gradedTplLink" href="https://tcgpricelookup.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;font-weight:600;color:var(--text-muted);text-decoration:none;padding:.25rem .55rem;border:1px solid var(--divider);border-radius:99px">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              TCGPriceLookup (free web lookup)
-            </a>
             <a id="gradedCompsLink" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;font-weight:600;color:var(--text-muted);text-decoration:none;padding:.25rem .55rem;border:1px solid var(--divider);border-radius:99px">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               <span id="gradedCompsLinkLabel">eBay sold →</span>
@@ -1004,6 +1000,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           </a>
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:.4rem;padding-left:.5rem">Set price via Override field below after checking comps</div>
         </div>
+        <!-- eBay sold comps auto-status -->
+        <div id="ebayCompsStatus" style="display:none;margin-bottom:.35rem;padding:.38rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.68rem;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+          <span id="ebayCompsStatusText"></span>
+          <button id="ebayCompsRefreshBtn" onclick="fetchAndApplySoldComps(true)" style="background:none;border:none;color:var(--gold);font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;padding:0">Refresh</button>
+        </div>
+
         <div class="price-override">
           <span class="price-override-label">Override price:</span>
           <div class="price-input-wrap">
@@ -2430,6 +2432,80 @@ function attachDropHandlers(cardFactory) {
 }
 
 // ── eBay comps link for sports ──
+// ── eBay sold comps: auto-fetch + populate override ──
+let _compsAbortCard = null; // track which card we're fetching for
+
+async function fetchAndApplySoldComps(forceRefresh) {
+  if (!selectedCard) return;
+
+  const card    = selectedCard;
+  const cardKey = (card.name || '') + '|' + (card.setName || '') + '|' + (card.game || '');
+
+  // Skip sports (they use manual override) and JP (different market)
+  if (card.game === 'sports' || card.game === 'pokemonjp') return;
+
+  // Don't re-fetch same card unless forced
+  if (!forceRefresh && _compsAbortCard === cardKey) return;
+  _compsAbortCard = cardKey;
+
+  const statusEl = document.getElementById('ebayCompsStatus');
+  const statusTxt = document.getElementById('ebayCompsStatusText');
+  if (!statusEl || !statusTxt) return;
+
+  // Show loading state — use flex display
+  statusEl.style.display = 'flex';
+  statusTxt.textContent = '⏳ Fetching eBay sold comps…';
+
+  // Build search query: card name + set name
+  const q = [card.name, card.setName].filter(Boolean).join(' ');
+
+  // Check if a graded pill is selected
+  const selGradePill = document.querySelector('#gradedPills .pill.sel');
+  const gradeVal = selGradePill?.dataset?.val;
+  const grade = (gradeVal && gradeVal !== 'no') ? gradeVal : '';
+
+  try {
+    const params = new URLSearchParams({ q, limit: '15' });
+    if (grade) params.set('grade', grade);
+    const r = await fetch('/api/ebay-sold?' + params.toString());
+    if (!r.ok) throw new Error('API ' + r.status);
+    const data = await r.json();
+
+    // If card changed while fetching, abort
+    if (_compsAbortCard !== cardKey) return;
+
+    if (!data.count || data.count === 0) {
+      statusTxt.innerHTML = 'No recent eBay sales found — set price manually';
+      statusEl.style.display = 'flex';
+      return;
+    }
+
+    const med = data.median;
+    const avg = data.avg;
+    const cnt = data.count;
+
+    // Auto-populate override with median if user hasn't typed one
+    const ovField = document.getElementById('priceOverride');
+    if (ovField && (!ovField.value || forceRefresh)) {
+      ovField.value = med.toFixed(2);
+      calc();
+    }
+
+    statusTxt.innerHTML =
+      `<span style="color:var(--text)">eBay sold</span>` +
+      ` · <strong style="color:var(--gold)">${cnt} sales</strong>` +
+      ` · median <strong style="color:var(--text)">$${med.toFixed(2)}</strong>` +
+      ` · avg $${avg.toFixed(2)}`;
+    statusEl.style.display = 'flex';
+
+  } catch(e) {
+    if (_compsAbortCard !== cardKey) return;
+    statusTxt.textContent = 'Could not load eBay comps — set price manually';
+    statusEl.style.display = 'flex';
+    console.error('fetchAndApplySoldComps error:', e);
+  }
+}
+
 function openEbayComps() {
   const player  = document.getElementById('sp_player').value.trim();
   const year    = document.getElementById('sp_year').value.trim();
@@ -2669,8 +2745,13 @@ function loadCardUI(card) {
     showGradingCtaBanner(card.name || pending);
   }
 
-  // Clear price override on new card load (will be re-set by auto-populate in attachDropHandlers)
+  // Clear price override on new card load
   if (priceOverride) priceOverride.value = '';
+
+  // Reset comps status
+  _compsAbortCard = null;
+  const _compsStatusEl = document.getElementById('ebayCompsStatus');
+  if (_compsStatusEl) _compsStatusEl.style.display = 'none';
 
   // Reset graded pills to Raw/Ungraded on every new card load
   document.querySelectorAll('#gradedPills .pill').forEach(p => p.classList.remove('sel'));
@@ -2774,6 +2855,9 @@ function loadCardUI(card) {
 
   updatePriceFromPrinting();
   calc();
+
+  // Auto-fetch eBay sold comps (non-blocking, skip sports/JP)
+  setTimeout(() => fetchAndApplySoldComps(false), 300);
 }
 
 function resetCardPanel() {
