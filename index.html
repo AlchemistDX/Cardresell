@@ -529,22 +529,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pro-gate-btn{padding:.55rem 1.25rem;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;border:none;border-radius:99px;font-size:.82rem;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(245,197,24,.4);transition:filter .15s}
 .pro-gate-btn:hover{filter:brightness(1.08)}
 
-/* --- BULK LOOKUP --- */
-.bulk-section{margin-top:1.25rem;padding:1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg)}
-.bulk-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-faint);margin-bottom:.6rem}
-.bulk-textarea{width:100%;min-height:90px;padding:.6rem .75rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:.8rem;color:var(--text);resize:vertical;font-family:var(--mono);line-height:1.5;outline:none;transition:border-color .15s;box-sizing:border-box}
-.bulk-textarea:focus{border-color:var(--gold)}
-.bulk-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.6rem;flex-wrap:wrap}
-.bulk-hint{font-size:.72rem;color:var(--text-faint);line-height:1.4}
-.bulk-btn{flex-shrink:0;padding:.45rem 1rem;background:var(--gold);color:#000;border:none;border-radius:99px;font-size:.78rem;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .15s}
-.bulk-btn:hover{background:var(--gold-h)}
-.bulk-btn:disabled{opacity:.5;cursor:not-allowed}
-.bulk-results{margin-top:.85rem;display:flex;flex-direction:column;gap:.45rem}
-.bulk-card-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .7rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.8rem;cursor:pointer;transition:border-color .15s}
-.bulk-card-row:hover{border-color:var(--gold)}
-.bulk-card-name{font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bulk-card-price{font-family:var(--mono);font-weight:700;color:var(--green);flex-shrink:0}
-.bulk-card-price.unknown{color:var(--text-faint);font-weight:400}
+
 
 /* --- SCAN GATE MODAL --- */
 .scan-gate-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
@@ -785,16 +770,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div id="dropList" class="drop-list" role="listbox"></div>
   </div>
 
-  <!-- BULK PRICE LOOKUP -->
-  <div class="bulk-section" id="bulkSection">
-    <div class="bulk-title">&#128195; Bulk Price Lookup</div>
-    <textarea id="bulkInput" class="bulk-textarea" placeholder="Charizard VMAX&#10;Pikachu V&#10;Mew ex&#10;Black Lotus&#10;...one card per line, up to 25"></textarea>
-    <div class="bulk-row">
-      <div class="bulk-hint">Free users: 3 cards &middot; <span style="color:var(--gold);font-weight:700">Pro: 25 cards instantly</span></div>
-      <button id="bulkBtn" class="bulk-btn" onclick="runBulkLookup()">Look Up Prices</button>
-    </div>
-    <div id="bulkResults" class="bulk-results"></div>
-  </div>
 
   <!-- Sports card entry form (hidden by default) -->
   <div id="sportsForm" style="display:none;margin-top:.875rem">
@@ -1287,7 +1262,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
           <li>Unlimited flip &amp; portfolio tracking</li>
           <li>10 free Estimated Grade Scans/mo</li>
-          <li>Bulk price lookup (25 cards)</li>
           <li>PRO badge on account</li>
         </ul>
         <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
@@ -4710,59 +4684,6 @@ function handleScanOption(choice) {
   }
 }
 
-/* =========================================================
-   BULK PRICE LOOKUP — free: 3 cards, Pro: 25 cards
-   ========================================================= */
-
-async function runBulkLookup() {
-  const input = document.getElementById('bulkInput').value.trim();
-  if (!input) { showToast('Enter at least one card name'); return; }
-
-  const lines = input.split('\n').map(l => l.trim()).filter(l => l.length > 1);
-  if (!lines.length) { showToast('Enter at least one card name'); return; }
-
-  const limit = window._isPro ? 25 : 3;
-  const cards = lines.slice(0, limit);
-
-  if (!window._isPro && lines.length > 3) {
-    showToast('\u2605 Pro unlocks up to 25 cards — showing first 3');
-  }
-
-  const btn = document.getElementById('bulkBtn');
-  const resultsEl = document.getElementById('bulkResults');
-  btn.disabled = true;
-  btn.textContent = 'Looking up...';
-  resultsEl.innerHTML = cards.map(c => `<div class="bulk-card-row"><span class="bulk-card-name">${esc(c)}</span><span class="bulk-card-price unknown">searching...</span></div>`).join('');
-
-  // Look up each card in parallel using existing search logic
-  const results = await Promise.all(cards.map(async (cardName) => {
-    try {
-      // Use PokeTrace / TCG API via our existing endpoint
-      const r = await fetch('/api/poketrace?' + new URLSearchParams({ q: cardName, game: 'pokemon' }));
-      if (!r.ok) return { name: cardName, price: null };
-      const d = await r.json();
-      // Pull first result price
-      const first = d?.results?.[0] || d?.[0];
-      const price = first?.marketPrice || first?.price || first?.tcgPlayerPrice || null;
-      return { name: cardName, price };
-    } catch(e) { return { name: cardName, price: null }; }
-  }));
-
-  resultsEl.innerHTML = results.map(r => `
-    <div class="bulk-card-row" onclick="document.getElementById('searchInput').value=${JSON.stringify(r.name)};document.getElementById('searchInput').dispatchEvent(new Event('input'));setTimeout(()=>document.getElementById('searchBtn').click(),200);document.getElementById('bulkSection').scrollIntoView({behavior:'smooth'})">
-      <span class="bulk-card-name">${esc(r.name)}</span>
-      <span class="bulk-card-price ${r.price ? '' : 'unknown'}">${r.price ? '$' + parseFloat(r.price).toFixed(2) : 'Tap to search'}</span>
-    </div>`).join('');
-
-  if (!window._isPro && lines.length > 3) {
-    resultsEl.innerHTML += `<div style="margin-top:.5rem;padding:.6rem .75rem;background:linear-gradient(135deg,rgba(184,134,11,.1),rgba(245,197,24,.06));border:1px solid rgba(245,197,24,.25);border-radius:var(--radius-md);font-size:.76rem;color:var(--text-muted);text-align:center">
-      <span style="color:var(--gold);font-weight:700">&#11088; Pro unlocks all ${lines.length} cards</span> &mdash; <span style="cursor:pointer;text-decoration:underline" onclick="openPricingModal('bulk_gate')">Upgrade for $9.99/mo</span>
-    </div>`;
-  }
-
-  btn.disabled = false;
-  btn.textContent = 'Look Up Prices';
-}
 
 /* =========================================================
    FLIP CAP — show upsell when free user hits 5 flips
