@@ -655,11 +655,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <!-- Graded Scan -->
     <div style="margin-bottom:.55rem">
-      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🏅 Graded Scan</div>
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🏅 AI Grading Estimate</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
         <div>
           <div style="font-size:.82rem;font-weight:700;color:var(--text)">$1.50 / scan</div>
-          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Front + back photo · PSA/BGS/CGC estimate</div>
+          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Centering, corners, edges, surface + PSA/BGS/CGC estimate</div>
         </div>
         <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.38rem .9rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.73rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy 1 — $1.50</button>
       </div>
@@ -670,14 +670,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🔍 Identification Scan</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
         <div>
-          <div style="font-size:.82rem;font-weight:700;color:var(--text)">$10 / 100 scans</div>
-          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Single photo · Instant name + price lookup</div>
+          <div style="font-size:.82rem;font-weight:700;color:var(--text)">$5 / 50 scans</div>
+          <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Single photo · Card ID + live prices</div>
         </div>
         <button disabled style="flex-shrink:0;padding:.38rem .9rem;background:var(--surface);border:1.5px solid var(--border);color:var(--text-faint);border-radius:99px;font-size:.73rem;font-weight:700;cursor:not-allowed;white-space:nowrap">Coming Soon</button>
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free graded scans/mo</strong>. All credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free grading estimates/mo</strong>. All credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -708,7 +708,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Scan
       </button>
-      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="AI Grade Estimator — get a PSA/BGS grade estimate">
+      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="AI Grading Estimate — centering, corners, edges &amp; PSA grade estimate">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         Grade
       </button>
@@ -1213,16 +1213,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- SCAN GATE MODAL -->
 <div class="scan-gate-overlay" id="scanGateOverlay" onclick="closeScanGate(event)">
   <div class="scan-gate-box">
-    <div class="scan-gate-icon">&#128247;</div>
-    <div class="scan-gate-title">AI Card Scanner</div>
-    <div class="scan-gate-sub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
+    <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
+    <div class="scan-gate-title" id="scanGateTitle">AI Card Scanner</div>
+    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
     <div class="scan-gate-options">
       <div class="scan-gate-opt" onclick="handleScanOption('pay')">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name">&#128247; Single Scan</div>
-          <div class="scan-gate-opt-desc">Instant card ID &middot; No subscription needed</div>
+          <div class="scan-gate-opt-name" id="scanGateOptName">&#128247; Single Grading Estimate</div>
+          <div class="scan-gate-opt-desc" id="scanGateOptDesc">Centering &middot; Corners &middot; Edges &middot; PSA estimate</div>
         </div>
-        <div class="scan-gate-opt-price">$1.50</div>
+        <div class="scan-gate-opt-price" id="scanGateOptPrice">$1.50</div>
       </div>
       <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt">
         <div class="scan-gate-opt-info">
@@ -1243,7 +1243,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <div class="pricing-box">
     <div class="pricing-header">
       <div class="pricing-title">&#11088; CardResell Pro</div>
-      <div class="pricing-sub">Full platform fee breakdown, unlimited flip tracking &amp; AI graded scans</div>
+      <div class="pricing-sub">Full platform fee breakdown, unlimited flip tracking &amp; AI Grading Estimates</div>
     </div>
     <div class="pricing-cards">
       <!-- FREE plan -->
@@ -1256,7 +1256,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li>5 flips tracked</li>
           <li class="faded">Platform fee breakdown</li>
           <li class="faded">Unlimited flip tracking</li>
-          <li class="faded">AI graded scans</li>
+          <li class="faded">AI Grading Estimates</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -1268,7 +1268,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <ul class="plan-features">
           <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
           <li>Unlimited flip &amp; portfolio tracking</li>
-          <li>10 free Graded Scans/mo</li>
+          <li>10 free AI Grading Estimates/mo</li>
           <li>Bulk price lookup (25 cards)</li>
           <li>PRO badge on account</li>
         </ul>
@@ -3900,7 +3900,8 @@ async function processScanImage(input) {
 
     if (response.status === 402) {
       cancelScan();
-      openGradedScanGate();
+      _setScanGateMode('identify');
+      document.getElementById('scanGateOverlay').classList.add('open');
       return;
     }
 
@@ -3958,6 +3959,31 @@ function openGradeScanGate() {
   document.getElementById('gradeFileInput').click();
 }
 
+function _setScanGateMode(mode) {
+  // mode: 'identify' | 'grade'
+  const icon  = document.getElementById('scanGateIcon');
+  const title = document.getElementById('scanGateTitle');
+  const sub   = document.getElementById('scanGateSub');
+  const name  = document.getElementById('scanGateOptName');
+  const desc  = document.getElementById('scanGateOptDesc');
+  const price = document.getElementById('scanGateOptPrice');
+  if (mode === 'grade') {
+    if (icon)  icon.textContent  = '🏅';
+    if (title) title.textContent = 'AI Grading Estimate';
+    if (sub)   sub.innerHTML     = 'Front &amp; back photo — centering, corners, edges, surface + PSA/BGS/CGC grade estimate.';
+    if (name)  name.innerHTML    = '🏅 Single Grading Estimate';
+    if (desc)  desc.innerHTML    = 'Centering &middot; Corners &middot; Edges &middot; PSA estimate';
+    if (price) price.textContent = '$1.50';
+  } else {
+    if (icon)  icon.innerHTML    = '&#128247;';
+    if (title) title.textContent = 'AI Card Scanner';
+    if (sub)   sub.innerHTML     = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.';
+    if (name)  name.innerHTML    = '&#128247; Buy ID Scan Credits';
+    if (desc)  desc.innerHTML    = 'Card name &middot; Set &middot; Live prices &mdash; coming soon';
+    if (price) price.textContent = 'Soon';
+  }
+}
+
 // ── Process grade image ──
 // ── Grade scan — stored front image ──
 window._gradeFrontBase64 = null;
@@ -4012,7 +4038,7 @@ async function processGradeBack(input) {
     return;
   }
 
-  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 AI Grade Estimator</span><br><span style="font-size:.8rem;opacity:.7">Analyzing front + back\u2026</span>';
+  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 AI Grading Estimate</span><br><span style="font-size:.8rem;opacity:.7">Analyzing front + back\u2026</span>';
   resultEl.textContent = '';
 
   const backBase64 = await compressImage(file, 1000);
@@ -4040,7 +4066,7 @@ async function processGradeBack(input) {
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-    if (response.status === 402) { cancelScan(); openGradedScanGate(); return; }
+    if (response.status === 402) { cancelScan(); _setScanGateMode('grade'); document.getElementById('scanGateOverlay').classList.add('open'); return; }
     if (!response.ok) {
       let errMsg = 'Could not grade card. Try clearer photos.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
@@ -4389,7 +4415,7 @@ function showToast(msg, duration) {
     window._isPro = true;
     window._freeScansLeft = 5;
     updateProUI();
-    showToast('⭐ Welcome to CardResell Pro! 10 graded scans added.', 5000);
+    showToast('⭐ Welcome to CardResell Pro! 10 AI Grading Estimates added.', 5000);
     // Clean URL
     history.replaceState({}, '', window.location.pathname);
   }
@@ -4432,7 +4458,7 @@ function showToast(msg, duration) {
 
 
 /* =========================================================
-   SCAN GATE — $1.50 pay-per-use graded scan
+   SCAN GATE — $1.50 pay-per-use AI Grading Estimate
    ========================================================= */
 
 function openGradedScanGate() {
