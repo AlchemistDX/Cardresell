@@ -773,7 +773,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- VIEW TABS -->
 <div class="view-tabs" id="viewTabs">
   <span class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</span>
-  <span class="view-tab" data-view="flips" onclick="switchView('flips')">📈 Sales Tracker</span>
+  <span class="view-tab" data-view="flips" onclick="switchView('flips')">Sales Tracker</span>
+  <span class="view-tab" id="collectionTab" onclick="toggleCollectionView()" title="My Collection" style="display:none">Collection<span id="collectionTabCount" style="margin-left:.3rem;font-size:.68rem;color:var(--text-muted);font-weight:600"></span></span>
 </div>
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
@@ -5434,9 +5435,11 @@ function resetSaveToCollectionButton() {
 }
 
 function _updateCollectionCount(count) {
+  const label = count > 0 ? `(${count})` : '';
   const el = document.getElementById('collectionBtnCount');
-  if (!el) return;
-  el.textContent = count > 0 ? `(${count})` : '';
+  if (el) el.textContent = label;
+  const tabEl = document.getElementById('collectionTabCount');
+  if (tabEl) tabEl.textContent = label;
 }
 
 async function refreshCollectionCount() {
@@ -5556,8 +5559,11 @@ async function removeFromCollection(id) {
 }
 
 function updateCollectionBtnVisibility() {
+  const signedIn = !!window._googleIdToken;
   const btn = document.getElementById('collectionBtn');
-  if (btn) btn.style.display = window._googleIdToken ? 'inline-flex' : 'none';
+  if (btn) btn.style.display = signedIn ? 'inline-flex' : 'none';
+  const tab = document.getElementById('collectionTab');
+  if (tab) tab.style.display = signedIn ? 'inline-block' : 'none';
 }
 
 
