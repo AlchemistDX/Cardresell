@@ -849,7 +849,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         Grade
       </button>
     </div>
-    <button id="searchBtn" class="search-btn">Search</button>
+    <button id="searchBtn" class="search-btn" style="display:none" aria-hidden="true">Search</button>
   </div>
   <!-- Mobile: Scan + Grade as full-width sub-row -->
   <div class="scan-sub-row" id="scanSubRow">
@@ -2059,10 +2059,8 @@ searchInput.addEventListener('keydown', e => {
     clearTimeout(searchTimeout);
     const q = searchInput.value.trim();
     if (!q) return;
-    dropList.classList.remove('open');
-    if (activeGame === 'sports') { doSearch(q); return; }
-    // Enter key → open full Collectr-style catalog grid
-    openCatalog(q);
+    // Enter key → use dropdown (same as typing)
+    doSearch(q);
   }
   if (e.key === 'Escape') dropList.classList.remove('open');
 });
@@ -2072,10 +2070,8 @@ document.getElementById('searchBtn').addEventListener('click', () => {
   if (!window._pendingScanBannerCard) hideGradingCtaBanner();
   const q = searchInput.value.trim();
   if (!q) return;
-  dropList.classList.remove('open');
-  if (activeGame === 'sports') { doSearch(q); return; }
-  // Search button → open full Collectr-style catalog grid
-  openCatalog(q);
+  // Search button → use dropdown
+  doSearch(q);
 });
 
 document.addEventListener('click', e => {
