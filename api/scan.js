@@ -1,11 +1,12 @@
-// /api/scan — CardGrader.AI proxy (async submit + poll)
-// POST: validates auth, checks/consumes credit, submits scan to CardGrader, returns { scanId }
-// The frontend then polls /api/scan-result?id={scanId} until completed.
+// /api/scan — GPT-4o Vision card identification
+// POST { imageBase64, mimeType, email, googleSub }
+// Authorization: Bearer <google_id_token>
+// Returns: { card_name, card_number, set_name, hp, card_type, rarity, success: true }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ── 1. Auth: verify Google ID token or accept email fallback ──
+  // ── 1. Auth ──
   const idToken   = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
   const bodyEmail = req.body?.email || '';
   const bodySub   = req.body?.googleSub || '';
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
           googleSub = info.sub  || googleSub;
         }
       }
-    } catch(e) { /* fallback to email */ }
+    } catch(e) {}
   }
 
   if (!userEmail) {
@@ -38,17 +39,16 @@ export default async function handler(req, res) {
 
   // ── 2. Check & consume a scan credit ──
   if (hasKV) {
-    const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-    const isPro   = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
-    const stamp   = getMonthStamp();
+    const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const isPro    = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
+    const stamp    = getMonthStamp();
     const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
     const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
 
     if (freeLeft <= 0 && paid <= 0) {
-      return res.status(402).json({ error: 'No scan credits remaining. Purchase a scan to continue.', needsPayment: true });
+      return res.status(402).json({ error: 'No scan credits remaining.', needsPayment: true });
     }
 
-    // Consume credit (free first, then paid)
     if (freeLeft > 0) {
       await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
     } else {
@@ -56,72 +56,92 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 3. Get images (front required, back required by CardGrader) ──
-  const { imageBase64, mimeType, backBase64, backMimeType } = req.body || {};
+  // ── 3. Get image ──
+  const { imageBase64, mimeType } = req.body || {};
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
-  if (!backBase64)  return res.status(400).json({ error: 'Back photo required. Please photograph both sides of the card.' });
 
-  // ── 4. Submit scan to CardGrader.AI ──
-  const cgKey = process.env.CARDGRADER_API_KEY;
-  if (!cgKey) return res.status(500).json({ error: 'Scanner not configured.' });
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) return res.status(500).json({ error: 'Scanner not configured.' });
 
+  // ── 4. Call GPT-4o Vision ──
   try {
-    const frontBuffer = Buffer.from(imageBase64, 'base64');
-    const backBuffer  = Buffer.from(backBase64,  'base64');
-    const frontMime   = mimeType     || 'image/jpeg';
-    const backMime    = backMimeType || 'image/jpeg';
-    const boundary    = '----CardSellBoundary' + Date.now();
-    const idempotencyKey = `cs-${key.slice(0, 16)}-${Date.now()}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
+    const mime   = mimeType || 'image/jpeg';
+    const dataUrl = `data:${mime};base64,${imageBase64}`;
 
-    // Build multipart body with front + back + modules
-    const frontHeader  = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="front"; filename="front.jpg"\r\nContent-Type: ${frontMime}\r\n\r\n`);
-    const frontFooter  = Buffer.from(`\r\n`);
-    const backHeader   = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="back"; filename="back.jpg"\r\nContent-Type: ${backMime}\r\n\r\n`);
-    const backFooter   = Buffer.from(`\r\n`);
-    const modulePart   = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="modules"\r\n\r\nfull`);
-    const finalBoundary = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat([frontHeader, frontBuffer, frontFooter, backHeader, backBuffer, backFooter, modulePart, finalBoundary]);
-
-    const cgRes = await fetch('https://cardgrader.ai/v1/scans', {
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${cgKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Idempotency-Key': idempotencyKey,
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
       },
-      body,
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        max_tokens: 300,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: dataUrl, detail: 'high' }
+              },
+              {
+                type: 'text',
+                text: `You are a trading card expert. Look at this card image and extract:
+1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
+2. card_number: The card number (e.g. "079/078", "025/165")
+3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm")
+4. hp: HP number if Pokémon card (e.g. "280")
+5. card_type: "pokemon", "sports", or "mtg"
+6. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
+
+Respond ONLY with valid JSON, no explanation:
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"..."}`
+              }
+            ]
+          }
+        ]
+      })
     });
 
-    if (!cgRes.ok) {
-      const errText = await cgRes.text();
-      console.error('CardGrader submit error:', cgRes.status, errText);
-
-      // Refund credit if submission failed
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text();
+      console.error('OpenAI error:', openaiRes.status, errText);
+      // Refund credit on OpenAI failure
       if (hasKV) {
         const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
         await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
       }
-
-      // Handle specific error codes
-      if (cgRes.status === 402) {
-        return res.status(502).json({ error: 'Card scanner service credit issue. Please try again later.' });
-      }
-      return res.status(502).json({ error: 'Card scan failed. Try a clearer photo of the card.' });
+      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.' });
     }
 
-    const result = await cgRes.json();
-    // Returns: { id, status: "queued", modules, creditsCharged, creditsRemaining, links }
-    const scanId = result.id;
+    const openaiData = await openaiRes.json();
+    const content = openaiData.choices?.[0]?.message?.content || '';
 
-    if (!scanId) {
-      console.error('CardGrader no scan ID:', result);
-      return res.status(502).json({ error: 'Scanner did not return a scan ID. Please try again.' });
+    // Parse the JSON response from GPT-4o
+    let cardInfo;
+    try {
+      // Strip markdown code blocks if present
+      const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      cardInfo = JSON.parse(cleaned);
+    } catch(e) {
+      console.error('GPT-4o parse error:', content);
+      return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo.' });
     }
 
-    console.log('CardGrader scan submitted:', JSON.stringify({ scanId, status: result.status, key }));
+    if (!cardInfo.card_name) {
+      return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting.' });
+    }
 
-    // Return scan ID — frontend will poll /api/scan-result?id={scanId}
-    return res.status(202).json({ scanId, status: result.status || 'queued' });
+    return res.status(200).json({
+      success: true,
+      card_name:   cardInfo.card_name   || '',
+      card_number: cardInfo.card_number || '',
+      set_name:    cardInfo.set_name    || '',
+      hp:          cardInfo.hp          || '',
+      card_type:   cardInfo.card_type   || 'pokemon',
+      rarity:      cardInfo.rarity      || '',
+    });
 
   } catch(err) {
     console.error('Scan error:', err);

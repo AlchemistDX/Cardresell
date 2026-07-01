@@ -703,17 +703,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Camera scan overlay -->
   <!-- Hidden file input — opens native camera on mobile -->
   <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
-  <input type="file" id="scanBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanBack(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
       <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
-        <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Front of card" />
-        <div style="font-size:.65rem;color:rgba(255,255,255,.5);margin-top:.25rem">FRONT</div>
-      </div>
-      <div id="scanBackPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
-        <img id="scanBackPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Back of card" />
-        <div style="font-size:.65rem;color:rgba(255,255,255,.5);margin-top:.25rem">BACK</div>
+        <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
       </div>
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
@@ -3721,31 +3715,14 @@ function openScanner() {
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
-  // Reset back photo preview
-  const backWrap = document.getElementById('scanBackPreviewWrap');
-  if (backWrap) backWrap.style.display = 'none';
-  // Hide the grading CTA in the overlay
   const gradeCTA = document.getElementById('scanGradeCTA');
   if (gradeCTA) gradeCTA.classList.remove('show');
-  // Clear stored scan state
-  window._scanFrontBase64 = null;
-  window._scanFrontMime   = null;
-  window._scanFrontUrl    = null;
-  // Reset front file input
   const fi = document.getElementById('scanFileInput');
   if (fi) {
     fi.value = '';
     const clone = fi.cloneNode(true);
     fi.parentNode.replaceChild(clone, fi);
     clone.addEventListener('change', function() { processScanImage(this); });
-  }
-  // Reset back file input
-  const fib = document.getElementById('scanBackFileInput');
-  if (fib) {
-    fib.value = '';
-    const cloneB = fib.cloneNode(true);
-    fib.parentNode.replaceChild(cloneB, fib);
-    cloneB.addEventListener('change', function() { processScanBack(this); });
   }
 }
 
@@ -3814,11 +3791,9 @@ async function processScanImage(input) {
 
   if (!window._googleIdToken) {
     const overlay2 = document.getElementById('scanOverlay');
-    const statusEl2 = document.getElementById('scanStatus');
-    const resultEl2 = document.getElementById('scanResult');
     overlay2.style.display = 'flex';
-    statusEl2.innerHTML = '<span style="color:#f87171">Your sign-in expired. Please sign in again to scan.</span>';
-    resultEl2.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
+    document.getElementById('scanStatus').innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again.</span>';
+    document.getElementById('scanResult').innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
     return;
   }
 
@@ -3828,68 +3803,19 @@ async function processScanImage(input) {
   const prevWrap = document.getElementById('scanPreviewWrap');
   const prevImg  = document.getElementById('scanPreviewImg');
 
-  // Show the overlay and front preview
   overlay.style.display = 'flex';
   resultEl.textContent = '';
+  statusEl.textContent = 'Identifying card\u2026';
 
-  const frontObjectUrl = URL.createObjectURL(file);
-  prevImg.src = frontObjectUrl;
+  const objectUrl = URL.createObjectURL(file);
+  prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
 
-  // Store front image base64
-  const frontBase64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => resolve(e.target.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  window._scanFrontBase64 = frontBase64;
-  window._scanFrontMime   = file.type;
-  window._scanFrontUrl    = frontObjectUrl;
-
-  // Prompt for back photo
-  statusEl.innerHTML = '<span style="color:#4ade80">✓ Front photo captured</span><br><span style="font-size:.85rem;opacity:.8">Now take a photo of the BACK of the card</span>';
-  resultEl.innerHTML = '<button onclick="document.getElementById(\'scanBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">📷 Take Back Photo</button>';
-}
-
-async function processScanBack(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  const overlay  = document.getElementById('scanOverlay');
-  const statusEl = document.getElementById('scanStatus');
-  const resultEl = document.getElementById('scanResult');
-  const backWrap  = document.getElementById('scanBackPreviewWrap');
-  const backImg   = document.getElementById('scanBackPreviewImg');
-
-  const backObjectUrl = URL.createObjectURL(file);
-  backImg.src = backObjectUrl;
-  backWrap.style.display = 'block';
-  resultEl.textContent = '';
-
-  const backBase64 = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => resolve(e.target.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  const frontBase64 = window._scanFrontBase64;
-  const frontMime   = window._scanFrontMime || 'image/jpeg';
-  const backMime    = file.type || 'image/jpeg';
-  const frontUrl    = window._scanFrontUrl;
-
-  if (!frontBase64) {
-    statusEl.textContent = 'Front photo missing. Please start over.';
-    return;
-  }
-
+  // Compress image before sending — resize to max 1000px to stay under payload limits
+  const imageBase64 = await compressImage(file, 1000);
   const idToken = window._googleIdToken || '';
 
   try {
-    // ── Submit scan to CardGrader.AI (async, requires front+back) ──
-    statusEl.textContent = 'Submitting both photos to AI grader…';
-
     const response = await fetch('/api/scan', {
       method: 'POST',
       headers: {
@@ -3897,17 +3823,14 @@ async function processScanBack(input) {
         'Authorization': 'Bearer ' + idToken
       },
       body: JSON.stringify({
-        imageBase64:     frontBase64,
-        mimeType:        frontMime,
-        backBase64:      backBase64,
-        backMimeType:    backMime,
+        imageBase64,
+        mimeType: 'image/jpeg',
       })
     });
 
     if (response.status === 401) {
       window._googleIdToken = null;
-      try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
-      statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again, then scan.</span>';
+      statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again.</span>';
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
@@ -3919,113 +3842,72 @@ async function processScanBack(input) {
     }
 
     if (!response.ok) {
-      let errMsg = 'Scan failed. Try again with clearer photos.';
+      let errMsg = 'Scan failed. Try a clearer photo.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
       throw new Error(errMsg);
     }
 
-    const submitData = await response.json();
-    const scanId = submitData.scanId;
-    if (!scanId) throw new Error('Scanner did not return a scan ID. Please try again.');
-
-    // ── Poll /api/scan-result until completed ──
-    statusEl.textContent = 'AI is grading your card… (30–90 seconds)';
-    resultEl.innerHTML = '<span style="font-size:.75rem;opacity:.55">Keep this page open while grading…</span>';
-
-    let pollAttempts = 0;
-    const scanResult = await new Promise((resolve, reject) => {
-      const poll = async () => {
-        pollAttempts++;
-        if (pollAttempts > 60) { reject(new Error('Scan timed out. Please try again.')); return; }
-        try {
-          const pr = await fetch('/api/scan-result?id=' + encodeURIComponent(scanId));
-          if (!pr.ok) { setTimeout(poll, 3000); return; }
-          const pd = await pr.json();
-          if (pd.status === 'queued') {
-            statusEl.textContent = 'AI scan queued… (' + (pollAttempts * 3) + 's)';
-            setTimeout(poll, 3000);
-          } else if (pd.status === 'processing') {
-            const pct = pd.progress ? ' ' + pd.progress + '%' : '';
-            statusEl.textContent = 'Analyzing card…' + pct + ' (' + (pollAttempts * 3) + 's)';
-            setTimeout(poll, 3000);
-          } else if (pd.status === 'completed') {
-            resolve(pd.result);
-          } else if (pd.status === 'failed') {
-            reject(new Error(pd.error || 'Scan could not be completed. Try clearer photos.'));
-          } else {
-            setTimeout(poll, 3000);
-          }
-        } catch(e) { setTimeout(poll, 3000); }
-      };
-      poll();
-    });
-
-    // ── Process completed result ──
-    const cardName    = scanResult.card_name   || '';
-    const cardNumber  = scanResult.card_number || '';
-    const setName     = scanResult.set_name    || '';
-    const grade       = scanResult.grade;
-    const grLabel     = scanResult.grade_label || '';
-    const rawValue    = scanResult.raw_value;
-    const gradedValue = scanResult.graded_value;
-    const centering   = scanResult.centering;
-    const corners     = scanResult.corners;
-    const edges       = scanResult.edges;
-    const surface     = scanResult.surface;
-    const gradingRec  = scanResult.grading_recommendation || '';
+    const data = await response.json();
+    const cardName   = data.card_name   || '';
+    const cardNumber = data.card_number || '';
+    const setName    = data.set_name    || '';
+    const rarity     = data.rarity      || '';
+    const hp         = data.hp          || '';
 
     if (!cardName) {
-      statusEl.textContent = 'Could not identify the card. Try better lighting or clearer photos.';
+      statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
 
-    let gradeDisplay = '';
-    if (grade !== null && grade !== undefined) {
-      gradeDisplay = '<span style="color:#4ade80;font-weight:800"> · Grade: ' + grade + '/10' + (grLabel ? ' (' + grLabel + ')' : '') + '</span>';
-    }
-    let subGradeDisplay = '';
-    if (centering !== null && centering !== undefined) {
-      subGradeDisplay = '<div style="font-size:.73rem;opacity:.65;margin-top:.25rem">Centering ' + centering + ' · Corners ' + corners + ' · Edges ' + edges + ' · Surface ' + surface + '</div>';
-    }
-    let valueDisplay = '';
-    if (rawValue || gradedValue) {
-      valueDisplay = '<div style="font-size:.78rem;margin-top:.25rem;color:rgba(255,255,255,.75)">';
-      if (rawValue) valueDisplay += 'Raw est: <strong style="color:#fff">$' + Number(rawValue).toFixed(2) + '</strong>';
-      if (rawValue && gradedValue) valueDisplay += ' · ';
-      if (gradedValue) valueDisplay += 'Graded est: <strong style="color:#4ade80">$' + Number(gradedValue).toFixed(2) + '</strong>';
-      valueDisplay += '</div>';
-    }
+    let detailLine = [setName, rarity, hp ? hp + ' HP' : ''].filter(Boolean).join(' \u00b7 ');
+    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>';
+    resultEl.textContent = 'Searching market prices\u2026';
 
-    statusEl.innerHTML = '<span style="color:#4ade80">✓ ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span>' + gradeDisplay + '<br><span style="font-size:.8rem;opacity:.7">' + setName + '</span>' + subGradeDisplay + valueDisplay;
-    resultEl.innerHTML = gradingRec ? '<span style="font-size:.78rem;opacity:.75">' + gradingRec + '</span>' : 'Searching market prices…';
-
-    showScanGradeCTA(cardName, '', grade);
+    showScanGradeCTA(cardName, '', null);
 
     window._scanTargetNumber = cardNumber;
     window._scanTargetName   = cardName;
     window._scanTargetGrader = '';
-    window._scanTargetGrade  = grade;
+    window._scanTargetGrade  = null;
     window._pendingScanBannerCard = cardName;
 
     setTimeout(() => {
       cancelScan();
-      URL.revokeObjectURL(frontUrl);
-      URL.revokeObjectURL(backObjectUrl);
+      URL.revokeObjectURL(objectUrl);
       const searchInput = document.getElementById('searchInput');
       searchInput.value = cardName.trim();
       searchInput.dispatchEvent(new Event('input'));
       setTimeout(() => document.getElementById('searchBtn').click(), 300);
-    }, 2500);
+    }, 1800);
 
   } catch(err) {
     console.error('Scan error:', err);
-    const isNetErr = err instanceof TypeError && err.message.includes('fetch');
-    if (isNetErr) {
-      statusEl.innerHTML = '<span style="color:#f87171">Network error — check your connection and try again.</span>';
-    } else {
-      statusEl.textContent = err.message || 'Could not grade the card. Try clearer photos.';
-    }
+    statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
   }
+}
+
+// Compress image to max maxPx wide/tall, return base64 JPEG string
+function compressImage(file, maxPx) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      // quality 0.82 gives good detail at ~200-400KB
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      resolve(dataUrl.split(',')[1]);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
