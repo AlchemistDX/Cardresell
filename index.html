@@ -672,6 +672,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-gate-opt-desc{font-size:.73rem;color:var(--text-muted);margin-top:.1rem}
 .scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
 .scan-gate-cancel{font-size:.78rem;color:var(--text-faint);cursor:pointer;text-decoration:underline;background:none;border:none;padding:.25rem}
+.scan-gate-packs{display:flex;flex-direction:column;gap:.5rem;margin:.85rem 0 .5rem}
+.scan-gate-pack{display:flex;align-items:center;justify-content:space-between;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:var(--radius-md);cursor:pointer;transition:border-color .15s,background .15s;background:var(--surface-2);position:relative}
+.scan-gate-pack:hover{border-color:var(--gold)}
+.scan-gate-pack.best{border-color:var(--gold)}
+.scan-gate-pack-left{text-align:left;flex:1}
+.scan-gate-pack-name{font-size:.83rem;font-weight:700;color:var(--text)}
+.scan-gate-pack-desc{font-size:.72rem;color:var(--text-muted);margin-top:.1rem}
+.scan-gate-pack-price{font-size:.9rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
+.scan-gate-pack-badge{position:absolute;top:-9px;right:.6rem;background:var(--gold);color:#000;font-size:.62rem;font-weight:800;padding:.1rem .45rem;border-radius:20px;letter-spacing:.03em}
+.scan-gate-divider{font-size:.72rem;color:var(--text-faint);text-align:center;margin:.1rem 0 .1rem;position:relative}
+.scan-gate-divider::before,.scan-gate-divider::after{content:"";position:absolute;top:50%;width:35%;height:1px;background:var(--border)}
+.scan-gate-divider::before{left:0}.scan-gate-divider::after{right:0}
 
 /* --- GRADING AFFILIATE CTA --- */
 .grade-cta-banner{display:none;margin:.85rem 0 .25rem;padding:.9rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.08) 0%,rgba(196,122,0,.04) 100%);border:1px solid rgba(196,122,0,.3);border-radius:var(--radius-lg);animation:fadeSlideUp .3s ease}
@@ -1426,17 +1438,51 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
     <div class="scan-gate-title" id="scanGateTitle">Card Identification Scanner</div>
     <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
-    <div class="scan-gate-options">
-      <div class="scan-gate-opt" onclick="handleScanOption('pay')">
-        <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name" id="scanGateOptName">Estimated Grade Scan</div>
-          <div class="scan-gate-opt-desc" id="scanGateOptDesc">Centering &middot; Corners &middot; Edges &middot; PSA estimate</div>
+    <!-- Grade scan packs (shown only in grade mode) -->
+    <div class="scan-gate-packs" id="scanGatePacksSection" style="display:none">
+      <div class="scan-gate-pack" onclick="handleScanOption('pack5')">
+        <div class="scan-gate-pack-left">
+          <div class="scan-gate-pack-name">5 Grade Scans</div>
+          <div class="scan-gate-pack-desc">Centering &middot; Corners &middot; PSA estimate</div>
         </div>
-        <div class="scan-gate-opt-price" id="scanGateOptPrice">from $0.50</div>
+        <div class="scan-gate-pack-price">$2.49</div>
       </div>
-      <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt">
+      <div class="scan-gate-pack best" onclick="handleScanOption('pack20')">
+        <div class="scan-gate-pack-badge">BEST VALUE</div>
+        <div class="scan-gate-pack-left">
+          <div class="scan-gate-pack-name">20 Grade Scans</div>
+          <div class="scan-gate-pack-desc">Save 20% vs. single pack</div>
+        </div>
+        <div class="scan-gate-pack-price">$7.99</div>
+      </div>
+      <div class="scan-gate-pack" onclick="handleScanOption('pack50')">
+        <div class="scan-gate-pack-left">
+          <div class="scan-gate-pack-name">50 Grade Scans</div>
+          <div class="scan-gate-pack-desc">Best for bulk grading</div>
+        </div>
+        <div class="scan-gate-pack-price">$14.99</div>
+      </div>
+      <div class="scan-gate-divider">or</div>
+      <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt" style="margin-top:.1rem">
         <div class="scan-gate-opt-info">
           <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 10 scans/mo included</div>
+          <div class="scan-gate-opt-desc">+ Full fee breakdown &amp; unlimited flip tracking</div>
+        </div>
+        <div class="scan-gate-opt-price">$9.99/mo</div>
+      </div>
+    </div>
+    <!-- Identify scan option (shown only in identify mode) -->
+    <div class="scan-gate-options" id="scanGateIdentifySection">
+      <div class="scan-gate-opt" onclick="handleScanOption('pay')">
+        <div class="scan-gate-opt-info">
+          <div class="scan-gate-opt-name" id="scanGateOptName">Buy ID Scanner Credits</div>
+          <div class="scan-gate-opt-desc" id="scanGateOptDesc">Card name &middot; Set &middot; Live prices</div>
+        </div>
+        <div class="scan-gate-opt-price" id="scanGateOptPrice">from $1.00</div>
+      </div>
+      <div class="scan-gate-opt" onclick="handleScanOption('pro')">
+        <div class="scan-gate-opt-info">
+          <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 10 grade scans/mo</div>
           <div class="scan-gate-opt-desc">+ Full fee breakdown &amp; unlimited flip tracking</div>
         </div>
         <div class="scan-gate-opt-price">$9.99/mo</div>
@@ -4544,37 +4590,42 @@ async function processScanImage(input) {
   }
 }
 
-// ── Grade scan gate — same credit check as scan ──
+// ── Grade scan gate — check credits first, show pack options if needed ──
 function openGradeScanGate() {
   if (!googleUser) {
     showToast('Sign in with Google first to use the grader');
     return;
   }
-  document.getElementById('gradeFileInput').click();
+  const credits = (window._scanCredits || 0) + (window._freeScansLeft || 0);
+  if (credits > 0) {
+    // Has credits — go straight to camera
+    document.getElementById('gradeFileInput').click();
+    return;
+  }
+  // No credits — show the gate with pack options
+  _setScanGateMode('grade');
+  document.getElementById('scanGateOverlay').classList.add('open');
 }
 
 function _setScanGateMode(mode) {
   // mode: 'identify' | 'grade'
-  const icon  = document.getElementById('scanGateIcon');
-  const title = document.getElementById('scanGateTitle');
-  const sub   = document.getElementById('scanGateSub');
-  const name  = document.getElementById('scanGateOptName');
-  const desc  = document.getElementById('scanGateOptDesc');
-  const price = document.getElementById('scanGateOptPrice');
+  const icon    = document.getElementById('scanGateIcon');
+  const title   = document.getElementById('scanGateTitle');
+  const sub     = document.getElementById('scanGateSub');
+  const packs   = document.getElementById('scanGatePacksSection');
+  const identify= document.getElementById('scanGateIdentifySection');
   if (mode === 'grade') {
-    if (icon)  icon.textContent  = '🏅';
-    if (title) title.textContent = 'Estimated Grade Scanner';
-    if (sub)   sub.innerHTML     = 'Front &amp; back photo — centering, corners, edges, surface + PSA/BGS/CGC grade estimate.';
-    if (name)  name.innerHTML    = 'Estimated Grade Scan';
-    if (desc)  desc.innerHTML    = 'Centering &middot; Corners &middot; Edges &middot; PSA estimate';
-    if (price) price.textContent = 'From $2.49';
+    if (icon)     icon.textContent = '🏅';
+    if (title)    title.textContent = 'AI Grading Estimate';
+    if (sub)      sub.innerHTML    = 'Front &amp; back photo — centering, corners, edges, surface + PSA/BGS/CGC grade estimate.';
+    if (packs)    packs.style.display    = '';
+    if (identify) identify.style.display = 'none';
   } else {
-    if (icon)  icon.innerHTML    = '&#128247;';
-    if (title) title.textContent = 'Card Identification Scanner';
-    if (sub)   sub.innerHTML     = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.';
-    if (name)  name.innerHTML    = 'Buy ID Scanner Credits';
-    if (desc)  desc.innerHTML    = 'Card name &middot; Set &middot; Live prices &mdash; coming soon';
-    if (price) price.textContent = 'Soon';
+    if (icon)     icon.innerHTML   = '&#128247;';
+    if (title)    title.textContent = 'Card Identification Scanner';
+    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.';
+    if (packs)    packs.style.display    = 'none';
+    if (identify) identify.style.display = '';
   }
 }
 
@@ -5267,9 +5318,15 @@ function closeScanGate(evt) {
 function handleScanOption(choice) {
   document.getElementById('scanGateOverlay').classList.remove('open');
   if (choice === 'pay') {
-    openGradeScanModal();
+    openIdScanModal ? openIdScanModal() : openGradeScanModal();
   } else if (choice === 'pro') {
     openPricingModal('scan_gate');
+  } else if (choice === 'pack5') {
+    startGradeScanCheckout('5');
+  } else if (choice === 'pack20') {
+    startGradeScanCheckout('20');
+  } else if (choice === 'pack50') {
+    startGradeScanCheckout('50');
   }
 }
 
