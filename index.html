@@ -4049,17 +4049,69 @@ function cancelScan() {
   document.getElementById('gradeFileInput')?.addEventListener('change', function() { processGradeImage(this); });
   document.getElementById('gradeBackFileInput')?.addEventListener('change', function() { processGradeBack(this); });
 
-  // If ID scan identified a card, pre-fill search bar so it's ready to use
-  // User stays on the main screen — no forced catalog jump
+  // If ID scan identified a card, load the exact card directly (match by name + number)
   if (window._pendingIdScanCard) {
     const pending = window._pendingIdScanCard;
     window._pendingIdScanCard = null;
-    const si = document.getElementById('searchInput');
-    if (si) {
-      si.value = pending.name;
-      // Trigger autocomplete dropdown without opening catalog
-      si.dispatchEvent(new Event('input'));
+    _loadScannedCardExact(pending);
+  }
+}
+
+// Fetch the exact scanned card from PokemonTCG.io by name + number and load it
+async function _loadScannedCardExact(pending) {
+  const { name, number, setName, rarity } = pending;
+  const si = document.getElementById('searchInput');
+  if (si) si.value = name;
+
+  try {
+    // Build query: name + number gives us the exact card
+    let q = `name:${encodeURIComponent(name)}`;
+    if (number) q += ` number:${encodeURIComponent(number.replace(/\/.*$/, '').trim())}`; // strip /setsize
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('API error');
+    const json = await res.json();
+    let cards = json.data || [];
+
+    // Pick the best match: prefer exact number match, then rarity match
+    let match = cards.find(c => c.number === number);
+    if (!match && number) match = cards.find(c => c.number?.startsWith(number.split('/')[0]));
+    if (!match && rarity) match = cards.find(c => (c.rarity || '').toLowerCase() === rarity.toLowerCase());
+    if (!match) match = cards[0];
+
+    if (match) {
+      const prices = match.tcgplayer?.prices || {};
+      const priceVariants = Object.keys(prices).map(key => ({
+        key,
+        label: formatVariantName(key),
+        market: prices[key]?.market ?? null,
+        low:    prices[key]?.low    ?? null,
+        mid:    prices[key]?.mid    ?? null,
+        high:   prices[key]?.high   ?? null,
+      }));
+      const card = {
+        name:   match.name,
+        game:   'pokemon',
+        images: { small: match.images?.small || '', large: match.images?.large || '' },
+        setName: match.set?.name || setName || '',
+        number:  match.number || number || '',
+        rarity:  match.rarity || rarity || '',
+        priceVariants,
+        source: 'TCGPlayer',
+        updatedAt: match.tcgplayer?.updatedAt || '',
+      };
+      selectedCard = card;
+      if (si) si.value = card.name;
+      dropList.classList.remove('open');
+      loadCardUI(card);
+      return;
     }
+  } catch(e) { /* fall through to autocomplete */ }
+
+  // Fallback: just fill the search and let them pick
+  if (si) {
+    si.value = name;
+    si.dispatchEvent(new Event('input'));
   }
 }
 
@@ -4199,7 +4251,7 @@ async function processScanImage(input) {
 
     let detailLine = [setName, rarity, hp ? hp + ' HP' : ''].filter(Boolean).join(' \u00b7 ');
     statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>';
-    resultEl.textContent = 'Searching market prices\u2026';
+    resultEl.textContent = ''; // price will show on the card page — no need for 'Searching market prices...'
 
     showScanGradeCTA(cardName, '', null);
 
@@ -4212,7 +4264,7 @@ async function processScanImage(input) {
     // Silently load the card into the calculator in the background
     // so when the user closes the scan overlay it's already selected.
     // Do NOT auto-open catalog — let the user decide what to do next.
-    window._pendingIdScanCard = { name: cardName, number: cardNumber, set: setName, rarity, hp };
+    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp };
     URL.revokeObjectURL(objectUrl);
 
   } catch(err) {
