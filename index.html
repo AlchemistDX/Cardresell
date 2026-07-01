@@ -2062,12 +2062,9 @@ searchInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     clearTimeout(searchTimeout);
     const q = searchInput.value.trim();
-    if (q.length >= 2 && activeGame !== 'sports') {
-      dropList.classList.remove('open');
-      openCatalog(q); // Enter opens full card grid, same as Search button
-    } else {
-      doSearch(q);
-    }
+    if (!q) return;
+    // Always use dropdown search — grid catalog is accessible via "See all" link
+    doSearch(q);
   }
   if (e.key === 'Escape') dropList.classList.remove('open');
 });
@@ -2076,11 +2073,9 @@ document.getElementById('searchBtn').addEventListener('click', () => {
   clearTimeout(searchTimeout);
   if (!window._pendingScanBannerCard) hideGradingCtaBanner();
   const q = searchInput.value.trim();
-  if (q.length >= 2 && activeGame !== 'sports') {
-    openCatalog(q);
-  } else {
-    doSearch(q);
-  }
+  if (!q) return;
+  // Always use dropdown search — grid catalog is accessible via "See all" link
+  doSearch(q);
 });
 
 document.addEventListener('click', e => {
@@ -4709,50 +4704,7 @@ function getUserKey(suffix) {
   return googleUser ? 'cardsell_' + googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
 }
 
-/* =========================================================
-   EXAMPLE CARD — pre-loads Charizard ex so new visitors
-   see the full value loop immediately
-   ========================================================= */
-function loadExampleCard() {
-  // Hide the "how it works" bar once used
-  const bar = document.getElementById('howItWorksBar');
-  if (bar) bar.style.display = 'none';
-
-  // Trigger a search for a popular card
-  const searchInput = document.getElementById('searchInput');
-  if (!searchInput) return;
-  searchInput.value = 'Charizard ex';
-  searchInput.dispatchEvent(new Event('input'));
-  setTimeout(() => {
-    document.getElementById('searchBtn')?.click();
-    // After results load, auto-pick the first result
-    setTimeout(() => {
-      const firstResult = document.querySelector('#dropList .drop-item');
-      if (firstResult) {
-        firstResult.click();
-        // Set a realistic sell price so calc shows real numbers
-        setTimeout(() => {
-          const ov = document.getElementById('priceOverride');
-          if (ov && (!ov.value || parseFloat(ov.value) === 0)) {
-            ov.value = '28.00';
-            calc();
-          }
-        }, 800);
-      }
-    }, 900);
-  }, 300);
-}
-
-// Auto-load example card for first-time visitors only
-(function maybeLoadExample() {
-  try {
-    if (!localStorage.getItem('cardsell_seen')) {
-      localStorage.setItem('cardsell_seen', '1');
-      // Small delay so the page fully renders first
-      setTimeout(loadExampleCard, 1200);
-    }
-  } catch(e) {}
-})();
+// Example card auto-load removed — app opens on clean homepage
 
 function loadUserData() {
   // Reload flips view if it's active so it shows the signed-in user's data
