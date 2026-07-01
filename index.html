@@ -689,6 +689,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       Get Pro
     </button>
+    <button id="collectionBtn" class="shop-header-btn" onclick="toggleCollectionView()" title="My Collection" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span id="collectionBtnLabel">Collection</span><span id="collectionBtnCount" style="margin-left:.3rem;font-size:.68rem;color:var(--text-muted)"></span>
+    </button>
     <button id="shopBtn" class="shop-header-btn" onclick="openPricingModal('shopbtn')" title="Plans &amp; Pricing">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
       Shop
@@ -1043,6 +1047,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <div class="price-range" id="priceRange"></div>
           <div class="price-source" id="priceSource"></div>
         </div>
+        <!-- Save to Collection button — shown when a card is loaded and user is signed in -->
+        <button id="saveToCollectionBtn" onclick="saveCurrentCardToCollection()" style="display:none;margin-top:.75rem;width:100%;padding:.6rem 1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.82rem;font-weight:700;cursor:pointer;align-items:center;justify-content:center;gap:.45rem;transition:all .15s" onmouseover="if(!this.classList.contains('saved'))this.style.background='var(--surface)'" onmouseout="if(!this.classList.contains('saved'))this.style.background='var(--surface-2)'">
+          <svg id="saveToCollectionIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          <span id="saveToCollectionLabel">Save to Collection</span>
+        </button>
         <!-- Graded data banner — shown when graded pill selected but no API graded data -->
         <div id="gradedCompsBanner" style="display:none;margin-top:.6rem;padding:.75rem 1rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:.625rem">
           <div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.45rem;letter-spacing:.04em">GRADED PRICE</div>
@@ -1540,6 +1549,20 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <button class="modal-cancel" onclick="closeFlipModal()">Cancel</button>
       <button class="modal-save" onclick="saveFlipEntry()">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ================= COLLECTION VIEW ================= -->
+<div id="collectionView" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;padding-bottom:3rem">
+  <div style="position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--divider);padding:1rem 1.25rem;display:flex;align-items:center;gap:.75rem;z-index:1">
+    <button onclick="toggleCollectionView()" aria-label="Close" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">←</button>
+    <div style="flex:1">
+      <div style="font-size:1.05rem;font-weight:800;color:var(--text);letter-spacing:.01em">My Collection</div>
+      <div id="collectionSubHeader" style="font-size:.75rem;color:var(--text-muted);margin-top:.15rem">Loading…</div>
+    </div>
+  </div>
+  <div id="collectionBody" style="padding:1rem 1.25rem;max-width:960px;margin:0 auto">
+    <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem">Loading your collection…</div>
   </div>
 </div>
 
@@ -3020,6 +3043,9 @@ function loadCardUI(card) {
   const isSports  = card.game === 'sports';
   const isJPCard  = card.game === 'pokemonjp';
 
+  // Reset Save-to-Collection button state whenever a new card loads
+  try { resetSaveToCollectionButton(); } catch(e) {}
+
   // If this card was loaded via a scan, show grading CTA banner
   if (window._pendingScanBannerCard) {
     const pending = window._pendingScanBannerCard;
@@ -4162,6 +4188,9 @@ function applyGoogleUser() {
   document.getElementById('googleName').textContent = googleUser.name.split(' ')[0];
   // Check pro status after UI is applied
   checkProStatus();
+  // Collection UI — show header button + refresh count
+  try { updateCollectionBtnVisibility(); refreshCollectionCount(); } catch(e) {}
+  try { resetSaveToCollectionButton(); } catch(e) {}
 }
 
 function signOut() {
@@ -4174,6 +4203,8 @@ function signOut() {
   window._googleIdToken = null;
   document.getElementById('googleSignInBtn').style.display = 'flex';
   document.getElementById('googleUserBtn').style.display = 'none';
+  // Collection UI — hide header button, reset save state
+  try { updateCollectionBtnVisibility(); resetSaveToCollectionButton(); } catch(e) {}
   document.getElementById('googleAvatar').src = '';
   document.getElementById('googleName').textContent = '';
   window._isPro = false;
@@ -5173,6 +5204,247 @@ function closeLoginGate() {
   modal.classList.remove('show');
   setTimeout(() => { modal.style.display = 'none'; }, 200);
 }
+
+// ============================================================
+// COLLECTION MODULE — personal card portfolio
+// ============================================================
+// Stored server-side per Google account. Uses selectedCard + current
+// price on the detail screen for saving, then renders a grid of tiles
+// with running portfolio total on the collection view.
+window._collectionCache = null;
+
+function _collectionAuthHeaders() {
+  const idToken = window._googleIdToken || '';
+  return idToken ? { Authorization: `Bearer ${idToken}` } : null;
+}
+
+function _currentVariantKey() {
+  const active = document.querySelector('.price-variant-pill.active, .variant-pill.active');
+  return active?.dataset?.key || active?.dataset?.variant || 'raw_nm';
+}
+
+function _currentPriceNumber() {
+  const el = document.getElementById('priceMain');
+  if (!el) return 0;
+  const m = (el.textContent || '').match(/\$([\d,]+\.?\d*)/);
+  return m ? parseFloat(m[1].replace(/,/g, '')) : 0;
+}
+
+async function saveCurrentCardToCollection() {
+  const headers = _collectionAuthHeaders();
+  if (!headers) {
+    showToast('Sign in with Google to save cards to your collection.');
+    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 400);
+    return;
+  }
+  if (!selectedCard) return;
+
+  const btn = document.getElementById('saveToCollectionBtn');
+  const label = document.getElementById('saveToCollectionLabel');
+  const prevLabel = label?.textContent || 'Save to Collection';
+  if (btn) { btn.disabled = true; }
+  if (label) label.textContent = 'Saving…';
+
+  const price = _currentPriceNumber();
+  const image = selectedCard?.images?.small || selectedCard?.images?.large || selectedCard?._imgSmall || null;
+  const cardId = selectedCard?.tplId || selectedCard?.id || null;
+  const payload = {
+    cardId,
+    cardName:   selectedCard?.name || selectedCard?.cardName || 'Unknown',
+    cardNumber: selectedCard?.number || selectedCard?.cardNumber || null,
+    setName:    selectedCard?.set?.name || selectedCard?.setName || null,
+    image,
+    variant:    _currentVariantKey(),
+    priceAtAdd: price,
+    source:     selectedCard?.source || 'TCGPriceLookup',
+    game:       selectedCard?.game || 'pokemon',
+  };
+
+  try {
+    const r = await fetch('/api/collection', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (r.status === 409) {
+      showToast('Already in your collection.');
+      _markSaveButtonSaved();
+      return;
+    }
+    if (r.status === 400 && data.error === 'limit_reached') {
+      showToast(data.message || 'Collection limit reached.', 5000);
+      if (btn) btn.disabled = false;
+      if (label) label.textContent = prevLabel;
+      return;
+    }
+    if (!r.ok) throw new Error(data.error || 'save failed');
+    _markSaveButtonSaved();
+    _updateCollectionCount(data.count);
+    showToast('📖 Added to your collection.');
+  } catch(e) {
+    console.warn('saveCurrentCardToCollection', e);
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = prevLabel;
+    showToast('⚠️ Could not save. Try again.');
+  }
+}
+
+function _markSaveButtonSaved() {
+  const btn = document.getElementById('saveToCollectionBtn');
+  const label = document.getElementById('saveToCollectionLabel');
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.add('saved');
+    btn.style.background = 'var(--gold, #c47a00)';
+    btn.style.color = '#000';
+    btn.style.borderColor = 'transparent';
+  }
+  if (label) label.textContent = 'Saved ✓';
+}
+
+function resetSaveToCollectionButton() {
+  const btn = document.getElementById('saveToCollectionBtn');
+  const label = document.getElementById('saveToCollectionLabel');
+  const signedIn = !!window._googleIdToken;
+  if (btn) {
+    btn.classList.remove('saved');
+    btn.disabled = false;
+    btn.style.display = signedIn ? 'flex' : 'none';
+    btn.style.background = 'var(--surface-2)';
+    btn.style.color = 'var(--text)';
+    btn.style.borderColor = 'var(--border)';
+  }
+  if (label) label.textContent = 'Save to Collection';
+}
+
+function _updateCollectionCount(count) {
+  const el = document.getElementById('collectionBtnCount');
+  if (!el) return;
+  el.textContent = count > 0 ? `(${count})` : '';
+}
+
+async function refreshCollectionCount() {
+  const headers = _collectionAuthHeaders();
+  if (!headers) { _updateCollectionCount(0); return; }
+  try {
+    const r = await fetch('/api/collection', { headers });
+    if (!r.ok) return;
+    const data = await r.json();
+    window._collectionCache = data;
+    _updateCollectionCount(data.count || 0);
+  } catch(e) {}
+}
+
+async function toggleCollectionView() {
+  const view = document.getElementById('collectionView');
+  if (!view) return;
+  const opening = view.style.display === 'none' || !view.style.display;
+  if (opening) {
+    view.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    await renderCollectionView();
+  } else {
+    view.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+}
+
+async function renderCollectionView() {
+  const body = document.getElementById('collectionBody');
+  const sub  = document.getElementById('collectionSubHeader');
+  const headers = _collectionAuthHeaders();
+  if (!headers) {
+    body.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)">Sign in with Google to build your collection.</div>';
+    sub.textContent = 'Not signed in';
+    return;
+  }
+
+  sub.textContent = 'Loading…';
+  body.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem">Loading your collection…</div>';
+
+  let data;
+  try {
+    const r = await fetch('/api/collection', { headers });
+    data = await r.json();
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)">Couldn\'t load your collection. Try again.</div>';
+    sub.textContent = 'Error';
+    return;
+  }
+
+  window._collectionCache = data;
+  const items = data.items || [];
+  _updateCollectionCount(items.length);
+
+  if (!items.length) {
+    sub.textContent = 'Empty';
+    body.innerHTML = '<div style="text-align:center;padding:3rem 1.5rem;color:var(--text-muted)">'
+      + '<div style="font-size:2.5rem;margin-bottom:.75rem">📖</div>'
+      + '<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:.4rem">Your collection is empty</div>'
+      + '<div style="font-size:.85rem;max-width:340px;margin:0 auto 1.25rem;line-height:1.5">Scan or search for cards, then tap <b>Save to Collection</b> to start tracking their value.</div>'
+      + '<button onclick="toggleCollectionView()" style="background:var(--gold, #c47a00);color:#000;border:none;padding:.6rem 1.4rem;border-radius:.6rem;font-weight:800;font-size:.85rem;cursor:pointer">Find cards →</button>'
+      + '</div>';
+    return;
+  }
+
+  const total = data.totalValue || 0;
+  const delta = data.delta || 0;
+  const deltaSign  = delta >= 0 ? '+' : '−';
+  const deltaAbs   = Math.abs(delta).toFixed(2);
+  const deltaColor = delta > 0 ? '#0a8a3e' : (delta < 0 ? '#c73030' : 'var(--text-muted)');
+  sub.innerHTML = `${items.length} card${items.length === 1 ? '' : 's'} · <b style="color:var(--text)">$${total.toFixed(2)}</b> total <span style="color:${deltaColor};font-weight:700">(${deltaSign}$${deltaAbs} since added)</span>`;
+
+  body.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.75rem">'
+    + items.map(_collectionTileHTML).join('')
+    + '</div>';
+}
+
+function _collectionTileHTML(it) {
+  const price = Number(it.priceCurrent || it.priceAtAdd || 0);
+  const orig  = Number(it.priceAtAdd || 0);
+  const d     = price - orig;
+  const dCol  = d > 0 ? '#0a8a3e' : (d < 0 ? '#c73030' : 'var(--text-muted)');
+  const dTxt  = d === 0 ? '' : `<div style="font-size:.7rem;color:${dCol};font-weight:700;margin-top:.15rem">${d > 0 ? '▲' : '▼'} $${Math.abs(d).toFixed(2)}</div>`;
+  const img   = it.image
+    ? `<img src="${escapeHtmlAttr(it.image)}" alt="" style="width:100%;aspect-ratio:.72;object-fit:cover;border-radius:.45rem;background:var(--surface-2)"/>`
+    : `<div style="width:100%;aspect-ratio:.72;background:var(--surface-2);border-radius:.45rem;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:.7rem">No image</div>`;
+  const variantBadge = it.variant && it.variant !== 'raw_nm'
+    ? `<div style="display:inline-block;font-size:.6rem;font-weight:800;color:var(--gold);letter-spacing:.04em;text-transform:uppercase">${escapeHtmlAttr(it.variant.replace(/_/g,' '))}</div>`
+    : '';
+  return `<div style="position:relative;background:var(--surface);border:1px solid var(--border);border-radius:.6rem;padding:.55rem">
+      <button onclick="removeFromCollection('${escapeHtmlAttr(it.id)}')" aria-label="Remove" style="position:absolute;top:.25rem;right:.25rem;background:rgba(0,0,0,.55);color:#fff;border:none;width:22px;height:22px;border-radius:50%;font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">×</button>
+      ${img}
+      <div style="margin-top:.5rem;font-size:.78rem;font-weight:700;color:var(--text);line-height:1.25;min-height:2rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtmlAttr(it.cardName)}</div>
+      ${it.setName ? `<div style="font-size:.68rem;color:var(--text-muted);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtmlAttr(it.setName)}${it.cardNumber ? ' · #'+escapeHtmlAttr(it.cardNumber) : ''}</div>` : ''}
+      ${variantBadge}
+      <div style="margin-top:.35rem;font-size:.95rem;font-weight:800;color:var(--text)">$${price.toFixed(2)}</div>
+      ${dTxt}
+    </div>`;
+}
+
+function escapeHtmlAttr(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
+}
+
+async function removeFromCollection(id) {
+  const headers = _collectionAuthHeaders();
+  if (!headers) return;
+  if (!confirm('Remove this card from your collection?')) return;
+  try {
+    const r = await fetch('/api/collection?id=' + encodeURIComponent(id), { method: 'DELETE', headers });
+    if (!r.ok) throw new Error('delete failed');
+    await renderCollectionView();
+  } catch(e) {
+    showToast('⚠️ Could not remove. Try again.');
+  }
+}
+
+function updateCollectionBtnVisibility() {
+  const btn = document.getElementById('collectionBtn');
+  if (btn) btn.style.display = window._googleIdToken ? 'inline-flex' : 'none';
+}
+
 
 // ── Toast helper ──
 function showToast(msg, duration) {
