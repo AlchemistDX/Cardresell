@@ -200,6 +200,12 @@ img{display:block;max-width:100%;height:auto}
 .catalog-card-meta{font-size:.62rem;color:rgba(255,255,255,.65);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.8)}
 .catalog-card-price{font-size:.78rem;font-weight:800;color:var(--gold);margin-top:.15rem;text-shadow:0 1px 2px rgba(0,0,0,.9)}
 .catalog-empty{grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem}
+/* Pagination bar */
+.catalog-pagination{display:flex;align-items:center;justify-content:center;gap:.75rem;padding:.75rem 1rem;flex-shrink:0;border-top:1px solid var(--border);background:var(--surface)}
+.catalog-pg-btn{display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.5rem 1.1rem;background:var(--surface-2);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.82rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease)}
+.catalog-pg-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold)}
+.catalog-pg-btn:disabled{opacity:.3;cursor:not-allowed}
+.catalog-pg-info{font-size:.78rem;color:var(--text-muted);font-weight:600;min-width:90px;text-align:center}
 .catalog-coming-soon{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;gap:.75rem}
 .catalog-cs-icon{font-size:3rem;opacity:.3}
 .catalog-cs-title{font-size:1rem;font-weight:800;color:var(--text);opacity:.5}
@@ -5108,18 +5114,46 @@ async function fetchCatalogResults(q) {
   }
 }
 
+const CATALOG_PAGE_SIZE = 20;
+let _catalogAllCards = [];
+let _catalogCardFactory = null;
+let _catalogCurrentPage = 0;
+
 function _renderCatalogGrid(cards, cardFactory) {
   const grid = document.getElementById('catalogGrid');
   if (!cards.length) {
     grid.innerHTML = '<div class="catalog-empty">No cards found. Try a different name.</div>';
+    document.getElementById('catalogPagination').style.display = 'none';
     return;
   }
+  _catalogAllCards = cards;
+  _catalogCardFactory = cardFactory;
+  _catalogCurrentPage = 0;
+  _renderCatalogPage(0);
+}
+
+function _renderCatalogPage(page) {
+  const grid    = document.getElementById('catalogGrid');
+  const pgBar   = document.getElementById('catalogPagination');
+  const prevBtn = document.getElementById('catalogPrevBtn');
+  const nextBtn = document.getElementById('catalogNextBtn');
+  const pgInfo  = document.getElementById('catalogPageInfo');
+
+  const total = _catalogAllCards.length;
+  const pages = Math.ceil(total / CATALOG_PAGE_SIZE);
+  const start = page * CATALOG_PAGE_SIZE;
+  const end   = Math.min(start + CATALOG_PAGE_SIZE, total);
+  const slice = _catalogAllCards.slice(start, end);
+
+  _catalogCurrentPage = page;
   _catalogCards = {};
-  grid.innerHTML = cards.map((c, i) => {
-    _catalogCards[i] = c;
+
+  grid.innerHTML = slice.map((c, i) => {
+    const globalIdx = start + i;
+    _catalogCards[globalIdx] = c;
     const price = c._price;
     const img   = c._img || '';
-    return `<div class="catalog-card" data-idx="${i}">
+    return `<div class="catalog-card" data-idx="${globalIdx}">
       <div class="catalog-card-img-wrap${img ? ' loading' : ''}">
         ${img
           ? `<img src="${img}" alt="${esc(c.name)}" loading="eager" decoding="async"
@@ -5136,17 +5170,17 @@ function _renderCatalogGrid(cards, cardFactory) {
     </div>`;
   }).join('');
 
-  // Safety: clear any stuck shimmer after 5s (in case onload doesn't fire)
+  grid.scrollTop = 0;
+
   setTimeout(() => {
     grid.querySelectorAll('.catalog-card-img-wrap.loading').forEach(w => w.classList.remove('loading'));
-  }, 5000);
+  }, 4000);
 
   grid.querySelectorAll('.catalog-card').forEach(el => {
     el.addEventListener('click', () => {
       const idx  = parseInt(el.dataset.idx);
-      const card = cardFactory(idx);
+      const card = _catalogCardFactory(idx);
       closeCatalog();
-      // Populate the main search and select the card
       selectedCard = card;
       searchInput.value = card.name;
       dropList.classList.remove('open');
@@ -5163,7 +5197,23 @@ function _renderCatalogGrid(cards, cardFactory) {
       }
     });
   });
+
+  if (pages > 1) {
+    pgBar.style.display = 'flex';
+    pgInfo.textContent  = `Page ${page + 1} of ${pages}`;
+    prevBtn.disabled    = page === 0;
+    nextBtn.disabled    = page >= pages - 1;
+  } else {
+    pgBar.style.display = 'none';
+  }
 }
+
+function _catalogPageNav(delta) {
+  const pages = Math.ceil(_catalogAllCards.length / CATALOG_PAGE_SIZE);
+  const next  = Math.max(0, Math.min(_catalogCurrentPage + delta, pages - 1));
+  if (next !== _catalogCurrentPage) _renderCatalogPage(next);
+}
+
 
 async function fetchCatalogPokemon(q) {
   const grid = document.getElementById('catalogGrid');
@@ -5303,6 +5353,17 @@ async function fetchCatalogPokemonJP(q) {
     <div class="catalog-loading">
       <span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span>
     </div>
+  </div>
+  <div class="catalog-pagination" id="catalogPagination" style="display:none">
+    <button class="catalog-pg-btn" id="catalogPrevBtn" onclick="_catalogPageNav(-1)" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      Prev
+    </button>
+    <span class="catalog-pg-info" id="catalogPageInfo">Page 1</span>
+    <button class="catalog-pg-btn" id="catalogNextBtn" onclick="_catalogPageNav(1)">
+      Next
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
   </div>
 </div>
 <script>
