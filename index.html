@@ -137,10 +137,10 @@ button{cursor:pointer;border:none;background:none}
 img{display:block;max-width:100%;height:auto}
 
 /* ─── SHELL ─── */
-.wrap{max-width:1100px;margin:0 auto;padding:0 1.25rem 4rem}
+.wrap{max-width:1100px;margin:0 auto;padding:0 1.25rem 4rem}@media(max-width:820px){.wrap{padding:0 1rem 4rem}}
 
 /* ─── HEADER ─── */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 0 1.75rem;border-bottom:1px solid var(--divider);margin-bottom:1.75rem}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 0 1.75rem;border-bottom:1px solid var(--divider);margin-bottom:1.75rem}@media(max-width:820px){.hdr{padding:.65rem 0 .75rem;margin-bottom:.85rem}}
 .logo{display:flex;align-items:center;gap:.55rem}
 .logo-text{font-size:1.15rem;font-weight:800;letter-spacing:-.025em}
 .logo-text span{color:var(--gold)}
@@ -161,6 +161,15 @@ img{display:block;max-width:100%;height:auto}
 .search-btn:hover{background:var(--gold-h)}
 .search-btn:active{transform:scale(.97)}
 .search-btn:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:820px){
+  #howItWorksBar{padding:.4rem .875rem .35rem!important;flex-wrap:nowrap!important;overflow:hidden}
+  #howItWorksBar span{font-size:.67rem!important}
+  #howItWorksBar button{font-size:.63rem!important;padding:.2rem .55rem!important}
+  .view-tabs{margin-bottom:.7rem}
+  .search-area{margin-bottom:.9rem}
+  .search-row{gap:.4rem}
+  .scan-btn{padding:.55rem .6rem!important;font-size:.73rem!important;gap:.25rem!important}
+}
 
 /* category pills */
 .cat-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}
@@ -1893,6 +1902,13 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
 });
 
 // ── Search debounce ──
+searchInput.addEventListener('focus', () => {
+  if (window.innerWidth <= 820) {
+    setTimeout(() => {
+      searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 320);
+  }
+});
 searchInput.addEventListener('input', () => {
   clearTimeout(searchTimeout);
   const q = searchInput.value.trim();
