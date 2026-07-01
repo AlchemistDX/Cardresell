@@ -3,11 +3,29 @@
   "builds": [
     { "src": "api/**/*.js", "use": "@vercel/node" },
     { "src": "index.html", "use": "@vercel/static" },
-    { "src": "config.js", "use": "@vercel/static" }
+    { "src": "config.js", "use": "@vercel/static" },
+    { "src": "about.html", "use": "@vercel/static" },
+    { "src": "contact.html", "use": "@vercel/static" },
+    { "src": "terms.html", "use": "@vercel/static" },
+    { "src": "privacy.html", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
     { "src": "/config.js", "dest": "/config.js" },
+    { "src": "/about(\\.html)?", "dest": "/about.html" },
+    { "src": "/contact(\\.html)?", "dest": "/contact.html" },
+    { "src": "/terms(\\.html)?", "dest": "/terms.html" },
+    { "src": "/privacy(\\.html)?", "dest": "/privacy.html" },
     { "src": "/(.*)", "dest": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*\\.html)?",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate, max-age=0" },
+        { "key": "Pragma", "value": "no-cache" },
+        { "key": "Expires", "value": "0" }
+      ]
+    }
   ]
 }
