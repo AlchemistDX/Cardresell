@@ -2,8 +2,7 @@
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
 
-const FREE_SCANS_PER_MONTH    = 10; // Grade scans/mo for Pro
-const FREE_ID_SCANS_PER_MONTH = 20; // Card Lookup scans/mo for Pro
+const FREE_SCANS_PER_MONTH = 10;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -75,22 +74,18 @@ export default async function handler(req, res) {
 
   // 3. Get scan credits — always fetch paid credits; free credits only for Pro
   let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0;
-  let idFreeScansLeft = 0, idFreeScansUsed = 0;
   if (kvUrl && kvToken) {
     // Always check paid credits (any user who bought a scan)
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
     idPaidLeft    = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_paid_left`);
     if (isPro) {
-      const stamp    = getMonthStamp();
-      freeScansUsed = await getKVInt(kvUrl, kvToken, `scans:${userSub}:free_used_${stamp}`);
+      const monthKey = `scans:${userSub}:free_used_${getMonthStamp()}`;
+      freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
       freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
-      idFreeScansUsed = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_free_used_${stamp}`);
-      idFreeScansLeft = Math.max(0, FREE_ID_SCANS_PER_MONTH - idFreeScansUsed);
     }
   } else if (isPro) {
     // No KV — give full free allowance
-    freeScansLeft   = FREE_SCANS_PER_MONTH;
-    idFreeScansLeft = FREE_ID_SCANS_PER_MONTH;
+    freeScansLeft = FREE_SCANS_PER_MONTH;
   }
 
   return res.status(200).json({
@@ -102,11 +97,7 @@ export default async function handler(req, res) {
     freeScansTotal: FREE_SCANS_PER_MONTH,
     paidScansLeft,
     idPaidLeft,
-    idFreeScansLeft,
-    idFreeScansUsed,
-    idFreeScansTotal: FREE_ID_SCANS_PER_MONTH,
-    totalScansLeft:   freeScansLeft + paidScansLeft,
-    totalIdScansLeft: idFreeScansLeft + idPaidLeft,
+    totalScansLeft: freeScansLeft + paidScansLeft,
   });
 }
 

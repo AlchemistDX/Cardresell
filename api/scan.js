@@ -43,104 +43,32 @@ export default async function handler(req, res) {
   const isIdentifyMode = !isGradeMode; // identify is the default
 
   // ── 2. Check & consume a scan credit ──
-  // Track WHICH bucket we drew from so we can refund the exact same bucket on failure.
-  // 'id_paid' | 'id_free_<stamp>' | 'grade_paid' | 'grade_free_<stamp>' | null (nothing consumed)
-  //
-  // IMPORTANT: Consumption uses atomic Upstash DECR / INCR so two concurrent scans
-  // from the same user can't both read the same balance and each write balance-1
-  // (the demo "bought 2 credits, only 1 usable" bug). If DECR takes the balance
-  // below 0 we roll it back with INCR before returning 402.
-  let creditsDrawnFrom = null;
-  // Pro-plan monthly free allowances
-  const ID_FREE_PER_MONTH    = 20;
-  const GRADE_FREE_PER_MONTH = 10;
   if (hasKV) {
     const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
     if (isIdentifyMode) {
-      // ID scans: Pro users draw from id_free_used_<stamp> bucket first (20/mo), then id_paid_left
-      const stamp = getMonthStamp();
-      let consumed = false;
-
-      if (isPro) {
-        // Atomically increment used-counter, then check we stayed under the cap.
-        const usedAfter = await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
-        if (usedAfter !== null && usedAfter <= ID_FREE_PER_MONTH) {
-          creditsDrawnFrom = `id_free_${stamp}`;
-          consumed = true;
-        } else if (usedAfter !== null) {
-          // Went over the free cap — roll back the increment.
-          await decrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
-        }
-      }
-
-      if (!consumed) {
-        // Atomically decrement paid balance; if we went below 0 someone else took the last one.
-        const paidAfter = await decrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-        if (paidAfter !== null && paidAfter >= 0) {
-          creditsDrawnFrom = 'id_paid';
-          consumed = true;
-        } else if (paidAfter !== null) {
-          await incrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-        }
-      }
-
-      if (!consumed) {
+      // ID scans: draw from id_paid_left bucket
+      const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+      if (idPaid <= 0) {
         return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
       }
+      await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
     } else {
       // Graded scans: draw from Pro free bucket first, then paid_left
-      const stamp = getMonthStamp();
-      let consumed = false;
+      const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+      const stamp    = getMonthStamp();
+      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
+      const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
 
-      if (isPro) {
-        const usedAfter = await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
-        if (usedAfter !== null && usedAfter <= GRADE_FREE_PER_MONTH) {
-          creditsDrawnFrom = `grade_free_${stamp}`;
-          consumed = true;
-        } else if (usedAfter !== null) {
-          await decrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
-        }
-      }
-
-      if (!consumed) {
-        const paidAfter = await decrKV(kvUrl, kvToken, `scans:${key}:paid_left`);
-        if (paidAfter !== null && paidAfter >= 0) {
-          creditsDrawnFrom = 'grade_paid';
-          consumed = true;
-        } else if (paidAfter !== null) {
-          await incrKV(kvUrl, kvToken, `scans:${key}:paid_left`);
-        }
-      }
-
-      if (!consumed) {
+      if (freeLeft <= 0 && paid <= 0) {
         return res.status(402).json({ error: 'No grading credits remaining.', needsPayment: true, mode: 'grade' });
       }
-    }
-  }
-
-  // Helper: refund the exact bucket we drew from. Safe to call multiple times
-  // as long as `creditsDrawnFrom` is nulled after the first refund.
-  async function refundCredit(reason) {
-    if (!hasKV || !creditsDrawnFrom) return;
-    try {
-      if (creditsDrawnFrom === 'id_paid') {
-        await incrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-      } else if (creditsDrawnFrom === 'grade_paid') {
-        await incrKV(kvUrl, kvToken, `scans:${key}:paid_left`);
-      } else if (creditsDrawnFrom.startsWith('grade_free_')) {
-        const stamp = creditsDrawnFrom.replace('grade_free_', '');
-        // Free bucket is a counter of USES, so refund decrements it.
-        await decrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
-      } else if (creditsDrawnFrom.startsWith('id_free_')) {
-        const stamp = creditsDrawnFrom.replace('id_free_', '');
-        await decrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+      if (freeLeft > 0) {
+        await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+      } else {
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
       }
-      console.log('Refunded credit:', creditsDrawnFrom, 'reason:', reason);
-    } catch(e) {
-      console.error('Refund failed:', e);
     }
-    creditsDrawnFrom = null;
   }
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
 
@@ -182,12 +110,9 @@ Evaluate and return:
 7. grade_label: ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Good", "Poor")
 8. grade_notes: 1-2 sentences on the SPECIFIC flaws observed (or why it earns a high grade if truly flawless)
 9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
-10. card_number: The exact card number as printed (e.g. "079/078", "184/197"). Empty string if not visible.
-11. set_name: The set name if visible (e.g. "Surging Sparks", "Crown Zenith"). Empty string if unclear.
-12. rarity: The card's rarity family (e.g. "Special Illustration Rare", "Secret Rare", "Rainbow Rare", "Holo Rare", "Common"). Empty string if unclear.
 
 Respond ONLY with valid JSON:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"card_number":"...","set_name":"...","rarity":"..."}`
+{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false}`
       : `You are a trading card expert. Look at this card image and extract:
 1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
 2. card_number: The card number (e.g. "079/078", "025/165")
@@ -207,14 +132,14 @@ Respond ONLY with valid JSON, no explanation:
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: isGradeMode ? 500 : 200,
+        max_tokens: isGradeMode ? 500 : 300,
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'image_url',
-                image_url: { url: dataUrl, detail: isGradeMode ? 'high' : 'auto' }
+                image_url: { url: dataUrl, detail: 'high' }
               },
               // Include back image for grade mode if provided
               ...(isGradeMode && backDataUrl ? [{
@@ -231,8 +156,12 @@ Respond ONLY with valid JSON, no explanation:
     if (!openaiRes.ok) {
       const errText = await openaiRes.text();
       console.error('OpenAI error:', openaiRes.status, errText);
-      await refundCredit('openai_error');
-      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.', refunded: true });
+      // Refund credit on OpenAI failure
+      if (hasKV) {
+        const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
+      }
+      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.' });
     }
 
     const openaiData = await openaiRes.json();
@@ -246,13 +175,11 @@ Respond ONLY with valid JSON, no explanation:
       cardInfo = JSON.parse(cleaned);
     } catch(e) {
       console.error('GPT-4o parse error:', content);
-      await refundCredit('parse_error');
-      return res.status(502).json({ error: 'Could not read the card. Your credit was refunded — try a clearer photo.', refunded: true });
+      return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo.' });
     }
 
     if (!cardInfo.card_name) {
-      await refundCredit('no_card_name');
-      return res.status(422).json({ error: 'Could not identify the card. Your credit was refunded — try a clearer photo with better lighting.', refunded: true });
+      return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting.' });
     }
 
     if (isGradeMode) {
@@ -268,13 +195,6 @@ Respond ONLY with valid JSON, no explanation:
         grade_label:   cardInfo.grade_label   || '',
         grade_notes:   cardInfo.grade_notes   || '',
         worth_grading: cardInfo.worth_grading ?? false,
-        // Identifier fields — used by the frontend to auto-load the exact card into
-        // the detail view after grading so the user sees raw + estimated-graded price
-        // without having to re-search. Empty strings are OK; the client falls back to
-        // a name-only search when card_number/set_name are missing.
-        card_number:   cardInfo.card_number   || '',
-        set_name:      cardInfo.set_name      || '',
-        rarity:        cardInfo.rarity        || '',
       });
     }
 
@@ -291,8 +211,7 @@ Respond ONLY with valid JSON, no explanation:
 
   } catch(err) {
     console.error('Scan error:', err);
-    await refundCredit('unexpected');
-    return res.status(500).json({ error: 'Scanner temporarily unavailable. Your credit was refunded — please try again.', refunded: true });
+    return res.status(500).json({ error: 'Scanner temporarily unavailable. Please try again.' });
   }
 }
 
@@ -326,36 +245,13 @@ async function setKV(kvUrl, kvToken, key, value) {
   } catch(e) {}
 }
 
-// Atomic Upstash INCR — returns the value AFTER increment, or null on failure.
 async function incrKV(kvUrl, kvToken, key) {
   try {
-    const r = await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
+    await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${kvToken}` }
     });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const v = d?.result;
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string') { const n = parseInt(v); return isNaN(n) ? null : n; }
-    return null;
-  } catch(e) { return null; }
-}
-
-// Atomic Upstash DECR — returns the value AFTER decrement, or null on failure.
-async function decrKV(kvUrl, kvToken, key) {
-  try {
-    const r = await fetch(`${kvUrl}/decr/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const v = d?.result;
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string') { const n = parseInt(v); return isNaN(n) ? null : n; }
-    return null;
-  } catch(e) { return null; }
+  } catch(e) {}
 }
 
 async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {

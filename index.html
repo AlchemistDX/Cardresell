@@ -182,26 +182,24 @@ img{display:block;max-width:100%;height:auto}
 .catalog-input:focus{border-color:var(--gold)}
 .catalog-query-label{font-size:.72rem;color:var(--text-muted);padding:.5rem 1rem .25rem;flex-shrink:0}
 /* Catalog grid — Collectr-style: card art on top, info below */
-.catalog-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:max-content;gap:.75rem;padding:.75rem;overflow-y:auto;overflow-x:hidden;flex:1;width:100%;align-content:start}
+.catalog-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem;padding:.75rem;overflow-y:auto;overflow-x:hidden;flex:1;width:100%;align-content:start}
 @media(min-width:540px){.catalog-grid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:820px){.catalog-grid{grid-template-columns:repeat(4,1fr);gap:.85rem;padding:1rem}}
 /* Each card: dark tile, art on top, info below */
-.catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;cursor:pointer;display:flex;flex-direction:column;transition:border-color .15s,transform .15s,box-shadow .15s;min-height:0;box-shadow:0 1px 3px rgba(0,0,0,.15)}
-.catalog-card:active{transform:scale(.97)}
-.catalog-card:hover{border-color:var(--gold);box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
+.catalog-card:active{transform:scale(.96)}
+.catalog-card:hover{border-color:var(--gold)}
 /* Image area — fixed portrait aspect ratio */
-.catalog-card-img-wrap{width:100%;aspect-ratio:63/88;background:#0d0d0f;display:flex;align-items:center;justify-content:center;padding:.5rem;box-sizing:border-box;flex-shrink:0;border-radius:12px 12px 0 0;overflow:hidden;min-height:180px}
+.catalog-card-img-wrap{width:100%;aspect-ratio:63/88;background:#0d0d0f;display:flex;align-items:center;justify-content:center;padding:.5rem;box-sizing:border-box;flex-shrink:0}
 .catalog-card-img-wrap img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px}
 .catalog-card-img-wrap img:not([src]){opacity:0}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 .catalog-card-img-wrap.loading{background:linear-gradient(90deg,#1e1e20 25%,#2a2a2e 50%,#1e1e20 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
 /* Info area — below image */
-.catalog-card-body{padding:.55rem .65rem .7rem;display:flex;flex-direction:column;gap:.15rem;flex:1;min-height:0}
-.catalog-card-name{font-size:.88rem;font-weight:800;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.catalog-card-meta{font-size:.7rem;color:var(--text-muted);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;margin-top:.1rem}
-.catalog-card-rarity{display:inline-block;font-size:.62rem;font-weight:700;color:var(--gold);background:var(--gold-border);padding:.15rem .45rem;border-radius:99px;margin-top:.3rem;letter-spacing:.02em;align-self:flex-start;text-transform:uppercase}
-.catalog-card-price{font-size:.95rem;font-weight:800;color:var(--gold);margin-top:.35rem}
-.catalog-card-price-loading{font-size:.72rem;font-weight:600;color:var(--text-faint);margin-top:.35rem;font-style:italic}
+.catalog-card-body{padding:.5rem .6rem .6rem;display:flex;flex-direction:column;gap:.15rem;flex:1}
+.catalog-card-name{font-size:.82rem;font-weight:800;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.catalog-card-meta{font-size:.68rem;color:var(--text-muted);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.catalog-card-price{font-size:.85rem;font-weight:800;color:var(--gold);margin-top:.2rem}
 .catalog-empty{grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem}
 /* Pagination bar */
 .catalog-pagination{display:flex;align-items:center;justify-content:center;gap:.75rem;padding:.75rem 1rem;flex-shrink:0;border-top:1px solid var(--border);background:var(--surface)}
@@ -618,8 +616,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .grade-cta-btn.bgs:hover{background:#166534}
 .grade-cta-btn.sgc{background:#312e81;color:#fff;border:1.5px solid #6366f1}
 .grade-cta-btn.sgc:hover{background:#4338ca}
-.grade-cta-btn.our-grade{background:var(--gold);color:#111;border:1.5px solid var(--gold);padding:.6rem 1.15rem;font-size:.85rem;box-shadow:0 2px 12px rgba(196,122,0,.35);cursor:pointer}
-.grade-cta-btn.our-grade:hover{background:#e59617;border-color:#e59617}
 .grade-cta-dismiss{float:right;background:none;border:none;color:var(--text-faint);font-size:.78rem;cursor:pointer;padding:.1rem .3rem;line-height:1;margin-top:-2px}
 .grade-cta-dismiss:hover{color:var(--text-muted)}
 /* Scan overlay CTA (inside the dark overlay) */
@@ -632,28 +628,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 /* --- TOAST --- */
 .cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;white-space:nowrap}
 .cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-/* Login gate modal */
-.login-gate-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;transition:opacity .2s ease}
-.login-gate-overlay.show{opacity:1}
-.login-gate-card{background:var(--surface);border:1px solid var(--gold-border);border-radius:16px;padding:1.75rem 1.5rem 1.5rem;max-width:400px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.55);position:relative;transform:translateY(12px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
-.login-gate-overlay.show .login-gate-card{transform:translateY(0)}
-.login-gate-close{position:absolute;top:.5rem;right:.75rem;background:transparent;border:none;color:var(--text-muted);font-size:1.6rem;line-height:1;cursor:pointer;width:32px;height:32px;border-radius:8px;transition:background .15s}
-.login-gate-close:hover{background:var(--surface-2);color:var(--text)}
-.login-gate-icon{font-size:2.25rem;text-align:center;margin-bottom:.5rem}
-.login-gate-title{font-size:1.1rem;font-weight:800;color:var(--text);text-align:center;margin:0 0 .4rem;line-height:1.3}
-.login-gate-sub{font-size:.85rem;color:var(--text-muted);text-align:center;margin:0 0 1rem;line-height:1.45}
-.login-gate-teaser{margin-bottom:1rem}
-.lg-sample{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:.85rem 1rem;font-size:.82rem}
-.lg-sample-row{display:flex;justify-content:space-between;align-items:center;padding:.25rem 0}
-.lg-sample-row+.lg-sample-row{border-top:1px dashed var(--divider)}
-.lg-sample-lbl{color:var(--text-muted);font-weight:500}
-.lg-sample-val{color:var(--text);font-weight:700;font-family:var(--mono)}
-.lg-sample-total{margin-top:.25rem}
-.lg-sample-total .lg-sample-val{color:var(--gold)}
-.lg-sample-caption{margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--divider);font-size:.7rem;color:var(--text-faint);text-align:center;font-style:italic}
-.login-gate-primary{width:100%;padding:.85rem 1rem;background:#fff;color:#333;border:1.5px solid #dadce0;border-radius:12px;font-weight:600;font-size:.95rem;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
-.login-gate-primary:hover{background:#f8f9fa;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-.login-gate-fine{font-size:.72rem;color:var(--text-faint);text-align:center;margin:.75rem 0 0}
   </style>
   <!-- Google Sign-In -->
   <meta name="google-site-verification" content="vbXUqHxcuqg3LaCivRcNMtFPReLSMfWbid1Vi_QX6Yc" />
@@ -689,10 +663,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       Get Pro
     </button>
-    <button id="collectionBtn" class="shop-header-btn" onclick="toggleCollectionView()" title="My Collection" style="display:none">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span id="collectionBtnLabel">Collection</span><span id="collectionBtnCount" style="margin-left:.3rem;font-size:.68rem;color:var(--text-muted)"></span>
-    </button>
     <button id="shopBtn" class="shop-header-btn" onclick="openPricingModal('shopbtn')" title="Plans &amp; Pricing">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
       Shop
@@ -719,9 +689,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="settingsScanCount">—</div>
         <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check</div>
       </div>
-      <!-- Card Lookup Credits -->
+      <!-- ID Scanner Credits -->
       <div style="padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
-        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">ID Scans</div>
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">ID Scanner Credits</div>
         <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="idScanCount">—</div>
         <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="idScanSub">Sign in to check</div>
       </div>
@@ -732,54 +702,34 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">Estimated Grade Scanner</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
         <div>
-          <div style="font-size:.82rem;font-weight:700;color:var(--text)">$1.50 / scan</div>
+          <div style="font-size:.82rem;font-weight:700;color:var(--text)">From $2.49 / 5 scans</div>
           <div style="font-size:.67rem;color:var(--text-muted);margin-top:.1rem">Centering, corners, edges, surface + PSA/BGS/CGC estimate</div>
         </div>
-        <button onclick="startScanCheckout()" style="flex-shrink:0;padding:.38rem .9rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.73rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy 1 — $1.50</button>
+        <button onclick="openGradeScanModal()" style="flex-shrink:0;padding:.38rem .9rem;background:var(--gold);border:none;color:#000;border-radius:99px;font-size:.73rem;font-weight:800;cursor:pointer;white-space:nowrap">Buy Pack</button>
       </div>
     </div>
 
-    <!-- ID Scan Packs -->
+    <!-- ID Scan -->
     <div style="margin-bottom:.65rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">ID Scan Packs</div>
+        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">Identification Scan</div>
       </div>
-      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">One scan = AI photo-ID + card name, set &amp; live prices</div>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">Single photo · Card name, set &amp; live prices</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$0.10 ea</div>
+          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1</div>
         </button>
         <button onclick="startIdScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$5</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$0.10 ea</div>
+          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$5</div>
         </button>
         <button onclick="startIdScanCheckout('100')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$9</div><div style="font-size:.58rem;color:var(--gold);font-weight:700;margin-top:.1rem">$0.09 ea</div>
+          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$9</div>
         </button>
       </div>
     </div>
 
-    <!-- Grade Scan Packs (settings pane) -->
-    <div style="margin-bottom:.65rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">Grade Scan Packs</div>
-      </div>
-      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">One scan = AI PSA/BGS/CGC estimate w/ centering, corners, edges &amp; surface</div>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button onclick="startGradeScanCheckout('3')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>3 scans</div><div style="color:var(--gold);font-weight:800">$4</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$1.33 ea</div>
-        </button>
-        <button onclick="startGradeScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
-          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$12</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$1.20 ea &middot; save 20%</div>
-        </button>
-        <button onclick="startGradeScanCheckout('25')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>25 scans</div><div style="color:var(--gold);font-weight:800">$27.50</div><div style="font-size:.58rem;color:var(--gold);font-weight:700;margin-top:.1rem">$1.10 ea &middot; save 27%</div>
-        </button>
-      </div>
-    </div>
-
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">20 free ID Scans + 10 free Grade Scans/mo</strong>. Paid credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Card Grader Credits/mo</strong>. ID Scanner Credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -793,11 +743,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- VIEW TABS -->
 <div class="view-tabs" id="viewTabs">
   <span class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</span>
-  <span class="view-tab" data-view="flips" onclick="switchView('flips')">Sales Tracker</span>
-  <span class="view-tab" id="collectionTab" onclick="toggleCollectionView()" title="My Collection" style="display:none">Collection<span id="collectionTabCount" style="margin-left:.3rem;font-size:.68rem;color:var(--text-muted);font-weight:600"></span></span>
+  <span class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</span>
 </div>
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
+
+<!-- HOW IT WORKS + EXAMPLE -->
+<div id="howItWorksBar" style="padding:.55rem 1rem .45rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
+  <span style="font-size:.72rem;color:var(--text-muted);line-height:1.4">
+    <span style="color:var(--gold);font-weight:700">Search a card</span> → see real sold comps → <span style="color:var(--gold);font-weight:700">pick the best platform to sell after fees</span>
+  </span>
+  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
+</div>
 
 <section class="search-area">
   <div id="searchRow" class="search-row">
@@ -854,22 +811,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
-    <!-- Post-scan CTA — promotes our in-app Grade Scan first; official grading is a collapsible secondary path -->
+    <!-- Grading affiliate CTA — shown after scan when card is raw or grader detected -->
     <div id="scanGradeCTA">
-      <div class="sgc-label">&#127941; Curious about the grade?</div>
-      <div class="sgc-headline" id="scanGradeCTAHeadline">See if it's worth grading — in seconds.</div>
-      <div class="sgc-sub">Our AI checks centering, corners, edges &amp; surface and gives you an estimated PSA-scale grade before you spend $20+ on official submission.</div>
+      <div class="sgc-label">&#127942; Get It Graded</div>
+      <div class="sgc-headline" id="scanGradeCTAHeadline">Worth grading? Submit now.</div>
+      <div class="sgc-sub">Official grades unlock 2–5× higher resale value.</div>
       <div class="sgc-btns" id="scanGradeCTABtns">
-        <button type="button" id="sgcOurGradeBtn" onclick="launchGradeScanFromCTA()" class="grade-cta-btn our-grade">&#127941; Get Estimated Grade &middot; $1.50</button>
-      </div>
-      <div style="margin-top:.55rem">
-        <button type="button" id="sgcOfficialToggle" onclick="toggleOfficialGradersRow()" style="background:none;border:none;color:rgba(255,255,255,.55);font-size:.68rem;font-weight:600;cursor:pointer;text-decoration:underline;padding:.15rem .35rem">Already ready to submit? See official graders →</button>
-        <div id="sgcOfficialRow" style="display:none;margin-top:.5rem;flex-wrap:wrap;gap:.35rem;justify-content:center">
-          <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
-          <a href="https://www.cgccomics.com/cards/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
-          <a href="https://www.beckett.com/grading/submit" id="sgcBGSBtn" target="_blank" rel="noopener" class="grade-cta-btn bgs">&#127942; BGS</a>
-          <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
-        </div>
+        <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
+        <a href="https://www.cgccomics.com/cards/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
+        <a href="https://www.beckett.com/grading/submit" id="sgcBGSBtn" target="_blank" rel="noopener" class="grade-cta-btn bgs">&#127942; BGS</a>
+        <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
       </div>
     </div>
     <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
@@ -1060,11 +1011,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <div class="price-range" id="priceRange"></div>
           <div class="price-source" id="priceSource"></div>
         </div>
-        <!-- Save to Collection button — shown when a card is loaded and user is signed in -->
-        <button id="saveToCollectionBtn" onclick="saveCurrentCardToCollection()" style="display:none;margin-top:.75rem;width:100%;padding:.6rem 1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.82rem;font-weight:700;cursor:pointer;align-items:center;justify-content:center;gap:.45rem;transition:all .15s" onmouseover="if(!this.classList.contains('saved'))this.style.background='var(--surface)'" onmouseout="if(!this.classList.contains('saved'))this.style.background='var(--surface-2)'">
-          <svg id="saveToCollectionIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-          <span id="saveToCollectionLabel">Save to Collection</span>
-        </button>
         <!-- Graded data banner — shown when graded pill selected but no API graded data -->
         <div id="gradedCompsBanner" style="display:none;margin-top:.6rem;padding:.75rem 1rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:.625rem">
           <div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.45rem;letter-spacing:.04em">GRADED PRICE</div>
@@ -1347,15 +1293,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
   </div>
 
-  <!-- Sales Tracker -->
+  <!-- Flip Log -->
   <div class="fl-header">
-    <div>
-      <div class="fl-title">Sales Tracker</div>
-      <div style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Log every card you buy &amp; sell &mdash; see realized profit, avg margin, and which platform pays you best over time.</div>
-    </div>
+    <div class="fl-title">Flip Log</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
       <button class="fl-sub-btn" onclick="exportFlips()">⬇ Export CSV</button>
-      <button class="fl-add-btn" onclick="openAddFlip('flip')">+ Log a Sale</button>
+      <button class="fl-add-btn" onclick="openAddFlip('flip')">+ Log a Flip</button>
     </div>
   </div>
 
@@ -1388,7 +1331,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <div class="scan-gate-opt-name" id="scanGateOptName">Estimated Grade Scan</div>
           <div class="scan-gate-opt-desc" id="scanGateOptDesc">Centering &middot; Corners &middot; Edges &middot; PSA estimate</div>
         </div>
-        <div class="scan-gate-opt-price" id="scanGateOptPrice">$1.50</div>
+        <div class="scan-gate-opt-price" id="scanGateOptPrice">from $0.50</div>
       </div>
       <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt">
         <div class="scan-gate-opt-info">
@@ -1411,20 +1354,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div class="pricing-title">&#11088; CardResell Pro</div>
       <div class="pricing-sub">Full platform fee breakdown, unlimited flip tracking &amp; Estimated Grade Scans</div>
     </div>
-
-    <!-- Free balance banner -->
-    <div id="pricingFreeBalance" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.03));border:1px solid rgba(196,122,0,.25);border-radius:var(--radius-md);padding:.7rem .9rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap">
-      <div style="font-size:.78rem;color:var(--text);line-height:1.4">
-        <strong id="pricingLookupBalance" style="color:var(--gold);font-weight:800">&mdash;</strong> ID scans left
-        <span style="color:var(--text-muted);font-weight:500">&middot;</span>
-        <strong id="pricingGradeBalance" style="color:var(--gold);font-weight:800">&mdash;</strong> grade scans left
-      </div>
-      <button type="button" onclick="toggleLookupTooltip(event)" aria-label="What's a card lookup?" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:99px;cursor:pointer">What's a lookup?</button>
-    </div>
-    <div id="lookupTooltip" style="display:none;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);padding:.6rem .8rem;margin-bottom:1rem;font-size:.72rem;color:var(--text-muted);line-height:1.5">
-      A <strong style="color:var(--text)">card lookup</strong> is one AI photo-ID scan that returns the card's name, set &amp; live market prices. A <strong style="color:var(--text)">grade scan</strong> is separate &mdash; it estimates PSA/BGS/CGC grade from centering, corners, edges &amp; surface.
-    </div>
-
     <div class="pricing-cards">
       <!-- FREE plan -->
       <div class="plan-card">
@@ -1448,7 +1377,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <ul class="plan-features">
           <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
           <li>Unlimited flip &amp; portfolio tracking</li>
-          <li>20 free ID Scans/mo</li>
           <li>10 free Estimated Grade Scans/mo</li>
           <li>PRO badge on account</li>
         </ul>
@@ -1458,61 +1386,31 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
     <hr class="pricing-divider">
-
-    <!-- ID Scan Packs (pricing modal) -->
-    <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.45rem">ID Scan Packs</div>
-    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.5">One scan = one AI photo-ID + live prices. Credits never expire.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:1rem">
-      <button onclick="startIdScanCheckout('10')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">10 scans</div>
-        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$1.00</div>
-        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$0.10 / scan</div>
+    <!-- Grade Scan credit packs -->
+    <div style="font-size:.78rem;font-weight:800;color:var(--text);margin-bottom:.6rem;text-align:center;letter-spacing:.04em;text-transform:uppercase;opacity:.6">Ai Grading Estimate Credits</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.75rem">
+      <button onclick="startGradeScanCheckout('5')" style="background:var(--surface-2);border:1.5px solid var(--border);border-radius:10px;padding:.6rem .4rem;cursor:pointer;transition:border-color var(--ease)" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:1.1rem;font-weight:900;color:var(--text)">5</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin:.1rem 0">scans</div>
+        <div style="font-size:.82rem;font-weight:800;color:var(--gold)">$2.49</div>
+        <div style="font-size:.6rem;color:var(--text-faint)">$0.50/scan</div>
       </button>
-      <button onclick="startIdScanCheckout('50')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
-        <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">50 scans</div>
-        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$5.00</div>
-        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$0.10 / scan</div>
+      <button onclick="startGradeScanCheckout('20')" style="background:var(--surface-2);border:2px solid var(--gold);border-radius:10px;padding:.6rem .4rem;cursor:pointer;position:relative">
+        <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.55rem;font-weight:900;padding:.15rem .45rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
+        <div style="font-size:1.1rem;font-weight:900;color:var(--text)">20</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin:.1rem 0">scans</div>
+        <div style="font-size:.82rem;font-weight:800;color:var(--gold)">$7.99</div>
+        <div style="font-size:.6rem;color:var(--text-faint)">$0.40/scan</div>
       </button>
-      <button onclick="startIdScanCheckout('100')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">100 scans</div>
-        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$9.00</div>
-        <div style="font-size:.62rem;color:var(--gold);margin-top:.15rem;font-weight:700">$0.09 / scan &middot; save 10%</div>
-      </button>
-    </div>
-
-    <!-- Grade Scan Packs (pricing modal) -->
-    <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.45rem">Grade Scan Packs</div>
-    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.5">One scan = AI PSA/BGS/CGC estimate w/ centering, corners, edges &amp; surface. Credits never expire.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:1rem">
-      <button onclick="startGradeScanCheckout('3')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">3 scans</div>
-        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$4.00</div>
-        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$1.33 / scan &middot; save 11%</div>
-      </button>
-      <button onclick="startGradeScanCheckout('10')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
-        <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">10 scans</div>
-        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$12.00</div>
-        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$1.20 / scan &middot; save 20%</div>
-      </button>
-      <button onclick="startGradeScanCheckout('25')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">25 scans</div>
-        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$27.50</div>
-        <div style="font-size:.62rem;color:var(--gold);margin-top:.15rem;font-weight:700">$1.10 / scan &middot; save 27%</div>
+      <button onclick="startGradeScanCheckout('50')" style="background:var(--surface-2);border:1.5px solid var(--border);border-radius:10px;padding:.6rem .4rem;cursor:pointer;transition:border-color var(--ease)" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:1.1rem;font-weight:900;color:var(--text)">50</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin:.1rem 0">scans</div>
+        <div style="font-size:.82rem;font-weight:800;color:var(--gold)">$14.99</div>
+        <div style="font-size:.6rem;color:var(--text-faint)">$0.30/scan</div>
       </button>
     </div>
-
-    <!-- Grade Scan single-buy -->
-    <div class="scan-credit-row">
-      <div class="scan-credit-info">
-        <strong>Estimated Grade Scan</strong><br>
-        $1.50 per scan &middot; PSA/BGS/CGC estimate
-      </div>
-      <button class="scan-credit-buy" onclick="startScanCheckout()">Buy 1 &mdash; $1.50</button>
-    </div>
-    <div style="font-size:.72rem;color:var(--text-faint);text-align:center;margin-bottom:1rem;line-height:1.5">
-      Photo a card &mdash; AI identifies it and pulls live market prices.
+    <div style="font-size:.7rem;color:var(--text-faint);text-align:center;margin-bottom:1rem;line-height:1.5">
+      Centering &middot; Corners &middot; Edges &middot; Surface &middot; PSA/BGS/CGC estimate &middot; Credits never expire
     </div>
     <div class="pricing-close">
       <button class="pricing-close-btn" onclick="closePricingModal()">Maybe later</button>
@@ -1522,22 +1420,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- TOAST -->
 <div id="csToast" class="cs-toast"></div>
-
-<!-- ═══ LOGIN GATE MODAL (Scan / Grade / etc.) ═══ -->
-<div id="loginGateModal" class="login-gate-overlay" style="display:none" onclick="if(event.target===this)closeLoginGate()">
-  <div class="login-gate-card" role="dialog" aria-labelledby="loginGateTitle">
-    <button class="login-gate-close" onclick="closeLoginGate()" aria-label="Close">×</button>
-    <div id="loginGateIcon" class="login-gate-icon">🔍</div>
-    <h2 id="loginGateTitle" class="login-gate-title">Sign in — get 10 free Card Lookups</h2>
-    <p id="loginGateSub" class="login-gate-sub">Instant card ID plus market price in seconds. 10 lookups on us, no credit card needed.</p>
-    <div id="loginGateTeaser" class="login-gate-teaser"></div>
-    <button class="login-gate-primary" onclick="closeLoginGate();setTimeout(()=>document.getElementById('googleSignInBtn')?.click(),50)">
-      <svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:middle;margin-right:.5rem"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5c-2 1.5-4.6 2.4-7.5 2.4-5.2 0-9.6-3.3-11.3-8L6 32.5C9.3 39 16.1 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.7 2.1-2 4-3.7 5.4L38 39c-.5.5 6-4.4 6-15 0-1.3-.1-2.4-.4-3.5z"/></svg>
-      Continue with Google
-    </button>
-    <p class="login-gate-fine">Free to sign up · no credit card required</p>
-  </div>
-</div>
 
 <div class="modal-overlay" id="flipModal" onclick="closeFlipModal(event)">
   <div class="modal-box">
@@ -1587,47 +1469,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
 </div>
 
-<!-- ================= COLLECTION VIEW ================= -->
-<div id="collectionView" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;padding-bottom:3rem">
-  <div style="position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--divider);padding:1rem 1.25rem;display:flex;align-items:center;gap:.75rem;z-index:1">
-    <button onclick="toggleCollectionView()" aria-label="Close" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">←</button>
-    <div style="flex:1">
-      <div style="font-size:1.05rem;font-weight:800;color:var(--text);letter-spacing:.01em">My Collection</div>
-      <div id="collectionSubHeader" style="font-size:.75rem;color:var(--text-muted);margin-top:.15rem">Loading…</div>
-    </div>
-  </div>
-  <div id="collectionBody" style="padding:1rem 1.25rem;max-width:960px;margin:0 auto">
-    <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem">Loading your collection…</div>
-  </div>
-</div>
-
 <footer>
-  <!-- Site links -->
-  <div class="footer-nav" style="display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem 1rem;padding:.75rem 1rem .55rem;font-size:.78rem;font-weight:600">
-    <a href="/about.html">About</a>
-    <span style="opacity:.35">·</span>
-    <a href="/contact.html">Contact</a>
-    <span style="opacity:.35">·</span>
-    <a href="/terms.html">Terms</a>
-    <span style="opacity:.35">·</span>
-    <a href="/privacy.html">Privacy</a>
-    <span style="opacity:.35">·</span>
-    <a href="https://github.com/AlchemistDX/Cardresell/issues/new" target="_blank" rel="noopener">Feedback</a>
-  </div>
-  <div style="padding:.4rem 1rem 1rem;font-size:.72rem;color:var(--text-muted);line-height:1.55">
-    &copy; 2026 CardResell. Card data via
-    <a href="https://pokemontcg.io" target="_blank" rel="noopener">PokemonTCG.io</a> (English),
-    <a href="https://www.ebay.com/b/Japanese-Pokemon-Cards/183454" target="_blank" rel="noopener">eBay JP</a> (Japanese Pokémon),
-    <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>,
-    <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a>.
-    Platform fees from official sources (2026):
-    <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees" target="_blank" rel="noopener">eBay</a> ·
-    <a href="https://www.mercari.com/us/help_center/article/169/" target="_blank" rel="noopener">Mercari</a> ·
-    <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
-    <a href="https://stockx.com/help/articles/what-are-stockxs-fees-for-sellers" target="_blank" rel="noopener">StockX</a> ·
-    <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a>.<br>
-    Estimates only — verify current rates before listing. CardResell is an independent tool and is not affiliated with, sponsored by, or endorsed by The Pokémon Company, Nintendo, PSA, BGS, CGC, or SGC.
-  </div>
+  Card data via <a href="https://pokemontcg.io" target="_blank" rel="noopener">PokemonTCG.io</a> (English),
+  <a href="https://www.ebay.com/b/Japanese-Pokemon-Cards/183454" target="_blank" rel="noopener">eBay JP</a> (Japanese Pokémon),
+  <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>,
+  <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a>.
+  Platform fees from official sources (2026):
+  <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees" target="_blank" rel="noopener">eBay</a> ·
+  <a href="https://www.mercari.com/us/help_center/article/169/" target="_blank" rel="noopener">Mercari</a> ·
+  <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
+  <a href="https://stockx.com/help/articles/what-are-stockxs-fees-for-sellers" target="_blank" rel="noopener">StockX</a> ·
+  <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a>.<br>
+  Estimates only — verify current rates before listing.
 </footer>
 
 </div><!-- /wrap -->
@@ -1737,17 +1590,8 @@ async function loadSettingsScanCredits() {
     const res  = await fetch('/api/scan-credits?' + params.toString());
     const data = await res.json();
     const credits   = typeof data.credits   === 'number' ? data.credits   : 0;
-    const idCredits     = typeof data.idCredits     === 'number' ? data.idCredits     : 0;
-    const idPaidCredits = typeof data.idPaidCredits === 'number' ? data.idPaidCredits : idCredits;
-    const idFreeCredits = typeof data.idFreeCredits === 'number' ? data.idFreeCredits : 0;
-    const isPro         = data.isPro || false;
-
-    // ── Welcome bonus toast ──
-    // Server sets welcomeGranted:true exactly once per Google account, right
-    // after crediting +10 Card Lookups. Show a celebratory toast.
-    if (data.welcomeGranted) {
-      try { showWelcomeBonusToast(); } catch(e) { console.warn('welcome toast failed', e); }
-    }
+    const idCredits = typeof data.idCredits === 'number' ? data.idCredits : 0;
+    const isPro     = data.isPro || false;
 
     window._idScanCredits = idCredits;
     window._scanCredits = credits;
@@ -1764,7 +1608,7 @@ async function loadSettingsScanCredits() {
         subEl.textContent = 'None left — buy below';
         subEl.style.color = 'var(--red, #f87171)';
       } else {
-        subEl.textContent = '$1.50 per scan';
+        subEl.textContent = 'From $0.30/scan';
         subEl.style.color = '';
       }
     }
@@ -1775,19 +1619,8 @@ async function loadSettingsScanCredits() {
       idCountEl.style.color = idCredits === 0 ? 'var(--red, #f87171)' : 'var(--gold)';
     }
     if (idSubEl) {
-      if (idCredits === 0) {
-        idSubEl.textContent = 'None left — buy below';
-        idSubEl.style.color = 'var(--red, #f87171)';
-      } else if (isPro && idFreeCredits > 0 && idPaidCredits > 0) {
-        idSubEl.textContent = idFreeCredits + ' Pro + ' + idPaidCredits + ' paid';
-        idSubEl.style.color = '';
-      } else if (isPro && idFreeCredits > 0) {
-        idSubEl.textContent = 'Pro monthly included';
-        idSubEl.style.color = '';
-      } else {
-        idSubEl.textContent = 'Never expire';
-        idSubEl.style.color = '';
-      }
+      idSubEl.textContent  = idCredits === 0 ? 'None left — buy below' : 'Never expire';
+      idSubEl.style.color  = idCredits === 0 ? 'var(--red, #f87171)' : '';
     }
   } catch(e) {
     countEl.textContent = '—';
@@ -2194,37 +2027,10 @@ async function doSearch(q) {
 }
 
 /* ── Pokémon API (PokemonTCG.io) ── */
-// Sort TPL/API results so exact-name matches for the query float to the top,
-// then variant matches ("Mew ex", "Mew V"), then substring matches ("Mewtwo").
-// Without this, TPL returns e.g. Mewtwo-EX and Meowth ahead of Mew when the
-// query is "Mew", which is what the user reported.
-function _rankByNameMatch(cards, q, getName) {
-  const ql = (q || '').toLowerCase().trim();
-  if (!ql) return cards;
-  const scoreName = raw => {
-    const nl = (getName(raw) || '').toLowerCase();
-    if (!nl) return 9;
-    if (nl === ql) return 0;
-    // Word-boundary match: "mew" appears as a whole word in "Mewtwo & Mew-GX"
-    const tokens = nl.split(/[^a-z0-9]+/).filter(Boolean);
-    if (tokens[0] === ql) return 1;                     // starts with query as whole first word
-    if (tokens.includes(ql)) return 2;                  // has query as whole word anywhere
-    if (tokens[0] && tokens[0].startsWith(ql)) return 3;// first word starts with query (Mewtwo)
-    if (nl.startsWith(ql)) return 4;                    // prefix but not word-boundary
-    return 5;                                           // substring / fuzzy
-  };
-  return cards.slice().sort((a, b) => {
-    const sa = scoreName(a), sb = scoreName(b);
-    if (sa !== sb) return sa - sb;
-    return 0; // preserve API order within tier
-  });
-}
-
 async function searchPokemon(q) {
   // Try TCGPriceLookup first if key is set
-  let tplData = await searchWithTPL(q, 'pokemon');
+  const tplData = await searchWithTPL(q, 'pokemon');
   if (tplData) {
-    tplData = _rankByNameMatch(tplData, q, c => c.name);
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
       window._searchCards[i] = { _tpl: c, game: 'pokemon' };
@@ -2247,18 +2053,11 @@ async function searchPokemon(q) {
     return;
   }
 
-  // Fallback: PokemonTCG.io — exact-token match first (avoids Mewtwo when
-  // searching "Mew"), then prefix wildcard if the exact query is empty.
-  const exactUrl  = `https://api.pokemontcg.io/v2/cards?q=name:%22${encodeURIComponent(q)}%22&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-  const prefixUrl = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-  let r = await fetch(exactUrl);
-  let data = r.ok ? await r.json() : { data: [] };
+  // Fallback: PokemonTCG.io
+  const url = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+  const r = await fetch(url);
+  const data = await r.json();
   let cards = data.data || [];
-  if (!cards.length) {
-    r = await fetch(prefixUrl);
-    data = r.ok ? await r.json() : { data: [] };
-    cards = data.data || [];
-  }
 
   // Sort: exact match first, then by rarity (rarest first), then by set date desc
   const ql = q.toLowerCase().trim();
@@ -3078,20 +2877,12 @@ function loadCardUI(card) {
   const isSports  = card.game === 'sports';
   const isJPCard  = card.game === 'pokemonjp';
 
-  // Reset Save-to-Collection button state whenever a new card loads
-  try { resetSaveToCollectionButton(); } catch(e) {}
-
   // If this card was loaded via a scan, show grading CTA banner
   if (window._pendingScanBannerCard) {
     const pending = window._pendingScanBannerCard;
     window._pendingScanBannerCard = null;
     showGradingCtaBanner(card.name || pending);
   }
-
-  // If this card was loaded from a Grade Scan, render a small AI grade
-  // estimate badge above the Market Value so the user sees raw price
-  // AND the AI's PSA estimate in the same viewport — "full circle" flow.
-  try { _renderAiGradeBadge(); } catch(e) { console.warn('AI grade badge render failed', e); }
 
   // Clear price override on new card load
   if (priceOverride) priceOverride.value = '';
@@ -3746,17 +3537,8 @@ function calc() {
     const sellUrl = window._platSellUrls ? (window._platSellUrls[r.pid] || '') : '';
     const cardTag  = sellUrl ? 'a' : 'div';
     const cardHref = sellUrl ? ` href="${sellUrl}" target="_blank" rel="noopener"` : '';
-    // Per-platform CTA (issue #10): platform-specific verb, e.g. "Sell on eBay"
     const sellBadge = sellUrl
-      ? `<div class="plat-sell-badge">Sell on ${info.name} <span class="plat-sell-arrow">→</span></div>`
-      : '';
-    // Winner banner (issue #7): announce best net payout up top
-    const winnerBanner = isWin && eligible.length > 1
-      ? `<div style="display:flex;align-items:center;gap:.4rem;margin:-.15rem 0 .55rem;padding:.35rem .6rem;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);border-radius:99px;font-size:.68rem;font-weight:800;color:var(--green);letter-spacing:.02em;text-transform:uppercase;width:fit-content">🏆 Best net payout — sell here</div>`
-      : '';
-    // Negative payout warning (issue #7): flag when net is negative
-    const negativeWarn = (r.eligible && r.netPayout < 0)
-      ? `<div style="display:flex;align-items:flex-start;gap:.4rem;margin:.4rem 0 .1rem;padding:.4rem .6rem;background:rgba(248,113,113,.10);border:1px solid rgba(248,113,113,.35);border-radius:var(--radius-md);font-size:.7rem;font-weight:600;color:var(--red,#f87171);line-height:1.4"><span style="font-size:.85rem;line-height:1">⚠️</span><span>You'd <strong>lose money</strong> selling here at this price after fees &amp; shipping. Try a higher list price or a platform with lower fees.</span></div>`
+      ? `<div class="plat-sell-badge">Tap to sell here <span class="plat-sell-arrow">→</span></div>`
       : '';
 
     if (!r.eligible) {
@@ -3771,13 +3553,11 @@ function calc() {
 
     html += `<${cardTag} class="${cls}"${cardHref}>
       <div class="plat-accent" style="background:${info.color}"></div>
-      ${winnerBanner}
       <div class="plat-hdr">
         <span class="plat-name">${info.emoji} ${info.name}</span>
         ${badgeHtml}
       </div>
       <div class="plat-payout ${r.netPayout >= 0 ? 'pos' : 'neg'}">${fmt(r.netPayout)}</div>
-      ${negativeWarn}
       ${sellBadge}
       ${itemCost > 0
         ? `<div class="plat-sub">Profit: <span style="color:${r.grossProfit>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(r.grossProfit)}</span> · <span style="${r.margin>=0?'color:var(--green)':'color:var(--red)'}">${r.margin.toFixed(1)}%</span></div>`
@@ -3800,28 +3580,12 @@ function calc() {
     const bestAlt = proOnlyResults[0];
     const diff = bestAlt ? (bestAlt.netPayout - ebayPayout) : 0;
 
-    // Issue #8: Unblur Mercari as a genuine teaser — show one real payout so
-    // the value of Pro is provable. All other Pro platforms stay blurred.
-    // Pull Mercari to the top of the list.
-    const mercIdx = proOnlyResults.findIndex(r => r.pid === 'mercari');
-    if (mercIdx > 0) {
-      const [merc] = proOnlyResults.splice(mercIdx, 1);
-      proOnlyResults.unshift(merc);
-    }
-
-    const blurRows = proOnlyResults.map((r, i) => {
+    const blurRows = proOnlyResults.map(r => {
       const info = PLATFORMS[r.pid];
       const isBetter = r.netPayout > ebayPayout;
-      const isFreeTeaser = r.pid === 'mercari'; // unblurred sample platform
-      const valueStyle = isFreeTeaser
-        ? `font-family:var(--mono);font-size:.88rem;font-weight:700;color:${isBetter?'var(--green)':'var(--text)'}`
-        : `font-family:var(--mono);font-size:.88rem;font-weight:700;filter:blur(5px);user-select:none;color:${isBetter?'var(--green)':'var(--text)'}`;
-      const previewBadge = isFreeTeaser
-        ? `<span style="font-size:.55rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);background:var(--gold-hi);border:1px solid rgba(196,122,0,.35);padding:.1rem .35rem;border-radius:99px;margin-left:.35rem">Free preview</span>`
-        : '';
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
-        <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">${info.emoji} ${info.name}${previewBadge}</span>
-        <span style="${valueStyle}">${fmt(r.netPayout)}</span>
+        <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">${info.emoji} ${info.name}</span>
+        <span style="font-family:var(--mono);font-size:.88rem;font-weight:700;filter:blur(5px);user-select:none;color:${isBetter?'var(--green)':'var(--text)'}">${fmt(r.netPayout)}</span>
       </div>`;
     }).join('');
 
@@ -3829,7 +3593,7 @@ function calc() {
     <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="openPricingModal('calc_gate')">
       <div class="plat-accent" style="background:linear-gradient(135deg,#b8860b,#f5c518)"></div>
       <div class="plat-hdr" style="margin-bottom:.3rem">
-        <span class="plat-name">&#11088; 3 More Platforms + Mercari preview</span>
+        <span class="plat-name">&#11088; 4 More Platforms</span>
         <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">PRO</span>
       </div>
       ${mightEarnMore && diff > 0.5
@@ -3839,8 +3603,8 @@ function calc() {
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock Poshmark, StockX &amp; COMC — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">Mercari shown free above · Pro unlocks Poshmark, StockX, COMC + bar chart + unlimited flip tracking</div>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock All Platforms — $9.99/mo</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">Mercari · Poshmark · StockX · COMC + bar chart + unlimited flip tracking</div>
       </div>
     </div>`;
     html += `</div>`;
@@ -4106,7 +3870,7 @@ function renderFlipsView() {
   // ── Flip Log table ──
   const flipWrap = document.getElementById('flipLogWrap');
   if (!flips.length) {
-    flipWrap.innerHTML = '<div class="section-panel"><div class="empty-flips"><div class="empty-flips-icon">🔄</div><div class="empty-flips-h">Start your Sales Tracker</div><div class="empty-flips-p">Every card you log builds your realized P&amp;L history — see which sets, cards &amp; platforms actually made you money. Tap <strong>+ Log a Sale</strong> to add your first one.</div></div></div>';
+    flipWrap.innerHTML = '<div class="section-panel"><div class="empty-flips"><div class="empty-flips-icon">🔄</div><div class="empty-flips-h">No flips logged yet</div><div class="empty-flips-p">Tap "+ Log a Flip" to record your first card sale and start tracking profit.</div></div></div>';
   } else {
     const sorted = [...flips].sort((a,b) => b.date.localeCompare(a.date));
     flipWrap.innerHTML = '<div class="flip-table-wrap"><table class="flip-table"><thead><tr><th>Date</th><th>Card</th><th>Set</th><th>Bought</th><th>Sold</th><th>Profit</th><th>Platform</th><th></th></tr></thead><tbody>' +
@@ -4228,9 +3992,6 @@ function applyGoogleUser() {
   document.getElementById('googleName').textContent = googleUser.name.split(' ')[0];
   // Check pro status after UI is applied
   checkProStatus();
-  // Collection UI — show header button + refresh count
-  try { updateCollectionBtnVisibility(); refreshCollectionCount(); } catch(e) {}
-  try { resetSaveToCollectionButton(); } catch(e) {}
 }
 
 function signOut() {
@@ -4243,8 +4004,6 @@ function signOut() {
   window._googleIdToken = null;
   document.getElementById('googleSignInBtn').style.display = 'flex';
   document.getElementById('googleUserBtn').style.display = 'none';
-  // Collection UI — hide header button, reset save state
-  try { updateCollectionBtnVisibility(); resetSaveToCollectionButton(); } catch(e) {}
   document.getElementById('googleAvatar').src = '';
   document.getElementById('googleName').textContent = '';
   window._isPro = false;
@@ -4272,8 +4031,8 @@ function openScanner() {
     statusEl.innerHTML = `
       <div style="text-align:center;padding:1rem">
         <div style="font-size:2rem;margin-bottom:.75rem">📷</div>
-        <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:.5rem">Sign in — get 10 free Card Lookups</div>
-        <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1.25rem">Sign in with Google and 10 lookups land in your account instantly.</div>
+        <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:.5rem">Sign in to scan cards</div>
+        <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1.25rem">Google sign-in is required to use the card scanner.</div>
         <button onclick="cancelScan();document.getElementById('googleSignInBtn')?.click()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.6rem 1.4rem;font-weight:700;font-size:.9rem;cursor:pointer">Sign in with Google</button>
       </div>`;
     overlay.style.display = 'flex';
@@ -4311,185 +4070,64 @@ function cancelScan() {
     window._pendingIdScanCard = null;
     _loadScannedCardExact(pending);
   }
-
-  // "Full circle" Grade Scan flow — after grading (or when the user cancels
-  // the overlay after seeing the grade), auto-load the exact card into the
-  // detail view. The AI's PSA estimate is stashed on the pending payload and
-  // surfaced as a small badge next to the market price so the user can compare
-  // raw vs graded value without having to re-search.
-  if (window._pendingGradeScanCard) {
-    const pending = window._pendingGradeScanCard;
-    window._pendingGradeScanCard = null;
-    _loadScannedCardExact(pending);
-  }
 }
 
-// Fetch the exact scanned card from PokemonTCG.io and load it.
-//
-// Robustness notes (learned the hard way, three demos in a row):
-//  - Bare apostrophes in the name value (Lillie's Clefairy) break the query and
-//    return 400 Bad Request. We MUST wrap the name value in double quotes.
-//  - The AI OCR often returns "GX" for Scarlet & Violet "ex" cards. Normalize.
-//  - The AI OCR sometimes misreads the number for secret rares (#177 vs the
-//    real #184 on a set-of-159 card). So we race a number-scoped query and a
-//    name-only query in parallel — whichever returns a usable match first wins.
-//  - No matter what, we NEVER leave the detail view in "No card selected".
-//    If PokemonTCG.io returns nothing, we still load a manual-entry card so
-//    the detail page shows the AI's read instead of an empty state.
+// Fetch the exact scanned card from PokemonTCG.io by name + number and load it
 async function _loadScannedCardExact(pending) {
-  const { name, number, setName, rarity, gradeEstimate } = pending;
-  // If we came in from a Grade Scan, stash the estimate globally so the
-  // detail-view renderer can add a "AI est. PSA X" badge once the card
-  // has loaded (renderers are async so we can't set it inline here).
-  if (gradeEstimate && typeof gradeEstimate === 'object') {
-    window._latestGradeEstimate = gradeEstimate;
-  }
+  const { name, number, setName, rarity } = pending;
   const si = document.getElementById('searchInput');
   if (si) si.value = name;
 
-  const cleanNumber = (number || '').replace(/\/.*$/, '').trim();
+  try {
+    // Build query: name + number gives us the exact card
+    let q = `name:${encodeURIComponent(name)}`;
+    if (number) q += ` number:${encodeURIComponent(number.replace(/\/.*$/, '').trim())}`; // strip /setsize
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('API error');
+    const json = await res.json();
+    let cards = json.data || [];
 
-  // Build candidate name variants. Try the raw name AND the ex-normalized form,
-  // because SV cards are stored as "ex" on PokemonTCG.io but the AI often says "GX".
-  const nameCandidates = new Set();
-  if (name) {
-    nameCandidates.add(name);
-    const exNorm = name.replace(/\bGX\b/gi, 'ex');
-    if (exNorm !== name) nameCandidates.add(exNorm);
-    // Also try stripping the GX/ex/V/VMAX/VSTAR suffix entirely as a broader fallback
-    const stripped = name.replace(/\s+(GX|ex|V|VMAX|VSTAR)\b/gi, '').trim();
-    if (stripped && stripped !== name) nameCandidates.add(stripped);
-  }
+    // Pick the best match: prefer exact number match, then rarity match
+    let match = cards.find(c => c.number === number);
+    if (!match && number) match = cards.find(c => c.number?.startsWith(number.split('/')[0]));
+    if (!match && rarity) match = cards.find(c => (c.rarity || '').toLowerCase() === rarity.toLowerCase());
+    if (!match) match = cards[0];
 
-  // Build the query set: for each name candidate, race a name+number query and
-  // a name-only query. Quote the name value so apostrophes don't malform it.
-  const queries = [];
-  for (const n of nameCandidates) {
-    const quoted = `"${n.replace(/"/g, '')}"`;
-    if (cleanNumber) queries.push(`name:${quoted} number:${cleanNumber}`);
-    queries.push(`name:${quoted}`);
-  }
-
-  const select = 'id,name,set,number,rarity,images,tcgplayer,supertype,subtypes';
-  const fetchQ = async (q) => {
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=${select}`;
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 12000);
-    try {
-      const r = await fetch(url, { signal: ctl.signal });
-      if (!r.ok) return { q, cards: [] };
-      const j = await r.json();
-      return { q, cards: j.data || [] };
-    } catch(e) {
-      return { q, cards: [], err: e.message };
-    } finally {
-      clearTimeout(t);
+    if (match) {
+      const prices = match.tcgplayer?.prices || {};
+      const priceVariants = Object.keys(prices).map(key => ({
+        key,
+        label: formatVariantName(key),
+        market: prices[key]?.market ?? null,
+        low:    prices[key]?.low    ?? null,
+        mid:    prices[key]?.mid    ?? null,
+        high:   prices[key]?.high   ?? null,
+      }));
+      const card = {
+        name:   match.name,
+        game:   'pokemon',
+        images: { small: match.images?.small || '', large: match.images?.large || '' },
+        setName: match.set?.name || setName || '',
+        number:  match.number || number || '',
+        rarity:  match.rarity || rarity || '',
+        priceVariants,
+        source: 'TCGPlayer',
+        updatedAt: match.tcgplayer?.updatedAt || '',
+      };
+      selectedCard = card;
+      if (si) si.value = card.name;
+      dropList.classList.remove('open');
+      loadCardUI(card);
+      return;
     }
-  };
+  } catch(e) { /* fall through to autocomplete */ }
 
-  // Fire all queries in parallel; collect all non-empty result sets.
-  const results = await Promise.all(queries.map(fetchQ));
-  const allCards = [];
-  const seen = new Set();
-  for (const r of results) {
-    for (const c of r.cards) {
-      if (!seen.has(c.id)) { seen.add(c.id); allCards.push(c); }
-    }
+  // Fallback: just fill the search and let them pick
+  if (si) {
+    si.value = name;
+    si.dispatchEvent(new Event('input'));
   }
-
-  // Detect "secret rare" in two ways:
-  //  a) Number like 177/159 where numerator > denominator (physical secret-rare marker).
-  //  b) AI reported rarity as any variant that means "beyond normal print run" —
-  //     Secret Rare, Hyper Rare, Rainbow Rare, Special Illustration, Illustration Rare, etc.
-  //     PokemonTCG.io uses very specific rarity labels ("Special Illustration Rare")
-  //     that rarely match the loose language the AI uses ("Secret Rare"), so we treat
-  //     the whole family as one signal.
-  const numRaw = (number || '').trim();
-  const setSizeMatch = numRaw.match(/^(\d+)\/(\d+)$/);
-  const rarityLc = (rarity || '').toLowerCase();
-  const secretRareRarityHints = ['secret','hyper','rainbow','illustration','alternate','alt art','gold','shiny'];
-  const rarityLooksSecret = rarityLc && secretRareRarityHints.some(h => rarityLc.includes(h));
-  const looksSecretRare = (setSizeMatch && parseInt(setSizeMatch[1],10) > parseInt(setSizeMatch[2],10))
-                       || rarityLooksSecret;
-
-  // Rank candidates. Order matters:
-  //  1. Exact number match (best case)
-  //  2. Number-prefix match (e.g. scan gave "177" for "177a")
-  //  3. Rarity match (if AI captured rarity)
-  //  4. Secret-rare heuristic BEFORE set-only fallback (a set-only match is too
-  //     coarse for cards with 6+ variants in the same set — it would silently
-  //     pick the vanilla Double Rare when the user scanned the SIR).
-  //  5. Set match (last-ditch narrowing)
-  //  6. First hit
-  let match = null;
-  if (cleanNumber) match = allCards.find(c => c.number === cleanNumber);
-  if (!match && cleanNumber) match = allCards.find(c => (c.number || '').split('/')[0] === cleanNumber);
-  if (!match && rarity) match = allCards.find(c => (c.rarity || '').toLowerCase() === (rarity || '').toLowerCase());
-  if (!match && looksSecretRare && allCards.length) {
-    // Restrict to the scanned set if we know it (so we don't cross-pick from other sets).
-    const inSet = setName
-      ? allCards.filter(c => (c.set?.name || '').toLowerCase() === setName.toLowerCase())
-      : allCards;
-    const pool = inSet.length ? inSet : allCards;
-    const rarityPref = ['special illustration rare','hyper rare','ultra rare','illustration rare','double rare'];
-    for (const pref of rarityPref) {
-      match = pool.find(c => (c.rarity || '').toLowerCase() === pref);
-      if (match) break;
-    }
-    if (!match) {
-      match = [...pool].sort((a,b) => (parseInt(b.number,10)||0) - (parseInt(a.number,10)||0))[0];
-    }
-  }
-  if (!match && setName) match = allCards.find(c => (c.set?.name || '').toLowerCase() === setName.toLowerCase());
-  if (!match) match = allCards[0];
-
-  let card;
-  if (match) {
-    // Real match from the API
-    const prices = match.tcgplayer?.prices || {};
-    const priceVariants = Object.keys(prices).map(key => ({
-      key,
-      label: formatVariantName(key),
-      market: prices[key]?.market ?? null,
-      low:    prices[key]?.low    ?? null,
-      mid:    prices[key]?.mid    ?? null,
-      high:   prices[key]?.high   ?? null,
-    }));
-    if (!priceVariants.length) {
-      priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
-    }
-    card = {
-      name:      match.name,
-      game:      'pokemon',
-      images:    { small: match.images?.small || '', large: match.images?.large || match.images?.small || '' },
-      setName:   match.set?.name || setName || '',
-      number:    match.number || cleanNumber || '',
-      rarity:    match.rarity || rarity || '',
-      priceVariants,
-      source:    'TCGPlayer',
-      updatedAt: match.tcgplayer?.updatedAt || '',
-    };
-  } else {
-    // No API hit — build a manual-entry card from the scan data so the detail
-    // page still shows something instead of "No card selected".
-    card = {
-      name:      name || 'Scanned card',
-      game:      'pokemon',
-      images:    { small: '', large: '' },
-      setName:   setName || '',
-      number:    cleanNumber || '',
-      rarity:    rarity || '',
-      priceVariants: [{ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null }],
-      source:    'Manual',
-      updatedAt: '',
-    };
-    showToast?.('Loaded from scan — tap Search for exact market price.', 4000);
-  }
-
-  selectedCard = card;
-  if (si) si.value = card.name;
-  try { dropList?.classList.remove('open'); } catch(e) {}
-  loadCardUI(card);
 }
 
 // ── Affiliate grading CTA helpers ──
@@ -4506,75 +4144,20 @@ function showScanGradeCTA(cardName, grader, grade) {
   const cta = document.getElementById('scanGradeCTA');
   if (!cta) return;
   const links = _affiliateLinks();
-  const label      = cta.querySelector('.sgc-label');
-  const headline   = document.getElementById('scanGradeCTAHeadline');
-  const sub        = cta.querySelector('.sgc-sub');
-  const ourBtn     = document.getElementById('sgcOurGradeBtn');
-  const toggle     = document.getElementById('sgcOfficialToggle');
-  const officialRow = document.getElementById('sgcOfficialRow');
-
-  if (grader === 'estimate' && grade) {
-    // Post Grade-Scan flow: we just gave the estimate and it looks worth submitting.
-    if (label)    label.innerHTML     = '&#127942; Ready to Submit?';
-    if (headline) headline.textContent = `Estimated ${grade} — send it in for an official grade.`;
-    if (sub)      sub.textContent     = 'A high estimate means it\'s a strong candidate for official grading. Submit to any of these grading services.';
-    if (ourBtn)   ourBtn.style.display = 'none';
-    if (toggle)   toggle.style.display = 'none';
-    if (officialRow) officialRow.style.display = 'flex';
-  } else if (grader && grade) {
-    // Card is already slabbed — our Grade Scan can't improve on an existing grade,
-    // so surface the official grader path directly.
-    if (label)    label.innerHTML     = '&#127942; Already Graded';
-    if (headline) headline.textContent = `Detected ${grader} ${grade} — need re-holdering or cross-over?`;
-    if (sub)      sub.textContent     = 'Submit for re-grade, cross-over, or a fresh review at any of these grading services.';
-    if (ourBtn)   ourBtn.style.display = 'none';
-    if (toggle)   toggle.style.display = 'none';
-    if (officialRow) officialRow.style.display = 'flex';
+  // Update headline based on whether we detected a grader already
+  const headline = document.getElementById('scanGradeCTAHeadline');
+  if (grader && grade) {
+    if (headline) headline.textContent = `Detected ${grader} ${grade} — Get it officially certified!`;
   } else if (grader) {
-    if (label)    label.innerHTML     = '&#127942; Slabbed Card';
-    if (headline) headline.textContent = `Detected a ${grader} slab — want to re-submit?`;
-    if (sub)      sub.textContent     = 'Cross-over, re-grade, or submit fresh at any of these grading services.';
-    if (ourBtn)   ourBtn.style.display = 'none';
-    if (toggle)   toggle.style.display = 'none';
-    if (officialRow) officialRow.style.display = 'flex';
+    if (headline) headline.textContent = `Detected a ${grader} slab — Get it officially certified!`;
   } else {
-    // Raw card — default flow: promote our in-app Grade Scan first
-    if (label)    label.innerHTML     = '&#127941; Curious about the grade?';
-    if (headline) headline.textContent = cardName
-      ? `${cardName} — see if it's worth grading.`
-      : "See if it's worth grading — in seconds.";
-    if (sub)      sub.textContent     = 'Our AI checks centering, corners, edges & surface and gives you an estimated PSA-scale grade before you spend $20+ on official submission.';
-    if (ourBtn)   ourBtn.style.display = '';
-    if (toggle)   { toggle.style.display = ''; toggle.textContent = 'Already ready to submit? See official graders →'; }
-    if (officialRow) officialRow.style.display = 'none';
+    if (headline) headline.textContent = `${cardName ? cardName + ' — ' : ''}Get it officially graded!`;
   }
-
-  // Wire affiliate links regardless (so the collapsible row is ready when opened)
+  // Wire affiliate links
   const p = document.getElementById('sgcPSABtn'); if (p) p.href = links.psa;
   const c = document.getElementById('sgcCGCBtn'); if (c) c.href = links.cgc;
   const b = document.getElementById('sgcBGSBtn'); if (b) b.href = links.bgs;
-  const s = document.getElementById('sgcSGCBtn'); if (s) s.href = links.sgc;
   cta.classList.add('show');
-}
-
-// Toggle the collapsed PSA/CGC/BGS/SGC row inside #scanGradeCTA
-function toggleOfficialGradersRow() {
-  const row = document.getElementById('sgcOfficialRow');
-  const toggle = document.getElementById('sgcOfficialToggle');
-  if (!row) return;
-  const open = row.style.display !== 'none';
-  row.style.display = open ? 'none' : 'flex';
-  if (toggle) toggle.textContent = open
-    ? 'Already ready to submit? See official graders →'
-    : 'Hide official graders';
-}
-
-// From the post-scan CTA, launch our own Grade Scan flow
-function launchGradeScanFromCTA() {
-  // Close the scan overlay first so Grade Scan gate isn't stacked underneath
-  cancelScan();
-  // Slight delay so the overlay animation finishes before the file picker opens
-  setTimeout(() => openGradeScanGate(), 200);
 }
 
 function showGradingCtaBanner(cardName) {
@@ -4608,16 +4191,6 @@ async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
-  // Prevent double-fire: rapid re-taps or camera events firing twice would
-  // consume two credits on the backend but only render one result on the client.
-  if (window._scanInFlight) return;
-  window._scanInFlight = true;
-  // Safety net: never leave the lock stuck for more than 30 seconds.
-  const _lockTimer = setTimeout(() => { window._scanInFlight = false; }, 30000);
-  const _release = () => { clearTimeout(_lockTimer); window._scanInFlight = false; };
-
-  try {
-
   if (!googleUser) { openScanner(); return; }
 
   if (!window._googleIdToken) {
@@ -4642,8 +4215,8 @@ async function processScanImage(input) {
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
 
-  // Compress image before sending — 640px is plenty for ID mode (detail:'auto' → 512px tile)
-  const imageBase64 = await compressImage(file, 640);
+  // Compress image before sending — resize to max 1000px to stay under payload limits
+  const imageBase64 = await compressImage(file, 1000);
   const idToken = window._googleIdToken || '';
 
   try {
@@ -4667,25 +4240,16 @@ async function processScanImage(input) {
     }
 
     if (response.status === 402) {
-      statusEl.innerHTML = '<span style="color:#f87171;font-weight:800">Out of ID scan credits</span>';
-      resultEl.innerHTML =
-        '<div style="font-size:.78rem;color:rgba(255,255,255,.7);margin:.35rem 0 .65rem;line-height:1.4">You have no Card ID scan credits left. Nothing was charged.</div>' +
-        '<div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">' +
-          '<button onclick="cancelScan();openPricingModal(\'id_out\')" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.2rem;font-weight:800;font-size:.85rem;cursor:pointer">Get more credits</button>' +
-          '<button onclick="cancelScan()" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.55rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>' +
-        '</div>';
+      cancelScan();
+      _setScanGateMode('identify');
+      document.getElementById('scanGateOverlay').classList.add('open');
       return;
     }
 
     if (!response.ok) {
       let errMsg = 'Scan failed. Try a clearer photo.';
-      let refunded = false;
-      try { const e = await response.json(); errMsg = e.error || errMsg; refunded = !!e.refunded; } catch(e) {}
-      statusEl.innerHTML = '<span style="color:#f87171;font-weight:700">' + errMsg + '</span>' +
-        (refunded ? '<br><span style="color:#4ade80;font-size:.75rem;font-weight:700">\u2713 Credit refunded</span>' : '');
-      resultEl.innerHTML = '<button onclick="cancelScan()" style="margin-top:.5rem;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.5rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>';
-      if (refunded && typeof loadSettingsScanCredits === 'function') { try { loadSettingsScanCredits(); } catch(e) {} }
-      return;
+      try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
+      throw new Error(errMsg);
     }
 
     const data = await response.json();
@@ -4706,10 +4270,10 @@ async function processScanImage(input) {
 
     showScanGradeCTA(cardName, '', null);
 
-    // Only the exact-match path (_pendingIdScanCard → _loadScannedCardExact) loads the card.
-    // Do NOT also set _scanTargetNumber/_scanTargetName — those trigger a second, name-only
-    // dropdown auto-selector that races with the exact-match load and can silently swap the
-    // loaded card to a wrong-set variant (the "Pidove misplay" bug from the demo).
+    window._scanTargetNumber = cardNumber;
+    window._scanTargetName   = cardName;
+    window._scanTargetGrader = '';
+    window._scanTargetGrade  = null;
     window._pendingScanBannerCard = cardName;
 
     // Silently load the card into the calculator in the background
@@ -4722,16 +4286,12 @@ async function processScanImage(input) {
     console.error('Scan error:', err);
     statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
   }
-
-  } finally {
-    _release();
-  }
 }
 
 // ── Grade scan gate — same credit check as scan ──
 function openGradeScanGate() {
   if (!googleUser) {
-    openLoginGate('grade');
+    showToast('Sign in with Google first to use the grader');
     return;
   }
   document.getElementById('gradeFileInput').click();
@@ -4751,7 +4311,7 @@ function _setScanGateMode(mode) {
     if (sub)   sub.innerHTML     = 'Front &amp; back photo — centering, corners, edges, surface + PSA/BGS/CGC grade estimate.';
     if (name)  name.innerHTML    = 'Estimated Grade Scan';
     if (desc)  desc.innerHTML    = 'Centering &middot; Corners &middot; Edges &middot; PSA estimate';
-    if (price) price.textContent = '$1.50';
+    if (price) price.textContent = 'From $2.49';
   } else {
     if (icon)  icon.innerHTML    = '&#128247;';
     if (title) title.textContent = 'Card Identification Scanner';
@@ -4807,23 +4367,14 @@ async function processGradeBack(input) {
   const file = input.files[0];
   if (!file) return;
 
-  // Same double-fire guard as ID scan — stops a rapid re-tap from spending two grade credits.
-  if (window._gradeScanInFlight) return;
-  window._gradeScanInFlight = true;
-  const _gradeLockTimer = setTimeout(() => { window._gradeScanInFlight = false; }, 45000);
-  const _releaseGradeLock = () => { clearTimeout(_gradeLockTimer); window._gradeScanInFlight = false; };
-
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
 
   const frontBase64 = window._gradeFrontBase64;
   if (!frontBase64) {
     statusEl.textContent = 'Front photo missing. Please start over.';
-    _releaseGradeLock();
     return;
   }
-
-  try {
 
   statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 Estimated Grade Scanner</span><br><span style="font-size:.8rem;opacity:.7">Analyzing front + back\u2026</span>';
   resultEl.textContent = '';
@@ -4853,27 +4404,11 @@ async function processGradeBack(input) {
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-    if (response.status === 402) {
-      // Out of grading credits — do NOT auto-slam the shop. Show a clear in-context message with a button.
-      statusEl.innerHTML = '<span style="color:#f87171;font-weight:800">Out of grading credits</span>';
-      resultEl.innerHTML =
-        '<div style="font-size:.78rem;color:rgba(255,255,255,.7);margin:.35rem 0 .65rem;line-height:1.4">You have no Estimated Grade credits left. Nothing was charged.</div>' +
-        '<div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">' +
-          '<button onclick="cancelScan();openPricingModal(\'grade_out\')" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.2rem;font-weight:800;font-size:.85rem;cursor:pointer">Get more credits</button>' +
-          '<button onclick="cancelScan()" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.55rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>' +
-        '</div>';
-      return;
-    }
+    if (response.status === 402) { cancelScan(); _setScanGateMode('grade'); document.getElementById('scanGateOverlay').classList.add('open'); return; }
     if (!response.ok) {
       let errMsg = 'Could not grade card. Try clearer photos.';
-      let refunded = false;
-      try { const e = await response.json(); errMsg = e.error || errMsg; refunded = !!e.refunded; } catch(e) {}
-      statusEl.innerHTML = '<span style="color:#f87171;font-weight:700">' + errMsg + '</span>' +
-        (refunded ? '<br><span style="color:#4ade80;font-size:.75rem;font-weight:700">\u2713 Credit refunded</span>' : '');
-      resultEl.innerHTML = '<button onclick="cancelScan()" style="margin-top:.5rem;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:.5rem 1.2rem;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>';
-      // Refresh the credit counter so user sees the refund immediately
-      if (refunded && typeof loadSettingsScanCredits === 'function') { try { loadSettingsScanCredits(); } catch(e) {} }
-      return;
+      try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
+      throw new Error(errMsg);
     }
 
     const data = await response.json();
@@ -4902,39 +4437,16 @@ async function processGradeBack(input) {
         : '<div style="font-size:.74rem;color:#fb923c">May not be worth grading costs</div>'
       );
 
-    // Grade Scan just gave the estimate — don't upsell our own Grade Scan again.
-    // If the estimate says the card is worth submitting, promote the official
-    // grading services (using the slabbed-card branch of showScanGradeCTA).
-    if (worth) {
-      showScanGradeCTA(data.card_name, 'estimate', psa);
-    }
+    showScanGradeCTA(data.card_name, '', psa);
 
     window._pendingScanBannerCard = data.card_name;
-
-    // "Full circle" auto-load — stash the exact-card payload + the AI's grade
-    // estimate. When the user closes the overlay (or hits Cancel), cancelScan
-    // picks this up and calls _loadScannedCardExact, which will pull the raw
-    // market value and render a small "AI est. PSA X" badge next to it.
-    //
-    // We ONLY set _pendingGradeScanCard when we actually have a card name to
-    // match on; otherwise the raw name-only search fallback (below) is safer.
     if (data.card_name) {
-      window._pendingGradeScanCard = {
-        name:       data.card_name,
-        number:     data.card_number || '',
-        setName:    data.set_name    || '',
-        rarity:     data.rarity      || '',
-        hp:         '',
-        gradeEstimate: {
-          psa:       (typeof psa === 'number' ? psa : null),
-          label:     label || '',
-          centering: data.centering || '',
-          corners:   data.corners   || '',
-          edges:     data.edges     || '',
-          surface:   data.surface   || '',
-          worth:     !!worth,
-        },
-      };
+      setTimeout(() => {
+        const searchInput = document.getElementById('searchInput');
+        searchInput.value = data.card_name.trim();
+        searchInput.dispatchEvent(new Event('input'));
+        setTimeout(() => document.getElementById('searchBtn').click(), 300);
+      }, 3500);
     }
 
     window._gradeFrontBase64 = null;
@@ -4951,10 +4463,6 @@ async function processGradeBack(input) {
   } catch(err) {
     console.error('Grade error:', err);
     statusEl.textContent = err.message || 'Could not grade the card. Try clearer photos.';
-  }
-
-  } finally {
-    _releaseGradeLock();
   }
 }
 
@@ -5086,9 +4594,16 @@ function loadExampleCard() {
   }, 300);
 }
 
-// NOTE: The example card is opt-in only. Users click "Try an example →" in the
-// How-It-Works bar to trigger loadExampleCard(). We do not auto-fill the search
-// input on page load — a pre-populated field the user has to delete is bad UX.
+// Auto-load example card for first-time visitors only
+(function maybeLoadExample() {
+  try {
+    if (!localStorage.getItem('cardsell_seen')) {
+      localStorage.setItem('cardsell_seen', '1');
+      // Small delay so the page fully renders first
+      setTimeout(loadExampleCard, 1200);
+    }
+  } catch(e) {}
+})();
 
 function loadUserData() {
   // Reload flips view if it's active so it shows the signed-in user's data
@@ -5132,8 +4647,7 @@ async function checkProStatus() {
     window._isPro = d.isPro === true;
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
-    window._idFreeScansLeft = d.idFreeScansLeft || 0;
-    window._idScanCredits = (d.idPaidLeft || 0) + (d.idFreeScansLeft || 0);
+    window._idScanCredits = d.idPaidLeft || 0;
   } catch(e) { /* non-blocking */ }
   updateProUI();
   updateScanBtnCredits();
@@ -5173,7 +4687,7 @@ function updateProUI() {
     }
     // Update pricing modal Pro button label
     const pricingProBtnText = document.getElementById('pricingProBtnText');
-    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $9.99/mo';
+    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $4.99/mo';
   }
 }
 
@@ -5212,25 +4726,6 @@ function openPricingModal(source) {
     if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'default'; }
     if (txt) txt.textContent = '✓ Already Pro';
   }
-
-  // Populate free-balance banner from cached credits
-  try {
-    const lookupEl = document.getElementById('pricingLookupBalance');
-    const gradeEl  = document.getElementById('pricingGradeBalance');
-    const idCred   = typeof window._idScanCredits === 'number' ? window._idScanCredits : null;
-    const grCred   = typeof window._scanCredits   === 'number' ? window._scanCredits   : null;
-    if (lookupEl) lookupEl.textContent = idCred === null ? 'Sign in' : String(idCred);
-    if (gradeEl)  gradeEl.textContent  = grCred === null ? 'Sign in' : String(grCred);
-  } catch (e) { /* noop */ }
-  const tip = document.getElementById('lookupTooltip');
-  if (tip) tip.style.display = 'none';
-}
-
-function toggleLookupTooltip(evt) {
-  if (evt) evt.stopPropagation();
-  const tip = document.getElementById('lookupTooltip');
-  if (!tip) return;
-  tip.style.display = tip.style.display === 'none' ? 'block' : 'none';
 }
 
 function closePricingModal(evt) {
@@ -5266,45 +4761,62 @@ async function startProCheckout() {
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       if (btn) btn.disabled = false;
-      if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+      if (txt) txt.textContent = 'Get Pro — $4.99/mo';
     }
   } catch(e) {
     showToast('⚠️ Network error. Try again.');
     if (btn) btn.disabled = false;
-    if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+    if (txt) txt.textContent = 'Get Pro — $4.99/mo';
   }
 }
 
-// ── Start per-scan checkout ──
-async function startScanCheckout() {
+// ── Start per-scan checkout (legacy — now opens grade scan modal) ──
+function startScanCheckout() {
+  openGradeScanModal();
+}
+
+// ── Start grade scan pack checkout ──
+async function startGradeScanCheckout(tier) {
   if (!googleUser) {
-    closePricingModal();
-    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 200);
+    showToast('Sign in with Google first to buy Grade Scan Credits.');
+    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
     return;
   }
-  const btn = document.querySelector('.scan-credit-buy');
-  if (btn) { btn.disabled = true; btn.textContent = 'Redirecting...'; }
-
+  // Disable all grade scan tier buttons while redirecting
+  const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
+  tierBtns.forEach(b => { b.disabled = true; });
+  const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
+  if (clickedBtn) {
+    const priceEl = clickedBtn.querySelector('div:last-child');
+    if (priceEl) priceEl.textContent = 'Redirecting…';
+  }
   try {
-    const r = await fetch('/api/stripe-scan-checkout', {
+    const r = await fetch('/api/stripe-grade-checkout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (window._googleIdToken || '')
       },
-      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
+      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub, name: googleUser.name })
     });
     const d = await r.json();
     if (d.url) {
       window.location.href = d.url;
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
-      if (btn) { btn.disabled = false; btn.textContent = 'Buy 1 — $1.50'; }
+      tierBtns.forEach(b => { b.disabled = false; });
     }
   } catch(e) {
     showToast('⚠️ Network error. Try again.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Buy 1 — $1.50'; }
+    tierBtns.forEach(b => { b.disabled = false; });
   }
+}
+
+// ── Open grade scan pricing modal ──
+function openGradeScanModal() {
+  // Switch the pricing modal to grade scan mode and open it
+  switchScanMode('grade');
+  openPricingModal('grade_scan');
 }
 
 // ── Start ID scan tier checkout ──
@@ -5354,359 +4866,6 @@ async function startIdScanCheckout(tier) {
   }
 }
 
-// ── Start Grade Scan bulk-pack checkout ──
-// Tiers: '3' → $4  (save 11% vs single at $1.50)
-//        '10' → $12 (save 20%)
-//        '25' → $27.50 (save 27%)
-async function startGradeScanCheckout(tier) {
-  if (!googleUser) {
-    showToast('Sign in with Google first to buy Grade Scan credits.');
-    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
-    return;
-  }
-  // Disable all three tier buttons while redirecting
-  const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
-  tierBtns.forEach(b => { b.disabled = true; });
-  const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
-  if (clickedBtn) {
-    const priceEl = clickedBtn.querySelector('div:nth-child(2)');
-    if (priceEl) priceEl.textContent = 'Redirecting…';
-  }
-  try {
-    const r = await fetch('/api/stripe-id-checkout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (window._googleIdToken || '')
-      },
-      body: JSON.stringify({ type: 'grade', tier, email: googleUser.email, userId: googleUser.sub })
-    });
-    const d = await r.json();
-    if (d.url) {
-      window.location.href = d.url;
-    } else {
-      showToast('\u26a0\ufe0f Could not start checkout. Try again.');
-      tierBtns.forEach(b => { b.disabled = false; });
-      if (clickedBtn) {
-        const priceEl = clickedBtn.querySelector('div:nth-child(2)');
-        const priceMap = { '3': '$4', '10': '$12', '25': '$27.50' };
-        if (priceEl) priceEl.textContent = priceMap[tier] || '$4';
-      }
-    }
-  } catch(e) {
-    showToast('\u26a0\ufe0f Network error. Try again.');
-    tierBtns.forEach(b => { b.disabled = false; });
-    if (clickedBtn) {
-      const priceEl = clickedBtn.querySelector('div:nth-child(2)');
-      const priceMap = { '3': '$4', '10': '$12', '25': '$27.50' };
-      if (priceEl) priceEl.textContent = priceMap[tier] || '$4';
-    }
-  }
-}
-
-// ── Login gate modal (replaces disappearing toast on Scan/Grade for logged-out users) ──
-function openLoginGate(mode) {
-  // mode: 'scan' | 'grade' | 'flips' | 'generic'
-  const modal   = document.getElementById('loginGateModal');
-  const icon    = document.getElementById('loginGateIcon');
-  const title   = document.getElementById('loginGateTitle');
-  const sub     = document.getElementById('loginGateSub');
-  const teaser  = document.getElementById('loginGateTeaser');
-  if (!modal) return;
-
-  if (mode === 'grade') {
-    icon.textContent = '🏆';
-    title.textContent = 'Try Grade Scan free — before paying $25 to PSA';
-    sub.textContent = 'Our AI estimates a card’s grade in seconds. Send it to PSA only when the grade justifies the cost.';
-    teaser.innerHTML = `
-      <div class="lg-sample">
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Estimated grade</span><span class="lg-sample-val">PSA 9 (Mint)</span></div>
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Centering</span><span class="lg-sample-val">9</span></div>
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Corners</span><span class="lg-sample-val">8</span></div>
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Edges</span><span class="lg-sample-val">9</span></div>
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Surface</span><span class="lg-sample-val">9</span></div>
-        <div class="lg-sample-row lg-sample-total"><span class="lg-sample-lbl">Est. graded market value</span><span class="lg-sample-val">~$120</span></div>
-        <div class="lg-sample-caption">Sample output — sign in to run one on your card</div>
-      </div>`;
-  } else if (mode === 'flips') {
-    icon.textContent = '📈';
-    title.textContent = 'Sign in to track your sales';
-    sub.textContent = 'Log every card sale, see your real profit after fees, and find your best-performing platform.';
-    teaser.innerHTML = '';
-  } else if (mode === 'scan') {
-    icon.textContent = '📷';
-    title.textContent = 'Sign in to scan cards';
-    sub.textContent = 'Snap a photo — CardResell IDs the card and shows its market price plus the best platform to sell on.';
-    teaser.innerHTML = `
-      <div class="lg-sample">
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Card identified</span><span class="lg-sample-val">Charizard — Base Set #4</span></div>
-        <div class="lg-sample-row"><span class="lg-sample-lbl">Market price</span><span class="lg-sample-val">$142.80</span></div>
-        <div class="lg-sample-row lg-sample-total"><span class="lg-sample-lbl">Best net payout</span><span class="lg-sample-val">Mercari · $121.60</span></div>
-        <div class="lg-sample-caption">Sample output — sign in to scan your own</div>
-      </div>`;
-  } else {
-    icon.textContent = '🔐';
-    title.textContent = 'Sign in to continue';
-    sub.textContent = 'Free to sign up — unlock scanning, grading, and sale tracking.';
-    teaser.innerHTML = '';
-  }
-
-  modal.style.display = 'flex';
-  requestAnimationFrame(() => modal.classList.add('show'));
-}
-function closeLoginGate() {
-  const modal = document.getElementById('loginGateModal');
-  if (!modal) return;
-  modal.classList.remove('show');
-  setTimeout(() => { modal.style.display = 'none'; }, 200);
-}
-
-// ============================================================
-// COLLECTION MODULE — personal card portfolio
-// ============================================================
-// Stored server-side per Google account. Uses selectedCard + current
-// price on the detail screen for saving, then renders a grid of tiles
-// with running portfolio total on the collection view.
-window._collectionCache = null;
-
-function _collectionAuthHeaders() {
-  const idToken = window._googleIdToken || '';
-  return idToken ? { Authorization: `Bearer ${idToken}` } : null;
-}
-
-function _currentVariantKey() {
-  const active = document.querySelector('.price-variant-pill.active, .variant-pill.active');
-  return active?.dataset?.key || active?.dataset?.variant || 'raw_nm';
-}
-
-function _currentPriceNumber() {
-  const el = document.getElementById('priceMain');
-  if (!el) return 0;
-  const m = (el.textContent || '').match(/\$([\d,]+\.?\d*)/);
-  return m ? parseFloat(m[1].replace(/,/g, '')) : 0;
-}
-
-async function saveCurrentCardToCollection() {
-  const headers = _collectionAuthHeaders();
-  if (!headers) {
-    showToast('Sign in with Google to save cards to your collection.');
-    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 400);
-    return;
-  }
-  if (!selectedCard) return;
-
-  const btn = document.getElementById('saveToCollectionBtn');
-  const label = document.getElementById('saveToCollectionLabel');
-  const prevLabel = label?.textContent || 'Save to Collection';
-  if (btn) { btn.disabled = true; }
-  if (label) label.textContent = 'Saving…';
-
-  const price = _currentPriceNumber();
-  const image = selectedCard?.images?.small || selectedCard?.images?.large || selectedCard?._imgSmall || null;
-  const cardId = selectedCard?.tplId || selectedCard?.id || null;
-  const payload = {
-    cardId,
-    cardName:   selectedCard?.name || selectedCard?.cardName || 'Unknown',
-    cardNumber: selectedCard?.number || selectedCard?.cardNumber || null,
-    setName:    selectedCard?.set?.name || selectedCard?.setName || null,
-    image,
-    variant:    _currentVariantKey(),
-    priceAtAdd: price,
-    source:     selectedCard?.source || 'TCGPriceLookup',
-    game:       selectedCard?.game || 'pokemon',
-  };
-
-  try {
-    const r = await fetch('/api/collection', {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await r.json();
-    if (r.status === 409) {
-      showToast('Already in your collection.');
-      _markSaveButtonSaved();
-      return;
-    }
-    if (r.status === 400 && data.error === 'limit_reached') {
-      showToast(data.message || 'Collection limit reached.', 5000);
-      if (btn) btn.disabled = false;
-      if (label) label.textContent = prevLabel;
-      return;
-    }
-    if (!r.ok) throw new Error(data.error || 'save failed');
-    _markSaveButtonSaved();
-    _updateCollectionCount(data.count);
-    showToast('📖 Added to your collection.');
-  } catch(e) {
-    console.warn('saveCurrentCardToCollection', e);
-    if (btn) btn.disabled = false;
-    if (label) label.textContent = prevLabel;
-    showToast('⚠️ Could not save. Try again.');
-  }
-}
-
-function _markSaveButtonSaved() {
-  const btn = document.getElementById('saveToCollectionBtn');
-  const label = document.getElementById('saveToCollectionLabel');
-  if (btn) {
-    btn.disabled = false;
-    btn.classList.add('saved');
-    btn.style.background = 'var(--gold, #c47a00)';
-    btn.style.color = '#000';
-    btn.style.borderColor = 'transparent';
-  }
-  if (label) label.textContent = 'Saved ✓';
-}
-
-function resetSaveToCollectionButton() {
-  const btn = document.getElementById('saveToCollectionBtn');
-  const label = document.getElementById('saveToCollectionLabel');
-  const signedIn = !!window._googleIdToken;
-  if (btn) {
-    btn.classList.remove('saved');
-    btn.disabled = false;
-    btn.style.display = signedIn ? 'flex' : 'none';
-    btn.style.background = 'var(--surface-2)';
-    btn.style.color = 'var(--text)';
-    btn.style.borderColor = 'var(--border)';
-  }
-  if (label) label.textContent = 'Save to Collection';
-}
-
-function _updateCollectionCount(count) {
-  const label = count > 0 ? `(${count})` : '';
-  const el = document.getElementById('collectionBtnCount');
-  if (el) el.textContent = label;
-  const tabEl = document.getElementById('collectionTabCount');
-  if (tabEl) tabEl.textContent = label;
-}
-
-async function refreshCollectionCount() {
-  const headers = _collectionAuthHeaders();
-  if (!headers) { _updateCollectionCount(0); return; }
-  try {
-    const r = await fetch('/api/collection', { headers });
-    if (!r.ok) return;
-    const data = await r.json();
-    window._collectionCache = data;
-    _updateCollectionCount(data.count || 0);
-  } catch(e) {}
-}
-
-async function toggleCollectionView() {
-  const view = document.getElementById('collectionView');
-  if (!view) return;
-  const opening = view.style.display === 'none' || !view.style.display;
-  if (opening) {
-    view.style.display = 'block';
-    document.body.style.overflow = 'hidden';
-    await renderCollectionView();
-  } else {
-    view.style.display = 'none';
-    document.body.style.overflow = '';
-  }
-}
-
-async function renderCollectionView() {
-  const body = document.getElementById('collectionBody');
-  const sub  = document.getElementById('collectionSubHeader');
-  const headers = _collectionAuthHeaders();
-  if (!headers) {
-    body.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)">Sign in with Google to build your collection.</div>';
-    sub.textContent = 'Not signed in';
-    return;
-  }
-
-  sub.textContent = 'Loading…';
-  body.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem">Loading your collection…</div>';
-
-  let data;
-  try {
-    const r = await fetch('/api/collection', { headers });
-    data = await r.json();
-  } catch(e) {
-    body.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text-muted)">Couldn\'t load your collection. Try again.</div>';
-    sub.textContent = 'Error';
-    return;
-  }
-
-  window._collectionCache = data;
-  const items = data.items || [];
-  _updateCollectionCount(items.length);
-
-  if (!items.length) {
-    sub.textContent = 'Empty';
-    body.innerHTML = '<div style="text-align:center;padding:3rem 1.5rem;color:var(--text-muted)">'
-      + '<div style="font-size:2.5rem;margin-bottom:.75rem">📖</div>'
-      + '<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:.4rem">Your collection is empty</div>'
-      + '<div style="font-size:.85rem;max-width:340px;margin:0 auto 1.25rem;line-height:1.5">Scan or search for cards, then tap <b>Save to Collection</b> to start tracking their value.</div>'
-      + '<button onclick="toggleCollectionView()" style="background:var(--gold, #c47a00);color:#000;border:none;padding:.6rem 1.4rem;border-radius:.6rem;font-weight:800;font-size:.85rem;cursor:pointer">Find cards →</button>'
-      + '</div>';
-    return;
-  }
-
-  const total = data.totalValue || 0;
-  const delta = data.delta || 0;
-  const deltaSign  = delta >= 0 ? '+' : '−';
-  const deltaAbs   = Math.abs(delta).toFixed(2);
-  const deltaColor = delta > 0 ? '#0a8a3e' : (delta < 0 ? '#c73030' : 'var(--text-muted)');
-  sub.innerHTML = `${items.length} card${items.length === 1 ? '' : 's'} · <b style="color:var(--text)">$${total.toFixed(2)}</b> total <span style="color:${deltaColor};font-weight:700">(${deltaSign}$${deltaAbs} since added)</span>`;
-
-  body.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.75rem">'
-    + items.map(_collectionTileHTML).join('')
-    + '</div>';
-}
-
-function _collectionTileHTML(it) {
-  const price = Number(it.priceCurrent || it.priceAtAdd || 0);
-  const orig  = Number(it.priceAtAdd || 0);
-  const d     = price - orig;
-  const dCol  = d > 0 ? '#0a8a3e' : (d < 0 ? '#c73030' : 'var(--text-muted)');
-  const dTxt  = d === 0 ? '' : `<div style="font-size:.7rem;color:${dCol};font-weight:700;margin-top:.15rem">${d > 0 ? '▲' : '▼'} $${Math.abs(d).toFixed(2)}</div>`;
-  const img   = it.image
-    ? `<img src="${escapeHtmlAttr(it.image)}" alt="" style="width:100%;aspect-ratio:.72;object-fit:cover;border-radius:.45rem;background:var(--surface-2)"/>`
-    : `<div style="width:100%;aspect-ratio:.72;background:var(--surface-2);border-radius:.45rem;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:.7rem">No image</div>`;
-  const variantBadge = it.variant && it.variant !== 'raw_nm'
-    ? `<div style="display:inline-block;font-size:.6rem;font-weight:800;color:var(--gold);letter-spacing:.04em;text-transform:uppercase">${escapeHtmlAttr(it.variant.replace(/_/g,' '))}</div>`
-    : '';
-  return `<div style="position:relative;background:var(--surface);border:1px solid var(--border);border-radius:.6rem;padding:.55rem">
-      <button onclick="removeFromCollection('${escapeHtmlAttr(it.id)}')" aria-label="Remove" style="position:absolute;top:.25rem;right:.25rem;background:rgba(0,0,0,.55);color:#fff;border:none;width:22px;height:22px;border-radius:50%;font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">×</button>
-      ${img}
-      <div style="margin-top:.5rem;font-size:.78rem;font-weight:700;color:var(--text);line-height:1.25;min-height:2rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtmlAttr(it.cardName)}</div>
-      ${it.setName ? `<div style="font-size:.68rem;color:var(--text-muted);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtmlAttr(it.setName)}${it.cardNumber ? ' · #'+escapeHtmlAttr(it.cardNumber) : ''}</div>` : ''}
-      ${variantBadge}
-      <div style="margin-top:.35rem;font-size:.95rem;font-weight:800;color:var(--text)">$${price.toFixed(2)}</div>
-      ${dTxt}
-    </div>`;
-}
-
-function escapeHtmlAttr(s) {
-  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
-}
-
-async function removeFromCollection(id) {
-  const headers = _collectionAuthHeaders();
-  if (!headers) return;
-  if (!confirm('Remove this card from your collection?')) return;
-  try {
-    const r = await fetch('/api/collection?id=' + encodeURIComponent(id), { method: 'DELETE', headers });
-    if (!r.ok) throw new Error('delete failed');
-    await renderCollectionView();
-  } catch(e) {
-    showToast('⚠️ Could not remove. Try again.');
-  }
-}
-
-function updateCollectionBtnVisibility() {
-  const signedIn = !!window._googleIdToken;
-  const btn = document.getElementById('collectionBtn');
-  if (btn) btn.style.display = signedIn ? 'inline-flex' : 'none';
-  const tab = document.getElementById('collectionTab');
-  if (tab) tab.style.display = signedIn ? 'inline-block' : 'none';
-}
-
-
 // ── Toast helper ──
 function showToast(msg, duration) {
   const t = document.getElementById('csToast');
@@ -5717,13 +4876,6 @@ function showToast(msg, duration) {
   t._timer = setTimeout(() => t.classList.remove('show'), duration || 3500);
 }
 
-// One-time welcome bonus toast — shown right after the server grants +10
-// Card Lookups on first Google sign-in. Sticks around a bit longer so users
-// actually see it.
-function showWelcomeBonusToast() {
-  showToast('🎉 Welcome! 10 free Card Lookups added to your account.', 6000);
-}
-
 // ── Handle return from Stripe ──
 (function handleStripeReturn() {
   const params = new URLSearchParams(window.location.search);
@@ -5731,7 +4883,7 @@ function showWelcomeBonusToast() {
     window._isPro = true;
     window._freeScansLeft = 5;
     updateProUI();
-    showToast('⭐ Welcome to CardResell Pro! 20 Card Lookups + 10 Grade Scans added.', 5000);
+    showToast('⭐ Welcome to CardResell Pro! 10 Estimated Grade Scans added.', 5000);
     // Clean URL
     history.replaceState({}, '', window.location.pathname);
   }
@@ -5814,91 +4966,57 @@ function showWelcomeBonusToast() {
   }
 })();
 
-// Render an AI grade estimate badge above the market value price panel.
-// Called by loadCardUI after a Grade-Scan-driven auto-load. Pulls the
-// estimate from window._latestGradeEstimate (set in _loadScannedCardExact).
-// The badge is intentionally small and non-blocking — the market value
-// is still the primary datum; the badge is a "here's what we think it'd
-// grade" hint that goes away next time the user loads a different card.
-function _renderAiGradeBadge() {
-  const est = window._latestGradeEstimate;
-  // Consume once so the badge doesn't persist across unrelated card loads
-  window._latestGradeEstimate = null;
-  const host = document.getElementById('priceDisplay');
-  // Remove any prior badge
-  const prior = document.getElementById('aiGradeEstimateBadge');
-  if (prior) prior.remove();
-  if (!est || !host) return;
-  const psa = (typeof est.psa === 'number' && est.psa >= 1 && est.psa <= 10) ? est.psa : null;
-  if (psa === null) return;
-  const color = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
-  const badge = document.createElement('div');
-  badge.id = 'aiGradeEstimateBadge';
-  badge.style.cssText = 'display:flex;align-items:center;gap:.55rem;padding:.5rem .7rem;margin-bottom:.55rem;background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.03));border:1px solid rgba(196,122,0,.35);border-radius:.55rem;font-size:.75rem;line-height:1.35';
-  const label = est.label ? ' ' + est.label : '';
-  const worthLine = est.worth
-    ? '<span style="color:#4ade80;font-weight:700">\u2713 Worth submitting for grading</span>'
-    : '<span style="color:var(--text-muted)">May not clear grading costs at this estimate</span>';
-  badge.innerHTML =
-    '<span style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:var(--gold);text-transform:uppercase;flex-shrink:0">AI Est.</span>' +
-    '<span style="color:' + color + ';font-weight:900;font-size:.98rem;flex-shrink:0">PSA ' + psa + '</span>' +
-    '<span style="color:var(--text-muted);font-weight:600;flex-shrink:0">' + label + '</span>' +
-    '<span style="margin-left:auto;font-size:.68rem;text-align:right">' + worthLine + '</span>';
-  // Insert as first child of priceDisplay so it renders directly above the price
-  host.insertBefore(badge, host.firstChild);
-}
-
-// ── Handle return from Stripe — Grade Scan bulk pack purchase ──
-// Success URL: /?grade_pack_paid=1&tier=3|10|25&session_id={CHECKOUT_SESSION_ID}
-(function handleGradePackReturn() {
+// ── Handle return from Stripe — grade scan pack purchase ──
+(function handleGradeScanReturn() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('grade_pack_paid') !== '1') return;
-  const sessionId = params.get('session_id') || '';
-  const tier = params.get('tier') || '';
-  history.replaceState({}, '', window.location.pathname);
-  (async () => {
-    const email     = window._userEmail || '';
-    const googleSub = googleUser?.sub || googleUser?.id || '';
-    if (!sessionId || !email) {
-      showToast('\u2705 Grade Scan credits purchased! Loading balance\u2026', 4000);
-      setTimeout(() => loadSettingsScanCredits?.(), 1500);
-      return;
-    }
-    try {
-      showToast('\u23f3 Confirming your Grade Scan credits\u2026', 3000);
-      const r = await fetch('/api/scan-credits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verify_grade_pack_payment', sessionId, email, googleSub })
-      });
-      const data = await r.json();
-      if (data.success) {
-        const added = data.added || 0;
-        window._scanCredits = data.credits || 0;
-        const msg = data.alreadyCredited
-          ? '\u2705 Grade Scan credits already applied to your account.'
-          : `\u2705 ${added} Grade Scan credits added! Ready to grade.`;
-        showToast(msg, 5000);
-        loadSettingsScanCredits?.();
-      } else {
-        showToast('\u26a0\ufe0f Payment received but credit verification failed. Contact support.', 6000);
-        console.error('Grade pack verify failed:', data);
+  if (params.get('grade_scan_paid') === '1') {
+    const sessionId = params.get('session_id') || '';
+    history.replaceState({}, '', window.location.pathname);
+    (async () => {
+      const email     = window._userEmail || '';
+      const googleSub = googleUser?.sub || googleUser?.id || '';
+      if (!sessionId || !email) {
+        showToast('✅ Grade Scan Credits purchased! Loading balance…', 4000);
+        setTimeout(() => loadSettingsScanCredits?.(), 1500);
+        return;
       }
-    } catch(e) {
-      showToast('\u2705 Grade Scan credits purchased \u2014 balance updating shortly.', 5000);
-      console.error('Grade pack verify error:', e);
-    }
-  })();
+      try {
+        showToast('⏳ Confirming your Grade Scan Credits…', 3000);
+        const r = await fetch('/api/scan-credits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'verify_grade_payment', sessionId, email, googleSub })
+        });
+        const data = await r.json();
+        if (data.success) {
+          const added = data.added || 0;
+          window._scanCredits = data.credits || 0;
+          const msg = data.alreadyCredited
+            ? '✅ Grade Scan Credits already applied to your account.'
+            : `✅ ${added} Grade Scan Credits added! Ready to scan.`;
+          showToast(msg, 5000);
+          loadSettingsScanCredits?.();
+          updateScanBtnCredits?.();
+        } else {
+          showToast('⚠️ Payment received but credit verification failed. Contact support.', 6000);
+          console.error('Grade scan credit verify failed:', data);
+        }
+      } catch(e) {
+        showToast('✅ Grade Scan Credits purchased — balance updating shortly.', 5000);
+        console.error('Grade scan credit verify error:', e);
+      }
+    })();
+  }
 })();
 
 
 /* =========================================================
-   SCAN GATE — $1.50 pay-per-use Estimated Grade Scanner
-   ========================================================= */
+   SCAN GATE — Pay-per-use Estimated Grade Scanner
+   ========================="================================ */
 
 function openGradedScanGate() {
   if (!googleUser) {
-    openLoginGate('scan');
+    showToast('Sign in with Google first to use the scanner');
     return;
   }
   // Always try to open the camera — server is the source of truth on credits.
@@ -5915,7 +5033,7 @@ function closeScanGate(evt) {
 function handleScanOption(choice) {
   document.getElementById('scanGateOverlay').classList.remove('open');
   if (choice === 'pay') {
-    startScanCheckout();
+    openGradeScanModal();
   } else if (choice === 'pro') {
     openPricingModal('scan_gate');
   }
@@ -6171,10 +5289,8 @@ function _renderCatalogPage(page) {
   grid.innerHTML = slice.map((c, i) => {
     const globalIdx = start + i;
     _catalogCards[globalIdx] = c;
-    const price  = c._price;
-    const img    = c._img || '';
-    const rarity = c._rarity || c.rarity || '';
-    const setLine = [c.set || c.set_name || '', c.number ? '#' + c.number : ''].filter(Boolean).join(' · ');
+    const price = c._price;
+    const img   = c._img || '';
     return `<div class="catalog-card" data-idx="${globalIdx}">
       <div class="catalog-card-img-wrap${img ? ' loading' : ''}">
         ${img
@@ -6186,11 +5302,8 @@ function _renderCatalogPage(page) {
       </div>
       <div class="catalog-card-body">
         <div class="catalog-card-name">${esc(c.name)}</div>
-        ${setLine ? `<div class="catalog-card-meta">${esc(setLine)}</div>` : ''}
-        ${rarity ? `<div class="catalog-card-rarity">${esc(rarity)}</div>` : ''}
-        ${price
-          ? `<div class="catalog-card-price">$${parseFloat(price).toFixed(2)}</div>`
-          : `<div class="catalog-card-price-loading">Price loading…</div>`}
+        ${c.set || c.set_name || c.number ? `<div class="catalog-card-meta">${esc(c.set || c.set_name || '')}${c.number ? ' #' + esc(c.number) : ''}</div>` : ''}
+        ${price ? `<div class="catalog-card-price">$${parseFloat(price).toFixed(2)}</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -6240,108 +5353,23 @@ function _catalogPageNav(delta) {
 }
 
 
-async function fetchCatalogPokemon(q, _isFallback) {
+async function fetchCatalogPokemon(q) {
   const grid = document.getElementById('catalogGrid');
-
-  // Normalize the query. pokemontcg.io indexes card names as lowercase "ex"
-  // (e.g. "Lillie's Clefairy ex"). If the caller passed "eX" or "EX"
-  // (from Grade Scan AI output), lowercase it so exact-phrase matching works.
-  const trimmed = (q || '').trim().replace(/\b(eX|EX|Ex)\b/g, 'ex');
-  const parts = trimmed.split(/\s+/);
-  const primary = parts[0] || trimmed;
-  const remainder = parts.slice(1).join(' ').trim().toLowerCase();
-
-  // Helper: fetch with per-attempt timeout. pokemontcg.io occasionally hangs
-  // for 15-25s on bare single-token queries with punctuation (like
-  // name:"Lillie's") while a multi-word phrase ("Lillie's Clefairy") returns
-  // in 3-4s. So we cap each attempt at 12s and try broader/narrower shapes.
-  async function tryFetch(qStr, timeoutMs) {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), timeoutMs);
-    try {
-      const r = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(qStr)}&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
-        { signal: ctl.signal }
-      );
-      clearTimeout(t);
-      if (!r.ok) return null;
-      const j = await r.json();
-      return j.data || [];
-    } catch(e) { clearTimeout(t); return null; }
-  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
   try {
-    let data = null;
-    let anySuccess = false;
-    const record = r => { if (r !== null) anySuccess = true; return r; };
-
-    // Build the list of query shapes we'll race in parallel. pokemontcg.io
-    // is unpredictable — exact phrase matches sometimes return in 400ms,
-    // sometimes hang 15s. Running shapes in parallel means whichever one
-    // returns first wins, and we don't sit on a slow one.
-    const strippedPrimary = primary.replace(/['\u2019]/g, '').toLowerCase();
-    const queryShapes = [
-      // Prefix wildcard on primary — fastest for most cases (Charizard, Mew).
-      `name:${primary}*`,
-      // Exact single-token — keeps ranking tight.
-      `name:"${primary}"`,
-    ];
-    // Full-phrase match (only if multi-word input from Grade Scan).
-    if (parts.length > 1) queryShapes.unshift(`name:"${trimmed}"`);
-    // Apostrophe fallback (`name:lillie*` for `Lillie's`) — known-fast escape hatch.
-    if (strippedPrimary && strippedPrimary !== primary.toLowerCase() && strippedPrimary.length >= 3) {
-      queryShapes.push(`name:${strippedPrimary}*`);
-    }
-
-    // Race all shapes in parallel with a 15s ceiling. Winner is the FIRST
-    // fetch that returns a non-empty array. If all resolve empty, we still
-    // report success (no results found) rather than "search timed out."
-    const promises = queryShapes.map(shape => tryFetch(shape, 15000));
-
-    data = await new Promise(resolve => {
-      let pending = promises.length;
-      let bestEmpty = null; // remember an empty [] in case nothing non-empty comes back
-      promises.forEach(p => p.then(r => {
-        pending--;
-        if (r !== null) anySuccess = true;
-        if (r && r.length) return resolve(r);          // first non-empty wins
-        if (r && !r.length) bestEmpty = r;             // remember empty success
-        if (pending === 0) resolve(bestEmpty);         // all done — return empty or null
-      }));
-    });
-
-    // If every strategy hard-failed (all null — network/abort), throw so the
-    // catch handler shows the retry button. If any strategy returned []
-    // (successful but no matches), fall through to the no-results UI.
-    if (!anySuccess) throw new Error('API error');
-    data = data || [];
-
-    // If the user typed additional tokens (e.g. "ex", "vmax"), filter to matching names first
-    let usedFallback = false;
-    if (remainder && data.length) {
-      const filtered = data.filter(c => (c.name || '').toLowerCase().includes(remainder));
-      if (filtered.length) {
-        data = filtered;
-      } else {
-        // No exact suffix match — keep broader results but flag it so we can show a banner
-        usedFallback = true;
-      }
-    }
-
-    // Rank exact-name matches to the top so "Mew" comes before "Mewtwo" etc.
-    data = _rankByNameMatch(data, primary, c => c.name);
-
+    const res = await fetch(
+      `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=48&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('API error');
+    const json = await res.json();
+    const data = json.data || [];
     if (!data.length) {
-      grid.innerHTML = `<div class="catalog-empty">No Pokémon cards found for "${esc(q)}".<br><br>Try a shorter name like "${esc(primary)}", or browse by set.</div>`;
+      grid.innerHTML = '<div class="catalog-empty">No Pokémon cards found for "' + esc(q) + '". Try a different name.</div>';
       return;
-    }
-
-    // Show a small fallback banner when we broadened the query
-    if (usedFallback || (remainder && trimmed.toLowerCase() !== primary.toLowerCase())) {
-      const label = document.getElementById('catalogQueryLabel');
-      if (label && usedFallback) {
-        label.innerHTML = `Showing results for <strong>"${esc(primary)}"</strong> — no exact matches for <em>"${esc(q)}"</em>`;
-      }
     }
     const cards = data.map(c => ({
       name: c.name, set: c.set?.name || '', number: c.number || '',
@@ -6350,46 +5378,24 @@ async function fetchCatalogPokemon(q, _isFallback) {
               c.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
               c.cardmarket?.prices?.averageSellPrice || null,
       _img: c.images?.small || c.images?.large || '',
-      _rarity: c.rarity || '',
       _raw: c
     }));
     _renderCatalogGrid(cards, i => {
-      // Build the same card shape the dropdown flow uses (see searchPokemon
-      // ~L2291). loadCardUI expects images.{large,small}, priceVariants, setName.
       const raw = data[i];
-      const prices = raw.tcgplayer?.prices || {};
-      const priceVariants = Object.keys(prices).map(key => ({
-        key,
-        label: formatVariantName(key),
-        market: prices[key]?.market ?? null,
-        low:    prices[key]?.low ?? null,
-        mid:    prices[key]?.mid ?? null,
-        high:   prices[key]?.high ?? null,
-      }));
-      if (!priceVariants.length) {
-        priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
-      }
       return {
-        name: raw.name,
-        game: 'pokemon',
-        images: { small: raw.images?.small || '', large: raw.images?.large || raw.images?.small || '' },
-        setName: raw.set?.name || '',
-        number: raw.number || '',
-        rarity: raw.rarity || '',
-        priceVariants,
-        source: 'TCGPlayer',
-        updatedAt: raw.tcgplayer?.updatedAt || '',
+        name: raw.name, set: raw.set?.name || '', number: raw.number || '',
+        img: raw.images?.large || raw.images?.small || '',
+        hp: raw.hp, types: raw.types, game: 'pokemon',
+        prices: { tcgplayer: raw.tcgplayer?.prices || {} }
       };
     });
   } catch(err) {
-    // All four fetch strategies aborted or errored. Show a retry button.
-    if (!_isFallback && q.includes(' ')) {
-      const p = q.trim().split(/\s+/)[0];
-      const label = document.getElementById('catalogQueryLabel');
-      if (label) label.innerHTML = `Showing results for <strong>"${esc(p)}"</strong> — <em>"${esc(q)}"</em> couldn’t be matched exactly`;
-      return fetchCatalogPokemon(p, true);
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      grid.innerHTML = '<div class="catalog-empty">Search timed out — check your connection and try again.</div>';
+    } else {
+      grid.innerHTML = '<div class="catalog-empty">Could not load cards. Check your connection and try again.</div>';
     }
-    grid.innerHTML = `<div class="catalog-empty">Search is slow right now — the card database is having a moment.<br><br><button class="catalog-pg-btn" onclick="fetchCatalogPokemon('${esc(q).replace(/'/g,"\\'")}')">Try again</button></div>`;
   }
 }
 
@@ -6426,8 +5432,7 @@ async function fetchCatalogMTG(q) {
   const cards = data.map(c => ({
     name: c.name, set: c.set_name || '', number: c.collector_number || '',
     _price: c.prices?.usd || null,
-    _img: c.image_uris?.small || (c.card_faces?.[0]?.image_uris?.small) || '',
-    _rarity: c.rarity || ''
+    _img: c.image_uris?.small || (c.card_faces?.[0]?.image_uris?.small) || ''
   }));
   _renderCatalogGrid(cards, i => {
     const raw = data[i];
@@ -6448,7 +5453,7 @@ async function fetchCatalogYugioh(q) {
   const cards = data.map(c => {
     const img = c.card_images?.[0]?.image_url_small || '';
     const price = c.card_prices?.[0]?.tcgplayer_price || null;
-    return { name: c.name, set: c.type || '', number: String(c.id || ''), _price: price, _img: img, _rarity: c.race || c.type || '' };
+    return { name: c.name, set: c.type || '', number: String(c.id || ''), _price: price, _img: img };
   });
   _renderCatalogGrid(cards, i => {
     const raw = data[i];

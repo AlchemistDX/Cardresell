@@ -36,41 +36,20 @@ export default async function handler(req, res) {
       });
     }
 
-    const key      = googleSub || email;
-
-    // ── Welcome bonus: 10 free Card Lookups on first authenticated visit ──
-    // Only grant when we have a real googleSub (not just email) so it's tied to
-    // a verified Google identity, not a spoofable email.
-    let welcomeGranted = false;
-    if (googleSub) {
-      const already = await getKVInt(kvUrl, kvToken, `scans:${key}:welcome_granted`);
-      if (!already) {
-        const curId = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, curId + 10);
-        await setKV(kvUrl, kvToken, `scans:${key}:welcome_granted`, 1);
-        welcomeGranted = true;
-      }
-    }
-
-    const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-    const idPaid   = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-    const stamp    = getMonthStamp();
-    const proFree  = isPro
+    const key     = googleSub || email;
+    const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const idPaid  = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+    const stamp   = getMonthStamp();
+    const proFree = isPro
       ? Math.max(0, 10 - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
       : 0;
-    const proIdFree = isPro
-      ? Math.max(0, 20 - await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`))
-      : 0;
     return res.status(200).json({
-      credits:      paid + proFree,
-      idCredits:    idPaid + proIdFree,
+      credits: paid + proFree,
+      idCredits: idPaid,
       isPro,
-      paidCredits:  paid,
-      freeCredits:  proFree,
-      idPaidCredits: idPaid,
-      idFreeCredits: proIdFree,
-      kvAvailable:  true,
-      welcomeGranted,
+      paidCredits: paid,
+      freeCredits: proFree,
+      kvAvailable: true,
     });
   }
 
@@ -170,40 +149,6 @@ export default async function handler(req, res) {
       return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
     }
 
-    // ── verify_grade_pack_payment: Stripe session → grant Grade Scan credits ('paid_left') ──
-    if (action === 'verify_grade_pack_payment') {
-      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-      if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
-      try {
-        const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
-          headers: { Authorization: `Bearer ${stripeKey}` }
-        });
-        if (!r.ok) return res.status(400).json({ error: 'Could not verify payment' });
-        const session = await r.json();
-        if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
-        if (session.metadata?.type !== 'grade_pack') return res.status(400).json({ error: 'Not a grade pack payment' });
-        if (session.metadata?.credited === 'true') {
-          const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-          return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
-        }
-        const tierMap = { '3': 3, '10': 10, '25': 25 };
-        const qty = tierMap[session.metadata?.tier] || 3;
-        await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `metadata[credited]=true&metadata[credited_to]=${encodeURIComponent(key)}`
-        });
-        if (hasKV) {
-          const current = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, current + qty);
-          return res.status(200).json({ success: true, credits: current + qty, added: qty });
-        }
-        return res.status(200).json({ success: true, credits: qty, added: qty });
-      } catch(e) {
-        return res.status(500).json({ error: 'Verification failed: ' + e.message });
-      }
-    }
-
     // ── verify_id_payment: Stripe session → grant ID scan credits ──
     if (action === 'verify_id_payment') {
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
@@ -230,6 +175,40 @@ export default async function handler(req, res) {
         if (hasKV) {
           const current = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
           await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, current + qty);
+          return res.status(200).json({ success: true, credits: current + qty, added: qty });
+        }
+        return res.status(200).json({ success: true, credits: qty, added: qty });
+      } catch(e) {
+        return res.status(500).json({ error: 'Verification failed: ' + e.message });
+      }
+    }
+
+    // ── verify_grade_payment: Stripe session → grant grade scan credits ──
+    if (action === 'verify_grade_payment') {
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
+      try {
+        const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${stripeKey}` }
+        });
+        if (!r.ok) return res.status(400).json({ error: 'Could not verify payment' });
+        const session = await r.json();
+        if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
+        if (session.metadata?.type !== 'grade_scan') return res.status(400).json({ error: 'Not a grade scan payment' });
+        if (session.metadata?.credited === 'true') {
+          const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
+        }
+        const tierMap = { '5': 5, '20': 20, '50': 50 };
+        const qty = tierMap[session.metadata?.tier] || 5;
+        await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `metadata[credited]=true&metadata[credited_to]=${encodeURIComponent(key)}`
+        });
+        if (hasKV) {
+          const current = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, current + qty);
           return res.status(200).json({ success: true, credits: current + qty, added: qty });
         }
         return res.status(200).json({ success: true, credits: qty, added: qty });

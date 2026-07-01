@@ -40,10 +40,16 @@ export default async function handler(req, res) {
     const paymentType = obj.metadata?.type || '';
 
     if (googleSub) {
-      if (paymentType === 'graded_scan') {
-        // Per-scan payment — add 1 graded scan credit
+      if (paymentType === 'grade_scan') {
+        // Grade scan pack — credit based on tier (5, 20, or 50)
+        const tierMap = { '5': 5, '20': 20, '50': 50 };
+        const qty = tierMap[obj.metadata?.tier] || parseInt(obj.metadata?.credits) || 5;
+        await addPaidScanCredit(googleSub, qty, 'graded');
+        console.log('GRADE_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email, qty }));
+      } else if (paymentType === 'graded_scan') {
+        // Legacy single-scan payment — add 1 credit (backward compat)
         await addPaidScanCredit(googleSub, 1, 'graded');
-        console.log('GRADED_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email }));
+        console.log('GRADED_SCAN_CREDIT_ADDED_LEGACY:', JSON.stringify({ googleSub, email }));
       } else if (paymentType === 'id_scan') {
         // ID scan bundle — credit based on tier
         const tierMap = { '10': 10, '50': 50, '100': 100 };
