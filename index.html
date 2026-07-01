@@ -4324,10 +4324,13 @@ async function _loadScannedCardExact(pending) {
     }
   } catch(e) { /* fall through to autocomplete */ }
 
-  // Fallback: just fill the search and let them pick
+  // Fallback: fill the search box but DO NOT auto-open the dropdown. Let the user tap
+  // Search to pick the exact card. Auto-dispatching 'input' here previously caused the
+  // dropdown auto-selector to pick a wrong-set variant for common Pokémon like Pidove.
   if (si) {
     si.value = name;
-    si.dispatchEvent(new Event('input'));
+    // Show a subtle hint that we couldn't auto-match — user can tap Search.
+    showToast?.('Tap Search to pick the exact card.', 3500);
   }
 }
 
@@ -4447,6 +4450,16 @@ async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
+  // Prevent double-fire: rapid re-taps or camera events firing twice would
+  // consume two credits on the backend but only render one result on the client.
+  if (window._scanInFlight) return;
+  window._scanInFlight = true;
+  // Safety net: never leave the lock stuck for more than 30 seconds.
+  const _lockTimer = setTimeout(() => { window._scanInFlight = false; }, 30000);
+  const _release = () => { clearTimeout(_lockTimer); window._scanInFlight = false; };
+
+  try {
+
   if (!googleUser) { openScanner(); return; }
 
   if (!window._googleIdToken) {
@@ -4535,10 +4548,10 @@ async function processScanImage(input) {
 
     showScanGradeCTA(cardName, '', null);
 
-    window._scanTargetNumber = cardNumber;
-    window._scanTargetName   = cardName;
-    window._scanTargetGrader = '';
-    window._scanTargetGrade  = null;
+    // Only the exact-match path (_pendingIdScanCard → _loadScannedCardExact) loads the card.
+    // Do NOT also set _scanTargetNumber/_scanTargetName — those trigger a second, name-only
+    // dropdown auto-selector that races with the exact-match load and can silently swap the
+    // loaded card to a wrong-set variant (the "Pidove misplay" bug from the demo).
     window._pendingScanBannerCard = cardName;
 
     // Silently load the card into the calculator in the background
@@ -4550,6 +4563,10 @@ async function processScanImage(input) {
   } catch(err) {
     console.error('Scan error:', err);
     statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+  }
+
+  } finally {
+    _release();
   }
 }
 
@@ -4632,14 +4649,23 @@ async function processGradeBack(input) {
   const file = input.files[0];
   if (!file) return;
 
+  // Same double-fire guard as ID scan — stops a rapid re-tap from spending two grade credits.
+  if (window._gradeScanInFlight) return;
+  window._gradeScanInFlight = true;
+  const _gradeLockTimer = setTimeout(() => { window._gradeScanInFlight = false; }, 45000);
+  const _releaseGradeLock = () => { clearTimeout(_gradeLockTimer); window._gradeScanInFlight = false; };
+
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
 
   const frontBase64 = window._gradeFrontBase64;
   if (!frontBase64) {
     statusEl.textContent = 'Front photo missing. Please start over.';
+    _releaseGradeLock();
     return;
   }
+
+  try {
 
   statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 Estimated Grade Scanner</span><br><span style="font-size:.8rem;opacity:.7">Analyzing front + back\u2026</span>';
   resultEl.textContent = '';
@@ -4749,6 +4775,10 @@ async function processGradeBack(input) {
   } catch(err) {
     console.error('Grade error:', err);
     statusEl.textContent = err.message || 'Could not grade the card. Try clearer photos.';
+  }
+
+  } finally {
+    _releaseGradeLock();
   }
 }
 
