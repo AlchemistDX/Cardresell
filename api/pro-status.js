@@ -83,6 +83,30 @@ export default async function handler(req, res) {
       freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
       freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
     }
+
+    // 4. Sign-up bonus — gift 10 ID credits + 1 Grader credit on first sign-in ever
+    const bonusKey = `signup_bonus:${userSub}`;
+    const bonusGiven = await getKVInt(kvUrl, kvToken, bonusKey);
+    if (!bonusGiven) {
+      try {
+        // Set bonus flag so it only runs once
+        await fetch(`${kvUrl}/set/${encodeURIComponent(bonusKey)}/1`, {
+          headers: { Authorization: `Bearer ${kvToken}` },
+        });
+        // Add 10 ID credits
+        const newIdLeft = idPaidLeft + 10;
+        await fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:id_paid_left`)}/${newIdLeft}`, {
+          headers: { Authorization: `Bearer ${kvToken}` },
+        });
+        idPaidLeft = newIdLeft;
+        // Add 1 Grader credit
+        const newPaidLeft = paidScansLeft + 1;
+        await fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:paid_left`)}/${newPaidLeft}`, {
+          headers: { Authorization: `Bearer ${kvToken}` },
+        });
+        paidScansLeft = newPaidLeft;
+      } catch(e) { console.error('Sign-up bonus error:', e); }
+    }
   } else if (isPro) {
     // No KV — give full free allowance
     freeScansLeft = FREE_SCANS_PER_MONTH;
