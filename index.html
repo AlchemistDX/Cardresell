@@ -1985,7 +1985,16 @@ searchInput.addEventListener('input', () => {
 });
 
 searchInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { clearTimeout(searchTimeout); doSearch(searchInput.value.trim()); }
+  if (e.key === 'Enter') {
+    clearTimeout(searchTimeout);
+    const q = searchInput.value.trim();
+    if (q.length >= 2 && activeGame !== 'sports') {
+      dropList.classList.remove('open');
+      openCatalog(q); // Enter opens full card grid, same as Search button
+    } else {
+      doSearch(q);
+    }
+  }
   if (e.key === 'Escape') dropList.classList.remove('open');
 });
 
@@ -2459,6 +2468,20 @@ async function searchYugioh(q) {
 
 // ── Attach click handlers after rendering drop ──
 function attachDropHandlers(cardFactory) {
+  // Add "See all results" footer to jump to the portrait grid
+  const existingFooter = dropList.querySelector('.drop-see-all');
+  if (!existingFooter && dropList.querySelectorAll('.drop-item').length > 0 && activeGame === 'pokemon') {
+    const footer = document.createElement('div');
+    footer.className = 'drop-see-all';
+    footer.innerHTML = `<span>See all results as cards</span><span style="font-size:.8rem">&#8594;</span>`;
+    footer.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);font-size:.82rem;font-weight:700;color:var(--gold);cursor:pointer;';
+    footer.addEventListener('click', () => {
+      dropList.classList.remove('open');
+      openCatalog(searchInput.value.trim());
+    });
+    dropList.appendChild(footer);
+  }
+
   dropList.querySelectorAll('.drop-item').forEach(el => {
     el.addEventListener('click', () => {
       const card = cardFactory(parseInt(el.dataset.idx));
@@ -4192,11 +4215,10 @@ async function _loadScannedCardExact(pending) {
     /* fall through to autocomplete */
   }
 
-  // Fallback: just fill the search and let them pick
-  if (si) {
-    si.value = name;
-    si.dispatchEvent(new Event('input'));
-  }
+  // Fallback: open the full card grid so user can pick from portrait results
+  if (si) si.value = name;
+  switchView('lookup');
+  openCatalog(name); // opens the portrait card grid for the scanned card name
 }
 
 // ── Affiliate grading CTA helpers ──
