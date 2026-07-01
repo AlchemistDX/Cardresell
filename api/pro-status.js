@@ -72,13 +72,16 @@ export default async function handler(req, res) {
     } catch(e) { console.error('Stripe fallback check error:', e); }
   }
 
-  // 3. Get scan credits (only meaningful for Pro users)
+  // 3. Get scan credits — always fetch paid credits; free credits only for Pro
   let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0;
-  if (isPro && kvUrl && kvToken) {
-    const monthKey = `scans:${userSub}:free_used_${getMonthStamp()}`;
-    freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
+  if (kvUrl && kvToken) {
+    // Always check paid credits (any user who bought a scan)
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
-    freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
+    if (isPro) {
+      const monthKey = `scans:${userSub}:free_used_${getMonthStamp()}`;
+      freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
+      freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
+    }
   } else if (isPro) {
     // No KV — give full free allowance
     freeScansLeft = FREE_SCANS_PER_MONTH;

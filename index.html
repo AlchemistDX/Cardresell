@@ -4281,8 +4281,13 @@ function openGradedScanGate() {
     showToast('Sign in with Google first to use the scanner');
     return;
   }
-  // If already Pro with credits, go straight to scan
+  // If user has any credits (Pro free scans OR paid credits), go straight to scan
   if (window._isPro && (window._freeScansLeft > 0 || window._scanCredits > 0)) {
+    document.getElementById('scanFileInput').click();
+    return;
+  }
+  // Non-Pro but has paid scan credits — also go straight to scan
+  if (!window._isPro && window._scanCredits > 0) {
     document.getElementById('scanFileInput').click();
     return;
   }
