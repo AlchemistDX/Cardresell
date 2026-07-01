@@ -2063,8 +2063,10 @@ searchInput.addEventListener('keydown', e => {
     clearTimeout(searchTimeout);
     const q = searchInput.value.trim();
     if (!q) return;
-    // Always use dropdown search — grid catalog is accessible via "See all" link
-    doSearch(q);
+    dropList.classList.remove('open');
+    if (activeGame === 'sports') { doSearch(q); return; }
+    // Enter key → open full Collectr-style catalog grid
+    openCatalog(q);
   }
   if (e.key === 'Escape') dropList.classList.remove('open');
 });
@@ -2074,8 +2076,10 @@ document.getElementById('searchBtn').addEventListener('click', () => {
   if (!window._pendingScanBannerCard) hideGradingCtaBanner();
   const q = searchInput.value.trim();
   if (!q) return;
-  // Always use dropdown search — grid catalog is accessible via "See all" link
-  doSearch(q);
+  dropList.classList.remove('open');
+  if (activeGame === 'sports') { doSearch(q); return; }
+  // Search button → open full Collectr-style catalog grid
+  openCatalog(q);
 });
 
 document.addEventListener('click', e => {
