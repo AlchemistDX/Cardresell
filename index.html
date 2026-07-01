@@ -643,19 +643,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="settings-panel" id="settingsPanel">
   <!-- AI SCANNER — unified section -->
   <div class="settings-inner">
-    <div class="settings-title">🤖 Card ID Scan</div>
+    <div class="settings-title">Card Identification Scanner</div>
 
     <!-- Credit balance row -->
     <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.75rem">
       <div>
-        <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="settingsScanCount">— scans remaining</div>
+        <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="settingsScanCount">— Graded Credits</div>
         <div style="font-size:.68rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check your balance</div>
       </div>
     </div>
 
     <!-- Graded Scan -->
     <div style="margin-bottom:.55rem">
-      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">🏅 Estimated Grade Scanner</div>
+      <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem">Estimated Grade Scanner</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
         <div>
           <div style="font-size:.82rem;font-weight:700;color:var(--text)">$1.50 / scan</div>
@@ -668,7 +668,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- ID Scan -->
     <div style="margin-bottom:.65rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">🔍 Identification Scan</div>
+        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">Identification Scan</div>
         <div style="font-size:.68rem;color:var(--text-muted)" id="idScanBalance"></div>
       </div>
       <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">Single photo · Card name, set &amp; live prices</div>
@@ -686,7 +686,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free grade scans/mo</strong>. ID scan credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Graded Credits/mo</strong>. ID Scanner Credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -713,7 +713,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
     <div style="display:flex;gap:.35rem;flex-shrink:0">
-      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card ID Scan — identify any card instantly">
+      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card Identification Scanner — identify any card instantly">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Scan
       </button>
@@ -1223,12 +1223,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="scan-gate-overlay" id="scanGateOverlay" onclick="closeScanGate(event)">
   <div class="scan-gate-box">
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
-    <div class="scan-gate-title" id="scanGateTitle">Card ID Scan</div>
+    <div class="scan-gate-title" id="scanGateTitle">Card Identification Scanner</div>
     <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
     <div class="scan-gate-options">
       <div class="scan-gate-opt" onclick="handleScanOption('pay')">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name" id="scanGateOptName">&#128247; 🏅 Estimated Grade Scan</div>
+          <div class="scan-gate-opt-name" id="scanGateOptName">Estimated Grade Scan</div>
           <div class="scan-gate-opt-desc" id="scanGateOptDesc">Centering &middot; Corners &middot; Edges &middot; PSA estimate</div>
         </div>
         <div class="scan-gate-opt-price" id="scanGateOptPrice">$1.50</div>
@@ -1290,7 +1290,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- Pay-per-use options -->
     <div class="scan-credit-row">
       <div class="scan-credit-info">
-        <strong>AI Card Scan</strong><br>
+        <strong>Estimated Grade Scanner</strong><br>
         $1.50 per scan &middot; No subscription needed
       </div>
       <button class="scan-credit-buy" onclick="startScanCheckout()">Buy 1 Scan &mdash; $1.50</button>
@@ -1460,7 +1460,7 @@ async function loadSettingsScanCredits() {
   const googleSub = window.googleUser?.sub || window.googleUser?.id || window._googleSub || '';
 
   if (!email) {
-    countEl.textContent = '— scans remaining';
+    countEl.textContent = '— Graded Credits';
     if (subEl) subEl.textContent = 'Sign in to check your balance';
     if (idBalEl) idBalEl.textContent = '';
     return;
@@ -1481,15 +1481,15 @@ async function loadSettingsScanCredits() {
     window._idScanCredits = idCredits;
 
     // Grading scan balance
-    countEl.textContent = credits === 1 ? '1 scan remaining' : `${credits} scans remaining`;
+    countEl.textContent = credits === 1 ? '1 Graded Credit' : `${credits} Graded Credits`;
     if (subEl) {
       if (isPro && credits > 0) {
-        subEl.textContent = 'Includes your Pro monthly scans';
+        subEl.textContent = 'Includes your Pro monthly Graded Credits';
       } else if (credits === 0) {
-        subEl.textContent = 'Out of scans — buy more below';
+        subEl.textContent = 'Out of Graded Credits — buy more below';
         subEl.style.color = 'var(--red, #f87171)';
       } else {
-        subEl.textContent = 'Pay-per-use scans ($1.50 each)';
+        subEl.textContent = 'Pay-per-use Graded Credits ($1.50 each)';
         subEl.style.color = '';
       }
     }
@@ -1497,15 +1497,15 @@ async function loadSettingsScanCredits() {
     // ID scan balance
     if (idBalEl) {
       if (idCredits === 0) {
-        idBalEl.textContent = 'No credits';
+        idBalEl.textContent = 'No ID Scanner Credits';
         idBalEl.style.color = 'var(--red, #f87171)';
       } else {
-        idBalEl.textContent = idCredits === 1 ? '1 credit left' : `${idCredits} credits left`;
+        idBalEl.textContent = idCredits === 1 ? '1 ID Scanner Credit' : `${idCredits} ID Scanner Credits`;
         idBalEl.style.color = 'var(--gold)';
       }
     }
   } catch(e) {
-    countEl.textContent = '— scans remaining';
+    countEl.textContent = '— Graded Credits';
     if (subEl) subEl.textContent = 'Could not load — try again';
     if (idBalEl) idBalEl.textContent = '';
   }
@@ -4001,14 +4001,14 @@ function _setScanGateMode(mode) {
     if (icon)  icon.textContent  = '🏅';
     if (title) title.textContent = 'Estimated Grade Scanner';
     if (sub)   sub.innerHTML     = 'Front &amp; back photo — centering, corners, edges, surface + PSA/BGS/CGC grade estimate.';
-    if (name)  name.innerHTML    = '🏅 🏅 Estimated Grade Scan';
+    if (name)  name.innerHTML    = 'Estimated Grade Scan';
     if (desc)  desc.innerHTML    = 'Centering &middot; Corners &middot; Edges &middot; PSA estimate';
     if (price) price.textContent = '$1.50';
   } else {
     if (icon)  icon.innerHTML    = '&#128247;';
-    if (title) title.textContent = 'Card ID Scan';
+    if (title) title.textContent = 'Card Identification Scanner';
     if (sub)   sub.innerHTML     = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.';
-    if (name)  name.innerHTML    = '&#128247; Buy ID Scan Credits';
+    if (name)  name.innerHTML    = 'Buy ID Scanner Credits';
     if (desc)  desc.innerHTML    = 'Card name &middot; Set &middot; Live prices &mdash; coming soon';
     if (price) price.textContent = 'Soon';
   }
@@ -4433,7 +4433,7 @@ async function startScanCheckout() {
 // ── Start ID scan tier checkout ──
 async function startIdScanCheckout(tier) {
   if (!googleUser) {
-    showToast('Sign in with Google first to buy ID scan credits.');
+    showToast('Sign in with Google first to buy ID Scanner Credits.');
     setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
     return;
   }
@@ -4507,11 +4507,11 @@ function showToast(msg, duration) {
       const googleSub = googleUser?.sub || googleUser?.id || '';
       if (!sessionId || !email) {
         // No session ID — can't verify, show generic message and refresh credits
-        showToast('\u2714 Payment received! Verifying your scan credit…', 4000);
+        showToast('\u2714 Payment received! Verifying your Graded Credit…', 4000);
         return;
       }
       try {
-        showToast('\u231b Confirming your scan credit…', 3000);
+        showToast('\u231b Confirming your Graded Credit…', 3000);
         const r = await fetch('/api/scan-credits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4528,7 +4528,7 @@ function showToast(msg, duration) {
           console.error('Credit verify failed:', data);
         }
       } catch(e) {
-        showToast('\u2714 Payment received — your scan credit is being processed.', 5000);
+        showToast('\u2714 Payment received — your Graded Credit is being processed.', 5000);
         console.error('Credit verify error:', e);
       }
     })();
@@ -4545,12 +4545,12 @@ function showToast(msg, duration) {
       const email     = window._userEmail || '';
       const googleSub = googleUser?.sub || googleUser?.id || '';
       if (!sessionId || !email) {
-        showToast('\u2705 ID scan credits purchased! Loading balance\u2026', 4000);
+        showToast('\u2705 ID Scanner Credits purchased! Loading balance\u2026', 4000);
         setTimeout(() => loadSettingsScanCredits?.(), 1500);
         return;
       }
       try {
-        showToast('\u23f3 Confirming your ID scan credits\u2026', 3000);
+        showToast('\u23f3 Confirming your ID Scanner Credits\u2026', 3000);
         const r = await fetch('/api/scan-credits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4561,8 +4561,8 @@ function showToast(msg, duration) {
           const added = data.added || 0;
           window._idScanCredits = data.credits || 0;
           const msg = data.alreadyCredited
-            ? '\u2705 ID scan credits already applied to your account.'
-            : `\u2705 ${added} ID scan credits added! Ready to use.`;
+            ? '\u2705 ID Scanner Credits already applied to your account.'
+            : `\u2705 ${added} ID Scanner Credits added! Ready to use.`;
           showToast(msg, 5000);
           loadSettingsScanCredits?.();
         } else {
@@ -4570,7 +4570,7 @@ function showToast(msg, duration) {
           console.error('ID credit verify failed:', data);
         }
       } catch(e) {
-        showToast('\u2705 ID scan credits purchased \u2014 balance updating shortly.', 5000);
+        showToast('\u2705 ID Scanner Credits purchased \u2014 balance updating shortly.', 5000);
         console.error('ID credit verify error:', e);
       }
     })();
