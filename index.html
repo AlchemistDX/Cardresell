@@ -4936,7 +4936,7 @@ function updateProUI() {
     }
     // Update pricing modal Pro button label
     const pricingProBtnText = document.getElementById('pricingProBtnText');
-    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $4.99/mo';
+    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $9.99/mo';
   }
 }
 
@@ -5029,12 +5029,12 @@ async function startProCheckout() {
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       if (btn) btn.disabled = false;
-      if (txt) txt.textContent = 'Get Pro — $4.99/mo';
+      if (txt) txt.textContent = 'Get Pro — $9.99/mo';
     }
   } catch(e) {
     showToast('⚠️ Network error. Try again.');
     if (btn) btn.disabled = false;
-    if (txt) txt.textContent = 'Get Pro — $4.99/mo';
+    if (txt) txt.textContent = 'Get Pro — $9.99/mo';
   }
 }
 
