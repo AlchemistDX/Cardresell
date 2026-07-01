@@ -190,8 +190,8 @@ img{display:block;max-width:100%;height:auto}
 .catalog-card:active{transform:scale(.96)}
 .catalog-card:hover{border-color:var(--gold)}
 /* Image area — fixed portrait aspect ratio */
-.catalog-card-img-wrap{width:100%;aspect-ratio:63/88;background:#0d0d0f;display:flex;align-items:center;justify-content:center;padding:.5rem;box-sizing:border-box;flex-shrink:0}
-.catalog-card-img-wrap img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px}
+.catalog-card-img-wrap{width:100%;aspect-ratio:63/88;background:#0d0d0f;overflow:hidden;flex-shrink:0;border-radius:10px 10px 0 0}
+.catalog-card-img-wrap img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
 .catalog-card-img-wrap img:not([src]){opacity:0}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 .catalog-card-img-wrap.loading{background:linear-gradient(90deg,#1e1e20 25%,#2a2a2e 50%,#1e1e20 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
@@ -816,6 +816,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div class="sgc-label">&#127942; Get It Graded</div>
       <div class="sgc-headline" id="scanGradeCTAHeadline">Worth grading? Submit now.</div>
       <div class="sgc-sub">Official grades unlock 2–5× higher resale value.</div>
+      <!-- AI Grading Estimate CTA -->
+      <button onclick="window._openGradeAfterScan=true;cancelScan()" style="width:100%;margin-bottom:.6rem;padding:.65rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:800;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">&#11088; Ai Grading Estimate &mdash; Know before you submit</button>
       <div class="sgc-btns" id="scanGradeCTABtns">
         <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
         <a href="https://www.cgccomics.com/cards/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
@@ -4098,10 +4100,11 @@ function cancelScan() {
   document.getElementById('gradeFileInput')?.addEventListener('change', function() { processGradeImage(this); });
   document.getElementById('gradeBackFileInput')?.addEventListener('change', function() { processGradeBack(this); });
 
-  // If ID scan identified a card, load the exact card directly (match by name + number)
+  // If ID scan identified a card, switch to Lookup view and load the exact card
   if (window._pendingIdScanCard) {
     const pending = window._pendingIdScanCard;
     window._pendingIdScanCard = null;
+    switchView('lookup'); // make sure we're on the lookup tab
     _loadScannedCardExact(pending);
   }
 }
@@ -4113,18 +4116,36 @@ async function _loadScannedCardExact(pending) {
   if (si) si.value = name;
 
   try {
-    // Build query: name + number gives us the exact card
-    let q = `name:${encodeURIComponent(name)}`;
-    if (number) q += ` number:${encodeURIComponent(number.replace(/\/.*$/, '').trim())}`; // strip /setsize
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-    const res  = await fetch(url);
-    if (!res.ok) throw new Error('API error');
-    const json = await res.json();
-    let cards = json.data || [];
+    // Strategy: search by name only (wildcard), then filter client-side by number.
+    // DO NOT encodeURIComponent the field values — PokemonTCG.io query syntax uses raw text.
+    // The whole URL param is encoded once by the URL constructor.
+    const cleanName = name.replace(/["\\]/g, ''); // strip quotes/backslashes only
+    const cleanNumber = number ? number.replace(/\/.*$/, '').trim() : ''; // strip /setsize e.g. "173/236" → "173"
+
+    // Try multiple query strategies in order, stop at first that returns results.
+    // PokemonTCG.io query syntax: field:value — NO encodeURIComponent on the value itself.
+    // The whole q= param gets encodeURIComponent once below.
+    const firstWord = cleanName.split(/\s+/)[0]; // e.g. "Lillie" from "Lillie's Clefairy GX"
+    const queries = [
+      `name:"${cleanName}"`,            // exact phrase (works for simple names)
+      `name:${firstWord}* number:${cleanNumber}`, // first-word wildcard + number filter
+      `name:${firstWord}*`,             // broad first-word wildcard, filter client-side
+    ].filter(q => q.trim());
+
+    let cards = [];
+    for (const q of queries) {
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        cards = json.data || [];
+        if (cards.length > 0) break; // got results, stop trying
+      }
+    }
 
     // Pick the best match: prefer exact number match, then rarity match
-    let match = cards.find(c => c.number === number);
-    if (!match && number) match = cards.find(c => c.number?.startsWith(number.split('/')[0]));
+    let match = cleanNumber ? cards.find(c => c.number === cleanNumber) : null;
+    if (!match && cleanNumber) match = cards.find(c => c.number?.split('/')[0] === cleanNumber);
     if (!match && rarity) match = cards.find(c => (c.rarity || '').toLowerCase() === rarity.toLowerCase());
     if (!match) match = cards[0];
 
@@ -4153,9 +4174,23 @@ async function _loadScannedCardExact(pending) {
       if (si) si.value = card.name;
       dropList.classList.remove('open');
       loadCardUI(card);
+      // If AI grading was requested, open the grade gate now
+      if (window._openGradeAfterScan) {
+        window._openGradeAfterScan = false;
+        setTimeout(() => {
+          // Scroll card into view first, then open the grade scan flow
+          typeof openGradeScanGate === 'function' && openGradeScanGate();
+        }, 600);
+      }
+      // Scroll card into view
+      const mainCard = document.getElementById('cardMain') || document.getElementById('cardPanel');
+      if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
-  } catch(e) { /* fall through to autocomplete */ }
+  } catch(e) {
+    console.warn('[_loadScannedCardExact] error:', e);
+    /* fall through to autocomplete */
+  }
 
   // Fallback: just fill the search and let them pick
   if (si) {
