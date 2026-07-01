@@ -5373,13 +5373,13 @@ async function startGradeScanCheckout(tier) {
     if (priceEl) priceEl.textContent = 'Redirecting…';
   }
   try {
-    const r = await fetch('/api/stripe-grade-checkout', {
+    const r = await fetch('/api/stripe-id-checkout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (window._googleIdToken || '')
       },
-      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub })
+      body: JSON.stringify({ type: 'grade', tier, email: googleUser.email, userId: googleUser.sub })
     });
     const d = await r.json();
     if (d.url) {
