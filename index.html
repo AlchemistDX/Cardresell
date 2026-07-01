@@ -645,11 +645,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <div class="settings-inner">
     <div class="settings-title">Card Identification Scanner</div>
 
-    <!-- Credit balance row -->
-    <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.75rem">
-      <div>
-        <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="settingsScanCount">— credits</div>
-        <div style="font-size:.68rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check your balance</div>
+    <!-- Credit balances row -->
+    <div id="settingsScanCredits" style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-bottom:.75rem">
+      <!-- Card Grader Credits -->
+      <div style="padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">Grader Credits</div>
+        <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="settingsScanCount">—</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check</div>
+      </div>
+      <!-- ID Scanner Credits -->
+      <div style="padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">ID Scanner Credits</div>
+        <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="idScanCount">—</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="idScanSub">Sign in to check</div>
       </div>
     </div>
 
@@ -669,7 +677,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div style="margin-bottom:.65rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
         <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">Identification Scan</div>
-        <div style="font-size:.68rem;color:var(--text-muted)" id="idScanBalance"></div>
       </div>
       <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">Single photo · Card name, set &amp; live prices</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
@@ -1452,62 +1459,65 @@ function toggleTplKeyVisibility() {
 async function loadSettingsScanCredits() {
   const countEl   = document.getElementById('settingsScanCount');
   const subEl     = document.getElementById('settingsScanSub');
-  const idBalEl   = document.getElementById('idScanBalance');
+  const idCountEl = document.getElementById('idScanCount');
+  const idSubEl   = document.getElementById('idScanSub');
   if (!countEl) return;
 
-  // Try multiple sources for email/sub in case timing is off
   const email     = window._userEmail || window.googleUser?.email || '';
   const googleSub = window.googleUser?.sub || window.googleUser?.id || window._googleSub || '';
 
   if (!email) {
-    countEl.textContent = '— credits';
-    if (subEl) subEl.textContent = 'Sign in to check your balance';
-    if (idBalEl) idBalEl.textContent = '';
+    countEl.textContent = '—';
+    if (subEl)     subEl.textContent = 'Sign in to check';
+    if (idCountEl) idCountEl.textContent = '—';
+    if (idSubEl)   idSubEl.textContent = 'Sign in to check';
     return;
   }
-  countEl.textContent = 'Loading…';
-  if (subEl) subEl.textContent = '';
-  if (idBalEl) idBalEl.textContent = 'Loading…';
+
+  countEl.textContent = '…';
+  if (idCountEl) idCountEl.textContent = '…';
+
   try {
     const params = new URLSearchParams({ email });
     if (googleSub) params.set('sub', googleSub);
-    const res = await fetch('/api/scan-credits?' + params.toString());
+    const res  = await fetch('/api/scan-credits?' + params.toString());
     const data = await res.json();
     const credits   = typeof data.credits   === 'number' ? data.credits   : 0;
     const idCredits = typeof data.idCredits === 'number' ? data.idCredits : 0;
     const isPro     = data.isPro || false;
 
-    // Store ID credits globally for gate logic
     window._idScanCredits = idCredits;
 
-    // Grading scan balance
-    countEl.textContent = credits === 1 ? '1 credit' : `${credits} credits`;
+    // — Grader Credits —
+    countEl.textContent = credits.toString();
+    countEl.style.color = credits === 0 ? 'var(--red, #f87171)' : 'var(--text)';
     if (subEl) {
       if (isPro && credits > 0) {
-        subEl.textContent = 'Includes your Pro Card Grader Credits';
+        subEl.textContent = 'Pro monthly included';
+        subEl.style.color = '';
       } else if (credits === 0) {
-        subEl.textContent = 'Out of Card Grader Credits';
+        subEl.textContent = 'None left — buy below';
         subEl.style.color = 'var(--red, #f87171)';
       } else {
-        subEl.textContent = 'Card Grader Credits · $1.50 each';
+        subEl.textContent = '$1.50 per scan';
         subEl.style.color = '';
       }
     }
 
-    // ID scan balance
-    if (idBalEl) {
-      if (idCredits === 0) {
-        idBalEl.textContent = 'No ID Scanner Credits';
-        idBalEl.style.color = 'var(--red, #f87171)';
-      } else {
-        idBalEl.textContent = idCredits === 1 ? '1 ID Scanner Credit' : `${idCredits} ID Scanner Credits`;
-        idBalEl.style.color = 'var(--gold)';
-      }
+    // — ID Scanner Credits —
+    if (idCountEl) {
+      idCountEl.textContent = idCredits.toString();
+      idCountEl.style.color = idCredits === 0 ? 'var(--red, #f87171)' : 'var(--gold)';
+    }
+    if (idSubEl) {
+      idSubEl.textContent  = idCredits === 0 ? 'None left — buy below' : 'Never expire';
+      idSubEl.style.color  = idCredits === 0 ? 'var(--red, #f87171)' : '';
     }
   } catch(e) {
-    countEl.textContent = '— credits';
-    if (subEl) subEl.textContent = 'Could not load — try again';
-    if (idBalEl) idBalEl.textContent = '';
+    countEl.textContent = '—';
+    if (subEl)     subEl.textContent = 'Could not load';
+    if (idCountEl) idCountEl.textContent = '—';
+    if (idSubEl)   idSubEl.textContent = 'Could not load';
   }
 }
 
