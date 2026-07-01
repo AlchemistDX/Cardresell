@@ -4433,8 +4433,8 @@ async function processScanImage(input) {
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
 
-  // Compress image before sending — resize to max 1000px to stay under payload limits
-  const imageBase64 = await compressImage(file, 1000);
+  // Compress image before sending — 640px is plenty for ID mode (detail:'auto' → 512px tile)
+  const imageBase64 = await compressImage(file, 640);
   const idToken = window._googleIdToken || '';
 
   try {

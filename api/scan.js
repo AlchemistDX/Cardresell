@@ -177,14 +177,14 @@ Respond ONLY with valid JSON, no explanation:
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: isGradeMode ? 500 : 300,
+        max_tokens: isGradeMode ? 500 : 200,
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'image_url',
-                image_url: { url: dataUrl, detail: 'high' }
+                image_url: { url: dataUrl, detail: isGradeMode ? 'high' : 'auto' }
               },
               // Include back image for grade mode if provided
               ...(isGradeMode && backDataUrl ? [{
