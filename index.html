@@ -2115,10 +2115,37 @@ async function doSearch(q) {
 }
 
 /* ── Pokémon API (PokemonTCG.io) ── */
+// Sort TPL/API results so exact-name matches for the query float to the top,
+// then variant matches ("Mew ex", "Mew V"), then substring matches ("Mewtwo").
+// Without this, TPL returns e.g. Mewtwo-EX and Meowth ahead of Mew when the
+// query is "Mew", which is what the user reported.
+function _rankByNameMatch(cards, q, getName) {
+  const ql = (q || '').toLowerCase().trim();
+  if (!ql) return cards;
+  const scoreName = raw => {
+    const nl = (getName(raw) || '').toLowerCase();
+    if (!nl) return 9;
+    if (nl === ql) return 0;
+    // Word-boundary match: "mew" appears as a whole word in "Mewtwo & Mew-GX"
+    const tokens = nl.split(/[^a-z0-9]+/).filter(Boolean);
+    if (tokens[0] === ql) return 1;                     // starts with query as whole first word
+    if (tokens.includes(ql)) return 2;                  // has query as whole word anywhere
+    if (tokens[0] && tokens[0].startsWith(ql)) return 3;// first word starts with query (Mewtwo)
+    if (nl.startsWith(ql)) return 4;                    // prefix but not word-boundary
+    return 5;                                           // substring / fuzzy
+  };
+  return cards.slice().sort((a, b) => {
+    const sa = scoreName(a), sb = scoreName(b);
+    if (sa !== sb) return sa - sb;
+    return 0; // preserve API order within tier
+  });
+}
+
 async function searchPokemon(q) {
   // Try TCGPriceLookup first if key is set
-  const tplData = await searchWithTPL(q, 'pokemon');
+  let tplData = await searchWithTPL(q, 'pokemon');
   if (tplData) {
+    tplData = _rankByNameMatch(tplData, q, c => c.name);
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
       window._searchCards[i] = { _tpl: c, game: 'pokemon' };
@@ -2141,11 +2168,18 @@ async function searchPokemon(q) {
     return;
   }
 
-  // Fallback: PokemonTCG.io
-  const url = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-  const r = await fetch(url);
-  const data = await r.json();
+  // Fallback: PokemonTCG.io — exact-token match first (avoids Mewtwo when
+  // searching "Mew"), then prefix wildcard if the exact query is empty.
+  const exactUrl  = `https://api.pokemontcg.io/v2/cards?q=name:%22${encodeURIComponent(q)}%22&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+  const prefixUrl = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+  let r = await fetch(exactUrl);
+  let data = r.ok ? await r.json() : { data: [] };
   let cards = data.data || [];
+  if (!cards.length) {
+    r = await fetch(prefixUrl);
+    data = r.ok ? await r.json() : { data: [] };
+    cards = data.data || [];
+  }
 
   // Sort: exact match first, then by rarity (rarest first), then by set date desc
   const ql = q.toLowerCase().trim();
@@ -5559,14 +5593,28 @@ async function fetchCatalogPokemon(q, _isFallback) {
   const remainder = parts.slice(1).join(' ').trim().toLowerCase();
 
   try {
-    const res = await fetch(
-      `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(primary)}*&pageSize=48&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
+    // Prefer the whole-word exact match (name:"mew") first so we don't get
+    // Mewtwo/Meowth in the top slots. Fall back to prefix wildcard if the
+    // exact-token query returns nothing (rare edge cases like partial typing).
+    let res = await fetch(
+      `https://api.pokemontcg.io/v2/cards?q=name:%22${encodeURIComponent(primary)}%22&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
       { signal: controller.signal }
     );
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('API error');
-    const json = await res.json();
+    let json = res.ok ? await res.json() : { data: [] };
     let data = json.data || [];
+
+    // If exact-token search returns nothing, retry with the prefix wildcard
+    if (!data.length) {
+      res = await fetch(
+        `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(primary)}*&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
+        { signal: controller.signal }
+      );
+      json = res.ok ? await res.json() : { data: [] };
+      data = json.data || [];
+    }
+
+    clearTimeout(timer);
+    if (!res.ok && !data.length) throw new Error('API error');
 
     // If the user typed additional tokens (e.g. "ex", "vmax"), filter to matching names first
     let usedFallback = false;
@@ -5579,6 +5627,9 @@ async function fetchCatalogPokemon(q, _isFallback) {
         usedFallback = true;
       }
     }
+
+    // Rank exact-name matches to the top so "Mew" comes before "Mewtwo" etc.
+    data = _rankByNameMatch(data, primary, c => c.name);
 
     if (!data.length) {
       grid.innerHTML = `<div class="catalog-empty">No Pokémon cards found for "${esc(q)}".<br><br>Try a shorter name like "${esc(primary)}", or browse by set.</div>`;
