@@ -137,10 +137,10 @@ button{cursor:pointer;border:none;background:none}
 img{display:block;max-width:100%;height:auto}
 
 /* ─── SHELL ─── */
-.wrap{max-width:1100px;margin:0 auto;padding:0 1.25rem 4rem}@media(max-width:820px){.wrap{padding:0 1rem 4rem}}
+.wrap{max-width:1100px;margin:0 auto;padding:0 1.25rem 4rem}
 
 /* ─── HEADER ─── */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 0 1.75rem;border-bottom:1px solid var(--divider);margin-bottom:1.75rem}@media(max-width:820px){.hdr{padding:.65rem 0 .75rem;margin-bottom:.85rem}}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 0 1.75rem;border-bottom:1px solid var(--divider);margin-bottom:1.75rem}
 .logo{display:flex;align-items:center;gap:.55rem}
 .logo-text{font-size:1.15rem;font-weight:800;letter-spacing:-.025em}
 .logo-text span{color:var(--gold)}
@@ -151,25 +151,55 @@ img{display:block;max-width:100%;height:auto}
 
 /* ─── SEARCH BAR ─── */
 .search-area{margin-bottom:1.5rem}
-.search-row{display:flex;gap:.625rem;align-items:stretch}
-.search-box{position:relative;flex:1}
+.search-row{display:flex;gap:.5rem;align-items:stretch}
+.search-box{position:relative;flex:1;min-width:0}
 .search-icon{position:absolute;left:.875rem;top:50%;transform:translateY(-50%);color:var(--text-faint);pointer-events:none;display:flex}
 .search-input{width:100%;padding:.75rem .875rem .75rem 2.6rem;border:1.5px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2);font-size:.95rem;outline:none;transition:border-color var(--ease),box-shadow var(--ease)}
 .search-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-border)}
 .search-input::placeholder{color:var(--text-faint)}
-.search-btn{padding:.75rem 1.35rem;background:var(--gold);color:#fff;border-radius:var(--radius-lg);font-weight:700;font-size:.88rem;white-space:nowrap;transition:background var(--ease),transform var(--ease)}
+.search-btn{padding:.75rem 1.35rem;background:var(--gold);color:#fff;border-radius:var(--radius-lg);font-weight:700;font-size:.88rem;white-space:nowrap;transition:background var(--ease),transform var(--ease);flex-shrink:0}
 .search-btn:hover{background:var(--gold-h)}
 .search-btn:active{transform:scale(.97)}
 .search-btn:disabled{opacity:.5;cursor:not-allowed}
+/* Scanner sub-row — shown below search on mobile */
+.scan-sub-row{display:none;gap:.5rem;margin-top:.45rem}
+.scan-sub-btn{display:flex;align-items:center;gap:.35rem;padding:.48rem .9rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.78rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease);flex:1;justify-content:center}
+.scan-sub-btn.grade-sub{border-color:var(--gold-border);color:var(--gold)}
+.scan-sub-btn:hover{background:var(--gold-hi);border-color:var(--gold);color:var(--gold)}
 @media(max-width:820px){
-  #howItWorksBar{padding:.4rem .875rem .35rem!important;flex-wrap:nowrap!important;overflow:hidden}
-  #howItWorksBar span{font-size:.67rem!important}
-  #howItWorksBar button{font-size:.63rem!important;padding:.2rem .55rem!important}
-  .view-tabs{margin-bottom:.7rem}
-  .search-area{margin-bottom:.9rem}
-  .search-row{gap:.4rem}
-  .scan-btn{padding:.55rem .6rem!important;font-size:.73rem!important;gap:.25rem!important}
+  .search-row .scan-inline{display:none!important}
+  .scan-sub-row{display:flex!important}
 }
+/* Catalog overlay */
+#catalogOverlay{position:fixed;inset:0;background:var(--bg);z-index:150;display:none;flex-direction:column;overflow:hidden;width:100%;max-width:100vw}
+#catalogOverlay.open{display:flex}
+.catalog-header{display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.catalog-back{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text-muted);cursor:pointer;flex-shrink:0;font-size:1.1rem;transition:all var(--ease)}
+.catalog-back:hover{border-color:var(--gold);color:var(--text)}
+.catalog-search-wrap{flex:1;position:relative}
+.catalog-search-wrap .search-icon{position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--text-faint);pointer-events:none;display:flex}
+.catalog-input{width:100%;padding:.6rem .85rem .6rem 2.3rem;background:var(--surface-2);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.9rem;color:var(--text);outline:none;transition:border-color var(--ease)}
+.catalog-input:focus{border-color:var(--gold)}
+.catalog-query-label{font-size:.72rem;color:var(--text-muted);padding:.5rem 1rem .25rem;flex-shrink:0}
+.catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;padding:1rem;overflow-y:auto;overflow-x:hidden;flex:1;width:100%}
+@media(max-width:820px){.catalog-grid{grid-template-columns:repeat(2,1fr);gap:.65rem;padding:.75rem}}
+.catalog-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s;display:flex;flex-direction:column;min-width:0}
+.catalog-card:hover,.catalog-card:active{border-color:var(--gold);transform:scale(.97)}
+.catalog-card-img-wrap{width:100%;aspect-ratio:63/88;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.catalog-card-img-wrap img{width:100%;height:100%;object-fit:contain;display:block}
+.catalog-card-img-wrap img:not([src]){opacity:0}
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.catalog-card-img-wrap.loading{background:linear-gradient(90deg,#1e1e20 25%,#2a2a2e 50%,#1e1e20 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
+.catalog-card-body{padding:.6rem .75rem}
+.catalog-card-name{font-size:.82rem;font-weight:700;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.catalog-card-meta{font-size:.7rem;color:var(--text-muted);margin-top:.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.catalog-card-price{font-size:.85rem;font-weight:800;color:var(--gold);margin-top:.3rem}
+.catalog-empty{grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted);font-size:.9rem}
+.catalog-coming-soon{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;gap:.75rem}
+.catalog-cs-icon{font-size:3rem;opacity:.3}
+.catalog-cs-title{font-size:1rem;font-weight:800;color:var(--text);opacity:.5}
+.catalog-cs-sub{font-size:.82rem;color:var(--text-muted);max-width:260px;line-height:1.55}
+.catalog-loading{grid-column:1/-1;text-align:center;padding:3rem 1rem;color:var(--text-muted)}
 
 /* category pills */
 .cat-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}
@@ -556,43 +586,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-gate-opt-desc{font-size:.73rem;color:var(--text-muted);margin-top:.1rem}
 .scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
 .scan-gate-cancel{font-size:.78rem;color:var(--text-faint);cursor:pointer;text-decoration:underline;background:none;border:none;padding:.25rem}
-/* ─── CAMERA ALIGNMENT FRAME ─── */
-#scanOverlay .card-frame-wrap{position:relative;width:min(55vw,200px);margin:0 auto .5rem;flex-shrink:0}
-#scanOverlay .card-frame{
-  display:block;width:100%;aspect-ratio:2.5/3.5;
-  border:2.5px dashed rgba(255,255,255,.55);border-radius:10px;
-  position:relative;background:rgba(255,255,255,.04);
-}
-#scanOverlay .card-frame::before,#scanOverlay .card-frame::after,
-#scanOverlay .card-frame-wrap::before,#scanOverlay .card-frame-wrap::after{
-  content:'';position:absolute;width:16px;height:16px;border-color:var(--gold);border-style:solid;
-}
-#scanOverlay .card-frame::before{top:-2px;left:-2px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
-#scanOverlay .card-frame::after {top:-2px;right:-2px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
-#scanOverlay .card-frame-wrap::before{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 4px;transform:translateY(2px)}
-#scanOverlay .card-frame-wrap::after {bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 4px 0;transform:translateY(2px)}
-#scanOverlay .card-frame-label{
-  position:absolute;bottom:-1.4rem;left:0;right:0;
-  text-align:center;font-size:.62rem;color:rgba(255,255,255,.45);letter-spacing:.04em;white-space:nowrap;
-}
-/* credit badge in overlay */
-#scanCreditBadge{
-  display:inline-flex;align-items:center;gap:.3rem;
-  background:rgba(196,122,0,.18);border:1px solid rgba(196,122,0,.4);
-  border-radius:99px;padding:.22rem .7rem;
-  font-size:.72rem;font-weight:700;color:var(--gold);
-  margin-bottom:.1rem;
-}
-#scanCreditBadge.id-type{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.35);color:#fde047}
-/* scanner mode header bar */
-#scanModeBar{
-  display:flex;align-items:center;justify-content:center;gap:.4rem;
-  font-size:.75rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
-  color:rgba(255,255,255,.9);margin-bottom:.1rem;
-}
-#scanModeBar .scan-mode-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0}
-#scanModeBar.id-mode .scan-mode-dot{background:#fde047}
-
 
 /* --- GRADING AFFILIATE CTA --- */
 .grade-cta-banner{display:none;margin:.85rem 0 .25rem;padding:.9rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.08) 0%,rgba(196,122,0,.04) 100%);border:1px solid rgba(196,122,0,.3);border-radius:var(--radius-lg);animation:fadeSlideUp .3s ease}
@@ -757,19 +750,31 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <span class="search-icon">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       </span>
-      <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
+      <input id="searchInput" class="search-input" type="text" placeholder="Search card name…" autocomplete="off" />
     </div>
-    <div style="display:flex;gap:.35rem;flex-shrink:0">
-      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card Identification Scanner — identify any card instantly">
+    <!-- Desktop: Scan + Grade inline -->
+    <div class="scan-inline" style="display:flex;gap:.35rem;flex-shrink:0">
+      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card Identification Scanner">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Scan
       </button>
-      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="Estimated Grade Scanner — centering, corners, edges &amp; PSA grade estimate">
+      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="Estimated Grade Scanner">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         Grade
       </button>
     </div>
     <button id="searchBtn" class="search-btn">Search</button>
+  </div>
+  <!-- Mobile: Scan + Grade as full-width sub-row -->
+  <div class="scan-sub-row" id="scanSubRow">
+    <button class="scan-sub-btn" id="idScanSubBtn" onclick="openGradedScanGate()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      ID Scan <span id="idScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span>
+    </button>
+    <button class="scan-sub-btn grade-sub" id="gradeScanSubBtn" onclick="openGradeScanGate()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      Grade Scan <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span>
+    </button>
   </div>
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
   <div id="promoBanner" class="promo-banner">
@@ -786,19 +791,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
   <input type="file" id="gradeBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
   <!-- Scan status modal -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;padding:1.5rem">
-    <!-- Mode label + credit badge -->
-    <div id="scanModeBar"><span class="scan-mode-dot"></span><span id="scanModeLabel">Card Identification Scanner</span></div>
-    <div id="scanCreditBadge">— credits</div>
-    <!-- Card alignment frame (shown before/during capture, hidden after result) -->
-    <div id="scanFrameWrap" class="card-frame-wrap" style="display:none">
-      <div class="card-frame">
-        <span class="card-frame-label">Line card up inside frame</span>
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
+    <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
+      <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
+        <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
       </div>
-    </div>
-    <!-- Preview after capture -->
-    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
-      <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
@@ -1570,6 +1567,8 @@ async function loadSettingsScanCredits() {
     const isPro     = data.isPro || false;
 
     window._idScanCredits = idCredits;
+    window._scanCredits = credits;
+    if (typeof updateScanBtnCredits === 'function') updateScanBtnCredits();
 
     // — Grader Credits —
     countEl.textContent = credits.toString();
@@ -1947,13 +1946,6 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
 });
 
 // ── Search debounce ──
-searchInput.addEventListener('focus', () => {
-  if (window.innerWidth <= 820) {
-    setTimeout(() => {
-      searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 320);
-  }
-});
 searchInput.addEventListener('input', () => {
   clearTimeout(searchTimeout);
   const q = searchInput.value.trim();
@@ -1968,9 +1960,13 @@ searchInput.addEventListener('keydown', e => {
 
 document.getElementById('searchBtn').addEventListener('click', () => {
   clearTimeout(searchTimeout);
-  // If this is a manual search (not from scan), hide grading CTA banner
   if (!window._pendingScanBannerCard) hideGradingCtaBanner();
-  doSearch(searchInput.value.trim());
+  const q = searchInput.value.trim();
+  if (q.length >= 2 && activeGame !== 'sports') {
+    openCatalog(q);
+  } else {
+    doSearch(q);
+  }
 });
 
 document.addEventListener('click', e => {
@@ -4018,58 +4014,6 @@ function openScanner() {
   document.getElementById('scanFileInput').click();
 }
 
-
-// ── Scanner overlay helper — sets mode label + credit count + shows frame ──
-function _openScanOverlay(mode) {
-  // mode: 'id' | 'grade'
-  const overlay   = document.getElementById('scanOverlay');
-  const modeBar   = document.getElementById('scanModeBar');
-  const modeLabel = document.getElementById('scanModeLabel');
-  const badge     = document.getElementById('scanCreditBadge');
-  const frameWrap = document.getElementById('scanFrameWrap');
-  const prevWrap  = document.getElementById('scanPreviewWrap');
-  const statusEl  = document.getElementById('scanStatus');
-  const resultEl  = document.getElementById('scanResult');
-
-  // Reset result area
-  if (prevWrap) prevWrap.style.display = 'none';
-  if (resultEl) resultEl.textContent = '';
-  if (statusEl) statusEl.textContent = '';
-  const cta = document.getElementById('scanGradeCTA');
-  if (cta) cta.classList.remove('show');
-
-  if (mode === 'grade') {
-    if (modeLabel) modeLabel.textContent = 'Estimated Grade Scanner';
-    if (modeBar)   { modeBar.className = 'scan-mode-bar'; }
-    const credits = window._scanCredits || 0;
-    if (badge) {
-      badge.id = 'scanCreditBadge'; badge.className = '';
-      badge.textContent = credits + ' Card Grader Credit' + (credits !== 1 ? 's' : '');
-      badge.style.display = 'inline-flex';
-    }
-    if (statusEl) statusEl.innerHTML = '<span style="color:rgba(255,255,255,.7);font-size:.82rem">Front photo first — flip for back after</span>';
-  } else {
-    if (modeLabel) modeLabel.textContent = 'Card Identification Scanner';
-    if (modeBar)   { modeBar.className = 'scan-mode-bar id-mode'; }
-    const credits = window._idScanCredits || 0;
-    if (badge) {
-      badge.id = 'scanCreditBadge'; badge.className = 'id-type';
-      badge.textContent = credits + ' ID Scanner Credit' + (credits !== 1 ? 's' : '');
-      badge.style.display = 'inline-flex';
-    }
-    if (statusEl) statusEl.innerHTML = '<span style="color:rgba(255,255,255,.7);font-size:.82rem">Tap below to take your photo</span>';
-  }
-
-  // Show alignment frame
-  if (frameWrap) frameWrap.style.display = '';
-  if (overlay) overlay.style.display = 'flex';
-}
-
-function _hideScanFrame() {
-  const f = document.getElementById('scanFrameWrap');
-  if (f) f.style.display = 'none';
-}
-
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
   const gradeCTA = document.getElementById('scanGradeCTA');
@@ -4178,7 +4122,6 @@ async function processScanImage(input) {
   const objectUrl = URL.createObjectURL(file);
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
-  _hideScanFrame();
 
   // Compress image before sending — resize to max 1000px to stay under payload limits
   const imageBase64 = await compressImage(file, 1000);
@@ -4262,9 +4205,7 @@ function openGradeScanGate() {
     showToast('Sign in with Google first to use the grader');
     return;
   }
-  // Show overlay with Grade Scanner label + credit count + alignment frame
-  _openScanOverlay('grade');
-  setTimeout(() => document.getElementById('gradeFileInput').click(), 350);
+  document.getElementById('gradeFileInput').click();
 }
 
 function _setScanGateMode(mode) {
@@ -4324,7 +4265,6 @@ async function processGradeImage(input) {
   const frontUrl = URL.createObjectURL(file);
   prevImg.src = frontUrl;
   prevWrap.style.display = 'block';
-  _hideScanFrame();
 
   window._gradeFrontBase64 = await compressImage(file, 1000);
   window._gradeFrontUrl    = frontUrl;
@@ -4621,6 +4561,7 @@ async function checkProStatus() {
     window._idScanCredits = d.idPaidLeft || 0;
   } catch(e) { /* non-blocking */ }
   updateProUI();
+  updateScanBtnCredits();
 }
 
 // ── Update all Pro-related UI elements ──
@@ -4664,6 +4605,24 @@ function updateProUI() {
 function dismissPromoBanner() {
   document.getElementById('promoBanner')?.classList.remove('visible');
   try { sessionStorage.setItem('cs_banner_dismissed', '1'); } catch(e) {}
+}
+
+// ── Update scan button credit badges ──
+function updateScanBtnCredits() {
+  const idSpan    = document.getElementById('idScanSubCredits');
+  const gradeSpan = document.getElementById('gradeScanSubCredits');
+  if (idSpan) {
+    const n = window._idScanCredits || 0;
+    idSpan.textContent = n > 0 ? `· ${n} credit${n !== 1 ? 's' : ''}` : '· 0 credits';
+    idSpan.style.opacity = n > 0 ? '1' : '.45';
+    idSpan.style.color   = n > 0 ? 'var(--gold)' : '';
+  }
+  if (gradeSpan) {
+    const n = (window._scanCredits || 0) + (window._freeScansLeft || 0);
+    gradeSpan.textContent = n > 0 ? `· ${n} credit${n !== 1 ? 's' : ''}` : '· 0 credits';
+    gradeSpan.style.opacity = n > 0 ? '1' : '.45';
+    gradeSpan.style.color   = n > 0 ? 'var(--gold)' : '';
+  }
 }
 
 // ── Open / close pricing modal ──
@@ -4911,10 +4870,10 @@ function openGradedScanGate() {
     showToast('Sign in with Google first to use the scanner');
     return;
   }
-  // Show overlay with ID Scanner label + credit count + alignment frame
-  _openScanOverlay('id');
-  // Small delay so overlay is visible before camera opens
-  setTimeout(() => document.getElementById('scanFileInput').click(), 350);
+  // Always try to open the camera — server is the source of truth on credits.
+  // If credits are actually 0, the server returns 402 and the gate modal opens then.
+  // This avoids race conditions where _scanCredits hasn't loaded yet.
+  document.getElementById('scanFileInput').click();
 }
 
 function closeScanGate(evt) {
@@ -5067,6 +5026,280 @@ document.addEventListener('keydown', e => {
   }
 });
 
+
+
+/* ═══════════════════════════════════════
+   CATALOG — Full search results page
+   ═══════════════════════════════════════ */
+
+let _catalogQuery = '';
+let _catalogTimeout = null;
+let _catalogCards = {};
+
+function openCatalog(q) {
+  _catalogQuery = q;
+  _catalogCards = {};
+  const overlay = document.getElementById('catalogOverlay');
+  const input   = document.getElementById('catalogInput');
+  const label   = document.getElementById('catalogQueryLabel');
+  const grid    = document.getElementById('catalogGrid');
+
+  if (input) input.value = q;
+  if (label) label.textContent = 'Results for "' + q + '"';
+  grid.innerHTML = '<div class="catalog-loading"><span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span></div>';
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Wire refine input
+  if (input) {
+    input.oninput = () => {
+      clearTimeout(_catalogTimeout);
+      const nq = input.value.trim();
+      if (nq.length < 2) return;
+      _catalogQuery = nq;
+      label.textContent = 'Results for "' + nq + '"';
+      grid.innerHTML = '<div class="catalog-loading"><span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span></div>';
+      _catalogTimeout = setTimeout(() => fetchCatalogResults(nq), 380);
+    };
+    input.onkeydown = e => { if (e.key === 'Escape') closeCatalog(); };
+    // Focus after animation frame
+    requestAnimationFrame(() => input.focus());
+  }
+
+  fetchCatalogResults(q);
+}
+
+function closeCatalog() {
+  document.getElementById('catalogOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+async function fetchCatalogResults(q) {
+  const grid = document.getElementById('catalogGrid');
+  _catalogCards = {};
+
+  // Only Pokémon EN has a full catalog — everything else shows coming soon
+  if (activeGame !== 'pokemon') {
+    const names = {
+      pokemonjp: 'Pokémon JP',
+      mtg: 'Magic: The Gathering',
+      yugioh: 'Yu-Gi-Oh!',
+      sports: 'Sports Cards',
+      other: 'Other TCG'
+    };
+    const label = names[activeGame] || 'This game';
+    grid.innerHTML = `<div class="catalog-coming-soon">
+      <div class="catalog-cs-icon">🃏</div>
+      <div class="catalog-cs-title">${label} Catalog</div>
+      <div class="catalog-cs-sub">Coming soon — full card database with images and prices is in progress.</div>
+    </div>`;
+    return;
+  }
+
+  try {
+    await fetchCatalogPokemon(q);
+  } catch(err) {
+    grid.innerHTML = '<div class="catalog-empty">Search failed — check your connection and try again.</div>';
+  }
+}
+
+function _renderCatalogGrid(cards, cardFactory) {
+  const grid = document.getElementById('catalogGrid');
+  if (!cards.length) {
+    grid.innerHTML = '<div class="catalog-empty">No cards found. Try a different name.</div>';
+    return;
+  }
+  _catalogCards = {};
+  grid.innerHTML = cards.map((c, i) => {
+    _catalogCards[i] = c;
+    const price = c._price;
+    const img   = c._img || '';
+    return `<div class="catalog-card" data-idx="${i}">
+      <div class="catalog-card-img-wrap${img ? ' loading' : ''}">
+        ${img ? `<img src="${img}" alt="${esc(c.name)}" loading="eager" decoding="async" onload="this.parentNode.classList.remove('loading')" onerror="this.parentNode.classList.remove('loading');this.style.display='none'" />` : `<span style="font-size:2rem">🃏</span>`}
+      </div>
+      <div class="catalog-card-body">
+        <div class="catalog-card-name">${esc(c.name)}</div>
+        <div class="catalog-card-meta">${esc(c.set || c.set_name || '')}${c.number ? ' #' + esc(c.number) : ''}</div>
+        ${price ? `<div class="catalog-card-price">$${parseFloat(price).toFixed(2)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Safety: clear any stuck shimmer after 5s (in case onload doesn't fire)
+  setTimeout(() => {
+    grid.querySelectorAll('.catalog-card-img-wrap.loading').forEach(w => w.classList.remove('loading'));
+  }, 5000);
+
+  grid.querySelectorAll('.catalog-card').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx  = parseInt(el.dataset.idx);
+      const card = cardFactory(idx);
+      closeCatalog();
+      // Populate the main search and select the card
+      selectedCard = card;
+      searchInput.value = card.name;
+      dropList.classList.remove('open');
+      loadCardUI(card);
+      const price = _catalogCards[idx]?._price;
+      if (price && !isNaN(parseFloat(price))) {
+        const ov = document.getElementById('priceOverride');
+        if (ov) {
+          ov.value = parseFloat(price).toFixed(2);
+          calc();
+          ov.style.boxShadow = '0 0 0 2px var(--gold)';
+          setTimeout(() => { ov.style.boxShadow = ''; }, 1800);
+        }
+      }
+    });
+  });
+}
+
+async function fetchCatalogPokemon(q) {
+  const grid = document.getElementById('catalogGrid');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+  try {
+    const res = await fetch(
+      `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=32&orderBy=-set.releaseDate`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('API error');
+    const json = await res.json();
+    const data = json.data || [];
+    if (!data.length) {
+      grid.innerHTML = '<div class="catalog-empty">No Pokémon cards found for "' + esc(q) + '". Try a different name.</div>';
+      return;
+    }
+    const cards = data.map(c => ({
+      name: c.name, set: c.set?.name || '', number: c.number || '',
+      _price: c.tcgplayer?.prices?.holofoil?.market ||
+              c.tcgplayer?.prices?.normal?.market ||
+              c.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
+              c.cardmarket?.prices?.averageSellPrice || null,
+      _img: c.images?.small || c.images?.large || '',
+      _raw: c
+    }));
+    _renderCatalogGrid(cards, i => {
+      const raw = data[i];
+      return {
+        name: raw.name, set: raw.set?.name || '', number: raw.number || '',
+        img: raw.images?.large || raw.images?.small || '',
+        hp: raw.hp, types: raw.types, game: 'pokemon',
+        prices: { tcgplayer: raw.tcgplayer?.prices || {} }
+      };
+    });
+  } catch(err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      grid.innerHTML = '<div class="catalog-empty">Search timed out — check your connection and try again.</div>';
+    } else {
+      grid.innerHTML = '<div class="catalog-empty">Could not load cards. Check your connection and try again.</div>';
+    }
+  }
+}
+
+function injectCatalogPokemonImages(tplData, cards) {
+  tplData.forEach((c, i) => {
+    const cardId = c.card_id;
+    if (!cardId) return;
+    fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json?.data?.images?.small) return;
+        const img = json.data.images.small;
+        cards[i]._img = img;
+        // Update in grid if still showing
+        const wrap = document.querySelector(`#catalogGrid .catalog-card[data-idx="${i}"] .catalog-card-img-wrap`);
+        if (wrap) {
+          const existing = wrap.querySelector('img');
+          if (existing) { existing.src = img; }
+          else {
+            const imgEl = document.createElement('img');
+            imgEl.src = img; imgEl.alt = cards[i].name || ''; imgEl.loading = 'lazy';
+            wrap.innerHTML = ''; wrap.appendChild(imgEl);
+          }
+        }
+      }).catch(() => {});
+  });
+}
+
+async function fetchCatalogMTG(q) {
+  const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&include_multilingual=true&unique=prints&order=released&dir=desc`);
+  if (!res.ok) { document.getElementById('catalogGrid').innerHTML = '<div class="catalog-empty">No Magic cards found. Try a different name.</div>'; return; }
+  const json = await res.json();
+  const data = (json.data || []).slice(0, 40);
+  const cards = data.map(c => ({
+    name: c.name, set: c.set_name || '', number: c.collector_number || '',
+    _price: c.prices?.usd || null,
+    _img: c.image_uris?.small || (c.card_faces?.[0]?.image_uris?.small) || ''
+  }));
+  _renderCatalogGrid(cards, i => {
+    const raw = data[i];
+    return {
+      name: raw.name, set: raw.set_name || '', number: raw.collector_number || '',
+      img: raw.image_uris?.normal || raw.image_uris?.small || (raw.card_faces?.[0]?.image_uris?.normal) || '',
+      game: 'mtg',
+      prices: { usd: parseFloat(raw.prices?.usd || 0) || 0 }
+    };
+  });
+}
+
+async function fetchCatalogYugioh(q) {
+  const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=40&offset=0`);
+  if (!res.ok) { document.getElementById('catalogGrid').innerHTML = '<div class="catalog-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>'; return; }
+  const json = await res.json();
+  const data = (json.data || []).slice(0, 40);
+  const cards = data.map(c => {
+    const img = c.card_images?.[0]?.image_url_small || '';
+    const price = c.card_prices?.[0]?.tcgplayer_price || null;
+    return { name: c.name, set: c.type || '', number: String(c.id || ''), _price: price, _img: img };
+  });
+  _renderCatalogGrid(cards, i => {
+    const raw = data[i];
+    return {
+      name: raw.name, set: raw.type || '', number: String(raw.id || ''),
+      img: raw.card_images?.[0]?.image_url || raw.card_images?.[0]?.image_url_small || '',
+      game: 'yugioh',
+      prices: { tcgplayer_price: parseFloat(raw.card_prices?.[0]?.tcgplayer_price || 0) || 0 }
+    };
+  });
+}
+
+async function fetchCatalogPokemonJP(q) {
+  // JP uses same TPL path — fall through to inline search approach
+  await fetchCatalogPokemon(q);
+}
+
+</script>
+
+<!-- ═══ CATALOG / SEARCH RESULTS PAGE ═══ -->
+<div id="catalogOverlay">
+  <div class="catalog-header">
+    <button class="catalog-back" onclick="closeCatalog()" aria-label="Back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="catalog-search-wrap">
+      <span class="search-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      </span>
+      <input id="catalogInput" class="catalog-input" type="text" placeholder="Refine search…" autocomplete="off" />
+    </div>
+  </div>
+  <div id="catalogQueryLabel" class="catalog-query-label"></div>
+  <div id="catalogGrid" class="catalog-grid">
+    <div class="catalog-loading">
+      <span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span>
+    </div>
+  </div>
+</div>
+<script>
+// Init scan button credits on load (shows 0 until checkProStatus fires)
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof updateScanBtnCredits === 'function') updateScanBtnCredits();
+});
 </script>
 </body>
 </html>
