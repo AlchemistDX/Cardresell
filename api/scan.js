@@ -44,25 +44,36 @@ export default async function handler(req, res) {
 
   // ── 2. Check & consume a scan credit ──
   // Track WHICH bucket we drew from so we can refund the exact same bucket on failure.
-  // 'id_paid' | 'grade_paid' | 'grade_free_<stamp>' | null (nothing consumed)
+  // 'id_paid' | 'id_free_<stamp>' | 'grade_paid' | 'grade_free_<stamp>' | null (nothing consumed)
   let creditsDrawnFrom = null;
+  // Pro-plan monthly free allowances
+  const ID_FREE_PER_MONTH    = 20;
+  const GRADE_FREE_PER_MONTH = 10;
   if (hasKV) {
     const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
     if (isIdentifyMode) {
-      // ID scans: draw from id_paid_left bucket
-      const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-      if (idPaid <= 0) {
+      // ID scans: Pro users draw from id_free_used_<stamp> bucket first (20/mo), then id_paid_left
+      const stamp      = getMonthStamp();
+      const idFreeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : ID_FREE_PER_MONTH;
+      const idFreeLeft = isPro ? Math.max(0, ID_FREE_PER_MONTH - idFreeUsed) : 0;
+      const idPaid     = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+      if (idFreeLeft <= 0 && idPaid <= 0) {
         return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
       }
-      await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
-      creditsDrawnFrom = 'id_paid';
+      if (idFreeLeft > 0) {
+        await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+        creditsDrawnFrom = `id_free_${stamp}`;
+      } else {
+        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
+        creditsDrawnFrom = 'id_paid';
+      }
     } else {
       // Graded scans: draw from Pro free bucket first, then paid_left
       const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
       const stamp    = getMonthStamp();
-      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
-      const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
+      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : GRADE_FREE_PER_MONTH;
+      const freeLeft = isPro ? Math.max(0, GRADE_FREE_PER_MONTH - freeUsed) : 0;
 
       if (freeLeft <= 0 && paid <= 0) {
         return res.status(402).json({ error: 'No grading credits remaining.', needsPayment: true, mode: 'grade' });
@@ -93,6 +104,10 @@ export default async function handler(req, res) {
         const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
         // Free bucket is a counter of USES, so refund decrements it.
         if (cur > 0) await setKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`, cur - 1);
+      } else if (creditsDrawnFrom.startsWith('id_free_')) {
+        const stamp = creditsDrawnFrom.replace('id_free_', '');
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+        if (cur > 0) await setKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`, cur - 1);
       }
       console.log('Refunded credit:', creditsDrawnFrom, 'reason:', reason);
     } catch(e) {
