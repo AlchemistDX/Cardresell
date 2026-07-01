@@ -556,6 +556,43 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-gate-opt-desc{font-size:.73rem;color:var(--text-muted);margin-top:.1rem}
 .scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
 .scan-gate-cancel{font-size:.78rem;color:var(--text-faint);cursor:pointer;text-decoration:underline;background:none;border:none;padding:.25rem}
+/* ─── CAMERA ALIGNMENT FRAME ─── */
+#scanOverlay .card-frame-wrap{position:relative;width:min(55vw,200px);margin:0 auto .5rem;flex-shrink:0}
+#scanOverlay .card-frame{
+  display:block;width:100%;aspect-ratio:2.5/3.5;
+  border:2.5px dashed rgba(255,255,255,.55);border-radius:10px;
+  position:relative;background:rgba(255,255,255,.04);
+}
+#scanOverlay .card-frame::before,#scanOverlay .card-frame::after,
+#scanOverlay .card-frame-wrap::before,#scanOverlay .card-frame-wrap::after{
+  content:'';position:absolute;width:16px;height:16px;border-color:var(--gold);border-style:solid;
+}
+#scanOverlay .card-frame::before{top:-2px;left:-2px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+#scanOverlay .card-frame::after {top:-2px;right:-2px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+#scanOverlay .card-frame-wrap::before{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 4px;transform:translateY(2px)}
+#scanOverlay .card-frame-wrap::after {bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 4px 0;transform:translateY(2px)}
+#scanOverlay .card-frame-label{
+  position:absolute;bottom:-1.4rem;left:0;right:0;
+  text-align:center;font-size:.62rem;color:rgba(255,255,255,.45);letter-spacing:.04em;white-space:nowrap;
+}
+/* credit badge in overlay */
+#scanCreditBadge{
+  display:inline-flex;align-items:center;gap:.3rem;
+  background:rgba(196,122,0,.18);border:1px solid rgba(196,122,0,.4);
+  border-radius:99px;padding:.22rem .7rem;
+  font-size:.72rem;font-weight:700;color:var(--gold);
+  margin-bottom:.1rem;
+}
+#scanCreditBadge.id-type{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.35);color:#fde047}
+/* scanner mode header bar */
+#scanModeBar{
+  display:flex;align-items:center;justify-content:center;gap:.4rem;
+  font-size:.75rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:rgba(255,255,255,.9);margin-bottom:.1rem;
+}
+#scanModeBar .scan-mode-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0}
+#scanModeBar.id-mode .scan-mode-dot{background:#fde047}
+
 
 /* --- GRADING AFFILIATE CTA --- */
 .grade-cta-banner{display:none;margin:.85rem 0 .25rem;padding:.9rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.08) 0%,rgba(196,122,0,.04) 100%);border:1px solid rgba(196,122,0,.3);border-radius:var(--radius-lg);animation:fadeSlideUp .3s ease}
@@ -749,11 +786,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
   <input type="file" id="gradeBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
   <!-- Scan status modal -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
-    <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
-      <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
-        <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;padding:1.5rem">
+    <!-- Mode label + credit badge -->
+    <div id="scanModeBar"><span class="scan-mode-dot"></span><span id="scanModeLabel">Card Identification Scanner</span></div>
+    <div id="scanCreditBadge">— credits</div>
+    <!-- Card alignment frame (shown before/during capture, hidden after result) -->
+    <div id="scanFrameWrap" class="card-frame-wrap" style="display:none">
+      <div class="card-frame">
+        <span class="card-frame-label">Line card up inside frame</span>
       </div>
+    </div>
+    <!-- Preview after capture -->
+    <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
+      <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
@@ -3973,6 +4018,58 @@ function openScanner() {
   document.getElementById('scanFileInput').click();
 }
 
+
+// ── Scanner overlay helper — sets mode label + credit count + shows frame ──
+function _openScanOverlay(mode) {
+  // mode: 'id' | 'grade'
+  const overlay   = document.getElementById('scanOverlay');
+  const modeBar   = document.getElementById('scanModeBar');
+  const modeLabel = document.getElementById('scanModeLabel');
+  const badge     = document.getElementById('scanCreditBadge');
+  const frameWrap = document.getElementById('scanFrameWrap');
+  const prevWrap  = document.getElementById('scanPreviewWrap');
+  const statusEl  = document.getElementById('scanStatus');
+  const resultEl  = document.getElementById('scanResult');
+
+  // Reset result area
+  if (prevWrap) prevWrap.style.display = 'none';
+  if (resultEl) resultEl.textContent = '';
+  if (statusEl) statusEl.textContent = '';
+  const cta = document.getElementById('scanGradeCTA');
+  if (cta) cta.classList.remove('show');
+
+  if (mode === 'grade') {
+    if (modeLabel) modeLabel.textContent = 'Estimated Grade Scanner';
+    if (modeBar)   { modeBar.className = 'scan-mode-bar'; }
+    const credits = window._scanCredits || 0;
+    if (badge) {
+      badge.id = 'scanCreditBadge'; badge.className = '';
+      badge.textContent = credits + ' Card Grader Credit' + (credits !== 1 ? 's' : '');
+      badge.style.display = 'inline-flex';
+    }
+    if (statusEl) statusEl.innerHTML = '<span style="color:rgba(255,255,255,.7);font-size:.82rem">Front photo first — flip for back after</span>';
+  } else {
+    if (modeLabel) modeLabel.textContent = 'Card Identification Scanner';
+    if (modeBar)   { modeBar.className = 'scan-mode-bar id-mode'; }
+    const credits = window._idScanCredits || 0;
+    if (badge) {
+      badge.id = 'scanCreditBadge'; badge.className = 'id-type';
+      badge.textContent = credits + ' ID Scanner Credit' + (credits !== 1 ? 's' : '');
+      badge.style.display = 'inline-flex';
+    }
+    if (statusEl) statusEl.innerHTML = '<span style="color:rgba(255,255,255,.7);font-size:.82rem">Tap below to take your photo</span>';
+  }
+
+  // Show alignment frame
+  if (frameWrap) frameWrap.style.display = '';
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function _hideScanFrame() {
+  const f = document.getElementById('scanFrameWrap');
+  if (f) f.style.display = 'none';
+}
+
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
   const gradeCTA = document.getElementById('scanGradeCTA');
@@ -4081,6 +4178,7 @@ async function processScanImage(input) {
   const objectUrl = URL.createObjectURL(file);
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
+  _hideScanFrame();
 
   // Compress image before sending — resize to max 1000px to stay under payload limits
   const imageBase64 = await compressImage(file, 1000);
@@ -4164,7 +4262,9 @@ function openGradeScanGate() {
     showToast('Sign in with Google first to use the grader');
     return;
   }
-  document.getElementById('gradeFileInput').click();
+  // Show overlay with Grade Scanner label + credit count + alignment frame
+  _openScanOverlay('grade');
+  setTimeout(() => document.getElementById('gradeFileInput').click(), 350);
 }
 
 function _setScanGateMode(mode) {
@@ -4224,6 +4324,7 @@ async function processGradeImage(input) {
   const frontUrl = URL.createObjectURL(file);
   prevImg.src = frontUrl;
   prevWrap.style.display = 'block';
+  _hideScanFrame();
 
   window._gradeFrontBase64 = await compressImage(file, 1000);
   window._gradeFrontUrl    = frontUrl;
@@ -4810,10 +4911,10 @@ function openGradedScanGate() {
     showToast('Sign in with Google first to use the scanner');
     return;
   }
-  // Always try to open the camera — server is the source of truth on credits.
-  // If credits are actually 0, the server returns 402 and the gate modal opens then.
-  // This avoids race conditions where _scanCredits hasn't loaded yet.
-  document.getElementById('scanFileInput').click();
+  // Show overlay with ID Scanner label + credit count + alignment frame
+  _openScanOverlay('id');
+  // Small delay so overlay is visible before camera opens
+  setTimeout(() => document.getElementById('scanFileInput').click(), 350);
 }
 
 function closeScanGate(evt) {
