@@ -4265,65 +4265,158 @@ function cancelScan() {
   }
 }
 
-// Fetch the exact scanned card from PokemonTCG.io by name + number and load it
+// Fetch the exact scanned card from PokemonTCG.io and load it.
+//
+// Robustness notes (learned the hard way, three demos in a row):
+//  - Bare apostrophes in the name value (Lillie's Clefairy) break the query and
+//    return 400 Bad Request. We MUST wrap the name value in double quotes.
+//  - The AI OCR often returns "GX" for Scarlet & Violet "ex" cards. Normalize.
+//  - The AI OCR sometimes misreads the number for secret rares (#177 vs the
+//    real #184 on a set-of-159 card). So we race a number-scoped query and a
+//    name-only query in parallel — whichever returns a usable match first wins.
+//  - No matter what, we NEVER leave the detail view in "No card selected".
+//    If PokemonTCG.io returns nothing, we still load a manual-entry card so
+//    the detail page shows the AI's read instead of an empty state.
 async function _loadScannedCardExact(pending) {
   const { name, number, setName, rarity } = pending;
   const si = document.getElementById('searchInput');
   if (si) si.value = name;
 
-  try {
-    // Build query: name + number gives us the exact card
-    let q = `name:${encodeURIComponent(name)}`;
-    if (number) q += ` number:${encodeURIComponent(number.replace(/\/.*$/, '').trim())}`; // strip /setsize
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-    const res  = await fetch(url);
-    if (!res.ok) throw new Error('API error');
-    const json = await res.json();
-    let cards = json.data || [];
+  const cleanNumber = (number || '').replace(/\/.*$/, '').trim();
 
-    // Pick the best match: prefer exact number match, then rarity match
-    let match = cards.find(c => c.number === number);
-    if (!match && number) match = cards.find(c => c.number?.startsWith(number.split('/')[0]));
-    if (!match && rarity) match = cards.find(c => (c.rarity || '').toLowerCase() === rarity.toLowerCase());
-    if (!match) match = cards[0];
-
-    if (match) {
-      const prices = match.tcgplayer?.prices || {};
-      const priceVariants = Object.keys(prices).map(key => ({
-        key,
-        label: formatVariantName(key),
-        market: prices[key]?.market ?? null,
-        low:    prices[key]?.low    ?? null,
-        mid:    prices[key]?.mid    ?? null,
-        high:   prices[key]?.high   ?? null,
-      }));
-      const card = {
-        name:   match.name,
-        game:   'pokemon',
-        images: { small: match.images?.small || '', large: match.images?.large || '' },
-        setName: match.set?.name || setName || '',
-        number:  match.number || number || '',
-        rarity:  match.rarity || rarity || '',
-        priceVariants,
-        source: 'TCGPlayer',
-        updatedAt: match.tcgplayer?.updatedAt || '',
-      };
-      selectedCard = card;
-      if (si) si.value = card.name;
-      dropList.classList.remove('open');
-      loadCardUI(card);
-      return;
-    }
-  } catch(e) { /* fall through to autocomplete */ }
-
-  // Fallback: fill the search box but DO NOT auto-open the dropdown. Let the user tap
-  // Search to pick the exact card. Auto-dispatching 'input' here previously caused the
-  // dropdown auto-selector to pick a wrong-set variant for common Pokémon like Pidove.
-  if (si) {
-    si.value = name;
-    // Show a subtle hint that we couldn't auto-match — user can tap Search.
-    showToast?.('Tap Search to pick the exact card.', 3500);
+  // Build candidate name variants. Try the raw name AND the ex-normalized form,
+  // because SV cards are stored as "ex" on PokemonTCG.io but the AI often says "GX".
+  const nameCandidates = new Set();
+  if (name) {
+    nameCandidates.add(name);
+    const exNorm = name.replace(/\bGX\b/gi, 'ex');
+    if (exNorm !== name) nameCandidates.add(exNorm);
+    // Also try stripping the GX/ex/V/VMAX/VSTAR suffix entirely as a broader fallback
+    const stripped = name.replace(/\s+(GX|ex|V|VMAX|VSTAR)\b/gi, '').trim();
+    if (stripped && stripped !== name) nameCandidates.add(stripped);
   }
+
+  // Build the query set: for each name candidate, race a name+number query and
+  // a name-only query. Quote the name value so apostrophes don't malform it.
+  const queries = [];
+  for (const n of nameCandidates) {
+    const quoted = `"${n.replace(/"/g, '')}"`;
+    if (cleanNumber) queries.push(`name:${quoted} number:${cleanNumber}`);
+    queries.push(`name:${quoted}`);
+  }
+
+  const select = 'id,name,set,number,rarity,images,tcgplayer,supertype,subtypes';
+  const fetchQ = async (q) => {
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=${select}`;
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 12000);
+    try {
+      const r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok) return { q, cards: [] };
+      const j = await r.json();
+      return { q, cards: j.data || [] };
+    } catch(e) {
+      return { q, cards: [], err: e.message };
+    } finally {
+      clearTimeout(t);
+    }
+  };
+
+  // Fire all queries in parallel; collect all non-empty result sets.
+  const results = await Promise.all(queries.map(fetchQ));
+  const allCards = [];
+  const seen = new Set();
+  for (const r of results) {
+    for (const c of r.cards) {
+      if (!seen.has(c.id)) { seen.add(c.id); allCards.push(c); }
+    }
+  }
+
+  // Detect "secret rare" from the scan: number like 177/159 where numerator > denominator.
+  // If the AI OCR'd a bogus number and we can't match exactly, prefer the highest-numbered
+  // variant of the card (which is usually the Special Illustration Rare / secret rare).
+  const numRaw = (number || '').trim();
+  const setSizeMatch = numRaw.match(/^(\d+)\/(\d+)$/);
+  const looksSecretRare = setSizeMatch && parseInt(setSizeMatch[1],10) > parseInt(setSizeMatch[2],10);
+
+  // Rank candidates. Order matters:
+  //  1. Exact number match (best case)
+  //  2. Number-prefix match (e.g. scan gave "177" for "177a")
+  //  3. Rarity match (if AI captured rarity)
+  //  4. Secret-rare heuristic BEFORE set-only fallback (a set-only match is too
+  //     coarse for cards with 6+ variants in the same set — it would silently
+  //     pick the vanilla Double Rare when the user scanned the SIR).
+  //  5. Set match (last-ditch narrowing)
+  //  6. First hit
+  let match = null;
+  if (cleanNumber) match = allCards.find(c => c.number === cleanNumber);
+  if (!match && cleanNumber) match = allCards.find(c => (c.number || '').split('/')[0] === cleanNumber);
+  if (!match && rarity) match = allCards.find(c => (c.rarity || '').toLowerCase() === (rarity || '').toLowerCase());
+  if (!match && looksSecretRare && allCards.length) {
+    // Restrict to the scanned set if we know it (so we don't cross-pick from other sets).
+    const inSet = setName
+      ? allCards.filter(c => (c.set?.name || '').toLowerCase() === setName.toLowerCase())
+      : allCards;
+    const pool = inSet.length ? inSet : allCards;
+    const rarityPref = ['special illustration rare','hyper rare','ultra rare','illustration rare','double rare'];
+    for (const pref of rarityPref) {
+      match = pool.find(c => (c.rarity || '').toLowerCase() === pref);
+      if (match) break;
+    }
+    if (!match) {
+      match = [...pool].sort((a,b) => (parseInt(b.number,10)||0) - (parseInt(a.number,10)||0))[0];
+    }
+  }
+  if (!match && setName) match = allCards.find(c => (c.set?.name || '').toLowerCase() === setName.toLowerCase());
+  if (!match) match = allCards[0];
+
+  let card;
+  if (match) {
+    // Real match from the API
+    const prices = match.tcgplayer?.prices || {};
+    const priceVariants = Object.keys(prices).map(key => ({
+      key,
+      label: formatVariantName(key),
+      market: prices[key]?.market ?? null,
+      low:    prices[key]?.low    ?? null,
+      mid:    prices[key]?.mid    ?? null,
+      high:   prices[key]?.high   ?? null,
+    }));
+    if (!priceVariants.length) {
+      priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
+    }
+    card = {
+      name:      match.name,
+      game:      'pokemon',
+      images:    { small: match.images?.small || '', large: match.images?.large || match.images?.small || '' },
+      setName:   match.set?.name || setName || '',
+      number:    match.number || cleanNumber || '',
+      rarity:    match.rarity || rarity || '',
+      priceVariants,
+      source:    'TCGPlayer',
+      updatedAt: match.tcgplayer?.updatedAt || '',
+    };
+  } else {
+    // No API hit — build a manual-entry card from the scan data so the detail
+    // page still shows something instead of "No card selected".
+    card = {
+      name:      name || 'Scanned card',
+      game:      'pokemon',
+      images:    { small: '', large: '' },
+      setName:   setName || '',
+      number:    cleanNumber || '',
+      rarity:    rarity || '',
+      priceVariants: [{ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null }],
+      source:    'Manual',
+      updatedAt: '',
+    };
+    showToast?.('Loaded from scan — tap Search for exact market price.', 4000);
+  }
+
+  selectedCard = card;
+  if (si) si.value = card.name;
+  try { dropList?.classList.remove('open'); } catch(e) {}
+  loadCardUI(card);
 }
 
 // ── Affiliate grading CTA helpers ──
