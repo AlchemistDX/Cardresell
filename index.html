@@ -721,7 +721,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
       <!-- Card Lookup Credits -->
       <div style="padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
-        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">Card Lookups</div>
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">ID Scans</div>
         <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="idScanCount">—</div>
         <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="idScanSub">Sign in to check</div>
       </div>
@@ -739,27 +739,47 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <!-- ID Scan -->
+    <!-- ID Scan Packs -->
     <div style="margin-bottom:.65rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">Card Lookup Packs</div>
+        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">ID Scan Packs</div>
       </div>
-      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">One lookup = AI photo-ID + card name, set &amp; live prices</div>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">One scan = AI photo-ID + card name, set &amp; live prices</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 lookups</div><div style="color:var(--gold);font-weight:800">$1</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$0.10 ea</div>
+          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$0.10 ea</div>
         </button>
         <button onclick="startIdScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>50 lookups</div><div style="color:var(--gold);font-weight:800">$5</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$0.10 ea</div>
+          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$5</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$0.10 ea</div>
         </button>
         <button onclick="startIdScanCheckout('100')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>100 lookups</div><div style="color:var(--gold);font-weight:800">$9</div><div style="font-size:.58rem;color:var(--gold);font-weight:700;margin-top:.1rem">$0.09 ea</div>
+          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$9</div><div style="font-size:.58rem;color:var(--gold);font-weight:700;margin-top:.1rem">$0.09 ea</div>
         </button>
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">20 free Card Lookups + 10 free Grade Scans/mo</strong>. Paid credits never expire.</div>
+    <!-- Grade Scan Packs (settings pane) -->
+    <div style="margin-bottom:.65rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
+        <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">Grade Scan Packs</div>
+      </div>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">One scan = AI PSA/BGS/CGC estimate w/ centering, corners, edges &amp; surface</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button onclick="startGradeScanCheckout('3')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>3 scans</div><div style="color:var(--gold);font-weight:800">$4</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$1.33 ea</div>
+        </button>
+        <button onclick="startGradeScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
+          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
+          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$12</div><div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem">$1.20 ea &middot; save 20%</div>
+        </button>
+        <button onclick="startGradeScanCheckout('25')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>25 scans</div><div style="color:var(--gold);font-weight:800">$27.50</div><div style="font-size:.58rem;color:var(--gold);font-weight:700;margin-top:.1rem">$1.10 ea &middot; save 27%</div>
+        </button>
+      </div>
+    </div>
+
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">20 free ID Scans + 10 free Grade Scans/mo</strong>. Paid credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -1395,7 +1415,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- Free balance banner -->
     <div id="pricingFreeBalance" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.03));border:1px solid rgba(196,122,0,.25);border-radius:var(--radius-md);padding:.7rem .9rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap">
       <div style="font-size:.78rem;color:var(--text);line-height:1.4">
-        <strong id="pricingLookupBalance" style="color:var(--gold);font-weight:800">&mdash;</strong> card lookups left
+        <strong id="pricingLookupBalance" style="color:var(--gold);font-weight:800">&mdash;</strong> ID scans left
         <span style="color:var(--text-muted);font-weight:500">&middot;</span>
         <strong id="pricingGradeBalance" style="color:var(--gold);font-weight:800">&mdash;</strong> grade scans left
       </div>
@@ -1428,7 +1448,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <ul class="plan-features">
           <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
           <li>Unlimited flip &amp; portfolio tracking</li>
-          <li>20 free Card Lookups/mo</li>
+          <li>20 free ID Scans/mo</li>
           <li>10 free Estimated Grade Scans/mo</li>
           <li>PRO badge on account</li>
         </ul>
@@ -1439,25 +1459,47 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <hr class="pricing-divider">
 
-    <!-- Card Lookup packs (formerly ID Scanner) -->
-    <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.45rem">Card Lookup Packs</div>
-    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.5">One lookup = one AI photo-ID + live prices. Credits never expire.</div>
+    <!-- ID Scan Packs (pricing modal) -->
+    <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.45rem">ID Scan Packs</div>
+    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.5">One scan = one AI photo-ID + live prices. Credits never expire.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:1rem">
       <button onclick="startIdScanCheckout('10')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">10 lookups</div>
+        <div style="font-size:.85rem;color:var(--text);font-weight:800">10 scans</div>
         <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$1.00</div>
-        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$0.10 / lookup</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$0.10 / scan</div>
       </button>
       <button onclick="startIdScanCheckout('50')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
         <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">50 lookups</div>
+        <div style="font-size:.85rem;color:var(--text);font-weight:800">50 scans</div>
         <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$5.00</div>
-        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$0.10 / lookup</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$0.10 / scan</div>
       </button>
       <button onclick="startIdScanCheckout('100')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:.85rem;color:var(--text);font-weight:800">100 lookups</div>
+        <div style="font-size:.85rem;color:var(--text);font-weight:800">100 scans</div>
         <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$9.00</div>
-        <div style="font-size:.62rem;color:var(--gold);margin-top:.15rem;font-weight:700">$0.09 / lookup &middot; save 10%</div>
+        <div style="font-size:.62rem;color:var(--gold);margin-top:.15rem;font-weight:700">$0.09 / scan &middot; save 10%</div>
+      </button>
+    </div>
+
+    <!-- Grade Scan Packs (pricing modal) -->
+    <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.45rem">Grade Scan Packs</div>
+    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.5">One scan = AI PSA/BGS/CGC estimate w/ centering, corners, edges &amp; surface. Credits never expire.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:1rem">
+      <button onclick="startGradeScanCheckout('3')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:.85rem;color:var(--text);font-weight:800">3 scans</div>
+        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$4.00</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$1.33 / scan &middot; save 11%</div>
+      </button>
+      <button onclick="startGradeScanCheckout('10')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
+        <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
+        <div style="font-size:.85rem;color:var(--text);font-weight:800">10 scans</div>
+        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$12.00</div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.15rem">$1.20 / scan &middot; save 20%</div>
+      </button>
+      <button onclick="startGradeScanCheckout('25')" style="padding:.55rem .35rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;text-align:center;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:.85rem;color:var(--text);font-weight:800">25 scans</div>
+        <div style="color:var(--gold);font-weight:800;margin-top:.15rem">$27.50</div>
+        <div style="font-size:.62rem;color:var(--gold);margin-top:.15rem;font-weight:700">$1.10 / scan &middot; save 27%</div>
       </button>
     </div>
 
@@ -3046,6 +3088,11 @@ function loadCardUI(card) {
     showGradingCtaBanner(card.name || pending);
   }
 
+  // If this card was loaded from a Grade Scan, render a small AI grade
+  // estimate badge above the Market Value so the user sees raw price
+  // AND the AI's PSA estimate in the same viewport — "full circle" flow.
+  try { _renderAiGradeBadge(); } catch(e) { console.warn('AI grade badge render failed', e); }
+
   // Clear price override on new card load
   if (priceOverride) priceOverride.value = '';
 
@@ -4264,6 +4311,17 @@ function cancelScan() {
     window._pendingIdScanCard = null;
     _loadScannedCardExact(pending);
   }
+
+  // "Full circle" Grade Scan flow — after grading (or when the user cancels
+  // the overlay after seeing the grade), auto-load the exact card into the
+  // detail view. The AI's PSA estimate is stashed on the pending payload and
+  // surfaced as a small badge next to the market price so the user can compare
+  // raw vs graded value without having to re-search.
+  if (window._pendingGradeScanCard) {
+    const pending = window._pendingGradeScanCard;
+    window._pendingGradeScanCard = null;
+    _loadScannedCardExact(pending);
+  }
 }
 
 // Fetch the exact scanned card from PokemonTCG.io and load it.
@@ -4279,7 +4337,13 @@ function cancelScan() {
 //    If PokemonTCG.io returns nothing, we still load a manual-entry card so
 //    the detail page shows the AI's read instead of an empty state.
 async function _loadScannedCardExact(pending) {
-  const { name, number, setName, rarity } = pending;
+  const { name, number, setName, rarity, gradeEstimate } = pending;
+  // If we came in from a Grade Scan, stash the estimate globally so the
+  // detail-view renderer can add a "AI est. PSA X" badge once the card
+  // has loaded (renderers are async so we can't set it inline here).
+  if (gradeEstimate && typeof gradeEstimate === 'object') {
+    window._latestGradeEstimate = gradeEstimate;
+  }
   const si = document.getElementById('searchInput');
   if (si) si.value = name;
 
@@ -4846,13 +4910,31 @@ async function processGradeBack(input) {
     }
 
     window._pendingScanBannerCard = data.card_name;
+
+    // "Full circle" auto-load — stash the exact-card payload + the AI's grade
+    // estimate. When the user closes the overlay (or hits Cancel), cancelScan
+    // picks this up and calls _loadScannedCardExact, which will pull the raw
+    // market value and render a small "AI est. PSA X" badge next to it.
+    //
+    // We ONLY set _pendingGradeScanCard when we actually have a card name to
+    // match on; otherwise the raw name-only search fallback (below) is safer.
     if (data.card_name) {
-      setTimeout(() => {
-        const searchInput = document.getElementById('searchInput');
-        searchInput.value = data.card_name.trim();
-        searchInput.dispatchEvent(new Event('input'));
-        setTimeout(() => document.getElementById('searchBtn').click(), 300);
-      }, 3500);
+      window._pendingGradeScanCard = {
+        name:       data.card_name,
+        number:     data.card_number || '',
+        setName:    data.set_name    || '',
+        rarity:     data.rarity      || '',
+        hp:         '',
+        gradeEstimate: {
+          psa:       (typeof psa === 'number' ? psa : null),
+          label:     label || '',
+          centering: data.centering || '',
+          corners:   data.corners   || '',
+          edges:     data.edges     || '',
+          surface:   data.surface   || '',
+          worth:     !!worth,
+        },
+      };
     }
 
     window._gradeFrontBase64 = null;
@@ -5272,6 +5354,56 @@ async function startIdScanCheckout(tier) {
   }
 }
 
+// ── Start Grade Scan bulk-pack checkout ──
+// Tiers: '3' → $4  (save 11% vs single at $1.50)
+//        '10' → $12 (save 20%)
+//        '25' → $27.50 (save 27%)
+async function startGradeScanCheckout(tier) {
+  if (!googleUser) {
+    showToast('Sign in with Google first to buy Grade Scan credits.');
+    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
+    return;
+  }
+  // Disable all three tier buttons while redirecting
+  const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
+  tierBtns.forEach(b => { b.disabled = true; });
+  const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
+  if (clickedBtn) {
+    const priceEl = clickedBtn.querySelector('div:nth-child(2)');
+    if (priceEl) priceEl.textContent = 'Redirecting…';
+  }
+  try {
+    const r = await fetch('/api/stripe-grade-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (window._googleIdToken || '')
+      },
+      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      showToast('\u26a0\ufe0f Could not start checkout. Try again.');
+      tierBtns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) {
+        const priceEl = clickedBtn.querySelector('div:nth-child(2)');
+        const priceMap = { '3': '$4', '10': '$12', '25': '$27.50' };
+        if (priceEl) priceEl.textContent = priceMap[tier] || '$4';
+      }
+    }
+  } catch(e) {
+    showToast('\u26a0\ufe0f Network error. Try again.');
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) {
+      const priceEl = clickedBtn.querySelector('div:nth-child(2)');
+      const priceMap = { '3': '$4', '10': '$12', '25': '$27.50' };
+      if (priceEl) priceEl.textContent = priceMap[tier] || '$4';
+    }
+  }
+}
+
 // ── Login gate modal (replaces disappearing toast on Scan/Grade for logged-out users) ──
 function openLoginGate(mode) {
   // mode: 'scan' | 'grade' | 'flips' | 'generic'
@@ -5680,6 +5812,83 @@ function showWelcomeBonusToast() {
       }
     })();
   }
+})();
+
+// Render an AI grade estimate badge above the market value price panel.
+// Called by loadCardUI after a Grade-Scan-driven auto-load. Pulls the
+// estimate from window._latestGradeEstimate (set in _loadScannedCardExact).
+// The badge is intentionally small and non-blocking — the market value
+// is still the primary datum; the badge is a "here's what we think it'd
+// grade" hint that goes away next time the user loads a different card.
+function _renderAiGradeBadge() {
+  const est = window._latestGradeEstimate;
+  // Consume once so the badge doesn't persist across unrelated card loads
+  window._latestGradeEstimate = null;
+  const host = document.getElementById('priceDisplay');
+  // Remove any prior badge
+  const prior = document.getElementById('aiGradeEstimateBadge');
+  if (prior) prior.remove();
+  if (!est || !host) return;
+  const psa = (typeof est.psa === 'number' && est.psa >= 1 && est.psa <= 10) ? est.psa : null;
+  if (psa === null) return;
+  const color = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
+  const badge = document.createElement('div');
+  badge.id = 'aiGradeEstimateBadge';
+  badge.style.cssText = 'display:flex;align-items:center;gap:.55rem;padding:.5rem .7rem;margin-bottom:.55rem;background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.03));border:1px solid rgba(196,122,0,.35);border-radius:.55rem;font-size:.75rem;line-height:1.35';
+  const label = est.label ? ' ' + est.label : '';
+  const worthLine = est.worth
+    ? '<span style="color:#4ade80;font-weight:700">\u2713 Worth submitting for grading</span>'
+    : '<span style="color:var(--text-muted)">May not clear grading costs at this estimate</span>';
+  badge.innerHTML =
+    '<span style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:var(--gold);text-transform:uppercase;flex-shrink:0">AI Est.</span>' +
+    '<span style="color:' + color + ';font-weight:900;font-size:.98rem;flex-shrink:0">PSA ' + psa + '</span>' +
+    '<span style="color:var(--text-muted);font-weight:600;flex-shrink:0">' + label + '</span>' +
+    '<span style="margin-left:auto;font-size:.68rem;text-align:right">' + worthLine + '</span>';
+  // Insert as first child of priceDisplay so it renders directly above the price
+  host.insertBefore(badge, host.firstChild);
+}
+
+// ── Handle return from Stripe — Grade Scan bulk pack purchase ──
+// Success URL: /?grade_pack_paid=1&tier=3|10|25&session_id={CHECKOUT_SESSION_ID}
+(function handleGradePackReturn() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('grade_pack_paid') !== '1') return;
+  const sessionId = params.get('session_id') || '';
+  const tier = params.get('tier') || '';
+  history.replaceState({}, '', window.location.pathname);
+  (async () => {
+    const email     = window._userEmail || '';
+    const googleSub = googleUser?.sub || googleUser?.id || '';
+    if (!sessionId || !email) {
+      showToast('\u2705 Grade Scan credits purchased! Loading balance\u2026', 4000);
+      setTimeout(() => loadSettingsScanCredits?.(), 1500);
+      return;
+    }
+    try {
+      showToast('\u23f3 Confirming your Grade Scan credits\u2026', 3000);
+      const r = await fetch('/api/scan-credits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify_grade_pack_payment', sessionId, email, googleSub })
+      });
+      const data = await r.json();
+      if (data.success) {
+        const added = data.added || 0;
+        window._scanCredits = data.credits || 0;
+        const msg = data.alreadyCredited
+          ? '\u2705 Grade Scan credits already applied to your account.'
+          : `\u2705 ${added} Grade Scan credits added! Ready to grade.`;
+        showToast(msg, 5000);
+        loadSettingsScanCredits?.();
+      } else {
+        showToast('\u26a0\ufe0f Payment received but credit verification failed. Contact support.', 6000);
+        console.error('Grade pack verify failed:', data);
+      }
+    } catch(e) {
+      showToast('\u2705 Grade Scan credits purchased \u2014 balance updating shortly.', 5000);
+      console.error('Grade pack verify error:', e);
+    }
+  })();
 })();
 
 

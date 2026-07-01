@@ -182,9 +182,12 @@ Evaluate and return:
 7. grade_label: ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Good", "Poor")
 8. grade_notes: 1-2 sentences on the SPECIFIC flaws observed (or why it earns a high grade if truly flawless)
 9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
+10. card_number: The exact card number as printed (e.g. "079/078", "184/197"). Empty string if not visible.
+11. set_name: The set name if visible (e.g. "Surging Sparks", "Crown Zenith"). Empty string if unclear.
+12. rarity: The card's rarity family (e.g. "Special Illustration Rare", "Secret Rare", "Rainbow Rare", "Holo Rare", "Common"). Empty string if unclear.
 
 Respond ONLY with valid JSON:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false}`
+{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"card_number":"...","set_name":"...","rarity":"..."}`
       : `You are a trading card expert. Look at this card image and extract:
 1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
 2. card_number: The card number (e.g. "079/078", "025/165")
@@ -265,6 +268,13 @@ Respond ONLY with valid JSON, no explanation:
         grade_label:   cardInfo.grade_label   || '',
         grade_notes:   cardInfo.grade_notes   || '',
         worth_grading: cardInfo.worth_grading ?? false,
+        // Identifier fields — used by the frontend to auto-load the exact card into
+        // the detail view after grading so the user sees raw + estimated-graded price
+        // without having to re-search. Empty strings are OK; the client falls back to
+        // a name-only search when card_number/set_name are missing.
+        card_number:   cardInfo.card_number   || '',
+        set_name:      cardInfo.set_name      || '',
+        rarity:        cardInfo.rarity        || '',
       });
     }
 
