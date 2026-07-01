@@ -1375,7 +1375,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-name">Pro</div>
         <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
         <ul class="plan-features">
-          <li>Full eBay, Mercari, StockX &amp; COMC fee breakdown</li>
+          <li>Adds Poshmark, COMC &amp; Fanatics Collect to fee breakdown</li>
           <li>Unlimited flip &amp; portfolio tracking</li>
           <li>10 free Estimated Grade Scans/mo</li>
           <li>PRO badge on account</li>
@@ -1446,9 +1446,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <select id="mPlatform">
           <option value="eBay">eBay</option>
           <option value="Mercari">Mercari</option>
-          <option value="Poshmark">Poshmark</option>
           <option value="StockX">StockX</option>
+          <option value="Poshmark">Poshmark</option>
           <option value="COMC">COMC</option>
+          <option value="Fanatics Collect">Fanatics Collect</option>
           <option value="Local/Cash">Local / Cash</option>
           <option value="Other">Other</option>
         </select>
@@ -1477,9 +1478,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   Platform fees from official sources (2026):
   <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees" target="_blank" rel="noopener">eBay</a> ·
   <a href="https://www.mercari.com/us/help_center/article/169/" target="_blank" rel="noopener">Mercari</a> ·
-  <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
   <a href="https://stockx.com/help/articles/what-are-stockxs-fees-for-sellers" target="_blank" rel="noopener">StockX</a> ·
-  <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a>.<br>
+  <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
+  <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a> ·
+  <a href="https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe" target="_blank" rel="noopener">Fanatics Collect</a>.<br>
   Estimates only — verify current rates before listing.
 </footer>
 
@@ -3269,6 +3271,7 @@ function updateSellLinks(card) {
   const mercariQ    = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
   const comcQ       = encodeURIComponent(searchName);
   const stockxQ     = encodeURIComponent(`${searchName}${isPokemon ? ' pokemon' : isMagic ? ' magic' : ''}`);
+  const fanaticsQ   = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${isPokemon ? ' pokemon' : ''}`);
   const tcgpUrl     = (isPokemon || isMagic || isYugioh) ? buildTcgpUrl(searchName, setName) : '';
 
   // Store URLs globally — calc() reads these to make cards clickable
@@ -3278,6 +3281,7 @@ function updateSellLinks(card) {
     comc:     `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
     stockx:   `https://stockx.com/search?s=${stockxQ}`,
     poshmark: `https://poshmark.com/search?query=${mercariQ}&type=listings`,
+    fanatics: `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
     // TCGPlayer only for card games (not sports)
     ...(tcgpUrl ? {} : {})
   };
@@ -3341,12 +3345,17 @@ function esc(s) {
 /* ═══ FEE ENGINE (2026) ═══ */
 
 const PLATFORMS = {
-  ebay:     { name: 'eBay',     color: '#e53238', emoji: '🛒' },
-  mercari:  { name: 'Mercari',  color: '#cc0000', emoji: '🏷️' },
-  poshmark: { name: 'Poshmark', color: '#c02b50', emoji: '👗' },
-  stockx:   { name: 'StockX',   color: '#1a1a1a', emoji: '👟' },
-  comc:     { name: 'COMC',     color: '#1a5276', emoji: '🃏' }
+  ebay:     { name: 'eBay',            color: '#e53238', emoji: '🛒' },
+  mercari:  { name: 'Mercari',         color: '#cc0000', emoji: '🏷️' },
+  stockx:   { name: 'StockX',          color: '#1a1a1a', emoji: '👟' },
+  poshmark: { name: 'Poshmark',        color: '#c02b50', emoji: '👗' },
+  comc:     { name: 'COMC',            color: '#1a5276', emoji: '🃏' },
+  fanatics: { name: 'Fanatics Collect', color: '#0a2540', emoji: '💎' }
 };
+// Free-tier platforms shown to everyone. Everything else is Pro-gated.
+// StockX is included here despite thin card volume because paying Pro to see
+// StockX comps is not honest — see the sports-cards note on the platform card.
+const FREE_PLATFORMS = new Set(['ebay', 'mercari', 'stockx']);
 
 function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   const total = price + shipCharge;
@@ -3383,6 +3392,15 @@ function feeStockX(price, level) {
     { l: 'Payment processing (3%)', a: price * 0.03 },
     { l: 'Auth center shipping', a: 5 }
   ];
+}
+
+// Fanatics Collect (formerly PWCC). Default is Buy Now marketplace at 6%
+// for cards priced within 120% of Card Ladder market value. We don't have
+// Card Ladder market data at calc time, so we assume in-band pricing and
+// surface the 12% overprice tier + 0% auction alternative in a note.
+// Sources: https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe
+function feeFanatics(price) {
+  return [{ l: 'Buy Now seller fee (6%)', a: price * 0.06 }];
 }
 
 function feeCOMC(price, service, isGraded, cashout) {
@@ -3461,6 +3479,15 @@ function calc() {
       feeItems: feeCOMC(price, comcService, isGraded, comcCashout),
       sellerShip: 0,
       note: isSports ? 'COMC accepts sports cards.' : ''
+    },
+    {
+      pid: 'fanatics',
+      eligible: true,
+      feeItems: feeFanatics(price),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'Buy Now default. Auction: 0% seller, 20% buyer premium. Listings >120% market: 12% fee.'
+        : 'Buy Now default. Listings priced >120% of market pay 12%; auction has 0% seller fee + 20% buyer premium.'
     }
   ];
 
@@ -3484,11 +3511,12 @@ function calc() {
   let html = '';
 
   // Winner banner
-  // Free users always see eBay in the banner — Pro sees the actual best platform
-  const bannerResult = window._isPro ? winner : (results.find(r => r.pid === 'ebay' && r.eligible) || winner);
+  // Free users see the best of their FREE platforms; Pro sees the true best across all.
+  const freeWinner = eligible.find(r => FREE_PLATFORMS.has(r.pid));
+  const bannerResult = window._isPro ? winner : (freeWinner || winner);
   if (bannerResult) {
     const hasCost = itemCost > 0;
-    const bannerLabel = window._isPro ? 'Best Net Payout' : 'eBay Net Payout';
+    const bannerLabel = window._isPro ? 'Best Net Payout' : 'Best Free Payout';
     html += `<div class="winner">
       <div class="winner-icon">${PLATFORMS[bannerResult.pid].emoji}</div>
       <div class="winner-info">
@@ -3514,8 +3542,9 @@ function calc() {
   }
   html += `<div class="plat-grid">`;
 
-  // Free users: only show eBay card — other platforms locked behind Pro gate
-  const displaySorted = window._isPro ? sorted : sorted.filter(r => r.pid === 'ebay');
+  // Free users see the FREE_PLATFORMS set (eBay, Mercari, StockX) as full cards;
+  // everything else (Poshmark, COMC, Fanatics Collect) is locked behind the Pro gate.
+  const displaySorted = window._isPro ? sorted : sorted.filter(r => FREE_PLATFORMS.has(r.pid));
 
   displaySorted.forEach(r => {
     const info   = PLATFORMS[r.pid];
@@ -3571,18 +3600,23 @@ function calc() {
     </${cardTag}>`;
   });
 
-  // Pro gate — non-eBay platforms blurred to entice upgrade
+  // Pro gate — Pro-only platforms blurred to entice upgrade
   if (!window._isPro) {
-    const proOnlyResults = results.filter(r => r.pid !== 'ebay' && r.eligible);
+    const proOnlyResults = results.filter(r => !FREE_PLATFORMS.has(r.pid) && r.eligible);
     proOnlyResults.sort((a, b) => b.netPayout - a.netPayout);
-    const ebayPayout = results.find(r => r.pid === 'ebay')?.netPayout ?? 0;
-    const mightEarnMore = proOnlyResults[0] && proOnlyResults[0].netPayout > ebayPayout;
+    // Compare Pro platforms against the best of the free tier (not just eBay),
+    // now that Mercari and StockX are also visible for free.
+    const bestFreePayout = Math.max(
+      ...results.filter(r => FREE_PLATFORMS.has(r.pid) && r.eligible).map(r => r.netPayout),
+      0
+    );
+    const mightEarnMore = proOnlyResults[0] && proOnlyResults[0].netPayout > bestFreePayout;
     const bestAlt = proOnlyResults[0];
-    const diff = bestAlt ? (bestAlt.netPayout - ebayPayout) : 0;
+    const diff = bestAlt ? (bestAlt.netPayout - bestFreePayout) : 0;
 
     const blurRows = proOnlyResults.map(r => {
       const info = PLATFORMS[r.pid];
-      const isBetter = r.netPayout > ebayPayout;
+      const isBetter = r.netPayout > bestFreePayout;
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
         <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">${info.emoji} ${info.name}</span>
         <span style="font-family:var(--mono);font-size:.88rem;font-weight:700;filter:blur(5px);user-select:none;color:${isBetter?'var(--green)':'var(--text)'}">${fmt(r.netPayout)}</span>
@@ -3593,18 +3627,18 @@ function calc() {
     <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="openPricingModal('calc_gate')">
       <div class="plat-accent" style="background:linear-gradient(135deg,#b8860b,#f5c518)"></div>
       <div class="plat-hdr" style="margin-bottom:.3rem">
-        <span class="plat-name">&#11088; 4 More Platforms</span>
+        <span class="plat-name">&#11088; 3 More Platforms</span>
         <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">PRO</span>
       </div>
       ${mightEarnMore && diff > 0.5
           ? `<div style="font-size:.76rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; You could net <strong>$${diff.toFixed(2)} more</strong> on another platform</div>`
           : mightEarnMore
-            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; Another platform pays more than eBay</div>`
+            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; A Pro platform pays more than any free one</div>`
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock All Platforms — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">Mercari · Poshmark · StockX · COMC + bar chart + unlimited flip tracking</div>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock Poshmark, COMC &amp; Fanatics Collect — $9.99/mo</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay · Mercari · StockX shown free · Pro unlocks 3 more platforms + bar chart + unlimited flip tracking</div>
       </div>
     </div>`;
     html += `</div>`;
