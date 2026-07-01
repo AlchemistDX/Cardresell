@@ -648,7 +648,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- Credit balance row -->
     <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.75rem">
       <div>
-        <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="settingsScanCount">— Graded Credits</div>
+        <div style="font-size:.85rem;font-weight:700;color:var(--text)" id="settingsScanCount">— credits</div>
         <div style="font-size:.68rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check your balance</div>
       </div>
     </div>
@@ -686,7 +686,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Graded Credits/mo</strong>. ID Scanner Credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Card Grader Credits/mo</strong>. ID Scanner Credits never expire.</div>
   </div>
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
@@ -1460,7 +1460,7 @@ async function loadSettingsScanCredits() {
   const googleSub = window.googleUser?.sub || window.googleUser?.id || window._googleSub || '';
 
   if (!email) {
-    countEl.textContent = '— Graded Credits';
+    countEl.textContent = '— credits';
     if (subEl) subEl.textContent = 'Sign in to check your balance';
     if (idBalEl) idBalEl.textContent = '';
     return;
@@ -1481,15 +1481,15 @@ async function loadSettingsScanCredits() {
     window._idScanCredits = idCredits;
 
     // Grading scan balance
-    countEl.textContent = credits === 1 ? '1 Graded Credit' : `${credits} Graded Credits`;
+    countEl.textContent = credits === 1 ? '1 credit' : `${credits} credits`;
     if (subEl) {
       if (isPro && credits > 0) {
-        subEl.textContent = 'Includes your Pro monthly Graded Credits';
+        subEl.textContent = 'Includes your Pro Card Grader Credits';
       } else if (credits === 0) {
-        subEl.textContent = 'Out of Graded Credits — buy more below';
+        subEl.textContent = 'Out of Card Grader Credits';
         subEl.style.color = 'var(--red, #f87171)';
       } else {
-        subEl.textContent = 'Pay-per-use Graded Credits ($1.50 each)';
+        subEl.textContent = 'Card Grader Credits · $1.50 each';
         subEl.style.color = '';
       }
     }
@@ -1505,7 +1505,7 @@ async function loadSettingsScanCredits() {
       }
     }
   } catch(e) {
-    countEl.textContent = '— Graded Credits';
+    countEl.textContent = '— credits';
     if (subEl) subEl.textContent = 'Could not load — try again';
     if (idBalEl) idBalEl.textContent = '';
   }
@@ -4507,11 +4507,11 @@ function showToast(msg, duration) {
       const googleSub = googleUser?.sub || googleUser?.id || '';
       if (!sessionId || !email) {
         // No session ID — can't verify, show generic message and refresh credits
-        showToast('\u2714 Payment received! Verifying your Graded Credit…', 4000);
+        showToast('\u2714 Payment received! Verifying your credit…', 4000);
         return;
       }
       try {
-        showToast('\u231b Confirming your Graded Credit…', 3000);
+        showToast('\u231b Confirming your credit…', 3000);
         const r = await fetch('/api/scan-credits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4528,7 +4528,7 @@ function showToast(msg, duration) {
           console.error('Credit verify failed:', data);
         }
       } catch(e) {
-        showToast('\u2714 Payment received — your Graded Credit is being processed.', 5000);
+        showToast('\u2714 Payment received — your Card Grader Credit is being processed.', 5000);
         console.error('Credit verify error:', e);
       }
     })();
