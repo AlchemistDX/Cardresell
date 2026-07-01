@@ -845,7 +845,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
-    <button onclick="document.getElementById('googleSignInBtn')?.click()" style="height:30px;padding:0 .8rem;background:#2563eb;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:.72rem;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent">Sign in free</button>
+    <button onclick="triggerGoogleSignIn()" style="height:30px;padding:0 .8rem;background:#2563eb;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:.72rem;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent">Sign in free</button>
     <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="width:24px;height:24px;background:none;border:none;color:var(--text-muted);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">&times;</button>
   </div>
 </div>
@@ -1366,7 +1366,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Export your flip history as CSV</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#60a5fa;font-weight:700">★</span> Pro: unlimited flips + all platforms</div>
     </div>
-    <button onclick="document.getElementById('googleSignInBtn')?.click()" style="width:100%;max-width:260px;padding:.75rem 1.5rem;background:#2563eb;border:none;border-radius:12px;color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;-webkit-tap-highlight-color:transparent">Sign in with Google — it's free</button>
+    <button onclick="triggerGoogleSignIn()" style="width:100%;max-width:260px;padding:.75rem 1.5rem;background:#2563eb;border:none;border-radius:12px;color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;-webkit-tap-highlight-color:transparent">Sign in with Google — it's free</button>
     <div style="font-size:.68rem;color:var(--text-muted);margin-top:.6rem">No password needed &middot; Takes 5 seconds</div>
   </div>
 
@@ -4158,6 +4158,33 @@ function initGoogleSignIn() {
   }
 }
 
+// ── Reliable sign-in trigger — works from any button ──
+function triggerGoogleSignIn() {
+  try {
+    // Try One Tap prompt first (most reliable)
+    if (window.google?.accounts?.id) {
+      google.accounts.id.prompt(notification => {
+        // If One Tap is suppressed (user dismissed it before), fall back to button click
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          const inner = document.getElementById('googleSignInBtn')?.querySelector('div[role="button"], iframe');
+          if (inner) inner.click();
+          else triggerGoogleSignIn();
+        }
+      });
+    } else {
+      // GSI not loaded yet — click the rendered button directly
+      const inner = document.getElementById('googleSignInBtn')?.querySelector('div[role="button"], iframe');
+      if (inner) inner.click();
+      else triggerGoogleSignIn();
+    }
+  } catch(e) {
+    // Last resort
+    const inner = document.getElementById('googleSignInBtn')?.querySelector('div[role="button"], iframe');
+    if (inner) inner.click();
+    else triggerGoogleSignIn();
+  }
+}
+
 function handleGoogleSignIn(response) {
   // Decode JWT payload
   const payload = JSON.parse(atob(response.credential.split('.')[1]));
@@ -4230,7 +4257,7 @@ function openScanner() {
         <div style="font-size:2rem;margin-bottom:.75rem">📷</div>
         <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:.5rem">Sign in to scan cards</div>
         <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1.25rem">Google sign-in is required to use the card scanner.</div>
-        <button onclick="cancelScan();document.getElementById('googleSignInBtn')?.click()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.6rem 1.4rem;font-weight:700;font-size:.9rem;cursor:pointer">Sign in with Google</button>
+        <button onclick="cancelScan();triggerGoogleSignIn()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.6rem 1.4rem;font-weight:700;font-size:.9rem;cursor:pointer">Sign in with Google</button>
       </div>`;
     overlay.style.display = 'flex';
     return;
@@ -4945,7 +4972,7 @@ async function startProCheckout() {
   if (!googleUser) {
     closePricingModal();
     // Trigger Google sign-in
-    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 200);
+    setTimeout(() => triggerGoogleSignIn(), 200);
     return;
   }
   const btn = document.getElementById('pricingProBtn');
@@ -4986,7 +5013,7 @@ function startScanCheckout() {
 async function startGradeScanCheckout(tier) {
   if (!googleUser) {
     showToast('Sign in with Google first to buy Grade Scan Credits.');
-    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
+    setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
   // Disable all grade scan tier buttons while redirecting
@@ -5030,7 +5057,7 @@ function openGradeScanModal() {
 async function startIdScanCheckout(tier) {
   if (!googleUser) {
     showToast('Sign in with Google first to buy ID Scanner Credits.');
-    setTimeout(() => document.getElementById('googleSignInBtn')?.querySelector('div')?.click(), 600);
+    setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
   // Disable all three tier buttons while redirecting
