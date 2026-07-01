@@ -703,10 +703,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </span>
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
-    <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="AI Card Scanner — identify any card instantly">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      Scan
-    </button>
+    <div style="display:flex;gap:.35rem;flex-shrink:0">
+      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="AI Card Scanner — identify any card instantly">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Scan
+      </button>
+      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="AI Grade Estimator — get a PSA/BGS grade estimate">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        Grade
+      </button>
+    </div>
     <button id="searchBtn" class="search-btn">Search</button>
   </div>
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
@@ -721,6 +727,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Camera scan overlay -->
   <!-- Hidden file input — opens native camera on mobile -->
   <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
+  <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
@@ -3902,6 +3909,135 @@ async function processScanImage(input) {
   } catch(err) {
     console.error('Scan error:', err);
     statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+  }
+}
+
+// ── Grade scan gate — same credit check as scan ──
+function openGradeScanGate() {
+  if (!googleUser) {
+    showToast('Sign in with Google first to use the grader');
+    return;
+  }
+  document.getElementById('gradeFileInput').click();
+}
+
+// ── Process grade image ──
+async function processGradeImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  if (!googleUser) { openGradeScanGate(); return; }
+
+  if (!window._googleIdToken) {
+    const overlay2 = document.getElementById('scanOverlay');
+    overlay2.style.display = 'flex';
+    document.getElementById('scanStatus').innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again.</span>';
+    document.getElementById('scanResult').innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
+    return;
+  }
+
+  const overlay  = document.getElementById('scanOverlay');
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const prevWrap = document.getElementById('scanPreviewWrap');
+  const prevImg  = document.getElementById('scanPreviewImg');
+
+  overlay.style.display = 'flex';
+  resultEl.textContent = '';
+  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 AI Grade Estimator</span><br><span style="font-size:.8rem;opacity:.7">Analyzing condition\u2026</span>';
+
+  const objectUrl = URL.createObjectURL(file);
+  prevImg.src = objectUrl;
+  prevWrap.style.display = 'block';
+
+  const imageBase64 = await compressImage(file, 1000);
+  const idToken = window._googleIdToken || '';
+
+  try {
+    const response = await fetch('/api/scan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + idToken
+      },
+      body: JSON.stringify({
+        imageBase64,
+        mimeType: 'image/jpeg',
+        mode: 'grade',
+      })
+    });
+
+    if (response.status === 401) {
+      window._googleIdToken = null;
+      statusEl.innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again.</span>';
+      resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
+      return;
+    }
+    if (response.status === 402) {
+      cancelScan();
+      openGradedScanGate();
+      return;
+    }
+    if (!response.ok) {
+      let errMsg = 'Could not grade card. Try a clearer photo.';
+      try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
+      throw new Error(errMsg);
+    }
+
+    const data = await response.json();
+    const psa   = data.psa_estimate;
+    const label = data.grade_label || '';
+    const notes = data.grade_notes || '';
+    const worth = data.worth_grading;
+
+    // Grade color: 10=gem green, 8-9=teal, 6-7=yellow, <6=red
+    const gradeColor = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
+
+    statusEl.innerHTML =
+      '<span style="color:' + gradeColor + ';font-size:1.3rem;font-weight:900">PSA ' + psa + '</span>' +
+      ' <span style="color:rgba(255,255,255,.6);font-size:.82rem">' + label + '</span><br>' +
+      '<span style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.2rem;display:block">' + (data.card_name || '') + '</span>';
+
+    // Sub-grade breakdown
+    resultEl.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem;text-align:left;font-size:.74rem;margin:.1rem 0 .5rem">' +
+        '<span style="color:rgba(255,255,255,.45)">Centering</span><span style="color:#fff;font-weight:600">' + data.centering + '</span>' +
+        '<span style="color:rgba(255,255,255,.45)">Corners</span><span style="color:#fff;font-weight:600">' + data.corners + '</span>' +
+        '<span style="color:rgba(255,255,255,.45)">Edges</span><span style="color:#fff;font-weight:600">' + data.edges + '</span>' +
+        '<span style="color:rgba(255,255,255,.45)">Surface</span><span style="color:#fff;font-weight:600">' + data.surface + '</span>' +
+      '</div>' +
+      (notes ? '<div style="font-size:.73rem;color:rgba(255,255,255,.55);line-height:1.45;margin-bottom:.4rem">' + notes + '</div>' : '') +
+      (worth
+        ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700">\u2713 Worth submitting for grading</div>'
+        : '<div style="font-size:.74rem;color:#fb923c">May not be worth grading costs</div>'
+      );
+
+    // Show grading CTA with submission links
+    showScanGradeCTA(data.card_name, '', psa);
+
+    // Also kick off a price search for this card
+    window._pendingScanBannerCard = data.card_name;
+    if (data.card_name) {
+      setTimeout(() => {
+        const searchInput = document.getElementById('searchInput');
+        searchInput.value = data.card_name.trim();
+        searchInput.dispatchEvent(new Event('input'));
+        setTimeout(() => document.getElementById('searchBtn').click(), 300);
+      }, 3500);
+    }
+
+    // Reset grade file input
+    const fi = document.getElementById('gradeFileInput');
+    if (fi) {
+      fi.value = '';
+      const clone = fi.cloneNode(true);
+      fi.parentNode.replaceChild(clone, fi);
+      clone.addEventListener('change', function() { processGradeImage(this); });
+    }
+
+  } catch(err) {
+    console.error('Grade error:', err);
+    statusEl.textContent = err.message || 'Could not grade the card. Try a clearer photo.';
   }
 }
 

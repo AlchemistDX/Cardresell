@@ -57,16 +57,45 @@ export default async function handler(req, res) {
   }
 
   // ── 3. Get image ──
-  const { imageBase64, mimeType } = req.body || {};
+  const { imageBase64, mimeType, mode } = req.body || {};
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
 
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) return res.status(500).json({ error: 'Scanner not configured.' });
 
+  const isGradeMode = mode === 'grade';
+
   // ── 4. Call GPT-4o Vision ──
   try {
     const mime   = mimeType || 'image/jpeg';
     const dataUrl = `data:${mime};base64,${imageBase64}`;
+
+    const prompt = isGradeMode
+      ? `You are a professional trading card grader with expertise in PSA, BGS, and CGC grading standards. Analyze this card image carefully and provide a detailed condition report.
+
+Evaluate these specific areas:
+1. card_name: The card name (e.g. "Charizard VMAX", "LeBron James")
+2. centering: Left/right and top/bottom centering as a percentage estimate (e.g. "60/40")
+3. corners: Condition of all 4 corners - look for wear, creases, fraying ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
+4. edges: Condition of all 4 edges - look for chips, nicks, roughness ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
+5. surface: Front surface condition - scratches, print lines, dents, stains ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
+6. psa_estimate: Your estimated PSA grade as a number (1-10, can use 9.5 for BGS)
+7. grade_label: Grade label ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Poor")
+8. grade_notes: 1-2 sentence explanation of what's limiting the grade, or why it grades high
+9. worth_grading: true or false - is it worth the cost to submit for professional grading?
+
+Respond ONLY with valid JSON, no explanation:
+{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":9,"grade_label":"...","grade_notes":"...","worth_grading":true}`
+      : `You are a trading card expert. Look at this card image and extract:
+1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
+2. card_number: The card number (e.g. "079/078", "025/165")
+3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm")
+4. hp: HP number if Pokémon card (e.g. "280")
+5. card_type: "pokemon", "sports", or "mtg"
+6. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
+
+Respond ONLY with valid JSON, no explanation:
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"..."}`;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -76,7 +105,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: 300,
+        max_tokens: isGradeMode ? 500 : 300,
         messages: [
           {
             role: 'user',
@@ -85,19 +114,7 @@ export default async function handler(req, res) {
                 type: 'image_url',
                 image_url: { url: dataUrl, detail: 'high' }
               },
-              {
-                type: 'text',
-                text: `You are a trading card expert. Look at this card image and extract:
-1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
-2. card_number: The card number (e.g. "079/078", "025/165")
-3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm")
-4. hp: HP number if Pokémon card (e.g. "280")
-5. card_type: "pokemon", "sports", or "mtg"
-6. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
-
-Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"..."}`
-              }
+              { type: 'text', text: prompt }
             ]
           }
         ]
@@ -133,8 +150,25 @@ Respond ONLY with valid JSON, no explanation:
       return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting.' });
     }
 
+    if (isGradeMode) {
+      return res.status(200).json({
+        success:       true,
+        mode:          'grade',
+        card_name:     cardInfo.card_name     || '',
+        centering:     cardInfo.centering     || 'Unknown',
+        corners:       cardInfo.corners       || 'Unknown',
+        edges:         cardInfo.edges         || 'Unknown',
+        surface:       cardInfo.surface       || 'Unknown',
+        psa_estimate:  cardInfo.psa_estimate  ?? null,
+        grade_label:   cardInfo.grade_label   || '',
+        grade_notes:   cardInfo.grade_notes   || '',
+        worth_grading: cardInfo.worth_grading ?? false,
+      });
+    }
+
     return res.status(200).json({
       success: true,
+      mode:        'identify',
       card_name:   cardInfo.card_name   || '',
       card_number: cardInfo.card_number || '',
       set_name:    cardInfo.set_name    || '',
