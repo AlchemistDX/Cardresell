@@ -1,4 +1,4 @@
-// /api/stripe-checkout — Create Stripe Checkout for Pro subscription ($4.99/mo)
+// /api/stripe-checkout — Create Stripe Checkout for Pro subscription ($9.99/mo)
 // POST body: { email, userId, name? }
 // Authorization: Bearer <google_id_token>  (optional — used if present, falls back to body email)
 
