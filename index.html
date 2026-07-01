@@ -643,7 +643,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="settings-panel" id="settingsPanel">
   <!-- AI SCANNER — unified section -->
   <div class="settings-inner">
-    <div class="settings-title">🤖 AI Card Scanner</div>
+    <div class="settings-title">🤖 Card ID Scan</div>
 
     <!-- Credit balance row -->
     <div id="settingsScanCredits" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.75rem">
@@ -713,7 +713,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
     <div style="display:flex;gap:.35rem;flex-shrink:0">
-      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="AI Card Scanner — identify any card instantly">
+      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card ID Scan — identify any card instantly">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Scan
       </button>
@@ -1223,7 +1223,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="scan-gate-overlay" id="scanGateOverlay" onclick="closeScanGate(event)">
   <div class="scan-gate-box">
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
-    <div class="scan-gate-title" id="scanGateTitle">AI Card Scanner</div>
+    <div class="scan-gate-title" id="scanGateTitle">Card ID Scan</div>
     <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
     <div class="scan-gate-options">
       <div class="scan-gate-opt" onclick="handleScanOption('pay')">
@@ -4006,7 +4006,7 @@ function _setScanGateMode(mode) {
     if (price) price.textContent = '$1.50';
   } else {
     if (icon)  icon.innerHTML    = '&#128247;';
-    if (title) title.textContent = 'AI Card Scanner';
+    if (title) title.textContent = 'Card ID Scan';
     if (sub)   sub.innerHTML     = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.';
     if (name)  name.innerHTML    = '&#128247; Buy ID Scan Credits';
     if (desc)  desc.innerHTML    = 'Card name &middot; Set &middot; Live prices &mdash; coming soon';
