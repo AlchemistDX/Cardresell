@@ -685,7 +685,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </span>
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name (e.g. Charizard, Black Lotus, Dark Magician…)" autocomplete="off" />
     </div>
-    <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="AI Graded Scan — $1.50">
+    <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="AI Card Scanner — identify any card instantly">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       Scan
     </button>
@@ -1207,13 +1207,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="scan-gate-overlay" id="scanGateOverlay" onclick="closeScanGate(event)">
   <div class="scan-gate-box">
     <div class="scan-gate-icon">&#128247;</div>
-    <div class="scan-gate-title">AI Card Grader</div>
-    <div class="scan-gate-sub">Upload a photo &mdash; our AI analyzes condition, centering &amp; surface wear to estimate your PSA grade.</div>
+    <div class="scan-gate-title">AI Card Scanner</div>
+    <div class="scan-gate-sub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
     <div class="scan-gate-options">
       <div class="scan-gate-opt" onclick="handleScanOption('pay')">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name">&#128197; Single Graded Scan</div>
-          <div class="scan-gate-opt-desc">Full condition report &middot; No subscription needed</div>
+          <div class="scan-gate-opt-name">&#128247; Single Scan</div>
+          <div class="scan-gate-opt-desc">Instant card ID &middot; No subscription needed</div>
         </div>
         <div class="scan-gate-opt-price">$1.50</div>
       </div>
@@ -1274,13 +1274,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- Pay-per-use options -->
     <div class="scan-credit-row">
       <div class="scan-credit-info">
-        <strong>AI Graded Scan</strong><br>
+        <strong>AI Card Scan</strong><br>
         $1.50 per scan &middot; No subscription needed
       </div>
       <button class="scan-credit-buy" onclick="startScanCheckout()">Buy 1 Scan &mdash; $1.50</button>
     </div>
     <div style="font-size:.72rem;color:var(--text-faint);text-align:center;margin-bottom:1rem;line-height:1.5">
-      Graded Scans use AI to analyze condition, centering &amp; surface wear &mdash; tells you if it&apos;s worth grading at PSA.
+      Take a photo of any card &mdash; AI instantly identifies it and pulls live market prices.
     </div>
     <div class="pricing-close">
       <button class="pricing-close-btn" onclick="closePricingModal()">Maybe later</button>
@@ -4221,25 +4221,13 @@ function showToast(msg, duration) {
 
 function openGradedScanGate() {
   if (!googleUser) {
-    // Must be signed in
     showToast('Sign in with Google first to use the scanner');
     return;
   }
-  // If user has any credits (Pro free scans OR paid credits), go straight to scan
-  if (window._isPro && (window._freeScansLeft > 0 || window._scanCredits > 0)) {
-    document.getElementById('scanFileInput').click();
-    return;
-  }
-  // Non-Pro but has paid scan credits — also go straight to scan
-  if (!window._isPro && window._scanCredits > 0) {
-    document.getElementById('scanFileInput').click();
-    return;
-  }
-  // Show gate modal
-  document.getElementById('scanGateOverlay').classList.add('open');
-  // If already Pro, hide the Pro upsell option
-  const proOpt = document.getElementById('scanGateProOpt');
-  if (window._isPro && proOpt) proOpt.style.display = 'none';
+  // Always try to open the camera — server is the source of truth on credits.
+  // If credits are actually 0, the server returns 402 and the gate modal opens then.
+  // This avoids race conditions where _scanCredits hasn't loaded yet.
+  document.getElementById('scanFileInput').click();
 }
 
 function closeScanGate(evt) {
