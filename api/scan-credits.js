@@ -37,6 +37,21 @@ export default async function handler(req, res) {
     }
 
     const key      = googleSub || email;
+
+    // ── Welcome bonus: 10 free Card Lookups on first authenticated visit ──
+    // Only grant when we have a real googleSub (not just email) so it's tied to
+    // a verified Google identity, not a spoofable email.
+    let welcomeGranted = false;
+    if (googleSub) {
+      const already = await getKVInt(kvUrl, kvToken, `scans:${key}:welcome_granted`);
+      if (!already) {
+        const curId = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, curId + 10);
+        await setKV(kvUrl, kvToken, `scans:${key}:welcome_granted`, 1);
+        welcomeGranted = true;
+      }
+    }
+
     const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
     const idPaid   = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
     const stamp    = getMonthStamp();
@@ -55,6 +70,7 @@ export default async function handler(req, res) {
       idPaidCredits: idPaid,
       idFreeCredits: proIdFree,
       kvAvailable:  true,
+      welcomeGranted,
     });
   }
 

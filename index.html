@@ -1484,8 +1484,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <div class="login-gate-card" role="dialog" aria-labelledby="loginGateTitle">
     <button class="login-gate-close" onclick="closeLoginGate()" aria-label="Close">×</button>
     <div id="loginGateIcon" class="login-gate-icon">🔍</div>
-    <h2 id="loginGateTitle" class="login-gate-title">Sign in to use the scanner</h2>
-    <p id="loginGateSub" class="login-gate-sub">Instant card ID plus market price in seconds.</p>
+    <h2 id="loginGateTitle" class="login-gate-title">Sign in — get 10 free Card Lookups</h2>
+    <p id="loginGateSub" class="login-gate-sub">Instant card ID plus market price in seconds. 10 lookups on us, no credit card needed.</p>
     <div id="loginGateTeaser" class="login-gate-teaser"></div>
     <button class="login-gate-primary" onclick="closeLoginGate();setTimeout(()=>document.getElementById('googleSignInBtn')?.click(),50)">
       <svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:middle;margin-right:.5rem"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.5 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.5c-2 1.5-4.6 2.4-7.5 2.4-5.2 0-9.6-3.3-11.3-8L6 32.5C9.3 39 16.1 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.7 2.1-2 4-3.7 5.4L38 39c-.5.5 6-4.4 6-15 0-1.3-.1-2.4-.4-3.5z"/></svg>
@@ -1683,6 +1683,13 @@ async function loadSettingsScanCredits() {
     const idPaidCredits = typeof data.idPaidCredits === 'number' ? data.idPaidCredits : idCredits;
     const idFreeCredits = typeof data.idFreeCredits === 'number' ? data.idFreeCredits : 0;
     const isPro         = data.isPro || false;
+
+    // ── Welcome bonus toast ──
+    // Server sets welcomeGranted:true exactly once per Google account, right
+    // after crediting +10 Card Lookups. Show a celebratory toast.
+    if (data.welcomeGranted) {
+      try { showWelcomeBonusToast(); } catch(e) { console.warn('welcome toast failed', e); }
+    }
 
     window._idScanCredits = idCredits;
     window._scanCredits = credits;
@@ -4194,8 +4201,8 @@ function openScanner() {
     statusEl.innerHTML = `
       <div style="text-align:center;padding:1rem">
         <div style="font-size:2rem;margin-bottom:.75rem">📷</div>
-        <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:.5rem">Sign in to scan cards</div>
-        <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1.25rem">Google sign-in is required to use the card scanner.</div>
+        <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:.5rem">Sign in — get 10 free Card Lookups</div>
+        <div style="font-size:.85rem;color:rgba(255,255,255,.65);margin-bottom:1.25rem">Sign in with Google and 10 lookups land in your account instantly.</div>
         <button onclick="cancelScan();document.getElementById('googleSignInBtn')?.click()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.6rem 1.4rem;font-weight:700;font-size:.9rem;cursor:pointer">Sign in with Google</button>
       </div>`;
     overlay.style.display = 'flex';
@@ -5175,6 +5182,13 @@ function showToast(msg, duration) {
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), duration || 3500);
+}
+
+// One-time welcome bonus toast — shown right after the server grants +10
+// Card Lookups on first Google sign-in. Sticks around a bit longer so users
+// actually see it.
+function showWelcomeBonusToast() {
+  showToast('🎉 Welcome! 10 free Card Lookups added to your account.', 6000);
 }
 
 // ── Handle return from Stripe ──
