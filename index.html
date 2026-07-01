@@ -5673,47 +5673,68 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <!-- ═══ SEARCH MODAL ═══ -->
-<div id="searchModal" style="display:none;position:fixed;inset:0;z-index:9000;background:#000;flex-direction:column;overflow:hidden">
-  <!-- Header -->
-  <div style="display:flex;align-items:center;gap:10px;padding:14px 14px 10px;background:#000;border-bottom:1px solid #222;flex-shrink:0">
-    <button onclick="closeSearchModal()" style="width:36px;height:36px;border-radius:50%;background:#1a1a1a;border:none;color:#fff;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">&#8592;</button>
-    <input id="searchModalInput" type="search" placeholder="Card name…" autocomplete="off" autocorrect="off" spellcheck="false"
-      style="flex:1;height:44px;background:#1a1a1a;border:1.5px solid #333;border-radius:22px;padding:0 18px;font-size:1rem;color:#fff;outline:none;-webkit-appearance:none"/>
-    <button id="searchModalBtn" onclick="runModalSearch()" style="height:44px;padding:0 20px;background:var(--gold);border:none;border-radius:22px;color:#fff;font-weight:700;font-size:.9rem;cursor:pointer;flex-shrink:0">Go</button>
+<div id="searchModal" style="display:none;position:fixed;inset:0;z-index:9000;background:#0a0a0a;flex-direction:column;overflow:hidden">
+  <!-- Page header -->
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 14px 10px;background:#0a0a0a;border-bottom:1px solid #1f1f1f;flex-shrink:0;min-height:64px">
+    <button onclick="closeSearchModal()" style="width:38px;height:38px;border-radius:50%;background:#1c1c1c;border:1px solid #2a2a2a;color:#fff;font-size:1.15rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent">&#8592;</button>
+    <div style="flex:1;display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2e2e2e;border-radius:14px;overflow:hidden;height:46px">
+      <svg style="margin:0 10px 0 14px;flex-shrink:0;opacity:.4" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchModalInput" type="search" placeholder="Search by card name…" autocomplete="off" autocorrect="off" spellcheck="false"
+        style="flex:1;height:100%;background:transparent;border:none;font-size:1rem;color:#fff;outline:none;-webkit-appearance:none;padding:0 4px"/>
+      <button id="smlClear" onclick="document.getElementById('searchModalInput').value='';document.getElementById('searchModalList').innerHTML='';document.getElementById('searchModalInput').focus();document.getElementById('smlClear').style.display='none'" style="display:none;width:30px;height:30px;margin-right:6px;background:#2a2a2a;border:none;border-radius:50%;color:#999;cursor:pointer;font-size:.85rem;flex-shrink:0">&#x2715;</button>
+    </div>
+    <button id="searchModalBtn" onclick="runModalSearch()" style="height:46px;padding:0 18px;background:var(--gold);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:.9rem;cursor:pointer;flex-shrink:0;white-space:nowrap;-webkit-tap-highlight-color:transparent">Search</button>
+  </div>
+  <!-- Column headers -->
+  <div id="smlColHeaders" style="display:none;grid-template-columns:64px 1fr 90px 80px;gap:0;padding:8px 16px;background:#111;border-bottom:1px solid #1f1f1f;flex-shrink:0">
+    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em"></div>
+    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;padding-left:12px">Card</div>
+    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;text-align:center">Rarity</div>
+    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;text-align:right">Price</div>
   </div>
   <!-- Results list -->
-  <div id="searchModalList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#000"></div>
+  <div id="searchModalList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#0a0a0a"></div>
 </div>
 
 <style>
-/* Search modal result rows — enlarged version of dropdown */
+/* ═══ SEARCH PAGE — table-style rows ═══ */
 .sml-item{
-  display:flex;align-items:center;gap:14px;
-  padding:14px 16px;
-  border-bottom:1px solid #1a1a1a;
+  display:grid;
+  grid-template-columns:64px 1fr 90px 80px;
+  align-items:center;
+  gap:0;
+  padding:10px 16px 10px 16px;
+  border-bottom:1px solid #161616;
   cursor:pointer;
-  background:#000;
+  background:#0a0a0a;
   -webkit-tap-highlight-color:transparent;
+  min-height:88px;
 }
-.sml-item:active{background:#111}
+.sml-item:active{background:#131313}
+@media (hover:hover){.sml-item:hover{background:#111}}
+.sml-thumb-wrap{width:64px;height:88px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .sml-thumb{
-  width:64px;height:88px;
-  object-fit:contain;border-radius:6px;
-  flex-shrink:0;background:#111;
+  width:58px;height:82px;
+  object-fit:contain;border-radius:5px;
+  background:#111;display:block;
 }
 .sml-thumb-ph{
-  width:64px;height:88px;
-  border-radius:6px;background:#111;
-  flex-shrink:0;display:flex;align-items:center;
-  justify-content:center;font-size:1.4rem;color:#555;
+  width:58px;height:82px;
+  border-radius:5px;background:#161616;
+  display:flex;align-items:center;
+  justify-content:center;font-size:1.4rem;color:#444;
 }
-.sml-info{flex:1;min-width:0}
-.sml-name{font-size:1rem;font-weight:700;color:#fff;line-height:1.3;margin-bottom:3px}
-.sml-meta{font-size:.78rem;color:rgba(255,255,255,.5);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sml-price{font-size:1rem;font-weight:700;color:#4ade80;flex-shrink:0;text-align:right}
-.sml-no-price{font-size:.78rem;color:#555;flex-shrink:0}
-.sml-loading{padding:2rem;text-align:center;color:#666;font-size:.9rem;display:flex;align-items:center;justify-content:center;gap:.5rem}
-.sml-empty{padding:2rem;text-align:center;color:#555;font-size:.9rem}
+.sml-info{padding-left:12px;min-width:0}
+.sml-name{font-size:.95rem;font-weight:700;color:#f0f0f0;line-height:1.3;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sml-set{font-size:.75rem;color:rgba(255,255,255,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sml-rarity-col{padding:0 6px;text-align:center}
+.sml-rarity{display:inline-block;font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;word-break:break-word;text-align:center}
+.sml-price-col{text-align:right;padding-right:2px}
+.sml-price{font-size:.98rem;font-weight:700;color:#4ade80;white-space:nowrap}
+.sml-no-price{font-size:.75rem;color:#3a3a3a}
+.sml-loading{padding:3rem 2rem;text-align:center;color:#555;font-size:.9rem;display:flex;align-items:center;justify-content:center;gap:.6rem}
+.sml-empty{padding:3rem 2rem;text-align:center;color:#444;font-size:.9rem}
+.sml-count{padding:8px 16px;font-size:.75rem;color:#555;background:#0f0f0f;border-bottom:1px solid #161616;flex-shrink:0}
 </style>
 
 <script>
@@ -5721,15 +5742,20 @@ document.addEventListener('DOMContentLoaded', function() {
 function openSearchModal() {
   const modal = document.getElementById('searchModal');
   const input = document.getElementById('searchModalInput');
+  const clearBtn = document.getElementById('smlClear');
+  const headers = document.getElementById('smlColHeaders');
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   // Pre-fill with current search text if any
   const existing = document.getElementById('searchInput').value.trim();
   if (existing) {
     input.value = existing;
+    clearBtn.style.display = 'flex';
     runModalSearch();
   } else {
     input.value = '';
+    clearBtn.style.display = 'none';
+    headers.style.display = 'none';
     document.getElementById('searchModalList').innerHTML = '';
   }
   setTimeout(() => input.focus(), 100);
@@ -5738,7 +5764,12 @@ function openSearchModal() {
   input.oninput = () => {
     clearTimeout(window._smlTimeout);
     const q = input.value.trim();
-    if (q.length >= 2) window._smlTimeout = setTimeout(runModalSearch, 380);
+    clearBtn.style.display = q.length ? 'flex' : 'none';
+    if (q.length >= 2) window._smlTimeout = setTimeout(runModalSearch, 350);
+    else if (!q.length) {
+      document.getElementById('searchModalList').innerHTML = '';
+      document.getElementById('smlColHeaders').style.display = 'none';
+    }
   };
 }
 
@@ -5784,20 +5815,48 @@ async function _runModalSearchQuery(q) {
       return;
     }
 
-    list.innerHTML = results.map((r, i) =>
-      '<div class="sml-item" data-idx="' + i + '">' +
-        (r.img
-          ? '<img class="sml-thumb" src="' + r.img + '" loading="lazy" alt="' + esc(r.name) + '" onerror="this.style.opacity=0" />'
-          : '<div class="sml-thumb-ph">&#127183;</div>') +
-        '<div class="sml-info">' +
-          '<div class="sml-name">' + esc(r.name) + '</div>' +
-          '<div class="sml-meta">' + esc(r.meta) + '</div>' +
-        '</div>' +
-        (r.price != null
-          ? '<div class="sml-price">$' + r.price.toFixed(2) + '</div>'
-          : '<div class="sml-no-price">No price</div>') +
-      '</div>'
-    ).join('');
+    // Parse meta into set/number and rarity parts
+    const parseRarity = (meta) => {
+      const parts = (meta || '').split(' · ').map(p => p.trim()).filter(p => p.length > 0);
+      if (parts.length === 0) return { setNum: '', rarity: '' };
+      if (parts.length === 1) {
+        // Single part — could be rarity only or set only; treat as set
+        return { setNum: parts[0], rarity: '' };
+      }
+      // Last part is rarity, rest is set+number
+      const rarity = parts[parts.length - 1];
+      const setNum = parts.slice(0, -1).join(' · ');
+      return { setNum, rarity };
+    };
+
+    const colHeaders = document.getElementById('smlColHeaders');
+    colHeaders.style.display = 'grid';
+
+    const countEl = document.getElementById('smlCountBar');
+    if (countEl) countEl.textContent = results.length + ' result' + (results.length !== 1 ? 's' : '');
+
+    list.innerHTML =
+      '<div class="sml-count">' + results.length + ' result' + (results.length !== 1 ? 's' : '') + '</div>' +
+      results.map((r, i) => {
+        const {setNum, rarity} = parseRarity(r.meta || '');
+        return '<div class="sml-item" data-idx="' + i + '">' +
+          '<div class="sml-thumb-wrap">' +
+            (r.img
+              ? '<img class="sml-thumb" src="' + r.img + '" loading="lazy" alt="' + esc(r.name) + '" onerror="this.style.opacity=0" />'
+              : '<div class="sml-thumb-ph">&#127183;</div>') +
+          '</div>' +
+          '<div class="sml-info">' +
+            '<div class="sml-name">' + esc(r.name) + '</div>' +
+            '<div class="sml-set">' + esc(setNum) + '</div>' +
+          '</div>' +
+          '<div class="sml-rarity-col"><span class="sml-rarity">' + esc(rarity || '—') + '</span></div>' +
+          '<div class="sml-price-col">' +
+            (r.price != null
+              ? '<div class="sml-price">$' + r.price.toFixed(2) + '</div>'
+              : '<div class="sml-no-price">—</div>') +
+          '</div>' +
+        '</div>';
+      }).join('');
 
     // Click handlers
     list.querySelectorAll('.sml-item').forEach(el => {
@@ -5841,8 +5900,11 @@ async function _fetchModalPokemon(q) {
         return { key, label, market: p?.tcgplayer?.market || null, low: null, mid: null, high: null };
       });
       if (!priceVariants.length) priceVariants.push({ key:'manual', label:'Manual', market:null, low:null, mid:null, high:null });
+      const tplSet = c.set_name || c.set?.name || c.expansion || '';
+      const tplNum = c.number || c.card_number || '';
+      const tplMetaParts = [tplSet, tplNum ? '#' + tplNum : '', c.rarity].filter(Boolean);
       return {
-        name: c.name, img: c.image_url || '', meta: (c.set_name || '') + (c.rarity ? ' · ' + c.rarity : ''),
+        name: c.name, img: c.image_url || '', meta: tplMetaParts.join(' · '),
         price,
         cardFactory: () => tplCardToNormalized(c, 'pokemon', c.image_url || '')
       };
