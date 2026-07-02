@@ -5134,26 +5134,72 @@ async function processGradeBack(input) {
       return 55;
     };
     const barCol = pct => pct >= 80 ? '#4ade80' : pct >= 60 ? '#facc15' : pct >= 40 ? '#fb923c' : '#f87171';
-    const scoreBar = (label, val) => {
+
+    // Plain-English tips per category
+    const centeringTip = v => {
+      if (!v) return '';
+      const nums = (v.match(/(\d+)\/(\d+)/g) || []).map(n => { const [a,b]=n.split('/').map(Number); return Math.max(a,b); });
+      const worst = nums.length ? Math.max(...nums) : 50;
+      if (worst <= 52) return 'Nearly perfect — PSA 10 territory';
+      if (worst <= 55) return 'Slight shift, still strong — PSA 9–10 possible';
+      if (worst <= 60) return 'Moderate off-center — likely caps at PSA 8';
+      if (worst <= 65) return 'Noticeably off-center — PSA 7 or lower';
+      return 'Heavily off-center — major grade deduction';
+    };
+    const cornerTip = v => {
+      if (!v) return '';
+      const s = v.toLowerCase();
+      if (s.includes('mint') && !s.includes('near')) return 'All 4 corners sharp — no whitening or fraying under light';
+      if (s.includes('near mint')) return '1–2 corners with faint softness — barely visible';
+      if (s.includes('light')) return 'Light whitening or fraying — visible up close under direct light';
+      if (s.includes('moderate')) return 'Clear corner wear — significant grade deduction';
+      if (s.includes('heavy')) return 'Heavy wear or bends — major impact on grade';
+      return 'Check all 4 corners under direct light for whitening';
+    };
+    const edgeTip = v => {
+      if (!v) return '';
+      const s = v.toLowerCase();
+      if (s.includes('mint') && !s.includes('near')) return 'Clean edges — no nicks, chips, or roughness';
+      if (s.includes('near mint')) return 'Very minor edge wear — hard to see';
+      if (s.includes('light')) return 'Small nicks or slight roughness — visible on close inspection';
+      if (s.includes('moderate')) return 'Clear chips or roughness — noticeable deduction';
+      if (s.includes('heavy')) return 'Significant edge damage — heavy grade impact';
+      return 'Run a finger along all 4 edges to feel for nicks';
+    };
+    const surfaceTip = v => {
+      if (!v) return '';
+      const s = v.toLowerCase();
+      if (s.includes('mint') && !s.includes('near')) return 'No scratches, print lines, or holo damage visible';
+      if (s.includes('near mint')) return 'Extremely minor — near flawless surface';
+      if (s.includes('light')) return 'Light scratches or print lines — may show under angled light';
+      if (s.includes('moderate')) return 'Visible scratches or holo wear — notable deduction';
+      if (s.includes('heavy')) return 'Heavy surface damage — severe impact on grade';
+      return 'Tilt card under a light to check for hidden scratches';
+    };
+
+    const scoreBar = (label, val, tipFn) => {
       const pct = gradeScore(val); const col = barCol(pct);
-      return '<div style="margin-bottom:.45rem">' +
+      const tip = tipFn ? tipFn(val) : '';
+      return '<div style="margin-bottom:.55rem">' +
         '<div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:.18rem">' +
           '<span style="color:rgba(255,255,255,.45)">' + label + '</span>' +
           '<span style="color:' + col + ';font-weight:700">' + (val || '\u2014') + '</span>' +
         '</div>' +
-        '<div style="height:5px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden">' +
+        '<div style="height:5px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;margin-bottom:.2rem">' +
           '<div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:99px"></div>' +
-        '</div></div>';
+        '</div>' +
+        (tip ? '<div style="font-size:.65rem;color:rgba(255,255,255,.38);line-height:1.35">' + tip + '</div>' : '') +
+      '</div>';
     };
 
     resultEl.innerHTML =
       '<div style="margin:.3rem 0 .5rem">' +
-        scoreBar('Centering', data.centering) +
-        scoreBar('Corners',   data.corners)   +
-        scoreBar('Edges',     data.edges)     +
-        scoreBar('Surface',   data.surface)   +
+        scoreBar('Centering', data.centering, centeringTip) +
+        scoreBar('Corners',   data.corners,   cornerTip)   +
+        scoreBar('Edges',     data.edges,     edgeTip)     +
+        scoreBar('Surface',   data.surface,   surfaceTip)  +
       '</div>' +
-      (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.5;margin-bottom:.5rem;padding:.4rem .5rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left">' + notes + '</div>' : '') +
+      (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + notes + '</div>' : '') +
       (worth
         ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.2rem">\u2713 Worth submitting for grading</div>'
         : '<div style="font-size:.74rem;color:#fb923c;margin-bottom:.2rem">May not be worth grading costs</div>'
