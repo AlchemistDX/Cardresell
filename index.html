@@ -1430,9 +1430,87 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div id="portfolioWrap"></div>
   </div>
 
+  <!-- Grading Log -->
+  <div class="section-panel" id="gradingLogSection" style="margin-top:1.5rem">
+    <div class="section-hdr">
+      <div>
+        <div class="section-title">🏅 Grading Log</div>
+        <div class="section-sub">Cards sent for grading — track ROI vs. selling raw</div>
+      </div>
+      <button class="fl-sub-btn" onclick="openGradingModal()">+ Log Card</button>
+    </div>
+    <div id="gradingLogWrap"></div>
+    <!-- Monthly Report -->
+    <div id="gradingReportWrap" style="display:none;margin-top:1.1rem"></div>
+  </div>
+
 </div><!-- /flipsView -->
 
 <!-- ADD FLIP / ADD HOLD MODAL -->
+
+<!-- GRADING LOG MODAL -->
+<div class="modal-overlay" id="gradingModal" onclick="closeGradingModal(event)">
+  <div class="modal-box" style="max-width:370px">
+    <div class="modal-title" id="gradingModalTitle">Log Card for Grading</div>
+
+    <label>Card Name</label>
+    <input type="text" id="gmCard" placeholder="e.g. Charizard Base Set Holo" autocomplete="off" />
+
+    <label>Set / Number</label>
+    <input type="text" id="gmSet" placeholder="e.g. Base Set · 4/102" autocomplete="off" />
+
+    <label>Raw Acquisition Cost ($)</label>
+    <input type="number" id="gmCost" placeholder="0.00" step="0.01" min="0" />
+
+    <label>Raw Market Value at Submission ($) <span style="font-weight:400;opacity:.6">— what you could have sold it raw for</span></label>
+    <input type="number" id="gmRawVal" placeholder="0.00" step="0.01" min="0" />
+
+    <label>Date Sent</label>
+    <input type="date" id="gmDateSent" />
+
+    <label>Grading Company</label>
+    <select id="gmGrader" style="width:100%;padding:.5rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem">
+      <option value="PSA">PSA</option>
+      <option value="BGS">BGS / Beckett</option>
+      <option value="CGC">CGC</option>
+      <option value="SGC">SGC</option>
+      <option value="Other">Other</option>
+    </select>
+
+    <label>Grading Fees Paid ($) <span style="font-weight:400;opacity:.6">— submission + shipping</span></label>
+    <input type="number" id="gmFees" placeholder="0.00" step="0.01" min="0" />
+
+    <!-- Grade received — hidden until card comes back -->
+    <div id="gmGradeReceivedRow" style="display:none">
+      <label>Final Grade Received</label>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <select id="gmGradeGrader" style="flex:1;padding:.5rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem">
+          <option value="PSA">PSA</option><option value="BGS">BGS</option><option value="CGC">CGC</option><option value="SGC">SGC</option>
+        </select>
+        <select id="gmGrade" style="flex:1;padding:.5rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem">
+          <option value="">— select —</option>
+          <option value="10">10 (Gem Mint)</option><option value="9.5">9.5</option><option value="9">9 (Mint)</option>
+          <option value="8.5">8.5</option><option value="8">8 (NM-MT)</option><option value="7.5">7.5</option>
+          <option value="7">7 (NM)</option><option value="6">6 (EX-MT)</option><option value="5">5 (EX)</option>
+          <option value="4">4 (VG-EX)</option><option value="3">3 (VG)</option><option value="2">2 (GD)</option><option value="1">1 (PR)</option>
+        </select>
+      </div>
+      <label style="margin-top:.65rem">Final Sale Price ($) <span style="font-weight:400;opacity:.6">— leave blank if still holding</span></label>
+      <input type="number" id="gmSalePrice" placeholder="0.00" step="0.01" min="0" />
+    </div>
+
+    <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
+      <input type="checkbox" id="gmHasGrade" onchange="document.getElementById('gmGradeReceivedRow').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:var(--gold)">
+      <label for="gmHasGrade" style="font-size:.8rem;color:var(--text-muted);margin:0;cursor:pointer">Card has come back — enter final grade</label>
+    </div>
+
+    <div style="display:flex;gap:.5rem;margin-top:1rem">
+      <button onclick="closeGradingModal()" style="flex:1;padding:.6rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem;cursor:pointer">Cancel</button>
+      <button onclick="saveGradingEntry()" style="flex:1;padding:.6rem;background:var(--gold);border:none;border-radius:var(--radius-md);color:#000;font-size:.85rem;font-weight:800;cursor:pointer">Save Entry</button>
+    </div>
+  </div>
+</div>
+
 <!-- SCAN GATE MODAL -->
 <div class="scan-gate-overlay" id="scanGateOverlay" onclick="closeScanGate(event)">
   <div class="scan-gate-box">
@@ -4065,6 +4143,235 @@ function saveFlipEntry() {
   renderFlipsView();
 }
 
+/* ═══════════════════════════════════════
+   GRADING LOG MODULE
+   Data shape per entry:
+   { id, card, set, cost, rawVal, dateSent, grader, fees,
+     hasGrade, gradeGrader, grade, salePrice, dateGraded }
+   ═══════════════════════════════════════ */
+
+function loadGradingData() {
+  try { return JSON.parse(localStorage.getItem(getUserKey('grading_log')) || '[]'); } catch(e) { return []; }
+}
+function saveGradingData(d) {
+  try { localStorage.setItem(getUserKey('grading_log'), JSON.stringify(d)); } catch(e) {}
+}
+
+let _gradingEditId = null; // null = new entry, number = editing existing
+
+function openGradingModal(editId) {
+  _gradingEditId = editId ?? null;
+  const modal = document.getElementById('gradingModal');
+  const title = document.getElementById('gradingModalTitle');
+
+  // Reset form
+  ['gmCard','gmSet','gmCost','gmRawVal','gmFees','gmSalePrice'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('gmDateSent').value = new Date().toISOString().slice(0,10);
+  document.getElementById('gmGrader').value = 'PSA';
+  document.getElementById('gmGrade').value = '';
+  document.getElementById('gmHasGrade').checked = false;
+  document.getElementById('gmGradeReceivedRow').style.display = 'none';
+
+  if (editId != null) {
+    title.textContent = 'Edit Grading Entry';
+    const entry = loadGradingData().find(e => e.id === editId);
+    if (entry) {
+      document.getElementById('gmCard').value     = entry.card || '';
+      document.getElementById('gmSet').value      = entry.set  || '';
+      document.getElementById('gmCost').value     = entry.cost || '';
+      document.getElementById('gmRawVal').value   = entry.rawVal || '';
+      document.getElementById('gmDateSent').value = entry.dateSent || '';
+      document.getElementById('gmGrader').value   = entry.grader || 'PSA';
+      document.getElementById('gmFees').value     = entry.fees || '';
+      if (entry.hasGrade) {
+        document.getElementById('gmHasGrade').checked = true;
+        document.getElementById('gmGradeReceivedRow').style.display = '';
+        document.getElementById('gmGradeGrader').value = entry.gradeGrader || entry.grader || 'PSA';
+        document.getElementById('gmGrade').value       = entry.grade || '';
+        document.getElementById('gmSalePrice').value   = entry.salePrice || '';
+      }
+    }
+  } else {
+    title.textContent = 'Log Card for Grading';
+    // Pre-fill card name from currently selected card
+    if (selectedCard && selectedCard.name) {
+      document.getElementById('gmCard').value = selectedCard.name;
+      document.getElementById('gmSet').value  = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
+      const p = getEffectivePrice();
+      if (p) document.getElementById('gmRawVal').value = p.toFixed(2);
+    }
+  }
+  modal.classList.add('open');
+}
+
+function closeGradingModal(e) {
+  if (e && !e.target.classList.contains('modal-overlay')) return;
+  document.getElementById('gradingModal').classList.remove('open');
+}
+
+function saveGradingEntry() {
+  const card     = document.getElementById('gmCard').value.trim();
+  if (!card) { document.getElementById('gmCard').focus(); return; }
+  const set      = document.getElementById('gmSet').value.trim();
+  const cost     = parseFloat(document.getElementById('gmCost').value) || 0;
+  const rawVal   = parseFloat(document.getElementById('gmRawVal').value) || 0;
+  const dateSent = document.getElementById('gmDateSent').value || new Date().toISOString().slice(0,10);
+  const grader   = document.getElementById('gmGrader').value;
+  const fees     = parseFloat(document.getElementById('gmFees').value) || 0;
+  const hasGrade = document.getElementById('gmHasGrade').checked;
+  const gradeGrader = document.getElementById('gmGradeGrader').value;
+  const grade    = hasGrade ? (parseFloat(document.getElementById('gmGrade').value) || null) : null;
+  const salePrice= hasGrade ? (parseFloat(document.getElementById('gmSalePrice').value) || null) : null;
+
+  const data = loadGradingData();
+  if (_gradingEditId != null) {
+    const idx = data.findIndex(e => e.id === _gradingEditId);
+    if (idx !== -1) data[idx] = { ...data[idx], card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice };
+  } else {
+    data.push({ id: Date.now(), card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice });
+  }
+  saveGradingData(data);
+  document.getElementById('gradingModal').classList.remove('open');
+  renderGradingLog();
+}
+
+function deleteGradingEntry(id) {
+  if (!confirm('Remove this grading entry?')) return;
+  saveGradingData(loadGradingData().filter(e => e.id !== id));
+  renderGradingLog();
+}
+
+function renderGradingLog() {
+  const data = loadGradingData();
+  const wrap = document.getElementById('gradingLogWrap');
+  const reportWrap = document.getElementById('gradingReportWrap');
+  if (!wrap) return;
+
+  if (!data.length) {
+    wrap.innerHTML = '<div class="empty-flips"><div class="empty-flips-icon">🏅</div><div class="empty-flips-h">No grading submissions yet</div><div class="empty-flips-p">Tap "+ Log Card" when you send a card in for grading to start tracking your ROI.</div></div>';
+    if (reportWrap) reportWrap.style.display = 'none';
+    return;
+  }
+
+  const esc2 = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const gradeColor = g => g >= 9 ? '#4ade80' : g >= 7 ? '#facc15' : g >= 5 ? '#fb923c' : '#f87171';
+  const statusBadge = e => {
+    if (!e.hasGrade) return '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:4px;background:rgba(148,163,184,.12);color:#94a3b8;border:1px solid rgba(148,163,184,.2)">Pending</span>';
+    if (e.salePrice) return '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:4px;background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.25)">Sold</span>';
+    return '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:4px;background:rgba(250,204,21,.1);color:#facc15;border:1px solid rgba(250,204,21,.25)">Graded</span>';
+  };
+
+  const sorted = [...data].sort((a,b) => b.dateSent.localeCompare(a.dateSent));
+
+  wrap.innerHTML = `
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table class="flip-table" style="min-width:580px">
+        <thead><tr>
+          <th>Sent</th><th>Card</th><th>Cost</th><th>Raw Value</th>
+          <th>Grader</th><th>Fees</th><th>Grade</th><th>Sale $</th><th>ROI</th><th></th>
+        </tr></thead>
+        <tbody>${sorted.map(e => {
+          const totalIn   = e.cost + e.fees;
+          const rawProfit = e.rawVal - e.cost;
+          let roi = '—', roiClass = '';
+          if (e.hasGrade && e.salePrice) {
+            const gradedProfit = e.salePrice - totalIn;
+            const roiPct = totalIn > 0 ? ((e.salePrice - totalIn) / totalIn * 100) : 0;
+            const vsRaw  = gradedProfit - rawProfit;
+            roi = `<div style="font-size:.72rem;font-weight:700;color:${gradedProfit>=0?'#4ade80':'#f87171'}">${gradedProfit>=0?'+':''}$${Math.abs(gradedProfit).toFixed(2)}</div>
+                   <div style="font-size:.62rem;color:${vsRaw>=0?'#4ade80':'#f87171'}">${vsRaw>=0?'▲':'▼'}$${Math.abs(vsRaw).toFixed(2)} vs raw</div>
+                   <div style="font-size:.6rem;color:var(--text-muted)">${roiPct.toFixed(0)}% ROI</div>`;
+          } else if (e.rawVal) {
+            roi = `<div style="font-size:.65rem;color:var(--text-muted)">Raw: ${rawProfit>=0?'+':''}$${rawProfit.toFixed(2)}</div>`;
+          }
+          return `<tr>
+            <td class="ft-mono" style="font-size:.7rem">${esc2(e.dateSent)}</td>
+            <td><div class="ft-card" title="${esc2(e.card)}">${esc2(e.card)}</div><div style="font-size:.62rem;color:var(--text-muted)">${esc2(e.set||'')}</div>${statusBadge(e)}</td>
+            <td class="ft-mono">$${(e.cost||0).toFixed(2)}</td>
+            <td class="ft-mono">$${(e.rawVal||0).toFixed(2)}</td>
+            <td style="font-size:.78rem">${esc2(e.grader)}</td>
+            <td class="ft-mono">$${(e.fees||0).toFixed(2)}</td>
+            <td style="text-align:center">${e.hasGrade && e.grade ? `<span style="font-weight:800;color:${gradeColor(e.grade)}">${esc2(e.gradeGrader||e.grader)} ${e.grade}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td class="ft-mono">${e.salePrice ? '$'+e.salePrice.toFixed(2) : '<span style="color:var(--text-muted)">—</span>'}</td>
+            <td>${roi}</td>
+            <td><div style="display:flex;gap:.3rem">
+              <button class="ft-delete" onclick="openGradingModal(${e.id})" title="Edit" style="color:var(--gold)">✎</button>
+              <button class="ft-delete" onclick="deleteGradingEntry(${e.id})" title="Delete">✕</button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+
+  // ── Monthly ROI Report ──
+  renderGradingReport(data, reportWrap);
+}
+
+function renderGradingReport(data, reportWrap) {
+  if (!reportWrap) return;
+  const completed = data.filter(e => e.hasGrade && e.salePrice);
+  if (!completed.length) { reportWrap.style.display = 'none'; return; }
+
+  // Group by month (YYYY-MM)
+  const byMonth = {};
+  completed.forEach(e => {
+    const month = (e.dateSent || '').slice(0, 7);
+    if (!byMonth[month]) byMonth[month] = [];
+    byMonth[month].push(e);
+  });
+
+  const months = Object.keys(byMonth).sort().reverse();
+  const esc2 = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+  const rows = months.map(m => {
+    const entries = byMonth[m];
+    const totalCost   = entries.reduce((s,e) => s + e.cost, 0);
+    const totalFees   = entries.reduce((s,e) => s + e.fees, 0);
+    const totalSale   = entries.reduce((s,e) => s + e.salePrice, 0);
+    const totalIn     = totalCost + totalFees;
+    const gradedProfit= totalSale - totalIn;
+    const rawProfit   = entries.reduce((s,e) => s + (e.rawVal - e.cost), 0);
+    const vsRaw       = gradedProfit - rawProfit;
+    const roiPct      = totalIn > 0 ? (gradedProfit / totalIn * 100).toFixed(1) : '0.0';
+    const avgGrade    = entries.filter(e=>e.grade).length
+      ? (entries.filter(e=>e.grade).reduce((s,e)=>s+parseFloat(e.grade),0) / entries.filter(e=>e.grade).length).toFixed(1)
+      : '—';
+    const [yr, mo] = m.split('-');
+    const label = new Date(+yr, +mo-1).toLocaleString('en-US', { month:'long', year:'numeric' });
+
+    return `<tr>
+      <td style="font-size:.78rem;font-weight:700;color:var(--text)">${esc2(label)}</td>
+      <td class="ft-mono" style="text-align:center">${entries.length}</td>
+      <td class="ft-mono">$${totalCost.toFixed(2)}</td>
+      <td class="ft-mono">$${totalFees.toFixed(2)}</td>
+      <td class="ft-mono">$${totalSale.toFixed(2)}</td>
+      <td><span style="font-weight:800;color:${gradedProfit>=0?'#4ade80':'#f87171'}">${gradedProfit>=0?'+':''}$${Math.abs(gradedProfit).toFixed(2)}</span></td>
+      <td><span style="font-size:.78rem;color:${vsRaw>=0?'#4ade80':'#f87171'}">${vsRaw>=0?'▲':'▼'}$${Math.abs(vsRaw).toFixed(2)}</span></td>
+      <td><span style="font-weight:800;color:${+roiPct>=0?'#4ade80':'#f87171'}">${roiPct}%</span></td>
+      <td style="font-size:.78rem;text-align:center">${avgGrade}</td>
+    </tr>`;
+  });
+
+  reportWrap.style.display = '';
+  reportWrap.innerHTML = `
+    <div style="font-size:.7rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.55rem">📊 Monthly Performance Report</div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table class="flip-table" style="min-width:520px">
+        <thead><tr>
+          <th>Month</th><th>Cards</th><th>Cost</th><th>Fees</th><th>Sale Total</th>
+          <th>Graded P&L</th><th>vs Raw</th><th>ROI %</th><th>Avg Grade</th>
+        </tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </div>
+    <div style="font-size:.67rem;color:var(--text-muted);margin-top:.5rem;line-height:1.5">
+      <strong style="color:var(--text)">vs Raw</strong> = graded profit minus what you'd have made selling raw at submission price · 
+      <strong style="color:var(--text)">ROI %</strong> = (sale − cost − fees) ÷ (cost + fees)
+    </div>`;
+}
+
 // ── Delete helpers ──
 function deleteFlip(id) {
   const flips = loadFlipsData().filter(f => f.id !== id);
@@ -4140,6 +4447,9 @@ function renderFlipsView() {
       </tr>`).join('') +
     '</tbody></table></div>';
   }
+
+  // ── Grading Log ──
+  renderGradingLog();
 
   // ── Portfolio table ──
   const portWrap = document.getElementById('portfolioWrap');
