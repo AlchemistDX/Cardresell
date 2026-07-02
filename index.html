@@ -840,10 +840,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div id="lookupView" class="lookup-view">
 
 <!-- SOCIAL PROOF BAR -->
-<div id="howItWorksBar" style="padding:.35rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
-  <span id="socialProofBar" style="font-size:.67rem;color:var(--text-muted);opacity:.7;display:none">
-    <span id="socialProofCount" style="color:var(--gold);font-weight:700"></span> <span id="socialProofLabel"></span>
-  </span>
+<div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold);font-weight:800"></span> <span id="socialProofLabel"></span></span>
   <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
 </div>
 
@@ -3065,7 +3063,7 @@ function loadSportsCardFromSearch(playerName) {
     // Format number with commas
     const fmt = total.toLocaleString();
     count.textContent = fmt;
-    label.textContent = 'cards looked up';
+    label.textContent = 'searches so far — find out the value of your card';
     bar.style.display = 'inline';
   }
 
