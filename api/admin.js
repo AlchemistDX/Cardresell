@@ -1,6 +1,7 @@
 // /api/admin.js
 // Private admin stats endpoint — only Will's Google sub may call it.
 // GET /api/admin?sub=<googleSub> → { proUsers, newsletters, referrals, scanRevenue }
+// GET /api/admin?sub=<googleSub>&all=1 → adds allEmails[] (full subscriber list)
 
 const KV_URL   = 'https://patient-dragon-155704.upstash.io';
 const KV_TOKEN = 'gQAAAAAAAmA4AAIgcDIxZjgwYWU3ODEzOTM0NjdmYjlmZTNjZDE1MzExMjEwZQ';
@@ -30,6 +31,10 @@ export default async function handler(req, res) {
     const newsletterCount = await kv('ZCARD', 'newsletter:all');
     // Get most recent 10 emails
     const recentEmails = await kv('ZREVRANGE', 'newsletter:all', '0', '9');
+    // If ?all=1, fetch the full subscriber list for CSV export
+    const allEmails = req.query?.all === '1'
+      ? (await kv('ZREVRANGE', 'newsletter:all', '0', '-1') || [])
+      : undefined;
 
     // ── Referral stats ──
     // Scan ref_count keys using SCAN (pattern ref_count:*)
@@ -101,6 +106,7 @@ export default async function handler(req, res) {
       proAnnual,
       newsletterCount: newsletterCount || 0,
       recentEmails: recentEmails || [],
+      ...(allEmails !== undefined ? { allEmails } : {}),
       totalReferrals,
       totalSignups,
       revenueEstimate: revenueEstimate.toFixed(2),

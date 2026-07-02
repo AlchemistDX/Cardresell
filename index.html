@@ -394,6 +394,9 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .mini-input::-webkit-outer-spin-button,.mini-input::-webkit-inner-spin-button{-webkit-appearance:none}
 
 .calc-btn{width:100%;margin-top:1rem;padding:.75rem;background:var(--gold);color:#fff;border-radius:var(--radius-lg);font-weight:700;font-size:.9rem;transition:background var(--ease),transform var(--ease),box-shadow var(--ease)}
+.add-collection-btn{width:100%;padding:.55rem;background:rgba(74,222,128,.1);color:#4ade80;font-weight:700;font-size:.78rem;border:1px solid rgba(74,222,128,.28);border-radius:var(--radius-lg);cursor:pointer;letter-spacing:-.01em;transition:all .15s;margin-top:.5rem;display:flex;align-items:center;justify-content:center;gap:.4rem}
+.add-collection-btn:hover{background:rgba(74,222,128,.2);border-color:rgba(74,222,128,.5)}
+.add-collection-btn:disabled{opacity:.4;cursor:not-allowed}
 .calc-btn:hover{background:var(--gold-h);box-shadow:0 0 0 3px var(--gold-border)}
 .calc-btn:active{transform:scale(.98)}
 @keyframes calc-pulse{0%{box-shadow:0 0 0 0 var(--gold-border)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
@@ -715,6 +718,43 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;white-space:nowrap}
 .cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   </style>
+  <!-- SEO / Open Graph / Twitter Card -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.cardresell.org/" />
+  <meta property="og:title" content="CardResell — TCG Price Lookup & Sell Calculator" />
+  <meta property="og:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell — free." />
+  <meta property="og:image" content="https://www.cardresell.org/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CardResell — TCG Price Lookup & Sell Calculator" />
+  <meta name="twitter:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell." />
+  <meta name="twitter:image" content="https://www.cardresell.org/og-image.png" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CardResell" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "CardResell",
+    "url": "https://www.cardresell.org/",
+    "description": "TCG card price lookup and sell profitability calculator for Pokémon, MTG, Yu-Gi-Oh!, Lorcana, and One Piece cards.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+
   <!-- Google Sign-In -->
   <meta name="google-site-verification" content="vbXUqHxcuqg3LaCivRcNMtFPReLSMfWbid1Vi_QX6Yc" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -971,6 +1011,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <option value="pokemonjp">Pokémon JP</option>
         <option value="mtg">Magic: The Gathering</option>
         <option value="yugioh">Yu-Gi-Oh!</option>
+        <option value="lorcana">Disney Lorcana</option>
+        <option value="onepiece">One Piece TCG</option>
         <option value="sports">Sports Cards</option>
         <option value="other">Other TCG</option>
       </select>
@@ -1317,6 +1359,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
         <button class="calc-btn" id="calcBtn" onclick="this.classList.remove('pulsed');void this.offsetWidth;this.classList.add('pulsed');calc()">⚡ Calculate Platform Payouts</button>
 
+        <button class="add-collection-btn" id="addCollectionBtn" onclick="addCurrentCardToCollection()" title="Save this card to your Collection tab">
+          📦 Add to My Collection
+        </button>
+
         <div class="sep"></div>
 
         <!-- Advanced -->
@@ -1555,6 +1601,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- Actions row -->
     <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem">
       <button onclick="openAddFlip('hold')" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.78rem;font-weight:800;cursor:pointer">+ Add Card</button>
+      <button onclick="exportCollection()" style="padding:.42rem .85rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">⬇ Export CSV</button>
       <button onclick="refreshCollectionPrices()" id="colRefreshBtn" style="padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">↻ Refresh Prices</button>
       <span id="colLastUpdated" style="font-size:.65rem;color:var(--text-muted);margin-left:auto"></span>
     </div>
@@ -1567,9 +1614,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- ADMIN VIEW -->
 <div id="adminView" style="display:none;padding:.5rem 0">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
     <div style="font-size:.88rem;font-weight:800;color:var(--text);letter-spacing:-.01em">⚙ Admin Dashboard</div>
-    <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
+    <div style="display:flex;gap:.4rem">
+      <button onclick="exportSubscriberCSV()" style="padding:.35rem .75rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">⬇ Export Emails</button>
+      <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
+    </div>
   </div>
 
   <!-- Stats grid -->
@@ -1878,9 +1928,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <span style="margin-left:.75rem;font-size:.68rem;color:var(--text-faint)">⚠️ Some sell buttons are affiliate links — we may earn a small commission at no cost to you.</span>
   </div>
   Card data via <a href="https://pokemontcg.io" target="_blank" rel="noopener">PokemonTCG.io</a> (English),
+  <a href="https://tcgpricelookup.com" target="_blank" rel="noopener">TCG Price Lookup</a> (multi-game prices),
   <a href="https://www.ebay.com/b/Japanese-Pokemon-Cards/183454" target="_blank" rel="noopener">eBay JP</a> (Japanese Pokémon),
-  <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>,
-  <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a>.
+  <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a> (Magic),
+  <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a> (Yu-Gi-Oh!).
   Platform fees from official sources (2026):
   <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees" target="_blank" rel="noopener">eBay</a> ·
   <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
@@ -2463,6 +2514,10 @@ async function doSearch(q) {
       await searchMTG(q);
     } else if (activeGame === 'yugioh') {
       await searchYugioh(q);
+    } else if (activeGame === 'lorcana') {
+      await searchTPLGame(q, 'lorcana');
+    } else if (activeGame === 'onepiece') {
+      await searchTPLGame(q, 'onepiece');
     } else if (activeGame === 'other') {
       dropList.innerHTML = '<div class="drop-empty">No live API for "Other TCG". Enter your price manually in the Override field.</div>';
     }
@@ -2818,6 +2873,42 @@ async function searchMTG(q) {
       source: 'Scryfall',
       updatedAt: 'daily',
     };
+  });
+}
+
+/* ── Generic TPL game search (Lorcana, One Piece, etc.) ── */
+async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
+  const dropList = document.getElementById('dropList');
+  if (!dropList) return;
+
+  if (!window.tplApiKey) {
+    dropList.innerHTML = `<div class="drop-empty">A TCG Price Lookup API key is required for ${gameSlug}. Add yours in Settings.</div>`;
+    return;
+  }
+
+  const data = await searchWithTPL(q, gameSlug);
+  if (!data || !data.length) {
+    dropList.innerHTML = `<div class="drop-empty">${emptyMsg} Try a different name.</div>`;
+    return;
+  }
+
+  window._searchCards = {};
+  dropList.innerHTML = data.map((c, i) => {
+    window._searchCards[i] = { _tpl: c, game: gameSlug };
+    const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+    return `<div class="drop-item" data-idx="${i}" role="option">
+      ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">${emoji}</div>`}
+      <div class="drop-info">
+        <div class="drop-name">${esc(c.name)}</div>
+        <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+      </div>
+      ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
+    </div>`;
+  }).join('');
+
+  attachDropHandlers(i => {
+    const entry = window._searchCards[i];
+    return tplCardToNormalized(entry._tpl, gameSlug, '');
   });
 }
 
@@ -3370,6 +3461,9 @@ function loadSportsCardFromSearch(playerName) {
 })();
 
 function loadCardUI(card) {
+  // Show the Add to My Collection button whenever a card is loaded
+  const _colBtn = document.getElementById('addCollectionBtn');
+  if (_colBtn) _colBtn.style.display = '';
   // Increment social proof counter on each card load
   if (window._triggerSocialProof) window._triggerSocialProof();
   const isSports  = card.game === 'sports';
@@ -3498,6 +3592,8 @@ function loadCardUI(card) {
 }
 
 function resetCardPanel() {
+  const _colBtn2 = document.getElementById('addCollectionBtn');
+  if (_colBtn2) _colBtn2.style.display = 'none';
   cardImg.src = '';
   cardImgWrap.style.display = 'none';
   cardImgPh.style.display = 'flex';
@@ -3768,7 +3864,8 @@ function updateSellLinks(card) {
   const poshQ       = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
   const fanaticsQ   = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${isPokemon ? ' pokemon' : ''}`);
   const pwccQ       = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}`);
-  const tcgpUrl     = (isPokemon || isMagic || isYugioh) ? buildTcgpUrl(searchName, setName) : '';
+  const isTCGGame   = isPokemon || isMagic || isYugioh || game === 'lorcana' || game === 'onepiece';
+  const tcgpUrl     = isTCGGame ? buildTcgpUrl(searchName, setName) : '';
 
   // Store URLs globally — calc() reads these to make cards clickable
   window._platSellUrls = {
@@ -3778,8 +3875,16 @@ function updateSellLinks(card) {
     fanatics: `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
     pwcc:     `https://www.pwccmarketplace.com/search?query=${pwccQ}`
   };
-  // TCGPlayer replaces eBay for card game sell if available
-  // (eBay is always the primary sell destination; TCGPlayer added as separate comps via old pills if ever re-enabled)
+  // Show TCGPlayer sell button for card games (MTG + YGO primarily)
+  const slTcgpSellEl = document.getElementById('slTcgpSell');
+  if (slTcgpSellEl) {
+    if (isTCGGame && tcgpUrl) {
+      slTcgpSellEl.href = tcgpUrl;
+      slTcgpSellEl.style.display = '';
+    } else {
+      slTcgpSellEl.style.display = 'none';
+    }
+  }
 
   // Also keep eBay buy/comps link alive for the graded comps banner
   const ebaySoldQ = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${(isYugioh || isMagic) && number ? ' ' + number : ''} ${gameTag}`);
@@ -4294,6 +4399,33 @@ function switchView(view) {
 // ── Modal state ──
 let _modalMode = 'flip'; // 'flip' or 'hold'
 
+function addCurrentCardToCollection() {
+  if (!window._userSub) { triggerGoogleSignIn(); return; }
+  if (!selectedCard || !selectedCard.name) {
+    alert('Search for a card first, then tap Add to My Collection.');
+    return;
+  }
+  // Pre-fill the hold modal with current card data
+  _modalMode = 'hold';
+  const modal = document.getElementById('flipModal');
+  const title = document.getElementById('modalTitle');
+  const sellField = document.getElementById('mSellPriceField');
+  const platField = document.getElementById('mPlatformField');
+  if (title) title.textContent = 'Add Card to Collection';
+  if (sellField) sellField.style.display = 'none';
+  if (platField) platField.style.display = 'none';
+  // Set today's date
+  document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
+  // Pre-fill card info
+  document.getElementById('mCardName').value = selectedCard.name || '';
+  document.getElementById('mSetName').value = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
+  const price = getEffectivePrice();
+  if (price) document.getElementById('mCurrentValue').value = price.toFixed(2);
+  modal.classList.add('open');
+  // Show a brief toast hint
+  showToast('Fill in your purchase cost and tap Save to track this card 📦');
+}
+
 function openAddFlip(mode) {
   _modalMode = mode || 'flip';
   const modal = document.getElementById('flipModal');
@@ -4663,6 +4795,25 @@ function exportGradingLog() {
   showToast('Grading log exported!', 'success');
 }
 
+// ── Export Collection as CSV ──
+function exportCollection() {
+  const port = loadPortData();
+  if (!port.length) { showToast('No cards in your collection to export.', 'info'); return; }
+  const rows = [['Card','Set','Cost Basis','Current Value','Unrealized P/L','P/L %']];
+  port.forEach(p => {
+    const cur  = p.currentValue ?? p.buyPrice ?? 0;
+    const gain = cur - (p.buyPrice || 0);
+    const pct  = p.buyPrice > 0 ? (gain / p.buyPrice * 100).toFixed(1) + '%' : '';
+    rows.push([p.card||'', p.set||'', (p.buyPrice||0).toFixed(2), cur.toFixed(2), gain.toFixed(2), pct]);
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'cardsell_collection.csv';
+  a.click();
+  showToast('Collection exported!', 'success');
+}
+
 // ── Newsletter subscribe ──
 async function submitNewsletter() {
   const emailInput = document.getElementById('newsletterEmail');
@@ -4704,6 +4855,26 @@ async function submitNewsletter() {
 }
 
 
+
+async function exportSubscriberCSV() {
+  if (window._userSub !== _OWNER_SUB) return;
+  try {
+    // Fetch all emails via admin endpoint with extended param
+    const res  = await fetch('/api/admin?sub=' + encodeURIComponent(window._userSub) + '&all=1');
+    const data = await res.json();
+    if (!res.ok) { showToast('Could not load subscriber list.', 'error'); return; }
+    const emails = data.allEmails || data.recentEmails || [];
+    if (!emails.length) { showToast('No subscribers to export.', 'info'); return; }
+    const csv = ['Email', ...emails].join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'cardresell_subscribers.csv';
+    a.click();
+    showToast(emails.length + ' subscriber emails exported.', 'success');
+  } catch(e) {
+    showToast('Export failed — try again.', 'error');
+  }
+}
 
 // ══════════════════════════════════════════════════════════
 // MY COLLECTION VIEW
@@ -5909,6 +6080,9 @@ async function checkProStatus() {
   _maybeRerenderCollection();
   // Show admin tab for owner
   _maybeShowAdminTab();
+  // Prefill newsletter email for signed-in users
+  const nlInput = document.getElementById('newsletterEmail');
+  if (nlInput && !nlInput.value && window._userEmail) nlInput.value = window._userEmail;
 }
 
 // ── Update all Pro-related UI elements ──
