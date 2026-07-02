@@ -836,6 +836,21 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
   </div>
 
+  <!-- NEWSLETTER SIGNUP -->
+  <div id="newsletterSection" style="margin-top:.5rem">
+    <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
+    <div style="padding:.65rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.3rem">📬 Price Drop Alerts</div>
+      <div style="font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:.2rem">Get CardResell updates</div>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.55rem;line-height:1.4">Tips, new features, and market alerts — no spam, unsubscribe anytime.</div>
+      <div id="newsletterForm" style="display:flex;gap:.4rem">
+        <input type="email" id="newsletterEmail" placeholder="your@email.com" autocomplete="email" style="flex:1;min-width:0;padding:.4rem .6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.75rem;outline:none" />
+        <button onclick="submitNewsletter()" style="padding:.4rem .7rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.73rem;font-weight:800;cursor:pointer;white-space:nowrap">Subscribe</button>
+      </div>
+      <div id="newsletterMsg" style="display:none;font-size:.68rem;text-align:center;margin-top:.35rem;font-weight:700"></div>
+    </div>
+  </div>
+
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
     <input type="password" id="tplKeyInput" autocomplete="off" spellcheck="false" />
@@ -1451,7 +1466,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="section-title">🏅 Grading Log</div>
         <div class="section-sub">Cards sent for grading — track ROI vs. selling raw</div>
       </div>
-      <button class="fl-sub-btn" onclick="openGradingModal()">+ Log Card</button>
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <button id="exportGradingLogBtn" onclick="exportGradingLog()" style="display:none;padding:.36rem .65rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.7rem;font-weight:700;cursor:pointer;transition:all .15s" title="Export Grading Log as CSV (Pro)">⬇ Export CSV</button>
+        <button class="fl-sub-btn" onclick="openGradingModal()">+ Log Card</button>
+      </div>
     </div>
     <div id="gradingLogWrap"></div>
     <!-- Monthly Report -->
@@ -4461,6 +4479,81 @@ function exportFlips() {
   a.download = 'cardsell_flips.csv';
   a.click();
 }
+// ── Export Grading Log as CSV (Pro feature) ──
+function exportGradingLog() {
+  if (!window._isPro) { showToast('Pro feature — upgrade to export your Grading Log.', 'gold'); return; }
+  const data = loadGradingData();
+  if (!data.length) { showToast('No grading entries to export yet.', 'info'); return; }
+  const rows = [['Date Sent','Card','Set','Raw Cost','Raw Market Value','Grader','Grading Fees','Final Grade','Sale Price','ROI $','ROI %','Status']];
+  data.forEach(e => {
+    const totalIn   = (e.cost||0) + (e.fees||0);
+    const roiDollar = (e.hasGrade && e.salePrice) ? (e.salePrice - totalIn).toFixed(2) : '';
+    const roiPct    = (e.hasGrade && e.salePrice && totalIn > 0) ? ((e.salePrice - totalIn) / totalIn * 100).toFixed(1) + '%' : '';
+    const status    = !e.hasGrade ? 'Pending' : (e.salePrice ? 'Sold' : 'Graded');
+    rows.push([
+      e.dateSent || '',
+      e.card  || '',
+      e.set   || '',
+      (e.cost   || 0).toFixed(2),
+      (e.rawVal || 0).toFixed(2),
+      e.grader || '',
+      (e.fees   || 0).toFixed(2),
+      (e.hasGrade && e.grade) ? (e.gradeGrader || e.grader || '') + ' ' + e.grade : '',
+      e.salePrice ? e.salePrice.toFixed(2) : '',
+      roiDollar,
+      roiPct,
+      status
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'cardsell_grading_log.csv';
+  a.click();
+  showToast('Grading log exported!', 'success');
+}
+
+// ── Newsletter subscribe ──
+async function submitNewsletter() {
+  const emailInput = document.getElementById('newsletterEmail');
+  const msgEl      = document.getElementById('newsletterMsg');
+  const formEl     = document.getElementById('newsletterForm');
+  if (!emailInput || !msgEl || !formEl) return;
+  const email = emailInput.value.trim();
+  if (!email || !email.includes('@') || !email.includes('.')) {
+    emailInput.style.borderColor = '#f87171';
+    setTimeout(() => { emailInput.style.borderColor = 'var(--border)'; }, 1500);
+    return;
+  }
+  const btn = formEl.querySelector('button');
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const res  = await fetch('/api/newsletter', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+    const body = await res.json().catch(() => ({}));
+    formEl.style.display = 'none';
+    msgEl.style.display  = 'block';
+    if (res.ok) {
+      msgEl.style.color = '#4ade80';
+      msgEl.textContent = 'You\'re subscribed! Thanks for joining.';
+    } else if (res.status === 409) {
+      msgEl.style.color = 'var(--text-muted)';
+      msgEl.textContent = 'Already subscribed — you\'re all set!';
+    } else {
+      msgEl.style.color = '#f87171';
+      msgEl.textContent = 'Something went wrong. Try again later.';
+      formEl.style.display = 'flex';
+      if (btn) { btn.disabled = false; btn.textContent = 'Subscribe'; }
+    }
+  } catch(err) {
+    msgEl.style.color = '#f87171';
+    msgEl.textContent = 'Network error — try again.';
+    msgEl.style.display  = 'block';
+    formEl.style.display = 'flex';
+    if (btn) { btn.disabled = false; btn.textContent = 'Subscribe'; }
+  }
+}
+
+
 
 // ── Main render ──
 function renderFlipsView() {
@@ -5466,6 +5559,10 @@ async function checkProStatus() {
     if (!r.ok) return;
     const d = await r.json();
     window._isPro = d.isPro === true;
+    if (window._isPro) {
+      const exportGLBtn = document.getElementById('exportGradingLogBtn');
+      if (exportGLBtn) exportGLBtn.style.display = '';
+    }
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
     window._idScanCredits = d.idPaidLeft || 0;
