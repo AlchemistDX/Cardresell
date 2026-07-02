@@ -92,16 +92,17 @@ export default async function handler(req, res) {
         // Write credits FIRST — only mark bonus given if both succeed
         const newIdLeft    = idPaidLeft + 10;
         const newPaidLeft  = paidScansLeft + 1;
+        const kvSet = (key, val) => fetch(
+          `${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(val))}`,
+          { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
+        );
         const [idRes, gradeRes] = await Promise.all([
-          fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:id_paid_left`)}/${newIdLeft}`,
-            { headers: { Authorization: `Bearer ${kvToken}` } }),
-          fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:paid_left`)}/${newPaidLeft}`,
-            { headers: { Authorization: `Bearer ${kvToken}` } }),
+          kvSet(`scans:${userSub}:id_paid_left`, newIdLeft),
+          kvSet(`scans:${userSub}:paid_left`, newPaidLeft),
         ]);
         if (idRes.ok && gradeRes.ok) {
           // Only set the flag once credits are confirmed written
-          await fetch(`${kvUrl}/set/${encodeURIComponent(bonusKey)}/1`,
-            { headers: { Authorization: `Bearer ${kvToken}` } });
+          await kvSet(bonusKey, 1);
           idPaidLeft    = newIdLeft;
           paidScansLeft = newPaidLeft;
           console.log(`Sign-up bonus granted to ${userSub}: 10 ID + 1 Grade`);
