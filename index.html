@@ -781,6 +781,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     // Expose to global scope for use in non-module scripts
     window._fbAuth = auth;
+    // If openAuthModal was called before Firebase was ready, open it now
+    if (window._pendingAuthModal) {
+      const pending = window._pendingAuthModal;
+      window._pendingAuthModal = null;
+      setTimeout(() => openAuthModal(pending), 100);
+    }
     window._fbSignOut = () => fbSignOut(auth);
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
@@ -877,7 +883,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
       Shop
     </button>
-    <div id="googleSignInBtn" style="display:flex"></div>
+    <div id="googleSignInBtn" style="display:flex"><button onclick="openAuthModal('signin')" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Sign In</button></div>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
     <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -5243,7 +5249,7 @@ function initGoogleSignIn() {
   const btn = document.getElementById('googleSignInBtn');
   if (btn && !btn.dataset.fbWired) {
     btn.dataset.fbWired = '1';
-    btn.innerHTML = '<button onclick="openAuthModal('signin')" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Sign In</button>';
+    btn.innerHTML = '<button onclick="openAuthModal(\'signin\')" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Sign In</button>';
   }
 }
 
@@ -6657,3 +6663,148 @@ window.addEventListener('load', () => {
   const gcInput = document.getElementById('googleClientIdInput');
   if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
 });
+<!-- ══════════════════════════════════════════════════════════
+     FIREBASE AUTH MODAL
+     ══════════════════════════════════════════════════════════ -->
+<div id="authModalOverlay" class="auth-modal-overlay" style="display:none" onclick="if(event.target===this)closeAuthModal()">
+  <div class="auth-modal">
+    <button class="auth-modal-close" onclick="closeAuthModal()">✕</button>
+
+    <!-- Logo -->
+    <div class="auth-modal-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      <span style="font-size:.9rem;font-weight:900;color:var(--text)">Card<span style="color:var(--gold)">Resell</span></span>
+    </div>
+
+    <!-- Sign In view -->
+    <div id="authViewSignIn">
+      <div class="auth-modal-title">Welcome back</div>
+      <div class="auth-modal-sub">Sign in to track flips, manage your collection, and access Pro features.</div>
+      <button class="auth-btn-google" onclick="window._fbGoogleSignIn && window._fbGoogleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+      <div class="auth-divider">or</div>
+      <div id="authSignInError" class="auth-error"></div>
+      <input id="authSignInEmail" class="auth-input" type="email" placeholder="Email address" autocomplete="email" />
+      <input id="authSignInPass" class="auth-input" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doEmailSignIn()" />
+      <span class="auth-forgot" onclick="showAuthView('forgot')">Forgot password?</span>
+      <button class="auth-btn-primary" id="authSignInBtn" onclick="doEmailSignIn()">Sign In</button>
+      <div class="auth-switch">Don't have an account? <a onclick="showAuthView('signup')">Create one</a></div>
+    </div>
+
+    <!-- Sign Up view -->
+    <div id="authViewSignUp" style="display:none">
+      <div class="auth-modal-title">Create your account</div>
+      <div class="auth-modal-sub">Sign up free — get 10 ID scans + 1 AI Grade scan on us.</div>
+      <button class="auth-btn-google" onclick="window._fbGoogleSignIn && window._fbGoogleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign up with Google
+      </button>
+      <div class="auth-divider">or</div>
+      <div id="authSignUpError" class="auth-error"></div>
+      <input id="authSignUpEmail" class="auth-input" type="email" placeholder="Email address" autocomplete="email" />
+      <input id="authSignUpPass" class="auth-input" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password" />
+      <input id="authSignUpPass2" class="auth-input" type="password" placeholder="Confirm password" autocomplete="new-password" onkeydown="if(event.key==='Enter')doEmailSignUp()" />
+      <button class="auth-btn-primary" id="authSignUpBtn" onclick="doEmailSignUp()">Create Account</button>
+      <div class="auth-switch">Already have an account? <a onclick="showAuthView('signin')">Sign in</a></div>
+    </div>
+
+    <!-- Forgot Password view -->
+    <div id="authViewForgot" style="display:none">
+      <div class="auth-modal-title">Reset password</div>
+      <div class="auth-modal-sub">Enter your email and we'll send a reset link.</div>
+      <div id="authForgotSuccess" class="auth-success"></div>
+      <div id="authForgotError" class="auth-error"></div>
+      <input id="authForgotEmail" class="auth-input" type="email" placeholder="Email address" autocomplete="email" onkeydown="if(event.key==='Enter')doPasswordReset()" />
+      <button class="auth-btn-primary" onclick="doPasswordReset()">Send Reset Email</button>
+      <div class="auth-switch"><a onclick="showAuthView('signin')">← Back to sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Auth Modal Controller ──
+function openAuthModal(view) {
+  view = view || 'signin';
+  if (!window._fbAuth) { window._pendingAuthModal = view; return; }
+  const overlay = document.getElementById('authModalOverlay');
+  if (overlay) {
+    overlay.style.display = 'flex';
+    showAuthView(view);
+    setTimeout(() => { const f = overlay.querySelector('.auth-input'); if (f) f.focus(); }, 100);
+  }
+}
+function closeAuthModal() {
+  const overlay = document.getElementById('authModalOverlay');
+  if (overlay) overlay.style.display = 'none';
+  ['authSignInEmail','authSignInPass','authSignUpEmail','authSignUpPass','authSignUpPass2','authForgotEmail'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['authSignInError','authSignUpError','authForgotError','authForgotSuccess'].forEach(id => { const el = document.getElementById(id); if (el) { el.style.display = 'none'; el.textContent = ''; } });
+}
+function showAuthView(view) {
+  ['authViewSignIn','authViewSignUp','authViewForgot'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  const map = { signin: 'authViewSignIn', signup: 'authViewSignUp', forgot: 'authViewForgot' };
+  const t = document.getElementById(map[view]); if (t) t.style.display = '';
+}
+function _authError(elId, msg) { const el = document.getElementById(elId); if (!el) return; el.textContent = msg; el.style.display = ''; }
+function _authClearError(elId) { const el = document.getElementById(elId); if (el) { el.style.display = 'none'; el.textContent = ''; } }
+
+async function doEmailSignIn() {
+  const email = document.getElementById('authSignInEmail')?.value?.trim();
+  const pass  = document.getElementById('authSignInPass')?.value;
+  _authClearError('authSignInError');
+  if (!email || !pass) return _authError('authSignInError', 'Please enter your email and password.');
+  const btn = document.getElementById('authSignInBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+  try {
+    await window._fbEmailSignIn(email, pass);
+  } catch(e) {
+    _authError('authSignInError', _fbErrMsg(e));
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+  }
+}
+async function doEmailSignUp() {
+  const email = document.getElementById('authSignUpEmail')?.value?.trim();
+  const pass  = document.getElementById('authSignUpPass')?.value;
+  const pass2 = document.getElementById('authSignUpPass2')?.value;
+  _authClearError('authSignUpError');
+  if (!email || !pass) return _authError('authSignUpError', 'Please fill in all fields.');
+  if (pass.length < 6) return _authError('authSignUpError', 'Password must be at least 6 characters.');
+  if (pass !== pass2) return _authError('authSignUpError', "Passwords don't match.");
+  const btn = document.getElementById('authSignUpBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating account...'; }
+  try {
+    await window._fbEmailSignUp(email, pass);
+  } catch(e) {
+    _authError('authSignUpError', _fbErrMsg(e));
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
+  }
+}
+async function doPasswordReset() {
+  const email = document.getElementById('authForgotEmail')?.value?.trim();
+  _authClearError('authForgotError');
+  const s = document.getElementById('authForgotSuccess');
+  if (s) { s.style.display = 'none'; s.textContent = ''; }
+  if (!email) return _authError('authForgotError', 'Please enter your email address.');
+  try {
+    await window._fbResetPassword(email);
+    if (s) { s.textContent = 'Reset email sent — check your inbox.'; s.style.display = ''; }
+  } catch(e) { _authError('authForgotError', _fbErrMsg(e)); }
+}
+function _fbErrMsg(e) {
+  const map = {
+    'auth/invalid-email': 'Invalid email address.',
+    'auth/user-not-found': 'No account found with that email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/too-many-requests': 'Too many attempts — please try again later.',
+    'auth/network-request-failed': 'Network error — check your connection.',
+    'auth/popup-blocked': 'Pop-up blocked — please allow pop-ups and try again.',
+  };
+  return map[e.code] || e.message || 'Something went wrong. Please try again.';
+}
+</script>
+</body>
+</html>
