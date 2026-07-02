@@ -89,22 +89,23 @@ export default async function handler(req, res) {
     const bonusGiven = await getKVInt(kvUrl, kvToken, bonusKey);
     if (!bonusGiven) {
       try {
-        // Set bonus flag so it only runs once
-        await fetch(`${kvUrl}/set/${encodeURIComponent(bonusKey)}/1`, {
-          headers: { Authorization: `Bearer ${kvToken}` },
-        });
-        // Add 10 ID credits
-        const newIdLeft = idPaidLeft + 10;
-        await fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:id_paid_left`)}/${newIdLeft}`, {
-          headers: { Authorization: `Bearer ${kvToken}` },
-        });
-        idPaidLeft = newIdLeft;
-        // Add 1 Grader credit
-        const newPaidLeft = paidScansLeft + 1;
-        await fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:paid_left`)}/${newPaidLeft}`, {
-          headers: { Authorization: `Bearer ${kvToken}` },
-        });
-        paidScansLeft = newPaidLeft;
+        // Write credits FIRST — only mark bonus given if both succeed
+        const newIdLeft    = idPaidLeft + 10;
+        const newPaidLeft  = paidScansLeft + 1;
+        const [idRes, gradeRes] = await Promise.all([
+          fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:id_paid_left`)}/${newIdLeft}`,
+            { headers: { Authorization: `Bearer ${kvToken}` } }),
+          fetch(`${kvUrl}/set/${encodeURIComponent(`scans:${userSub}:paid_left`)}/${newPaidLeft}`,
+            { headers: { Authorization: `Bearer ${kvToken}` } }),
+        ]);
+        if (idRes.ok && gradeRes.ok) {
+          // Only set the flag once credits are confirmed written
+          await fetch(`${kvUrl}/set/${encodeURIComponent(bonusKey)}/1`,
+            { headers: { Authorization: `Bearer ${kvToken}` } });
+          idPaidLeft    = newIdLeft;
+          paidScansLeft = newPaidLeft;
+          console.log(`Sign-up bonus granted to ${userSub}: 10 ID + 1 Grade`);
+        }
       } catch(e) { console.error('Sign-up bonus error:', e); }
     }
   } else if (isPro) {
@@ -121,6 +122,7 @@ export default async function handler(req, res) {
     freeScansTotal: FREE_SCANS_PER_MONTH,
     paidScansLeft,
     idPaidLeft,
+    idCredits: idPaidLeft,        // alias — settings panel reads this key
     totalScansLeft: freeScansLeft + paidScansLeft,
   });
 }
