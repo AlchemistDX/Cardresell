@@ -4312,6 +4312,43 @@ function openScanner() {
   document.getElementById('scanFileInput').click();
 }
 
+function viewGradedCard(cardName, psaGrade) {
+  // Close the scan overlay
+  document.getElementById('scanOverlay').style.display = 'none';
+  const gradeCTA = document.getElementById('scanGradeCTA');
+  if (gradeCTA) gradeCTA.classList.remove('show');
+
+  // Search for the card, then auto-apply PSA + grade
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) {
+    searchInput.value = cardName.trim();
+    searchInput.dispatchEvent(new Event('input'));
+    // After dropdown populates, click the best match
+    setTimeout(() => {
+      const best = document.querySelector('.drop-item');
+      if (best) {
+        best.click();
+        // After card loads, switch to PSA pill + set grade
+        setTimeout(() => {
+          const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
+          if (psaPill) {
+            setPill(psaPill, 'gradedPills');
+            if (typeof toggleGrade === 'function') toggleGrade();
+          }
+          setTimeout(() => {
+            const gradeSelect = document.getElementById('gradeSelect');
+            if (gradeSelect) {
+              gradeSelect.value = String(psaGrade);
+              gradeSelect.dispatchEvent(new Event('change'));
+              if (typeof calc === 'function') calc();
+            }
+          }, 250);
+        }, 500);
+      }
+    }, 900);
+  }
+}
+
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
   const gradeCTA = document.getElementById('scanGradeCTA');
@@ -4747,15 +4784,15 @@ async function processGradeBack(input) {
 
     showScanGradeCTA(data.card_name, '', psa);
 
+    // Store grade info so card auto-selects to correct grader/grade
+    window._pendingGradeResult = { cardName: data.card_name, psa };
+
+    // Add "View graded price" tap button into the result
+    const psaGrade = psa >= 10 ? 10 : psa >= 9 ? 9 : psa >= 8 ? 8 : psa >= 7 ? 7 : psa >= 6 ? 6 : psa >= 5 ? 5 : 1;
+    const gradeColor2 = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
+    resultEl.innerHTML += `<button onclick="viewGradedCard('${(data.card_name||'').replace(/'/g,"\'")}', ${psaGrade})" style="margin-top:.65rem;width:100%;padding:.6rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">📊 View PSA ${psaGrade} price →</button>`;
+
     window._pendingScanBannerCard = data.card_name;
-    if (data.card_name) {
-      setTimeout(() => {
-        const searchInput = document.getElementById('searchInput');
-        searchInput.value = data.card_name.trim();
-        searchInput.dispatchEvent(new Event('input'));
-        setTimeout(() => document.getElementById('searchBtn').click(), 300);
-      }, 3500);
-    }
 
     window._gradeFrontBase64 = null;
     if (window._gradeFrontUrl) { URL.revokeObjectURL(window._gradeFrontUrl); window._gradeFrontUrl = null; }
