@@ -839,14 +839,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
 
-<!-- SOCIAL PROOF BAR -->
-<div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
-  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold);font-weight:800"></span> <span id="socialProofLabel"></span></span>
-  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
-</div>
-
 <!-- SIGN-IN OFFER BANNER — shown to guests only -->
-<div id="signInNudge" style="display:none;position:relative;margin:.65rem .75rem .2rem;border-radius:14px;background:linear-gradient(110deg,#1a1200,#2a1d00);border:1.5px solid var(--gold);overflow:hidden;-webkit-tap-highlight-color:transparent">
+<div id="signInNudge" style="display:none;position:relative;margin:.55rem .75rem .45rem;border-radius:14px;background:linear-gradient(110deg,#1a1200,#2a1d00);border:1.5px solid var(--gold);overflow:hidden;-webkit-tap-highlight-color:transparent">
   <!-- shimmer line -->
   <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.5),transparent)"></div>
   <div style="padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem">
@@ -860,6 +854,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
   </div>
   <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
+</div>
+
+<!-- SOCIAL PROOF BAR -->
+<div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold);font-weight:800"></span> <span id="socialProofLabel"></span></span>
+  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
 </div>
 
 <section class="search-area">
