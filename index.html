@@ -1715,6 +1715,33 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   Estimates only — verify current rates before listing.
 </footer>
 
+<!-- ABOUT MODAL -->
+<div class="modal-overlay" id="aboutModal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:9999">
+  <div class="modal-box" style="max-width:360px;text-align:center">
+    <div style="font-size:1.5rem;margin-bottom:.5rem">🃏</div>
+    <div class="modal-title" style="font-size:1.1rem;margin-bottom:.25rem">CardResell</div>
+    <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:1.1rem">Built by a card flipper, for card flippers</div>
+
+    <div style="text-align:left;font-size:.83rem;line-height:1.65;color:var(--text-muted);margin-bottom:1rem">
+      CardResell was built by <strong style="color:var(--text)">Will Jones</strong> in <strong style="color:var(--text)">Bradenton, Florida</strong> to solve a problem every reseller hits — you know your card is worth money but you have no idea which platform actually pays you the most after fees.<br><br>
+      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, COMC, Poshmark, Fanatics Collect, and PWCC — so you never leave money on the table.<br><br>
+      The AI Grading Estimate uses GPT-4o vision to analyze centering, corners, edges, and surface — giving you a realistic grade prediction before you spend money on a PSA submission.
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
+      <a href="mailto:contact@cardresell.org" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.82rem;color:var(--text);text-decoration:none">
+        <span>✉️</span><span>contact@cardresell.org</span>
+      </a>
+    </div>
+
+    <div style="font-size:.67rem;color:var(--text-faint);line-height:1.6;margin-bottom:1rem">
+      ⚠️ Some platform links are affiliate links — we may earn a small commission at no extra cost to you. Prices and fee estimates are for informational purposes only.
+    </div>
+
+    <button onclick="document.getElementById('aboutModal').classList.remove('open')" style="width:100%;padding:.6rem;background:var(--gold);border:none;border-radius:var(--radius-md);color:#000;font-weight:800;font-size:.88rem;cursor:pointer">Close</button>
+  </div>
+</div>
+
 </div><!-- /wrap -->
 
 <script>
@@ -4669,6 +4696,10 @@ function viewGradedCard(cardName, psaGrade) {
   }
 }
 
+function openAboutModal() {
+  document.getElementById('aboutModal').classList.add('open');
+}
+
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
   const gradeCTA = document.getElementById('scanGradeCTA');
@@ -5089,17 +5120,43 @@ async function processGradeBack(input) {
       ' <span style="color:rgba(255,255,255,.6);font-size:.82rem">' + label + '</span><br>' +
       '<span style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.2rem;display:block">' + (data.card_name || '') + '</span>';
 
+    // Map text grades to numeric scores for bar width
+    const gradeScore = g => {
+      if (!g) return 50;
+      const s = String(g).toLowerCase();
+      if (s.includes('exc') || s.includes('10') || s.includes('perfect')) return 98;
+      if (s.includes('9') || s.includes('mint') || s.includes('great'))   return 85;
+      if (s.includes('8') || s.includes('near') || s.includes('good'))    return 70;
+      if (s.includes('7') || s.includes('fine'))                          return 58;
+      if (s.includes('6') || s.includes('mod') || s.includes('ok'))       return 46;
+      if (s.includes('5') || s.includes('fair') || s.includes('avg'))     return 36;
+      if (s.includes('poor') || s.includes('bad') || s.includes('1') || s.includes('2')) return 18;
+      return 55;
+    };
+    const barCol = pct => pct >= 80 ? '#4ade80' : pct >= 60 ? '#facc15' : pct >= 40 ? '#fb923c' : '#f87171';
+    const scoreBar = (label, val) => {
+      const pct = gradeScore(val); const col = barCol(pct);
+      return '<div style="margin-bottom:.45rem">' +
+        '<div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:.18rem">' +
+          '<span style="color:rgba(255,255,255,.45)">' + label + '</span>' +
+          '<span style="color:' + col + ';font-weight:700">' + (val || '\u2014') + '</span>' +
+        '</div>' +
+        '<div style="height:5px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden">' +
+          '<div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:99px"></div>' +
+        '</div></div>';
+    };
+
     resultEl.innerHTML =
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem;text-align:left;font-size:.74rem;margin:.1rem 0 .5rem">' +
-        '<span style="color:rgba(255,255,255,.45)">Centering</span><span style="color:#fff;font-weight:600">' + data.centering + '</span>' +
-        '<span style="color:rgba(255,255,255,.45)">Corners</span><span style="color:#fff;font-weight:600">' + data.corners + '</span>' +
-        '<span style="color:rgba(255,255,255,.45)">Edges</span><span style="color:#fff;font-weight:600">' + data.edges + '</span>' +
-        '<span style="color:rgba(255,255,255,.45)">Surface</span><span style="color:#fff;font-weight:600">' + data.surface + '</span>' +
+      '<div style="margin:.3rem 0 .5rem">' +
+        scoreBar('Centering', data.centering) +
+        scoreBar('Corners',   data.corners)   +
+        scoreBar('Edges',     data.edges)     +
+        scoreBar('Surface',   data.surface)   +
       '</div>' +
-      (notes ? '<div style="font-size:.73rem;color:rgba(255,255,255,.55);line-height:1.45;margin-bottom:.4rem">' + notes + '</div>' : '') +
+      (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.5;margin-bottom:.5rem;padding:.4rem .5rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left">' + notes + '</div>' : '') +
       (worth
-        ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700">\u2713 Worth submitting for grading</div>'
-        : '<div style="font-size:.74rem;color:#fb923c">May not be worth grading costs</div>'
+        ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.2rem">\u2713 Worth submitting for grading</div>'
+        : '<div style="font-size:.74rem;color:#fb923c;margin-bottom:.2rem">May not be worth grading costs</div>'
       );
 
     showScanGradeCTA(data.card_name, '', psa);
