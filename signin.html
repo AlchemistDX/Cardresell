@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — CardResell</title>
+  <meta name="description" content="Sign in to CardResell to track flips, manage your collection, and access Pro features." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0a;
+      --surface:  #141414;
+      --border:   rgba(255,255,255,.08);
+      --text:     #f1f0ec;
+      --text-muted: #6b7280;
+      --gold:     #d4af37;
+      --gold-h:   #c9a227;
+      --radius:   14px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    /* Back link */
+    .back-link {
+      position: fixed;
+      top: 1.1rem;
+      left: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      color: var(--text-muted);
+      font-size: .78rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: color .15s;
+    }
+    .back-link:hover { color: var(--text); }
+
+    /* Card */
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 400px;
+      padding: 2.25rem 2rem;
+      box-shadow: 0 24px 80px rgba(0,0,0,.5);
+    }
+
+    /* Logo */
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      margin-bottom: 1.75rem;
+    }
+    .logo-text { font-size: 1.1rem; font-weight: 900; color: var(--text); }
+    .logo-text span { color: var(--gold); }
+
+    /* Tab switcher */
+    .auth-tabs {
+      display: flex;
+      background: rgba(255,255,255,.05);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 1.5rem;
+      gap: 3px;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: .5rem;
+      text-align: center;
+      font-size: .82rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all .15s;
+      border: none;
+      background: none;
+    }
+    .auth-tab.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,.4);
+    }
+
+    /* Views */
+    .auth-view { display: none; }
+    .auth-view.active { display: block; }
+
+    .auth-title { font-size: 1.15rem; font-weight: 800; color: var(--text); letter-spacing: -.02em; margin-bottom: .3rem; }
+    .auth-sub { font-size: .8rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.55; }
+
+    /* Google button */
+    .btn-google {
+      width: 100%;
+      padding: .72rem;
+      background: #fff;
+      color: #1f1f1f;
+      border: none;
+      border-radius: 10px;
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .65rem;
+      transition: opacity .15s;
+      margin-bottom: 1rem;
+    }
+    .btn-google:hover { opacity: .9; }
+    .btn-google:active { opacity: .8; }
+
+    /* Divider */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      color: var(--text-muted);
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+      margin-bottom: 1rem;
+    }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* Inputs */
+    .input-group { margin-bottom: .75rem; }
+    .input-label { font-size: .72rem; font-weight: 700; color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; margin-bottom: .35rem; display: block; }
+    .auth-input {
+      width: 100%;
+      padding: .72rem 1rem;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: .88rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .auth-input:focus { border-color: var(--gold); }
+    .auth-input::placeholder { color: var(--text-muted); }
+
+    /* Forgot */
+    .forgot-link {
+      display: block;
+      text-align: right;
+      font-size: .73rem;
+      color: var(--gold);
+      cursor: pointer;
+      margin-top: -.3rem;
+      margin-bottom: .85rem;
+      font-weight: 600;
+    }
+
+    /* Primary button */
+    .btn-primary {
+      width: 100%;
+      padding: .75rem;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-size: .88rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: opacity .15s;
+      font-family: inherit;
+      margin-top: .25rem;
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Error / success */
+    .alert {
+      border-radius: 9px;
+      padding: .55rem .8rem;
+      font-size: .78rem;
+      margin-bottom: .75rem;
+      display: none;
+      line-height: 1.45;
+    }
+    .alert-error { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); color: #f87171; }
+    .alert-success { background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.3); color: #4ade80; }
+
+    /* Bonus badge */
+    .bonus-badge {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      background: rgba(212,175,55,.08);
+      border: 1px solid rgba(212,175,55,.25);
+      border-radius: 10px;
+      padding: .6rem .85rem;
+      margin-bottom: 1.25rem;
+      font-size: .76rem;
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    /* Switch */
+    .auth-switch { text-align: center; font-size: .78rem; color: var(--text-muted); margin-top: 1.25rem; }
+    .auth-switch a { color: var(--gold); cursor: pointer; font-weight: 700; text-decoration: none; }
+
+    /* Bottom branding */
+    .bottom-brand {
+      margin-top: 1.75rem;
+      text-align: center;
+      font-size: .7rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <a class="back-link" href="/">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to CardResell
+  </a>
+
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      <span class="logo-text">Card<span>Resell</span></span>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabSignIn" onclick="switchTab('signin')">Sign In</button>
+      <button class="auth-tab" id="tabSignUp" onclick="switchTab('signup')">Create Account</button>
+    </div>
+
+    <!-- Sign In view -->
+    <div class="auth-view active" id="viewSignIn">
+      <div id="errSignIn" class="alert alert-error"></div>
+
+      <button class="btn-google" id="btnGoogleSignIn" onclick="googleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+
+      <div class="divider">or sign in with email</div>
+
+      <div class="input-group">
+        <label class="input-label">Email</label>
+        <input id="siEmail" class="auth-input" type="email" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="input-group">
+        <label class="input-label">Password</label>
+        <input id="siPass" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignIn()" />
+      </div>
+      <a class="forgot-link" onclick="switchTab('forgot')">Forgot password?</a>
+
+      <button class="btn-primary" id="btnSignIn" onclick="doSignIn()">Sign In</button>
+      <div class="auth-switch">No account? <a onclick="switchTab('signup')">Create one free</a></div>
+    </div>
+
+    <!-- Sign Up view -->
+    <div class="auth-view" id="viewSignUp">
+      <div class="bonus-badge">
+        🎁 Sign up free — get <strong>&nbsp;10 ID scans + 1 AI Grade</strong>&nbsp;on us
+      </div>
+      <div id="errSignUp" class="alert alert-error"></div>
+
+      <button class="btn-google" id="btnGoogleSignUp" onclick="googleSignIn()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign up with Google
+      </button>
+
+      <div class="divider">or sign up with email</div>
+
+      <div class="input-group">
+        <label class="input-label">Email</label>
+        <input id="suEmail" class="auth-input" type="email" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="input-group">
+        <label class="input-label">Password</label>
+        <input id="suPass" class="auth-input" type="password" placeholder="Min 6 characters" autocomplete="new-password" />
+      </div>
+      <div class="input-group">
+        <label class="input-label">Confirm Password</label>
+        <input id="suPass2" class="auth-input" type="password" placeholder="••••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter')doSignUp()" />
+      </div>
+
+      <button class="btn-primary" id="btnSignUp" onclick="doSignUp()">Create Account</button>
+      <div class="auth-switch">Already have an account? <a onclick="switchTab('signin')">Sign in</a></div>
+    </div>
+
+    <!-- Forgot Password view -->
+    <div class="auth-view" id="viewForgot">
+      <div class="auth-title">Reset password</div>
+      <div class="auth-sub">Enter your email and we'll send a reset link right away.</div>
+      <div id="errForgot" class="alert alert-error"></div>
+      <div id="okForgot" class="alert alert-success"></div>
+      <div class="input-group">
+        <label class="input-label">Email</label>
+        <input id="frEmail" class="auth-input" type="email" placeholder="you@example.com" autocomplete="email" onkeydown="if(event.key==='Enter')doReset()" />
+      </div>
+      <button class="btn-primary" onclick="doReset()">Send Reset Email</button>
+      <div class="auth-switch"><a onclick="switchTab('signin')">← Back to sign in</a></div>
+    </div>
+
+  </div>
+
+  <div class="bottom-brand">CardResell · Bradenton, FL · Free to use</div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import {
+      getAuth, onAuthStateChanged,
+      GoogleAuthProvider, signInWithPopup,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      sendPasswordResetEmail
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+
+    const app = initializeApp({
+      apiKey: "AIzaSyByHlvesKEFGqOTPPx35b1gAG-4zgrPt-c",
+      authDomain: "cardresell-e0329.firebaseapp.com",
+      projectId: "cardresell-e0329",
+      storageBucket: "cardresell-e0329.firebasestorage.app",
+      messagingSenderId: "107816299392",
+      appId: "1:107816299392:web:247dd67177459923866f65"
+    });
+    const auth = getAuth(app);
+
+    window._fbGoogleSignIn = async () => {
+      const provider = new GoogleAuthProvider();
+      try { await signInWithPopup(auth, provider); }
+      catch(e) { if (e.code !== 'auth/popup-closed-by-user') throw e; }
+    };
+    window._fbEmailSignIn  = (e, p) => signInWithEmailAndPassword(auth, e, p);
+    window._fbEmailSignUp  = (e, p) => createUserWithEmailAndPassword(auth, e, p);
+    window._fbResetPassword = (e)   => sendPasswordResetEmail(auth, e);
+
+    // On sign-in success → go back to app
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        const dest = new URLSearchParams(location.search).get('next') || '/';
+        window.location.replace(dest);
+      }
+    });
+  </script>
+
+  <script>
+    function switchTab(tab) {
+      ['signin','signup','forgot'].forEach(t => {
+        document.getElementById('view' + t.charAt(0).toUpperCase() + t.slice(1)).classList.remove('active');
+      });
+      document.getElementById('tabSignIn')?.classList.remove('active');
+      document.getElementById('tabSignUp')?.classList.remove('active');
+      const viewMap = { signin:'viewSignIn', signup:'viewSignUp', forgot:'viewForgot' };
+      document.getElementById(viewMap[tab])?.classList.add('active');
+      if (tab === 'signin') document.getElementById('tabSignIn')?.classList.add('active');
+      if (tab === 'signup') document.getElementById('tabSignUp')?.classList.add('active');
+    }
+
+    async function googleSignIn() {
+      try { await window._fbGoogleSignIn(); }
+      catch(e) { showErr('errSignIn', fbMsg(e)); }
+    }
+
+    async function doSignIn() {
+      const email = document.getElementById('siEmail').value.trim();
+      const pass  = document.getElementById('siPass').value;
+      clearErr('errSignIn');
+      if (!email || !pass) return showErr('errSignIn', 'Please enter your email and password.');
+      setLoading('btnSignIn', true, 'Signing in...');
+      try { await window._fbEmailSignIn(email, pass); }
+      catch(e) { showErr('errSignIn', fbMsg(e)); setLoading('btnSignIn', false, 'Sign In'); }
+    }
+
+    async function doSignUp() {
+      const email = document.getElementById('suEmail').value.trim();
+      const pass  = document.getElementById('suPass').value;
+      const pass2 = document.getElementById('suPass2').value;
+      clearErr('errSignUp');
+      if (!email || !pass) return showErr('errSignUp', 'Please fill in all fields.');
+      if (pass.length < 6) return showErr('errSignUp', 'Password must be at least 6 characters.');
+      if (pass !== pass2) return showErr('errSignUp', "Passwords don't match.");
+      setLoading('btnSignUp', true, 'Creating account...');
+      try { await window._fbEmailSignUp(email, pass); }
+      catch(e) { showErr('errSignUp', fbMsg(e)); setLoading('btnSignUp', false, 'Create Account'); }
+    }
+
+    async function doReset() {
+      const email = document.getElementById('frEmail').value.trim();
+      clearErr('errForgot');
+      if (!email) return showErr('errForgot', 'Please enter your email.');
+      try {
+        await window._fbResetPassword(email);
+        const ok = document.getElementById('okForgot');
+        ok.textContent = 'Reset email sent — check your inbox.';
+        ok.style.display = '';
+      } catch(e) { showErr('errForgot', fbMsg(e)); }
+    }
+
+    function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.style.display = ''; } }
+    function clearErr(id) { const el = document.getElementById(id); if (el) { el.style.display = 'none'; el.textContent = ''; } }
+    function setLoading(id, on, label) { const el = document.getElementById(id); if (el) { el.disabled = on; el.textContent = label; } }
+    function fbMsg(e) {
+      return ({
+        'auth/invalid-email': 'Invalid email address.',
+        'auth/user-not-found': 'No account found with that email.',
+        'auth/wrong-password': 'Incorrect password.',
+        'auth/invalid-credential': 'Incorrect email or password.',
+        'auth/email-already-in-use': 'An account with this email already exists.',
+        'auth/weak-password': 'Password must be at least 6 characters.',
+        'auth/too-many-requests': 'Too many attempts — try again later.',
+        'auth/network-request-failed': 'Network error — check your connection.',
+        'auth/popup-blocked': 'Pop-up blocked — please allow pop-ups and try again.',
+      })[e.code] || e.message || 'Something went wrong.';
+    }
+
+    // Check URL for tab param
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab === 'signup') switchTab('signup');
+  </script>
+
+</body>
+</html>
