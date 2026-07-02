@@ -864,6 +864,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="view-tabs" id="viewTabs">
   <span class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</span>
   <span class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</span>
+  <span class="view-tab" data-view="collection" onclick="switchView('collection')">📦 Collection</span>
+  <span class="view-tab" data-view="admin" id="adminTab" onclick="switchView('admin')" style="display:none">⚙ Admin</span>
 </div>
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
@@ -1382,10 +1384,49 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Grading affiliate CTA banner (shown after a scan result, persistent until dismissed) -->
   <!-- Grading CTA banner removed — grading CTA lives only in #scanGradeCTA (post-scan overlay) -->
   <div class="results-area" id="resultsArea">
-    <div class="intro-state">
-      <div class="intro-icon">🃏</div>
-      <div class="intro-h">Search for a card to get started</div>
-      <p class="intro-p">Find any Pokémon, Magic, Yu-Gi-Oh!, or sports card and see exactly where to sell it for maximum profit.</p>
+    <div class="intro-state" style="text-align:left;padding:1.5rem 1.25rem">
+      <!-- headline -->
+      <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold)">maximum profit</span></div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, sports, or trading card — see exact fees &amp; payouts across every platform.</div>
+
+      <!-- Feature bullets -->
+      <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.25rem">
+        <div style="display:flex;align-items:flex-start;gap:.6rem">
+          <span style="font-size:1rem;margin-top:.05rem">💰</span>
+          <div>
+            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Side-by-side payout comparison</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">eBay, COMC, Fanatics, PWCC &amp; more — after fees</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:.6rem">
+          <span style="font-size:1rem;margin-top:.05rem">📈</span>
+          <div>
+            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Live eBay sold comps</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">Real recent sales — raw &amp; graded prices</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:.6rem">
+          <span style="font-size:1rem;margin-top:.05rem">🏅</span>
+          <div>
+            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Grading ROI calculator</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">Is it worth sending to PSA? See the math instantly</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:.6rem">
+          <span style="font-size:1rem;margin-top:.05rem">📦</span>
+          <div>
+            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Track flips &amp; your collection</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">P&amp;L dashboard + portfolio value — free</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Social proof mini row -->
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <div style="padding:.35rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:99px;font-size:.67rem;color:#4ade80;font-weight:700">✓ 100% free to use</div>
+        <div style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold);font-weight:700">🔍 1,200+ cards searched today</div>
+        <div style="padding:.35rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;font-size:.67rem;color:var(--text-muted);font-weight:600">No account needed to search</div>
+      </div>
     </div>
   </div>
 
@@ -1477,6 +1518,92 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
 
 </div><!-- /flipsView -->
+
+<!-- MY COLLECTION VIEW -->
+<div id="collectionView" class="flips-view" style="display:none">
+
+  <!-- SIGN-IN WALL -->
+  <div id="collectionSignInWall" style="display:none;padding:2.5rem 1.5rem;text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">📦</div>
+    <div style="font-size:1.05rem;font-weight:800;color:var(--text);margin-bottom:.4rem">Track your collection</div>
+    <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Log every card you own, see total value,<br>and know what it's worth today.</div>
+    <button onclick="triggerGoogleSignIn()" style="padding:.7rem 1.6rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.88rem;font-weight:800;cursor:pointer">Sign in with Google</button>
+  </div>
+
+  <!-- CONTENT (signed-in) -->
+  <div id="collectionContent">
+
+    <!-- Value Stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:1rem">
+      <div class="pnl-card">
+        <div class="pnl-label">Total Cards</div>
+        <div class="pnl-value" id="colTotalCards">—</div>
+        <div class="pnl-sub" id="colTotalCardsSub"></div>
+      </div>
+      <div class="pnl-card">
+        <div class="pnl-label">Cost Basis</div>
+        <div class="pnl-value" id="colCostBasis">—</div>
+        <div class="pnl-sub" id="colCostSub"></div>
+      </div>
+      <div class="pnl-card">
+        <div class="pnl-label">Unrealized P/L</div>
+        <div class="pnl-value" id="colUnrealized">—</div>
+        <div class="pnl-sub" id="colUnrealizedSub"></div>
+      </div>
+    </div>
+
+    <!-- Actions row -->
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem">
+      <button onclick="openAddFlip('hold')" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.78rem;font-weight:800;cursor:pointer">+ Add Card</button>
+      <button onclick="refreshCollectionPrices()" id="colRefreshBtn" style="padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">↻ Refresh Prices</button>
+      <span id="colLastUpdated" style="font-size:.65rem;color:var(--text-muted);margin-left:auto"></span>
+    </div>
+
+    <!-- Collection table -->
+    <div id="collectionWrap"></div>
+
+  </div>
+</div><!-- /collectionView -->
+
+<!-- ADMIN VIEW -->
+<div id="adminView" style="display:none;padding:.5rem 0">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <div style="font-size:.88rem;font-weight:800;color:var(--text);letter-spacing:-.01em">⚙ Admin Dashboard</div>
+    <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
+  </div>
+
+  <!-- Stats grid -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem">
+    <div class="pnl-card" style="border-color:rgba(74,222,128,.25)">
+      <div class="pnl-label">Pro Users</div>
+      <div class="pnl-value pos" id="adminProUsers">—</div>
+      <div class="pnl-sub" id="adminProSub"></div>
+    </div>
+    <div class="pnl-card" style="border-color:rgba(196,122,0,.25)">
+      <div class="pnl-label">Est. MRR</div>
+      <div class="pnl-value" id="adminMRR" style="color:var(--gold)">—</div>
+      <div class="pnl-sub" id="adminMRRSub">active subscriptions</div>
+    </div>
+    <div class="pnl-card">
+      <div class="pnl-label">Newsletter</div>
+      <div class="pnl-value" id="adminNewsletter">—</div>
+      <div class="pnl-sub">subscribers</div>
+    </div>
+    <div class="pnl-card">
+      <div class="pnl-label">Total Signups</div>
+      <div class="pnl-value" id="adminSignups">—</div>
+      <div class="pnl-sub" id="adminReferralSub"></div>
+    </div>
+  </div>
+
+  <!-- Recent newsletter emails -->
+  <div class="section-panel" style="margin-top:.5rem">
+    <div class="section-hdr"><div class="section-title">📬 Recent Subscribers</div></div>
+    <div id="adminEmailList" style="font-size:.72rem;color:var(--text-muted);line-height:2">Loading…</div>
+  </div>
+
+  <div style="font-size:.62rem;color:var(--text-muted);margin-top:.75rem;text-align:center" id="adminGeneratedAt"></div>
+</div><!-- /adminView -->
 
 <!-- ADD FLIP / ADD HOLD MODAL -->
 
@@ -4128,17 +4255,33 @@ function _updateFlipsSignInWall() {
 
 function switchView(view) {
   document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  const lookup = document.getElementById('lookupView');
-  const flips  = document.getElementById('flipsView');
+  const lookup     = document.getElementById('lookupView');
+  const flips      = document.getElementById('flipsView');
+  const collection = document.getElementById('collectionView');
+
+  // Hide all
+  if (lookup)     lookup.classList.remove('hidden');
+  if (flips)      flips.classList.remove('active');
+  if (collection) collection.style.display = 'none';
+  const adminViewEl = document.getElementById('adminView');
+  if (adminViewEl) adminViewEl.style.display = 'none';
+
   if (view === 'flips') {
     if (lookup) lookup.classList.add('hidden');
     if (flips)  flips.classList.add('active');
     _updateFlipsSignInWall();
     renderFlipsView();
-  } else {
-    if (lookup) lookup.classList.remove('hidden');
-    if (flips)  flips.classList.remove('active');
+  } else if (view === 'collection') {
+    if (lookup)     lookup.classList.add('hidden');
+    if (collection) collection.style.display = '';
+    renderCollectionView();
+  } else if (view === 'admin') {
+    if (lookup) lookup.classList.add('hidden');
+    const adminView = document.getElementById('adminView');
+    if (adminView) adminView.style.display = '';
+    loadAdminData();
   }
+  // else: lookup (default) — already shown above
 }
 
 // ── Modal state ──
@@ -4554,6 +4697,181 @@ async function submitNewsletter() {
 }
 
 
+
+// ══════════════════════════════════════════════════════════
+// MY COLLECTION VIEW
+// ══════════════════════════════════════════════════════════
+
+function _updateCollectionSignInWall() {
+  const wall    = document.getElementById('collectionSignInWall');
+  const content = document.getElementById('collectionContent');
+  const signedIn = !!window._userSub;
+  if (wall)    wall.style.display    = signedIn ? 'none' : '';
+  if (content) content.style.display = signedIn ? ''     : 'none';
+}
+
+function renderCollectionView() {
+  _updateCollectionSignInWall();
+  if (!window._userSub) return;
+
+  const port = loadPortData(); // reuse existing portfolio data
+
+  // ── Stats ──
+  const totalCards  = port.length;
+  const costBasis   = port.reduce((s, p) => s + (p.buyPrice || 0), 0);
+  const curValue    = port.reduce((s, p) => s + (p.currentValue ?? p.buyPrice ?? 0), 0);
+  const unrealized  = curValue - costBasis;
+
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  const setClass = (id, cls) => { const el = document.getElementById(id); if (el) el.className = 'pnl-value ' + cls; };
+
+  setEl('colTotalCards', totalCards);
+  setEl('colTotalCardsSub', totalCards === 1 ? '1 card tracked' : totalCards + ' cards tracked');
+  setEl('colCostBasis', '$' + costBasis.toFixed(2));
+  setEl('colCostSub', 'amount paid');
+  setEl('colUnrealized', (unrealized >= 0 ? '+' : '') + '$' + unrealized.toFixed(2));
+  setClass('colUnrealized', unrealized >= 0 ? 'pos' : 'neg');
+  setEl('colUnrealizedSub', unrealized >= 0 ? 'unrealized gain' : 'unrealized loss');
+
+  const wrap = document.getElementById('collectionWrap');
+  if (!wrap) return;
+
+  if (!port.length) {
+    wrap.innerHTML = '<div class="empty-flips"><div class="empty-flips-icon">📦</div><div class="empty-flips-h">No cards in your collection yet</div><div class="empty-flips-p">Tap "+ Add Card" to log a card you own and track its value.</div></div>';
+    return;
+  }
+
+  const esc2 = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Sort by unrealized gain descending
+  const sorted = [...port].sort((a, b) => {
+    const aGain = (a.currentValue ?? a.buyPrice ?? 0) - (a.buyPrice || 0);
+    const bGain = (b.currentValue ?? b.buyPrice ?? 0) - (b.buyPrice || 0);
+    return bGain - aGain;
+  });
+
+  wrap.innerHTML = `
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table class="flip-table" style="min-width:520px">
+        <thead><tr>
+          <th>Card</th><th>Set</th><th>Cost</th><th>Current Value</th><th>P/L</th><th>P/L %</th><th></th>
+        </tr></thead>
+        <tbody>${sorted.map(p => {
+          const cur     = p.currentValue ?? p.buyPrice ?? 0;
+          const gain    = cur - (p.buyPrice || 0);
+          const gainPct = p.buyPrice > 0 ? (gain / p.buyPrice * 100) : 0;
+          const color   = gain >= 0 ? '#4ade80' : '#f87171';
+          return `<tr>
+            <td><div class="ft-card" title="${esc2(p.card)}">${esc2(p.card)}</div></td>
+            <td style="font-size:.72rem;color:var(--text-muted)">${esc2(p.set||'—')}</td>
+            <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
+            <td class="ft-mono" style="color:var(--gold)">$${cur.toFixed(2)}</td>
+            <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
+            <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
+            <td><div style="display:flex;gap:.3rem">
+              <button class="ft-delete" onclick="deletePortEntry(${p.id})" title="Remove">✕</button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function refreshCollectionPrices() {
+  const btn = document.getElementById('colRefreshBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Refreshing…'; }
+
+  const port = loadPortData();
+  if (!port.length) {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh Prices'; }
+    return;
+  }
+
+  // For each card, search eBay comps and update currentValue
+  let updated = 0;
+  for (const p of port) {
+    if (!p.card) continue;
+    try {
+      const query = [p.card, p.set].filter(Boolean).join(' ');
+      const res   = await fetch('/api/ebay-sold?q=' + encodeURIComponent(query));
+      if (!res.ok) continue;
+      const data  = await res.json();
+      if (data.items && data.items.length) {
+        // Use median of recent raw sales
+        const prices = data.items.map(i => parseFloat(i.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.['__value__'] || i.price || 0)).filter(x => x > 0).sort((a,b) => a-b);
+        if (prices.length) {
+          const mid = Math.floor(prices.length / 2);
+          p.currentValue = prices.length % 2 === 0 ? (prices[mid-1] + prices[mid]) / 2 : prices[mid];
+          updated++;
+        }
+      }
+    } catch(e) { /* skip on error */ }
+  }
+
+  savePortData(port);
+  const lastEl = document.getElementById('colLastUpdated');
+  if (lastEl) lastEl.textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  renderCollectionView();
+
+  if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh Prices'; }
+  if (updated > 0) showToast(updated + ' card price' + (updated>1?'s':'') + ' refreshed from eBay sold data.', 'success');
+  else showToast('Could not fetch updated prices right now. Try again later.', 'info');
+}
+
+// ── Also re-render collection if active when port data changes ──
+function _maybeRerenderCollection() {
+  const colView = document.getElementById('collectionView');
+  if (colView && colView.style.display !== 'none') renderCollectionView();
+}
+
+// ══════════════════════════════════════════════════════════
+// ADMIN DASHBOARD
+// ══════════════════════════════════════════════════════════
+const _OWNER_SUB = '111904685934190351595';
+
+function _maybeShowAdminTab() {
+  if (window._userSub === _OWNER_SUB) {
+    const tab = document.getElementById('adminTab');
+    if (tab) tab.style.display = '';
+  }
+}
+
+async function loadAdminData() {
+  if (window._userSub !== _OWNER_SUB) return;
+  const btn = document.getElementById('adminRefreshBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Loading…'; }
+
+  try {
+    const res  = await fetch('/api/admin?sub=' + encodeURIComponent(window._userSub));
+    const data = await res.json();
+    if (!res.ok) { showToast('Admin API error: ' + (data.error || res.status), 'error'); return; }
+
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    setEl('adminProUsers',   data.proUsers);
+    setEl('adminProSub',     data.proMonthly + ' monthly · ' + data.proAnnual + ' annual');
+    setEl('adminMRR',        '$' + data.revenueEstimate);
+    setEl('adminNewsletter', data.newsletterCount);
+    setEl('adminSignups',    data.totalSignups);
+    setEl('adminReferralSub', data.totalReferrals + ' referrals made');
+    setEl('adminGeneratedAt', 'Generated ' + new Date(data.generatedAt).toLocaleString());
+
+    const emailList = document.getElementById('adminEmailList');
+    if (emailList) {
+      if (data.recentEmails && data.recentEmails.length) {
+        emailList.innerHTML = data.recentEmails.map(e =>
+          `<div style="padding:.25rem 0;border-bottom:1px solid var(--border)">${e}</div>`
+        ).join('');
+      } else {
+        emailList.textContent = 'No subscribers yet.';
+      }
+    }
+  } catch(err) {
+    showToast('Could not load admin data.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
+  }
+}
 
 // ── Main render ──
 function renderFlipsView() {
@@ -5580,6 +5898,10 @@ async function checkProStatus() {
   } catch(e) { /* non-blocking */ }
   updateProUI();
   updateScanBtnCredits();
+  // Re-render collection view if it's active
+  _maybeRerenderCollection();
+  // Show admin tab for owner
+  _maybeShowAdminTab();
 }
 
 // ── Update all Pro-related UI elements ──
