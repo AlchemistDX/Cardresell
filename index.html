@@ -2867,7 +2867,7 @@ async function searchYugioh(q) {
       ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🐉</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
-        <div class="drop-meta">${esc(c.type || '')}${c.race ? ' · ' + esc(c.race) : ''}</div>
+        <div class="drop-meta">${esc(c.card_sets?.[0]?.set_name || c.type || '')}${c.card_sets?.[0]?.set_rarity ? ' · ' + esc(c.card_sets[0].set_rarity) : (c.race ? ' · ' + esc(c.race) : '')}</div>
       </div>
       ${tcgPrice ? `<span class="drop-price">$${tcgPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
     </div>`;
@@ -2885,13 +2885,14 @@ async function searchYugioh(q) {
     if (ebayP !== null) priceVariants.push({ key:'ebay',         label:'eBay',          market: ebayP, low: null, mid: null, high: null });
     if (cmP   !== null) priceVariants.push({ key:'cardmarket',   label:'Cardmarket',   market: cmP,   low: null, mid: null, high: null });
     if (!priceVariants.length) priceVariants.push({ key:'manual', label:'Manual', market: null, low: null, mid: null, high: null });
+    const ygoSet = c.card_sets?.[0];
     return {
       name: c.name,
       game: 'yugioh',
       images: { small: imgSmall, large: imgLarge },
-      setName: c.type || '',
-      number: '',
-      rarity: c.race || '',
+      setName: ygoSet?.set_name || c.type || '',
+      number:  ygoSet?.set_code || '',
+      rarity:  ygoSet?.set_rarity || c.race || '',
       priceVariants,
       source: 'YGOProDeck',
       updatedAt: 'TCGPlayer data',
@@ -3030,7 +3031,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
   // Build search query: card name + set name + card number for precision
   // e.g. "Lacey Stellar Crown 172" instead of just "Lacey Stellar Crown"
   const cardNum = card.number ? card.number.replace(/^0+/, '') : ''; // strip leading zeros
-  const q = [card.name, card.setName, cardNum].filter(Boolean).join(' ');
+  // For YGO: append "yugioh" for eBay precision; for MTG: append "mtg"
+  const gameTag = card.game === 'yugioh' ? 'yugioh' : (card.game === 'mtg' ? 'mtg' : '');
+  const q = [card.name, card.setName, cardNum, gameTag].filter(Boolean).join(' ');
 
   // Check if a graded pill is selected
   const selGradePill = document.querySelector('#gradedPills .pill.sel');
@@ -3050,7 +3053,8 @@ async function fetchAndApplySoldComps(forceRefresh) {
     if (!data.count || data.count === 0 || data.error) {
       const _num2 = card.number ? card.number.replace(/^0+/, '') : '';
       const fbQuery2 = encodeURIComponent([card.name, card.setName, _num2].filter(Boolean).join(' '));
-      const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
+      const _sacat2 = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
+      const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=${_sacat2}&LH_Sold=1&LH_Complete=1&_sop=12`;
       statusTxt.innerHTML =
         `No recent sales found · ` +
         `<a href="${fbUrl2}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
@@ -3081,7 +3085,8 @@ async function fetchAndApplySoldComps(forceRefresh) {
     // Fallback: use TCGPlayer market price as reference, link to eBay sold
     const _num3 = card.number ? card.number.replace(/^0+/, '') : '';
     const fbQuery = encodeURIComponent([card.name, card.setName, _num3].filter(Boolean).join(' '));
-    const fbUrl   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=2536&LH_Sold=1&LH_Complete=1&_sop=12`;
+    const _sacat3 = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
+    const fbUrl   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=${_sacat3}&LH_Sold=1&LH_Complete=1&_sop=12`;
     // Try to get TCG market price from the price display
     const tcgPriceEl = document.getElementById('cardPriceDisplay');
     const tcgRaw = tcgPriceEl?.dataset?.market || tcgPriceEl?.textContent?.replace(/[^0-9.]/g,'');
@@ -3755,7 +3760,7 @@ function updateSellLinks(card) {
 
   const searchName = rawName;
   const gameTag = isPokemon ? 'pokemon card' : isMagic ? 'mtg card' : isYugioh ? 'yugioh card' : 'trading card';
-  const ebaycat = isPokemon ? '183454' : isMagic ? '183454' : '212';
+  const ebaycat = (isPokemon || isMagic || isYugioh) ? '183454' : '212';
 
   // Build per-platform sell URLs
   const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(searchName + (setName ? ' ' + setName : '') + (number ? ' ' + number : ''))}`;
@@ -3777,7 +3782,7 @@ function updateSellLinks(card) {
   // (eBay is always the primary sell destination; TCGPlayer added as separate comps via old pills if ever re-enabled)
 
   // Also keep eBay buy/comps link alive for the graded comps banner
-  const ebaySoldQ = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
+  const ebaySoldQ = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${(isYugioh || isMagic) && number ? ' ' + number : ''} ${gameTag}`);
   const ebayBuyRaw = `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
   const slEbayBuy = document.getElementById('slEbayBuy');
   if (slEbayBuy) slEbayBuy.href = buildEbayUrl(ebayBuyRaw);
@@ -3922,6 +3927,8 @@ function calc() {
   const graderVal     = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const isGraded      = graderVal !== 'no';
   const isSports      = activeGame === 'sports';
+  const isYugioh      = selectedCard?.game === 'yugioh';
+  const isMagic       = selectedCard?.game === 'mtg';
 
   // PWCC is best for $75+ cards; flag for note display
   const pwccWorthy    = price >= 75;
@@ -3946,7 +3953,7 @@ function calc() {
       eligible: true,
       feeItems: feeCOMC(price, comcService, isGraded, comcCashout),
       sellerShip: 0,
-      note: isSports ? 'COMC accepts sports cards.' : ''
+      note: isSports ? 'COMC accepts sports cards.' : (isYugioh || isMagic) ? 'COMC accepts MTG and Yu-Gi-Oh! cards alongside Pokémon.' : ''
     },
     {
       pid: 'fanatics',
@@ -7233,7 +7240,7 @@ async function _fetchModalYugioh(q) {
       meta: (c.type||'') + (c.race ? ' · '+c.race : ''),
       price: tcgP,
       cardFactory: () => ({
-        name: c.name, setName: c.type||'', number: String(c.id||''), rarity: c.race||'',
+        name: c.name, setName: c.card_sets?.[0]?.set_name||c.type||'', number: c.card_sets?.[0]?.set_code||String(c.id||''), rarity: c.card_sets?.[0]?.set_rarity||c.race||'',
         images: { large: imgLarge, small: imgLarge }, game: 'yugioh', priceVariants,
         prices: { tcgplayer_price: tcgP||0 }
       })
