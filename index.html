@@ -3997,7 +3997,14 @@ function openAddFlip(mode) {
   // Pre-fill from selected card if available
   if (selectedCard && selectedCard.name) {
     document.getElementById('mCardName').value = selectedCard.name;
-    document.getElementById('mSetName').value  = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
+    // If we have a pending grade scan result, tag set/notes with "PSA X Est."
+    const baseSet = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
+    if (mode === 'hold' && window._lastScanEstGrade && window._lastScanCardName &&
+        selectedCard.name.toLowerCase().includes(window._lastScanCardName.toLowerCase().split(' ')[0])) {
+      document.getElementById('mSetName').value = `PSA ${window._lastScanEstGrade} Est. · ${baseSet}`;
+    } else {
+      document.getElementById('mSetName').value = baseSet;
+    }
     const price = getEffectivePrice();
     if (price) document.getElementById('mCurrentValue').value = price.toFixed(2);
   }
@@ -4032,7 +4039,10 @@ function saveFlipEntry() {
   if (_modalMode === 'hold') {
     // Add to portfolio
     const port = loadPortData();
-    port.push({ id: Date.now(), card: cardName, set: setName, buyPrice, currentValue: curVal, addedDate: date });
+    // Carry estimated grade if set/notes contains "Est." pattern
+    const estGradeMatch = setName.match(/PSA\s*(\d+)\s*Est/i);
+    const estGrade = estGradeMatch ? parseInt(estGradeMatch[1]) : null;
+    port.push({ id: Date.now(), card: cardName, set: setName, buyPrice, currentValue: curVal, addedDate: date, estGrade });
     savePortData(port);
   } else {
     // Log flip
@@ -4143,7 +4153,7 @@ function renderFlipsView() {
         const gain = cur - p.buyPrice;
         return `<tr>
           <td class="ft-mono" style="font-size:.72rem">${p.addedDate}</td>
-          <td><div class="ft-card" title="${esc(p.card)}">${esc(p.card)}</div></td>
+          <td><div class="ft-card" title="${esc(p.card)}">${esc(p.card)}${p.estGrade ? `<span style="margin-left:.35rem;font-size:.6rem;font-weight:800;padding:.1rem .35rem;border-radius:4px;background:${p.estGrade>=9?'rgba(74,222,128,.15)':p.estGrade>=7?'rgba(250,204,21,.15)':p.estGrade>=5?'rgba(251,146,60,.15)':'rgba(248,113,113,.15)'};color:${p.estGrade>=9?'#4ade80':p.estGrade>=7?'#facc15':p.estGrade>=5?'#fb923c':'#f87171'};border:1px solid ${p.estGrade>=9?'rgba(74,222,128,.3)':p.estGrade>=7?'rgba(250,204,21,.3)':p.estGrade>=5?'rgba(251,146,60,.3)':'rgba(248,113,113,.3)'};white-space:nowrap">PSA ${p.estGrade} Est.</span>` : ''}</div></td>
           <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.72rem">${esc(p.set||'—')}</td>
           <td class="ft-mono">$${p.buyPrice.toFixed(2)}</td>
           <td class="ft-mono">$${cur.toFixed(2)}</td>
@@ -4786,6 +4796,9 @@ async function processGradeBack(input) {
 
     // Store grade info so card auto-selects to correct grader/grade
     window._pendingGradeResult = { cardName: data.card_name, psa };
+    // Store estimated grade for portfolio auto-tag
+    window._lastScanEstGrade = psa;
+    window._lastScanCardName = data.card_name;
 
     // Add "View graded price" tap button into the result
     const psaGrade = psa >= 10 ? 10 : psa >= 9 ? 9 : psa >= 8 ? 8 : psa >= 7 ? 7 : psa >= 6 ? 6 : psa >= 5 ? 5 : 1;
