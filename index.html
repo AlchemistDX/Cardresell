@@ -1754,7 +1754,9 @@ window.CARDSELL_GOOGLE_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88
 // PokemonTCG.io API key — free at dev.pokemontcg.io (raises limit from 1k to 20k/day)
 window.CARDSELL_PTCG_KEY = ''; // <-- paste your key here
 // ── Affiliate Links (replace with Awin/ShareASale links when approved) ──
-window.CARDSELL_AFFIL_PSA  = 'https://www.psacard.com/submit'; // PSA submission page
+window.CARDSELL_AFFIL_PSA  = 'https://www.psacard.com/submit'; // PSA submission page — swap to referral link when approved
+window.CARDSELL_AFFIL_BCW  = '';  // BCW Supplies affiliate link — paste your affiliate tracking URL here
+window.CARDSELL_AFFIL_BCW_CODE = ''; // BCW coupon code (e.g. CARDRESELL10) — shown to users
 window.CARDSELL_AFFIL_CGC  = 'https://www.cgccomics.com/cards/submit/'; // CGC submission page
 window.CARDSELL_AFFIL_BGS  = 'https://www.beckett.com/grading/submit'; // BGS/Beckett submission page
 window.CARDSELL_AFFIL_SGC  = 'https://www.gosgc.com/submit-cards'; // SGC submission page
@@ -5201,7 +5203,24 @@ async function processGradeBack(input) {
       '</div>' +
       (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + notes + '</div>' : '') +
       (worth
-        ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.2rem">\u2713 Worth submitting for grading</div>'
+        ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.4rem">\u2713 Worth submitting for grading</div>' +
+          // PSA referral CTA
+          '<div style="margin:.35rem 0 .3rem;padding:.55rem .65rem;background:rgba(26,58,110,.25);border:1px solid rgba(42,82,152,.4);border-radius:10px">' +
+            '<div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;color:#7ea8e8;margin-bottom:.2rem">🏆 NEW TO PSA?</div>' +
+            '<div style="font-size:.75rem;font-weight:700;color:#fff;margin-bottom:.15rem">Get $25 off your first grading order</div>' +
+            '<a href="' + (window.CARDSELL_AFFIL_PSA || 'https://www.psacard.com/submit') + '" target="_blank" rel="noopener" ' +
+              'style="font-size:.7rem;font-weight:700;color:#7ea8e8;text-decoration:none">Submit to PSA →</a>' +
+          '</div>' +
+          // BCW supplies CTA
+          (window.CARDSELL_AFFIL_BCW
+            ? '<div style="margin:.3rem 0 0;padding:.5rem .65rem;background:rgba(180,83,9,.12);border:1px solid rgba(180,83,9,.3);border-radius:10px">' +
+                '<div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;color:#f59e0b;margin-bottom:.2rem">🛡️ PROTECT YOUR CARD</div>' +
+                '<div style="font-size:.73rem;color:rgba(255,255,255,.75);margin-bottom:.15rem">Grab toploaders &amp; sleeves before submitting</div>' +
+                '<a href="' + window.CARDSELL_AFFIL_BCW + '" target="_blank" rel="noopener" ' +
+                  'style="font-size:.7rem;font-weight:700;color:#f59e0b;text-decoration:none">' +
+                  'Shop BCW Supplies' + (window.CARDSELL_AFFIL_BCW_CODE ? ' · Use code <strong>' + window.CARDSELL_AFFIL_BCW_CODE + '</strong> for 10% off' : '') + ' →</a>' +
+              '</div>'
+            : '') 
         : '<div style="font-size:.74rem;color:#fb923c;margin-bottom:.2rem">May not be worth grading costs</div>'
       );
 
