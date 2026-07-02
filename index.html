@@ -923,7 +923,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
   <input type="file" id="gradeBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
   <!-- Scan status modal -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;padding:1.5rem">
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1.25rem;padding:1.5rem 1.5rem 2.5rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
       <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
         <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
@@ -4717,40 +4717,58 @@ function openScanner() {
 }
 
 function viewGradedCard(cardName, psaGrade) {
-  // Close the scan overlay
-  document.getElementById('scanOverlay').style.display = 'none';
+  // Close the scan overlay and any CTAs
+  const ov = document.getElementById('scanOverlay');
+  if (ov) ov.style.display = 'none';
   const gradeCTA = document.getElementById('scanGradeCTA');
   if (gradeCTA) gradeCTA.classList.remove('show');
+  const gradingBanner = document.getElementById('gradingCtaBanner');
+  if (gradingBanner) gradingBanner.classList.remove('show');
+
+  // Switch to Card Lookup tab so search is visible
+  if (typeof switchView === 'function') switchView('lookup');
 
   // Search for the card, then auto-apply PSA + grade
   const searchInput = document.getElementById('searchInput');
-  if (searchInput) {
-    searchInput.value = cardName.trim();
-    searchInput.dispatchEvent(new Event('input'));
-    // After dropdown populates, click the best match
-    setTimeout(() => {
-      const best = document.querySelector('.drop-item');
-      if (best) {
-        best.click();
-        // After card loads, switch to PSA pill + set grade
+  if (!searchInput) return;
+
+  searchInput.value = cardName.trim();
+  searchInput.dispatchEvent(new Event('input'));
+
+  // After dropdown populates, click the best match
+  setTimeout(() => {
+    const best = document.querySelector('.drop-item');
+    if (best) {
+      best.click();
+      // After card loads, switch to PSA pill + set grade
+      setTimeout(() => {
+        // Click the graded toggle if present
+        const gradedToggle = document.getElementById('gradedToggle');
+        if (gradedToggle && !gradedToggle.classList.contains('active')) gradedToggle.click();
+
+        const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
+        if (psaPill) {
+          setPill(psaPill, 'gradedPills');
+          if (typeof toggleGrade === 'function') toggleGrade();
+        }
         setTimeout(() => {
-          const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
-          if (psaPill) {
-            setPill(psaPill, 'gradedPills');
-            if (typeof toggleGrade === 'function') toggleGrade();
+          const gradeSelect = document.getElementById('gradeSelect');
+          if (gradeSelect) {
+            gradeSelect.value = String(psaGrade);
+            gradeSelect.dispatchEvent(new Event('change'));
+            if (typeof calc === 'function') calc();
           }
-          setTimeout(() => {
-            const gradeSelect = document.getElementById('gradeSelect');
-            if (gradeSelect) {
-              gradeSelect.value = String(psaGrade);
-              gradeSelect.dispatchEvent(new Event('change'));
-              if (typeof calc === 'function') calc();
-            }
-          }, 250);
-        }, 500);
-      }
-    }, 900);
-  }
+          // Scroll to results
+          const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
+          if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+      }, 600);
+    } else {
+      // No dropdown match — still show search results
+      const searchBtn = document.getElementById('searchBtn');
+      if (searchBtn) searchBtn.click();
+    }
+  }, 1000);
 }
 
 function openAboutModal() {
