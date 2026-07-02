@@ -3,8 +3,27 @@
 // Returns: { avg, median, low, high, count, items[], cached }
 
 const FINDING_API = 'https://svcs.ebay.com/services/search/FindingService/v1';
-const CACHE = new Map(); // in-memory, resets per cold start — fine for Vercel
-const CACHE_TTL = 15 * 60 * 1000; // 15 min
+const CACHE_TTL_SEC = 15 * 60; // 15 min in seconds (for Upstash EX param)
+
+async function getCachedResult(kvUrl, kvToken, key) {
+  if (!kvUrl || !kvToken) return null;
+  try {
+    const r = await fetch(`${kvUrl}/get/${encodeURIComponent('ebay_cache:' + key)}`,
+      { headers: { Authorization: `Bearer ${kvToken}` } });
+    const d = await r.json();
+    if (d.result) return JSON.parse(d.result);
+  } catch(e) {}
+  return null;
+}
+
+async function setCachedResult(kvUrl, kvToken, key, data) {
+  if (!kvUrl || !kvToken) return;
+  try {
+    // Use Upstash SETEX to auto-expire after TTL
+    await fetch(`${kvUrl}/setex/${encodeURIComponent('ebay_cache:' + key)}/${CACHE_TTL_SEC}/${encodeURIComponent(JSON.stringify(data))}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
+  } catch(e) {}
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,11 +45,12 @@ export default async function handler(req, res) {
   const keywords = grade ? `${q} ${grade}` : q;
   const cacheKey = keywords.toLowerCase() + ':' + limit;
 
-  // Check cache
-  const cached = CACHE.get(cacheKey);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
-    return res.status(200).json({ ...cached.data, cached: true });
-  }
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+
+  // Check KV cache first
+  const cached = await getCachedResult(kvUrl, kvToken, cacheKey);
+  if (cached) return res.status(200).json({ ...cached, cached: true });
 
   try {
     const params = new URLSearchParams({
@@ -86,7 +106,7 @@ export default async function handler(req, res) {
 
     if (count === 0) {
       const data = { count: 0, avg: null, median: null, low: null, high: null, items: [] };
-      CACHE.set(cacheKey, { data, ts: Date.now() });
+      await setCachedResult(kvUrl, kvToken, cacheKey, data);
       return res.status(200).json(data);
     }
 
@@ -98,7 +118,7 @@ export default async function handler(req, res) {
     const high = prices[count - 1];
 
     const data = { count, avg, median, low, high, items: items.slice(0, 8) };
-    CACHE.set(cacheKey, { data, ts: Date.now() });
+    await setCachedResult(kvUrl, kvToken, cacheKey, data);
     return res.status(200).json(data);
 
   } catch (e) {

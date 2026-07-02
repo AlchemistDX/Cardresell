@@ -1609,9 +1609,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
-      <!-- PRO plan -->
+      <!-- PRO MONTHLY plan -->
       <div class="plan-card featured">
-        <div class="plan-badge">BEST VALUE</div>
+        <div class="plan-badge">MONTHLY</div>
         <div class="plan-name">Pro</div>
         <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
         <ul class="plan-features">
@@ -1622,6 +1622,22 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         </ul>
         <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
           <span id="pricingProBtnText">Get Pro &mdash; $9.99/mo</span>
+        </button>
+      </div>
+      <!-- PRO ANNUAL plan -->
+      <div class="plan-card" style="border:1.5px solid rgba(196,122,0,.5);background:linear-gradient(135deg,rgba(196,122,0,.08),rgba(196,122,0,.03));position:relative">
+        <div class="plan-badge" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">BEST VALUE</div>
+        <div class="plan-name">Pro Annual</div>
+        <div class="plan-price" style="font-size:1.6rem"><sup>$</sup>89<span style="font-size:1rem">.99</span><sub>/yr</sub></div>
+        <div style="font-size:.68rem;color:#4ade80;font-weight:700;margin-bottom:.5rem">Save $30 vs monthly</div>
+        <ul class="plan-features">
+          <li>Everything in Pro</li>
+          <li>Billed once per year</li>
+          <li>Cancel anytime</li>
+          <li style="color:var(--gold);font-weight:700">~ $7.50/mo effective</li>
+        </ul>
+        <button id="pricingAnnualBtn" class="plan-btn pro-btn" onclick="startAnnualCheckout()" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">
+          <span id="pricingAnnualBtnText">Get Annual &mdash; $89.99/yr</span>
         </button>
       </div>
     </div>
@@ -5498,7 +5514,7 @@ function updateProUI() {
     }
     // Update pricing modal Pro button label
     const pricingProBtnText = document.getElementById('pricingProBtnText');
-    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $4.99/mo';
+    if (pricingProBtnText) pricingProBtnText.textContent = 'Get Pro — $9.99/mo';
   }
 }
 
@@ -5580,12 +5596,44 @@ async function startProCheckout() {
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       if (btn) btn.disabled = false;
-      if (txt) txt.textContent = 'Get Pro — $4.99/mo';
+      if (txt) txt.textContent = 'Get Pro — $9.99/mo';
     }
   } catch(e) {
     showToast('⚠️ Network error. Try again.');
     if (btn) btn.disabled = false;
-    if (txt) txt.textContent = 'Get Pro — $4.99/mo';
+    if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+  }
+}
+
+// ── Start annual Pro checkout ──
+async function startAnnualCheckout() {
+  if (!googleUser) {
+    closePricingModal();
+    setTimeout(() => triggerGoogleSignIn(), 200);
+    return;
+  }
+  const btn = document.getElementById('pricingAnnualBtn');
+  const txt = document.getElementById('pricingAnnualBtnText');
+  if (btn) btn.disabled = true;
+  if (txt) txt.textContent = 'Redirecting...';
+  try {
+    const r = await fetch('/api/stripe-annual-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      body: JSON.stringify({ googleSub: googleUser.sub, email: googleUser.email })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = 'Get Annual — $89.99/yr';
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    if (btn) btn.disabled = false;
+    if (txt) txt.textContent = 'Get Annual — $89.99/yr';
   }
 }
 

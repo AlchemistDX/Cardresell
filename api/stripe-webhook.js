@@ -56,9 +56,10 @@ export default async function handler(req, res) {
         const qty = tierMap[obj.metadata?.tier] || 10;
         await addPaidScanCredit(googleSub, qty, 'id');
         console.log('ID_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email, qty }));
-      } else if (obj.mode === 'subscription') {
+      } else if (obj.mode === 'subscription' || paymentType === 'pro_annual') {
         const subscriptionId = obj.subscription || obj.id;
-        await storeProUser(googleSub, email, subscriptionId, 'active');
+        const plan = obj.metadata?.plan || 'pro_monthly';
+        await storeProUser(googleSub, email, subscriptionId, 'active', plan);
       }
     }
   }
@@ -82,13 +83,13 @@ export default async function handler(req, res) {
   return res.status(200).json({ received: true });
 }
 
-async function storeProUser(googleSub, email, subscriptionId, status) {
+async function storeProUser(googleSub, email, subscriptionId, status, plan = 'pro_monthly') {
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
   if (kvUrl && kvToken) {
     try {
       const key = `pro:${googleSub}`;
-      const val = JSON.stringify({ email, subscriptionId, status, updatedAt: new Date().toISOString() });
+      const val = JSON.stringify({ email, subscriptionId, status, plan, updatedAt: new Date().toISOString() });
       await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(val)}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${kvToken}` },
