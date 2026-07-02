@@ -822,6 +822,20 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Grader Credits/mo</strong>. ID Scanner Credits never expire.</div>
   </div>
+  <!-- ── REFER A FRIEND ── -->
+  <div id="referSection" style="display:none;margin-top:.5rem">
+    <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
+    <div style="padding:.65rem .75rem;background:linear-gradient(135deg,rgba(196,122,0,.08),rgba(196,122,0,.04));border:1px solid rgba(196,122,0,.25);border-radius:var(--radius-md)">
+      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:.3rem">🎁 Refer a Friend</div>
+      <div style="font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:.2rem">Both get 5 free ID scans</div>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.55rem;line-height:1.4">Share your link — when a friend signs up for the first time, you both instantly get 5 ID scan credits.</div>
+      <button id="refShareBtn" onclick="shareReferralLink()" style="width:100%;padding:.45rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.75rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">
+        📤 Copy my referral link
+      </button>
+      <div id="refCopiedMsg" style="display:none;font-size:.68rem;color:#4ade80;text-align:center;margin-top:.35rem;font-weight:700">✓ Link copied! Send it to a friend.</div>
+    </div>
+  </div>
+
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
     <input type="password" id="tplKeyInput" autocomplete="off" spellcheck="false" />
@@ -1748,6 +1762,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 // CardResell API Configuration (inlined — no separate file needed)
 window.CARDSELL_TPL_KEY = 'tcg_37ca6c972d0251c5372b395faa9f71a92a11096872d78e12';
 window.CARDSELL_EPN_CAMPID = '5339158497';
+// Capture referral code from URL on page load
+(function() {
+  const p = new URLSearchParams(window.location.search);
+  const ref = p.get('ref');
+  if (ref) window._pendingRefCode = ref.slice(0, 16);
+})();
 window.CARDSELL_TCGP_AFFID = '';
 window.CARDSELL_SCANNER_KEY = '';
 window.CARDSELL_GOOGLE_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
@@ -4614,6 +4634,25 @@ function applyGoogleUser() {
   checkProStatus();
 }
 
+function shareReferralLink() {
+  const code = window._userRefCode || '';
+  if (!code) return;
+  const link = window.location.origin + '/?ref=' + encodeURIComponent(code);
+  const msg  = 'Check out CardResell — it tells you exactly where to sell your trading cards for the most profit. Sign up free and we both get 5 bonus ID scans: ' + link;
+  if (navigator.share) {
+    navigator.share({ title: 'CardResell — find your card\'s value', text: msg, url: link })
+      .catch(() => {});
+  } else {
+    navigator.clipboard.writeText(link).then(() => {
+      const copied = document.getElementById('refCopiedMsg');
+      if (copied) { copied.style.display = 'block'; setTimeout(() => copied.style.display = 'none', 3500); }
+    }).catch(() => {
+      // Fallback — prompt copy
+      window.prompt('Copy your referral link:', link);
+    });
+  }
+}
+
 function signOut() {
   const name = googleUser?.name || 'your account';
   if (!window.confirm('Sign out of ' + name + '?')) return;
@@ -5386,7 +5425,8 @@ window._idScanCredits = 0; // paid ID scan credits
 async function checkProStatus() {
   if (!googleUser || !window._googleIdToken) return;
   try {
-    const r = await fetch('/api/pro-status', {
+    const refParam = window._pendingRefCode ? '?ref=' + encodeURIComponent(window._pendingRefCode) : '';
+    const r = await fetch('/api/pro-status' + refParam, {
       headers: { 'Authorization': 'Bearer ' + window._googleIdToken }
     });
     if (!r.ok) return;
@@ -5395,6 +5435,17 @@ async function checkProStatus() {
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
     window._idScanCredits = d.idPaidLeft || 0;
+    // Store referral code and show reward toast if applicable
+    if (d.refCode) {
+      window._userRefCode = d.refCode;
+      const refSec = document.getElementById('referSection');
+      if (refSec) refSec.style.display = '';
+    }
+    if (d.refRewarded) {
+      setTimeout(() => showToast('🎉 Referral bonus! You and your friend both got 5 free ID scans.', 5000), 1200);
+    }
+    // Clear pending ref so it only fires once
+    window._pendingRefCode = null;
   } catch(e) { /* non-blocking */ }
   updateProUI();
   updateScanBtnCredits();

@@ -114,6 +114,62 @@ export default async function handler(req, res) {
     freeScansLeft = FREE_SCANS_PER_MONTH;
   }
 
+  // 5. Generate referral code for this user (deterministic: first 8 chars of sub)
+  const refCode = userSub.replace(/\D/g, '').slice(0, 8) || userSub.slice(0, 8);
+  const refKey  = `ref:${refCode}`;
+
+  // Store sub→refCode mapping so we can look up who to reward
+  if (kvUrl && kvToken) {
+    try {
+      const existing = await fetch(`${kvUrl}/get/${encodeURIComponent(refKey)}`,
+        { headers: { Authorization: `Bearer ${kvToken}` } });
+      const exData = await existing.json();
+      if (!exData.result) {
+        // First time — register this code
+        await fetch(
+          `${kvUrl}/set/${encodeURIComponent(refKey)}/${encodeURIComponent(userSub)}`,
+          { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
+        );
+      }
+    } catch(e) { console.error('Ref code register error:', e); }
+  }
+
+  // 6. Process incoming referral claim (ref= param passed from client on first sign-in)
+  //    Only credit if: this user just got their signup bonus AND a ref code is provided
+  //    and the ref code belongs to a different user
+  let refRewarded = false;
+  const incomingRef = (req.query?.ref || '').trim().slice(0, 16);
+  if (incomingRef && kvUrl && kvToken) {
+    const claimKey = `ref_claimed:${userSub}`;
+    try {
+      const claimed = await getKVInt(kvUrl, kvToken, claimKey);
+      if (!claimed) {
+        // Look up who owns this ref code
+        const ownerRes = await fetch(`${kvUrl}/get/${encodeURIComponent(`ref:${incomingRef}`)}`,
+          { headers: { Authorization: `Bearer ${kvToken}` } });
+        const ownerData = await ownerRes.json();
+        const ownerSub  = ownerData.result;
+        if (ownerSub && ownerSub !== userSub) {
+          const kvSet = (key, val) => fetch(
+            `${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(val))}`,
+            { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
+          );
+          // Give both users 5 ID scan credits
+          const ownerCurrent  = await getKVInt(kvUrl, kvToken, `scans:${ownerSub}:id_paid_left`);
+          const newUserCurrent = idPaidLeft;
+          await Promise.all([
+            kvSet(`scans:${ownerSub}:id_paid_left`,  ownerCurrent + 5),
+            kvSet(`scans:${userSub}:id_paid_left`,   newUserCurrent + 5),
+            kvSet(claimKey, 1),
+          ]);
+          idPaidLeft += 5;
+          refRewarded = true;
+          console.log(`Referral: ${incomingRef} → owner ${ownerSub} +5, new user ${userSub} +5`);
+        }
+      }
+    } catch(e) { console.error('Ref claim error:', e); }
+  }
+
   return res.status(200).json({
     isPro,
     status: proStatus,
@@ -125,6 +181,8 @@ export default async function handler(req, res) {
     idPaidLeft,
     idCredits: idPaidLeft,        // alias — settings panel reads this key
     totalScansLeft: freeScansLeft + paidScansLeft,
+    refCode,                      // user's personal referral code
+    refRewarded,                  // true if this sign-in triggered a referral reward
   });
 }
 
