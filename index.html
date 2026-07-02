@@ -757,7 +757,91 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
   <!-- Google Sign-In -->
   <meta name="google-site-verification" content="vbXUqHxcuqg3LaCivRcNMtFPReLSMfWbid1Vi_QX6Yc" />
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Firebase Auth SDK -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import {
+      getAuth, onAuthStateChanged, signOut as fbSignOut,
+      GoogleAuthProvider, signInWithPopup,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      sendPasswordResetEmail
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyByHlvesKEFGqOTPPx35b1gAG-4zgrPt-c",
+      authDomain: "cardresell-e0329.firebaseapp.com",
+      projectId: "cardresell-e0329",
+      storageBucket: "cardresell-e0329.firebasestorage.app",
+      messagingSenderId: "107816299392",
+      appId: "1:107816299392:web:247dd67177459923866f65"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // Expose to global scope for use in non-module scripts
+    window._fbAuth = auth;
+    window._fbSignOut = () => fbSignOut(auth);
+    window._fbGoogleSignIn = async () => {
+      const provider = new GoogleAuthProvider();
+      try { await signInWithPopup(auth, provider); }
+      catch(e) { if (e.code !== 'auth/popup-closed-by-user') console.error(e); }
+    };
+    window._fbEmailSignIn = async (email, pass) => {
+      return signInWithEmailAndPassword(auth, email, pass);
+    };
+    window._fbEmailSignUp = async (email, pass) => {
+      return createUserWithEmailAndPassword(auth, email, pass);
+    };
+    window._fbResetPassword = async (email) => {
+      return sendPasswordResetEmail(auth, email);
+    };
+
+    // Central auth state handler — fires on sign-in, sign-out, and page load
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const token = await user.getIdToken();
+        window._googleIdToken = token;
+        window._userEmail = user.email || '';
+        window._googleSub = user.uid;
+        window._userSub = user.uid;
+        googleUser = {
+          name: user.displayName || user.email?.split('@')[0] || 'User',
+          email: user.email || '',
+          avatar: user.photoURL || '',
+          sub: user.uid,
+          uid: user.uid
+        };
+        // Refresh token every 55 min (tokens expire at 60 min)
+        clearInterval(window._tokenRefreshInterval);
+        window._tokenRefreshInterval = setInterval(async () => {
+          try {
+            const fresh = await user.getIdToken(true);
+            window._googleIdToken = fresh;
+          } catch(e) {}
+        }, 55 * 60 * 1000);
+        applyGoogleUser();
+        loadUserData();
+        if (document.getElementById('settingsPanel')?.classList.contains('open')) {
+          loadSettingsScanCredits();
+        }
+        // Close auth modal if open
+        closeAuthModal();
+      } else {
+        googleUser = null;
+        window._googleIdToken = null;
+        window._userEmail = '';
+        window._googleSub = '';
+        window._userSub = '';
+        clearInterval(window._tokenRefreshInterval);
+        try { document.getElementById('googleSignInBtn').style.display = 'flex'; } catch(e) {}
+        try { document.getElementById('googleUserBtn').style.display = 'none'; } catch(e) {}
+        try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
+        try { _updateFlipsSignInWall?.(); } catch(e) {}
+        updateProUI?.();
+      }
+    });
+  </script>
 </head>
 <body>
 <div class="wrap">
@@ -5155,89 +5239,46 @@ function saveGoogleClientId() {
 }
 
 function initGoogleSignIn() {
-  // If no real client ID is configured, show a setup prompt instead of the GSI button
-  if (!GOOGLE_AUTH_READY) {
-    const btn = document.getElementById('googleSignInBtn');
-    if (btn) {
-      btn.innerHTML = `<button style="font-size:.72rem;padding:.3rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:99px;color:var(--text-muted);cursor:pointer" onclick="alert('Google Sign-In needs setup. See the setup guide in the app.')">Sign In (setup needed)</button>`;
-    }
-    return;
-  }
-  if (!window.google) { setTimeout(initGoogleSignIn, 500); return; }
-  try {
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleSignIn,
-      auto_select: false,
-    });
-    google.accounts.id.renderButton(
-      document.getElementById('googleSignInBtn'),
-      { theme: 'outline', size: 'small', text: 'signin', shape: 'pill', logo_alignment: 'left' }
-    );
-  } catch(err) {
-    console.warn('Google Sign-In init failed:', err);
+  // Firebase auth handles everything — just wire up the header sign-in button
+  const btn = document.getElementById('googleSignInBtn');
+  if (btn && !btn.dataset.fbWired) {
+    btn.dataset.fbWired = '1';
+    btn.innerHTML = '<button onclick="openAuthModal('signin')" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Sign In</button>';
   }
 }
+
 
 // ── Reliable sign-in trigger — works from any button ──
 function triggerGoogleSignIn() {
-  try {
-    // Try One Tap prompt first (most reliable)
-    if (window.google?.accounts?.id) {
-      google.accounts.id.prompt(notification => {
-        // If One Tap is suppressed (user dismissed it before), fall back to button click
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          const inner = document.getElementById('googleSignInBtn')?.querySelector('div[role="button"], iframe');
-          if (inner) inner.click();
-          else triggerGoogleSignIn();
-        }
-      });
-    } else {
-      // GSI not loaded yet — click the rendered button directly
-      const inner = document.getElementById('googleSignInBtn')?.querySelector('div[role="button"], iframe');
-      if (inner) inner.click();
-      else triggerGoogleSignIn();
-    }
-  } catch(e) {
-    // Last resort
-    const inner = document.getElementById('googleSignInBtn')?.querySelector('div[role="button"], iframe');
-    if (inner) inner.click();
-    else triggerGoogleSignIn();
-  }
+  openAuthModal('signin');
 }
+
 
 function handleGoogleSignIn(response) {
-  // Decode JWT payload
-  const payload = JSON.parse(atob(response.credential.split('.')[1]));
-  googleUser = { name: payload.name, email: payload.email, avatar: payload.picture, sub: payload.sub };
-  // Store ID token for scanner auth proxy
-  window._googleIdToken = response.credential;
-  window._userEmail = payload.email;
-  window._googleSub = payload.sub;
-
-  // Persist session so reload doesn't log user out
-  try { localStorage.setItem('cardsell_google_user', JSON.stringify(googleUser)); } catch(e) {}
-  // Persist token in sessionStorage — valid ~1hr, gone when tab closes
-  try { sessionStorage.setItem('cardsell_id_token', response.credential); } catch(e) {}
-
-  applyGoogleUser();
-  loadUserData();
-  // Refresh scan credits if settings panel happens to be open
-  if (document.getElementById('settingsPanel')?.classList.contains('open')) {
-    loadSettingsScanCredits();
-  }
+  // Handled by Firebase onAuthStateChanged — this stub kept for compatibility
 }
+
 
 function applyGoogleUser() {
   if (!googleUser) return;
-  document.getElementById('googleSignInBtn').style.display = 'none';
+  const btn = document.getElementById('googleSignInBtn');
+  if (btn) btn.style.display = 'none';
   const userBtn = document.getElementById('googleUserBtn');
-  userBtn.style.display = 'flex';
-  document.getElementById('googleAvatar').src = googleUser.avatar;
-  document.getElementById('googleName').textContent = googleUser.name.split(' ')[0];
-  // Check pro status after UI is applied
+  if (userBtn) userBtn.style.display = 'flex';
+  const avatar = document.getElementById('googleAvatar');
+  if (avatar) avatar.src = googleUser.avatar || '';
+  const nameEl = document.getElementById('googleName');
+  if (nameEl) nameEl.textContent = (googleUser.name || 'User').split(' ')[0];
+  // Check pro status
   checkProStatus();
+  _maybeShowAdminTab();
+  _updateFlipsSignInWall?.();
+  updateProUI?.();
+  // Prefill newsletter email if settings open
+  const nlInput = document.getElementById('newsletterEmail');
+  if (nlInput && !nlInput.value && googleUser.email) nlInput.value = googleUser.email;
 }
+
 
 function shareReferralLink() {
   const code = window._userRefCode || '';
@@ -5261,22 +5302,12 @@ function shareReferralLink() {
 function signOut() {
   const name = googleUser?.name || 'your account';
   if (!window.confirm('Sign out of ' + name + '?')) return;
-  googleUser = null;
-  // Clear persisted session
-  try { localStorage.removeItem('cardsell_google_user'); } catch(e) {}
-  try { sessionStorage.removeItem('cardsell_id_token'); } catch(e) {}
-  window._googleIdToken = null;
-  document.getElementById('googleSignInBtn').style.display = 'flex';
-  document.getElementById('googleUserBtn').style.display = 'none';
-  document.getElementById('googleAvatar').src = '';
-  document.getElementById('googleName').textContent = '';
-  window._isPro = false;
-  window._freeScansLeft = 0;
-  window._scanCredits = 0;
-  updateProUI();
-  // Re-render flips view with no-user state
-  if (document.getElementById('flipsView').classList.contains('active')) renderFlipsView();
+  if (window._fbSignOut) {
+    window._fbSignOut().catch(e => console.error(e));
+  }
+  // onAuthStateChanged handler will clear state automatically
 }
+
 
 /* ═══════════════════════════════════════
    CARD SCANNER — Photo + AI Vision
@@ -5976,37 +6007,8 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 }
 
 // Restore Google session on page load
-(function restoreGoogleSession() {
-  try {
-    const saved = localStorage.getItem('cardsell_google_user');
-    if (saved) {
-      googleUser = JSON.parse(saved);
-      // Set global email/sub for credits and scan auth
-      window._userEmail = googleUser.email || '';
-      window._googleSub = googleUser.sub   || '';
-      // Also restore the ID token from sessionStorage if still there
-      const savedToken = sessionStorage.getItem('cardsell_id_token');
-      if (savedToken) {
-        // Quick expiry check — decode JWT exp claim
-        try {
-          const exp = JSON.parse(atob(savedToken.split('.')[1])).exp;
-          if (exp && Date.now() / 1000 < exp - 60) {
-            window._googleIdToken = savedToken;
-          } else {
-            // Token expired — clear it but keep user profile (UI stays signed in)
-            sessionStorage.removeItem('cardsell_id_token');
-          }
-        } catch(e) { /* bad token — ignore */ }
-      }
-      // Wait for DOM to be ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyGoogleUser);
-      } else {
-        applyGoogleUser();
-      }
-    }
-  } catch(e) {}
-})();
+// Session restore handled by Firebase onAuthStateChanged
+
 
 function getUserKey(suffix) {
   return googleUser ? 'cardsell_' + googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
@@ -6643,12 +6645,11 @@ function showFlipCapModal() {
 
 // Init on load
 window.addEventListener('load', () => {
-  initGoogleSignIn();
-  updateKeyStatus();  // show correct status dot for saved API key
-  // If session was restored (user was already signed in), run Pro check
-  if (googleUser && window._googleIdToken) checkProStatus();
-  else updateProUI(); // still update UI to hide/show buttons correctly
+  initGoogleSignIn();  // sets up header button
+  updateKeyStatus();
+  updateProUI();
   // Pre-populate settings inputs with saved values
+
   const tplInput = document.getElementById('tplKeyInput');
   if (tplInput && window.tplApiKey) tplInput.value = window.tplApiKey;
   const oaiInput = document.getElementById('openAiKeyInput');
@@ -6656,772 +6657,3 @@ window.addEventListener('load', () => {
   const gcInput = document.getElementById('googleClientIdInput');
   if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
 });
-
-// ── Keyboard: Escape closes modal ──
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    document.getElementById('flipModal').classList.remove('open');
-    document.getElementById('pricingOverlay')?.classList.remove('open');
-    document.getElementById('scanGateOverlay')?.classList.remove('open');
-  }
-});
-
-
-
-/* ═══════════════════════════════════════
-   CATALOG — Full search results page
-   ═══════════════════════════════════════ */
-
-let _catalogQuery = '';
-let _catalogTimeout = null;
-let _catalogCards = {};
-
-function openCatalog(q) {
-  _catalogQuery = q;
-  _catalogCards = {};
-  const overlay = document.getElementById('catalogOverlay');
-  const input   = document.getElementById('catalogInput');
-  const label   = document.getElementById('catalogQueryLabel');
-  const grid    = document.getElementById('catalogGrid');
-
-  if (input) input.value = q;
-  if (label) label.textContent = 'Results for "' + q + '"';
-  grid.innerHTML = '<div class="catalog-loading"><span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span></div>';
-  overlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
-
-  // Wire refine input
-  if (input) {
-    input.oninput = () => {
-      clearTimeout(_catalogTimeout);
-      const nq = input.value.trim();
-      if (nq.length < 2) return;
-      _catalogQuery = nq;
-      label.textContent = 'Results for "' + nq + '"';
-      grid.innerHTML = '<div class="catalog-loading"><span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span></div>';
-      _catalogTimeout = setTimeout(() => fetchCatalogResults(nq), 380);
-    };
-    input.onkeydown = e => { if (e.key === 'Escape') closeCatalog(); };
-    // Focus after animation frame
-    requestAnimationFrame(() => input.focus());
-  }
-
-  fetchCatalogResults(q);
-}
-
-function closeCatalog() {
-  document.getElementById('catalogOverlay').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-async function fetchCatalogResults(q) {
-  const grid = document.getElementById('catalogGrid');
-  _catalogCards = {};
-
-  // Only Pokémon EN has a full catalog — everything else shows coming soon
-  if (activeGame !== 'pokemon') {
-    const names = {
-      pokemonjp: 'Pokémon JP',
-      mtg: 'Magic: The Gathering',
-      yugioh: 'Yu-Gi-Oh!',
-      sports: 'Sports Cards',
-      other: 'Other TCG'
-    };
-    const label = names[activeGame] || 'This game';
-    grid.innerHTML = `<div class="catalog-coming-soon">
-      <div class="catalog-cs-icon">🃏</div>
-      <div class="catalog-cs-title">${label} Catalog</div>
-      <div class="catalog-cs-sub">Coming soon — full card database with images and prices is in progress.</div>
-    </div>`;
-    return;
-  }
-
-  try {
-    await fetchCatalogPokemon(q);
-  } catch(err) {
-    grid.innerHTML = '<div class="catalog-empty">Search failed — check your connection and try again.</div>';
-  }
-}
-
-const CATALOG_PAGE_SIZE = 8; // 8 per page = 2-col mobile tiles big enough to see card art clearly
-let _catalogAllCards = [];
-let _catalogCardFactory = null;
-let _catalogCurrentPage = 0;
-
-// ── Collectr-style infinite scroll catalog ──
-const CATALOG_BATCH = 20;
-let _catalogScrollObserver = null;
-
-function _renderCatalogGrid(cards, cardFactory) {
-  const grid = document.getElementById('catalogGrid');
-  const pgBar = document.getElementById('catalogPagination');
-  if (pgBar) pgBar.style.display = 'none';
-
-  if (!cards.length) {
-    grid.innerHTML = '<div class="catalog-empty">No cards found. Try a different name.</div>';
-    return;
-  }
-  _catalogAllCards = cards;
-  _catalogCardFactory = cardFactory;
-  _catalogCurrentPage = 0;
-  _catalogCards = {};
-
-  if (_catalogScrollObserver) { _catalogScrollObserver.disconnect(); _catalogScrollObserver = null; }
-  grid.innerHTML = '';
-  grid.scrollTop = 0;
-  _appendCatalogBatch(grid, 0);
-}
-
-function _appendCatalogBatch(grid, startIdx) {
-  const oldSentinel = grid.querySelector('.catalog-scroll-sentinel');
-  if (oldSentinel) oldSentinel.remove();
-
-  const total = _catalogAllCards.length;
-  const end   = Math.min(startIdx + CATALOG_BATCH, total);
-  const frag  = document.createDocumentFragment();
-
-  for (let i = startIdx; i < end; i++) {
-    const c = _catalogAllCards[i];
-    _catalogCards[i] = c;
-    const price = c._price;
-    const img   = c._img || '';
-
-    const tile = document.createElement('div');
-    tile.className = 'catalog-card';
-    tile.dataset.idx = i;
-    tile.innerHTML =
-      '<div class="catalog-card-img-wrap' + (img ? ' loading' : '') + '">' +
-        (img
-          ? '<img src="' + img + '" alt="' + esc(c.name) + '" loading="lazy" decoding="async"' +
-            ' onload="this.parentNode.classList.remove(\u0022loading\u0022)"' +
-            ' onerror="this.parentNode.classList.remove(\u0022loading\u0022);this.style.opacity=.1" />'
-          : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3rem;opacity:.15">&#127183;</div>'
-        ) +
-      '</div>' +
-      '<div class="catalog-card-body">' +
-        '<div class="catalog-card-name">' + esc(c.name) + '</div>' +
-        ((c.set || c.set_name) ? '<div class="catalog-card-meta">' + esc(c.set || c.set_name || '') + '</div>' : '') +
-        (c.rarity || c.number ? '<div class="catalog-card-rarity">' + (c.rarity ? esc(c.rarity) : '') + (c.number ? ' • ' + esc(c.number) : '') + '</div>' : '') +
-        (price ? '<div class="catalog-card-price">$' + parseFloat(price).toFixed(2) + '</div>' : '<div class="catalog-card-price" style="color:rgba(255,255,255,.25)">No price</div>') +
-      '</div>';
-
-    tile.addEventListener('click', (function(idx) {
-      return function() {
-        const card = _catalogCardFactory(idx);
-        closeCatalog();
-        selectedCard = card;
-        searchInput.value = card.name;
-        dropList.classList.remove('open');
-        loadCardUI(card);
-        const pval = _catalogCards[idx] && _catalogCards[idx]._price;
-        if (pval && !isNaN(parseFloat(pval))) {
-          const ov = document.getElementById('priceOverride');
-          if (ov) {
-            ov.value = parseFloat(pval).toFixed(2);
-            calc();
-            ov.style.boxShadow = '0 0 0 2px var(--gold)';
-            setTimeout(function(){ ov.style.boxShadow = ''; }, 1800);
-          }
-        }
-      };
-    })(i));
-
-    frag.appendChild(tile);
-  }
-
-  grid.appendChild(frag);
-
-  if (end < total) {
-    const sentinel = document.createElement('div');
-    sentinel.className = 'catalog-scroll-sentinel';
-    sentinel.innerHTML = '<div class="catalog-scroll-spinner"></div>';
-    grid.appendChild(sentinel);
-
-    if (_catalogScrollObserver) _catalogScrollObserver.disconnect();
-    _catalogScrollObserver = new IntersectionObserver(function(entries) {
-      if (entries[0].isIntersecting) {
-        _catalogScrollObserver.disconnect();
-        _catalogScrollObserver = null;
-        _appendCatalogBatch(grid, end);
-      }
-    }, { root: grid, rootMargin: '150px', threshold: 0 });
-    _catalogScrollObserver.observe(sentinel);
-  }
-}
-
-// _renderCatalogPage replaced by infinite scroll _appendCatalogBatch
-function _renderCatalogPage(page) { /* legacy stub */ }
-
-function _catalogPageNav(delta) { /* legacy stub */ }
-
-
-async function fetchCatalogPokemon(q) {
-  const grid = document.getElementById('catalogGrid');
-
-  // Build headers — attach PokemonTCG.io key if configured (raises limit to 20k/day)
-  const ptcgKey = window.CARDSELL_PTCG_KEY || '';
-  const fetchHeaders = ptcgKey ? { 'X-Api-Key': ptcgKey } : {};
-
-  // Attempt fetch with up to 2 tries (handles transient rate-limit / slow mobile)
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 18000); // 18s — generous for slow connections
-    try {
-      const res = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=100&select=id,name,set,number,rarity,images,tcgplayer,cardmarket`,
-        { signal: controller.signal, headers: fetchHeaders }
-      );
-      clearTimeout(timer);
-      if (res.status === 429) {
-        // Rate limited — wait 2s and retry once
-        if (attempt < 2) { await new Promise(r => setTimeout(r, 2000)); continue; }
-        grid.innerHTML = '<div class="catalog-empty">Too many requests — please wait a moment and try again.</div>';
-        return;
-      }
-      if (!res.ok) throw new Error('API error ' + res.status);
-      const json = await res.json();
-      const data = json.data || [];
-      if (!data.length) {
-        grid.innerHTML = '<div class="catalog-empty">No Pokémon cards found for "' + esc(q) + '". Try a different name.</div>';
-        return;
-      }
-      const cards = data.map(c => ({
-        name: c.name, set: c.set?.name || '', number: c.number || '',
-        _price: c.tcgplayer?.prices?.holofoil?.market ||
-                c.tcgplayer?.prices?.normal?.market ||
-                c.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
-                c.cardmarket?.prices?.averageSellPrice || null,
-        _img: c.images?.large || c.images?.small || '',
-        rarity: c.rarity || '',
-        _raw: c
-      }));
-      _renderCatalogGrid(cards, i => {
-        const raw = data[i];
-        // Build priceVariants exactly like the dropdown search does
-        const tcgPrices = raw.tcgplayer?.prices || {};
-        const priceVariants = Object.keys(tcgPrices).map(key => {
-          const p = tcgPrices[key];
-          const label = key.replace(/([A-Z])/g, ' $1')
-                           .replace('1st Edition', '1st Ed')
-                           .replace(/^./, s => s.toUpperCase()).trim();
-          return { key, label, market: p.market || p.mid || null, low: p.low || null, mid: p.mid || null, high: p.high || null };
-        });
-        if (!priceVariants.length) priceVariants.push({ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null });
-        return {
-          name: raw.name,
-          setName: raw.set?.name || '',
-          number: raw.number || '',
-          rarity: raw.rarity || '',
-          images: { large: raw.images?.large || '', small: raw.images?.small || '' },
-          hp: raw.hp || '',
-          types: raw.types || [],
-          game: 'pokemon',
-          priceVariants,
-          prices: { tcgplayer: tcgPrices }
-        };
-      });
-      return; // success
-    } catch(err) {
-      clearTimeout(timer);
-      if (err.name === 'AbortError') {
-        if (attempt < 2) {
-          // Show retry message and try again
-          grid.innerHTML = '<div class="catalog-empty" style="color:var(--text-muted)">Loading... retrying</div>';
-          continue;
-        }
-        grid.innerHTML = '<div class="catalog-empty">Search timed out — try again or check your connection.</div>';
-      } else {
-        grid.innerHTML = '<div class="catalog-empty">Could not load cards. Check your connection and try again.</div>';
-      }
-    }
-  }
-}
-
-function injectCatalogPokemonImages(tplData, cards) {
-  tplData.forEach((c, i) => {
-    const cardId = c.card_id;
-    if (!cardId) return;
-    fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(json => {
-        const imgUrl = json.data.images?.large || json.data.images?.small;
-        if (!imgUrl) return;
-        const img = imgUrl;
-        cards[i]._img = img;
-        // Update in grid if still showing
-        const wrap = document.querySelector(`#catalogGrid .catalog-card[data-idx="${i}"] .catalog-card-img-wrap`);
-        if (wrap) {
-          const existing = wrap.querySelector('img');
-          if (existing) { existing.src = img; }
-          else {
-            const imgEl = document.createElement('img');
-            imgEl.src = img; imgEl.alt = cards[i].name || ''; imgEl.loading = 'lazy';
-            wrap.innerHTML = ''; wrap.appendChild(imgEl);
-          }
-        }
-      }).catch(() => {});
-  });
-}
-
-async function fetchCatalogMTG(q) {
-  const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&include_multilingual=true&unique=prints&order=released&dir=desc`);
-  if (!res.ok) { document.getElementById('catalogGrid').innerHTML = '<div class="catalog-empty">No Magic cards found. Try a different name.</div>'; return; }
-  const json = await res.json();
-  const data = (json.data || []).slice(0, 40);
-  const cards = data.map(c => ({
-    name: c.name, set: c.set_name || '', number: c.collector_number || '',
-    _price: c.prices?.usd || null,
-    _img: c.image_uris?.small || (c.card_faces?.[0]?.image_uris?.small) || ''
-  }));
-  _renderCatalogGrid(cards, i => {
-    const raw = data[i];
-    const imgLarge = raw.image_uris?.normal || raw.image_uris?.small || raw.card_faces?.[0]?.image_uris?.normal || '';
-    const priceVariants = [];
-    if (raw.prices?.usd)        priceVariants.push({ key:'usd',        label:'Normal',     market: parseFloat(raw.prices.usd),        low: null, mid: null, high: null });
-    if (raw.prices?.usd_foil)   priceVariants.push({ key:'usd_foil',   label:'Foil',        market: parseFloat(raw.prices.usd_foil),   low: null, mid: null, high: null });
-    if (raw.prices?.usd_etched) priceVariants.push({ key:'usd_etched', label:'Etched Foil', market: parseFloat(raw.prices.usd_etched), low: null, mid: null, high: null });
-    if (!priceVariants.length)  priceVariants.push({ key:'manual', label:'Manual', market: null, low: null, mid: null, high: null });
-    return {
-      name: raw.name,
-      setName: raw.set_name || '',
-      number: raw.collector_number || '',
-      rarity: raw.rarity || '',
-      images: { large: imgLarge, small: imgLarge },
-      game: 'mtg',
-      priceVariants,
-      prices: { usd: parseFloat(raw.prices?.usd || 0) || 0 }
-    };
-  });
-}
-
-async function fetchCatalogYugioh(q) {
-  const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=40&offset=0`);
-  if (!res.ok) { document.getElementById('catalogGrid').innerHTML = '<div class="catalog-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>'; return; }
-  const json = await res.json();
-  const data = (json.data || []).slice(0, 40);
-  const cards = data.map(c => {
-    const img = c.card_images?.[0]?.image_url_small || '';
-    const price = c.card_prices?.[0]?.tcgplayer_price || null;
-    return { name: c.name, set: c.type || '', number: String(c.id || ''), _price: price, _img: img };
-  });
-  _renderCatalogGrid(cards, i => {
-    const raw = data[i];
-    const imgLarge = raw.card_images?.[0]?.image_url || raw.card_images?.[0]?.image_url_small || '';
-    const tcgP = parseFloat(raw.card_prices?.[0]?.tcgplayer_price || 0) || null;
-    const priceVariants = tcgP ? [{ key:'tcgplayer', label:'TCGPlayer', market: tcgP, low: null, mid: null, high: null }]
-                                : [{ key:'manual', label:'Manual', market: null, low: null, mid: null, high: null }];
-    return {
-      name: raw.name,
-      setName: raw.type || '',
-      number: String(raw.id || ''),
-      rarity: raw.race || '',
-      images: { large: imgLarge, small: imgLarge },
-      game: 'yugioh',
-      priceVariants,
-      prices: { tcgplayer_price: tcgP || 0 }
-    };
-  });
-}
-
-async function fetchCatalogPokemonJP(q) {
-  // JP uses same TPL path — fall through to inline search approach
-  await fetchCatalogPokemon(q);
-}
-
-</script>
-
-<!-- ═══ CATALOG / SEARCH RESULTS PAGE ═══ -->
-<div id="catalogOverlay">
-  <div class="catalog-header">
-    <button class="catalog-back" onclick="closeCatalog()" aria-label="Back">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <div class="catalog-search-wrap">
-      <span class="search-icon">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      </span>
-      <input id="catalogInput" class="catalog-input" type="text" placeholder="Refine search…" autocomplete="off" />
-    </div>
-  </div>
-  <div id="catalogQueryLabel" class="catalog-query-label"></div>
-  <div id="catalogGrid" class="catalog-grid">
-    <div class="catalog-loading">
-      <span class="spinner" style="border-color:rgba(255,255,255,.15);border-top-color:var(--gold)"></span>
-    </div>
-  </div>
-  <div class="catalog-pagination" id="catalogPagination" style="display:none">
-    <button class="catalog-pg-btn" id="catalogPrevBtn" onclick="_catalogPageNav(-1)" disabled>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-      Prev
-    </button>
-    <span class="catalog-pg-info" id="catalogPageInfo">Page 1</span>
-    <button class="catalog-pg-btn" id="catalogNextBtn" onclick="_catalogPageNav(1)">
-      Next
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
-    </button>
-  </div>
-</div>
-<script>
-// Init scan button credits on load (shows 0 until checkProStatus fires)
-document.addEventListener('DOMContentLoaded', function() {
-  if (typeof updateScanBtnCredits === 'function') updateScanBtnCredits();
-});
-</script>
-
-<!-- ═══ SEARCH MODAL ═══ -->
-<div id="searchModal" style="display:none;position:fixed;inset:0;z-index:9000;background:#0a0a0a;flex-direction:column;overflow:hidden">
-  <!-- Page header -->
-  <div style="display:flex;align-items:center;gap:10px;padding:12px 14px 10px;background:#0a0a0a;border-bottom:1px solid #1f1f1f;flex-shrink:0;min-height:64px">
-    <button onclick="closeSearchModal()" style="width:38px;height:38px;border-radius:50%;background:#1c1c1c;border:1px solid #2a2a2a;color:#fff;font-size:1.15rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent">&#8592;</button>
-    <div style="flex:1;display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2e2e2e;border-radius:14px;overflow:hidden;height:46px">
-      <svg style="margin:0 10px 0 14px;flex-shrink:0;opacity:.4" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="searchModalInput" type="search" placeholder="Search by card name…" autocomplete="off" autocorrect="off" spellcheck="false"
-        style="flex:1;height:100%;background:transparent;border:none;font-size:1rem;color:#fff;outline:none;-webkit-appearance:none;padding:0 4px"/>
-      <button id="smlClear" onclick="document.getElementById('searchModalInput').value='';document.getElementById('searchModalList').innerHTML='';document.getElementById('searchModalInput').focus();document.getElementById('smlClear').style.display='none'" style="display:none;width:30px;height:30px;margin-right:6px;background:#2a2a2a;border:none;border-radius:50%;color:#999;cursor:pointer;font-size:.85rem;flex-shrink:0">&#x2715;</button>
-    </div>
-    <button id="searchModalBtn" onclick="runModalSearch()" style="height:46px;padding:0 18px;background:var(--gold);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:.9rem;cursor:pointer;flex-shrink:0;white-space:nowrap;-webkit-tap-highlight-color:transparent">Search</button>
-  </div>
-  <!-- Column headers -->
-  <div id="smlColHeaders" style="display:none;grid-template-columns:64px 1fr 90px 80px;gap:0;padding:8px 16px;background:#111;border-bottom:1px solid #1f1f1f;flex-shrink:0">
-    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em"></div>
-    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;padding-left:12px">Card</div>
-    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;text-align:center">Rarity</div>
-    <div style="font-size:.68rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;text-align:right">Price</div>
-  </div>
-  <!-- Results list -->
-  <div id="searchModalList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#0a0a0a"></div>
-</div>
-
-<style>
-/* ═══ SEARCH PAGE — table-style rows ═══ */
-.sml-item{
-  display:grid;
-  grid-template-columns:64px 1fr 90px 80px;
-  align-items:center;
-  gap:0;
-  padding:10px 16px 10px 16px;
-  border-bottom:1px solid #161616;
-  cursor:pointer;
-  background:#0a0a0a;
-  -webkit-tap-highlight-color:transparent;
-  min-height:88px;
-}
-.sml-item:active{background:#131313}
-@media (hover:hover){.sml-item:hover{background:#111}}
-.sml-thumb-wrap{width:64px;height:88px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.sml-thumb{
-  width:58px;height:82px;
-  object-fit:contain;border-radius:5px;
-  background:#111;display:block;
-}
-.sml-thumb-ph{
-  width:58px;height:82px;
-  border-radius:5px;background:#161616;
-  display:flex;align-items:center;
-  justify-content:center;font-size:1.4rem;color:#444;
-}
-.sml-info{padding-left:12px;min-width:0}
-.sml-name{font-size:.95rem;font-weight:700;color:#f0f0f0;line-height:1.3;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sml-set{font-size:.75rem;color:rgba(255,255,255,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sml-rarity-col{padding:0 6px;text-align:center}
-.sml-rarity{display:inline-block;font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;line-height:1.4;word-break:break-word;text-align:center}
-.sml-price-col{text-align:right;padding-right:2px}
-.sml-price{font-size:.98rem;font-weight:700;color:#4ade80;white-space:nowrap}
-.sml-no-price{font-size:.75rem;color:#3a3a3a}
-.sml-loading{padding:3rem 2rem;text-align:center;color:#555;font-size:.9rem;display:flex;align-items:center;justify-content:center;gap:.6rem}
-.sml-empty{padding:3rem 2rem;text-align:center;color:#444;font-size:.9rem}
-.sml-count{padding:8px 16px;font-size:.75rem;color:#555;background:#0f0f0f;border-bottom:1px solid #161616;flex-shrink:0}
-</style>
-
-<script>
-// ═══ SEARCH MODAL ═══
-function openSearchModal() {
-  const modal = document.getElementById('searchModal');
-  const input = document.getElementById('searchModalInput');
-  const clearBtn = document.getElementById('smlClear');
-  const headers = document.getElementById('smlColHeaders');
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-  // Pre-fill with current search text if any
-  const existing = document.getElementById('searchInput').value.trim();
-  if (existing) {
-    input.value = existing;
-    clearBtn.style.display = 'flex';
-    runModalSearch();
-  } else {
-    input.value = '';
-    clearBtn.style.display = 'none';
-    headers.style.display = 'none';
-    document.getElementById('searchModalList').innerHTML = '';
-  }
-  setTimeout(() => input.focus(), 100);
-  // Enter key in modal input
-  input.onkeydown = e => { if (e.key === 'Enter') runModalSearch(); };
-  input.oninput = () => {
-    clearTimeout(window._smlTimeout);
-    const q = input.value.trim();
-    clearBtn.style.display = q.length ? 'flex' : 'none';
-    if (q.length >= 2) window._smlTimeout = setTimeout(runModalSearch, 350);
-    else if (!q.length) {
-      document.getElementById('searchModalList').innerHTML = '';
-      document.getElementById('smlColHeaders').style.display = 'none';
-    }
-  };
-}
-
-function closeSearchModal() {
-  document.getElementById('searchModal').style.display = 'none';
-  document.body.style.overflow = '';
-}
-
-async function runModalSearch() {
-  const input = document.getElementById('searchModalInput');
-  const list  = document.getElementById('searchModalList');
-  const q = input.value.trim();
-  if (!q || q.length < 2) return;
-
-  list.innerHTML = '<div class="sml-loading"><span class="spinner" style="border-color:rgba(255,255,255,.1);border-top-color:var(--gold)"></span> Searching…</div>';
-
-  // Temporarily redirect dropList rendering into our modal list
-  // by running doSearch() and mirroring results
-  await _runModalSearchQuery(q);
-}
-
-async function _runModalSearchQuery(q) {
-  const list = document.getElementById('searchModalList');
-
-  try {
-    let results = [];
-
-    if (activeGame === 'pokemon') {
-      results = await _fetchModalPokemon(q);
-    } else if (activeGame === 'pokemonjp') {
-      results = await _fetchModalPokemonJP(q);
-    } else if (activeGame === 'mtg') {
-      results = await _fetchModalMTG(q);
-    } else if (activeGame === 'yugioh') {
-      results = await _fetchModalYugioh(q);
-    } else {
-      list.innerHTML = '<div class="sml-empty">Search not available for this game type.</div>';
-      return;
-    }
-
-    if (!results.length) {
-      list.innerHTML = '<div class="sml-empty">No results found for "' + esc(q) + '".</div>';
-      return;
-    }
-
-    // Parse meta into set/number and rarity parts
-    const parseRarity = (meta) => {
-      const parts = (meta || '').split(' · ').map(p => p.trim()).filter(p => p.length > 0);
-      if (parts.length === 0) return { setNum: '', rarity: '' };
-      if (parts.length === 1) {
-        // Single part — could be rarity only or set only; treat as set
-        return { setNum: parts[0], rarity: '' };
-      }
-      // Last part is rarity, rest is set+number
-      const rarity = parts[parts.length - 1];
-      const setNum = parts.slice(0, -1).join(' · ');
-      return { setNum, rarity };
-    };
-
-    const colHeaders = document.getElementById('smlColHeaders');
-    colHeaders.style.display = 'grid';
-
-    const countEl = document.getElementById('smlCountBar');
-    if (countEl) countEl.textContent = results.length + ' result' + (results.length !== 1 ? 's' : '');
-
-    list.innerHTML =
-      '<div class="sml-count">' + results.length + ' result' + (results.length !== 1 ? 's' : '') + '</div>' +
-      results.map((r, i) => {
-        const {setNum, rarity} = parseRarity(r.meta || '');
-        return '<div class="sml-item" data-idx="' + i + '">' +
-          '<div class="sml-thumb-wrap">' +
-            (r.img
-              ? '<img class="sml-thumb" src="' + r.img + '" loading="lazy" alt="' + esc(r.name) + '" onerror="this.style.opacity=0" />'
-              : '<div class="sml-thumb-ph">&#127183;</div>') +
-          '</div>' +
-          '<div class="sml-info">' +
-            '<div class="sml-name">' + esc(r.name) + '</div>' +
-            '<div class="sml-set">' + esc(setNum) + '</div>' +
-          '</div>' +
-          '<div class="sml-rarity-col"><span class="sml-rarity">' + esc(rarity || '—') + '</span></div>' +
-          '<div class="sml-price-col">' +
-            (r.price != null
-              ? '<div class="sml-price">$' + r.price.toFixed(2) + '</div>'
-              : '<div class="sml-no-price">—</div>') +
-          '</div>' +
-        '</div>';
-      }).join('');
-
-    // Click handlers
-    list.querySelectorAll('.sml-item').forEach(el => {
-      el.addEventListener('click', () => {
-        const idx = parseInt(el.dataset.idx);
-        const r = results[idx];
-        const card = r.cardFactory();
-        selectedCard = card;
-        document.getElementById('searchInput').value = card.name;
-        dropList.classList.remove('open');
-        closeSearchModal();
-        loadCardUI(card);
-        if (r.price != null && r.price > 0) {
-          const ov = document.getElementById('priceOverride');
-          if (ov) {
-            ov.value = r.price.toFixed(2);
-            calc();
-            ov.style.boxShadow = '0 0 0 2px var(--gold)';
-            setTimeout(() => { ov.style.boxShadow = ''; }, 1800);
-          }
-        }
-      });
-    });
-
-  } catch(err) {
-    list.innerHTML = '<div class="sml-empty">Search failed — check your connection.</div>';
-  }
-}
-
-// ── Pokemon EN ──
-async function _fetchModalPokemon(q) {
-  // Try TPL first
-  const tplData = await searchWithTPL(q, 'pokemon').catch(() => null);
-  if (tplData && tplData.length) {
-    return tplData.map(c => {
-      const price = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
-      const tcgPrices = c.prices?.raw || {};
-      const priceVariants = Object.keys(tcgPrices).map(key => {
-        const p = tcgPrices[key];
-        const label = key.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase()).trim();
-        return { key, label, market: p?.tcgplayer?.market || null, low: null, mid: null, high: null };
-      });
-      if (!priceVariants.length) priceVariants.push({ key:'manual', label:'Manual', market:null, low:null, mid:null, high:null });
-      const tplSet = c.set_name || c.set?.name || c.expansion || '';
-      const tplNum = c.number || c.card_number || '';
-      const tplMetaParts = [tplSet, tplNum ? '#' + tplNum : '', c.rarity].filter(Boolean);
-      return {
-        name: c.name, img: c.image_url || '', meta: tplMetaParts.join(' · '),
-        price,
-        cardFactory: () => tplCardToNormalized(c, 'pokemon', c.image_url || '')
-      };
-    });
-  }
-
-  // Fallback: PokemonTCG.io
-  const url = 'https://api.pokemontcg.io/v2/cards?q=name:' + encodeURIComponent(q) + '*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes';
-  const r = await fetch(url);
-  const data = await r.json();
-  const cards = data.data || [];
-
-  const rarityScore = t => {
-    t = (t||'').toLowerCase();
-    if(t.includes('special illustration'))return 0;
-    if(t.includes('hyper rare'))return 1;
-    if(t.includes('illustration rare'))return 2;
-    if(t.includes('secret rare'))return 3;
-    if(t.includes('ultra rare'))return 4;
-    if(t.includes('rainbow rare'))return 5;
-    if(t.includes('full art'))return 6;
-    if(t.includes('rare holo')||t.includes('holo rare'))return 7;
-    if(t.includes('rare')&&!t.includes('ultra'))return 8;
-    if(t.includes('promo'))return 9;
-    if(t.includes('uncommon'))return 10;
-    if(t.includes('common'))return 11;
-    return 7;
-  };
-  const ql = q.toLowerCase().trim();
-  cards.sort((a,b) => {
-    const aExact = a.name.toLowerCase()===ql?0:1;
-    const bExact = b.name.toLowerCase()===ql?0:1;
-    if(aExact!==bExact)return aExact-bExact;
-    return rarityScore(a.rarity)-rarityScore(b.rarity);
-  });
-
-  return cards.map(c => {
-    const tcgP = c.tcgplayer?.prices || {};
-    const price = tcgP.holofoil?.market || tcgP.normal?.market || tcgP['1stEditionHolofoil']?.market || null;
-    const priceVariants = Object.keys(tcgP).map(key => {
-      const p = tcgP[key];
-      const label = key.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase()).trim();
-      return { key, label, market:p.market||p.mid||null, low:p.low||null, mid:p.mid||null, high:p.high||null };
-    });
-    if (!priceVariants.length) priceVariants.push({ key:'manual', label:'Manual', market:null, low:null, mid:null, high:null });
-    return {
-      name: c.name,
-      img: c.images?.small || '',
-      meta: (c.set?.name||'') + (c.number ? ' · #'+c.number : '') + (c.rarity ? ' · '+c.rarity : ''),
-      price,
-      cardFactory: () => ({
-        name: c.name, setName: c.set?.name||'', number: c.number||'', rarity: c.rarity||'',
-        images: { large: c.images?.large||'', small: c.images?.small||'' },
-        hp: c.hp||'', types: c.types||[], game: 'pokemon',
-        priceVariants, prices: { tcgplayer: tcgP }
-      })
-    };
-  });
-}
-
-// ── Pokemon JP ──
-async function _fetchModalPokemonJP(q) {
-  // Reuse regular dropdown search by temporarily capturing its output
-  return await _fetchModalPokemon(q); // JP falls back to EN search for now
-}
-
-// ── MTG ──
-async function _fetchModalMTG(q) {
-  // Fetch all Scryfall pages (175 cards/page) up to 400 results
-  let allCards = [];
-  let url = 'https://api.scryfall.com/cards/search?q=' + encodeURIComponent(q) + '&unique=prints&order=released&dir=desc';
-  while (url && allCards.length < 400) {
-    const r = await fetch(url);
-    if (!r.ok) break;
-    const json = await r.json();
-    allCards = allCards.concat(json.data || []);
-    url = json.has_more ? json.next_page : null;
-  }
-  return allCards.map(c => {
-    const imgLarge = c.image_uris?.normal || c.image_uris?.small || c.card_faces?.[0]?.image_uris?.normal || '';
-    const priceVariants = [];
-    if(c.prices?.usd) priceVariants.push({key:'usd',label:'Normal',market:parseFloat(c.prices.usd),low:null,mid:null,high:null});
-    if(c.prices?.usd_foil) priceVariants.push({key:'usd_foil',label:'Foil',market:parseFloat(c.prices.usd_foil),low:null,mid:null,high:null});
-    if(!priceVariants.length) priceVariants.push({key:'manual',label:'Manual',market:null,low:null,mid:null,high:null});
-    return {
-      name: c.name, img: c.image_uris?.small || c.card_faces?.[0]?.image_uris?.small || '',
-      meta: (c.set_name||'') + (c.collector_number ? ' · #'+c.collector_number : '') + (c.rarity ? ' · '+c.rarity : ''),
-      price: c.prices?.usd ? parseFloat(c.prices.usd) : null,
-      cardFactory: () => ({
-        name: c.name, setName: c.set_name||'', number: c.collector_number||'', rarity: c.rarity||'',
-        images: { large: imgLarge, small: imgLarge }, game: 'mtg', priceVariants,
-        prices: { usd: parseFloat(c.prices?.usd||0)||0 }
-      })
-    };
-  });
-}
-
-// ── YuGiOh ──
-async function _fetchModalYugioh(q) {
-  const r = await fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=' + encodeURIComponent(q) + '&num=100&offset=0');
-  if (!r.ok) return [];
-  const json = await r.json();
-  return (json.data||[]).map(c => {
-    const imgLarge = c.card_images?.[0]?.image_url || '';
-    const tcgP = parseFloat(c.card_prices?.[0]?.tcgplayer_price||0)||null;
-    const priceVariants = tcgP
-      ? [{key:'tcgplayer',label:'TCGPlayer',market:tcgP,low:null,mid:null,high:null}]
-      : [{key:'manual',label:'Manual',market:null,low:null,mid:null,high:null}];
-    return {
-      name: c.name, img: c.card_images?.[0]?.image_url_small || '',
-      meta: (c.type||'') + (c.race ? ' · '+c.race : ''),
-      price: tcgP,
-      cardFactory: () => ({
-        name: c.name, setName: c.card_sets?.[0]?.set_name||c.type||'', number: c.card_sets?.[0]?.set_code||String(c.id||''), rarity: c.card_sets?.[0]?.set_rarity||c.race||'',
-        images: { large: imgLarge, small: imgLarge }, game: 'yugioh', priceVariants,
-        prices: { tcgplayer_price: tcgP||0 }
-      })
-    };
-  });
-}
-</script>
-
-</body>
-</html>

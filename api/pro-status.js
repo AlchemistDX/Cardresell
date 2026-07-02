@@ -1,3 +1,4 @@
+import { verifyTokenFlexible } from './_verifyToken.js';
 // /api/pro-status — Check Pro status + scan credits for a Google user
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
@@ -16,13 +17,11 @@ export default async function handler(req, res) {
 
   let userSub, userEmail;
   try {
-    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!r.ok) return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 });
-    const info = await r.json();
-    if (info.aud !== '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com')
-      return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 });
-    userSub   = info.sub;
-    userEmail = info.email;
+    let tokenInfo;
+    try { tokenInfo = await verifyTokenFlexible(idToken); }
+    catch(e) { return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 }); }
+    const googleSub = tokenInfo.uid;
+    const userEmail = tokenInfo.email || '';
   } catch(e) {
     return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 });
   }

@@ -1,3 +1,4 @@
+import { verifyTokenFlexible } from './_verifyToken.js';
 // /api/scan — GPT-4o Vision card identification
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
@@ -15,13 +16,11 @@ export default async function handler(req, res) {
   let googleSub = bodySub;
 
   if (idToken && idToken.length > 20) {
-    try {
-      const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-      if (googleRes.ok) {
-        const info = await googleRes.json();
-        const expectedClientId = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
-        if (info.aud === expectedClientId) {
-          userEmail = info.email || userEmail;
+      try {
+        const tokenInfo = await verifyTokenFlexible(idToken);
+        userSub   = tokenInfo.uid;
+        userEmail = tokenInfo.email || userEmail;
+      } catch(e) { /* proceed with empty sub — credit check will reject */ }
           googleSub = info.sub  || googleSub;
         }
       }
