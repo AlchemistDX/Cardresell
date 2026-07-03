@@ -939,6 +939,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
+    <!-- Manage Subscription — Pro users only -->
+    <div id="manageSubSection" style="display:none;margin-bottom:.65rem">
+      <button onclick="openBillingPortal()" style="width:100%;padding:.48rem .75rem;background:var(--surface-2);border:1.5px solid rgba(196,122,0,.35);color:var(--text);border-radius:var(--radius-md);font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='rgba(196,122,0,.35)'">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <span>Manage Subscription</span>
+        <span style="font-size:.65rem;color:var(--text-muted);margin-left:.2rem">(cancel, update billing)</span>
+      </button>
+    </div>
+
     <!-- Grader Credits buy — right under balances -->
     <div style="margin-bottom:.5rem">
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy Grader Credits</div>
@@ -6676,6 +6685,10 @@ function updateProUI() {
   // Update flips wall now that sign-in state changed
   _updateFlipsSignInWall();
 
+  // Show/hide Manage Subscription button
+  const manageSub = document.getElementById('manageSubSection');
+  if (manageSub) manageSub.style.display = window._isPro ? '' : 'none';
+
   if (window._isPro) {
     // Signed in + Pro — show badge, hide shop btn & banner
     proBadge?.classList.add('visible');
@@ -6836,6 +6849,32 @@ async function startIdScanCheckout(tier) {
     if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
   };
   setTimeout(resetBtns, 8000); // safety reset
+}
+
+// ── Open Stripe billing portal (manage / cancel subscription) ──
+async function openBillingPortal() {
+  await window._waitForAuth();
+  if (!googleUser) { showToast('Sign in first to manage your subscription.'); return; }
+  const btn = document.querySelector('[onclick="openBillingPortal()"]');
+  const origText = btn?.innerHTML;
+  if (btn) btn.innerHTML = '<span style="opacity:.6">Opening…</span>';
+  try {
+    const r = await fetch('/api/stripe-portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      showToast('\u26a0\ufe0f ' + (d.error || 'Could not open billing portal.'));
+      if (btn && origText) btn.innerHTML = origText;
+    }
+  } catch(e) {
+    showToast('\u26a0\ufe0f Network error. Try again.');
+    if (btn && origText) btn.innerHTML = origText;
+  }
 }
 
 // ── Toast helper ──
