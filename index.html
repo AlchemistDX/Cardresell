@@ -833,6 +833,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         }
         // Close auth modal if open
         closeAuthModal();
+        // Handle ?next= redirect from sign-in page
+        const _nextParam = new URLSearchParams(location.search).get('next');
+        if (_nextParam === 'flips' || _nextParam === 'collection') {
+          setTimeout(() => switchView(_nextParam), 300);
+          // Clean URL without reload
+          history.replaceState(null, '', location.pathname);
+        }
       } else {
         googleUser = null;
         window._googleIdToken = null;
@@ -1011,7 +1018,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Instant · Never expires</div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex-shrink:0">
-      <button onclick="triggerGoogleSignIn()" style="padding:.5rem .9rem;background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;letter-spacing:.01em;-webkit-tap-highlight-color:transparent">Sign in free →</button>
+      <a href="/signin" style="padding:.5rem .9rem;background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;letter-spacing:.01em;-webkit-tap-highlight-color:transparent;text-decoration:none;display:inline-block">Sign in free →</a>
     </div>
   </div>
   <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
@@ -1585,7 +1592,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Export your flip history as CSV</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#60a5fa;font-weight:700">★</span> Pro: unlimited flips + all platforms</div>
     </div>
-    <button onclick="triggerGoogleSignIn()" style="width:100%;max-width:260px;padding:.75rem 1.5rem;background:#2563eb;border:none;border-radius:12px;color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;-webkit-tap-highlight-color:transparent">Sign in with Google — it's free</button>
+    <a href="/signin?next=flips" style="width:100%;max-width:260px;padding:.75rem 1.5rem;background:#2563eb;border:none;border-radius:12px;color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;-webkit-tap-highlight-color:transparent;text-decoration:none;display:inline-block;text-align:center;box-sizing:border-box">Sign in with Google — it's free</a>
     <div style="font-size:.68rem;color:var(--text-muted);margin-top:.6rem">No password needed &middot; Takes 5 seconds</div>
   </div>
 
@@ -1663,7 +1670,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div style="font-size:2.5rem;margin-bottom:.75rem">📦</div>
     <div style="font-size:1.05rem;font-weight:800;color:var(--text);margin-bottom:.4rem">Track your collection</div>
     <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Log every card you own, see total value,<br>and know what it's worth today.</div>
-    <button onclick="triggerGoogleSignIn()" style="padding:.7rem 1.6rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.88rem;font-weight:800;cursor:pointer">Sign in with Google</button>
+    <a href="/signin?next=collection" style="padding:.7rem 1.6rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.88rem;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block">Sign in with Google</a>
   </div>
 
   <!-- CONTENT (signed-in) -->

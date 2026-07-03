@@ -255,6 +255,9 @@
 
     <!-- Sign In view -->
     <div class="auth-view active" id="viewSignIn">
+      <div class="bonus-badge">
+        🎁 Sign in — get <strong>&nbsp;10 ID scans + 1 AI Grade</strong>&nbsp;on first login
+      </div>
       <div id="errSignIn" class="alert alert-error"></div>
 
       <button class="btn-google" id="btnGoogleSignIn" onclick="googleSignIn()">
@@ -270,7 +273,10 @@
       </div>
       <div class="input-group">
         <label class="input-label">Password</label>
-        <input id="siPass" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignIn()" />
+        <div style="position:relative">
+          <input id="siPass" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignIn()" style="padding-right:2.5rem" />
+          <button type="button" onclick="togglePw('siPass','siEye')" style="position:absolute;right:.65rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1" aria-label="Show password"><span id="siEye">👁</span></button>
+        </div>
       </div>
       <a class="forgot-link" onclick="switchTab('forgot')">Forgot password?</a>
 
@@ -298,7 +304,10 @@
       </div>
       <div class="input-group">
         <label class="input-label">Password</label>
-        <input id="suPass" class="auth-input" type="password" placeholder="Min 6 characters" autocomplete="new-password" />
+        <div style="position:relative">
+          <input id="suPass" class="auth-input" type="password" placeholder="Min 6 characters" autocomplete="new-password" style="padding-right:2.5rem" />
+          <button type="button" onclick="togglePw('suPass','suEye')" style="position:absolute;right:.65rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1" aria-label="Show password"><span id="suEye">👁</span></button>
+        </div>
       </div>
       <div class="input-group">
         <label class="input-label">Confirm Password</label>
@@ -366,6 +375,14 @@
   </script>
 
   <script>
+    function togglePw(inputId, eyeId) {
+      const inp = document.getElementById(inputId);
+      const eye = document.getElementById(eyeId);
+      if (!inp) return;
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+      if (eye) eye.textContent = inp.type === 'password' ? '👁' : '🙈';
+    }
+
     function switchTab(tab) {
       const viewMap = { signin:'viewSignIn', signup:'viewSignUp', forgot:'viewForgot' };
       Object.values(viewMap).forEach(id => document.getElementById(id)?.classList.remove('active'));
