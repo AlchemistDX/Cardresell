@@ -298,7 +298,7 @@ img{display:block;max-width:100%;height:auto}
 
 /* ─── SEARCH RESULTS DROPDOWN ─── */
 .results-drop{position:relative;z-index:20}
-.drop-list{position:absolute;top:.4rem;left:0;right:0;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);max-height:220px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.drop-list{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);max-height:220px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .drop-list.open{display:block}
 .drop-item{display:flex;align-items:center;gap:.875rem;padding:.65rem 1rem;cursor:pointer;border-bottom:1px solid var(--divider);transition:background var(--ease)}
 .drop-item:last-child{border-bottom:none}
@@ -1044,6 +1044,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       </span>
       <input id="searchInput" class="search-input" type="text" placeholder="Search card name…" autocomplete="off" />
+      <div id="dropList" class="drop-list" role="listbox"></div>
     </div>
     <!-- Desktop: Scan + Grade inline -->
     <div class="scan-inline" style="display:flex;gap:.35rem;flex-shrink:0">
@@ -1123,9 +1124,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg class="game-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
     </div>
   </div>
-  <div class="results-drop">
-    <div id="dropList" class="drop-list" role="listbox"></div>
-  </div>
+  <div class="results-drop" style="display:none"></div>
 
 
   <!-- Sports card entry form (hidden by default) -->
@@ -2259,46 +2258,31 @@ function updateKeyStatus() {
 // ── TCGPriceLookup search ──
 // After TPL renders results (no images), fetch images from pokemontcg.io and inject them
 async function injectPokemonImages(cards, gameSlug) {
-  const names = [...new Set(cards.map(c => c.name).filter(Boolean))];
-  if (!names.length) return;
-  try {
-    const q = names.slice(0, 3).map(n => `name:"${n}"`).join(' OR ');
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=50&select=id,name,number,set,images`;
-    const r = await fetch(url);
-    if (!r.ok) return;
-    const data = await r.json();
-    const lookup = {};
-    (data.data || []).forEach(c => {
-      const key = (c.name + '|' + (c.number || '')).toLowerCase();
-      lookup[key] = c.images?.small || '';
-      if (!lookup[c.name.toLowerCase()]) lookup[c.name.toLowerCase()] = c.images?.small || '';
-    });
-    cards.forEach((c, i) => {
-      const key = (c.name + '|' + (c.number || '')).toLowerCase();
-      const img = lookup[key] || lookup[c.name.toLowerCase()] || '';
-      if (!img) return;
-      if (window._searchCards[i]) window._searchCards[i]._imgSmall = img;
-      // Update dropList
-      const item = dropList.querySelector(`[data-idx="${i}"]`);
-      if (item) {
-        const ph = item.querySelector('.drop-thumb-ph');
-        if (ph) {
-          const el = document.createElement('img');
-          el.className = 'drop-thumb';
-          el.src = img; el.alt = c.name;
-          ph.replaceWith(el);
-        }
+  // TPL already provides per-card image_url — use it directly, no extra fetch needed
+  cards.forEach((c, i) => {
+    const img = c.image_url || '';
+    if (!img) return;
+    if (window._searchCards[i]) window._searchCards[i]._imgSmall = img;
+    // Update dropList thumb
+    const item = dropList.querySelector(`[data-idx="${i}"]`);
+    if (item) {
+      const ph = item.querySelector('.drop-thumb-ph');
+      if (ph) {
+        const el = document.createElement('img');
+        el.className = 'drop-thumb';
+        el.src = img; el.alt = c.name;
+        ph.replaceWith(el);
       }
-      // Update catalog if open
-      const catCard = document.querySelector(`#searchModalGrid [data-idx="${i}"]`);
-      if (catCard) {
-        const area = catCard.querySelector('.cat-img-area');
-        if (area && !area.querySelector('img')) {
-          area.innerHTML = `<img src="${img}" loading="lazy" style="max-width:95%;max-height:200px;object-fit:contain;border-radius:6px;display:block">`;
-        }
+    }
+    // Update catalog row if open
+    const catCard = document.querySelector(`#searchModalGrid [data-idx="${i}"]`);
+    if (catCard) {
+      const area = catCard.querySelector('.cat-img-area');
+      if (area && !area.querySelector('img')) {
+        area.innerHTML = `<img src="${img}" loading="lazy" style="width:100%;height:100%;object-fit:contain">`;
       }
-    });
-  } catch(e) { /* silent */ }
+    }
+  });
 }
 
 async function searchWithTPL(q, gameSlug) {
