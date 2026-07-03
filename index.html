@@ -877,12 +877,24 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           }
         }
 
-        // Google/Apple providers verify email at OAuth — treat those users as verified
-        // regardless of the Firebase user.emailVerified flag (which can be stale for
-        // accounts that were originally email/password and later linked to Google).
+        // Track providers for UI + trust logic.
         const providerIds = (user.providerData || []).map(p => p?.providerId || '');
-        const providerVerifies = providerIds.includes('google.com') || providerIds.includes('apple.com');
-        const effectiveVerified = !!user.emailVerified || providerVerifies;
+        // Apple-only auto-verify: Apple OAuth is strong enough that we trust it, and
+        // Apple's private-relay email is often unreachable in practice. Google is NOT
+        // auto-trusted (fake Gmails are trivial to create).
+        const isApple = providerIds.includes('apple.com');
+        const effectiveVerified = !!user.emailVerified || isApple;
+
+        // Fresh sign-in — clear a prior session's banner dismissal so unverified users
+        // are re-prompted on every new sign-in until they verify. localStorage keyed by uid
+        // so we can tell "different user signed in" apart from "same tab, same session".
+        try {
+          const lastUid = localStorage.getItem('lastAuthUid');
+          if (lastUid !== user.uid) {
+            sessionStorage.removeItem('verifyBannerDismissed');
+            localStorage.setItem('lastAuthUid', user.uid);
+          }
+        } catch(e) {}
 
         // Set user object immediately (synchronously) so checkout functions can read it right away
         window.googleUser = {
@@ -904,7 +916,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
         // If unverified, poll every 5s for up to 5 min (Firebase updates emailVerified
         // only after the user reloads the token). When it flips, refetch pro-status
-        // so the signup bonus fires. Skip polling when the provider already verifies.
+        // so the signup bonus fires. Skip polling for Apple (already trusted).
         clearInterval(window._verifyPollInterval);
         if (!effectiveVerified) {
           let _verifyPollTries = 0;
@@ -972,6 +984,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         window._googleSub = '';
         window._userSub = '';
         clearInterval(window._tokenRefreshInterval);
+        // Clear sign-in tracking so next sign-in re-prompts the verify banner
+        try {
+          localStorage.removeItem('lastAuthUid');
+          sessionStorage.removeItem('verifyBannerDismissed');
+        } catch(e) {}
+        try { const b = document.getElementById('emailVerifyBanner'); if (b) b.remove(); } catch(e) {}
         try { document.getElementById('googleSignInBtn').style.display = 'flex'; } catch(e) {}
         try { document.getElementById('googleUserBtn').style.display = 'none'; } catch(e) {}
         try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
@@ -5905,38 +5923,46 @@ function applyGoogleUser() {
 }
 
 // Show a small banner at the top when the signed-in user hasn't verified their email yet.
-// Google/Apple users auto-verify, so this only appears for email/password signups
-// that haven't clicked the verification link.
+// Applies to everyone — Google/Apple sign-in email must still be verified via the emailed link
+// before the signup bonus is unlocked (prevents fake-account abuse).
 function _updateVerifyBanner() {
   let banner = document.getElementById('emailVerifyBanner');
   const gu = window.googleUser;
-  // Google/Apple providers verify email at OAuth — never show the banner for them
-  const providerVerifies = gu && Array.isArray(gu.providers) &&
-    (gu.providers.includes('google.com') || gu.providers.includes('apple.com'));
-  const needBanner = gu && !gu.emailVerified && !providerVerifies;
+  // Respect the user's session-scoped dismissal so we don't nag on every page load.
+  let dismissed = false;
+  try { dismissed = sessionStorage.getItem('verifyBannerDismissed') === '1'; } catch(e) {}
+  const needBanner = gu && !gu.emailVerified && !dismissed;
   if (!needBanner) { if (banner) banner.remove(); return; }
   if (!banner) {
     banner = document.createElement('div');
     banner.id = 'emailVerifyBanner';
-    banner.style.cssText = 'position:sticky;top:0;z-index:1000;background:linear-gradient(90deg,#f59e0b,#f97316);color:#000;font-size:.82rem;font-weight:600;padding:.55rem .9rem;display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+    banner.style.cssText = 'position:sticky;top:0;z-index:1000;background:linear-gradient(90deg,#f59e0b,#f97316);color:#000;font-size:.82rem;font-weight:600;padding:.55rem 2.4rem .55rem .9rem;display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25);isolation:isolate';
+    // The absolutely-positioned dismiss button needs a positioned ancestor — sticky counts,
+    // but be defensive in case the browser strips it.
     banner.innerHTML =
       '<span>⚠️ Verify your email to unlock <strong>10 ID scans + 1 AI Grade</strong> bonus</span>' +
       '<button id="btnResendVerifyMain" onclick="resendVerifyEmail()" style="background:#000;color:#fff;border:none;border-radius:6px;padding:.35rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">Resend Email</button>' +
-      '<button id="btnCheckVerifiedMain" onclick="recheckVerified()" style="background:rgba(0,0,0,.15);color:#000;border:1.5px solid #000;border-radius:6px;padding:.32rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">I Verified</button>';
+      '<button id="btnCheckVerifiedMain" onclick="recheckVerified()" style="background:rgba(0,0,0,.15);color:#000;border:1.5px solid #000;border-radius:6px;padding:.32rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">I Verified</button>' +
+      '<button id="btnDismissVerifyBanner" onclick="dismissVerifyBanner()" title="Dismiss" aria-label="Dismiss" style="position:absolute;top:.35rem;right:.55rem;background:transparent;color:#000;border:none;font-size:1.05rem;font-weight:800;line-height:1;cursor:pointer;padding:.2rem .35rem;opacity:.7">×</button>';
     document.body.insertBefore(banner, document.body.firstChild);
   }
+}
+
+function dismissVerifyBanner() {
+  try { sessionStorage.setItem('verifyBannerDismissed', '1'); } catch(e) {}
+  const b = document.getElementById('emailVerifyBanner');
+  if (b) b.remove();
 }
 
 async function resendVerifyEmail() {
   const btn = document.getElementById('btnResendVerifyMain');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
 
-  // If this is a Google/Apple user, they're already verified — just force-reload the token
+  // Apple users are already trusted — defensive path in case they somehow reach here.
+  // Refresh the token so backend re-grants the bonus without sending an email.
   const gu = window.googleUser;
-  if (gu && Array.isArray(gu.providers) &&
-      (gu.providers.includes('google.com') || gu.providers.includes('apple.com'))) {
+  if (gu && Array.isArray(gu.providers) && gu.providers.includes('apple.com')) {
     try {
-      // Force-refresh the token so backend sees email_verified=true
       if (window._fbCurrentUser) {
         await window._fbCurrentUser.reload();
         const fresh = await window._fbCurrentUser.getIdToken(true);
@@ -5945,9 +5971,8 @@ async function resendVerifyEmail() {
       if (window.googleUser) window.googleUser.emailVerified = true;
       window._emailVerified = true;
       try { checkProStatus?.(); } catch(e) {}
-      const b = document.getElementById('emailVerifyBanner');
-      if (b) b.remove();
-      showToast('Verified via ' + (gu.providers.includes('google.com') ? 'Google' : 'Apple') + ' — bonus unlocked', 'gold');
+      const b = document.getElementById('emailVerifyBanner'); if (b) b.remove();
+      showToast('Verified via Apple — bonus unlocked', 'gold');
     } catch(e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
       alert('Could not refresh sign-in. Try signing out and back in.');
@@ -5956,9 +5981,18 @@ async function resendVerifyEmail() {
   }
 
   try {
-    if (!window._fbCurrentUser || !window._fbCurrentUser.email) {
-      throw new Error('no-email');
+    // Firebase's sendEmailVerification requires user.email at the top level.
+    // For legacy Google/password accounts, email may live only in providerData —
+    // fall back to that so we don't throw auth/missing-email.
+    const u = window._fbCurrentUser;
+    if (!u) throw new Error('no-user');
+    let emailForVerify = u.email;
+    if (!emailForVerify && Array.isArray(u.providerData)) {
+      for (const p of u.providerData) {
+        if (p?.email) { emailForVerify = p.email; break; }
+      }
     }
+    if (!emailForVerify) throw new Error('no-email');
     await window._fbSendVerification();
     if (btn) { btn.textContent = 'Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Email'; }, 5000); }
   } catch(e) {

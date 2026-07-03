@@ -62,20 +62,21 @@ async function verifyFirebaseToken(idToken) {
   );
   if (!sigValid) throw new Error('Invalid signature');
 
-  // Google/Apple sign-in verifies email at the OAuth handshake. Some legacy Firebase users
-  // linked to Google keep emailVerified=false on the Firebase user object even though
-  // Google already verified the address — trust the OAuth provider in that case.
   const provider = payload.firebase?.sign_in_provider || 'unknown';
-  const providerVerifies = provider === 'google.com' || provider === 'apple.com';
-  // Also check identities.google.com — present when the account was Google-linked
+
+  // Apple sign-in requires 2FA + phone/payment on file at Apple's login screen, and
+  // Apple's private-relay email means users often can't easily check that inbox.
+  // We trust Apple's OAuth handshake as sufficient identity proof and treat those
+  // users as email-verified. Google is NOT auto-trusted here (fake Gmail signups are
+  // easy) — Google users still verify via the emailed link.
   const identities = payload.firebase?.identities || {};
-  const hasGoogleIdentity = !!(identities['google.com'] || identities['apple.com']);
+  const appleVerified = provider === 'apple.com' || !!identities['apple.com'];
 
   return {
     uid:   payload.sub,
     email: payload.email || '',
     name:  payload.name  || '',
-    emailVerified: payload.email_verified === true || providerVerifies || hasGoogleIdentity,
+    emailVerified: payload.email_verified === true || appleVerified,
     provider,
   };
 }
@@ -97,10 +98,8 @@ async function verifyTokenFlexible(idToken) {
         uid:   info.sub,
         email: info.email || '',
         name:  info.name  || '',
-        // Google tokeninfo: email_verified is string 'true'/'false'.
-        // Also: any token that passes Google tokeninfo IS a Google-verified account,
-        // so trust it regardless (matches Firebase Google-linked account behavior).
-        emailVerified: true,
+        // Google tokeninfo: email_verified is string 'true'/'false'
+        emailVerified: info.email_verified === true || info.email_verified === 'true',
         provider: 'google.com',
       };
     } catch(gErr) {
