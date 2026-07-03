@@ -6791,13 +6791,19 @@ async function startGradeScanCheckout(tier) {
     setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
-  // Disable all grade scan tier buttons while redirecting
+  // Refresh ID token before checkout to ensure it's not expired
+  try {
+    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
+    if (freshTok) window._googleIdToken = freshTok;
+  } catch(e) {}
+
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
+  const priceMap = { '5': '$2.49', '20': '$7.99', '50': '$14.99' };
   if (clickedBtn) {
     const priceEl = clickedBtn.querySelector('div:last-child');
-    if (priceEl) priceEl.textContent = 'Redirecting…';
+    if (priceEl) priceEl.textContent = 'Opening…';
   }
   try {
     const r = await fetch('/api/stripe-grade-checkout', {
@@ -6810,14 +6816,21 @@ async function startGradeScanCheckout(tier) {
     });
     const d = await r.json();
     if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener noreferrer'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+      // Reset buttons after short delay (user may come back)
+      setTimeout(() => {
+        tierBtns.forEach(b => { b.disabled = false; });
+        if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
+      }, 3000);
     } else {
-      showToast('⚠️ Could not start checkout. Try again.');
+      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
       tierBtns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
     }
   } catch(e) {
-    showToast('⚠️ Network error. Try again.');
+    showToast('⚠️ Network error — check your connection and try again.');
     tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
   }
 }
 
@@ -6835,13 +6848,19 @@ async function startIdScanCheckout(tier) {
     setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
-  // Disable all three tier buttons while redirecting
+  // Refresh ID token before checkout
+  try {
+    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
+    if (freshTok) window._googleIdToken = freshTok;
+  } catch(e) {}
+
   const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startIdScanCheckout('${tier}')"]`);
+  const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
   if (clickedBtn) {
     const priceEl = clickedBtn.querySelector('div:last-child');
-    if (priceEl) priceEl.textContent = 'Redirecting…';
+    if (priceEl) priceEl.textContent = 'Opening…';
   }
   try {
     const r = await fetch('/api/stripe-id-checkout', {
@@ -6854,18 +6873,18 @@ async function startIdScanCheckout(tier) {
     });
     const d = await r.json();
     if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener noreferrer'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+      setTimeout(() => {
+        tierBtns.forEach(b => { b.disabled = false; });
+        if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
+      }, 3000);
     } else {
-      showToast('⚠️ Could not start checkout. Try again.');
+      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
       tierBtns.forEach(b => { b.disabled = false; });
-      if (clickedBtn) {
-        const priceEl = clickedBtn.querySelector('div:last-child');
-        const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
-        if (priceEl) priceEl.textContent = priceMap[tier] || '$1';
-      }
+      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
     }
   } catch(e) {
-    showToast('⚠️ Network error. Try again.');
+    showToast('⚠️ Network error — check your connection and try again.');
     tierBtns.forEach(b => { b.disabled = false; });
     if (clickedBtn) {
       const priceEl = clickedBtn.querySelector('div:last-child');
