@@ -1212,6 +1212,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
   <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
   <input type="file" id="gradeBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
+  <!-- Deep Grade edge photo inputs — optional, up to 4 edges -->
+  <input type="file" id="gradeEdgeTopInput"    accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'top')" />
+  <input type="file" id="gradeEdgeBottomInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'bottom')" />
+  <input type="file" id="gradeEdgeLeftInput"   accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'left')" />
+  <input type="file" id="gradeEdgeRightInput"  accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'right')" />
   <!-- Bulk scan file inputs -->
   <input type="file" id="bulkUploadInput" accept="image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
   <input type="file" id="bulkCameraInput" accept="image/*" capture="environment" style="display:none" onchange="processBulkCameraCapture(this)" />
@@ -1993,6 +1998,39 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
     <button class="scan-gate-cancel" onclick="closeScanGate()">Maybe later</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     GRADE TIER PICKER — Quick vs Deep
+     ============================================================ -->
+<div class="scan-gate-overlay" id="gradeTierOverlay" onclick="closeGradeTier(event)">
+  <div class="scan-gate-box" style="max-width:420px">
+    <div class="scan-gate-icon">🏅</div>
+    <div class="scan-gate-title">Choose grading depth</div>
+    <div class="scan-gate-sub" style="line-height:1.45">The better the photos, the more accurate your grade estimate. Pick a tier below — you can retake any shot before submitting.</div>
+    <div style="display:flex;flex-direction:column;gap:.65rem;margin-top:.85rem">
+      <div id="tierQuickBtn" class="scan-gate-pack" onclick="startQuickGrade()" style="cursor:pointer;text-align:left">
+        <div class="scan-gate-pack-left">
+          <div class="scan-gate-pack-name">⚡ Quick Grade</div>
+          <div class="scan-gate-pack-desc" style="line-height:1.45">2 photos — front + back<br><span style="color:rgba(255,255,255,.55)">Best for: fast estimates · raw cards you already know are clean</span></div>
+        </div>
+        <div class="scan-gate-pack-price">1 credit</div>
+      </div>
+      <div id="tierDeepBtn" class="scan-gate-pack best" onclick="startDeepGrade()" style="cursor:pointer;text-align:left">
+        <div class="scan-gate-pack-badge">MOST ACCURATE</div>
+        <div class="scan-gate-pack-left">
+          <div class="scan-gate-pack-name">🔍 Deep Grade</div>
+          <div class="scan-gate-pack-desc" style="line-height:1.45">4–6 photos — front, back + 2–4 edges<br><span style="color:rgba(255,255,255,.55)">Best for: cards you might submit to PSA/BGS · catches corner/edge flaws Quick misses</span></div>
+        </div>
+        <div class="scan-gate-pack-price">2 credits</div>
+      </div>
+    </div>
+    <div style="margin-top:.75rem;padding:.6rem .7rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.25);border-radius:8px;font-size:.72rem;color:var(--text);line-height:1.55;text-align:left">
+      <strong style="color:var(--gold)">Photo tips:</strong> Bright, even lighting. Fill the frame with the card. On holo cards, tilt slightly to kill glare.
+    </div>
+    <div id="gradeTierCreditLine" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.7rem;text-align:center"></div>
+    <button class="scan-gate-cancel" onclick="closeGradeTier()">Cancel</button>
   </div>
 </div>
 
@@ -6397,13 +6435,64 @@ function openGradeScanGate() {
   }
   const credits = (window._scanCredits || 0) + (window._freeScansLeft || 0);
   if (credits > 0) {
-    // Has credits — go straight to camera
-    document.getElementById('gradeFileInput').click();
+    // Has credits — show tier picker (Quick vs Deep)
+    openGradeTierPicker();
     return;
   }
   // No credits — show the gate with pack options
   _setScanGateMode('grade');
   document.getElementById('scanGateOverlay').classList.add('open');
+}
+
+// ── Grade tier picker (Quick vs Deep) ──
+function openGradeTierPicker() {
+  const overlay = document.getElementById('gradeTierOverlay');
+  const line    = document.getElementById('gradeTierCreditLine');
+  const quickBtn= document.getElementById('tierQuickBtn');
+  const deepBtn = document.getElementById('tierDeepBtn');
+  const credits = (window._scanCredits || 0) + (window._freeScansLeft || 0);
+  if (line) line.textContent = 'You have ' + credits + ' grade credit' + (credits === 1 ? '' : 's') + ' available.';
+  // Grey out Deep Grade if fewer than 2 credits
+  if (deepBtn) {
+    if (credits < 2) {
+      deepBtn.style.opacity = '.5';
+      deepBtn.style.pointerEvents = 'none';
+      deepBtn.title = 'Needs 2 credits';
+    } else {
+      deepBtn.style.opacity = '';
+      deepBtn.style.pointerEvents = '';
+      deepBtn.title = '';
+    }
+  }
+  if (quickBtn) {
+    if (credits < 1) {
+      quickBtn.style.opacity = '.5';
+      quickBtn.style.pointerEvents = 'none';
+    } else {
+      quickBtn.style.opacity = '';
+      quickBtn.style.pointerEvents = '';
+    }
+  }
+  overlay.classList.add('open');
+}
+
+function closeGradeTier(evt) {
+  if (evt && evt.target !== document.getElementById('gradeTierOverlay')) return;
+  document.getElementById('gradeTierOverlay').classList.remove('open');
+}
+
+function startQuickGrade() {
+  window._gradeIsDeep = false;
+  window._gradeEdges = {}; // no edges for quick
+  document.getElementById('gradeTierOverlay').classList.remove('open');
+  document.getElementById('gradeFileInput').click();
+}
+
+function startDeepGrade() {
+  window._gradeIsDeep = true;
+  window._gradeEdges = {}; // reset edge collection
+  document.getElementById('gradeTierOverlay').classList.remove('open');
+  document.getElementById('gradeFileInput').click();
 }
 
 function _setScanGateMode(mode) {
@@ -6464,11 +6553,14 @@ async function processGradeImage(input) {
   window._gradeFrontBase64 = await compressImage(file, 1000);
   window._gradeFrontUrl    = frontUrl;
 
-  statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span><br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 take the BACK photo</span>';
+  const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 1 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 1 of 2)</span>';
+  statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span>' + stepLabel + '<br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 take the BACK photo</span>';
   resultEl.innerHTML = '<button onclick="document.getElementById(\'gradeBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
 }
 
-// Step 2: Back photo captured — submit both
+// Step 2: Back photo captured
+// - Quick mode: submit immediately (existing behavior)
+// - Deep mode: store back, show edge-capture UI (user picks 2-4 edges)
 async function processGradeBack(input) {
   const file = input.files[0];
   if (!file) return;
@@ -6482,11 +6574,138 @@ async function processGradeBack(input) {
     return;
   }
 
-  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">\u2605 Estimated Grade Scanner</span><br><span style="font-size:.8rem;opacity:.7">Analyzing front + back\u2026</span>';
-  resultEl.textContent = '';
-
   const backBase64 = await compressImage(file, 1000);
+  window._gradeBackBase64 = backBase64;
+
+  // Fork based on tier selected
+  if (window._gradeIsDeep) {
+    // Deep Grade — show edge capture UI, don't submit yet
+    showDeepGradeEdgeUI();
+    return;
+  }
+
+  // Quick Grade — submit immediately
+  await submitGradeScan(false);
+}
+
+// ── Deep Grade edge capture UI ──
+function showDeepGradeEdgeUI() {
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const edges = window._gradeEdges || {};
+  const count = Object.keys(edges).length;
+  const min = 2, max = 4;
+
+  statusEl.innerHTML =
+    '<span style="color:#4ade80">\u2713 Front + back captured</span> <span style="font-size:.7rem;color:var(--gold)">(Step 2 of 3)</span>' +
+    '<br><span style="font-size:.85rem;color:#fff;font-weight:700;margin-top:.35rem;display:inline-block">Add edge photos — pick <strong>at least 2</strong>, up to 4</span>' +
+    '<br><span style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.45">Hold the card so the light hits one edge at a time. Fill the frame with just that edge — don\'t worry about the whole card.</span>';
+
+  const edgeBtn = (key, label, emoji, tip) => {
+    const done = !!edges[key];
+    const bg = done ? 'rgba(74,222,128,.15)' : 'rgba(255,255,255,.06)';
+    const bord = done ? '1px solid rgba(74,222,128,.5)' : '1px solid rgba(255,255,255,.15)';
+    const check = done ? '<span style="color:#4ade80;font-weight:900">\u2713 </span>' : '';
+    const doneLabel = done ? ' <span style="font-size:.65rem;color:#4ade80">CAPTURED — tap to retake</span>' : '';
+    return '<button onclick="document.getElementById(\'gradeEdge' + key + 'Input\').click()" ' +
+      'style="padding:.65rem .7rem;background:' + bg + ';color:#fff;border:' + bord + ';border-radius:10px;font-size:.8rem;text-align:left;cursor:pointer;width:100%;line-height:1.35">' +
+      check + emoji + ' <strong>' + label + '</strong>' + doneLabel +
+      '<br><span style="font-size:.66rem;color:rgba(255,255,255,.5);font-weight:500">' + tip + '</span>' +
+      '</button>';
+  };
+
+  const progressColor = count >= min ? '#4ade80' : count === 1 ? '#facc15' : 'rgba(255,255,255,.4)';
+  const progressLabel = count === 0 ? 'Need 2 more' : count === 1 ? 'Need 1 more' : count + ' captured — ready to submit';
+
+  resultEl.innerHTML =
+    '<div style="display:flex;flex-direction:column;gap:.4rem;margin:.35rem 0 .5rem;text-align:left">' +
+      edgeBtn('Top',    'Top edge',    '\u2B06\uFE0F', 'Rotate the card so the top edge faces the camera') +
+      edgeBtn('Bottom', 'Bottom edge', '\u2B07\uFE0F', 'Flip to the bottom edge — look for dings or chips') +
+      edgeBtn('Left',   'Left edge',   '\u2B05\uFE0F', 'Left side — check for nicks along the border') +
+      edgeBtn('Right',  'Right edge',  '\u27A1\uFE0F', 'Right side — last edge, then submit') +
+    '</div>' +
+    '<div style="font-size:.75rem;color:' + progressColor + ';font-weight:700;text-align:center;margin:.3rem 0 .5rem">' + count + ' / ' + max + ' edges captured — ' + progressLabel + '</div>' +
+    (count >= min
+      ? '<button onclick="submitDeepGrade()" style="width:100%;padding:.75rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.95rem;cursor:pointer">\u2605 Submit Deep Grade — 2 credits</button>'
+      : '<button disabled style="width:100%;padding:.75rem 1rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.35);border:none;border-radius:10px;font-weight:800;font-size:.9rem;cursor:not-allowed">Add ' + (min - count) + ' more edge' + (min - count === 1 ? '' : 's') + ' to submit</button>') +
+    '<button onclick="cancelDeepGrade()" style="margin-top:.5rem;width:100%;padding:.5rem;background:transparent;color:rgba(255,255,255,.5);border:none;font-size:.75rem;cursor:pointer;text-decoration:underline">Cancel — don\'t charge me</button>';
+}
+
+// Called when user taps an edge photo button
+async function processGradeEdge(input, edgeKey) {
+  const file = input.files[0];
+  if (!file) return;
+  window._gradeEdges = window._gradeEdges || {};
+  const b64 = await compressImage(file, 1000);
+  window._gradeEdges[edgeKey] = b64;
+  // Reset input so re-picking the same edge works
+  input.value = '';
+  // Re-render the edge UI to show new checkmarks + progress
+  showDeepGradeEdgeUI();
+}
+
+function cancelDeepGrade() {
+  window._gradeFrontBase64 = null;
+  window._gradeBackBase64 = null;
+  window._gradeEdges = {};
+  window._gradeIsDeep = false;
+  if (window._gradeFrontUrl) { URL.revokeObjectURL(window._gradeFrontUrl); window._gradeFrontUrl = null; }
+  cancelScan();
+}
+
+async function submitDeepGrade() {
+  const edges = window._gradeEdges || {};
+  const count = Object.keys(edges).length;
+  if (count < 2) {
+    showToast('Need at least 2 edge photos for Deep Grade');
+    return;
+  }
+  await submitGradeScan(true);
+}
+
+// ── Shared submit path — handles both Quick and Deep Grade ──
+async function submitGradeScan(deepGrade) {
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const frontBase64 = window._gradeFrontBase64;
+  const backBase64  = window._gradeBackBase64;
+
+  if (!frontBase64 || !backBase64) {
+    statusEl.textContent = 'Photos missing. Please start over.';
+    return;
+  }
+
+  const analyzingCount = deepGrade
+    ? 'front, back + ' + Object.keys(window._gradeEdges || {}).length + ' edges'
+    : 'front + back';
+  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">' +
+    (deepGrade ? '\uD83D\uDD0D Deep Grade Analysis' : '\u2605 Estimated Grade Scanner') +
+    '</span><br><span style="font-size:.8rem;opacity:.7">Analyzing ' + analyzingCount + '\u2026 this may take 10\u201320s</span>';
+  resultEl.innerHTML = '<div style="width:100%;height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden"><div style="height:100%;width:35%;background:var(--gold);border-radius:99px;animation:pulse 1.5s ease-in-out infinite"></div></div>';
+
   const idToken = window._googleIdToken || '';
+  const edges = window._gradeEdges || {};
+
+  const body = {
+    imageBase64: frontBase64,
+    mimeType: 'image/jpeg',
+    backBase64,
+    backMimeType: 'image/jpeg',
+    mode: 'grade',
+    cardName: selectedCard?.name || window._lastScanCardName || '',
+    cardNumber: selectedCard?.number || window._scanTargetNumber || '',
+    setName: selectedCard?.setName || '',
+    email: window.googleUser?.email || window._userEmail || '',
+    googleSub: window.googleUser?.sub || window._googleSub || '',
+  };
+
+  if (deepGrade) {
+    body.deepGrade = true;
+    if (edges.Top)    { body.topEdgeBase64    = edges.Top;    body.topEdgeMimeType    = 'image/jpeg'; }
+    if (edges.Bottom) { body.bottomEdgeBase64 = edges.Bottom; body.bottomEdgeMimeType = 'image/jpeg'; }
+    if (edges.Left)   { body.leftEdgeBase64   = edges.Left;   body.leftEdgeMimeType   = 'image/jpeg'; }
+    if (edges.Right)  { body.rightEdgeBase64  = edges.Right;  body.rightEdgeMimeType  = 'image/jpeg'; }
+  }
 
   try {
     const response = await fetch('/api/scan', {
@@ -6495,18 +6714,7 @@ async function processGradeBack(input) {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + idToken
       },
-      body: JSON.stringify({
-        imageBase64: frontBase64,
-        mimeType: 'image/jpeg',
-        backBase64,
-        backMimeType: 'image/jpeg',
-        mode: 'grade',
-        cardName: selectedCard?.name || window._lastScanCardName || '',
-        cardNumber: selectedCard?.number || window._scanTargetNumber || '',
-        setName: selectedCard?.setName || '',
-        email: window.googleUser?.email || window._userEmail || '',
-        googleSub: window.googleUser?.sub || window._googleSub || '',
-      })
+      body: JSON.stringify(body)
     });
 
     if (response.status === 401) {
@@ -6538,11 +6746,20 @@ async function processGradeBack(input) {
       : (psa >= 8 ? 'High confidence' : psa >= 6 ? 'Moderate confidence' : 'Low confidence');
     const rangeStr = psaLow === psaHigh ? 'PSA ' + psaLow : 'PSA ' + psaLow + '\u2013' + psaHigh + ' likely';
 
+    const isDeep    = data.deepGrade === true;
+    const photoCount= data.photoCount || (isDeep ? 6 : 2);
+    const creditsUsed = data.creditsUsed || (isDeep ? 2 : 1);
+    const tierBadge = isDeep
+      ? '<span style="font-size:.65rem;font-weight:800;padding:.15rem .5rem;border-radius:99px;background:linear-gradient(135deg,var(--gold),#f59e0b);color:#000;margin-right:.35rem;letter-spacing:.04em;vertical-align:middle">\uD83D\uDD0D DEEP GRADE · ' + photoCount + ' photos</span>'
+      : '<span style="font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:99px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);margin-right:.35rem;letter-spacing:.04em;vertical-align:middle">\u26A1 QUICK GRADE</span>';
+
     statusEl.innerHTML =
+      '<div style="margin-bottom:.3rem">' + tierBadge + '</div>' +
       '<span style="color:' + gradeColor + ';font-size:1.3rem;font-weight:900">' + rangeStr + '</span>' +
       ' <span style="font-size:.7rem;font-weight:700;padding:.12rem .45rem;border-radius:99px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);margin-left:.25rem;vertical-align:middle">' + confidenceLabel + '</span><br>' +
       '<span style="color:rgba(255,255,255,.6);font-size:.8rem;margin-top:.15rem;display:block">' + label + '</span>' +
-      '<span style="font-size:.76rem;color:rgba(255,255,255,.5);margin-top:.1rem;display:block">' + (data.card_name || '') + '</span>';
+      '<span style="font-size:.76rem;color:rgba(255,255,255,.5);margin-top:.1rem;display:block">' + (data.card_name || '') + '</span>' +
+      '<span style="font-size:.68rem;color:rgba(255,255,255,.4);margin-top:.2rem;display:block">' + creditsUsed + ' credit' + (creditsUsed === 1 ? '' : 's') + ' used</span>';
 
     // Map text grades to numeric scores for bar width
     const gradeScore = g => {
@@ -6601,13 +6818,24 @@ async function processGradeBack(input) {
       return 'Tilt card under a light to check for hidden scratches';
     };
 
-    const scoreBar = (label, val, tipFn) => {
-      const pct = gradeScore(val); const col = barCol(pct);
+    // Numeric sub-grades from Deep Grade (1-10 scale)
+    const sg = data.subgrades || {};
+    const numericPct = n => Math.max(5, Math.min(100, n * 10));
+    const numericCol = n => n >= 9 ? '#4ade80' : n >= 7 ? '#facc15' : n >= 5 ? '#fb923c' : '#f87171';
+
+    const scoreBar = (label, val, tipFn, subKey) => {
+      // Prefer numeric sub-grade if present (Deep Grade); fall back to text (Quick Grade)
+      const numeric = subKey && typeof sg[subKey] === 'number' ? sg[subKey] : null;
+      const pct = numeric != null ? numericPct(numeric) : gradeScore(val);
+      const col = numeric != null ? numericCol(numeric) : barCol(pct);
       const tip = tipFn ? tipFn(val) : '';
+      const rightSide = numeric != null
+        ? '<span style="color:' + col + ';font-weight:800">' + numeric + '/10</span> <span style="font-size:.62rem;color:rgba(255,255,255,.4);margin-left:.3rem">' + (val || '') + '</span>'
+        : '<span style="color:' + col + ';font-weight:700">' + (val || '\u2014') + '</span>';
       return '<div style="margin-bottom:.55rem">' +
         '<div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:.18rem">' +
           '<span style="color:rgba(255,255,255,.45)">' + label + '</span>' +
-          '<span style="color:' + col + ';font-weight:700">' + (val || '\u2014') + '</span>' +
+          rightSide +
         '</div>' +
         '<div style="height:5px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;margin-bottom:.2rem">' +
           '<div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:99px"></div>' +
@@ -6618,10 +6846,10 @@ async function processGradeBack(input) {
 
     resultEl.innerHTML =
       '<div style="margin:.3rem 0 .5rem">' +
-        scoreBar('Centering', data.centering, centeringTip) +
-        scoreBar('Corners',   data.corners,   cornerTip)   +
-        scoreBar('Edges',     data.edges,     edgeTip)     +
-        scoreBar('Surface',   data.surface,   surfaceTip)  +
+        scoreBar('Centering', data.centering, centeringTip, 'centering') +
+        scoreBar('Corners',   data.corners,   cornerTip,   'corners')   +
+        scoreBar('Edges',     data.edges,     edgeTip,     'edges')     +
+        scoreBar('Surface',   data.surface,   surfaceTip,  'surface')   +
       '</div>' +
       (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + notes + '</div>' : '') +
       (worth
@@ -6661,16 +6889,27 @@ async function processGradeBack(input) {
 
     window._pendingScanBannerCard = data.card_name;
 
+    // Reset all Deep Grade state
     window._gradeFrontBase64 = null;
+    window._gradeBackBase64  = null;
+    window._gradeEdges       = {};
+    window._gradeIsDeep      = false;
     if (window._gradeFrontUrl) { URL.revokeObjectURL(window._gradeFrontUrl); window._gradeFrontUrl = null; }
 
-    const fi = document.getElementById('gradeBackFileInput');
-    if (fi) {
-      fi.value = '';
-      const clone = fi.cloneNode(true);
-      fi.parentNode.replaceChild(clone, fi);
-      clone.addEventListener('change', function() { processGradeBack(this); });
-    }
+    // Clone-replace all grade file inputs so the same file can be picked again next scan
+    ['gradeBackFileInput','gradeEdgeTopInput','gradeEdgeBottomInput','gradeEdgeLeftInput','gradeEdgeRightInput'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = '';
+      const clone = el.cloneNode(true);
+      el.parentNode.replaceChild(clone, el);
+      if (id === 'gradeBackFileInput') {
+        clone.addEventListener('change', function() { processGradeBack(this); });
+      } else {
+        const edgeKey = id.replace('gradeEdge','').replace('Input','');
+        clone.addEventListener('change', function() { processGradeEdge(this, edgeKey); });
+      }
+    });
 
   } catch(err) {
     console.error('Grade error:', err);

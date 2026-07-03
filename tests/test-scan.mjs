@@ -1,0 +1,722 @@
+// tests/test-scan.mjs
+// Integration tests for /api/scan — Deep Grade + credit math + refunds + regressions.
+// Mocks global fetch to intercept OpenAI + Upstash KV traffic, then calls the handler directly.
+
+import handler from '../api/scan.js';
+
+// ── Mock KV store ──────────────────────────────────────────────────────────
+class MockKV {
+  constructor(initial = {}) {
+    this.store = { ...initial };
+    this.opLog = [];
+  }
+  handleRequest(url, options = {}) {
+    const u = new URL(url);
+    // /get/<key>
+    let m = u.pathname.match(/^\/get\/(.+)$/);
+    if (m) {
+      const key = decodeURIComponent(m[1]);
+      this.opLog.push(['get', key]);
+      return this._resp({ result: this.store[key] ?? null });
+    }
+    // /set/<key>/<value>
+    m = u.pathname.match(/^\/set\/([^/]+)\/(.+)$/);
+    if (m) {
+      const key = decodeURIComponent(m[1]);
+      const val = decodeURIComponent(m[2]);
+      this.opLog.push(['set', key, val]);
+      this.store[key] = val;
+      return this._resp({ result: 'OK' });
+    }
+    // /incr/<key>
+    m = u.pathname.match(/^\/incr\/(.+)$/);
+    if (m) {
+      const key = decodeURIComponent(m[1]);
+      const cur = parseInt(this.store[key] ?? '0') || 0;
+      this.store[key] = String(cur + 1);
+      this.opLog.push(['incr', key]);
+      return this._resp({ result: cur + 1 });
+    }
+    throw new Error('Unhandled KV url: ' + url);
+  }
+  _resp(body) {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+    });
+  }
+  getInt(key) { return parseInt(this.store[key] ?? '0') || 0; }
+}
+
+// ── Mock res ──────────────────────────────────────────────────────────────
+function makeRes() {
+  const res = {
+    statusCode: 200,
+    headers: {},
+    body: null,
+    status(c) { this.statusCode = c; return this; },
+    setHeader(k, v) { this.headers[k] = v; return this; },
+    json(b) { this.body = b; return this; },
+    end() { return this; },
+  };
+  return res;
+}
+
+// ── Test infra ────────────────────────────────────────────────────────────
+let passed = 0, failed = 0;
+const failures = [];
+function assert(cond, msg) {
+  if (!cond) throw new Error('Assertion failed: ' + msg);
+}
+async function test(name, fn) {
+  process.stdout.write(`  ${name} ... `);
+  try {
+    await fn();
+    console.log('✓');
+    passed++;
+  } catch(e) {
+    console.log('✗');
+    console.log('    ' + e.message);
+    failed++;
+    failures.push({ name, err: e.message });
+  }
+}
+
+// ── Environment setup ─────────────────────────────────────────────────────
+process.env.KV_REST_API_URL     = 'https://mock-kv.local';
+process.env.KV_REST_API_TOKEN   = 'mock-token';
+process.env.OPENAI_API_KEY      = 'mock-openai';
+process.env.STRIPE_SECRET_KEY   = ''; // avoid Stripe fallback path
+
+// Global fetch mock — routed based on URL host
+let currentKV = null;
+let openaiHandler = null;
+const originalFetch = globalThis.fetch;
+
+function installMocks(kv, openaiFn) {
+  currentKV = kv;
+  openaiHandler = openaiFn;
+  globalThis.fetch = (url, options) => {
+    const u = typeof url === 'string' ? url : url.toString();
+    if (u.startsWith(process.env.KV_REST_API_URL)) return currentKV.handleRequest(u, options);
+    if (u.includes('openai.com'))               return openaiHandler(u, options);
+    if (u.includes('stripe.com'))               return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}), text: () => Promise.resolve('') });
+    throw new Error('Unexpected fetch: ' + u);
+  };
+}
+function restoreFetch() { globalThis.fetch = originalFetch; }
+
+// ── Fake Firebase JWT (unsigned, just for token parsing tests) ────────────
+function b64url(obj) {
+  return Buffer.from(JSON.stringify(obj)).toString('base64url');
+}
+function makeFakeToken(uid = 'user123', email = 'test@example.com', verified = true) {
+  // Use a token so short/malformed it takes the body-email fallback path
+  // (Firebase verification will fail; handler proceeds with body values.)
+  return 'header.' + b64url({
+    sub: uid, email, email_verified: verified,
+    aud: 'cardresell-e0329',
+    iss: 'https://securetoken.google.com/cardresell-e0329',
+    exp: Math.floor(Date.now()/1000) + 3600,
+    iat: Math.floor(Date.now()/1000),
+  }) + '.sig';
+}
+
+// Standard OpenAI mock: returns a valid grade JSON
+function goodOpenAI(mode = 'grade') {
+  return () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: mode === 'grade' ? JSON.stringify({
+        card_name: 'Charizard VMAX',
+        centering: '55/45 L/R, 50/50 T/B',
+        corners: 'Near Mint',
+        edges: 'Mint',
+        surface: 'Mint',
+        psa_estimate: 9,
+        grade_label: 'Mint',
+        grade_notes: 'Light corner wear on top-left.',
+        worth_grading: true,
+        subgrades: { centering: 9, corners: 8.5, edges: 9.5, surface: 9.5 },
+        confidence: 'high',
+      }) : JSON.stringify({
+        card_name: 'Charizard VMAX',
+        card_number: '020/189',
+        set_name: 'Darkness Ablaze',
+        hp: '330',
+        card_type: 'pokemon',
+        rarity: 'Rainbow Rare',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+}
+
+// OpenAI returns 500 error
+function failingOpenAI() {
+  return () => Promise.resolve({
+    ok: false, status: 500,
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve('Internal server error'),
+  });
+}
+
+// OpenAI returns garbage JSON
+function malformedOpenAI() {
+  return () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: 'not json at all' } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+}
+
+// Minimal valid request body helper
+function bodyFor({ mode, deepGrade = false, hasBack = false, hasEdges = false } = {}) {
+  const b = {
+    imageBase64: 'AAAA',
+    mimeType: 'image/jpeg',
+    email: 'test@example.com',
+    googleSub: 'user123',
+    mode,
+  };
+  if (deepGrade) b.deepGrade = true;
+  if (hasBack) { b.backBase64 = 'BBBB'; b.backMimeType = 'image/jpeg'; }
+  if (hasEdges) {
+    b.topEdgeBase64 = 'CCCC';    b.topEdgeMimeType = 'image/jpeg';
+    b.bottomEdgeBase64 = 'DDDD'; b.bottomEdgeMimeType = 'image/jpeg';
+    b.leftEdgeBase64 = 'EEEE';   b.leftEdgeMimeType = 'image/jpeg';
+    b.rightEdgeBase64 = 'FFFF';  b.rightEdgeMimeType = 'image/jpeg';
+  }
+  return b;
+}
+
+function makeReq(body, token) {
+  return {
+    method: 'POST',
+    headers: { authorization: token ? 'Bearer ' + token : '' },
+    body,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//                              TEST CASES
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('\n── /api/scan integration tests ──');
+
+// ─── Group 1: Existing behavior (regression) ───
+console.log('\n[1] Existing behavior — quick grade + identify still work as before');
+
+await test('quick grade (front only, no back) — 400 rejects, no credit deducted', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  let openaiCalled = false;
+  installMocks(kv, () => { openaiCalled = true; return goodOpenAI('grade')(); });
+  const req = makeReq(bodyFor({ mode: 'grade' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 400, 'want 400 got ' + res.statusCode);
+  assert(res.body.missingPhotos.includes('back'), 'back listed as missing');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'no credit deducted');
+  assert(openaiCalled === false, 'openai not called');
+});
+
+await test('quick grade (front + back) — succeeds, deducts 1 credit', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '3' });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, 'want 200 got ' + res.statusCode);
+  assert(res.body.success === true, 'success');
+  assert(res.body.mode === 'grade', 'mode grade');
+  assert(res.body.deepGrade === false, 'deepGrade false');
+  assert(res.body.creditsUsed === 1, 'creditsUsed=1');
+  assert(res.body.photoCount === 2, 'photoCount=2');
+  assert(kv.getInt('scans:user123:paid_left') === 2, 'paid_left -1');
+  assert(res.body.subgrades && res.body.subgrades.centering === 9, 'subgrades present');
+  // Confidence capped at medium for 2-photo quick grade
+  assert(res.body.confidence === 'medium', `confidence capped at medium, got ${res.body.confidence}`);
+});
+
+await test('identify mode — deducts 1 from id_paid_left, not paid_left', async () => {
+  const kv = new MockKV({
+    'scans:user123:id_paid_left': '10',
+    'scans:user123:paid_left': '2',
+  });
+  installMocks(kv, goodOpenAI('identify'));
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(res.body.mode === 'identify', 'identify mode');
+  assert(kv.getInt('scans:user123:id_paid_left') === 9, 'id_paid_left -1');
+  assert(kv.getInt('scans:user123:paid_left') === 2, 'paid_left UNCHANGED');
+});
+
+await test('identify mode — no id credits → 402', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '0' });
+  installMocks(kv, goodOpenAI('identify'));
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 402, '402');
+  assert(res.body.needsPayment === true, 'needsPayment');
+});
+
+// ─── Group 2: Deep Grade happy path ───
+console.log('\n[2] Deep Grade — full 6-photo flow');
+
+await test('deep grade with all 6 photos — deducts 2, gets high confidence', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  let openaiCallCount = 0;
+  let capturedBody = null;
+  const openai = (url, opts) => {
+    openaiCallCount++;
+    capturedBody = JSON.parse(opts.body);
+    return goodOpenAI('grade')();
+  };
+  installMocks(kv, openai);
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, 'want 200 got ' + res.statusCode);
+  assert(res.body.deepGrade === true, 'deepGrade=true in response');
+  assert(res.body.creditsUsed === 2, 'creditsUsed=2');
+  assert(res.body.photoCount === 6, 'photoCount=6');
+  assert(kv.getInt('scans:user123:paid_left') === 3, `paid_left want 3 got ${kv.getInt('scans:user123:paid_left')}`);
+  assert(openaiCallCount === 1, 'exactly 1 openai call');
+  const imgCount = capturedBody.messages[0].content.filter(c => c.type === 'image_url').length;
+  assert(imgCount === 6, `openai got 6 images, got ${imgCount}`);
+  assert(res.body.subgrades.centering === 9, 'subgrades in response');
+  assert(res.body.confidence === 'high', 'high confidence at 6 photos');
+});
+
+await test('deep grade with 4 photos (front + back + 2 edges) — succeeds, medium confidence', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  let capturedBody = null;
+  installMocks(kv, (url, opts) => { capturedBody = JSON.parse(opts.body); return goodOpenAI('grade')(); });
+  const body = bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true });
+  // Drop 2 edges — keep only top + bottom
+  delete body.leftEdgeBase64; delete body.leftEdgeMimeType;
+  delete body.rightEdgeBase64; delete body.rightEdgeMimeType;
+  const req = makeReq(body, makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, 'want 200 got ' + res.statusCode);
+  assert(res.body.deepGrade === true, 'deepGrade=true');
+  assert(res.body.creditsUsed === 2, 'still 2 credits');
+  assert(res.body.photoCount === 4, 'photoCount=4');
+  assert(res.body.confidence === 'medium', `confidence capped at medium for 4 photos, got ${res.body.confidence}`);
+  const imgCount = capturedBody.messages[0].content.filter(c => c.type === 'image_url').length;
+  assert(imgCount === 4, `openai got 4 images, got ${imgCount}`);
+});
+
+await test('deep grade with 5 photos (front + back + 3 edges) — succeeds, medium', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  const body = bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true });
+  delete body.rightEdgeBase64; delete body.rightEdgeMimeType;
+  const req = makeReq(body, makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(res.body.photoCount === 5, 'photoCount=5');
+  assert(res.body.confidence === 'medium', 'medium at 5 photos');
+});
+
+// ─── Group 3: Deep Grade validation ───
+console.log('\n[3] Deep Grade — validation blocks incomplete uploads');
+
+await test('deep grade missing back — rejects BEFORE credit deduction', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  let openaiCalled = false;
+  installMocks(kv, () => { openaiCalled = true; return goodOpenAI('grade')(); });
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: false, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 400, 'want 400 got ' + res.statusCode);
+  assert(Array.isArray(res.body.missingPhotos), 'missingPhotos array');
+  assert(res.body.missingPhotos.includes('back'), 'back listed');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'paid_left UNCHANGED');
+  assert(openaiCalled === false, 'openai not called');
+});
+
+await test('deep grade with only 1 edge — rejects (below 2 minimum)', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, () => { throw new Error('should not reach openai'); });
+  const body = bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true });
+  delete body.leftEdgeBase64; delete body.rightEdgeBase64; delete body.bottomEdgeBase64;
+  const req = makeReq(body, makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 400, 'want 400 got ' + res.statusCode);
+  assert(res.body.edgeCount === 1, `edgeCount=1 in error, got ${res.body.edgeCount}`);
+  assert(res.body.needsMoreEdges === 1, `needsMoreEdges=1, got ${res.body.needsMoreEdges}`);
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'no credit deducted');
+});
+
+await test('deep grade with 0 edges — rejects (needs 2 minimum)', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, () => { throw new Error('should not reach openai'); });
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: false }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 400, '400');
+  assert(res.body.edgeCount === 0, 'edgeCount=0');
+  assert(res.body.needsMoreEdges === 2, 'needsMoreEdges=2');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'no credit deducted');
+});
+
+await test('deep grade with front only — rejects on missing back FIRST', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, () => { throw new Error('should not reach openai'); });
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: false, hasEdges: false }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 400, '400');
+  assert(res.body.missingPhotos.includes('back'), 'reports missing back');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'no credit deducted');
+});
+
+// ─── Group 4: Insufficient credits for deep grade ───
+console.log('\n[4] Deep Grade — insufficient credits');
+
+await test('deep grade with only 1 credit — 402, no OpenAI call, no partial deduct', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '1' });
+  let openaiCalled = false;
+  installMocks(kv, () => { openaiCalled = true; return goodOpenAI('grade')(); });
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 402, 'want 402 got ' + res.statusCode);
+  assert(res.body.needsPayment === true, 'needsPayment');
+  assert(res.body.deepGrade === true, 'deepGrade flag in error');
+  assert(res.body.cost === 2, 'cost=2 in error');
+  assert(kv.getInt('scans:user123:paid_left') === 1, 'paid_left UNCHANGED');
+  assert(openaiCalled === false, 'openai not called');
+});
+
+await test('quick grade with 0 credits — 402, no OpenAI', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '0' });
+  let openaiCalled = false;
+  installMocks(kv, () => { openaiCalled = true; return goodOpenAI('grade')(); });
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 402, '402');
+  assert(openaiCalled === false, 'openai not called');
+});
+
+await test('deep grade with 0 credits — 402', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '0' });
+  installMocks(kv, () => goodOpenAI('grade')());
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 402, '402');
+});
+
+await test('deep grade with exactly 2 credits — succeeds, drains to 0', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '2' });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(kv.getInt('scans:user123:paid_left') === 0, 'drained');
+});
+
+// ─── Group 5: Refund logic ───
+console.log('\n[5] Refunds — credits returned on failure');
+
+await test('deep grade + OpenAI 500 — refunds BOTH credits', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, failingOpenAI());
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 502, 'want 502 got ' + res.statusCode);
+  assert(kv.getInt('scans:user123:paid_left') === 5, `refunded — want 5 got ${kv.getInt('scans:user123:paid_left')}`);
+});
+
+await test('quick grade + OpenAI 500 — refunds 1 credit', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, failingOpenAI());
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 502, '502');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'refunded to 5');
+});
+
+await test('identify + OpenAI 500 — refunds id_paid_left', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '10' });
+  installMocks(kv, failingOpenAI());
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 502, '502');
+  assert(kv.getInt('scans:user123:id_paid_left') === 10, 'refunded');
+});
+
+await test('deep grade + garbled OpenAI response — refunds both', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, malformedOpenAI());
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 502, '502');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'both refunded');
+});
+
+await test('deep grade + OpenAI returns card_name empty — refunds both', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  const emptyNameOpenAI = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({ card_name: '' }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, emptyNameOpenAI);
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 422, 'want 422 got ' + res.statusCode);
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'both refunded');
+});
+
+// ─── Group 6: Response shape (frontend contract) ───
+console.log('\n[6] Response shape — frontend contract');
+
+await test('quick grade response has legacy + new fields', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  const legacy = ['card_name','centering','corners','edges','surface','psa_estimate','grade_label','grade_notes','worth_grading'];
+  for (const f of legacy) assert(f in res.body, `legacy field ${f} missing`);
+  assert('subgrades' in res.body, 'subgrades in response');
+  assert('confidence' in res.body, 'confidence in response');
+  assert('deepGrade' in res.body, 'deepGrade in response');
+  assert('creditsUsed' in res.body, 'creditsUsed in response');
+  assert('photoCount' in res.body, 'photoCount in response');
+});
+
+await test('sub-grades are clamped to 1-10 and coerced from strings', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  const dirtyOpenAI = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Test', centering: 'x', corners: 'x', edges: 'x', surface: 'x',
+        psa_estimate: 8, grade_label: 'x', grade_notes: 'x', worth_grading: false,
+        subgrades: { centering: '9.5', corners: 15, edges: -3, surface: 'nope' },
+        confidence: 'MEDIUM',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, dirtyOpenAI);
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.body.subgrades.centering === 9.5, 'string→number');
+  assert(res.body.subgrades.corners === 10, 'clamp high');
+  assert(res.body.subgrades.edges === 1, 'clamp low');
+  assert(res.body.subgrades.surface === null, 'invalid → null');
+  assert(res.body.confidence === 'medium', 'confidence lowercased');
+});
+
+await test('confidence cap: GPT says high but only 2 photos → downgrades to medium', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  const highConfOpenAI = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Test', centering: 'x', corners: 'x', edges: 'x', surface: 'x',
+        psa_estimate: 10, grade_label: 'Gem Mint', grade_notes: 'x', worth_grading: true,
+        subgrades: { centering: 10, corners: 10, edges: 10, surface: 10 },
+        confidence: 'high',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, highConfOpenAI);
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.body.confidence === 'medium', `should cap to medium at 2 photos, got ${res.body.confidence}`);
+});
+
+await test('confidence: GPT says low, 6 photos → keeps low (no forced upgrade)', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  const lowConfOpenAI = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Test', centering: 'x', corners: 'x', edges: 'x', surface: 'x',
+        psa_estimate: 5, grade_label: 'x', grade_notes: 'blurry photos', worth_grading: false,
+        subgrades: { centering: 5, corners: 5, edges: 5, surface: 5 },
+        confidence: 'low',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, lowConfOpenAI);
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.body.confidence === 'low', 'low preserved even with 6 photos');
+});
+
+await test('OpenAI omits subgrades entirely — response has null sub-grades', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  const noSubOpenAI = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'T', centering: 'x', corners: 'x', edges: 'x', surface: 'x',
+        psa_estimate: 8, grade_label: 'x', grade_notes: 'x', worth_grading: false,
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, noSubOpenAI);
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(res.body.subgrades.centering === null, 'null when missing');
+  assert(res.body.confidence === 'medium', 'default confidence for quick grade');
+});
+
+// ─── Group 7: Auth regressions ───
+console.log('\n[7] Auth regressions — body-fallback + no-auth');
+
+await test('no token — falls back to body email + googleSub', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), null);
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, 'want 200 got ' + res.statusCode + ' body: ' + JSON.stringify(res.body));
+  assert(kv.getInt('scans:user123:paid_left') === 4, 'deducted');
+});
+
+await test('no email anywhere — 401 unauthorized', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  const body = bodyFor({ mode: 'grade', hasBack: true });
+  body.email = '';
+  body.googleSub = '';
+  const req = makeReq(body, null);
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 401, '401');
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'unchanged');
+});
+
+// ─── Group 8: Method + input validation ───
+console.log('\n[8] HTTP + input validation');
+
+await test('GET request — 405', async () => {
+  const req = { method: 'GET', headers: {}, body: {} };
+  const res = makeRes();
+  await handler(req, res);
+  assert(res.statusCode === 405, '405');
+});
+
+await test('no imageBase64 (quick grade with back) — 400, no credit deducted', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  const body = bodyFor({ mode: 'grade', hasBack: true });
+  delete body.imageBase64;
+  const req = makeReq(body, makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 400, 'want 400 got ' + res.statusCode);
+  assert(kv.getInt('scans:user123:paid_left') === 5, 'no credit deducted');
+});
+
+// ─── Group 9: Free scans (Pro users) ───
+console.log('\n[9] Pro free scans');
+
+await test('deep grade for Pro user with all free scans left — deducts from free bucket', async () => {
+  // We simulate a Pro user by seeding pro:<sub> KV so checkProStatus returns true
+  const kv = new MockKV({
+    'pro:user123': JSON.stringify({ status: 'active' }),
+    'scans:user123:paid_left': '0',
+    // free bucket empty this month — Pro gets 10, so freeLeft = 10 - 0 = 10
+  });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode + ' body ' + JSON.stringify(res.body));
+  // free_used should have been incremented by 2
+  const d = new Date();
+  const stamp = `${d.getUTCFullYear()}_${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  assert(kv.getInt(`scans:user123:free_used_${stamp}`) === 2, `free_used got ${kv.getInt(`scans:user123:free_used_${stamp}`)}`);
+  assert(kv.getInt('scans:user123:paid_left') === 0, 'paid_left untouched');
+});
+
+await test('deep grade for Pro with 1 free + 10 paid — uses paid (no bucket mixing)', async () => {
+  const d = new Date();
+  const stamp = `${d.getUTCFullYear()}_${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  const kv = new MockKV({
+    'pro:user123': JSON.stringify({ status: 'active' }),
+    'scans:user123:paid_left': '10',
+    [`scans:user123:free_used_${stamp}`]: '9', // freeLeft = 1
+  });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(kv.getInt('scans:user123:paid_left') === 8, `paid_left -2 got ${kv.getInt('scans:user123:paid_left')}`);
+  assert(kv.getInt(`scans:user123:free_used_${stamp}`) === 9, 'free_used unchanged');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log(`\n──────────────────────────────`);
+console.log(`  ${passed} passed, ${failed} failed`);
+if (failed > 0) {
+  console.log('\nFailures:');
+  for (const f of failures) console.log(`  ✗ ${f.name}\n     ${f.err}`);
+  process.exit(1);
+}

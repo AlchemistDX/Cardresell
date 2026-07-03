@@ -33,11 +33,57 @@ export default async function handler(req, res) {
   const key     = googleSub || userEmail;
 
   // ── 3. Get image + mode (read early so credit logic can branch) ──
-  const { imageBase64, mimeType, mode } = req.body || {};
+  const { imageBase64, mimeType, mode, deepGrade } = req.body || {};
   const isGradeMode    = mode === 'grade';
   const isIdentifyMode = !isGradeMode; // identify is the default
+  // Deep Grade = 6-photo PSA-style inspection (front + back + 4 edges), costs 2 credits.
+  // Only applies to grade mode; ignored otherwise.
+  const isDeepGrade    = isGradeMode && deepGrade === true;
+  const gradeCost      = isDeepGrade ? 2 : 1;
 
-  // ── 2. Check & consume a scan credit ──
+  // Pull edge photos early so we can validate BEFORE deducting any credits
+  const { backBase64, backMimeType,
+          topEdgeBase64, topEdgeMimeType,
+          bottomEdgeBase64, bottomEdgeMimeType,
+          leftEdgeBase64, leftEdgeMimeType,
+          rightEdgeBase64, rightEdgeMimeType } = req.body || {};
+
+  // Photo count validation — enforce per-tier minimums BEFORE deducting any credits or
+  // spending money on OpenAI. "More photos = better grade" but we set a floor so tier
+  // pricing reflects real work being done.
+  const edgeCount = [topEdgeBase64, bottomEdgeBase64, leftEdgeBase64, rightEdgeBase64].filter(Boolean).length;
+  const totalPhotos = (imageBase64 ? 1 : 0) + (backBase64 ? 1 : 0) + edgeCount;
+
+  if (isDeepGrade) {
+    // Deep Grade: 4–6 photos required. Must include front + back at minimum,
+    // plus at least 2 edge photos (any combination).
+    if (!imageBase64 || !backBase64) {
+      return res.status(400).json({
+        error: 'Deep Grade requires at least a front and back photo of the card.',
+        missingPhotos: [!imageBase64 && 'front', !backBase64 && 'back'].filter(Boolean),
+      });
+    }
+    if (edgeCount < 2) {
+      return res.status(400).json({
+        error: `Deep Grade needs 4–6 photos total (front, back, plus 2–4 edge close-ups). You provided ${totalPhotos}.`,
+        needsMoreEdges: 2 - edgeCount,
+        edgeCount,
+      });
+    }
+  } else if (isGradeMode) {
+    // Quick Grade: front + back required.
+    if (!imageBase64 || !backBase64) {
+      return res.status(400).json({
+        error: 'Grading requires both a front and back photo of the card.',
+        missingPhotos: [!imageBase64 && 'front', !backBase64 && 'back'].filter(Boolean),
+      });
+    }
+  }
+
+  // ── 2. Check & consume scan credit(s) ──
+  // Track what was consumed so we can refund on downstream failure.
+  let consumedFrom   = null; // 'id_paid_left' | 'paid_left' | 'free'
+  let consumedAmount = 0;
   if (hasKV) {
     const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
@@ -48,29 +94,63 @@ export default async function handler(req, res) {
         return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
       }
       await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
+      consumedFrom = 'id_paid_left';
+      consumedAmount = 1;
     } else {
-      // Graded scans: draw from Pro free bucket first, then paid_left
+      // Graded scans: draw from Pro free bucket first, then paid_left.
+      // Deep Grade costs 2 credits — must come from the SAME bucket (no mixing).
       const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
       const stamp    = getMonthStamp();
       const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
       const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
 
-      if (freeLeft <= 0 && paid <= 0) {
-        return res.status(402).json({ error: 'No grading credits remaining.', needsPayment: true, mode: 'grade' });
+      if (freeLeft < gradeCost && paid < gradeCost) {
+        return res.status(402).json({
+          error: gradeCost > 1
+            ? `Deep Grade needs ${gradeCost} grading credits. You have ${Math.max(freeLeft, paid)}.`
+            : 'No grading credits remaining.',
+          needsPayment: true,
+          mode: 'grade',
+          deepGrade: isDeepGrade,
+          cost: gradeCost,
+        });
       }
-      if (freeLeft > 0) {
-        await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+      if (freeLeft >= gradeCost) {
+        // Deduct from free bucket by incrementing free_used by gradeCost
+        for (let i = 0; i < gradeCost; i++) {
+          await incrKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        }
+        consumedFrom = 'free';
+        consumedAmount = gradeCost;
       } else {
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - gradeCost);
+        consumedFrom = 'paid_left';
+        consumedAmount = gradeCost;
       }
     }
   }
   if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
 
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return res.status(500).json({ error: 'Scanner not configured.' });
+  // Refund helper — called on any downstream failure so the user isn't charged for a broken scan.
+  async function refundCredits() {
+    if (!hasKV || !consumedFrom || !consumedAmount) return;
+    try {
+      if (consumedFrom === 'id_paid_left') {
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, cur + consumedAmount);
+      } else if (consumedFrom === 'paid_left') {
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, cur + consumedAmount);
+      } else if (consumedFrom === 'free') {
+        const stamp = getMonthStamp();
+        const cur   = await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        await setKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`, Math.max(0, cur - consumedAmount));
+      }
+    } catch(e) { console.error('Refund error:', e); }
+  }
 
-  const { backBase64, backMimeType } = req.body || {};
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) { await refundCredits(); return res.status(500).json({ error: 'Scanner not configured.' }); }
 
   // ── 4. Call GPT-4o Vision ──
   try {
@@ -78,8 +158,31 @@ export default async function handler(req, res) {
     const dataUrl = `data:${mime};base64,${imageBase64}`;
     const backDataUrl = backBase64 ? `data:${backMimeType || 'image/jpeg'};base64,${backBase64}` : null;
 
+    // Deep Grade edge images (only include ones actually provided — could be 2, 3, or 4)
+    const edgeImages = isDeepGrade ? [
+      topEdgeBase64    && { label: 'TOP edge',    dataUrl: `data:${topEdgeMimeType    || 'image/jpeg'};base64,${topEdgeBase64}`    },
+      bottomEdgeBase64 && { label: 'BOTTOM edge', dataUrl: `data:${bottomEdgeMimeType || 'image/jpeg'};base64,${bottomEdgeBase64}` },
+      leftEdgeBase64   && { label: 'LEFT edge',   dataUrl: `data:${leftEdgeMimeType   || 'image/jpeg'};base64,${leftEdgeBase64}`   },
+      rightEdgeBase64  && { label: 'RIGHT edge',  dataUrl: `data:${rightEdgeMimeType  || 'image/jpeg'};base64,${rightEdgeBase64}`  },
+    ].filter(Boolean) : [];
+
+    // Build ordered image list with human-readable labels for the prompt
+    const orderedImages = [
+      { label: 'FRONT of card',        dataUrl: dataUrl },
+      { label: 'BACK of card',         dataUrl: backDataUrl },
+      ...edgeImages, // already labeled TOP/BOTTOM/LEFT/RIGHT if present
+    ].filter(x => x.dataUrl);
+
+    const imageDescription = orderedImages.length > 1
+      ? `${orderedImages.length} images in order: ${orderedImages.map((img, i) => `(${i+1}) ${img.label}`).join(', ')}.`
+      : 'ONE image: the FRONT of a card only';
+
+    const deepGradeInstructions = isDeepGrade ? `
+
+DEEP GRADE MODE — You have ${orderedImages.length} photos including ${edgeImages.length} dedicated edge close-up${edgeImages.length === 1 ? '' : 's'}. This is a professional-tier inspection. Be MORE precise on the per-pillar sub-grades because you can actually see corner and edge detail. Use the edge close-ups to catch flaws that would be invisible in a whole-card shot.${edgeImages.length < 4 ? ` (Note: fewer than 4 edge shots — use "medium" confidence unless the shots you have are very clear.)` : ''}` : '';
+
     const prompt = isGradeMode
-      ? `You are a strict, professional trading card grader trained to PSA standards. You are analyzing ${backDataUrl ? 'TWO images: the front AND back of a card' : 'ONE image: the FRONT of a card only (back not provided)'}.
+      ? `You are a strict, professional trading card grader trained to PSA standards. You are analyzing ${imageDescription}.${deepGradeInstructions}
 
 BEFORE grading, understand this critical reality:
 - PSA 10 (Gem Mint) is EXTREMELY rare — fewer than 5% of submitted cards receive it
@@ -105,9 +208,11 @@ Evaluate and return:
 7. grade_label: ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Good", "Poor")
 8. grade_notes: 1-2 sentences on the SPECIFIC flaws observed (or why it earns a high grade if truly flawless)
 9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
+10. subgrades: object with numeric 1-10 sub-scores for each pillar: { "centering": 9.5, "corners": 8.5, "edges": 9, "surface": 9 }. Use half-steps (e.g. 8.5). Be strict — match the descriptors above.
+11. confidence: "high" | "medium" | "low" — how confident you are in this grade given the photo quality and angles you had to work with.
 
 Respond ONLY with valid JSON:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false}`
+{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium"}`
       : `You are a trading card expert. Look at this card image and extract:
 1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
 2. card_number: The card number (e.g. "079/078", "025/165")
@@ -127,7 +232,7 @@ Respond ONLY with valid JSON, no explanation:
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: isGradeMode ? 500 : 300,
+        max_tokens: isDeepGrade ? 700 : (isGradeMode ? 500 : 300),
         messages: [
           {
             role: 'user',
@@ -141,6 +246,11 @@ Respond ONLY with valid JSON, no explanation:
                 type: 'image_url',
                 image_url: { url: backDataUrl, detail: 'high' }
               }] : []),
+              // Deep Grade: include whatever edge close-ups the user provided (2–4)
+              ...edgeImages.map(e => ({
+                type: 'image_url',
+                image_url: { url: e.dataUrl, detail: 'high' }
+              })),
               { type: 'text', text: prompt }
             ]
           }
@@ -151,17 +261,9 @@ Respond ONLY with valid JSON, no explanation:
     if (!openaiRes.ok) {
       const errText = await openaiRes.text();
       console.error('OpenAI error:', openaiRes.status, errText);
-      // Refund credit on OpenAI failure
-      if (hasKV) {
-        if (isIdentifyMode) {
-          const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-          await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid + 1);
-        } else {
-          const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
-        }
-      }
-      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.' });
+      // Refund whatever credits we deducted (1 for quick / identify, 2 for deep grade)
+      await refundCredits();
+      return res.status(502).json({ error: 'Scanner temporarily unavailable. Credits refunded.' });
     }
 
     const openaiData = await openaiRes.json();
@@ -175,17 +277,52 @@ Respond ONLY with valid JSON, no explanation:
       cardInfo = JSON.parse(cleaned);
     } catch(e) {
       console.error('GPT-4o parse error:', content);
-      return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo.' });
+      // Refund on parse failure — user didn't get a valid grade.
+      await refundCredits();
+      return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo. Credits refunded.' });
     }
 
     if (!cardInfo.card_name) {
-      return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting.' });
+      await refundCredits();
+      return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting. Credits refunded.' });
     }
 
     if (isGradeMode) {
+      // Coerce sub-grades to numbers (GPT sometimes returns strings) and clamp 1-10.
+      const clampSub = (v) => {
+        const n = typeof v === 'number' ? v : parseFloat(v);
+        if (!isFinite(n)) return null;
+        return Math.max(1, Math.min(10, n));
+      };
+      const sg = cardInfo.subgrades || {};
+      const subgrades = {
+        centering: clampSub(sg.centering),
+        corners:   clampSub(sg.corners),
+        edges:     clampSub(sg.edges),
+        surface:   clampSub(sg.surface),
+      };
+      // Compute a server-side confidence floor based on how many photos we actually had.
+      // GPT can't over-claim: if it says "high" but we only had 2 photos, we downgrade to medium.
+      const gptConf = (typeof cardInfo.confidence === 'string')
+        ? cardInfo.confidence.toLowerCase()
+        : null;
+      const gptConfNorm = ['high','medium','low'].includes(gptConf) ? gptConf : null;
+      // Photo-count-based ceiling for confidence:
+      //   Deep Grade 6 photos = up to high
+      //   Deep Grade 4–5 photos = up to medium
+      //   Quick Grade 2 photos = up to medium
+      const photoCap = totalPhotos >= 6 ? 'high' : (totalPhotos >= 4 ? 'medium' : 'medium');
+      const capOrder = { low: 0, medium: 1, high: 2 };
+      const defaultConf = isDeepGrade ? (totalPhotos >= 6 ? 'high' : 'medium') : 'medium';
+      let confidence = gptConfNorm || defaultConf;
+      if (capOrder[confidence] > capOrder[photoCap]) confidence = photoCap;
+
       return res.status(200).json({
         success:       true,
         mode:          'grade',
+        deepGrade:     isDeepGrade,
+        creditsUsed:   gradeCost,
+        photoCount:    totalPhotos,
         card_name:     cardInfo.card_name     || '',
         centering:     cardInfo.centering     || 'Unknown',
         corners:       cardInfo.corners       || 'Unknown',
@@ -195,6 +332,8 @@ Respond ONLY with valid JSON, no explanation:
         grade_label:   cardInfo.grade_label   || '',
         grade_notes:   cardInfo.grade_notes   || '',
         worth_grading: cardInfo.worth_grading ?? false,
+        subgrades,
+        confidence,
       });
     }
 
@@ -211,7 +350,9 @@ Respond ONLY with valid JSON, no explanation:
 
   } catch(err) {
     console.error('Scan error:', err);
-    return res.status(500).json({ error: 'Scanner temporarily unavailable. Please try again.' });
+    // Refund on any unexpected exception
+    try { await refundCredits(); } catch(e) {}
+    return res.status(500).json({ error: 'Scanner temporarily unavailable. Credits refunded. Please try again.' });
   }
 }
 
