@@ -820,6 +820,23 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     // Track current auth UID to prevent null callbacks from overwriting a valid session
     let _currentAuthUid = null;
 
+    // Persistent auth debug indicator (top-left corner)
+    function _updateAuthDebug(state) {
+      try {
+        let el = document.getElementById('_authDebugPanel');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = '_authDebugPanel';
+          el.style.cssText = 'position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,.85);color:#fff;font:11px/1.3 monospace;padding:6px 8px;border-radius:6px;border:1px solid #444;max-width:250px;word-break:break-all;pointer-events:auto;cursor:pointer';
+          el.title = 'Tap to hide';
+          el.onclick = () => el.remove();
+          document.body.appendChild(el);
+        }
+        el.textContent = state;
+      } catch(e) {}
+    }
+    window._updateAuthDebug = _updateAuthDebug;
+
     onAuthStateChanged(auth, (user) => {
       if (user) {
         _currentAuthUid = user.uid;
@@ -836,6 +853,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         window._userSub = user.uid;
         window._authResolved = true;
         window._authInitialized = true;
+        _updateAuthDebug('AUTH OK: ' + (user.email || '(no email)').slice(0,30) + ' | uid=' + user.uid.slice(0,8));
         // Apply UI immediately — don't wait for token
         applyGoogleUser();
         // Fetch token async — doesn't block UI or checkout
@@ -867,8 +885,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           // A real user was set — ignore this null callback (token refresh artifact)
           // Firebase will fire again with the user shortly
           window._authInitialized = true;
+          _updateAuthDebug('AUTH NULL (ignored, kept uid=' + _currentAuthUid.slice(0,8) + ')');
           return;
         }
+        _updateAuthDebug('AUTH NULL (no user)');
         window.googleUser = null;
         window._googleIdToken = null;
         window._userEmail = '';
@@ -6790,6 +6810,10 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
   const txt = txtId ? document.getElementById(txtId) : null;
   if (btn) btn.disabled = true;
   if (txt) txt.textContent = 'Loading...';
+  // DEBUG: update the debug panel to show what we're sending
+  const _payloadEmail = payload?.email || '(none)';
+  const _tokenState   = window._googleIdToken ? 'YES(' + window._googleIdToken.length + ')' : 'NO';
+  window._updateAuthDebug?.('POST ' + endpoint.split('/').pop() + '\nemail=' + _payloadEmail.slice(0,25) + '\ntoken=' + _tokenState);
   try {
     const r = await fetch(endpoint, {
       method: 'POST',
@@ -6800,11 +6824,13 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
     if (d.url) {
       window.location.href = d.url;
     } else {
+      window._updateAuthDebug?.('ERR ' + r.status + ': ' + (d.error || 'unknown') + '\nsent email=' + _payloadEmail.slice(0,25));
       showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
       if (btn) btn.disabled = false;
       if (txt) txt.textContent = defaultTxt || 'Try again';
     }
   } catch(e) {
+    window._updateAuthDebug?.('NET ERR: ' + (e.message || e));
     showToast('⚠️ Network error. Try again.');
     if (btn) btn.disabled = false;
     if (txt) txt.textContent = defaultTxt || 'Try again';
