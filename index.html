@@ -2502,17 +2502,43 @@ const SPORT_EMOJI = {
 
 // ── Category pills ──
 function onGameSelectChange(game) {
-  // Mirror the old cat-pill click behavior
-  const pill = document.querySelector(`#catRow .cat-pill[data-game="${game}"]`);
-  if (pill) {
-    pill.click();
-  } else {
-    // Direct trigger if pills are gone
-    switchGame(game);
-  }
-  // Update select to match
+  activeGame = game;
+
+  // Sync select
   const sel = document.getElementById('gameSelect');
   if (sel && sel.value !== game) sel.value = game;
+
+  // Clear search state
+  dropList.classList.remove('open');
+  dropList.innerHTML = '';
+  selectedCard = null;
+  resetCardPanel();
+
+  const isSports = game === 'sports';
+  const isOther  = game === 'other';
+
+  searchRow.style.display = isSports ? 'none' : 'flex';
+  sportsForm.style.display = isSports ? 'block' : 'none';
+  otherTcgNote.style.display = isOther ? 'block' : 'none';
+
+  const placeholders = {
+    pokemon:   'Search card name (e.g. Charizard, Pikachu VMAX…)',
+    pokemonjp: 'Search JP card name (e.g. Vileplume, Charizard, Mew…)',
+    mtg:       'Search card name (e.g. Black Lotus, Jace…)',
+    yugioh:    'Search card name (e.g. Dark Magician, Blue-Eyes…)',
+    lorcana:   'Search card name (e.g. Elsa, Mickey Mouse…)',
+    onepiece:  'Search card name (e.g. Luffy, Zoro…)',
+    other:     'Enter card name to search (manual price only)',
+  };
+  if (!isSports && searchInput) {
+    searchInput.placeholder = placeholders[game] || 'Search card name…';
+    searchInput.value = '';
+  }
+
+  // Sync hidden pills if they exist
+  document.querySelectorAll('#catRow .cat-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.game === game);
+  });
 }
 
 // Keep hidden pills in DOM for JS compatibility — sync select when pill changes
@@ -2617,9 +2643,9 @@ async function doSearch(q) {
     } else if (activeGame === 'yugioh') {
       await searchYugioh(q);
     } else if (activeGame === 'lorcana') {
-      await searchTPLGame(q, 'lorcana');
+      await searchLorcana(q);
     } else if (activeGame === 'onepiece') {
-      await searchTPLGame(q, 'onepiece');
+      await searchOnePiece(q);
     } else if (activeGame === 'other') {
       dropList.innerHTML = '<div class="drop-empty">No live API for "Other TCG". Enter your price manually in the Override field.</div>';
     }
@@ -2989,6 +3015,134 @@ async function searchMTG(q) {
       updatedAt: 'daily',
     };
   });
+}
+
+/* ── Disney Lorcana (lorcana-api.com — free, no key required) ── */
+let _lorcanaCache = null; // session cache for the full card list
+let _lorcanaCachePending = null; // deduplicate in-flight fetch
+
+async function _getLorcanaCards() {
+  if (_lorcanaCache) return _lorcanaCache;
+  if (_lorcanaCachePending) return _lorcanaCachePending;
+  _lorcanaCachePending = fetch('https://api.lorcana-api.com/cards/all')
+    .then(r => r.json())
+    .then(data => {
+      _lorcanaCache = Array.isArray(data) ? data : [];
+      _lorcanaCachePending = null;
+      return _lorcanaCache;
+    })
+    .catch(() => { _lorcanaCachePending = null; return []; });
+  return _lorcanaCachePending;
+}
+
+async function searchLorcana(q) {
+  // Try TPL first if key available
+  const tplData = await searchWithTPL(q, 'lorcana');
+  if (tplData && tplData.length) {
+    window._searchCards = {};
+    dropList.innerHTML = tplData.map((c, i) => {
+      window._searchCards[i] = { _tpl: c, game: 'lorcana' };
+      const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+      return `<div class="drop-item" data-idx="${i}" role="option">
+        ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
+        <div class="drop-info">
+          <div class="drop-name">${esc(c.name)}</div>
+          <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+        </div>
+        ${nmPrice!==null?`<span class="drop-price">$${nmPrice.toFixed(2)}</span>`:`<span class="drop-no-price">No price</span>`}
+      </div>`;
+    }).join('');
+    attachDropHandlers(i => tplCardToNormalized(window._searchCards[i]._tpl, 'lorcana', ''));
+    return;
+  }
+
+  // Fallback: lorcana-api.com (free, no key)
+  dropList.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Searching Lorcana…</div>';
+  dropList.classList.add('open');
+
+  const allCards = await _getLorcanaCards();
+  if (!allCards.length) {
+    dropList.innerHTML = '<div class="drop-empty">Lorcana card database unavailable. Try again later.</div>';
+    return;
+  }
+
+  const ql = q.toLowerCase().trim();
+  const nameScore = n => {
+    const nl = n.toLowerCase();
+    if (nl === ql) return 0;
+    if (nl.startsWith(ql)) return 1;
+    if (nl.split(/[\s-]+/).some(w => w.startsWith(ql))) return 2;
+    if (nl.includes(ql)) return 3;
+    return 99;
+  };
+  const filtered = allCards
+    .filter(c => (c.Name||'').toLowerCase().includes(ql))
+    .sort((a, b) => nameScore(a.Name||'') - nameScore(b.Name||''))
+    .slice(0, 30);
+
+  if (!filtered.length) {
+    dropList.innerHTML = '<div class="drop-empty">No Lorcana cards found. Try a different name.</div>';
+    return;
+  }
+
+  window._searchCards = {};
+  dropList.innerHTML = filtered.map((c, i) => {
+    window._searchCards[i] = { _raw: c, game: 'lorcana' };
+    const img = c.Image || '';
+    return `<div class="drop-item" data-idx="${i}" role="option">
+      ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.Name||'')}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
+      <div class="drop-info">
+        <div class="drop-name">${esc(c.Name||'')}</div>
+        <div class="drop-meta">${esc(c.Set_Name||'')}${c.Rarity?' · '+esc(c.Rarity):''}</div>
+      </div>
+      <span class="drop-no-price">Set price</span>
+    </div>`;
+  }).join('');
+
+  attachDropHandlers(i => {
+    const c = window._searchCards[i]._raw;
+    return {
+      name:    c.Name || '',
+      game:    'lorcana',
+      images:  { small: c.Image || '', large: c.Image || '' },
+      setName: c.Set_Name || '',
+      number:  c.Card_Num ? String(c.Card_Num) : '',
+      rarity:  c.Rarity || '',
+      priceVariants: [{ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null }],
+      source:  'Lorcana-API',
+      updatedAt: 'daily',
+    };
+  });
+}
+
+/* ── One Piece TCG (no free public API — manual entry) ── */
+async function searchOnePiece(q) {
+  // Try TPL if key available
+  const tplData = await searchWithTPL(q, 'onepiece');
+  if (tplData && tplData.length) {
+    window._searchCards = {};
+    dropList.innerHTML = tplData.map((c, i) => {
+      window._searchCards[i] = { _tpl: c, game: 'onepiece' };
+      const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
+      return `<div class="drop-item" data-idx="${i}" role="option">
+        ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">⚓</div>`}
+        <div class="drop-info">
+          <div class="drop-name">${esc(c.name)}</div>
+          <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+        </div>
+        ${nmPrice!==null?`<span class="drop-price">$${nmPrice.toFixed(2)}</span>`:`<span class="drop-no-price">No price</span>`}
+      </div>`;
+    }).join('');
+    attachDropHandlers(i => tplCardToNormalized(window._searchCards[i]._tpl, 'onepiece', ''));
+    return;
+  }
+  // No free API available — guide user to manual entry
+  dropList.innerHTML = `<div style="padding:.9rem 1rem">
+    <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.35rem">⚓ One Piece TCG</div>
+    <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:.6rem">No free card database is available yet. Enter your card name above, then use the <strong>Override price</strong> field to set the market value manually.</div>
+    <div style="font-size:.7rem;color:var(--text-faint)">Full database coming soon 🏴‍☠️</div>
+  </div>`;
+  dropList.classList.add('open');
 }
 
 /* ── Generic TPL game search (Lorcana, One Piece, etc.) ── */
