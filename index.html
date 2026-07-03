@@ -2640,6 +2640,17 @@ async function searchPokemon(q) {
   // Try TCGPriceLookup first if key is set
   const tplData = await searchWithTPL(q, 'pokemon');
   if (tplData) {
+    // Sort by name relevance: exact → starts-with → word-starts-with → contains
+    const ql = q.toLowerCase().trim();
+    const nameScore = n => {
+      const nl = n.toLowerCase();
+      if (nl === ql)                         return 0;
+      if (nl.startsWith(ql + ' ') || nl === ql) return 1;
+      if (nl.startsWith(ql))                 return 2;
+      if (nl.split(' ').some(w => w.startsWith(ql))) return 3;
+      return 4;
+    };
+    tplData.sort((a, b) => nameScore(a.name) - nameScore(b.name));
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
       window._searchCards[i] = { _tpl: c, game: 'pokemon' };
