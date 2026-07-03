@@ -1049,7 +1049,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         Grade
       </button>
     </div>
-    <button id="searchBtn" class="search-btn" onclick="openSearchModal()">Search</button>
+    <button id="searchBtn" class="search-btn" onclick="doSearch(document.getElementById('searchInput').value.trim())">Search</button>
   </div>
   <!-- Mobile: Scan + Grade as full-width sub-row -->
   <div class="scan-sub-row" id="scanSubRow">
@@ -2039,16 +2039,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </footer>
 
 <!-- ABOUT MODAL -->
-<!-- FULL-SCREEN SEARCH RESULTS MODAL -->
-<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:8000;flex-direction:column;overflow:hidden" class="search-results-modal">
-  <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface)">
-    <button onclick="closeSearchModal()" style="background:none;border:none;color:var(--text);font-size:1.3rem;cursor:pointer;line-height:1;padding:.25rem;-webkit-tap-highlight-color:transparent">&larr;</button>
-    <div style="flex:1;font-size:.95rem;font-weight:800;color:var(--text)" id="searchModalTitle">Results</div>
-    <div style="font-size:.72rem;color:var(--text-muted)" id="searchModalCount"></div>
-  </div>
-  <div id="searchModalGrid" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:.75rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.75rem"></div>
-</div>
-
 <div class="modal-overlay" id="aboutModal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:9999">
   <div class="modal-box" style="max-width:360px;text-align:center">
     <div style="font-size:1.5rem;margin-bottom:.5rem">🃏</div>
@@ -2587,8 +2577,8 @@ searchInput.addEventListener('keydown', e => {
     clearTimeout(searchTimeout);
     const q = searchInput.value.trim();
     if (!q) return;
-    // Enter key → open full-screen search results
-    openSearchModal();
+    // Enter key → run search
+    doSearch(searchInput.value.trim());
   }
   if (e.key === 'Escape') dropList.classList.remove('open');
 });
@@ -3095,90 +3085,6 @@ async function searchYugioh(q) {
       updatedAt: 'TCGPlayer data',
     };
   });
-}
-
-// ── Full-screen search results modal ──
-function openSearchModal() {
-  const q = searchInput.value.trim();
-  if (!q) return;
-
-  // Show modal immediately with loading state
-  const modal = document.getElementById('searchResultsModal');
-  const grid  = document.getElementById('searchModalGrid');
-  const title = document.getElementById('searchModalTitle');
-  const count = document.getElementById('searchModalCount');
-  if (!modal) return;
-  title.textContent = `"${q}"`;
-  count.textContent = '';
-  grid.innerHTML = '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:var(--text-muted);font-size:.88rem"><span class="spinner" style="border-color:rgba(0,0,0,.15);border-top-color:var(--gold)"></span> Searching…</div>';
-  modal.style.display = 'flex';
-
-  // Run search in background, populate when done
-  doSearch(q).then(() => {
-    _openSearchResultsModal(q);
-  });
-}
-
-function openCatalog(q) {
-  if (q) searchInput.value = q;
-  doSearch(q || searchInput.value.trim()).then(() => {
-    _openSearchResultsModal(q || searchInput.value.trim());
-  });
-}
-
-function _openSearchResultsModal(q) {
-  const modal = document.getElementById('searchResultsModal');
-  const grid  = document.getElementById('searchModalGrid');
-  const title = document.getElementById('searchModalTitle');
-  const count = document.getElementById('searchModalCount');
-  if (!modal || !grid) return;
-
-  // Copy items from dropList into card grid
-  const items = dropList.querySelectorAll('.drop-item');
-  if (!items.length) {
-    // Results not ready yet — retry once after a short delay
-    setTimeout(() => _openSearchResultsModal(q), 600);
-    return;
-  }
-
-  title.textContent = q ? `"${q}"` : 'Results';
-  count.textContent = items.length + ' card' + (items.length === 1 ? '' : 's');
-
-  grid.innerHTML = '';
-  items.forEach(item => {
-    const idx   = item.dataset.idx;
-    const name  = item.querySelector('.drop-name')?.textContent || '';
-    const meta  = item.querySelector('.drop-meta')?.textContent || '';
-    const price = item.querySelector('.drop-price')?.textContent || '';
-    const img   = item.querySelector('img')?.src || '';
-
-    const card = document.createElement('div');
-    card.style.cssText = 'background:var(--surface-2);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .12s;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column';
-    card.innerHTML = `
-      <div style="aspect-ratio:63/88;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden">
-        ${img ? `<img src="${img}" style="width:100%;height:100%;object-fit:contain" loading="lazy" />` : '<div style="font-size:2rem">🃏</div>'}
-      </div>
-      <div style="padding:.5rem">
-        <div style="font-size:.75rem;font-weight:800;color:var(--text);line-height:1.3;margin-bottom:.2rem">${name}</div>
-        <div style="font-size:.65rem;color:var(--text-muted);margin-bottom:.25rem">${meta}</div>
-        ${price ? `<div style="font-size:.78rem;font-weight:800;color:var(--gold)">${price}</div>` : ''}
-      </div>`;
-    card.addEventListener('click', () => {
-      // Simulate clicking the original drop item
-      const orig = dropList.querySelector(`[data-idx="${idx}"]`);
-      if (orig) orig.click();
-      closeSearchModal();
-    });
-    grid.appendChild(card);
-  });
-
-  modal.style.display = 'flex';
-  dropList.classList.remove('open');
-}
-
-function closeSearchModal() {
-  const modal = document.getElementById('searchResultsModal');
-  if (modal) modal.style.display = 'none';
 }
 
 // ── Attach click handlers after rendering drop ──
@@ -4939,38 +4845,6 @@ function deletePort(id) {
   renderFlipsView();
 }
 
-function deletePortEntry(id) {
-  const port = loadPortData().filter(p => p.id !== id);
-  savePortData(port);
-  renderCollectionView();
-  renderFlipsView();
-}
-
-function sellFromCollection(id) {
-  const port = loadPortData();
-  const item = port.find(p => p.id === id);
-  if (!item) return;
-  // Pre-fill flip modal with collection item data
-  _modalMode = 'flip';
-  const modal = document.getElementById('flipModal');
-  const title = document.getElementById('modalTitle');
-  const sellField = document.getElementById('mSellPriceField');
-  const platField = document.getElementById('mPlatformField');
-  if (title) title.textContent = 'Mark as Sold';
-  if (sellField) sellField.style.display = '';
-  if (platField) platField.style.display = '';
-  document.getElementById('mCardName').value   = item.card || '';
-  document.getElementById('mSetName').value    = item.set  || '';
-  document.getElementById('mBuyPrice').value   = (item.buyPrice || 0).toFixed(2);
-  document.getElementById('mSellPrice').value  = '';
-  document.getElementById('mDate').value       = new Date().toISOString().slice(0,10);
-  document.getElementById('mPlatform').value   = 'eBay';
-  document.getElementById('mCurrentValue').value = '';
-  // Tag entry so on save we remove it from collection
-  modal._sellFromCollectionId = id;
-  modal.classList.add('open');
-}
-
 // ── Export CSV ──
 function exportFlips() {
   const flips = loadFlipsData();
@@ -5169,7 +5043,6 @@ function renderCollectionView() {
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
             <td><div style="display:flex;gap:.3rem">
-              <button onclick="sellFromCollection(${p.id})" style="padding:.28rem .6rem;background:var(--gold);border:none;border-radius:6px;color:#000;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">Sell</button>
               <button class="ft-delete" onclick="deletePortEntry(${p.id})" title="Remove">✕</button>
             </div></td>
           </tr>`;
