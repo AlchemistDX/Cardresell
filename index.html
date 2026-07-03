@@ -2027,7 +2027,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <strong style="color:var(--text)">CardResell</strong> &mdash; Built by <strong>Will Jones</strong> &middot;
     <a href="mailto:contact@cardresell.org">contact@cardresell.org</a> &middot;
     Bradenton, FL &middot;
-    <a href="#" onclick="openAboutModal();return false">About</a>
+    <a href="#" onclick="openAboutModal();return false">About</a> &middot;
+    <a href="/terms" target="_blank" rel="noopener">Terms</a> &middot;
+    <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
     <span style="margin-left:.75rem;font-size:.68rem;color:var(--text-faint)">⚠️ Some sell buttons are affiliate links — we may earn a small commission at no cost to you.</span>
   </div>
   Card data via <a href="https://pokemontcg.io" target="_blank" rel="noopener">PokemonTCG.io</a> (English),
@@ -4046,11 +4048,11 @@ function esc(s) {
 /* ═══ FEE ENGINE (2026) ═══ */
 
 const PLATFORMS = {
-  ebay:     { name: 'eBay',             color: '#e53238', emoji: '🛒' },
-  poshmark: { name: 'Poshmark',         color: '#c02b50', emoji: '👗' },
-  comc:     { name: 'COMC',             color: '#1a5276', emoji: '🃏' },
-  fanatics: { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎' },
-  pwcc:     { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆' }
+  ebay:     { name: 'eBay',             color: '#e53238', emoji: '🛒', verified: 'Jun 2026' },
+  poshmark: { name: 'Poshmark',         color: '#c02b50', emoji: '👗', verified: 'Jun 2026' },
+  comc:     { name: 'COMC',             color: '#1a5276', emoji: '🃏', verified: 'Jun 2026' },
+  fanatics: { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026' },
+  pwcc:     { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026' }
 };
 // Free tier: eBay only. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
 const FREE_PLATFORMS = new Set(['ebay']);
@@ -4287,6 +4289,7 @@ function calc() {
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
+        ${info.verified ? `<div style="font-size:.6rem;color:rgba(255,255,255,.28);margin-top:.35rem;text-align:right">✓ Fees verified ${info.verified}</div>` : ''}
       </div>
     </${cardTag}>`;
   });
@@ -4336,6 +4339,59 @@ function calc() {
     return;
   }
   html += `</div>`;
+
+  // ── Deal Score ────────────────────────────────────────────────────
+  // Score 1–100 combining ROI, margin, and absolute profit.
+  // Buy (70+, green) | Maybe (40–69, yellow) | Pass (<40, red)
+  if (itemCost > 0 && winner) {
+    const _bestNet   = winner.netPayout;
+    const _profit    = _bestNet - itemCost;
+    const _margin    = price > 0 ? (_profit / price) * 100 : 0;
+    const _roi       = itemCost > 0 ? (_profit / itemCost) * 100 : 0;
+    const _roiScore  = Math.min(100, Math.max(0, (_roi / 50) * 50 + 50));
+    const _margScore = Math.min(100, Math.max(0, _margin * 2.5));
+    const _absScore  = Math.min(100, Math.max(0, _profit * 5));
+    const _dealScore = Math.round((_roiScore * 0.35) + (_margScore * 0.40) + (_absScore * 0.25));
+    const _verdict   = _dealScore >= 70 ? 'Buy'  : _dealScore >= 40 ? 'Maybe' : 'Pass';
+    const _vColor    = _dealScore >= 70 ? '#4ade80' : _dealScore >= 40 ? '#facc15' : '#f87171';
+    const _vEmoji    = _dealScore >= 70 ? '🟢' : _dealScore >= 40 ? '🟡' : '🔴';
+    const _vTip      = _dealScore >= 70
+      ? `Strong ROI — good margins on ${PLATFORMS[winner.pid].name}`
+      : _dealScore >= 40
+        ? 'Decent margins — consider fees &amp; time carefully'
+        : 'Thin margins after fees — look for a lower buy price';
+    html += `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:.7rem .9rem;margin-top:.75rem;display:flex;align-items:center;gap:.75rem">
+      <div style="flex:0 0 auto;text-align:center">
+        <div style="font-size:1.35rem;font-weight:900;color:${_vColor};line-height:1">${_dealScore}</div>
+        <div style="font-size:.58rem;color:rgba(255,255,255,.38);margin-top:.1rem">DEAL SCORE</div>
+      </div>
+      <div style="width:1px;height:2.2rem;background:rgba(255,255,255,.1)"></div>
+      <div style="flex:1">
+        <div style="font-size:.9rem;font-weight:800;color:${_vColor}">${_vEmoji} ${_verdict}</div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-top:.1rem">${_vTip}</div>
+      </div>
+    </div>`;
+  }
+
+  // ── Max Buy Price ──────────────────────────────────────────────────
+  // Show the most the user should pay to hit 20/30/40% target margin.
+  if (winner && price > 0) {
+    const _bestNetMBP = winner.netPayout;
+    const _targetMargins = [20, 30, 40];
+    const _maxBuyRows = _targetMargins.map(t => {
+      const maxCost = _bestNetMBP - (price * t / 100);
+      return maxCost > 0
+        ? `<span style="margin-right:.75rem"><span style="color:rgba(255,255,255,.45);font-size:.68rem">${t}%&rarr;</span> <strong style="color:var(--text);font-size:.82rem">${fmt(maxCost)}</strong></span>`
+        : '';
+    }).filter(Boolean).join('');
+    if (_maxBuyRows) {
+      html += `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:.6rem .9rem;margin-top:.5rem">
+        <div style="font-size:.68rem;font-weight:800;letter-spacing:.05em;color:rgba(255,255,255,.4);margin-bottom:.35rem">MAX BUY PRICE (via ${PLATFORMS[winner.pid].name})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.2rem">${_maxBuyRows}</div>
+        <div style="font-size:.6rem;color:rgba(255,255,255,.28);margin-top:.3rem">Don't pay more than these to hit your target margin</div>
+      </div>`;
+    }
+  }
 
   // Bar chart
   if (eligible.length > 1) {
@@ -5833,10 +5889,19 @@ async function processGradeBack(input) {
 
     const gradeColor = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
 
+    // Confidence range: show PSA low–high range + confidence label
+    const psaLow  = Math.max(1, psa - 1);
+    const psaHigh = Math.min(10, psa + (psa >= 9 ? 1 : 0));
+    const confidenceLabel = data.confidence
+      ? (data.confidence === 'high' ? 'High confidence' : data.confidence === 'low' ? 'Low confidence' : 'Moderate confidence')
+      : (psa >= 8 ? 'High confidence' : psa >= 6 ? 'Moderate confidence' : 'Low confidence');
+    const rangeStr = psaLow === psaHigh ? 'PSA ' + psaLow : 'PSA ' + psaLow + '\u2013' + psaHigh + ' likely';
+
     statusEl.innerHTML =
-      '<span style="color:' + gradeColor + ';font-size:1.3rem;font-weight:900">PSA ' + psa + '</span>' +
-      ' <span style="color:rgba(255,255,255,.6);font-size:.82rem">' + label + '</span><br>' +
-      '<span style="font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.2rem;display:block">' + (data.card_name || '') + '</span>';
+      '<span style="color:' + gradeColor + ';font-size:1.3rem;font-weight:900">' + rangeStr + '</span>' +
+      ' <span style="font-size:.7rem;font-weight:700;padding:.12rem .45rem;border-radius:99px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);margin-left:.25rem;vertical-align:middle">' + confidenceLabel + '</span><br>' +
+      '<span style="color:rgba(255,255,255,.6);font-size:.8rem;margin-top:.15rem;display:block">' + label + '</span>' +
+      '<span style="font-size:.76rem;color:rgba(255,255,255,.5);margin-top:.1rem;display:block">' + (data.card_name || '') + '</span>';
 
     // Map text grades to numeric scores for bar width
     const gradeScore = g => {
