@@ -6711,71 +6711,119 @@ function closePricingModal(evt) {
 }
 
 // ── Start Pro subscription checkout ──
-// ── Stripe checkout helper — iOS Safari compatible ──
-// Navigates the current tab to the Stripe checkout URL.
-// Uses a hidden form submit so Safari never sees an async popup —
-// the navigation happens synchronously from a real user gesture.
-function _openStripeCheckout(apiPath) {
-  // Create a hidden form that GETs our API endpoint.
-  // The server returns a redirect to Stripe, which the browser follows naturally.
-  // This is the only pattern that works on iOS Safari without popup blockers.
-  const form = document.createElement('form');
-  form.method = 'GET';
-  // Parse the apiPath to split base URL and query params
-  const [base, qs] = apiPath.split('?');
-  form.action = base;
-  form.style.display = 'none';
-  if (qs) {
-    qs.split('&').forEach(pair => {
-      const [k, v] = pair.split('=').map(decodeURIComponent);
-      const inp = document.createElement('input');
-      inp.type = 'hidden';
-      inp.name = k;
-      inp.value = v || '';
-      form.appendChild(inp);
-    });
-  }
-  document.body.appendChild(form);
-  form.submit();
-}
-
-function startProCheckout() {
+async function startProCheckout() {
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
-  const p = new URLSearchParams({ plan: 'monthly', email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  _openStripeCheckout('/api/stripe-pro-redirect?' + p.toString(), 'Pro Monthly');
+  const btn = document.getElementById('pricingProBtn');
+  const txt = document.getElementById('pricingProBtnText');
+  if (btn) btn.disabled = true;
+  if (txt) txt.textContent = 'Redirecting...';
+  try {
+    const r = await fetch('/api/stripe-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    if (btn) btn.disabled = false;
+    if (txt) txt.textContent = 'Get Pro — $9.99/mo';
+  }
 }
 
 // ── Start annual Pro checkout ──
-function startAnnualCheckout() {
+async function startAnnualCheckout() {
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
-  const p = new URLSearchParams({ plan: 'annual', email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  _openStripeCheckout('/api/stripe-pro-redirect?' + p.toString(), 'Pro Annual');
+  const btn = document.getElementById('pricingAnnualBtn');
+  const txt = document.getElementById('pricingAnnualBtnText');
+  if (btn) btn.disabled = true;
+  if (txt) txt.textContent = 'Redirecting...';
+  try {
+    const r = await fetch('/api/stripe-annual-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      body: JSON.stringify({ googleSub: googleUser.sub, email: googleUser.email })
+    });
+    const d = await r.json();
+    if (d.url) {
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      if (btn) btn.disabled = false;
+      if (txt) txt.textContent = 'Get Annual — $89.99/yr';
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    if (btn) btn.disabled = false;
+    if (txt) txt.textContent = 'Get Annual — $89.99/yr';
+  }
 }
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──
-function startScanCheckout() {
-  openGradeScanModal();
-}
+function startScanCheckout() { openGradeScanModal(); }
 
 // ── Start grade scan pack checkout ──
-function startGradeScanCheckout(tier) {
+async function startGradeScanCheckout(tier) {
   if (!googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
-  const p = new URLSearchParams({ tier: String(tier), email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  _openStripeCheckout('/api/stripe-grade-redirect?' + p.toString(), 'Grade Scan');
+  const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
+  tierBtns.forEach(b => { b.disabled = true; });
+  const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
+  if (clickedBtn) { const priceEl = clickedBtn.querySelector('div:last-child'); if (priceEl) priceEl.textContent = 'Redirecting…'; }
+  try {
+    const r = await fetch('/api/stripe-grade-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub, name: googleUser.name })
+    });
+    const d = await r.json();
+    if (d.url) {
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      tierBtns.forEach(b => { b.disabled = false; });
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    tierBtns.forEach(b => { b.disabled = false; });
+  }
 }
 
 // ── Open grade scan pricing modal ──
-function openGradeScanModal() {
-  // Switch the pricing modal to grade scan mode and open it
-  switchScanMode('grade');
-  openPricingModal('grade_scan');
-}
+function openGradeScanModal() { switchScanMode('grade'); openPricingModal('grade_scan'); }
 
 // ── Start ID scan tier checkout ──
-function startIdScanCheckout(tier) {
+async function startIdScanCheckout(tier) {
   if (!googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
-  const p = new URLSearchParams({ tier: String(tier), email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  _openStripeCheckout('/api/stripe-id-redirect?' + p.toString(), 'ID Scan');
+  const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
+  tierBtns.forEach(b => { b.disabled = true; });
+  const clickedBtn = document.querySelector(`[onclick="startIdScanCheckout('${tier}')"]`);
+  if (clickedBtn) { const priceEl = clickedBtn.querySelector('div:last-child'); if (priceEl) priceEl.textContent = 'Redirecting…'; }
+  try {
+    const r = await fetch('/api/stripe-id-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub })
+    });
+    const d = await r.json();
+    if (d.url) {
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+    } else {
+      showToast('⚠️ Could not start checkout. Try again.');
+      tierBtns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) { const priceEl = clickedBtn.querySelector('div:last-child'); const priceMap = { '10': '$1', '50': '$5', '100': '$9' }; if (priceEl) priceEl.textContent = priceMap[tier] || '$1'; }
+    }
+  } catch(e) {
+    showToast('⚠️ Network error. Try again.');
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) { const priceEl = clickedBtn.querySelector('div:last-child'); const priceMap = { '10': '$1', '50': '$5', '100': '$9' }; if (priceEl) priceEl.textContent = priceMap[tier] || '$1'; }
+  }
 }
 
 // ── Toast helper ──
