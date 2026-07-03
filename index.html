@@ -840,6 +840,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           } catch(e) {}
         }, 55 * 60 * 1000);
         window._authResolved = true;
+        window._authInitialized = true;
         applyGoogleUser();
         loadUserData();
         checkProStatus(); // always call after token is confirmed set
@@ -867,7 +868,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
         try { _updateFlipsSignInWall?.(); } catch(e) {}
         updateProUI?.();
-        window._authResolved = true;
+        window._authInitialized = true; // fired, but no user
+        // _authResolved stays false until a real user signs in
       }
     });
   </script>
@@ -5667,17 +5669,24 @@ Object.defineProperty(window, 'googleUser', {
   configurable: true, enumerable: true
 });
 window._googleUserVal = null;
-window._authResolved = false;
+window._authResolved = false; // true only when a signed-in user is confirmed
+window._authInitialized = false; // true after first onAuthStateChanged fires (any result)
 
-// Polls until Firebase auth resolves (max 6s). Returns googleUser or null.
-// Safe to call from any context — replaces the broken one-shot _authReady promise.
+// Waits up to 4s for a signed-in user. Resolves immediately if already signed in.
+// If Firebase fires null (not signed in), resolves after _authInitialized is true.
 window._waitForAuth = function() {
   return new Promise(resolve => {
-    if (window._authResolved) { resolve(window.googleUser); return; }
+    // Already have a user — resolve immediately
+    if (window.googleUser && window._googleIdToken) { resolve(window.googleUser); return; }
+    // Firebase already fired and there's no user — don't wait
+    if (window._authInitialized && !window.googleUser) { resolve(null); return; }
+    // Firebase hasn't fired yet — poll for up to 4s
     const start = Date.now();
     const check = () => {
-      if (window._authResolved || Date.now() - start > 6000) {
+      if (window.googleUser && window._googleIdToken) {
         resolve(window.googleUser);
+      } else if (window._authInitialized || Date.now() - start > 4000) {
+        resolve(window.googleUser); // null if not signed in
       } else {
         setTimeout(check, 80);
       }
