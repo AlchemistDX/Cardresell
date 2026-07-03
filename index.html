@@ -728,11 +728,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- SEO / Open Graph / Twitter Card -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.cardresell.org/" />
-  <meta property="og:title" content="CardResell — TCG Price Lookup & Sell Calculator" />
+  <meta property="og:title" content="CardResell — Find Your Card's Value & Best Platform to Sell" />
   <meta property="og:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell — free." />
   <meta property="og:image" content="https://www.cardresell.org/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="CardResell — TCG Price Lookup & Sell Calculator" />
+  <meta name="twitter:title" content="CardResell — Find Your Card's Value & Best Platform to Sell" />
   <meta name="twitter:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell." />
   <meta name="twitter:image" content="https://www.cardresell.org/og-image.png" />
 
@@ -1034,7 +1034,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <!-- SOCIAL PROOF BAR -->
 <div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
   <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold);font-weight:800"></span> <span id="socialProofLabel"></span></span>
-  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.12);border:1px solid rgba(196,122,0,.3);border-radius:99px;padding:.25rem .7rem;cursor:pointer;white-space:nowrap">Try an example →</button>
+  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try an example →</button>
 </div>
 
 <section class="search-area">
@@ -1048,11 +1048,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
     <!-- Desktop: Scan + Grade inline -->
     <div class="scan-inline" style="display:flex;gap:.35rem;flex-shrink:0">
-      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card Identification Scanner">
+      <button id="scanBtn" class="scan-btn" onclick="openGradedScanGate()" title="Card ID Scanner — 10 free scans on sign-up, then $1/10">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Scan
       </button>
-      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="Estimated Grade Scanner">
+      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openGradeScanGate()" title="AI Grading Estimate — 1 free scan on sign-up, then $0.50/scan">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         Grade
       </button>
@@ -1061,13 +1061,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
   <!-- Mobile: Scan + Grade as full-width sub-row -->
   <div class="scan-sub-row" id="scanSubRow">
-    <button class="scan-sub-btn" id="idScanSubBtn" onclick="openGradedScanGate()">
+    <button class="scan-sub-btn" id="idScanSubBtn" onclick="openGradedScanGate()" title="Card ID Scanner — 10 free on sign-up, then $1/10">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      ID Scan <span id="idScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span>
+      ID Scan <span id="idScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span><span style="font-size:.6rem;opacity:.45;margin-left:.25rem">10 free</span>
     </button>
-    <button class="scan-sub-btn grade-sub" id="gradeScanSubBtn" onclick="openGradeScanGate()">
+    <button class="scan-sub-btn grade-sub" id="gradeScanSubBtn" onclick="openGradeScanGate()" title="AI Grading Estimate — 1 free on sign-up, $0.50/scan after">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      Grade Scan <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span>
+      Grade Scan <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span><span style="font-size:.6rem;opacity:.45;margin-left:.25rem">1 free</span>
     </button>
   </div>
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
@@ -1716,47 +1716,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div><!-- /collectionView -->
 
 <!-- ADMIN VIEW -->
-<div id="adminView" style="display:none;padding:.5rem 0">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
-    <div style="font-size:.88rem;font-weight:800;color:var(--text);letter-spacing:-.01em">⚙ Admin Dashboard</div>
-    <div style="display:flex;gap:.4rem">
-      <button onclick="exportSubscriberCSV()" style="padding:.35rem .75rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">⬇ Export Emails</button>
-      <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
-    </div>
-  </div>
-
-  <!-- Stats grid -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem">
-    <div class="pnl-card" style="border-color:rgba(74,222,128,.25)">
-      <div class="pnl-label">Pro Users</div>
-      <div class="pnl-value pos" id="adminProUsers">—</div>
-      <div class="pnl-sub" id="adminProSub"></div>
-    </div>
-    <div class="pnl-card" style="border-color:rgba(196,122,0,.25)">
-      <div class="pnl-label">Est. MRR</div>
-      <div class="pnl-value" id="adminMRR" style="color:var(--gold)">—</div>
-      <div class="pnl-sub" id="adminMRRSub">active subscriptions</div>
-    </div>
-    <div class="pnl-card">
-      <div class="pnl-label">Newsletter</div>
-      <div class="pnl-value" id="adminNewsletter">—</div>
-      <div class="pnl-sub">subscribers</div>
-    </div>
-    <div class="pnl-card">
-      <div class="pnl-label">Total Signups</div>
-      <div class="pnl-value" id="adminSignups">—</div>
-      <div class="pnl-sub" id="adminReferralSub"></div>
-    </div>
-  </div>
-
-  <!-- Recent newsletter emails -->
-  <div class="section-panel" style="margin-top:.5rem">
-    <div class="section-hdr"><div class="section-title">📬 Recent Subscribers</div></div>
-    <div id="adminEmailList" style="font-size:.72rem;color:var(--text-muted);line-height:2">Loading…</div>
-  </div>
-
-  <div style="font-size:.62rem;color:var(--text-muted);margin-top:.75rem;text-align:center" id="adminGeneratedAt"></div>
-</div><!-- /adminView -->
+<!-- Admin view: HTML injected at runtime after owner auth verified. No admin markup in public bundle. -->
+<div id="adminView" style="display:none;padding:.5rem 0"></div>
 
 <!-- ADD FLIP / ADD HOLD MODAL -->
 
@@ -1898,12 +1859,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-name">Free</div>
         <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
         <ul class="plan-features">
-          <li>Card price lookup</li>
-          <li>Flip calculator</li>
+          <li>Card price lookup (all games)</li>
+          <li>eBay &amp; TCGPlayer fee breakdown</li>
+          <li>Flip calculator + Deal Score</li>
           <li>5 flips tracked</li>
-          <li class="faded">Platform fee breakdown</li>
-          <li class="faded">Unlimited flip tracking</li>
-          <li class="faded">Estimated Grade Scans</li>
+          <li class="faded">Poshmark, COMC, Fanatics, PWCC fees</li>
+          <li class="faded">Unlimited flip &amp; portfolio tracking</li>
+          <li class="faded">AI Grading Estimate scans</li>
+          <li class="faded">Payout bar chart comparison</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -1912,10 +1875,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-badge">MONTHLY</div>
         <div class="plan-name">Pro</div>
         <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-bottom:.6rem;line-height:1.4">Everything to run a serious resell operation</div>
         <ul class="plan-features">
-          <li>Adds Poshmark, COMC, Fanatics Collect &amp; PWCC to fee breakdown</li>
-          <li>Unlimited flip &amp; portfolio tracking</li>
-          <li>10 free Estimated Grade Scans/mo</li>
+          <li><strong>6 platforms compared</strong> — adds Poshmark, COMC, Fanatics &amp; PWCC</li>
+          <li><strong>Payout bar chart</strong> — see all platforms side-by-side at a glance</li>
+          <li><strong>Unlimited flip tracking</strong> + P&amp;L dashboard</li>
+          <li><strong>10 AI Grading Estimate scans/mo</strong> — corners, edges, centering, surface</li>
+          <li><strong>Deal Score on every card</strong> — Buy / Maybe / Pass verdict</li>
+          <li><strong>Max Buy Price calculator</strong> — know your ceiling before bidding</li>
           <li>PRO badge on account</li>
         </ul>
         <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
@@ -1927,12 +1894,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-badge" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">BEST VALUE</div>
         <div class="plan-name">Pro Annual</div>
         <div class="plan-price" style="font-size:1.6rem"><sup>$</sup>89<span style="font-size:1rem">.99</span><sub>/yr</sub></div>
-        <div style="font-size:.68rem;color:#4ade80;font-weight:700;margin-bottom:.5rem">Save $30 vs monthly</div>
+        <div style="font-size:.68rem;color:#4ade80;font-weight:700;margin-bottom:.5rem">Save $30 vs monthly &mdash; that's 3 months free</div>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>Billed once per year</li>
           <li>Cancel anytime</li>
-          <li style="color:var(--gold);font-weight:700">~ $7.50/mo effective</li>
+          <li style="color:var(--gold);font-weight:700">~$7.50/mo &mdash; less than a pack of cards</li>
         </ul>
         <button id="pricingAnnualBtn" class="plan-btn pro-btn" onclick="startAnnualCheckout()" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">
           <span id="pricingAnnualBtnText">Get Annual &mdash; $89.99/yr</span>
@@ -3974,11 +3941,12 @@ function updateSellLinks(card) {
 
   // Store URLs globally — calc() reads these to make cards clickable
   window._platSellUrls = {
-    ebay:     buildEbayUrl(ebaySellRaw),
-    comc:     `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
-    poshmark: `https://poshmark.com/search?query=${poshQ}&type=listings`,
-    fanatics: `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
-    pwcc:     `https://www.pwccmarketplace.com/search?query=${pwccQ}`
+    ebay:      buildEbayUrl(ebaySellRaw),
+    tcgplayer: isTCGGame ? tcgpUrl : '',
+    comc:      `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
+    poshmark:  `https://poshmark.com/search?query=${poshQ}&type=listings`,
+    fanatics:  `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
+    pwcc:      `https://www.pwccmarketplace.com/search?query=${pwccQ}`
   };
   // Show TCGPlayer sell button for card games (MTG + YGO primarily)
   const slTcgpSellEl = document.getElementById('slTcgpSell');
@@ -4048,14 +4016,15 @@ function esc(s) {
 /* ═══ FEE ENGINE (2026) ═══ */
 
 const PLATFORMS = {
-  ebay:     { name: 'eBay',             color: '#e53238', emoji: '🛒', verified: 'Jun 2026' },
-  poshmark: { name: 'Poshmark',         color: '#c02b50', emoji: '👗', verified: 'Jun 2026' },
-  comc:     { name: 'COMC',             color: '#1a5276', emoji: '🃏', verified: 'Jun 2026' },
-  fanatics: { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026' },
-  pwcc:     { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026' }
+  ebay:      { name: 'eBay',             color: '#e53238', emoji: '🛒', verified: 'Jun 2026' },
+  tcgplayer: { name: 'TCGPlayer',        color: '#0070f3', emoji: '🔵', verified: 'Jun 2026' },
+  poshmark:  { name: 'Poshmark',         color: '#c02b50', emoji: '👗', verified: 'Jun 2026' },
+  comc:      { name: 'COMC',             color: '#1a5276', emoji: '🃏', verified: 'Jun 2026' },
+  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026' },
+  pwcc:      { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026' }
 };
-// Free tier: eBay only. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
-const FREE_PLATFORMS = new Set(['ebay']);
+// Free tier: eBay + TCGPlayer. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
+const FREE_PLATFORMS = new Set(['ebay', 'tcgplayer']);
 
 function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   const total = price + shipCharge;
@@ -4072,6 +4041,20 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   items.push({ l: 'Per-order fee', a: perOrder });
   if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100 });
   return items;
+}
+
+// TCGPlayer — dominant TCG singles marketplace (Pokémon, MTG, Yu-Gi-Oh!, Lorcana, etc.)
+// Standard seller: 10.25% marketplace commission on sale price.
+// Payment processing: 2.5% + $0.30 per transaction (PayPal/card, taken from payout).
+// Verified seller (Direct): same 10.25% + processing. No listing fee, no monthly fee.
+// Source: https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
+function feeTCGPlayer(price) {
+  const commission   = price * 0.1025;          // 10.25% marketplace commission
+  const processing   = price * 0.025 + 0.30;    // 2.5% + $0.30 payment processing
+  return [
+    { l: 'Marketplace commission (10.25%)', a: commission },
+    { l: 'Payment processing (2.5% + $0.30)', a: processing }
+  ];
 }
 
 // PWCC Marketplace — consignment auction house, best for $75+ graded/raw cards
@@ -4150,6 +4133,17 @@ function calc() {
       feeItems: feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated),
       sellerShip: shipCost,
       note: ''
+    },
+    {
+      pid: 'tcgplayer',
+      eligible: !isSports,   // TCGPlayer doesn’t carry sports cards
+      feeItems: feeTCGPlayer(price),
+      sellerShip: 0,         // TCGPlayer handles shipping
+      note: isSports
+        ? 'TCGPlayer is for TCG singles only — not sports cards.'
+        : (isYugioh || isMagic)
+          ? 'Largest TCG marketplace for MTG & Yu-Gi-Oh! singles.'
+          : 'Largest TCG marketplace for Pokémon singles. Sellers ship directly to buyers.'
     },
     {
       pid: 'poshmark',
@@ -4330,8 +4324,8 @@ function calc() {
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock Poshmark, COMC, Fanatics &amp; PWCC — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay shown free · Pro unlocks 4 more platforms + bar chart + unlimited flip tracking</div>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 4 more platforms + AI grading — $9.99/mo</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro unlocks Poshmark, COMC, Fanatics &amp; PWCC + bar chart + unlimited flip tracking</div>
       </div>
     </div>`;
     html += `</div>`;
@@ -4598,9 +4592,35 @@ function switchView(view) {
     if (collection) collection.style.display = '';
     renderCollectionView();
   } else if (view === 'admin') {
+    // Extra guard: only inject & show admin UI after confirming owner sub server-side.
+    if (window._userSub !== window._OWNER_SUB) { switchView('lookup'); return; }
     if (lookup) lookup.classList.add('hidden');
     const adminView = document.getElementById('adminView');
-    if (adminView) adminView.style.display = '';
+    if (!adminView) return;
+    // Inject admin HTML on first open (keeps it out of the public source bundle)
+    if (!adminView.dataset.loaded) {
+      adminView.dataset.loaded = '1';
+      adminView.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+          <div style="font-size:.88rem;font-weight:800;color:var(--text);letter-spacing:-.01em">⚙️ Admin Dashboard</div>
+          <div style="display:flex;gap:.4rem">
+            <button onclick="exportSubscriberCSV()" style="padding:.35rem .75rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">⬇ Export Emails</button>
+            <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem">
+          <div class="pnl-card" style="border-color:rgba(74,222,128,.25)"><div class="pnl-label">Pro Users</div><div class="pnl-value pos" id="adminProUsers">—</div><div class="pnl-sub" id="adminProSub"></div></div>
+          <div class="pnl-card" style="border-color:rgba(196,122,0,.25)"><div class="pnl-label">Est. MRR</div><div class="pnl-value" id="adminMRR" style="color:var(--gold)">—</div><div class="pnl-sub" id="adminMRRSub">active subscriptions</div></div>
+          <div class="pnl-card"><div class="pnl-label">Newsletter</div><div class="pnl-value" id="adminNewsletter">—</div><div class="pnl-sub">subscribers</div></div>
+          <div class="pnl-card"><div class="pnl-label">Total Signups</div><div class="pnl-value" id="adminSignups">—</div><div class="pnl-sub" id="adminReferralSub"></div></div>
+        </div>
+        <div class="section-panel" style="margin-top:.5rem">
+          <div class="section-hdr"><div class="section-title">📥 Recent Subscribers</div></div>
+          <div id="adminEmailList" style="font-size:.72rem;color:var(--text-muted);line-height:2">Loading…</div>
+        </div>
+        <div style="font-size:.62rem;color:var(--text-muted);margin-top:.75rem;text-align:center" id="adminGeneratedAt"></div>`;
+    }
+    adminView.style.display = '';
     loadAdminData();
   }
   // else: lookup (default) — already shown above
@@ -5216,6 +5236,7 @@ function _maybeRerenderCollection() {
 // ADMIN DASHBOARD
 // ══════════════════════════════════════════════════════════
 const _OWNER_SUB = '111904685934190351595';
+window._OWNER_SUB = _OWNER_SUB; // expose for switchView guard
 
 function _maybeShowAdminTab() {
   if (window._userSub === _OWNER_SUB) {
