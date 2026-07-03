@@ -4779,7 +4779,7 @@ function _updateFlipsSignInWall() {
   const portfolio = document.getElementById('portfolioSection');
   const flHeader = document.querySelector('.fl-header');
   if (!wall) return;
-  if (!googleUser) {
+  if (!window.googleUser) {
     wall.style.display = 'block';
     if (pnl) pnl.style.display = 'none';
     if (flipLog) flipLog.style.display = 'none';
@@ -5661,14 +5661,9 @@ function renderFlipsView() {
    GOOGLE SIGN-IN
    ═══════════════════════════════════════ */
 
-// googleUser is a global property — the Firebase module script writes window.googleUser
-// and bare `googleUser` in non-module scripts reads the same window property.
-Object.defineProperty(window, 'googleUser', {
-  get() { return window._googleUserVal ?? null; },
-  set(v) { window._googleUserVal = v; },
-  configurable: true, enumerable: true
-});
-window._googleUserVal = null;
+// window.googleUser is a global property — the Firebase module script writes window.googleUser
+// and bare `window.googleUser` in non-module scripts reads the same window property.
+window.googleUser = null; // set by Firebase onAuthStateChanged in module script
 window._authResolved = false; // true only when a signed-in user is confirmed
 window._authInitialized = false; // true after first onAuthStateChanged fires (any result)
 
@@ -5736,15 +5731,15 @@ function handleGoogleSignIn(response) {
 
 
 function applyGoogleUser() {
-  if (!googleUser) return;
+  if (!window.googleUser) return;
   const btn = document.getElementById('googleSignInBtn');
   if (btn) btn.style.display = 'none';
   const userBtn = document.getElementById('googleUserBtn');
   if (userBtn) userBtn.style.display = 'flex';
   const avatar = document.getElementById('googleAvatar');
-  if (avatar) avatar.src = googleUser.avatar || '';
+  if (avatar) avatar.src = window.googleUser.avatar || '';
   const nameEl = document.getElementById('googleName');
-  if (nameEl) nameEl.textContent = (googleUser.name || 'User').split(' ')[0];
+  if (nameEl) nameEl.textContent = (window.googleUser.name || 'User').split(' ')[0];
   // Check pro status
   checkProStatus();
   _maybeShowAdminTab();
@@ -5752,7 +5747,7 @@ function applyGoogleUser() {
   updateProUI?.();
   // Prefill newsletter email if settings open
   const nlInput = document.getElementById('newsletterEmail');
-  if (nlInput && !nlInput.value && googleUser.email) nlInput.value = googleUser.email;
+  if (nlInput && !nlInput.value && window.googleUser.email) nlInput.value = window.googleUser.email;
 }
 
 
@@ -5776,7 +5771,7 @@ function shareReferralLink() {
 }
 
 function signOut() {
-  const name = googleUser?.name || 'your account';
+  const name = window.googleUser?.name || 'your account';
   if (!window.confirm('Sign out of ' + name + '?')) return;
   if (window._fbSignOut) {
     window._fbSignOut().catch(e => console.error(e));
@@ -5791,7 +5786,7 @@ function signOut() {
 
 // ── Scanner gate — requires Google sign-in ──
 function openScanner() {
-  if (!googleUser) {
+  if (!window.googleUser) {
     // Show a friendly prompt instead of just doing nothing
     const overlay  = document.getElementById('scanOverlay');
     const statusEl = document.getElementById('scanStatus');
@@ -6113,7 +6108,7 @@ async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
 
-  if (!googleUser) { openScanner(); return; }
+  if (!window.googleUser) { openScanner(); return; }
 
   if (!window._googleIdToken) {
     const overlay2 = document.getElementById('scanOverlay');
@@ -6234,7 +6229,7 @@ async function processScanImage(input) {
 
 // ── Grade scan gate — check credits first, show pack options if needed ──
 function openGradeScanGate() {
-  if (!googleUser) {
+  if (!window.googleUser) {
     showToast('Sign in with Google first to use the grader');
     return;
   }
@@ -6281,7 +6276,7 @@ async function processGradeImage(input) {
   const file = input.files[0];
   if (!file) return;
 
-  if (!googleUser) { openGradeScanGate(); return; }
+  if (!window.googleUser) { openGradeScanGate(); return; }
 
   if (!window._googleIdToken) {
     const ov = document.getElementById('scanOverlay');
@@ -6581,7 +6576,7 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 
 
 function getUserKey(suffix) {
-  return googleUser ? 'cardsell_' + googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
+  return window.googleUser ? 'cardsell_' + window.googleUser.sub + '_' + suffix : 'cardsell_' + suffix;
 }
 
 // Example card auto-load removed — app opens on clean homepage
@@ -6620,7 +6615,7 @@ window._idScanCredits = 0; // paid ID scan credits
 async function checkProStatus() {
   // If auth hasn't resolved yet, wait for it
   await window._waitForAuth();
-  if (!googleUser || !window._googleIdToken) return;
+  if (!window.googleUser || !window._googleIdToken) return;
   try {
     const refParam = window._pendingRefCode ? '?ref=' + encodeURIComponent(window._pendingRefCode) : '';
     const r = await fetch('/api/pro-status' + refParam, {
@@ -6672,7 +6667,7 @@ function updateProUI() {
   const shopBtn    = document.getElementById('shopBtn');
   const promoBanner= document.getElementById('promoBanner');
 
-  if (!googleUser) {
+  if (!window.googleUser) {
     // Not signed in — hide per-user badges, keep Shop visible
     proBadge?.classList.remove('visible');
     getProBtn?.classList.remove('visible');
@@ -6802,18 +6797,18 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
 // ── Start Pro subscription checkout ──
 async function startProCheckout() {
   await window._waitForAuth();
-  if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-checkout',
-    { email: googleUser.email, userId: googleUser.sub },
+    { email: window.googleUser.email, userId: window.googleUser.sub },
     'pricingProBtn', 'pricingProBtnText', 'Get Pro — $9.99/mo');
 }
 
 // ── Start annual Pro checkout ──
 async function startAnnualCheckout() {
   await window._waitForAuth();
-  if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-annual-checkout',
-    { googleSub: googleUser.sub, email: googleUser.email },
+    { googleSub: window.googleUser.sub, email: window.googleUser.email },
     'pricingAnnualBtn', 'pricingAnnualBtnText', 'Get Annual — $89.99/yr');
 }
 
@@ -6824,13 +6819,13 @@ function startScanCheckout() { openGradeScanModal(); }
 async function startGradeScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
   await window._waitForAuth();
-  if (!googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
+  if (!window.googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
   if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = 'Loading…'; }
   _stripeCheckout('/api/stripe-grade-checkout',
-    { tier, email: googleUser.email, userId: googleUser.sub, name: googleUser.name },
+    { tier, email: window.googleUser.email, userId: window.googleUser.sub, name: window.googleUser.name },
     null, null, null).catch(() => tierBtns.forEach(b => { b.disabled = false; }));
   // Re-enable on failure
   const resetBtns = () => tierBtns.forEach(b => { b.disabled = false; });
@@ -6844,13 +6839,13 @@ function openGradeScanModal() { switchScanMode('grade'); openPricingModal('grade
 async function startIdScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
   await window._waitForAuth();
-  if (!googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
+  if (!window.googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startIdScanCheckout('${tier}')"]`);
   if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = 'Loading…'; }
   _stripeCheckout('/api/stripe-id-checkout',
-    { tier, email: googleUser.email, userId: googleUser.sub },
+    { tier, email: window.googleUser.email, userId: window.googleUser.sub },
     null, null, null);
   const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
   const resetBtns = () => {
@@ -6863,7 +6858,7 @@ async function startIdScanCheckout(tier) {
 // ── Open Stripe billing portal (manage / cancel subscription) ──
 async function openBillingPortal() {
   await window._waitForAuth();
-  if (!googleUser) { showToast('Sign in first to manage your subscription.'); return; }
+  if (!window.googleUser) { showToast('Sign in first to manage your subscription.'); return; }
   const btn = document.querySelector('[onclick="openBillingPortal()"]');
   const origText = btn?.innerHTML;
   if (btn) btn.innerHTML = '<span style="opacity:.6">Opening…</span>';
@@ -6871,7 +6866,7 @@ async function openBillingPortal() {
     const r = await fetch('/api/stripe-portal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
-      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
+      body: JSON.stringify({ email: window.googleUser.email, userId: window.googleUser.sub })
     });
     const d = await r.json();
     if (d.url) {
@@ -6913,7 +6908,7 @@ function showToast(msg, duration) {
     // Verify payment with Stripe and grant the credit
     (async () => {
       const email     = window._userEmail || '';
-      const googleSub = googleUser?.sub || googleUser?.id || '';
+      const googleSub = window.googleUser?.sub || window.googleUser?.id || '';
       if (!sessionId || !email) {
         // No session ID — can't verify, show generic message and refresh credits
         showToast('\u2714 Payment received! Verifying your credit…', 4000);
@@ -6952,7 +6947,7 @@ function showToast(msg, duration) {
     history.replaceState({}, '', window.location.pathname);
     (async () => {
       const email     = window._userEmail || '';
-      const googleSub = googleUser?.sub || googleUser?.id || '';
+      const googleSub = window.googleUser?.sub || window.googleUser?.id || '';
       if (!sessionId || !email) {
         showToast('\u2705 ID Scanner Credits purchased! Loading balance\u2026', 4000);
         setTimeout(() => loadSettingsScanCredits?.(), 1500);
@@ -6994,7 +6989,7 @@ function showToast(msg, duration) {
     history.replaceState({}, '', window.location.pathname);
     (async () => {
       const email     = window._userEmail || '';
-      const googleSub = googleUser?.sub || googleUser?.id || '';
+      const googleSub = window.googleUser?.sub || window.googleUser?.id || '';
       if (!sessionId || !email) {
         showToast('✅ Grade Scan Credits purchased! Loading balance…', 4000);
         setTimeout(() => loadSettingsScanCredits?.(), 1500);
@@ -7035,7 +7030,7 @@ function showToast(msg, duration) {
    ========================="================================ */
 
 function openGradedScanGate() {
-  if (!googleUser) {
+  if (!window.googleUser) {
     showToast('Sign in with Google first to use the scanner');
     return;
   }
@@ -7585,7 +7580,7 @@ window._bulkMode        = null; // 'camera' | 'upload'
 window._bulkProcessing  = false;
 
 function openBulkScan() {
-  if (!googleUser) {
+  if (!window.googleUser) {
     showToast('Sign in with Google first to use Bulk Scan');
     return;
   }
