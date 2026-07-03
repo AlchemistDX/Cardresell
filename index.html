@@ -301,7 +301,7 @@ img{display:block;max-width:100%;height:auto}
 
 /* ─── SEARCH RESULTS DROPDOWN ─── */
 .results-drop{position:relative;z-index:20}
-.drop-list{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);max-height:220px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.drop-list{position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.45);max-height:260px;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch;z-index:120}
 .drop-list.open{display:block}
 .drop-item{display:flex;align-items:center;gap:.875rem;padding:.65rem 1rem;cursor:pointer;border-bottom:1px solid var(--divider);transition:background var(--ease)}
 .drop-item:last-child{border-bottom:none}
@@ -2272,12 +2272,19 @@ async function injectPokemonImages(cards, gameSlug) {
         ph.replaceWith(el);
       }
     }
-    // Update catalog row if open
-    const catCard = document.querySelector(`#searchModalGrid [data-idx="${i}"]`);
+    // Update catalog row if open — always inject real image (replaces placeholder)
+    const catCard = document.querySelector(`#searchModalGrid [data-idx="${String(i)}"]`);
     if (catCard) {
       const area = catCard.querySelector('.cat-img-area');
-      if (area && !area.querySelector('img')) {
-        area.innerHTML = `<img src="${img}" loading="lazy" style="width:100%;height:100%;object-fit:contain">`;
+      if (area) {
+        const existing = area.querySelector('img');
+        if (existing) {
+          // Update src if it's a placeholder or empty
+          if (!existing.src || existing.src.includes('1F0CF')) existing.src = img;
+          else existing.src = img; // always update to best image
+        } else {
+          area.innerHTML = `<img src="${img}" loading="lazy" style="width:100%;height:100%;object-fit:contain">`;
+        }
       }
     }
   });
@@ -2615,6 +2622,8 @@ async function doSearch(q) {
     console.error(err);
     dropList.innerHTML = '<div class="drop-empty">Search failed — check your connection and try again.</div>';
   }
+  // Return drop items so callers can render directly without polling
+  return dropList.querySelectorAll('.drop-item');
 }
 
 /* ── Pokémon API (PokemonTCG.io) ── */
@@ -7126,7 +7135,7 @@ async function doPasswordReset() {
 function openSearchModal() {
   const q = searchInput.value.trim();
   if (!q) return;
-  clearTimeout(searchTimeout); // cancel any pending debounce so we own the doSearch call
+  clearTimeout(searchTimeout);
   const modal = document.getElementById('searchResultsModal');
   const grid  = document.getElementById('searchModalGrid');
   const title = document.getElementById('searchModalTitle');
@@ -7137,29 +7146,52 @@ function openSearchModal() {
   grid.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
   modal.style.display = 'flex';
 
-  // Always fire a fresh doSearch, then poll until dropList has items
-  doSearch(q).then(() => _pollAndRender(q, 0));
-}
-
-function _pollAndRender(q, attempts) {
-  const items = dropList.querySelectorAll('.drop-item');
-  if (items.length) {
-    _renderCatalogFromDrop(q, items);
-  } else if (attempts < 20) {
-    setTimeout(() => _pollAndRender(q, attempts + 1), 300);
-  } else {
-    document.getElementById('searchModalGrid').innerHTML =
-      '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
-  }
+  // Fire fresh search; doSearch resolves after dropList is populated
+  doSearch(q).then(items => {
+    if (items && items.length) {
+      _renderCatalogFromDrop(q, items);
+    } else {
+      // Fallback: check dropList one more time (edge case)
+      const fallback = dropList.querySelectorAll('.drop-item');
+      if (fallback.length) {
+        _renderCatalogFromDrop(q, fallback);
+      } else {
+        grid.innerHTML = '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
+      }
+    }
+  });
 }
 
 function openCatalog(q) {
   if (q) searchInput.value = q;
   const existing = dropList.querySelectorAll('.drop-item');
   if (existing.length) {
-    openSearchModal();
+    // Results already in dropList — render directly, no extra fetch
+    const modal = document.getElementById('searchResultsModal');
+    const title = document.getElementById('searchModalTitle');
+    document.getElementById('searchModalCount').textContent = '';
+    if (modal) modal.style.display = 'flex';
+    if (title) title.textContent = `"${q || searchInput.value.trim()}"`;
+    _renderCatalogFromDrop(q || searchInput.value.trim(), existing);
   } else {
-    doSearch(q || searchInput.value.trim()).then(() => openSearchModal());
+    const term = q || searchInput.value.trim();
+    if (!term) return;
+    const modal = document.getElementById('searchResultsModal');
+    const grid  = document.getElementById('searchModalGrid');
+    const titleEl = document.getElementById('searchModalTitle');
+    document.getElementById('searchModalCount').textContent = '';
+    if (modal) modal.style.display = 'flex';
+    if (titleEl) titleEl.textContent = `"${term}"`;
+    if (grid) grid.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
+    doSearch(term).then(items => {
+      if (items && items.length) {
+        _renderCatalogFromDrop(term, items);
+      } else {
+        const fallback = dropList.querySelectorAll('.drop-item');
+        if (fallback.length) _renderCatalogFromDrop(term, fallback);
+        else if (grid) grid.innerHTML = '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
+      }
+    });
   }
 }
 
@@ -7234,8 +7266,10 @@ function _makeCatalogRow(r) {
   row.dataset.idx = r.idx;
   row.style.cssText = 'display:flex;align-items:center;gap:.875rem;padding:.85rem 1rem;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);background:#000;-webkit-tap-highlight-color:transparent;transition:background .15s';
   row.innerHTML = `
-    <div class="cat-img-area" style="flex-shrink:0;width:52px;height:72px;background:#1a1a1a;border-radius:5px;display:flex;align-items:center;justify-content:center;overflow:hidden">
-      ${r.img ? `<img src="${r.img}" loading="lazy" style="width:100%;height:100%;object-fit:contain">` : '<span style="font-size:1.3rem;opacity:.3">&#x1F0CF;</span>'}
+    <div class="cat-img-area" style="flex-shrink:0;width:52px;height:72px;background:#1a1a1a;border-radius:5px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">
+      ${r.img
+        ? `<img src="${r.img}" loading="lazy" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none'">`
+        : '<span style="font-size:1.3rem;opacity:.3">&#x1F0CF;</span>'}
     </div>
     <div style="flex:1;min-width:0">
       <div style="font-size:.92rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
