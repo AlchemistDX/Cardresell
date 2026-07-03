@@ -1739,6 +1739,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
 
     <!-- Collection table -->
+    <!-- Pro nudge for free users with 5+ cards -->
+    <div id="colProNudge" style="display:none;margin:.5rem 0;padding:.6rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.22);border-radius:10px;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('collection_nudge')">
+      <span style="font-size:.75rem;color:rgba(196,122,0,.9)">Pro unlocks P&amp;L chart, grading ROI &amp; unlimited tracking</span>
+      <span style="font-size:.72rem;font-weight:800;color:var(--gold);white-space:nowrap">See Pro →</span>
+    </div>
     <div id="collectionWrap"></div>
 
   </div>
@@ -4399,6 +4404,13 @@ function calc() {
           <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-top:.1rem">${_vTip}</div>
         </div>
       </div>`;
+      // For free "Buy" verdicts: show Pro platform nudge
+      if (!window._isPro && _verdict === 'Buy') {
+        html += `<div style="margin-top:.35rem;padding:.45rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('deal_score_nudge')">
+          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">Pro unlocks 4 more platforms — maximize this deal</span>
+          <span style="font-size:.68rem;font-weight:800;color:var(--gold);white-space:nowrap">Upgrade →</span>
+        </div>`;
+      }
     }
   }
 
@@ -4770,6 +4782,10 @@ function saveFlipEntry() {
     }
     flips.push({ id: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, profit, platform, date });
     saveFlipsData(flips);
+    // Warn free users when they're 1 flip away from the cap
+    if (!window._isPro && flips.length === 4) {
+      setTimeout(() => showToast('1 flip slot left on the free plan — Pro unlocks unlimited tracking 📊', 'gold'), 400);
+    }
   }
 
   document.getElementById('flipModal').classList.remove('open');
@@ -5183,6 +5199,12 @@ function renderCollectionView() {
   const wrap = document.getElementById('collectionWrap');
   if (!wrap) return;
 
+  // Show Pro nudge banner for free users with a growing collection (5+ cards)
+  const _colNudge = document.getElementById('colProNudge');
+  if (_colNudge) {
+    _colNudge.style.display = (!window._isPro && port.length >= 5) ? 'flex' : 'none';
+  }
+
   if (!port.length) {
     wrap.innerHTML = '<div class="empty-flips"><div class="empty-flips-icon">📦</div><div class="empty-flips-h">No cards in your collection yet</div><div class="empty-flips-p">Tap "+ Add Card" to log a card you own and track its value.</div></div>';
     return;
@@ -5404,7 +5426,19 @@ function renderFlipsView() {
   // ── Flip Log table ──
   const flipWrap = document.getElementById('flipLogWrap');
   if (!flips.length) {
-    flipWrap.innerHTML = '<div class="section-panel"><div class="empty-flips"><div class="empty-flips-icon">🔄</div><div class="empty-flips-h">No flips logged yet</div><div class="empty-flips-p">Tap "+ Log a Flip" to record your first card sale and start tracking profit.</div></div></div>';
+    const _emptyFlipHTML = window._isPro
+      ? '<div class="section-panel"><div class="empty-flips"><div class="empty-flips-icon">🔄</div><div class="empty-flips-h">No flips logged yet</div><div class="empty-flips-p">Tap \"+ Log a Flip\" to record your first card sale and start tracking profit.</div></div></div>'
+      : `<div class="section-panel"><div class="empty-flips">
+          <div class="empty-flips-icon">🔄</div>
+          <div class="empty-flips-h">Start tracking your flips</div>
+          <div class="empty-flips-p" style="max-width:22ch">Log every card you sell — see your total profit, best flips, and platform breakdown.</div>
+          <div style="margin-top:1.1rem;display:flex;flex-direction:column;gap:.5rem;max-width:260px;width:100%">
+            <div style="display:flex;align-items:center;gap:.55rem;font-size:.78rem;color:var(--text-muted);text-align:left"><span style="font-size:1rem">✅</span> Free: 5 flips tracked</div>
+            <div style="display:flex;align-items:center;gap:.55rem;font-size:.78rem;color:var(--text-muted);text-align:left"><span style="font-size:1rem">🚀</span> Pro: unlimited + all platforms</div>
+          </div>
+          <button onclick="openPricingModal('flips_empty')" style="margin-top:1.1rem;padding:.55rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:99px;font-weight:800;font-size:.82rem;cursor:pointer">Upgrade to Pro</button>
+        </div></div>`;
+    flipWrap.innerHTML = _emptyFlipHTML;
   } else {
     const sorted = [...flips].sort((a,b) => b.date.localeCompare(a.date));
     flipWrap.innerHTML = '<div class="flip-table-wrap"><table class="flip-table"><thead><tr><th>Date</th><th>Card</th><th>Set</th><th>Bought</th><th>Sold</th><th>Profit</th><th>Platform</th><th></th></tr></thead><tbody>' +
@@ -5972,6 +6006,15 @@ async function processScanImage(input) {
     const badge = document.getElementById('scanSuccessBadge');
     if (badge) badge.style.display = 'flex';
     _setScanBtns('success');
+    // Nudge when credits are running low (≤ 3 remaining)
+    if (!window._isPro) {
+      const remaining = (window._idScanCredits || 0);
+      if (remaining <= 3 && remaining > 0) {
+        setTimeout(() => showToast(remaining + ' ID scan credit' + (remaining===1?'':'s') + ' left — top up anytime in Settings ⚡', 'gold'), 1200);
+      } else if (remaining === 0) {
+        setTimeout(() => showToast('Out of ID scan credits — tap Settings to buy more', 'gold'), 1200);
+      }
+    }
 
   } catch(err) {
     console.error('Scan error:', err);
