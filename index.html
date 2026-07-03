@@ -6828,7 +6828,7 @@ function openSearchModal() {
   const q = searchInput.value.trim();
   if (!q) return;
   _showSearchModal(q);
-  doSearch(q).then(() => _populateSearchModal(q));
+  doSearch(q).then(() => { setTimeout(() => _populateSearchModal(q), 80); });
 }
 
 function openCatalog(q) {
@@ -6836,7 +6836,7 @@ function openCatalog(q) {
   const query = q || searchInput.value.trim();
   if (!query) return;
   _showSearchModal(query);
-  doSearch(query).then(() => _populateSearchModal(query));
+  doSearch(query).then(() => { setTimeout(() => _populateSearchModal(query), 80); });
 }
 
 function _showSearchModal(q) {
@@ -6855,15 +6855,24 @@ function _showSearchModal(q) {
   dropList.classList.remove('open');
 }
 
-function _populateSearchModal(q) {
+function _populateSearchModal(q, _attempt) {
   const loading = document.getElementById('searchModalLoading');
   const grid    = document.getElementById('searchModalGrid');
   const count   = document.getElementById('searchModalCount');
   if (!grid) return;
+  // Modal may have been closed
+  const modal = document.getElementById('searchResultsModal');
+  if (!modal || modal.style.display === 'none') return;
 
   const items = dropList.querySelectorAll('.drop-item');
+  const attempt = _attempt || 0;
   if (!items.length) {
-    setTimeout(() => _populateSearchModal(q), 500);
+    if (attempt > 20) {
+      // Timed out — show empty state
+      if (loading) loading.innerHTML = '<span style="color:#666">No results found.</span>';
+      return;
+    }
+    setTimeout(() => _populateSearchModal(q, attempt + 1), 300);
     return;
   }
 
