@@ -6822,25 +6822,26 @@ function openSearchModal() {
   const modal = document.getElementById('searchResultsModal');
   const grid  = document.getElementById('searchModalGrid');
   const title = document.getElementById('searchModalTitle');
-  const count = document.getElementById('searchModalCount');
   if (!modal) return;
 
-  // Show modal immediately
   title.textContent = `"${q}"`;
-  count.textContent = '';
+  document.getElementById('searchModalCount').textContent = '';
+  grid.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
   modal.style.display = 'flex';
 
-  // If dropdown already has results, render them now
-  const existing = dropList.querySelectorAll('.drop-item');
-  if (existing.length) {
-    _renderCatalogFromDrop(q, existing);
+  // Always fire a fresh doSearch, then poll until dropList has items
+  doSearch(q).then(() => _pollAndRender(q, 0));
+}
+
+function _pollAndRender(q, attempts) {
+  const items = dropList.querySelectorAll('.drop-item');
+  if (items.length) {
+    _renderCatalogFromDrop(q, items);
+  } else if (attempts < 20) {
+    setTimeout(() => _pollAndRender(q, attempts + 1), 300);
   } else {
-    // No results yet — show spinner and wait for doSearch
-    grid.innerHTML = '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
-    doSearch(q).then(() => {
-      const items = dropList.querySelectorAll('.drop-item');
-      _renderCatalogFromDrop(q, items);
-    });
+    document.getElementById('searchModalGrid').innerHTML =
+      '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
   }
 }
 
