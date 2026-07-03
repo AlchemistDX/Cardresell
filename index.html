@@ -813,9 +813,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       return sendPasswordResetEmail(auth, email);
     };
 
-    // Auth-ready promise — resolves after first onAuthStateChanged fires
-    let _authReadyResolve;
-    window._authReady = new Promise(res => { _authReadyResolve = res; });
+    // Signal that auth has resolved — sets window._authResolved = true
+    // Checkout functions poll window._waitForAuth() instead of a one-shot promise
 
     // Central auth state handler — fires on sign-in, sign-out, and page load
     onAuthStateChanged(auth, async (user) => {
@@ -840,7 +839,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             window._googleIdToken = fresh;
           } catch(e) {}
         }, 55 * 60 * 1000);
-        _authReadyResolve(window.googleUser);
+        window._authResolved = true;
         applyGoogleUser();
         loadUserData();
         checkProStatus(); // always call after token is confirmed set
@@ -868,7 +867,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
         try { _updateFlipsSignInWall?.(); } catch(e) {}
         updateProUI?.();
-        _authReadyResolve(null);
+        window._authResolved = true;
       }
     });
   </script>
@@ -2179,7 +2178,7 @@ async function loadSettingsScanCredits() {
   if (!countEl) return;
 
   // Wait for Firebase auth to resolve before checking email
-  if (!window._userEmail && window._authReady) await window._authReady;
+  if (!window._userEmail) await window._waitForAuth();
 
   const email     = window._userEmail || window.googleUser?.email || '';
   const googleSub = window.googleUser?.sub || window.googleUser?.id || window._googleSub || '';
@@ -5659,6 +5658,24 @@ Object.defineProperty(window, 'googleUser', {
   configurable: true, enumerable: true
 });
 window._googleUserVal = null;
+window._authResolved = false;
+
+// Polls until Firebase auth resolves (max 6s). Returns googleUser or null.
+// Safe to call from any context — replaces the broken one-shot _authReady promise.
+window._waitForAuth = function() {
+  return new Promise(resolve => {
+    if (window._authResolved) { resolve(window.googleUser); return; }
+    const start = Date.now();
+    const check = () => {
+      if (window._authResolved || Date.now() - start > 6000) {
+        resolve(window.googleUser);
+      } else {
+        setTimeout(check, 80);
+      }
+    };
+    setTimeout(check, 80);
+  });
+};
 
 // ── Google OAuth Client ID — reads from config.js first, then localStorage fallback ──
 const _HARDCODED_CLIENT_ID = window.CARDSELL_GOOGLE_CLIENT_ID || '458953497801-placeholder.apps.googleusercontent.com';
@@ -6584,7 +6601,7 @@ window._idScanCredits = 0; // paid ID scan credits
 // ── Check Pro status from server ──
 async function checkProStatus() {
   // If auth hasn't resolved yet, wait for it
-  if ((!googleUser || !window._googleIdToken) && window._authReady) await window._authReady;
+  await window._waitForAuth();
   if (!googleUser || !window._googleIdToken) return;
   try {
     const refParam = window._pendingRefCode ? '?ref=' + encodeURIComponent(window._pendingRefCode) : '';
@@ -6762,7 +6779,7 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
 
 // ── Start Pro subscription checkout ──
 async function startProCheckout() {
-  if (!googleUser && window._authReady) await window._authReady;
+  await window._waitForAuth();
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-checkout',
     { email: googleUser.email, userId: googleUser.sub },
@@ -6771,7 +6788,7 @@ async function startProCheckout() {
 
 // ── Start annual Pro checkout ──
 async function startAnnualCheckout() {
-  if (!googleUser && window._authReady) await window._authReady;
+  await window._waitForAuth();
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-annual-checkout',
     { googleSub: googleUser.sub, email: googleUser.email },
@@ -6784,7 +6801,7 @@ function startScanCheckout() { openGradeScanModal(); }
 // ── Start grade scan pack checkout ──
 async function startGradeScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
-  if (!googleUser && window._authReady) await window._authReady;
+  await window._waitForAuth();
   if (!googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
@@ -6804,7 +6821,7 @@ function openGradeScanModal() { switchScanMode('grade'); openPricingModal('grade
 // ── Start ID scan tier checkout ──
 async function startIdScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
-  if (!googleUser && window._authReady) await window._authReady;
+  await window._waitForAuth();
   if (!googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
