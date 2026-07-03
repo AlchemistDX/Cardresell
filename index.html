@@ -6864,16 +6864,17 @@ function _openSearchResultsModal(q) {
     const name  = (item.querySelector('.drop-name')?.textContent || '').trim();
     const meta  = (item.querySelector('.drop-meta')?.textContent || '').trim().replace(/\bTPL\b|\bJP\b|\[EN ref\]/gi, '').trim();
     const price = (item.querySelector('.drop-price')?.textContent || '').trim();
-    const img   = window._searchCards?.[idx]?._imgSmall || item.querySelector('img')?.src || '';
+    const img   = window._searchCards?.[idx]?._imgSmall || item.querySelector('img')?.src || window._searchCards?.[idx]?._tpl?.image_url || '';
 
     const metaParts = meta.split('·').map(s => s.trim()).filter(Boolean);
     const setLine   = metaParts[0] || '';
     const subLine   = metaParts.slice(1).join(' • ');
 
     const card = document.createElement('div');
+    card.dataset.idx = idx;
     card.style.cssText = 'background:#111;border-radius:10px;overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;position:relative';
     card.innerHTML = `
-      <div style="background:#1a1a1a;padding:.6rem;display:flex;align-items:center;justify-content:center;aspect-ratio:2/3">
+      <div class="cat-img-area" style="background:#1a1a1a;padding:.6rem;display:flex;align-items:center;justify-content:center;aspect-ratio:2/3">
         ${img ? `<img src="${img}" loading="lazy" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:5px">` : '<div style="font-size:2.5rem;opacity:.25">🃏</div>'}
       </div>
       <div style="padding:.55rem .6rem .8rem">
