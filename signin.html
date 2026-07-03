@@ -367,12 +367,10 @@
 
   <script>
     function switchTab(tab) {
-      ['signin','signup','forgot'].forEach(t => {
-        document.getElementById('view' + t.charAt(0).toUpperCase() + t.slice(1)).classList.remove('active');
-      });
+      const viewMap = { signin:'viewSignIn', signup:'viewSignUp', forgot:'viewForgot' };
+      Object.values(viewMap).forEach(id => document.getElementById(id)?.classList.remove('active'));
       document.getElementById('tabSignIn')?.classList.remove('active');
       document.getElementById('tabSignUp')?.classList.remove('active');
-      const viewMap = { signin:'viewSignIn', signup:'viewSignUp', forgot:'viewForgot' };
       document.getElementById(viewMap[tab])?.classList.add('active');
       if (tab === 'signin') document.getElementById('tabSignIn')?.classList.add('active');
       if (tab === 'signup') document.getElementById('tabSignUp')?.classList.add('active');
