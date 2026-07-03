@@ -6810,6 +6810,7 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
 // ── Start Pro subscription checkout ──
 async function startProCheckout() {
   await window._waitForAuth();
+  showToast('DBG: gU=' + (window.googleUser ? window.googleUser.email.slice(0,8) : 'NULL') + ' tok=' + (window._googleIdToken ? 'YES' : 'NO') + ' init=' + window._authInitialized + ' res=' + window._authResolved, 6000);
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-checkout',
     { email: window.googleUser.email, userId: window.googleUser.sub },
@@ -6831,8 +6832,10 @@ function startScanCheckout() { openGradeScanModal(); }
 // ── Start grade scan pack checkout ──
 async function startGradeScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
-  await window._waitForAuth();
-  if (!window.googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
+  const _dbgUser = await window._waitForAuth();
+  // DEBUG: show exact state on device
+  showToast('DBG: gU=' + (window.googleUser ? window.googleUser.email.slice(0,8) : 'NULL') + ' tok=' + (window._googleIdToken ? 'YES' : 'NO') + ' init=' + window._authInitialized + ' res=' + window._authResolved, 6000);
+  if (!window.googleUser) { setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
