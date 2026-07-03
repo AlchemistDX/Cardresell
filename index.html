@@ -825,7 +825,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         window._userEmail = user.email || '';
         window._googleSub = user.uid;
         window._userSub = user.uid;
-        googleUser = {
+        window.googleUser = {
           name: user.displayName || user.email?.split('@')[0] || 'User',
           email: user.email || '',
           avatar: user.photoURL || '',
@@ -840,7 +840,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             window._googleIdToken = fresh;
           } catch(e) {}
         }, 55 * 60 * 1000);
-        _authReadyResolve(googleUser);
+        _authReadyResolve(window.googleUser);
         applyGoogleUser();
         loadUserData();
         checkProStatus(); // always call after token is confirmed set
@@ -857,7 +857,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           history.replaceState(null, '', location.pathname);
         }
       } else {
-        googleUser = null;
+        window.googleUser = null;
         window._googleIdToken = null;
         window._userEmail = '';
         window._googleSub = '';
