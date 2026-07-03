@@ -6711,72 +6711,17 @@ function closePricingModal(evt) {
 }
 
 // ── Start Pro subscription checkout ──
-async function startProCheckout() {
-  if (!googleUser) {
-    closePricingModal();
-    // Trigger Google sign-in
-    setTimeout(() => triggerGoogleSignIn(), 200);
-    return;
-  }
-  const btn = document.getElementById('pricingProBtn');
-  const txt = document.getElementById('pricingProBtnText');
-  if (btn) btn.disabled = true;
-  if (txt) txt.textContent = 'Redirecting...';
-
-  try {
-    const r = await fetch('/api/stripe-checkout', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (window._googleIdToken || '')
-      },
-      body: JSON.stringify({ email: googleUser.email, userId: googleUser.sub })
-    });
-    const d = await r.json();
-    if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
-    } else {
-      showToast('⚠️ Could not start checkout. Try again.');
-      if (btn) btn.disabled = false;
-      if (txt) txt.textContent = 'Get Pro — $9.99/mo';
-    }
-  } catch(e) {
-    showToast('⚠️ Network error. Try again.');
-    if (btn) btn.disabled = false;
-    if (txt) txt.textContent = 'Get Pro — $9.99/mo';
-  }
+function startProCheckout() {
+  if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  const p = new URLSearchParams({ plan: 'monthly', email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
+  window.location.href = '/api/stripe-pro-redirect?' + p.toString();
 }
 
 // ── Start annual Pro checkout ──
-async function startAnnualCheckout() {
-  if (!googleUser) {
-    closePricingModal();
-    setTimeout(() => triggerGoogleSignIn(), 200);
-    return;
-  }
-  const btn = document.getElementById('pricingAnnualBtn');
-  const txt = document.getElementById('pricingAnnualBtnText');
-  if (btn) btn.disabled = true;
-  if (txt) txt.textContent = 'Redirecting...';
-  try {
-    const r = await fetch('/api/stripe-annual-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
-      body: JSON.stringify({ googleSub: googleUser.sub, email: googleUser.email })
-    });
-    const d = await r.json();
-    if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
-    } else {
-      showToast('⚠️ Could not start checkout. Try again.');
-      if (btn) btn.disabled = false;
-      if (txt) txt.textContent = 'Get Annual — $89.99/yr';
-    }
-  } catch(e) {
-    showToast('⚠️ Network error. Try again.');
-    if (btn) btn.disabled = false;
-    if (txt) txt.textContent = 'Get Annual — $89.99/yr';
-  }
+function startAnnualCheckout() {
+  if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  const p = new URLSearchParams({ plan: 'annual', email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
+  window.location.href = '/api/stripe-pro-redirect?' + p.toString();
 }
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──
@@ -6785,40 +6730,10 @@ function startScanCheckout() {
 }
 
 // ── Start grade scan pack checkout ──
-async function startGradeScanCheckout(tier) {
-  if (!googleUser) {
-    showToast('Sign in with Google first to buy Grade Scan Credits.');
-    setTimeout(() => triggerGoogleSignIn(), 600);
-    return;
-  }
-  const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
-  tierBtns.forEach(b => { b.disabled = true; });
-  const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
-  const priceMap = { '5': '$2.49', '20': '$7.99', '50': '$14.99' };
-  if (clickedBtn) {
-    const priceEl = clickedBtn.querySelector('div:last-child');
-    if (priceEl) priceEl.textContent = 'Opening…';
-  }
-  try {
-    const r = await fetch('/api/stripe-grade-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
-      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub, name: googleUser.name })
-    });
-    const d = await r.json();
-    if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
-      setTimeout(() => { tierBtns.forEach(b => { b.disabled = false; }); if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; } }, 3000);
-    } else {
-      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
-      tierBtns.forEach(b => { b.disabled = false; });
-      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
-    }
-  } catch(e) {
-    showToast('⚠️ Network error. Try again.');
-    tierBtns.forEach(b => { b.disabled = false; });
-    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
-  }
+function startGradeScanCheckout(tier) {
+  if (!googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
+  const p = new URLSearchParams({ tier: String(tier), email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
+  window.location.href = '/api/stripe-grade-redirect?' + p.toString();
 }
 
 // ── Open grade scan pricing modal ──
@@ -6829,40 +6744,10 @@ function openGradeScanModal() {
 }
 
 // ── Start ID scan tier checkout ──
-async function startIdScanCheckout(tier) {
-  if (!googleUser) {
-    showToast('Sign in with Google first to buy ID Scanner Credits.');
-    setTimeout(() => triggerGoogleSignIn(), 600);
-    return;
-  }
-  const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
-  tierBtns.forEach(b => { b.disabled = true; });
-  const clickedBtn = document.querySelector(`[onclick="startIdScanCheckout('${tier}')"]`);
-  const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
-  if (clickedBtn) {
-    const priceEl = clickedBtn.querySelector('div:last-child');
-    if (priceEl) priceEl.textContent = 'Opening…';
-  }
-  try {
-    const r = await fetch('/api/stripe-id-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
-      body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub })
-    });
-    const d = await r.json();
-    if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
-      setTimeout(() => { tierBtns.forEach(b => { b.disabled = false; }); if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; } }, 3000);
-    } else {
-      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
-      tierBtns.forEach(b => { b.disabled = false; });
-      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
-    }
-  } catch(e) {
-    showToast('⚠️ Network error. Try again.');
-    tierBtns.forEach(b => { b.disabled = false; });
-    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
-  }
+function startIdScanCheckout(tier) {
+  if (!googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
+  const p = new URLSearchParams({ tier: String(tier), email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
+  window.location.href = '/api/stripe-id-redirect?' + p.toString();
 }
 
 // ── Toast helper ──
