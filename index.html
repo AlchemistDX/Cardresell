@@ -820,8 +820,20 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     // Track current auth UID to prevent null callbacks from overwriting a valid session
     let _currentAuthUid = null;
 
-    // Persistent auth debug indicator (top-left corner)
+    // Auth debug indicator — hidden by default. Enable by visiting /?debug=1 (or ?authdebug=1)
+    // or by running window._enableAuthDebug() in the console.
+    const _authDebugEnabled = (() => {
+      try {
+        const q = new URLSearchParams(location.search);
+        if (q.get('debug') === '1' || q.get('authdebug') === '1') {
+          try { sessionStorage.setItem('_authDebug', '1'); } catch(e) {}
+          return true;
+        }
+        return sessionStorage.getItem('_authDebug') === '1';
+      } catch(e) { return false; }
+    })();
     function _updateAuthDebug(state) {
+      if (!_authDebugEnabled) return;
       try {
         let el = document.getElementById('_authDebugPanel');
         if (!el) {
@@ -836,6 +848,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       } catch(e) {}
     }
     window._updateAuthDebug = _updateAuthDebug;
+    window._enableAuthDebug = () => { try { sessionStorage.setItem('_authDebug','1'); location.reload(); } catch(e) {} };
+    window._disableAuthDebug = () => { try { sessionStorage.removeItem('_authDebug'); document.getElementById('_authDebugPanel')?.remove(); } catch(e) {} };
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -6862,7 +6876,6 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
 // ── Start Pro subscription checkout ──
 async function startProCheckout() {
   await window._waitForAuth();
-  showToast('DBG: gU=' + (window.googleUser ? window.googleUser.email.slice(0,8) : 'NULL') + ' tok=' + (window._googleIdToken ? 'YES' : 'NO') + ' init=' + window._authInitialized + ' res=' + window._authResolved, 6000);
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-checkout',
     { email: window.googleUser.email, userId: window.googleUser.sub },
@@ -6884,9 +6897,7 @@ function startScanCheckout() { openGradeScanModal(); }
 // ── Start grade scan pack checkout ──
 async function startGradeScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
-  const _dbgUser = await window._waitForAuth();
-  // DEBUG: show exact state on device
-  showToast('DBG: gU=' + (window.googleUser ? window.googleUser.email.slice(0,8) : 'NULL') + ' tok=' + (window._googleIdToken ? 'YES' : 'NO') + ' init=' + window._authInitialized + ' res=' + window._authResolved, 6000);
+  await window._waitForAuth();
   if (!window.googleUser) { setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
