@@ -6712,34 +6712,31 @@ function closePricingModal(evt) {
 
 // ── Start Pro subscription checkout ──
 // ── Stripe checkout helper — iOS Safari compatible ──
-// Opens a blank window synchronously (preserves gesture chain),
-// fetches the Stripe session URL from our API, then navigates directly.
-async function _openStripeCheckout(apiPath, label) {
-  // Open blank window synchronously inside the click handler (required by Safari)
-  const w = window.open('about:blank', '_blank');
-  if (w) {
-    w.document.write('<html><body style="background:#1a1a1a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><p style="color:#f59e0b;font-family:sans-serif;font-size:1.1rem">Connecting to Stripe…</p></body></html>');
+// Navigates the current tab to the Stripe checkout URL.
+// Uses a hidden form submit so Safari never sees an async popup —
+// the navigation happens synchronously from a real user gesture.
+function _openStripeCheckout(apiPath) {
+  // Create a hidden form that GETs our API endpoint.
+  // The server returns a redirect to Stripe, which the browser follows naturally.
+  // This is the only pattern that works on iOS Safari without popup blockers.
+  const form = document.createElement('form');
+  form.method = 'GET';
+  // Parse the apiPath to split base URL and query params
+  const [base, qs] = apiPath.split('?');
+  form.action = base;
+  form.style.display = 'none';
+  if (qs) {
+    qs.split('&').forEach(pair => {
+      const [k, v] = pair.split('=').map(decodeURIComponent);
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = k;
+      inp.value = v || '';
+      form.appendChild(inp);
+    });
   }
-  try {
-    const res = await fetch(apiPath);
-    const data = await res.json();
-    if (data.url) {
-      if (w && !w.closed) {
-        w.location.href = data.url;
-      } else {
-        // Fallback: navigate current tab (popup was blocked)
-        window.location.href = data.url;
-      }
-    } else {
-      if (w && !w.closed) w.close();
-      showToast('Payment setup failed — please try again.');
-      console.error('Stripe checkout error:', data);
-    }
-  } catch (e) {
-    if (w && !w.closed) w.close();
-    showToast('Network error — please check your connection and try again.');
-    console.error('Checkout fetch error:', e);
-  }
+  document.body.appendChild(form);
+  form.submit();
 }
 
 function startProCheckout() {
