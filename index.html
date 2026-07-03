@@ -6791,11 +6791,6 @@ async function startGradeScanCheckout(tier) {
     setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
-
-  // iOS Safari REQUIRES window.open() to be called synchronously within the
-  // tap handler — before any await — otherwise the popup blocker kills it.
-  const stripeWindow = window.open('', '_blank');
-
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
@@ -6804,18 +6799,6 @@ async function startGradeScanCheckout(tier) {
     const priceEl = clickedBtn.querySelector('div:last-child');
     if (priceEl) priceEl.textContent = 'Opening…';
   }
-
-  // Refresh token silently (no await needed before open)
-  try {
-    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
-    if (freshTok) window._googleIdToken = freshTok;
-  } catch(e) {}
-
-  const resetBtns = () => {
-    tierBtns.forEach(b => { b.disabled = false; });
-    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
-  };
-
   try {
     const r = await fetch('/api/stripe-grade-checkout', {
       method: 'POST',
@@ -6824,23 +6807,17 @@ async function startGradeScanCheckout(tier) {
     });
     const d = await r.json();
     if (d.url) {
-      // Navigate the already-open tab to Stripe
-      if (stripeWindow && !stripeWindow.closed) {
-        stripeWindow.location.href = d.url;
-      } else {
-        // Fallback if popup was blocked
-        window.location.href = d.url;
-      }
-      setTimeout(resetBtns, 4000);
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+      setTimeout(() => { tierBtns.forEach(b => { b.disabled = false; }); if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; } }, 3000);
     } else {
-      if (stripeWindow) stripeWindow.close();
-      showToast('⚠️ ' + (d.error || 'Could not start checkout — try again.'));
-      resetBtns();
+      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
+      tierBtns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
     }
   } catch(e) {
-    if (stripeWindow) stripeWindow.close();
-    showToast('⚠️ Network error — check your connection and try again.');
-    resetBtns();
+    showToast('⚠️ Network error. Try again.');
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
   }
 }
 
@@ -6858,10 +6835,6 @@ async function startIdScanCheckout(tier) {
     setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
-
-  // Open blank tab synchronously before any await (iOS Safari gesture chain)
-  const stripeWindow = window.open('', '_blank');
-
   const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startIdScanCheckout('${tier}')"]`);
@@ -6870,17 +6843,6 @@ async function startIdScanCheckout(tier) {
     const priceEl = clickedBtn.querySelector('div:last-child');
     if (priceEl) priceEl.textContent = 'Opening…';
   }
-
-  try {
-    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
-    if (freshTok) window._googleIdToken = freshTok;
-  } catch(e) {}
-
-  const resetBtns = () => {
-    tierBtns.forEach(b => { b.disabled = false; });
-    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
-  };
-
   try {
     const r = await fetch('/api/stripe-id-checkout', {
       method: 'POST',
@@ -6889,25 +6851,17 @@ async function startIdScanCheckout(tier) {
     });
     const d = await r.json();
     if (d.url) {
-      if (stripeWindow && !stripeWindow.closed) {
-        stripeWindow.location.href = d.url;
-      } else {
-        window.location.href = d.url;
-      }
-      setTimeout(resetBtns, 4000);
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
+      setTimeout(() => { tierBtns.forEach(b => { b.disabled = false; }); if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; } }, 3000);
     } else {
-      if (stripeWindow) stripeWindow.close();
-      showToast('⚠️ ' + (d.error || 'Could not start checkout — try again.'));
-      resetBtns();
+      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
+      tierBtns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
     }
   } catch(e) {
-    if (stripeWindow) stripeWindow.close();
-    showToast('⚠️ Network error — check your connection and try again.');
-    if (clickedBtn) {
-      const priceEl = clickedBtn.querySelector('div:last-child');
-      const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
-      if (priceEl) priceEl.textContent = priceMap[tier] || '$1';
-    }
+    showToast('⚠️ Network error. Try again.');
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
   }
 }
 
