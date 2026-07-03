@@ -840,20 +840,42 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     onAuthStateChanged(auth, (user) => {
       if (user) {
         _currentAuthUid = user.uid;
+        // Firebase's top-level user.email can be empty when the account was linked oddly
+        // or the Google provider didn't return an email claim. Fall back to providerData.
+        let effectiveEmail = user.email || '';
+        if (!effectiveEmail && Array.isArray(user.providerData)) {
+          for (const p of user.providerData) {
+            if (p?.email) { effectiveEmail = p.email; break; }
+          }
+        }
+        let effectiveName = user.displayName || '';
+        if (!effectiveName && Array.isArray(user.providerData)) {
+          for (const p of user.providerData) {
+            if (p?.displayName) { effectiveName = p.displayName; break; }
+          }
+        }
+        let effectivePhoto = user.photoURL || '';
+        if (!effectivePhoto && Array.isArray(user.providerData)) {
+          for (const p of user.providerData) {
+            if (p?.photoURL) { effectivePhoto = p.photoURL; break; }
+          }
+        }
+
         // Set user object immediately (synchronously) so checkout functions can read it right away
         window.googleUser = {
-          name: user.displayName || user.email?.split('@')[0] || 'User',
-          email: user.email || '',
-          avatar: user.photoURL || '',
+          name: effectiveName || effectiveEmail.split('@')[0] || 'User',
+          email: effectiveEmail,
+          avatar: effectivePhoto,
           sub: user.uid,
           uid: user.uid
         };
-        window._userEmail = user.email || '';
+        window._userEmail = effectiveEmail;
         window._googleSub = user.uid;
         window._userSub = user.uid;
         window._authResolved = true;
         window._authInitialized = true;
-        _updateAuthDebug('AUTH OK: ' + (user.email || '(no email)').slice(0,30) + ' | uid=' + user.uid.slice(0,8));
+        const _providers = (user.providerData || []).map(p => p?.providerId || '?').join(',');
+        _updateAuthDebug('AUTH OK: ' + (effectiveEmail || '(no email)').slice(0,30) + '\nuid=' + user.uid.slice(0,8) + ' | providers=' + _providers);
         // Apply UI immediately — don't wait for token
         applyGoogleUser();
         // Fetch token async — doesn't block UI or checkout
