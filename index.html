@@ -877,6 +877,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           }
         }
 
+        // Google/Apple providers verify email at OAuth — treat those users as verified
+        // regardless of the Firebase user.emailVerified flag (which can be stale for
+        // accounts that were originally email/password and later linked to Google).
+        const providerIds = (user.providerData || []).map(p => p?.providerId || '');
+        const providerVerifies = providerIds.includes('google.com') || providerIds.includes('apple.com');
+        const effectiveVerified = !!user.emailVerified || providerVerifies;
+
         // Set user object immediately (synchronously) so checkout functions can read it right away
         window.googleUser = {
           name: effectiveName || effectiveEmail.split('@')[0] || 'User',
@@ -884,21 +891,22 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           avatar: effectivePhoto,
           sub: user.uid,
           uid: user.uid,
-          emailVerified: !!user.emailVerified
+          emailVerified: effectiveVerified,
+          providers: providerIds
         };
         window._userEmail = effectiveEmail;
         window._googleSub = user.uid;
         window._userSub = user.uid;
-        window._emailVerified = !!user.emailVerified;
+        window._emailVerified = effectiveVerified;
         window._fbCurrentUser = user; // keep a handle for reload() / resend
         window._authResolved = true;
         window._authInitialized = true;
 
         // If unverified, poll every 5s for up to 5 min (Firebase updates emailVerified
         // only after the user reloads the token). When it flips, refetch pro-status
-        // so the signup bonus fires.
+        // so the signup bonus fires. Skip polling when the provider already verifies.
         clearInterval(window._verifyPollInterval);
-        if (!user.emailVerified) {
+        if (!effectiveVerified) {
           let _verifyPollTries = 0;
           window._verifyPollInterval = setInterval(async () => {
             _verifyPollTries++;
@@ -5901,7 +5909,11 @@ function applyGoogleUser() {
 // that haven't clicked the verification link.
 function _updateVerifyBanner() {
   let banner = document.getElementById('emailVerifyBanner');
-  const needBanner = window.googleUser && !window.googleUser.emailVerified;
+  const gu = window.googleUser;
+  // Google/Apple providers verify email at OAuth — never show the banner for them
+  const providerVerifies = gu && Array.isArray(gu.providers) &&
+    (gu.providers.includes('google.com') || gu.providers.includes('apple.com'));
+  const needBanner = gu && !gu.emailVerified && !providerVerifies;
   if (!needBanner) { if (banner) banner.remove(); return; }
   if (!banner) {
     banner = document.createElement('div');
@@ -5918,12 +5930,47 @@ function _updateVerifyBanner() {
 async function resendVerifyEmail() {
   const btn = document.getElementById('btnResendVerifyMain');
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  // If this is a Google/Apple user, they're already verified — just force-reload the token
+  const gu = window.googleUser;
+  if (gu && Array.isArray(gu.providers) &&
+      (gu.providers.includes('google.com') || gu.providers.includes('apple.com'))) {
+    try {
+      // Force-refresh the token so backend sees email_verified=true
+      if (window._fbCurrentUser) {
+        await window._fbCurrentUser.reload();
+        const fresh = await window._fbCurrentUser.getIdToken(true);
+        window._googleIdToken = fresh;
+      }
+      if (window.googleUser) window.googleUser.emailVerified = true;
+      window._emailVerified = true;
+      try { checkProStatus?.(); } catch(e) {}
+      const b = document.getElementById('emailVerifyBanner');
+      if (b) b.remove();
+      showToast('Verified via ' + (gu.providers.includes('google.com') ? 'Google' : 'Apple') + ' — bonus unlocked', 'gold');
+    } catch(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
+      alert('Could not refresh sign-in. Try signing out and back in.');
+    }
+    return;
+  }
+
   try {
+    if (!window._fbCurrentUser || !window._fbCurrentUser.email) {
+      throw new Error('no-email');
+    }
     await window._fbSendVerification();
     if (btn) { btn.textContent = 'Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Email'; }, 5000); }
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
-    alert('Could not send verification email: ' + (e?.message || 'unknown error'));
+    const code = e?.code || e?.message || '';
+    if (code.includes('missing-email') || code === 'no-email') {
+      alert('This account doesn\'t have an email on file. Try signing out and signing back in with Google.');
+    } else if (code.includes('too-many-requests')) {
+      alert('Too many requests — wait a minute and try again.');
+    } else {
+      alert('Could not send verification email: ' + (e?.message || 'unknown error'));
+    }
   }
 }
 

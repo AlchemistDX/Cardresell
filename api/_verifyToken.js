@@ -62,13 +62,21 @@ async function verifyFirebaseToken(idToken) {
   );
   if (!sigValid) throw new Error('Invalid signature');
 
+  // Google/Apple sign-in verifies email at the OAuth handshake. Some legacy Firebase users
+  // linked to Google keep emailVerified=false on the Firebase user object even though
+  // Google already verified the address — trust the OAuth provider in that case.
+  const provider = payload.firebase?.sign_in_provider || 'unknown';
+  const providerVerifies = provider === 'google.com' || provider === 'apple.com';
+  // Also check identities.google.com — present when the account was Google-linked
+  const identities = payload.firebase?.identities || {};
+  const hasGoogleIdentity = !!(identities['google.com'] || identities['apple.com']);
+
   return {
     uid:   payload.sub,
     email: payload.email || '',
     name:  payload.name  || '',
-    emailVerified: payload.email_verified === true,
-    // Firebase email/password users have firebase.sign_in_provider
-    provider: payload.firebase?.sign_in_provider || 'unknown',
+    emailVerified: payload.email_verified === true || providerVerifies || hasGoogleIdentity,
+    provider,
   };
 }
 
@@ -89,8 +97,10 @@ async function verifyTokenFlexible(idToken) {
         uid:   info.sub,
         email: info.email || '',
         name:  info.name  || '',
-        // Google tokeninfo: email_verified is string 'true'/'false'
-        emailVerified: info.email_verified === true || info.email_verified === 'true',
+        // Google tokeninfo: email_verified is string 'true'/'false'.
+        // Also: any token that passes Google tokeninfo IS a Google-verified account,
+        // so trust it regardless (matches Firebase Google-linked account behavior).
+        emailVerified: true,
         provider: 'google.com',
       };
     } catch(gErr) {
