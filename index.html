@@ -5199,20 +5199,46 @@ function renderCollectionView() {
           const gain    = cur - (p.buyPrice || 0);
           const gainPct = p.buyPrice > 0 ? (gain / p.buyPrice * 100) : 0;
           const color   = gain >= 0 ? '#4ade80' : '#f87171';
+          const refreshedAgo = p.lastRefreshed ? (() => {
+            const mins = Math.round((Date.now() - new Date(p.lastRefreshed).getTime()) / 60000);
+            if (mins < 1) return 'just now'; if (mins < 60) return mins + 'm ago';
+            const hrs = Math.round(mins / 60); if (hrs < 24) return hrs + 'h ago';
+            return Math.round(hrs / 24) + 'd ago';
+          })() : null;
           return `<tr>
             <td><div class="ft-card" title="${esc2(p.card)}">${esc2(p.card)}</div></td>
             <td style="font-size:.72rem;color:var(--text-muted)">${esc2(p.set||'—')}</td>
             <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
-            <td class="ft-mono" style="color:var(--gold)">$${cur.toFixed(2)}</td>
+            <td class="ft-mono" style="color:var(--gold)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
-            <td><div style="display:flex;gap:.3rem">
+            <td><div style="display:flex;gap:.3rem;align-items:center">
+              <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
               <button class="ft-delete" onclick="deletePortEntry(${p.id})" title="Remove">✕</button>
             </div></td>
           </tr>`;
         }).join('')}</tbody>
       </table>
     </div>`;
+}
+
+// ── Fetch best eBay median price for a single portfolio entry ──
+async function _fetchEbayPriceForEntry(p) {
+  // Build query: card name + card number (stripped from set field like "Charizard · #4")
+  const numMatch = (p.set || '').match(/#(\S+)/);
+  const cardNum  = numMatch ? numMatch[1].replace(/^0+/, '') : '';
+  const queryParts = [p.card, cardNum].filter(Boolean);
+  const query    = queryParts.join(' ');
+  const res      = await fetch('/api/ebay-sold?q=' + encodeURIComponent(query));
+  if (!res.ok) return null;
+  const data     = await res.json();
+  if (!data.items || !data.items.length) return null;
+  const prices   = data.items
+    .map(i => parseFloat(i.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.['__value__'] || i.price || 0))
+    .filter(x => x > 0).sort((a, b) => a - b);
+  if (!prices.length) return null;
+  const mid = Math.floor(prices.length / 2);
+  return prices.length % 2 === 0 ? (prices[mid-1] + prices[mid]) / 2 : prices[mid];
 }
 
 async function refreshCollectionPrices() {
@@ -5225,35 +5251,58 @@ async function refreshCollectionPrices() {
     return;
   }
 
-  // For each card, search eBay comps and update currentValue
   let updated = 0;
   for (const p of port) {
     if (!p.card) continue;
+    // Show inline spinner on the row if visible
+    const rowValEl = document.getElementById('colVal_' + p.id);
+    if (rowValEl) rowValEl.innerHTML = '<span style="opacity:.4;font-size:.72rem">refreshing…</span>';
     try {
-      const query = [p.card, p.set].filter(Boolean).join(' ');
-      const res   = await fetch('/api/ebay-sold?q=' + encodeURIComponent(query));
-      if (!res.ok) continue;
-      const data  = await res.json();
-      if (data.items && data.items.length) {
-        // Use median of recent raw sales
-        const prices = data.items.map(i => parseFloat(i.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.['__value__'] || i.price || 0)).filter(x => x > 0).sort((a,b) => a-b);
-        if (prices.length) {
-          const mid = Math.floor(prices.length / 2);
-          p.currentValue = prices.length % 2 === 0 ? (prices[mid-1] + prices[mid]) / 2 : prices[mid];
-          updated++;
-        }
+      const price = await _fetchEbayPriceForEntry(p);
+      if (price !== null) {
+        p.currentValue   = price;
+        p.lastRefreshed  = new Date().toISOString();
+        updated++;
       }
-    } catch(e) { /* skip on error */ }
+    } catch(e) { /* skip */ }
   }
 
   savePortData(port);
+  const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   const lastEl = document.getElementById('colLastUpdated');
-  if (lastEl) lastEl.textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  if (lastEl) lastEl.textContent = 'Updated ' + now;
   renderCollectionView();
 
   if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh Prices'; }
   if (updated > 0) showToast(updated + ' card price' + (updated>1?'s':'') + ' refreshed from eBay sold data.', 'success');
   else showToast('Could not fetch updated prices right now. Try again later.', 'info');
+}
+
+// ── Refresh a single card's price from the collection table ──
+async function refreshSingleCardPrice(id) {
+  const port = loadPortData();
+  const p    = port.find(x => x.id === id);
+  if (!p) return;
+  const btn  = document.getElementById('colRefreshRow_' + id);
+  if (btn) { btn.disabled = true; btn.textContent = '↻'; btn.style.opacity = '.4'; }
+  const valEl = document.getElementById('colVal_' + id);
+  if (valEl) valEl.innerHTML = '<span style="opacity:.4;font-size:.72rem">…</span>';
+  try {
+    const price = await _fetchEbayPriceForEntry(p);
+    if (price !== null) {
+      p.currentValue  = price;
+      p.lastRefreshed = new Date().toISOString();
+      savePortData(port);
+      renderCollectionView();
+      showToast('Price updated for ' + (p.card || 'card') + ' 📊', 'success');
+    } else {
+      showToast('No eBay sales found for this card.', 'info');
+      if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
+  } catch(e) {
+    showToast('Network error — try again.', 'info');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
 }
 
 // ── Also re-render collection if active when port data changes ──
@@ -7323,10 +7372,11 @@ function closeBulkScan() {
 }
 
 function _bulkShowSection(section) {
-  // section: 'modePicker' | 'creditConfirm' | 'processing'
+  // section: 'modePicker' | 'creditConfirm' | 'processing' | 'costSheet'
   document.getElementById('bulkModePicker').style.display     = section === 'modePicker'    ? 'flex' : 'none';
   document.getElementById('bulkCreditConfirm').style.display  = section === 'creditConfirm' ? 'flex' : 'none';
   document.getElementById('bulkProcessing').style.display     = section === 'processing'    ? 'flex' : 'none';
+  document.getElementById('bulkCostSheet').style.display      = section === 'costSheet'     ? 'flex' : 'none';
 }
 
 /* ── Camera mode: user taps to capture one card at a time ── */
@@ -7605,31 +7655,63 @@ function bulkAddAllToCollection() {
     showToast('No successfully identified cards to add.');
     return;
   }
+  // Show cost entry sheet instead of saving immediately
+  openBulkCostSheet(successful);
+}
 
+function openBulkCostSheet(cards) {
+  const list = document.getElementById('bulkCostList');
+  if (!list) return;
+  list.innerHTML = cards.map((r, i) => {
+    const thumb = r.objectUrl ? `<img src="${_esc(r.objectUrl)}" style="width:38px;height:52px;object-fit:cover;border-radius:5px;flex-shrink:0">` : `<div style="width:38px;height:52px;background:#1a1a1a;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🃏</div>`;
+    const name = r.cardName || 'Unknown card';
+    const sub  = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
+    const val  = r.marketPrice ? r.marketPrice.toFixed(2) : '';
+    return `<div style="display:flex;align-items:center;gap:.65rem;padding:.55rem .25rem;border-bottom:1px solid #1a1a1a">
+      ${thumb}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(name)}</div>
+        <div style="font-size:.67rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(sub||'—')}</div>
+        ${val ? `<div style="font-size:.67rem;color:rgba(212,175,55,.6);margin-top:.1rem">Market ~$${val}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden;flex-shrink:0;width:78px">
+        <span style="padding:0 .3rem;font-size:.8rem;color:rgba(255,255,255,.35)">$</span>
+        <input type="number" min="0" step="0.01" placeholder="0.00"
+          id="bulkCost_${i}"
+          style="background:transparent;border:none;color:#fff;font-size:.8rem;width:50px;padding:.38rem .2rem .38rem 0;outline:none;-moz-appearance:textfield"
+          oninput="this.style.borderColor='rgba(139,92,246,.6)'"
+          inputmode="decimal">
+      </div>
+    </div>`;
+  }).join('');
+  _bulkShowSection('costSheet');
+}
+
+function confirmBulkCostSave() {
+  const successful = window._bulkResults.filter(r => r.success);
   const port = loadPortData();
   const today = new Date().toISOString().slice(0,10);
   let added = 0;
-
-  for (const r of successful) {
+  successful.forEach((r, i) => {
+    const inp = document.getElementById('bulkCost_' + i);
+    const buyPrice = inp ? (parseFloat(inp.value) || 0) : 0;
     const setStr = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
     port.push({
       id: Date.now() + added,
       card: r.cardName,
       set: setStr,
-      buyPrice: 0,
+      buyPrice,
       currentValue: r.marketPrice || null,
       addedDate: today,
-      source: 'bulk-scan'
+      source: 'bulk-scan',
+      lastRefreshed: r.marketPrice ? new Date().toISOString() : null
     });
     added++;
-  }
-
+  });
   savePortData(port);
   _maybeRerenderCollection();
-
   showToast(added + ' card' + (added!==1?'s':'') + ' added to your Collection 📦', 'success');
   closeBulkScan();
-  // Navigate to collection tab
   switchView('collection');
 }
 
@@ -7721,6 +7803,19 @@ function _esc(s) {
         <div style="margin-top:.5rem">
           <button id="bulkScanMoreBtn" onclick="bulkScanMore()" style="width:100%;padding:.55rem;background:transparent;border:1px solid rgba(139,92,246,.4);color:rgba(139,92,246,1);border-radius:10px;font-weight:700;font-size:.8rem;cursor:pointer">+ Scan More Cards</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Cost sheet — enter purchase prices before saving to collection -->
+    <div id="bulkCostSheet" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div style="padding:.75rem 1.25rem .6rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
+        <div style="font-size:.85rem;font-weight:700;color:#fff">What did you pay?</div>
+        <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.15rem">Optional — leave $0 to skip. Used for P&amp;L tracking.</div>
+      </div>
+      <div id="bulkCostList" style="flex:1;overflow-y:auto;padding:.5rem 1rem 1rem"></div>
+      <div style="padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0;display:flex;gap:.75rem">
+        <button onclick="_bulkShowSection('processing')" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">← Back</button>
+        <button onclick="confirmBulkCostSave()" style="flex:2;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">💾 Save to Collection</button>
       </div>
     </div>
   </div>
