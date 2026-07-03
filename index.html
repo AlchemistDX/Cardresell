@@ -6681,21 +6681,13 @@ window.addEventListener('load', () => {
      FIREBASE AUTH MODAL
      ══════════════════════════════════════════════════════════ -->
 <!-- FULL-SCREEN SEARCH RESULTS MODAL -->
-<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:#000;z-index:8000;flex-direction:column;overflow:hidden;height:100%">
-  <!-- Header -->
-  <div style="display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;flex-shrink:0;background:#000;border-bottom:1px solid #222">
-    <button onclick="closeSearchModal()" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;line-height:1;padding:.2rem .4rem;-webkit-tap-highlight-color:transparent;opacity:.85">←</button>
-    <div style="flex:1;min-width:0">
-      <div id="searchModalTitle" style="font-size:1rem;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-      <div id="searchModalCount" style="font-size:.7rem;color:#888;margin-top:.05rem"></div>
-    </div>
+<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:#000;z-index:8000;flex-direction:column;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid #222;flex-shrink:0;background:#000">
+    <button onclick="closeSearchModal()" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1;padding:.25rem;-webkit-tap-highlight-color:transparent">&larr;</button>
+    <div style="flex:1;font-size:.95rem;font-weight:800;color:#fff" id="searchModalTitle">Results</div>
+    <div style="font-size:.72rem;color:#888" id="searchModalCount"></div>
   </div>
-  <!-- Loading -->
-  <div id="searchModalLoading" style="flex:1;display:flex;align-items:center;justify-content:center;gap:.75rem;color:#888;font-size:.88rem">
-    <span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…
-  </div>
-  <!-- Grid -->
-  <div id="searchModalGrid" style="display:none;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:.5rem;gap:.5rem;align-content:start"></div>
+  <div id="searchModalGrid" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:.5rem"></div>
 </div>
 
 <div id="authModalOverlay" class="auth-modal-overlay" style="display:none" onclick="if(event.target===this)closeAuthModal()">
@@ -6823,111 +6815,86 @@ async function doPasswordReset() {
     if (s) { s.textContent = 'Reset email sent — check your inbox.'; s.style.display = ''; }
   } catch(e) { _authError('authForgotError', _fbErrMsg(e)); }
 }
-// ── Full-screen search results modal (Collector-style) ──
+// ── Full-screen search results modal ──
 function openSearchModal() {
   const q = searchInput.value.trim();
   if (!q) return;
-  _showSearchModal(q);
-  doSearch(q).then(() => { setTimeout(() => _populateSearchModal(q), 80); });
+
+  const modal = document.getElementById('searchResultsModal');
+  const grid  = document.getElementById('searchModalGrid');
+  const title = document.getElementById('searchModalTitle');
+  const count = document.getElementById('searchModalCount');
+  if (!modal) return;
+  title.textContent = `"${q}"`;
+  count.textContent = '';
+  grid.innerHTML = '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
+  modal.style.display = 'flex';
+
+  doSearch(q).then(() => {
+    _openSearchResultsModal(q);
+  });
 }
 
 function openCatalog(q) {
   if (q) searchInput.value = q;
-  const query = q || searchInput.value.trim();
-  if (!query) return;
-  _showSearchModal(query);
-  doSearch(query).then(() => { setTimeout(() => _populateSearchModal(query), 80); });
+  doSearch(q || searchInput.value.trim()).then(() => {
+    _openSearchResultsModal(q || searchInput.value.trim());
+  });
 }
 
-function _showSearchModal(q) {
-  const modal   = document.getElementById('searchResultsModal');
-  const loading = document.getElementById('searchModalLoading');
-  const grid    = document.getElementById('searchModalGrid');
-  const title   = document.getElementById('searchModalTitle');
-  const count   = document.getElementById('searchModalCount');
-  if (!modal) return;
-  title.textContent = q;
-  count.textContent = '';
-  loading.style.display = 'flex';
-  grid.style.display    = 'none';
-  grid.innerHTML        = '';
-  modal.style.display   = 'flex';
-  dropList.classList.remove('open');
-}
-
-function _populateSearchModal(q, _attempt) {
-  const loading = document.getElementById('searchModalLoading');
-  const grid    = document.getElementById('searchModalGrid');
-  const count   = document.getElementById('searchModalCount');
-  if (!grid) return;
-  // Modal may have been closed
+function _openSearchResultsModal(q) {
   const modal = document.getElementById('searchResultsModal');
-  if (!modal || modal.style.display === 'none') return;
+  const grid  = document.getElementById('searchModalGrid');
+  const title = document.getElementById('searchModalTitle');
+  const count = document.getElementById('searchModalCount');
+  if (!modal || !grid) return;
 
   const items = dropList.querySelectorAll('.drop-item');
-  const attempt = _attempt || 0;
   if (!items.length) {
-    if (attempt > 20) {
-      // Timed out — show empty state
-      if (loading) loading.innerHTML = '<span style="color:#666">No results found.</span>';
-      return;
-    }
-    setTimeout(() => _populateSearchModal(q, attempt + 1), 300);
+    setTimeout(() => _openSearchResultsModal(q), 600);
     return;
   }
 
-  count.textContent = items.length + ' result' + (items.length === 1 ? '' : 's');
-  grid.innerHTML = '';
+  title.textContent = q ? `"${q}"` : 'Results';
+  count.textContent = items.length + ' card' + (items.length === 1 ? '' : 's');
 
+  grid.innerHTML = '';
   items.forEach(item => {
     const idx   = item.dataset.idx;
-    // Use textContent to strip any HTML tags (e.g. TPL badge spans)
     const name  = (item.querySelector('.drop-name')?.textContent || '').trim();
-    const rawMeta = (item.querySelector('.drop-meta')?.textContent || '').trim();
+    const meta  = (item.querySelector('.drop-meta')?.textContent || '').trim().replace(/\bTPL\b|\bJP\b|\[EN ref\]/gi, '').trim();
     const price = (item.querySelector('.drop-price')?.textContent || '').trim();
-    // Pull image: stored data first, then rendered img, then none
-    const storedImg = window._searchCards?.[idx]?._imgSmall || '';
-    const img   = storedImg || item.querySelector('img.drop-thumb')?.src || '';
+    const img   = window._searchCards?.[idx]?._imgSmall || item.querySelector('img')?.src || '';
 
-    // Parse meta: "Set Name · Number · Rarity" — strip stray labels like TPL/JP
-    const metaClean = rawMeta.replace(/\bTPL\b|\bJP\b|\[EN ref\]/gi, '').trim();
-    const metaParts = metaClean.split('·').map(s => s.trim()).filter(Boolean);
-    const setName   = metaParts[0] || '';
-    const numRarity = metaParts.slice(1).join(' • ');
+    const metaParts = meta.split('·').map(s => s.trim()).filter(Boolean);
+    const setLine   = metaParts[0] || '';
+    const subLine   = metaParts.slice(1).join(' • ');
 
     const card = document.createElement('div');
-    card.dataset.idx = idx;
-    card.style.cssText = 'background:#111;border-radius:10px;overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;position:relative;';
-
+    card.style.cssText = 'background:#111;border-radius:10px;overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;position:relative';
     card.innerHTML = `
-      <div class="cat-img-area" style="background:#1a1a1a;padding:.75rem .75rem .5rem;display:flex;align-items:center;justify-content:center;min-height:200px">
-        ${img
-          ? `<img src="${img}" loading="lazy" style="max-width:95%;max-height:200px;object-fit:contain;border-radius:6px;display:block">`
-          : `<div style="font-size:3.5rem;opacity:.25">🃏</div>`
-        }
+      <div style="background:#1a1a1a;padding:.6rem;display:flex;align-items:center;justify-content:center;aspect-ratio:2/3">
+        ${img ? `<img src="${img}" loading="lazy" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:5px">` : '<div style="font-size:2.5rem;opacity:.25">🃏</div>'}
       </div>
-      <div style="padding:.6rem .65rem .9rem;display:flex;flex-direction:column;gap:0">
-        <div style="font-size:.9rem;font-weight:800;color:#fff;line-height:1.25;margin-bottom:.3rem;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${name}</div>
-        <div style="font-size:.72rem;color:#aaa;line-height:1.5">${setName}</div>
-        ${numRarity ? `<div style="font-size:.7rem;color:#777;line-height:1.5">${numRarity}</div>` : ''}
-        <div style="margin-top:.45rem;font-size:.95rem;font-weight:800;color:#fff;padding-right:2rem">${price || '<span style="color:#555;font-size:.72rem">No price</span>'}</div>
+      <div style="padding:.55rem .6rem .8rem">
+        <div style="font-size:.82rem;font-weight:800;color:#fff;line-height:1.25;margin-bottom:.2rem;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${name}</div>
+        <div style="font-size:.68rem;color:#aaa">${setLine}</div>
+        ${subLine ? `<div style="font-size:.65rem;color:#666">${subLine}</div>` : ''}
+        <div style="margin-top:.4rem;font-size:.9rem;font-weight:800;color:#fff;padding-right:2rem">${price || '<span style="color:#555;font-size:.7rem">No price</span>'}</div>
       </div>
-      <div style="position:absolute;bottom:.65rem;right:.65rem;width:30px;height:30px;border-radius:50%;border:2px solid #4dd9ac;display:flex;align-items:center;justify-content:center;color:#4dd9ac;font-size:1.2rem;font-weight:300;line-height:1">+</div>
-    `;
-
+      <div style="position:absolute;bottom:.6rem;right:.6rem;width:28px;height:28px;border-radius:50%;border:2px solid #4dd9ac;display:flex;align-items:center;justify-content:center;color:#4dd9ac;font-size:1.1rem;line-height:1">+</div>`;
     card.addEventListener('click', () => {
-      closeSearchModal();
       const orig = dropList.querySelector(`[data-idx="${idx}"]`);
       if (orig) orig.click();
+      closeSearchModal();
     });
     card.addEventListener('touchstart', () => { card.style.opacity = '.7'; }, { passive: true });
-    card.addEventListener('touchend',   () => { card.style.opacity = '1'; },  { passive: true });
+    card.addEventListener('touchend',   () => { card.style.opacity = '1';  }, { passive: true });
     grid.appendChild(card);
   });
 
-  loading.style.display = 'none';
-  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;padding:.5rem;overflow-y:scroll;-webkit-overflow-scrolling:touch;align-content:start;flex:1;min-height:0;';
-  grid.scrollTop = 0;
+  modal.style.display = 'flex';
+  dropList.classList.remove('open');
 }
 
 function closeSearchModal() {
