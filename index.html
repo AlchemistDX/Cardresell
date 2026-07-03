@@ -772,7 +772,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
     import {
       getAuth, onAuthStateChanged, signOut as fbSignOut,
-      GoogleAuthProvider, signInWithPopup,
+      GoogleAuthProvider, signInWithRedirect, getRedirectResult,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
@@ -798,11 +798,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       setTimeout(() => openAuthModal(pending), 100);
     }
     window._fbSignOut = () => fbSignOut(auth);
+    // signInWithRedirect — navigates current tab to Google, works on iOS Safari
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
-      try { await signInWithPopup(auth, provider); }
-      catch(e) { if (e.code !== 'auth/popup-closed-by-user') console.error(e); }
+      await signInWithRedirect(auth, provider);
     };
+    // Catch result when Google redirects back to the app
+    getRedirectResult(auth).catch(e => {
+      if (e && e.code && e.code !== 'auth/cancelled-popup-request') console.error('Redirect result error:', e.code);
+    });
     window._fbEmailSignIn = async (email, pass) => {
       return signInWithEmailAndPassword(auth, email, pass);
     };

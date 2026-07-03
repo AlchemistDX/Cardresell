@@ -341,7 +341,7 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
     import {
       getAuth, onAuthStateChanged,
-      GoogleAuthProvider, signInWithPopup,
+      GoogleAuthProvider, signInWithRedirect, getRedirectResult,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
@@ -356,11 +356,20 @@
     });
     const auth = getAuth(app);
 
+    // Use signInWithRedirect — works on iOS Safari (signInWithPopup is blocked there)
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
-      try { await signInWithPopup(auth, provider); }
-      catch(e) { if (e.code !== 'auth/popup-closed-by-user') throw e; }
+      await signInWithRedirect(auth, provider);
     };
+
+    // After Google redirects back, grab the result
+    getRedirectResult(auth).catch(e => {
+      if (e && e.code !== 'auth/cancelled-popup-request') {
+        console.error('Redirect sign-in error:', e.code);
+        const errEl = document.getElementById('errSignIn');
+        if (errEl) { errEl.textContent = 'Google sign-in failed. Please try again.'; errEl.style.display = 'block'; }
+      }
+    });
     window._fbEmailSignIn  = (e, p) => signInWithEmailAndPassword(auth, e, p);
     window._fbEmailSignUp  = (e, p) => createUserWithEmailAndPassword(auth, e, p);
     window._fbResetPassword = (e)   => sendPasswordResetEmail(auth, e);
