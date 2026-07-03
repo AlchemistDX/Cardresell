@@ -5671,17 +5671,21 @@ window._authInitialized = false; // true after first onAuthStateChanged fires (a
 // If Firebase fires null (not signed in), resolves after _authInitialized is true.
 window._waitForAuth = function() {
   return new Promise(resolve => {
-    // Already have a user — resolve immediately
+    // Already have a confirmed signed-in user — resolve immediately
     if (window.googleUser && window._googleIdToken) { resolve(window.googleUser); return; }
-    // Firebase already fired and there's no user — don't wait
-    if (window._authInitialized && !window.googleUser) { resolve(null); return; }
-    // Firebase hasn't fired yet — poll for up to 4s
+    // Poll for up to 6s — resolves as soon as both googleUser AND token are set
+    // Only gives up (resolves null) after timeout OR after _authResolved fires with no user
     const start = Date.now();
     const check = () => {
       if (window.googleUser && window._googleIdToken) {
+        // Confirmed signed-in user
         resolve(window.googleUser);
-      } else if (window._authInitialized || Date.now() - start > 4000) {
-        resolve(window.googleUser); // null if not signed in
+      } else if (window._authResolved === false && window._authInitialized && !window.googleUser && Date.now() - start > 500) {
+        // Firebase fired, no user came, waited 500ms grace period — definitely signed out
+        resolve(null);
+      } else if (Date.now() - start > 6000) {
+        // Absolute timeout
+        resolve(window.googleUser || null);
       } else {
         setTimeout(check, 80);
       }
