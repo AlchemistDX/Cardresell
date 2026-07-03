@@ -318,6 +318,17 @@
       <div class="auth-switch">Already have an account? <a onclick="switchTab('signin')">Sign in</a></div>
     </div>
 
+    <!-- Verify Email view (shown after email/password signup) -->
+    <div class="auth-view" id="viewVerify">
+      <div class="auth-title">Check your inbox 📬</div>
+      <div class="auth-sub">We sent a verification link to <strong id="verifyEmailTarget">your inbox</strong>. Click it, then come back and press the button below to unlock your <strong>10 ID scans + 1 AI Grade</strong> signup bonus.</div>
+      <div id="errVerify" class="alert alert-error"></div>
+      <div id="okVerify" class="alert alert-success"></div>
+      <button class="btn-primary" id="btnCheckVerified" onclick="checkVerified()">I've verified — Continue</button>
+      <button class="btn-google" id="btnResendVerify" onclick="resendVerification()" style="margin-top:.75rem">Resend Verification Email</button>
+      <div class="auth-switch" style="margin-top:1rem">Wrong email? <a onclick="window._justSignedUp=false; window._fbAuth && window._fbAuth.signOut(); switchTab('signup')">Start over</a></div>
+    </div>
+
     <!-- Forgot Password view -->
     <div class="auth-view" id="viewForgot">
       <div class="auth-title">Reset password</div>
@@ -343,7 +354,7 @@
       getAuth, onAuthStateChanged,
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
-      sendPasswordResetEmail
+      sendPasswordResetEmail, sendEmailVerification
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const app = initializeApp({
@@ -364,13 +375,23 @@
     window._fbEmailSignIn  = (e, p) => signInWithEmailAndPassword(auth, e, p);
     window._fbEmailSignUp  = (e, p) => createUserWithEmailAndPassword(auth, e, p);
     window._fbResetPassword = (e)   => sendPasswordResetEmail(auth, e);
+    window._fbSendVerification = () => auth.currentUser && sendEmailVerification(auth.currentUser);
+    window._fbReloadUser = () => auth.currentUser && auth.currentUser.reload();
+    window._fbAuth = auth;
 
-    // On sign-in success → go back to app
+    // On sign-in success → go back to app.
+    // EXCEPTION: if the user just signed up with email/password and is unverified,
+    // stay on this page so we can show the "Check your inbox" view.
     onAuthStateChanged(auth, user => {
-      if (user) {
-        const dest = new URLSearchParams(location.search).get('next') || '/';
-        window.location.replace(dest);
+      if (!user) return;
+      // Google / Apple → emailVerified === true → redirect immediately.
+      // Email/password fresh signup → emailVerified === false → show verify screen.
+      if (window._justSignedUp && !user.emailVerified) {
+        window._showVerifyScreen && window._showVerifyScreen(user.email);
+        return;
       }
+      const dest = new URLSearchParams(location.search).get('next') || '/';
+      window.location.replace(dest);
     });
   </script>
 
@@ -384,7 +405,7 @@
     }
 
     function switchTab(tab) {
-      const viewMap = { signin:'viewSignIn', signup:'viewSignUp', forgot:'viewForgot' };
+      const viewMap = { signin:'viewSignIn', signup:'viewSignUp', forgot:'viewForgot', verify:'viewVerify' };
       Object.values(viewMap).forEach(id => document.getElementById(id)?.classList.remove('active'));
       document.getElementById('tabSignIn')?.classList.remove('active');
       document.getElementById('tabSignUp')?.classList.remove('active');
@@ -417,9 +438,65 @@
       if (pass.length < 6) return showErr('errSignUp', 'Password must be at least 6 characters.');
       if (pass !== pass2) return showErr('errSignUp', "Passwords don't match.");
       setLoading('btnSignUp', true, 'Creating account...');
-      try { await window._fbEmailSignUp(email, pass); }
-      catch(e) { showErr('errSignUp', fbMsg(e)); setLoading('btnSignUp', false, 'Create Account'); }
+      // Flag BEFORE the auth call so onAuthStateChanged sees it when it fires.
+      window._justSignedUp = true;
+      try {
+        await window._fbEmailSignUp(email, pass);
+        // Fire the verification email. Non-fatal if it fails — user can resend.
+        try { await window._fbSendVerification(); } catch(e) { console.error('Send verification failed:', e); }
+      } catch(e) {
+        window._justSignedUp = false;
+        showErr('errSignUp', fbMsg(e));
+        setLoading('btnSignUp', false, 'Create Account');
+      }
     }
+
+    // Called from onAuthStateChanged when a fresh signup lands unverified.
+    window._showVerifyScreen = function(email) {
+      document.getElementById('verifyEmailTarget').textContent = email || 'your inbox';
+      switchTab('verify');
+    };
+
+    async function resendVerification() {
+      const btn = document.getElementById('btnResendVerify');
+      const ok  = document.getElementById('okVerify');
+      const err = document.getElementById('errVerify');
+      if (ok)  ok.style.display  = 'none';
+      if (err) err.style.display = 'none';
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      try {
+        await window._fbSendVerification();
+        if (ok) { ok.textContent = 'Verification email sent — check your inbox.'; ok.style.display = ''; }
+        if (btn) { btn.textContent = 'Email Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }, 5000); }
+      } catch(e) {
+        if (err) { err.textContent = fbMsg(e); err.style.display = ''; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+      }
+    }
+
+    async function checkVerified() {
+      const btn = document.getElementById('btnCheckVerified');
+      const err = document.getElementById('errVerify');
+      if (err) err.style.display = 'none';
+      if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+      try {
+        await window._fbReloadUser();
+        const user = window._fbAuth.currentUser;
+        if (user && user.emailVerified) {
+          window._justSignedUp = false;
+          const dest = new URLSearchParams(location.search).get('next') || '/';
+          window.location.replace(dest);
+          return;
+        }
+        if (err) { err.textContent = "Not verified yet — click the link in your email, then try again."; err.style.display = ''; }
+      } catch(e) {
+        if (err) { err.textContent = fbMsg(e); err.style.display = ''; }
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "I've verified — Continue"; }
+      }
+    }
+    window.resendVerification = resendVerification;
+    window.checkVerified = checkVerified;
 
     async function doReset() {
       const email = document.getElementById('frEmail').value.trim();

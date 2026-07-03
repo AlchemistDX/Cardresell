@@ -774,7 +774,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       getAuth, onAuthStateChanged, signOut as fbSignOut,
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
-      sendPasswordResetEmail
+      sendPasswordResetEmail, sendEmailVerification
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const firebaseConfig = {
@@ -791,6 +791,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     // Expose to global scope for use in non-module scripts
     window._fbAuth = auth;
+    window._fbSendVerification = () => auth.currentUser && sendEmailVerification(auth.currentUser);
+    window._fbReloadUser = () => auth.currentUser && auth.currentUser.reload();
     // If openAuthModal was called before Firebase was ready, open it now
     if (window._pendingAuthModal) {
       const pending = window._pendingAuthModal;
@@ -881,13 +883,44 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           email: effectiveEmail,
           avatar: effectivePhoto,
           sub: user.uid,
-          uid: user.uid
+          uid: user.uid,
+          emailVerified: !!user.emailVerified
         };
         window._userEmail = effectiveEmail;
         window._googleSub = user.uid;
         window._userSub = user.uid;
+        window._emailVerified = !!user.emailVerified;
+        window._fbCurrentUser = user; // keep a handle for reload() / resend
         window._authResolved = true;
         window._authInitialized = true;
+
+        // If unverified, poll every 5s for up to 5 min (Firebase updates emailVerified
+        // only after the user reloads the token). When it flips, refetch pro-status
+        // so the signup bonus fires.
+        clearInterval(window._verifyPollInterval);
+        if (!user.emailVerified) {
+          let _verifyPollTries = 0;
+          window._verifyPollInterval = setInterval(async () => {
+            _verifyPollTries++;
+            if (_verifyPollTries > 60) { clearInterval(window._verifyPollInterval); return; }
+            try {
+              await user.reload();
+              if (user.emailVerified) {
+                clearInterval(window._verifyPollInterval);
+                window._emailVerified = true;
+                if (window.googleUser) window.googleUser.emailVerified = true;
+                // Force fresh token so backend sees email_verified=true
+                try {
+                  const fresh = await user.getIdToken(true);
+                  window._googleIdToken = fresh;
+                } catch(e) {}
+                // Refetch pro-status — this fires the signup bonus
+                try { checkProStatus?.(); } catch(e) {}
+                try { applyGoogleUser?.(); } catch(e) {}
+              }
+            } catch(e) { /* ignore transient errors */ }
+          }, 5000);
+        }
         const _providers = (user.providerData || []).map(p => p?.providerId || '?').join(',');
         _updateAuthDebug('AUTH OK: ' + (effectiveEmail || '(no email)').slice(0,30) + '\nuid=' + user.uid.slice(0,8) + ' | providers=' + _providers);
         // Apply UI immediately — don't wait for token
@@ -961,6 +994,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <span onclick="signOut()" style="display:flex;align-items:center;gap:.4rem;cursor:pointer" title="Tap to sign out">
         <img id="googleAvatar" src="" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold-border)" />
         <span id="googleName" style="font-size:.75rem;font-weight:600;color:var(--text-muted);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <span id="verifiedBadge" title="Email verified" style="display:none;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#22c55e;color:#000;font-size:.62rem;font-weight:900;line-height:1;flex-shrink:0">✓</span>
       </span>
       <span id="proBadge" class="pro-badge">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -5809,6 +5843,11 @@ function applyGoogleUser() {
   if (avatar) avatar.src = window.googleUser.avatar || '';
   const nameEl = document.getElementById('googleName');
   if (nameEl) nameEl.textContent = (window.googleUser.name || 'User').split(' ')[0];
+  // ✓ Verified badge — shown only when email is verified
+  const vBadge = document.getElementById('verifiedBadge');
+  if (vBadge) vBadge.style.display = window.googleUser.emailVerified ? 'inline-flex' : 'none';
+  // Unverified banner — nudge them to verify to unlock bonus
+  _updateVerifyBanner();
   // Check pro status
   checkProStatus();
   _maybeShowAdminTab();
@@ -5817,6 +5856,58 @@ function applyGoogleUser() {
   // Prefill newsletter email if settings open
   const nlInput = document.getElementById('newsletterEmail');
   if (nlInput && !nlInput.value && window.googleUser.email) nlInput.value = window.googleUser.email;
+}
+
+// Show a small banner at the top when the signed-in user hasn't verified their email yet.
+// Google/Apple users auto-verify, so this only appears for email/password signups
+// that haven't clicked the verification link.
+function _updateVerifyBanner() {
+  let banner = document.getElementById('emailVerifyBanner');
+  const needBanner = window.googleUser && !window.googleUser.emailVerified;
+  if (!needBanner) { if (banner) banner.remove(); return; }
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'emailVerifyBanner';
+    banner.style.cssText = 'position:sticky;top:0;z-index:1000;background:linear-gradient(90deg,#f59e0b,#f97316);color:#000;font-size:.82rem;font-weight:600;padding:.55rem .9rem;display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+    banner.innerHTML =
+      '<span>⚠️ Verify your email to unlock <strong>10 ID scans + 1 AI Grade</strong> bonus</span>' +
+      '<button id="btnResendVerifyMain" onclick="resendVerifyEmail()" style="background:#000;color:#fff;border:none;border-radius:6px;padding:.35rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">Resend Email</button>' +
+      '<button id="btnCheckVerifiedMain" onclick="recheckVerified()" style="background:rgba(0,0,0,.15);color:#000;border:1.5px solid #000;border-radius:6px;padding:.32rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">I Verified</button>';
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+}
+
+async function resendVerifyEmail() {
+  const btn = document.getElementById('btnResendVerifyMain');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await window._fbSendVerification();
+    if (btn) { btn.textContent = 'Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Email'; }, 5000); }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
+    alert('Could not send verification email: ' + (e?.message || 'unknown error'));
+  }
+}
+
+async function recheckVerified() {
+  const btn = document.getElementById('btnCheckVerifiedMain');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  try {
+    await window._fbReloadUser();
+    const u = window._fbAuth?.currentUser;
+    if (u && u.emailVerified) {
+      window._emailVerified = true;
+      if (window.googleUser) window.googleUser.emailVerified = true;
+      try { const fresh = await u.getIdToken(true); window._googleIdToken = fresh; } catch(e) {}
+      clearInterval(window._verifyPollInterval);
+      try { checkProStatus?.(); } catch(e) {}
+      applyGoogleUser();
+      return;
+    }
+    if (btn) { btn.textContent = 'Not yet — retry'; setTimeout(() => { btn.disabled = false; btn.textContent = 'I Verified'; }, 2500); }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'I Verified'; }
+  }
 }
 
 
@@ -6704,6 +6795,17 @@ async function checkProStatus() {
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
     window._idScanCredits = d.idPaidLeft || 0;
+    // Sync client state if server sees verification differently (e.g. token refresh needed)
+    if (typeof d.emailVerified === 'boolean' && window.googleUser) {
+      const prev = window.googleUser.emailVerified;
+      window.googleUser.emailVerified = d.emailVerified;
+      window._emailVerified = d.emailVerified;
+      if (prev !== d.emailVerified) {
+        const vBadge = document.getElementById('verifiedBadge');
+        if (vBadge) vBadge.style.display = d.emailVerified ? 'inline-flex' : 'none';
+        _updateVerifyBanner?.();
+      }
+    }
     // Store referral code and show reward toast if applicable
     if (d.refCode) {
       window._userRefCode = d.refCode;

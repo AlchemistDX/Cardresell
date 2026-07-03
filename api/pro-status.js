@@ -15,15 +15,19 @@ export default async function handler(req, res) {
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
   if (!idToken) return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 });
 
-  // ── FIXED: declare userSub and userEmail at function scope, assign inside try ──
+  // ── FIXED: declare userSub, userEmail, emailVerified at function scope, assign inside try ──
   let userSub = '';
   let userEmail = '';
+  let emailVerified = false;
+  let signInProvider = '';
   try {
     const tokenInfo = await verifyTokenFlexible(idToken);
-    userSub   = tokenInfo.uid   || '';
-    userEmail = tokenInfo.email || '';
+    userSub        = tokenInfo.uid   || '';
+    userEmail      = tokenInfo.email || '';
+    emailVerified  = !!tokenInfo.emailVerified;
+    signInProvider = tokenInfo.provider || '';
   } catch(e) {
-    return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0 });
+    return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0, emailVerified: false });
   }
 
   if (!userSub) {
@@ -87,9 +91,14 @@ export default async function handler(req, res) {
     }
 
     // 4. Sign-up bonus — gift 10 ID credits + 1 Grader credit on first sign-in ever
+    //    ONLY granted when the email is verified. This blocks fake-email farming:
+    //    Google/Apple sign-in → emailVerified is true automatically.
+    //    Email/password sign-up → emailVerified is false until they click the link
+    //    in the verification email. Once verified, the bonus fires on next
+    //    /api/pro-status call (client reloads the user + refetches automatically).
     const bonusKey   = `signup_bonus:${userSub}`;
     const bonusGiven = await getKVInt(kvUrl, kvToken, bonusKey);
-    if (!bonusGiven) {
+    if (!bonusGiven && emailVerified) {
       try {
         const newIdLeft   = idPaidLeft + 10;
         const newPaidLeft = paidScansLeft + 1;
@@ -106,7 +115,7 @@ export default async function handler(req, res) {
           idPaidLeft    = newIdLeft;
           paidScansLeft = newPaidLeft;
           isNewSignup   = true;
-          console.log(`Sign-up bonus granted to ${userSub}: 10 ID + 1 Grade`);
+          console.log(`Sign-up bonus granted to ${userSub} (verified via ${signInProvider}): 10 ID + 1 Grade`);
         }
       } catch(e) { console.error('Sign-up bonus error:', e); }
     }
@@ -177,6 +186,8 @@ export default async function handler(req, res) {
     refCode,
     refRewarded,
     isNewSignup,
+    emailVerified,
+    signInProvider,
   });
 }
 

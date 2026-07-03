@@ -66,6 +66,7 @@ async function verifyFirebaseToken(idToken) {
     uid:   payload.sub,
     email: payload.email || '',
     name:  payload.name  || '',
+    emailVerified: payload.email_verified === true,
     // Firebase email/password users have firebase.sign_in_provider
     provider: payload.firebase?.sign_in_provider || 'unknown',
   };
@@ -88,6 +89,8 @@ async function verifyTokenFlexible(idToken) {
         uid:   info.sub,
         email: info.email || '',
         name:  info.name  || '',
+        // Google tokeninfo: email_verified is string 'true'/'false'
+        emailVerified: info.email_verified === true || info.email_verified === 'true',
         provider: 'google.com',
       };
     } catch(gErr) {
