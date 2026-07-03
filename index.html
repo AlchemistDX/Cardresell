@@ -165,6 +165,7 @@ img{display:block;max-width:100%;height:auto}
 .scan-sub-btn.grade-sub{border-color:var(--gold-border);color:var(--gold)}
 .scan-sub-btn.bulk-sub{border-color:rgba(139,92,246,.4);color:rgba(139,92,246,1)}
 .scan-sub-btn.bulk-sub:hover{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.7);color:rgba(139,92,246,1)}
+@keyframes spin{to{transform:rotate(360deg)}}
 .scan-sub-btn:hover{background:var(--gold-hi);border-color:var(--gold);color:var(--gold)}
 @media(max-width:820px){
   .search-row .scan-inline{display:none!important}
@@ -1097,11 +1098,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="bulkUploadInput" accept="image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
   <input type="file" id="bulkCameraInput" accept="image/*" capture="environment" style="display:none" onchange="processBulkCameraCapture(this)" />
   <!-- Scan status modal -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1.25rem;padding:1.5rem 1.5rem 2.5rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <!-- Preview image -->
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
-      <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,170px);text-align:center">
+      <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,160px);text-align:center">
         <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
+        <!-- Success checkmark overlay on image -->
+        <div id="scanSuccessBadge" style="display:none;position:absolute;top:-8px;right:-8px;width:26px;height:26px;background:#4ade80;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;box-shadow:0 2px 8px rgba(74,222,128,.5)">✓</div>
       </div>
+    </div>
+    <!-- Spinner (shown while scanning) -->
+    <div id="scanSpinner" style="display:none;flex-direction:column;align-items:center;gap:.6rem">
+      <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite"></div>
     </div>
     <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
@@ -1119,7 +1127,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
       </div>
     </div>
-    <button onclick="cancelScan()" style="padding:.5rem 1.25rem;background:rgba(255,255,255,.12);color:#fff;border-radius:99px;font-weight:600;font-size:.85rem">Cancel</button>
+    <!-- Dynamic action buttons — swapped based on scan state -->
+    <div id="scanActionBtns" style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:320px;margin-top:.25rem">
+      <!-- Shown while scanning -->
+      <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
+      <!-- Shown after success -->
+      <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View Card Prices →</button>
+      <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
+      <!-- Shown after failure -->
+      <button id="scanRetryBtn" onclick="retryIdScan()" style="display:none;padding:.65rem 1.5rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:12px;font-weight:800;font-size:.88rem;width:100%;cursor:pointer">📷 Try Again</button>
+    </div>
   </div>
   <div class="cat-row" id="catRow" style="margin-top:.6rem">
     <div class="game-select-wrap">
@@ -5556,8 +5573,68 @@ function openAboutModal() {
   document.getElementById('aboutModal').classList.add('open');
 }
 
+// ── Scan overlay button state manager ──
+function _setScanBtns(state) {
+  // state: 'scanning' | 'success' | 'error'
+  const cancelBtn   = document.getElementById('scanCancelBtn');
+  const viewBtn     = document.getElementById('scanViewCardBtn');
+  const anotherBtn  = document.getElementById('scanAnotherBtn');
+  const retryBtn    = document.getElementById('scanRetryBtn');
+  if (!cancelBtn) return;
+  if (state === 'scanning') {
+    cancelBtn.style.display  = '';
+    viewBtn.style.display    = 'none';
+    anotherBtn.style.display = 'none';
+    retryBtn.style.display   = 'none';
+  } else if (state === 'success') {
+    cancelBtn.style.display  = 'none';
+    viewBtn.style.display    = '';
+    anotherBtn.style.display = '';
+    retryBtn.style.display   = 'none';
+  } else if (state === 'error') {
+    cancelBtn.style.display  = 'none';
+    viewBtn.style.display    = 'none';
+    anotherBtn.style.display = 'none';
+    retryBtn.style.display   = '';
+  }
+}
+
+// Retry — re-trigger camera without closing overlay
+function retryIdScan() {
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  if (statusEl) statusEl.textContent = 'Identifying card…';
+  if (resultEl) resultEl.textContent = '';
+  const gradeCTA = document.getElementById('scanGradeCTA');
+  if (gradeCTA) gradeCTA.classList.remove('show');
+  const badge = document.getElementById('scanSuccessBadge');
+  if (badge) badge.style.display = 'none';
+  _setScanBtns('scanning');
+  // Re-trigger file input
+  const fi = document.getElementById('scanFileInput');
+  if (fi) {
+    fi.value = '';
+    const clone = fi.cloneNode(true);
+    fi.parentNode.replaceChild(clone, fi);
+    clone.addEventListener('change', function() { processScanImage(this); });
+    clone.click();
+  }
+}
+
+// Scan another — close result, immediately open camera again
+function scanAnother() {
+  // Clear pending card so cancelScan doesn't navigate away
+  window._pendingIdScanCard = null;
+  cancelScan();
+  // Brief delay then reopen
+  setTimeout(() => openGradedScanGate(), 150);
+}
+
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
+  const spinner5 = document.getElementById('scanSpinner');
+  if (spinner5) spinner5.style.display = 'none';
+  _setScanBtns('scanning');
   const gradeCTA = document.getElementById('scanGradeCTA');
   if (gradeCTA) gradeCTA.classList.remove('show');
   // Clear grade front state
@@ -5787,6 +5864,8 @@ async function processScanImage(input) {
     }
 
     if (response.status === 402) {
+      const spinner4 = document.getElementById('scanSpinner');
+      if (spinner4) spinner4.style.display = 'none';
       cancelScan();
       _setScanGateMode('identify');
       document.getElementById('scanGateOverlay').classList.add('open');
@@ -5829,9 +5908,20 @@ async function processScanImage(input) {
     window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp };
     URL.revokeObjectURL(objectUrl);
 
+    // Show success state — hide spinner, show View Card + Scan Another
+    const spinner2 = document.getElementById('scanSpinner');
+    if (spinner2) spinner2.style.display = 'none';
+    const badge = document.getElementById('scanSuccessBadge');
+    if (badge) badge.style.display = 'flex';
+    _setScanBtns('success');
+
   } catch(err) {
     console.error('Scan error:', err);
-    statusEl.textContent = err.message || 'Could not identify the card. Try a clearer photo.';
+    const spinner3 = document.getElementById('scanSpinner');
+    if (spinner3) spinner3.style.display = 'none';
+    statusEl.innerHTML = '<span style="color:#f87171">' + (err.message || 'Could not identify the card.') + '</span>';
+    resultEl.innerHTML = '<span style="font-size:.75rem;color:rgba(255,255,255,.4)">Try better lighting or a closer shot.</span>';
+    _setScanBtns('error');
   }
 }
 
@@ -6389,7 +6479,7 @@ async function startProCheckout() {
     });
     const d = await r.json();
     if (d.url) {
-      window.location.href = d.url;
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       if (btn) btn.disabled = false;
@@ -6421,7 +6511,7 @@ async function startAnnualCheckout() {
     });
     const d = await r.json();
     if (d.url) {
-      window.location.href = d.url;
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       if (btn) btn.disabled = false;
@@ -6465,7 +6555,7 @@ async function startGradeScanCheckout(tier) {
     });
     const d = await r.json();
     if (d.url) {
-      window.location.href = d.url;
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       tierBtns.forEach(b => { b.disabled = false; });
@@ -6509,7 +6599,7 @@ async function startIdScanCheckout(tier) {
     });
     const d = await r.json();
     if (d.url) {
-      window.location.href = d.url;
+      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
     } else {
       showToast('⚠️ Could not start checkout. Try again.');
       tierBtns.forEach(b => { b.disabled = false; });
