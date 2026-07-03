@@ -2252,55 +2252,46 @@ function updateKeyStatus() {
 // ── TCGPriceLookup search ──
 // After TPL renders results (no images), fetch images from pokemontcg.io and inject them
 async function injectPokemonImages(cards, gameSlug) {
-  // Build a name+number lookup against pokemontcg.io in batches
   const names = [...new Set(cards.map(c => c.name).filter(Boolean))];
   if (!names.length) return;
   try {
-    // Batch into groups of 8 names to avoid URL length limits
-    const BATCH = 8;
+    const q = names.slice(0, 3).map(n => `name:"${n}"`).join(' OR ');
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=50&select=id,name,number,set,images`;
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const data = await r.json();
     const lookup = {};
-    for (let b = 0; b < names.length; b += BATCH) {
-      const batch = names.slice(b, b + BATCH);
-      const q = batch.map(n => `name:"${n}"`).join(' OR ');
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=250&select=id,name,number,set,images`;
-      const r = await fetch(url);
-      if (!r.ok) continue;
-      const data = await r.json();
-      (data.data || []).forEach(c => {
-        const key = (c.name + '|' + (c.number || '')).toLowerCase();
-        if (!lookup[key]) lookup[key] = c.images?.small || '';
-        if (!lookup[c.name.toLowerCase()]) lookup[c.name.toLowerCase()] = c.images?.small || '';
-      });
-    }
-    // Inject images into dropList AND catalog grid
+    (data.data || []).forEach(c => {
+      const key = (c.name + '|' + (c.number || '')).toLowerCase();
+      lookup[key] = c.images?.small || '';
+      if (!lookup[c.name.toLowerCase()]) lookup[c.name.toLowerCase()] = c.images?.small || '';
+    });
     cards.forEach((c, i) => {
       const key = (c.name + '|' + (c.number || '')).toLowerCase();
       const img = lookup[key] || lookup[c.name.toLowerCase()] || '';
       if (!img) return;
-      // Store on card data
       if (window._searchCards[i]) window._searchCards[i]._imgSmall = img;
-      // Update dropList placeholder
+      // Update dropList
       const item = dropList.querySelector(`[data-idx="${i}"]`);
       if (item) {
         const ph = item.querySelector('.drop-thumb-ph');
         if (ph) {
           const el = document.createElement('img');
           el.className = 'drop-thumb';
-          el.src = img;
-          el.alt = c.name;
+          el.src = img; el.alt = c.name;
           ph.replaceWith(el);
         }
       }
-      // Also update catalog grid card if it's open
+      // Update catalog if open
       const catCard = document.querySelector(`#searchModalGrid [data-idx="${i}"]`);
       if (catCard) {
-        const imgArea = catCard.querySelector('.cat-img-area');
-        if (imgArea) {
-          imgArea.innerHTML = `<img src="${img}" loading="lazy" style="max-width:95%;max-height:200px;object-fit:contain;border-radius:6px;display:block">`;
+        const area = catCard.querySelector('.cat-img-area');
+        if (area && !area.querySelector('img')) {
+          area.innerHTML = `<img src="${img}" loading="lazy" style="max-width:95%;max-height:200px;object-fit:contain;border-radius:6px;display:block">`;
         }
       }
     });
-  } catch(e) { /* silent — images are nice-to-have */ }
+  } catch(e) { /* silent */ }
 }
 
 async function searchWithTPL(q, gameSlug) {
@@ -6880,15 +6871,17 @@ function _populateSearchModal(q) {
 
   items.forEach(item => {
     const idx   = item.dataset.idx;
-    const name  = item.querySelector('.drop-name')?.textContent?.trim() || '';
-    const meta  = item.querySelector('.drop-meta')?.textContent?.trim() || '';
-    const price = item.querySelector('.drop-price')?.textContent?.trim() || '';
-    // Prefer already-fetched image stored on card data over dropList img
+    // Use textContent to strip any HTML tags (e.g. TPL badge spans)
+    const name  = (item.querySelector('.drop-name')?.textContent || '').trim();
+    const rawMeta = (item.querySelector('.drop-meta')?.textContent || '').trim();
+    const price = (item.querySelector('.drop-price')?.textContent || '').trim();
+    // Pull image: stored data first, then rendered img, then none
     const storedImg = window._searchCards?.[idx]?._imgSmall || '';
     const img   = storedImg || item.querySelector('img.drop-thumb')?.src || '';
 
-    // Parse meta: "Set Name · Number · Rarity"
-    const metaParts = meta.split('·').map(s => s.trim());
+    // Parse meta: "Set Name · Number · Rarity" — strip stray labels like TPL/JP
+    const metaClean = rawMeta.replace(/\bTPL\b|\bJP\b|\[EN ref\]/gi, '').trim();
+    const metaParts = metaClean.split('·').map(s => s.trim()).filter(Boolean);
     const setName   = metaParts[0] || '';
     const numRarity = metaParts.slice(1).join(' • ');
 
