@@ -1,6 +1,8 @@
 // /api/stripe-checkout — Create Stripe Checkout for Pro subscription ($4.99/mo)
 // POST body: { email, userId, name? }
-// Authorization: Bearer <google_id_token>  (optional — used if present, falls back to body email)
+// Authorization: Bearer <firebase_or_google_id_token>  (optional — used if present, falls back to body email)
+
+import { verifyTokenFlexible } from './_verifyToken.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,17 +18,14 @@ export default async function handler(req, res) {
   let userSub   = body.userId || '';
   let userName  = body.name || '';
 
-  // Try to verify via Google token if present — but fall back to body email if token is expired
+  // Try to verify via Firebase or Google token if present — but fall back to body email if token is expired
   if (idToken && idToken.length > 20) {
     try {
-      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-      if (r.ok) {
-        const info = await r.json();
-        if (info.email) {
-          userEmail = info.email;
-          userSub   = info.sub || userSub;
-          userName  = info.name || userName;
-        }
+      const info = await verifyTokenFlexible(idToken);
+      if (info.email) {
+        userEmail = info.email;
+        userSub   = info.uid  || userSub;
+        userName  = info.name || userName;
       }
       // If token is expired or invalid, we still continue with body email below
     } catch(e) { /* non-blocking — fall through to body email */ }

@@ -2,6 +2,8 @@
 // POST body: { tier: '5' | '20' | '50', email?, userId?, name? }
 // Packs: 5 scans $2.49 | 20 scans $7.99 | 50 scans $14.99
 
+import { verifyTokenFlexible } from './_verifyToken.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -17,14 +19,11 @@ export default async function handler(req, res) {
   let userSub   = body.userId || '';
   let userName  = body.name   || '';
 
-  // Verify Google token
+  // Verify Firebase or Google token — falls back to body values if verification fails
   if (idToken && idToken.length > 20) {
     try {
-      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-      if (r.ok) {
-        const info = await r.json();
-        if (info.email) { userEmail = info.email; userSub = info.sub || userSub; userName = info.name || userName; }
-      }
+      const info = await verifyTokenFlexible(idToken);
+      if (info.email) { userEmail = info.email; userSub = info.uid || userSub; userName = info.name || userName; }
     } catch(e) {}
   }
 

@@ -6159,6 +6159,8 @@ async function processScanImage(input) {
       body: JSON.stringify({
         imageBase64,
         mimeType: 'image/jpeg',
+        email: window.googleUser?.email || window._userEmail || '',
+        googleSub: window.googleUser?.sub || window._googleSub || '',
       })
     });
 
@@ -6355,6 +6357,8 @@ async function processGradeBack(input) {
         cardName: selectedCard?.name || window._lastScanCardName || '',
         cardNumber: selectedCard?.number || window._scanTargetNumber || '',
         setName: selectedCard?.setName || '',
+        email: window.googleUser?.email || window._userEmail || '',
+        googleSub: window.googleUser?.sub || window._googleSub || '',
       })
     });
 
@@ -7773,7 +7777,12 @@ async function startBulkQueue() {
       const resp = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-        body: JSON.stringify({ imageBase64, mimeType: 'image/jpeg' })
+        body: JSON.stringify({
+          imageBase64,
+          mimeType: 'image/jpeg',
+          email: window.googleUser?.email || window._userEmail || '',
+          googleSub: window.googleUser?.sub || window._googleSub || '',
+        })
       });
 
       if (resp.status === 402) {
