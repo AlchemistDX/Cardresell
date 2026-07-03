@@ -813,6 +813,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       return sendPasswordResetEmail(auth, email);
     };
 
+    // Auth-ready promise — resolves after first onAuthStateChanged fires
+    let _authReadyResolve;
+    window._authReady = new Promise(res => { _authReadyResolve = res; });
+
     // Central auth state handler — fires on sign-in, sign-out, and page load
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -836,6 +840,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             window._googleIdToken = fresh;
           } catch(e) {}
         }, 55 * 60 * 1000);
+        _authReadyResolve(googleUser);
         applyGoogleUser();
         loadUserData();
         checkProStatus(); // always call after token is confirmed set
@@ -863,6 +868,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
         try { _updateFlipsSignInWall?.(); } catch(e) {}
         updateProUI?.();
+        _authReadyResolve(null);
       }
     });
   </script>
@@ -2171,6 +2177,9 @@ async function loadSettingsScanCredits() {
   const idCountEl = document.getElementById('idScanCount');
   const idSubEl   = document.getElementById('idScanSub');
   if (!countEl) return;
+
+  // Wait for Firebase auth to resolve before checking email
+  if (!window._userEmail && window._authReady) await window._authReady;
 
   const email     = window._userEmail || window.googleUser?.email || '';
   const googleSub = window.googleUser?.sub || window.googleUser?.id || window._googleSub || '';
@@ -6567,6 +6576,8 @@ window._idScanCredits = 0; // paid ID scan credits
 
 // ── Check Pro status from server ──
 async function checkProStatus() {
+  // If auth hasn't resolved yet, wait for it
+  if ((!googleUser || !window._googleIdToken) && window._authReady) await window._authReady;
   if (!googleUser || !window._googleIdToken) return;
   try {
     const refParam = window._pendingRefCode ? '?ref=' + encodeURIComponent(window._pendingRefCode) : '';
@@ -6601,6 +6612,8 @@ async function checkProStatus() {
   } catch(e) { /* non-blocking */ }
   updateProUI();
   updateScanBtnCredits();
+  // Always refresh credits panel (not just when settings is open)
+  loadSettingsScanCredits();
   // Re-render collection view if it's active
   _maybeRerenderCollection();
   // Show admin tab for owner
@@ -6741,7 +6754,8 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
 }
 
 // ── Start Pro subscription checkout ──
-function startProCheckout() {
+async function startProCheckout() {
+  if (!googleUser && window._authReady) await window._authReady;
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-checkout',
     { email: googleUser.email, userId: googleUser.sub },
@@ -6749,7 +6763,8 @@ function startProCheckout() {
 }
 
 // ── Start annual Pro checkout ──
-function startAnnualCheckout() {
+async function startAnnualCheckout() {
+  if (!googleUser && window._authReady) await window._authReady;
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-annual-checkout',
     { googleSub: googleUser.sub, email: googleUser.email },
@@ -6760,7 +6775,9 @@ function startAnnualCheckout() {
 function startScanCheckout() { openGradeScanModal(); }
 
 // ── Start grade scan pack checkout ──
-function startGradeScanCheckout(tier) {
+async function startGradeScanCheckout(tier) {
+  // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
+  if (!googleUser && window._authReady) await window._authReady;
   if (!googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
@@ -6778,7 +6795,9 @@ function startGradeScanCheckout(tier) {
 function openGradeScanModal() { switchScanMode('grade'); openPricingModal('grade_scan'); }
 
 // ── Start ID scan tier checkout ──
-function startIdScanCheckout(tier) {
+async function startIdScanCheckout(tier) {
+  // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
+  if (!googleUser && window._authReady) await window._authReady;
   if (!googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
