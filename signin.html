@@ -425,12 +425,19 @@
       const email = document.getElementById('frEmail').value.trim();
       clearErr('errForgot');
       if (!email) return showErr('errForgot', 'Please enter your email.');
+      if (!window._fbResetPassword) return showErr('errForgot', 'Still loading — please try again in a moment.');
+      const btn = document.querySelector('#viewForgot .btn-primary');
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
       try {
         await window._fbResetPassword(email);
         const ok = document.getElementById('okForgot');
         ok.textContent = 'Reset email sent — check your inbox.';
         ok.style.display = '';
-      } catch(e) { showErr('errForgot', fbMsg(e)); }
+        if (btn) { btn.textContent = 'Email Sent ✓'; }
+      } catch(e) {
+        showErr('errForgot', fbMsg(e));
+        if (btn) { btn.disabled = false; btn.textContent = 'Send Reset Email'; }
+      }
     }
 
     function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.style.display = ''; } }
