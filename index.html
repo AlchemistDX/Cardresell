@@ -2644,11 +2644,11 @@ async function searchPokemon(q) {
     dropList.innerHTML = tplData.map((c, i) => {
       window._searchCards[i] = { _tpl: c, game: 'pokemon' };
       const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
-      return `<div class="drop-item" data-idx="${i}" role="option">
+      return `<div class="drop-item" data-idx="${i}" data-number="${esc(c.number||'')}" data-set="${esc(c.set?.name||c.set_name||'')}" data-rarity="${esc(c.rarity||'')}" role="option">
         <div class="drop-thumb-ph">🃏</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(c.set?.name||c.set_name||'')}${c.number ? ' · #'+esc(c.number) : ''}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -3995,7 +3995,7 @@ function updateSellLinks(card) {
   }
 
   // Also keep eBay buy/comps link alive for the graded comps banner
-  const ebaySoldQ = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${(isYugioh || isMagic) && number ? ' ' + number : ''} ${gameTag}`);
+  const ebaySoldQ = encodeURIComponent(`${searchName}${number ? ' ' + number : ''}${setName ? ' ' + setName : ''} ${gameTag}`);
   const ebayBuyRaw = `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
   const slEbayBuy = document.getElementById('slEbayBuy');
   if (slEbayBuy) slEbayBuy.href = buildEbayUrl(ebayBuyRaw);
@@ -5811,6 +5811,9 @@ async function processGradeBack(input) {
         backBase64,
         backMimeType: 'image/jpeg',
         mode: 'grade',
+        cardName: selectedCard?.name || window._lastScanCardName || '',
+        cardNumber: selectedCard?.number || window._scanTargetNumber || '',
+        setName: selectedCard?.setName || '',
       })
     });
 
@@ -6698,6 +6701,7 @@ window.addEventListener('load', () => {
   <div id="catalogFilterBar" style="display:flex;align-items:center;gap:.5rem;padding:.5rem 1rem;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0;border-bottom:1px solid #1a1a1a;scrollbar-width:none">
     <div class="cat-chip" id="chipSet" onclick="toggleCatalogChip('set')">Set <span id="chipSetVal"></span>&#9660;</div>
     <div class="cat-chip" id="chipRarity" onclick="toggleCatalogChip('rarity')">Rarity <span id="chipRarityVal"></span>&#9660;</div>
+    <div class="cat-chip" id="chipNumber" onclick="toggleCatalogChip('number')"># <span id="chipNumberVal"></span>&#9660;</div>
     <div class="cat-chip" id="chipPrice" onclick="cyclePriceSort()">Price <span id="chipPriceVal">&#8597;</span></div>
   </div>
   <!-- Chip dropdown (shared) -->
@@ -6834,6 +6838,7 @@ async function doPasswordReset() {
 function openSearchModal() {
   const q = searchInput.value.trim();
   if (!q) return;
+  clearTimeout(searchTimeout); // cancel any pending debounce so we own the doSearch call
   const modal = document.getElementById('searchResultsModal');
   const grid  = document.getElementById('searchModalGrid');
   const title = document.getElementById('searchModalTitle');
@@ -6899,30 +6904,34 @@ function _storeCatalogRows(items) {
                 || item.querySelector('img')?.src
                 || window._searchCards?.[idx]?._tpl?.image_url
                 || '';
+    const cardNum  = item.dataset.number || '';
+    const cardSet  = item.dataset.set || '';
+    const cardRarity = item.dataset.rarity || '';
     const metaParts = meta.split('·').map(s => s.trim()).filter(Boolean);
-    const setLine   = metaParts[0] || '';
-    const subLine   = metaParts.slice(1).join(' • ');
-    // extract rarity from subLine or setLine
-    const rarityMatch = subLine || setLine;
-    const priceNum = parseFloat(price.replace(/[^0-9.]/g,'')) || 0;
-    return { idx, name, setLine, subLine, price, img, priceNum };
+    const setLine   = cardSet || metaParts[0] || '';
+    const subLine   = [cardNum ? '#'+cardNum : '', cardRarity].filter(Boolean).join(' · ');
+    const priceNum  = parseFloat(price.replace(/[^0-9.]/g,'')) || 0;
+    return { idx, name, setLine, subLine, price, img, priceNum, cardNum, cardSet, cardRarity };
   });
   // Reset filters on new search
-  window._catFilter   = { set: '', rarity: '' };
+  window._catFilter   = { set: '', rarity: '', number: '' };
   window._catPriceDir = 0;
   document.getElementById('chipSetVal').textContent    = '';
   document.getElementById('chipRarityVal').textContent = '';
+  document.getElementById('chipNumberVal').textContent = '';
   document.getElementById('chipPriceVal').innerHTML    = '&#8597;';
   document.getElementById('chipSet').classList.remove('active');
   document.getElementById('chipRarity').classList.remove('active');
+  document.getElementById('chipNumber').classList.remove('active');
   document.getElementById('chipPrice').classList.remove('active');
 }
 
 function _applyFilters() {
   let rows = [...window._catAllRows];
   const { set, rarity } = window._catFilter;
-  if (set)    rows = rows.filter(r => r.setLine.toLowerCase().includes(set.toLowerCase()));
-  if (rarity) rows = rows.filter(r => (r.subLine + r.setLine).toLowerCase().includes(rarity.toLowerCase()));
+  if (set)    rows = rows.filter(r => r.cardSet.toLowerCase().includes(set.toLowerCase()));
+  if (rarity) rows = rows.filter(r => r.cardRarity.toLowerCase().includes(rarity.toLowerCase()));
+  if (window._catFilter.number) rows = rows.filter(r => r.cardNum.toLowerCase().includes(window._catFilter.number.toLowerCase()));
   if (window._catPriceDir === 1)  rows.sort((a,b) => a.priceNum - b.priceNum);
   if (window._catPriceDir === -1) rows.sort((a,b) => b.priceNum - a.priceNum);
   const grid  = document.getElementById('searchModalGrid');
@@ -6970,9 +6979,11 @@ function toggleCatalogChip(type) {
   const rows = window._catAllRows;
   let options = [];
   if (type === 'set') {
-    options = [...new Set(rows.map(r => r.setLine).filter(Boolean))].sort();
+    options = [...new Set(rows.map(r => r.cardSet).filter(Boolean))].sort();
+  } else if (type === 'rarity') {
+    options = [...new Set(rows.map(r => r.cardRarity).filter(Boolean))].sort();
   } else {
-    options = [...new Set(rows.map(r => r.subLine).filter(Boolean))].sort();
+    options = [...new Set(rows.map(r => r.cardNum).filter(Boolean))].sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
   }
   if (!options.length) return;
   const current = window._catFilter[type];
@@ -6988,8 +6999,8 @@ function toggleCatalogChip(type) {
 
 function selectCatalogFilter(type, value) {
   window._catFilter[type] = value;
-  const chipValEl = document.getElementById(type === 'set' ? 'chipSetVal' : 'chipRarityVal');
-  const chipEl    = document.getElementById(type === 'set' ? 'chipSet'    : 'chipRarity');
+  const chipValEl = document.getElementById(type === 'set' ? 'chipSetVal' : type === 'rarity' ? 'chipRarityVal' : 'chipNumberVal');
+  const chipEl    = document.getElementById(type === 'set' ? 'chipSet'    : type === 'rarity' ? 'chipRarity'    : 'chipNumber');
   if (value) {
     const short = value.length > 14 ? value.slice(0,13) + '…' : value;
     chipValEl.textContent = ': ' + short;
