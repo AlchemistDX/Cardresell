@@ -6791,11 +6791,10 @@ async function startGradeScanCheckout(tier) {
     setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
-  // Refresh ID token before checkout to ensure it's not expired
-  try {
-    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
-    if (freshTok) window._googleIdToken = freshTok;
-  } catch(e) {}
+
+  // iOS Safari REQUIRES window.open() to be called synchronously within the
+  // tap handler — before any await — otherwise the popup blocker kills it.
+  const stripeWindow = window.open('', '_blank');
 
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
@@ -6805,32 +6804,43 @@ async function startGradeScanCheckout(tier) {
     const priceEl = clickedBtn.querySelector('div:last-child');
     if (priceEl) priceEl.textContent = 'Opening…';
   }
+
+  // Refresh token silently (no await needed before open)
+  try {
+    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
+    if (freshTok) window._googleIdToken = freshTok;
+  } catch(e) {}
+
+  const resetBtns = () => {
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
+  };
+
   try {
     const r = await fetch('/api/stripe-grade-checkout', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (window._googleIdToken || '')
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
       body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub, name: googleUser.name })
     });
     const d = await r.json();
     if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener noreferrer'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
-      // Reset buttons after short delay (user may come back)
-      setTimeout(() => {
-        tierBtns.forEach(b => { b.disabled = false; });
-        if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
-      }, 3000);
+      // Navigate the already-open tab to Stripe
+      if (stripeWindow && !stripeWindow.closed) {
+        stripeWindow.location.href = d.url;
+      } else {
+        // Fallback if popup was blocked
+        window.location.href = d.url;
+      }
+      setTimeout(resetBtns, 4000);
     } else {
-      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
-      tierBtns.forEach(b => { b.disabled = false; });
-      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
+      if (stripeWindow) stripeWindow.close();
+      showToast('⚠️ ' + (d.error || 'Could not start checkout — try again.'));
+      resetBtns();
     }
   } catch(e) {
+    if (stripeWindow) stripeWindow.close();
     showToast('⚠️ Network error — check your connection and try again.');
-    tierBtns.forEach(b => { b.disabled = false; });
-    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$2.49'; }
+    resetBtns();
   }
 }
 
@@ -6848,11 +6858,9 @@ async function startIdScanCheckout(tier) {
     setTimeout(() => triggerGoogleSignIn(), 600);
     return;
   }
-  // Refresh ID token before checkout
-  try {
-    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
-    if (freshTok) window._googleIdToken = freshTok;
-  } catch(e) {}
+
+  // Open blank tab synchronously before any await (iOS Safari gesture chain)
+  const stripeWindow = window.open('', '_blank');
 
   const tierBtns = document.querySelectorAll('[onclick^="startIdScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
@@ -6862,30 +6870,39 @@ async function startIdScanCheckout(tier) {
     const priceEl = clickedBtn.querySelector('div:last-child');
     if (priceEl) priceEl.textContent = 'Opening…';
   }
+
+  try {
+    const freshTok = await firebase.auth().currentUser?.getIdToken(true);
+    if (freshTok) window._googleIdToken = freshTok;
+  } catch(e) {}
+
+  const resetBtns = () => {
+    tierBtns.forEach(b => { b.disabled = false; });
+    if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
+  };
+
   try {
     const r = await fetch('/api/stripe-id-checkout', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (window._googleIdToken || '')
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
       body: JSON.stringify({ tier, email: googleUser.email, userId: googleUser.sub })
     });
     const d = await r.json();
     if (d.url) {
-      const _a = document.createElement('a'); _a.href = d.url; _a.rel = 'noopener noreferrer'; document.body.appendChild(_a); _a.click(); document.body.removeChild(_a);
-      setTimeout(() => {
-        tierBtns.forEach(b => { b.disabled = false; });
-        if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
-      }, 3000);
+      if (stripeWindow && !stripeWindow.closed) {
+        stripeWindow.location.href = d.url;
+      } else {
+        window.location.href = d.url;
+      }
+      setTimeout(resetBtns, 4000);
     } else {
-      showToast('⚠️ ' + (d.error || 'Could not start checkout. Try again.'));
-      tierBtns.forEach(b => { b.disabled = false; });
-      if (clickedBtn) { const el = clickedBtn.querySelector('div:last-child'); if (el) el.textContent = priceMap[tier] || '$1'; }
+      if (stripeWindow) stripeWindow.close();
+      showToast('⚠️ ' + (d.error || 'Could not start checkout — try again.'));
+      resetBtns();
     }
   } catch(e) {
+    if (stripeWindow) stripeWindow.close();
     showToast('⚠️ Network error — check your connection and try again.');
-    tierBtns.forEach(b => { b.disabled = false; });
     if (clickedBtn) {
       const priceEl = clickedBtn.querySelector('div:last-child');
       const priceMap = { '10': '$1', '50': '$5', '100': '$9' };
