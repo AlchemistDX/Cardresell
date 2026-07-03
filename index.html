@@ -6675,7 +6675,7 @@ window.addEventListener('load', () => {
      FIREBASE AUTH MODAL
      ══════════════════════════════════════════════════════════ -->
 <!-- FULL-SCREEN SEARCH RESULTS MODAL -->
-<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:#000;z-index:8000;flex-direction:column;overflow:hidden">
+<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:#000;z-index:8000;flex-direction:column;overflow:hidden;height:100%">
   <!-- Header -->
   <div style="display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;flex-shrink:0;background:#000;border-bottom:1px solid #222">
     <button onclick="closeSearchModal()" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;line-height:1;padding:.2rem .4rem;-webkit-tap-highlight-color:transparent;opacity:.85">←</button>
@@ -6689,7 +6689,7 @@ window.addEventListener('load', () => {
     <span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…
   </div>
   <!-- Grid -->
-  <div id="searchModalGrid" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:.5rem;grid-template-columns:1fr 1fr;gap:.5rem"></div>
+  <div id="searchModalGrid" style="display:none;flex:1;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding:.5rem;grid-template-columns:1fr 1fr;gap:.5rem;align-content:start"></div>
 </div>
 
 <div id="authModalOverlay" class="auth-modal-overlay" style="display:none" onclick="if(event.target===this)closeAuthModal()">
@@ -6906,6 +6906,7 @@ function _populateSearchModal(q) {
 
   loading.style.display = 'none';
   grid.style.display    = 'grid';
+  grid.scrollTop = 0;
 }
 
 function closeSearchModal() {
