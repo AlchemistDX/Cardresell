@@ -16,15 +16,11 @@ export default async function handler(req, res) {
   let googleSub = bodySub;
 
   if (idToken && idToken.length > 20) {
-      try {
-        const tokenInfo = await verifyTokenFlexible(idToken);
-        userSub   = tokenInfo.uid;
-        userEmail = tokenInfo.email || userEmail;
-      } catch(e) { /* proceed with empty sub — credit check will reject */ }
-          googleSub = info.sub  || googleSub;
-        }
-      }
-    } catch(e) {}
+    try {
+      const tokenInfo = await verifyTokenFlexible(idToken);
+      googleSub = tokenInfo.uid   || googleSub;
+      userEmail = tokenInfo.email || userEmail;
+    } catch(e) { /* proceed with body values */ }
   }
 
   if (!userEmail) {
@@ -157,8 +153,13 @@ Respond ONLY with valid JSON, no explanation:
       console.error('OpenAI error:', openaiRes.status, errText);
       // Refund credit on OpenAI failure
       if (hasKV) {
-        const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
+        if (isIdentifyMode) {
+          const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+          await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid + 1);
+        } else {
+          const paid = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid + 1);
+        }
       }
       return res.status(502).json({ error: 'Scanner temporarily unavailable. Credit refunded.' });
     }
