@@ -5651,7 +5651,14 @@ function renderFlipsView() {
    GOOGLE SIGN-IN
    ═══════════════════════════════════════ */
 
-let googleUser = null; // { name, email, avatar, sub }
+// googleUser is a global property — the Firebase module script writes window.googleUser
+// and bare `googleUser` in non-module scripts reads the same window property.
+Object.defineProperty(window, 'googleUser', {
+  get() { return window._googleUserVal ?? null; },
+  set(v) { window._googleUserVal = v; },
+  configurable: true, enumerable: true
+});
+window._googleUserVal = null;
 
 // ── Google OAuth Client ID — reads from config.js first, then localStorage fallback ──
 const _HARDCODED_CLIENT_ID = window.CARDSELL_GOOGLE_CLIENT_ID || '458953497801-placeholder.apps.googleusercontent.com';
