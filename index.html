@@ -817,13 +817,13 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     // Checkout functions poll window._waitForAuth() instead of a one-shot promise
 
     // Central auth state handler — fires on sign-in, sign-out, and page load
-    onAuthStateChanged(auth, async (user) => {
+    // Track current auth UID to prevent null callbacks from overwriting a valid session
+    let _currentAuthUid = null;
+
+    onAuthStateChanged(auth, (user) => {
       if (user) {
-        const token = await user.getIdToken();
-        window._googleIdToken = token;
-        window._userEmail = user.email || '';
-        window._googleSub = user.uid;
-        window._userSub = user.uid;
+        _currentAuthUid = user.uid;
+        // Set user object immediately (synchronously) so checkout functions can read it right away
         window.googleUser = {
           name: user.displayName || user.email?.split('@')[0] || 'User',
           email: user.email || '',
@@ -831,32 +831,44 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           sub: user.uid,
           uid: user.uid
         };
-        // Refresh token every 55 min (tokens expire at 60 min)
-        clearInterval(window._tokenRefreshInterval);
-        window._tokenRefreshInterval = setInterval(async () => {
-          try {
-            const fresh = await user.getIdToken(true);
-            window._googleIdToken = fresh;
-          } catch(e) {}
-        }, 55 * 60 * 1000);
+        window._userEmail = user.email || '';
+        window._googleSub = user.uid;
+        window._userSub = user.uid;
         window._authResolved = true;
         window._authInitialized = true;
+        // Apply UI immediately — don't wait for token
         applyGoogleUser();
-        loadUserData();
-        checkProStatus(); // always call after token is confirmed set
-        if (document.getElementById('settingsPanel')?.classList.contains('open')) {
-          loadSettingsScanCredits();
-        }
+        // Fetch token async — doesn't block UI or checkout
+        user.getIdToken().then(token => {
+          window._googleIdToken = token;
+          // Refresh token every 55 min
+          clearInterval(window._tokenRefreshInterval);
+          window._tokenRefreshInterval = setInterval(() => {
+            user.getIdToken(true).then(fresh => { window._googleIdToken = fresh; }).catch(() => {});
+          }, 55 * 60 * 1000);
+          loadUserData();
+          checkProStatus();
+          if (document.getElementById('settingsPanel')?.classList.contains('open')) {
+            loadSettingsScanCredits();
+          }
+        }).catch(() => {});
         // Close auth modal if open
         closeAuthModal();
         // Handle ?next= redirect from sign-in page
         const _nextParam = new URLSearchParams(location.search).get('next');
         if (_nextParam === 'flips' || _nextParam === 'collection') {
           setTimeout(() => switchView(_nextParam), 300);
-          // Clean URL without reload
           history.replaceState(null, '', location.pathname);
         }
       } else {
+        // ONLY clear state if no valid user was ever set this session
+        // Prevents token-refresh null callbacks from wiping an active session
+        if (_currentAuthUid) {
+          // A real user was set — ignore this null callback (token refresh artifact)
+          // Firebase will fire again with the user shortly
+          window._authInitialized = true;
+          return;
+        }
         window.googleUser = null;
         window._googleIdToken = null;
         window._userEmail = '';
@@ -868,8 +880,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
         try { _updateFlipsSignInWall?.(); } catch(e) {}
         updateProUI?.();
-        window._authInitialized = true; // fired, but no user
-        // _authResolved stays false until a real user signs in
+        window._authInitialized = true;
       }
     });
   </script>
@@ -5672,20 +5683,18 @@ window._authInitialized = false; // true after first onAuthStateChanged fires (a
 window._waitForAuth = function() {
   return new Promise(resolve => {
     // Already have a confirmed signed-in user — resolve immediately
-    if (window.googleUser && window._googleIdToken) { resolve(window.googleUser); return; }
-    // Poll for up to 6s — resolves as soon as both googleUser AND token are set
-    // Only gives up (resolves null) after timeout OR after _authResolved fires with no user
+    // googleUser is now set synchronously in onAuthStateChanged, no need to wait for token
+    if (window.googleUser) { resolve(window.googleUser); return; }
+    // Poll for up to 6s — resolves as soon as googleUser is set
     const start = Date.now();
     const check = () => {
-      if (window.googleUser && window._googleIdToken) {
-        // Confirmed signed-in user
+      if (window.googleUser) {
         resolve(window.googleUser);
-      } else if (window._authResolved === false && window._authInitialized && !window.googleUser && Date.now() - start > 500) {
-        // Firebase fired, no user came, waited 500ms grace period — definitely signed out
+      } else if (window._authInitialized && !window.googleUser && Date.now() - start > 500) {
+        // Firebase fired with no user and 500ms grace passed — definitely signed out
         resolve(null);
       } else if (Date.now() - start > 6000) {
-        // Absolute timeout
-        resolve(window.googleUser || null);
+        resolve(null);
       } else {
         setTimeout(check, 80);
       }
