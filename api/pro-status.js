@@ -72,7 +72,7 @@ export default async function handler(req, res) {
   }
 
   // 3. Get scan credits — always fetch paid credits; free credits only for Pro
-  let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0;
+  let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0, isNewSignup = false;
   if (kvUrl && kvToken) {
     // Always check paid credits (any user who bought a scan)
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
@@ -104,6 +104,7 @@ export default async function handler(req, res) {
           await kvSet(bonusKey, 1);
           idPaidLeft    = newIdLeft;
           paidScansLeft = newPaidLeft;
+          isNewSignup   = true;
           console.log(`Sign-up bonus granted to ${userSub}: 10 ID + 1 Grade`);
         }
       } catch(e) { console.error('Sign-up bonus error:', e); }
@@ -182,6 +183,7 @@ export default async function handler(req, res) {
     totalScansLeft: freeScansLeft + paidScansLeft,
     refCode,                      // user's personal referral code
     refRewarded,                  // true if this sign-in triggered a referral reward
+    isNewSignup,                  // true if signup bonus was just granted (first ever login)
   });
 }
 

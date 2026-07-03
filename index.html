@@ -899,7 +899,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
       Shop
     </button>
-    <a id="googleSignInBtn" href="/signin" style="display:flex;padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap;text-decoration:none;align-items:center">Sign In</a>
+    <a id="googleSignInBtn" href="/signin" style="display:flex;padding:.45rem 1rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;text-decoration:none;align-items:center;gap:.3rem;box-shadow:0 2px 12px rgba(212,175,55,.35)">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+  Sign In
+</a>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
     <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -1079,10 +1082,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; CardResell PRO</span> &mdash; Full fee breakdown + unlimited flip tracking.<br>
-      <span style="font-size:.73rem;color:var(--text-muted)">$9.99/mo &middot; Cancel anytime</span>
+      <span>&#11088; Unlock 4 more platforms</span> &mdash; Poshmark, COMC, Fanatics &amp; PWCC.<br>
+      <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
-    <button class="promo-banner-cta" onclick="openPricingModal('banner')">View Plans</button>
+    <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
     <button class="promo-banner-close" onclick="dismissPromoBanner()" title="Dismiss">&times;</button>
   </div>
   <!-- Camera scan overlay -->
@@ -4463,6 +4466,7 @@ function calc() {
   }
 
   resultsArea.innerHTML = html;
+  _onCardResultShown();
 }
 
 function setSort(m) {
@@ -6239,7 +6243,11 @@ async function checkProStatus() {
       const refSec = document.getElementById('referSection');
       if (refSec) refSec.style.display = '';
     }
-    if (d.refRewarded) {
+    if (d.isNewSignup) {
+      setTimeout(() => {
+        showToast('🎁 Welcome! Your 10 ID scans & 1 AI Grade are ready — tap Scan to try it.', 6000);
+      }, 800);
+    } else if (d.refRewarded) {
       setTimeout(() => showToast('🎉 Referral bonus! You and your friend both got 5 free ID scans.', 5000), 1200);
     }
     // Clear pending ref so it only fires once
