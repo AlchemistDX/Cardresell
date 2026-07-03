@@ -883,7 +883,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
       Shop
     </button>
-    <div id="googleSignInBtn" style="display:flex"><button onclick="window.location.href='/signin'" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Sign In</button></div>
+    <div id="googleSignInBtn" style="display:flex"><a href="/signin" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center">Sign In</a></div>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
     <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -5249,7 +5249,7 @@ function initGoogleSignIn() {
   const btn = document.getElementById('googleSignInBtn');
   if (btn && !btn.dataset.fbWired) {
     btn.dataset.fbWired = '1';
-    btn.innerHTML = '<button onclick="window.location.href=\'/signin\'" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Sign In</button>';
+    btn.innerHTML = '<a href="/signin" style="padding:.4rem .85rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center">Sign In</a>';
   }
 }
 
