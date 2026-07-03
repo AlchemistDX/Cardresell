@@ -6711,17 +6711,48 @@ function closePricingModal(evt) {
 }
 
 // ── Start Pro subscription checkout ──
+// ── Stripe checkout helper — iOS Safari compatible ──
+// Opens a blank window synchronously (preserves gesture chain),
+// fetches the Stripe session URL from our API, then navigates directly.
+async function _openStripeCheckout(apiPath, label) {
+  // Open blank window synchronously inside the click handler (required by Safari)
+  const w = window.open('about:blank', '_blank');
+  if (w) {
+    w.document.write('<html><body style="background:#1a1a1a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><p style="color:#f59e0b;font-family:sans-serif;font-size:1.1rem">Connecting to Stripe…</p></body></html>');
+  }
+  try {
+    const res = await fetch(apiPath);
+    const data = await res.json();
+    if (data.url) {
+      if (w && !w.closed) {
+        w.location.href = data.url;
+      } else {
+        // Fallback: navigate current tab (popup was blocked)
+        window.location.href = data.url;
+      }
+    } else {
+      if (w && !w.closed) w.close();
+      showToast('Payment setup failed — please try again.');
+      console.error('Stripe checkout error:', data);
+    }
+  } catch (e) {
+    if (w && !w.closed) w.close();
+    showToast('Network error — please check your connection and try again.');
+    console.error('Checkout fetch error:', e);
+  }
+}
+
 function startProCheckout() {
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   const p = new URLSearchParams({ plan: 'monthly', email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  window.location.href = '/api/stripe-pro-redirect?' + p.toString();
+  _openStripeCheckout('/api/stripe-pro-redirect?' + p.toString(), 'Pro Monthly');
 }
 
 // ── Start annual Pro checkout ──
 function startAnnualCheckout() {
   if (!googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   const p = new URLSearchParams({ plan: 'annual', email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  window.location.href = '/api/stripe-pro-redirect?' + p.toString();
+  _openStripeCheckout('/api/stripe-pro-redirect?' + p.toString(), 'Pro Annual');
 }
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──
@@ -6733,7 +6764,7 @@ function startScanCheckout() {
 function startGradeScanCheckout(tier) {
   if (!googleUser) { showToast('Sign in with Google first to buy Grade Scan Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const p = new URLSearchParams({ tier: String(tier), email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  window.location.href = '/api/stripe-grade-redirect?' + p.toString();
+  _openStripeCheckout('/api/stripe-grade-redirect?' + p.toString(), 'Grade Scan');
 }
 
 // ── Open grade scan pricing modal ──
@@ -6747,7 +6778,7 @@ function openGradeScanModal() {
 function startIdScanCheckout(tier) {
   if (!googleUser) { showToast('Sign in with Google first to buy ID Scanner Credits.'); setTimeout(() => triggerGoogleSignIn(), 600); return; }
   const p = new URLSearchParams({ tier: String(tier), email: googleUser.email || '', uid: googleUser.sub || googleUser.uid || '', name: googleUser.name || '' });
-  window.location.href = '/api/stripe-id-redirect?' + p.toString();
+  _openStripeCheckout('/api/stripe-id-redirect?' + p.toString(), 'ID Scan');
 }
 
 // ── Toast helper ──

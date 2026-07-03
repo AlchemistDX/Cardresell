@@ -1,15 +1,16 @@
-// /api/stripe-grade-redirect — GET redirect to Stripe checkout (iOS Safari compatible)
-// Called as: /api/stripe-grade-redirect?tier=5&uid=xxx&email=yyy&name=zzz&token=idtoken
-// Responds with 302 redirect to Stripe checkout URL
+// /api/stripe-grade-redirect — returns JSON with Stripe checkout URL (iOS Safari compatible)
+// Called as: /api/stripe-grade-redirect?tier=5|20|50&uid=xxx&email=yyy&name=zzz
+// Returns: { url: "https://checkout.stripe.com/..." } or { error: "..." }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { tier = '5', email = '', uid = '', name = '' } = req.query;
 
   if (!email || !email.includes('@')) {
-    return res.status(302).setHeader('Location', '/?error=signin').end();
+    return res.status(400).json({ error: 'signin_required' });
   }
 
   const priceMap = {
@@ -20,10 +21,10 @@ export default async function handler(req, res) {
   const creditsMap = { '5': 5, '20': 20, '50': 50 };
   const priceId = priceMap[String(tier)];
 
-  if (!priceId) return res.status(302).setHeader('Location', '/?error=invalid_tier').end();
+  if (!priceId) return res.status(400).json({ error: 'invalid_tier' });
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) return res.status(302).setHeader('Location', '/?error=not_configured').end();
+  if (!stripeKey) return res.status(500).json({ error: 'not_configured' });
 
   const origin  = 'https://www.cardresell.org';
   const success = `${origin}/?grade_scan_paid=1&tier=${tier}&session_id={CHECKOUT_SESSION_ID}`;
@@ -53,14 +54,14 @@ export default async function handler(req, res) {
       body: params.toString(),
     });
 
-    if (!stripeRes.ok) {
-      return res.status(302).setHeader('Location', '/?error=stripe_error').end();
+    const data = await stripeRes.json();
+    if (!stripeRes.ok || !data.url) {
+      console.error('Stripe grade error:', data);
+      return res.status(500).json({ error: 'stripe_error', detail: data?.error?.message });
     }
-    const session = await stripeRes.json();
-    // 302 redirect directly to Stripe — browser follows it natively
-    return res.status(302).setHeader('Location', session.url).end();
-  } catch(e) {
+    return res.status(200).json({ url: data.url });
+  } catch (e) {
     console.error('Grade redirect error:', e);
-    return res.status(302).setHeader('Location', '/?error=network').end();
+    return res.status(500).json({ error: 'network_error' });
   }
 }

@@ -1,15 +1,21 @@
-// /api/stripe-pro-redirect — GET redirect to Stripe Pro checkout
-// ?plan=monthly|annual&email=x&uid=y&name=z
+// /api/stripe-pro-redirect — returns JSON with Stripe checkout URL (iOS Safari compatible)
+// Called as: /api/stripe-pro-redirect?plan=monthly|annual&email=x&uid=y&name=z
+// Returns: { url: "https://checkout.stripe.com/..." } or { error: "..." }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { plan = 'monthly', email = '', uid = '', name = '' } = req.query;
   const stripeKey = process.env.STRIPE_SECRET_KEY;
 
-  if (!email || !email.includes('@')) return res.status(302).setHeader('Location', '/?error=signin').end();
-  if (!stripeKey) return res.status(302).setHeader('Location', '/?error=not_configured').end();
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'signin_required' });
+  }
+  if (!stripeKey) {
+    return res.status(500).json({ error: 'not_configured' });
+  }
 
   const priceId = plan === 'annual'
     ? process.env.STRIPE_ANNUAL_PRICE_ID || 'price_1TosPSFW2YZoedIZ5e0abG3y'
@@ -34,14 +40,21 @@ export default async function handler(req, res) {
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Authorization': `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       body: params.toString(),
     });
 
-    if (!stripeRes.ok) return res.status(302).setHeader('Location', '/?error=stripe_error').end();
-    const session = await stripeRes.json();
-    return res.status(302).setHeader('Location', session.url).end();
-  } catch(e) {
-    return res.status(302).setHeader('Location', '/?error=network').end();
+    const data = await stripeRes.json();
+    if (!stripeRes.ok || !data.url) {
+      console.error('Stripe error:', data);
+      return res.status(500).json({ error: 'stripe_error', detail: data?.error?.message });
+    }
+    return res.status(200).json({ url: data.url });
+  } catch (e) {
+    console.error('Pro redirect error:', e);
+    return res.status(500).json({ error: 'network_error' });
   }
 }
