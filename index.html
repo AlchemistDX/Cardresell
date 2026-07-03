@@ -161,7 +161,7 @@ img{display:block;max-width:100%;height:auto}
 .search-btn:disabled{opacity:.5;cursor:not-allowed}
 /* Scanner sub-row — shown below search on mobile */
 .scan-sub-row{display:none;gap:.5rem;margin-top:.45rem}
-.scan-sub-btn{display:flex;align-items:center;gap:.35rem;padding:.48rem .9rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.78rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease);flex:1;justify-content:center}
+.scan-sub-btn{display:flex;align-items:center;gap:.3rem;padding:.48rem .5rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.73rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease);flex:1;justify-content:center;white-space:nowrap;overflow:hidden}
 .scan-sub-btn.grade-sub{border-color:var(--gold-border);color:var(--gold)}
 .scan-sub-btn.bulk-sub{border-color:rgba(139,92,246,.4);color:rgba(139,92,246,1)}
 .scan-sub-btn.bulk-sub:hover{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.7);color:rgba(139,92,246,1)}
@@ -1065,15 +1065,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <div class="scan-sub-row" id="scanSubRow">
     <button class="scan-sub-btn" id="idScanSubBtn" onclick="openGradedScanGate()" title="Card ID Scanner — 10 scans on sign-up, then $1/10">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      ID Scan <span id="idScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span><span style="font-size:.6rem;opacity:.45;margin-left:.25rem">10 on sign-up</span>
+      ID Scan <span id="idScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.15rem"></span>
     </button>
     <button class="scan-sub-btn bulk-sub" id="bulkScanSubBtn" onclick="openBulkScan()" title="Bulk ID Scan — scan multiple cards at once, 1 credit each">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-      Bulk Scan
+      Bulk
     </button>
     <button class="scan-sub-btn grade-sub" id="gradeScanSubBtn" onclick="openGradeScanGate()" title="AI Grading Estimate — 1 scan on sign-up, $0.50/scan after">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      Grade Scan <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.2rem"></span><span style="font-size:.6rem;opacity:.45;margin-left:.25rem">1 on sign-up</span>
+      AI Grade <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.15rem"></span>
     </button>
   </div>
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
