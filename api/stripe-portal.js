@@ -22,7 +22,9 @@ export default async function handler(req, res) {
       const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
       if (r.ok) {
         const info = await r.json();
-        if (info.email) { userEmail = info.email; userSub = info.sub || userSub; }
+        // Trust the verified sub regardless of email presence (legacy accounts).
+        if (info.sub)   userSub   = info.sub;
+        if (info.email) userEmail = info.email;
       }
     } catch(e) { /* fall through */ }
   }

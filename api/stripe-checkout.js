@@ -22,11 +22,11 @@ export default async function handler(req, res) {
   if (idToken && idToken.length > 20) {
     try {
       const info = await verifyTokenFlexible(idToken);
-      if (info.email) {
-        userEmail = info.email;
-        userSub   = info.uid  || userSub;
-        userName  = info.name || userName;
-      }
+      // Trust the verified uid even when email is empty (legacy Google-linked
+      // Firebase accounts can be missing top-level email but still have a valid uid).
+      if (info.uid)   userSub   = info.uid;
+      if (info.email) userEmail = info.email;
+      if (info.name)  userName  = info.name;
       // If token is expired or invalid, we still continue with body email below
     } catch(e) { /* non-blocking — fall through to body email */ }
   }

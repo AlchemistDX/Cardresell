@@ -5936,14 +5936,18 @@ function _updateVerifyBanner() {
   if (!banner) {
     banner = document.createElement('div');
     banner.id = 'emailVerifyBanner';
-    banner.style.cssText = 'position:sticky;top:0;z-index:1000;background:linear-gradient(90deg,#f59e0b,#f97316);color:#000;font-size:.82rem;font-weight:600;padding:.55rem 2.4rem .55rem .9rem;display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25);isolation:isolate';
-    // The absolutely-positioned dismiss button needs a positioned ancestor — sticky counts,
-    // but be defensive in case the browser strips it.
+    banner.style.cssText = 'position:sticky;top:0;z-index:1000;background:linear-gradient(90deg,#f59e0b,#f97316);color:#000;font-size:.82rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+    // Layout: dismiss button is its own flex child pinned right; content stays centered.
+    // This is more reliable in iOS Safari than absolute positioning inside a sticky parent.
     banner.innerHTML =
-      '<span>⚠️ Verify your email to unlock <strong>10 ID scans + 1 AI Grade</strong> bonus</span>' +
-      '<button id="btnResendVerifyMain" onclick="resendVerifyEmail()" style="background:#000;color:#fff;border:none;border-radius:6px;padding:.35rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">Resend Email</button>' +
-      '<button id="btnCheckVerifiedMain" onclick="recheckVerified()" style="background:rgba(0,0,0,.15);color:#000;border:1.5px solid #000;border-radius:6px;padding:.32rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">I Verified</button>' +
-      '<button id="btnDismissVerifyBanner" onclick="dismissVerifyBanner()" title="Dismiss" aria-label="Dismiss" style="position:absolute;top:.35rem;right:.55rem;background:transparent;color:#000;border:none;font-size:1.05rem;font-weight:800;line-height:1;cursor:pointer;padding:.2rem .35rem;opacity:.7">×</button>';
+      '<div style="display:flex;align-items:center;padding:.55rem .55rem .55rem .9rem;gap:.5rem">' +
+        '<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;text-align:center">' +
+          '<span>⚠️ Verify your email to unlock <strong>10 ID scans + 1 AI Grade</strong> bonus</span>' +
+          '<button id="btnResendVerifyMain" onclick="resendVerifyEmail()" style="background:#000;color:#fff;border:none;border-radius:6px;padding:.35rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">Resend Email</button>' +
+          '<button id="btnCheckVerifiedMain" onclick="recheckVerified()" style="background:rgba(0,0,0,.15);color:#000;border:1.5px solid #000;border-radius:6px;padding:.32rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">I Verified</button>' +
+        '</div>' +
+        '<button id="btnDismissVerifyBanner" onclick="dismissVerifyBanner()" title="Dismiss" aria-label="Dismiss" style="flex-shrink:0;align-self:flex-start;background:rgba(0,0,0,.15);color:#000;border:1.5px solid rgba(0,0,0,.35);border-radius:6px;width:1.6rem;height:1.6rem;font-size:1rem;font-weight:800;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center">×</button>' +
+      '</div>';
     document.body.insertBefore(banner, document.body.firstChild);
   }
 }
@@ -5980,31 +5984,85 @@ async function resendVerifyEmail() {
     return;
   }
 
+  // Detect broken legacy state up front: Firebase's sendEmailVerification reads
+  // auth.currentUser.email directly; if that's null, it throws auth/missing-email
+  // regardless of what we pass. First try a token reload — Firebase occasionally
+  // re-populates user.email from the Google token on refresh.
+  const u = window._fbCurrentUser;
+  if (u && !u.email) {
+    try { await u.reload(); } catch(e) {}
+    try { await u.getIdToken(true); } catch(e) {}
+  }
+  const topLevelEmail = u && u.email;
+  const providerEmail = u && Array.isArray(u.providerData)
+    ? (u.providerData.find(p => p?.email)?.email || '')
+    : '';
+  if (!topLevelEmail && !providerEmail) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
+    _showReauthPrompt('This account is missing an email on file. Sign out and sign back in with Google to fix it — you\'ll get your bonus right after.');
+    return;
+  }
+  if (!topLevelEmail && providerEmail) {
+    // Firebase SDK will still throw missing-email in this state; be honest and route
+    // the user to a re-auth flow that will populate user.email properly.
+    if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
+    _showReauthPrompt('Your Google sign-in didn\'t attach an email to this account (a known legacy Firebase quirk). Sign out and sign back in with Google — the fresh session will fix it, and you\'ll get your bonus.');
+    return;
+  }
+
   try {
-    // Firebase's sendEmailVerification requires user.email at the top level.
-    // For legacy Google/password accounts, email may live only in providerData —
-    // fall back to that so we don't throw auth/missing-email.
-    const u = window._fbCurrentUser;
-    if (!u) throw new Error('no-user');
-    let emailForVerify = u.email;
-    if (!emailForVerify && Array.isArray(u.providerData)) {
-      for (const p of u.providerData) {
-        if (p?.email) { emailForVerify = p.email; break; }
-      }
-    }
-    if (!emailForVerify) throw new Error('no-email');
     await window._fbSendVerification();
     if (btn) { btn.textContent = 'Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Email'; }, 5000); }
+    showToast('Verification email sent to ' + topLevelEmail, 'gold');
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
     const code = e?.code || e?.message || '';
-    if (code.includes('missing-email') || code === 'no-email') {
-      alert('This account doesn\'t have an email on file. Try signing out and signing back in with Google.');
+    if (code.includes('missing-email')) {
+      _showReauthPrompt('Sign out and sign back in with Google to refresh your account — you\'ll get the bonus right after.');
     } else if (code.includes('too-many-requests')) {
       alert('Too many requests — wait a minute and try again.');
     } else {
       alert('Could not send verification email: ' + (e?.message || 'unknown error'));
     }
+  }
+}
+
+// Custom modal that offers a one-tap Sign Out + Sign In flow for accounts with missing email.
+function _showReauthPrompt(msg) {
+  // Remove any existing prompt
+  const existing = document.getElementById('reauthPromptModal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'reauthPromptModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.innerHTML =
+    '<div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;max-width:22rem;width:100%;padding:1.25rem;color:#fff;font-size:.9rem;line-height:1.4">' +
+      '<div style="font-weight:700;font-size:1rem;margin-bottom:.6rem">Quick fix needed</div>' +
+      '<div style="margin-bottom:1rem;color:#ccc">' + msg + '</div>' +
+      '<div style="display:flex;gap:.5rem;justify-content:flex-end">' +
+        '<button onclick="document.getElementById(\'reauthPromptModal\').remove()" style="background:transparent;color:#aaa;border:1px solid #444;border-radius:6px;padding:.5rem .9rem;font-weight:600;cursor:pointer">Not now</button>' +
+        '<button onclick="_reauthNow()" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:.5rem .9rem;font-weight:700;cursor:pointer">Sign out &amp; back in</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+async function _reauthNow() {
+  const modal = document.getElementById('reauthPromptModal');
+  if (modal) modal.remove();
+  try {
+    // Sign out (Firebase onAuthStateChanged NULL branch clears storage + banner state)
+    if (typeof signOut === 'function') { signOut(); }
+    else if (window._fbAuth && typeof window._fbAuth.signOut === 'function') { await window._fbAuth.signOut(); }
+    // Give Firebase a beat to fire the NULL state, then re-launch Google popup.
+    setTimeout(() => {
+      try {
+        const btn = document.getElementById('googleSignInBtn');
+        if (btn) btn.click();
+      } catch(e) {}
+    }, 400);
+  } catch(e) {
+    alert('Could not sign out automatically. Tap the avatar in the top bar to sign out, then sign in with Google again.');
   }
 }
 
@@ -6683,7 +6741,7 @@ function showDeepGradeEdgeUI() {
     '<br><span style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.45">Hold the card so the light hits one edge at a time. Fill the frame with just that edge — don\'t worry about the whole card.</span>';
 
   const edgeBtn = (key, label, emoji, tip) => {
-    const done = !!edges[key];
+    const done = !!(edges[key] || edges[key.toLowerCase()]);
     const bg = done ? 'rgba(74,222,128,.15)' : 'rgba(255,255,255,.06)';
     const bord = done ? '1px solid rgba(74,222,128,.5)' : '1px solid rgba(255,255,255,.15)';
     const check = done ? '<span style="color:#4ade80;font-weight:900">\u2713 </span>' : '';
@@ -6782,10 +6840,16 @@ async function submitGradeScan(deepGrade) {
 
   if (deepGrade) {
     body.deepGrade = true;
-    if (edges.Top)    { body.topEdgeBase64    = edges.Top;    body.topEdgeMimeType    = 'image/jpeg'; }
-    if (edges.Bottom) { body.bottomEdgeBase64 = edges.Bottom; body.bottomEdgeMimeType = 'image/jpeg'; }
-    if (edges.Left)   { body.leftEdgeBase64   = edges.Left;   body.leftEdgeMimeType   = 'image/jpeg'; }
-    if (edges.Right)  { body.rightEdgeBase64  = edges.Right;  body.rightEdgeMimeType  = 'image/jpeg'; }
+    // processGradeEdge() stores keys lowercase ('top'/'bottom'/'left'/'right'),
+    // but some code paths historically used capitalized keys — accept either.
+    const top    = edges.top    || edges.Top;
+    const bottom = edges.bottom || edges.Bottom;
+    const left   = edges.left   || edges.Left;
+    const right  = edges.right  || edges.Right;
+    if (top)    { body.topEdgeBase64    = top;    body.topEdgeMimeType    = 'image/jpeg'; }
+    if (bottom) { body.bottomEdgeBase64 = bottom; body.bottomEdgeMimeType = 'image/jpeg'; }
+    if (left)   { body.leftEdgeBase64   = left;   body.leftEdgeMimeType   = 'image/jpeg'; }
+    if (right)  { body.rightEdgeBase64  = right;  body.rightEdgeMimeType  = 'image/jpeg'; }
   }
 
   try {
@@ -8090,6 +8154,7 @@ function openBulkScan() {
   window._bulkResults    = [];
   window._bulkMode       = null;
   window._bulkProcessing = false;
+  window._bulkSaved      = false;
 
   // Show overlay in mode-picker state
   const ov = document.getElementById('bulkScanOverlay');
@@ -8107,6 +8172,7 @@ function closeBulkScan() {
   (window._bulkResults || []).forEach(r => { try { URL.revokeObjectURL(r.objectUrl); } catch(e){} });
   window._bulkQueue   = [];
   window._bulkResults = [];
+  window._bulkSaved   = false;
 }
 
 function _bulkShowSection(section) {
@@ -8196,6 +8262,97 @@ function cancelBulkConfirm() {
   _bulkShowSection('modePicker');
 }
 
+/* ── Price lookup: pokemontcg.io (replaces dead /api/ebay-sold Finding API) ── */
+const BULK_CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
+const BULK_CONDITION_LABELS = { NM: 'Near Mint', LP: 'Lightly Played', MP: 'Moderately Played', HP: 'Heavily Played', DMG: 'Damaged' };
+const BULK_VARIANT_PRIORITY = ['holofoil', 'reverseHolofoil', 'normal', 'firstEditionHolofoil', 'firstEditionNormal', 'firstEdition'];
+
+function _bulkSetMatchScore(candidateSetName, targetSetName) {
+  const a = (candidateSetName || '').toLowerCase().trim();
+  const b = (targetSetName || '').toLowerCase().trim();
+  if (!b) return 1; // no target to compare — treat as weak match, still usable
+  if (!a) return 0;
+  if (a === b) return 3;
+  if (a.startsWith(b) || b.startsWith(a)) return 2;
+  if (a.includes(b) || b.includes(a)) return 1.5;
+  return 0;
+}
+
+async function _bulkFetchPrice(cardName, setName, cardNumber) {
+  if (!cardName) return null;
+  try {
+    const cleanName = String(cardName).replace(/["\\]/g, '').trim();
+    if (!cleanName) return null;
+    const cleanNumber = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
+
+    let q = `name:"${cleanName}"`;
+    if (cleanNumber) q += ` number:"${cleanNumber}"`;
+
+    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer`;
+
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    let resp;
+    try {
+      resp = await fetch(url, { signal: ctrl.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!resp || !resp.ok) return null;
+    const json = await resp.json();
+    let cards = json.data || [];
+    if (!cards.length) return null;
+
+    // Score by set-name similarity: exact match first, then prefix, then any.
+    cards = cards.map(c => ({ c, score: _bulkSetMatchScore(c.set?.name, setName) }))
+                 .sort((x, y) => y.score - x.score);
+    const best = cards[0].c;
+    if (!best) return null;
+
+    const prices = best.tcgplayer?.prices || {};
+    const priceMap = {};
+    let bestMarket = null, bestVariant = null;
+    for (const variant of BULK_VARIANT_PRIORITY) {
+      const p = prices[variant];
+      if (!p) continue;
+      const market = typeof p.market === 'number' ? p.market : null;
+      const mid = typeof p.mid === 'number' ? p.mid : null;
+      const val = market != null ? market : mid;
+      if (val != null) priceMap[variant] = val;
+      if (val != null && (bestMarket == null || val > bestMarket)) {
+        bestMarket = val;
+        bestVariant = variant;
+      }
+    }
+    // Also scan any other variant keys not in our priority list, in case of odd naming.
+    for (const key of Object.keys(prices)) {
+      if (BULK_VARIANT_PRIORITY.includes(key)) continue;
+      const p = prices[key];
+      const market = typeof p?.market === 'number' ? p.market : null;
+      const mid = typeof p?.mid === 'number' ? p.mid : null;
+      const val = market != null ? market : mid;
+      if (val != null) priceMap[key] = val;
+      if (val != null && (bestMarket == null || val > bestMarket)) {
+        bestMarket = val;
+        bestVariant = key;
+      }
+    }
+
+    return {
+      marketPrice: bestMarket,
+      variant: bestVariant,
+      imageUrl: best.images?.small || best.images?.large || null,
+      tcgplayerUrl: best.tcgplayer?.url || null,
+      matchedSet: best.set?.name || null,
+      matchedNumber: best.number || null,
+      prices: priceMap,
+    };
+  } catch (e) {
+    // Fail silently — timeout, network error, or bad JSON. Bulk scan should never block on this.
+    return null;
+  }
+}
+
 /* ── Queue processor ── */
 async function startBulkQueue() {
   const queue = window._bulkQueue || [];
@@ -8209,6 +8366,7 @@ async function startBulkQueue() {
 
   window._bulkProcessing = true;
   window._bulkResults    = [];
+  window._bulkSaved      = false;
 
   // Remove "Add Another" button if present
   const addAnother = document.getElementById('bulkAddAnotherBtn');
@@ -8218,6 +8376,7 @@ async function startBulkQueue() {
   _bulkShowSection('processing');
   document.getElementById('bulkResultsList').innerHTML = '';
   document.getElementById('bulkBottomBar').style.display = 'none';
+  _bulkClearDupBanner();
 
   const total = queue.length;
 
@@ -8249,87 +8408,99 @@ async function startBulkQueue() {
       </div>`);
     listEl.scrollTop = listEl.scrollHeight;
 
-    // Call the scan API
-    let result = { objectUrl: item.objectUrl, success: false, cardName: '', setName: '', cardNumber: '', marketPrice: null, error: '' };
-    try {
-      const imageBase64 = await compressImage(item.file, 1000);
-      const idToken     = window._googleIdToken || '';
-
-      const resp = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-        body: JSON.stringify({
-          imageBase64,
-          mimeType: 'image/jpeg',
-          email: window.googleUser?.email || window._userEmail || '',
-          googleSub: window.googleUser?.sub || window._googleSub || '',
-        })
-      });
-
-      if (resp.status === 402) {
-        result.error = 'Out of ID scan credits';
-        // Stop queue — show remaining as not scanned
-        _bulkUpdateRow(rowId, result);
-        // Mark remaining as skipped
-        for (let j = i+1; j < total; j++) {
-          const skipId = 'bulk-row-' + j;
-          const skipItem = queue[j];
-          listEl.insertAdjacentHTML('beforeend', `
-            <div id="${skipId}" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e;opacity:.4">
-              <img src="${skipItem.objectUrl}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0" alt="Card" />
-              <div style="flex:1;font-size:.75rem;color:rgba(255,255,255,.3)">Skipped — out of credits</div>
-            </div>`);
-        }
-        window._bulkResults.push(result);
-        showToast('Ran out of credits mid-scan. Results saved for cards that completed.', 'info');
-        break;
-      } else if (resp.status === 401) {
-        result.error = 'Auth expired';
-        window._googleIdToken = null;
-      } else if (!resp.ok) {
-        let em = 'Scan failed';
-        try { const e = await resp.json(); em = e.error || em; } catch(e) {}
-        result.error = em;
-      } else {
-        const data = await resp.json();
-        if (data.card_name) {
-          result.success    = true;
-          result.cardName   = data.card_name   || '';
-          result.setName    = data.set_name    || '';
-          result.cardNumber = data.card_number || '';
-          result.rarity     = data.rarity      || '';
-
-          // Try to get market price — call eBay sold data quick lookup
-          try {
-            const q   = [result.cardName, result.cardNumber, result.setName].filter(Boolean).join(' ');
-            const er  = await fetch('/api/ebay-sold?q=' + encodeURIComponent(q));
-            if (er.ok) {
-              const ed = await er.json();
-              if (ed.items && ed.items.length) {
-                const prices = ed.items
-                  .map(it => parseFloat(it.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.['__value__'] || it.price || 0))
-                  .filter(x => x > 0).sort((a,b) => a-b);
-                if (prices.length) {
-                  const mid = Math.floor(prices.length / 2);
-                  result.marketPrice = prices.length % 2 === 0
-                    ? (prices[mid-1] + prices[mid]) / 2
-                    : prices[mid];
-                }
-              }
-            }
-          } catch(e) { /* price fetch failed — still show the card name */ }
-        } else {
-          result.error = 'Could not identify card';
-        }
-      }
-    } catch(err) {
-      result.error = err.message || 'Scan error';
-    }
+    const result = await _bulkScanOne(item, rowId, false);
+    if (result === 'STOP') break;
 
     window._bulkResults.push(result);
     _bulkUpdateRow(rowId, result);
   }
 
+  _bulkFinishQueue(total);
+}
+
+/* Scans a single queued item through /api/scan, then does price lookup.
+   isRetry=true means: do not treat 402 as a hard stop, and mark result.wasRetry. */
+async function _bulkScanOne(item, rowId, isRetry) {
+  const listEl = document.getElementById('bulkResultsList');
+  let result = {
+    objectUrl: item.objectUrl, file: item.file, success: false, cardName: '', setName: '', cardNumber: '',
+    marketPrice: null, imageUrl: null, tcgplayerUrl: null, error: '', condition: 'NM',
+    rowId, wasRetry: !!isRetry,
+  };
+  try {
+    const imageBase64 = await compressImage(item.file, 1000);
+    const idToken     = window._googleIdToken || '';
+
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+      body: JSON.stringify({
+        imageBase64,
+        mimeType: 'image/jpeg',
+        email: window.googleUser?.email || window._userEmail || '',
+        googleSub: window.googleUser?.sub || window._googleSub || '',
+      })
+    });
+
+    if (resp.status === 402) {
+      result.error = 'Out of ID scan credits';
+      if (isRetry) {
+        // Retry is free — a 402 here means the account is truly out of credits.
+        // Still show the row instead of blocking the flow.
+        return result;
+      }
+      _bulkUpdateRow(rowId, result);
+      // Mark remaining as skipped
+      const queue = window._bulkQueue || [];
+      const total = queue.length;
+      const i = queue.indexOf(item);
+      for (let j = i+1; j < total; j++) {
+        const skipId = 'bulk-row-' + j;
+        const skipItem = queue[j];
+        listEl.insertAdjacentHTML('beforeend', `
+          <div id="${skipId}" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e;opacity:.4">
+            <img src="${skipItem.objectUrl}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0" alt="Card" />
+            <div style="flex:1;font-size:.75rem;color:rgba(255,255,255,.3)">Skipped — out of credits</div>
+          </div>`);
+      }
+      window._bulkResults.push(result);
+      showToast('Ran out of credits mid-scan. Results saved for cards that completed.', 'info');
+      return 'STOP';
+    } else if (resp.status === 401) {
+      result.error = 'Auth expired';
+      window._googleIdToken = null;
+    } else if (!resp.ok) {
+      let em = 'Scan failed';
+      try { const e = await resp.json(); em = e.error || em; } catch(e) {}
+      result.error = em;
+    } else {
+      const data = await resp.json();
+      if (data.card_name) {
+        result.success    = true;
+        result.cardName   = data.card_name   || '';
+        result.setName    = data.set_name    || '';
+        result.cardNumber = data.card_number || '';
+        result.rarity     = data.rarity      || '';
+        result.condition  = 'NM';
+
+        const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber);
+        if (priceInfo) {
+          result.marketPrice  = priceInfo.marketPrice;
+          result.priceVariant = priceInfo.variant;
+          result.imageUrl     = priceInfo.imageUrl;
+          result.tcgplayerUrl = priceInfo.tcgplayerUrl;
+        }
+      } else {
+        result.error = 'Could not identify card';
+      }
+    }
+  } catch(err) {
+    result.error = err.message || 'Scan error';
+  }
+  return result;
+}
+
+function _bulkFinishQueue(total) {
   // Done — show bottom bar
   document.getElementById('bulkProgressBar').style.width = '100%';
   document.getElementById('bulkProgressLabel').textContent = 'Done!';
@@ -8342,10 +8513,97 @@ async function startBulkQueue() {
     ' · Tap below to save to your Collection';
 
   document.getElementById('bulkBottomBar').style.display = '';
+  _bulkResetBottomBarButtons();
 
   // Update subtitle
   document.getElementById('bulkScanSubtitle').textContent =
     successCount + '/' + total + ' cards identified';
+
+  _bulkDetectDuplicates();
+}
+
+/* ── Duplicate detection ── */
+function _bulkDupKey(r) {
+  return [r.cardName || '', r.setName || '', r.cardNumber || ''].join('|').toLowerCase();
+}
+
+function _bulkClearDupBanner() {
+  const el = document.getElementById('bulkDupBanner');
+  if (el) el.remove();
+}
+
+function _bulkDetectDuplicates() {
+  _bulkClearDupBanner();
+  const successful = window._bulkResults.filter(r => r.success && !r.qty);
+  const groups = {};
+  successful.forEach(r => {
+    const key = _bulkDupKey(r);
+    (groups[key] = groups[key] || []).push(r);
+  });
+  const dupGroup = Object.values(groups).find(g => g.length > 1);
+  if (!dupGroup) return;
+
+  const name = dupGroup[0].cardName || 'this card';
+  const n = dupGroup.length;
+  const listEl = document.getElementById('bulkResultsList');
+  const banner = document.createElement('div');
+  banner.id = 'bulkDupBanner';
+  banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.6rem .75rem;background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.35);border-radius:10px;margin-bottom:.5rem;font-size:.78rem;color:#fff';
+  banner.innerHTML =
+    `<span>You scanned <strong>${_esc(name)}</strong> ${n} times</span>` +
+    `<button onclick="bulkMergeDuplicates()" style="background:rgba(212,175,55,.9);color:#000;border:none;border-radius:99px;padding:.35rem .8rem;font-weight:800;font-size:.72rem;cursor:pointer;flex-shrink:0">Tap to merge</button>`;
+  listEl.parentNode.insertBefore(banner, listEl);
+}
+
+function bulkMergeDuplicates() {
+  const groups = {};
+  const order = [];
+  (window._bulkResults || []).forEach(r => {
+    if (!r.success) { order.push({ r, merged: r }); return; }
+    const key = _bulkDupKey(r);
+    if (!groups[key]) {
+      const merged = Object.assign({}, r, { qty: r.qty || 1 });
+      groups[key] = merged;
+      order.push({ r, merged, isFirst: true });
+    } else {
+      groups[key].qty = (groups[key].qty || 1) + (r.qty || 1);
+      order.push({ r, merged: groups[key], isFirst: false });
+    }
+  });
+
+  const newResults = [];
+  const seenKeys = new Set();
+  order.forEach(({ r, merged, isFirst }) => {
+    if (!r.success) { newResults.push(r); return; }
+    const key = _bulkDupKey(r);
+    if (seenKeys.has(key)) return; // drop duplicate rows, keep the merged one
+    seenKeys.add(key);
+    newResults.push(merged);
+  });
+
+  window._bulkResults = newResults;
+
+  // Re-render the whole list from scratch since row count changed.
+  const listEl = document.getElementById('bulkResultsList');
+  listEl.innerHTML = '';
+  newResults.forEach((r, idx) => {
+    const rowId = 'bulk-row-' + idx;
+    r.rowId = rowId;
+    listEl.insertAdjacentHTML('beforeend', `<div id="${rowId}" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e"></div>`);
+    _bulkUpdateRow(rowId, r);
+  });
+
+  _bulkClearDupBanner();
+  showToast('Duplicates merged');
+
+  const successCount = window._bulkResults.filter(r => r.success).length;
+  document.getElementById('bulkSummaryLine').textContent =
+    successCount + ' card' + (successCount!==1?'s':'') + ' ready to add to Collection';
+}
+
+/* ── Row rendering ── */
+function _bulkFindResult(rowId) {
+  return (window._bulkResults || []).find(r => r.rowId === rowId);
 }
 
 function _bulkUpdateRow(rowId, result) {
@@ -8353,38 +8611,173 @@ function _bulkUpdateRow(rowId, result) {
   if (!row) return;
 
   if (result.success) {
-    const price = result.marketPrice != null
-      ? '<span style="color:var(--gold);font-weight:700">$' + result.marketPrice.toFixed(2) + '</span>'
-      : '<span style="color:rgba(255,255,255,.3)">Price unavailable</span>';
+    const thumbSrc = result.imageUrl || result.objectUrl || '';
+    const qtyBadge = (result.qty && result.qty > 1)
+      ? `<span style="position:absolute;top:-6px;right:-6px;background:rgba(139,92,246,1);color:#fff;font-size:.62rem;font-weight:800;border-radius:99px;padding:1px 5px;line-height:1.3;box-shadow:0 0 0 2px #111">×${result.qty}</span>`
+      : '';
+    const priceHtml = result.marketPrice != null
+      ? `<span style="color:var(--gold);font-weight:700">$${result.marketPrice.toFixed(2)}</span>` +
+        (result.priceVariant ? `<span style="color:rgba(255,255,255,.35);font-size:.68rem"> · ${_esc(formatVariantName(result.priceVariant))}</span>` : '') +
+        ` <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`
+      : `<span style="color:rgba(255,255,255,.3)">Price unavailable</span> <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`;
     const setStr = [result.setName, result.cardNumber ? '#' + result.cardNumber : ''].filter(Boolean).join(' ');
+    const cond = result.condition || 'NM';
+
     row.innerHTML = `
-      <img src="${result.objectUrl}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0" alt="Card" />
+      <div style="position:relative;flex-shrink:0">
+        <img src="${_esc(thumbSrc)}" onerror="this.src='${_esc(result.objectUrl || '')}'" style="width:44px;height:60px;object-fit:cover;border-radius:6px;background:#1a1a1a" alt="Card" />
+        ${qtyBadge}
+      </div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(result.cardName)}</div>
+        <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25)">${_esc(result.cardName)}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(setStr)}</div>
-        <div style="margin-top:.2rem">${price}</div>
+        <div style="margin-top:.2rem;font-size:.78rem">${priceHtml}</div>
+        <button onclick="bulkOpenConditionPicker('${rowId}')" style="margin-top:.3rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:99px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;cursor:pointer">${_esc(cond)} ▾</button>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.3rem;flex-shrink:0">
         <span style="color:#4ade80;font-size:.9rem">✓</span>
-        <button onclick="bulkRemoveResult(this)" data-card="${_esc(result.cardName)}" style="font-size:.65rem;color:rgba(255,255,255,.3);background:none;border:none;cursor:pointer;padding:2px 4px" title="Remove from batch">✕</button>
+        <button onclick="bulkRemoveResult('${rowId}')" style="font-size:.65rem;color:rgba(255,255,255,.3);background:none;border:none;cursor:pointer;padding:2px 4px" title="Remove from batch">✕</button>
       </div>`;
     row.style.borderColor = 'rgba(74,222,128,.2)';
+    row.style.opacity = '';
   } else {
+    const retryBtn = `<button onclick="bulkRetryRow('${rowId}')" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.4);color:rgba(196,181,253,1);border-radius:8px;padding:.25rem .6rem;font-size:.68rem;font-weight:700;cursor:pointer;margin-top:.3rem">↻ Retry (free)</button>`;
     row.innerHTML = `
-      <img src="${result.objectUrl}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.4" alt="Card" />
+      <img src="${_esc(result.objectUrl || '')}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.4" alt="Card" />
       <div style="flex:1;min-width:0">
         <div style="font-size:.78rem;color:rgba(255,255,255,.35)">${_esc(result.error || 'Could not identify')}</div>
         <div style="font-size:.68rem;color:rgba(255,255,255,.2);margin-top:.1rem">Try a clearer photo</div>
+        ${retryBtn}
       </div>
       <span style="color:#f87171;font-size:.9rem;flex-shrink:0">✗</span>`;
     row.style.opacity = '.55';
   }
 }
 
-function bulkRemoveResult(btn) {
-  const cardName = btn.getAttribute('data-card');
-  window._bulkResults = window._bulkResults.filter(r => r.cardName !== cardName || !r.success);
-  const row = btn.closest('div[id^="bulk-row-"]');
+/* ── Condition picker ── */
+function bulkOpenConditionPicker(rowId) {
+  _bulkCloseConditionPicker();
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const result = _bulkFindResult(rowId);
+  const current = result ? (result.condition || 'NM') : 'NM';
+
+  const picker = document.createElement('div');
+  picker.id = 'bulkConditionPicker';
+  picker.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:flex-end;justify-content:center';
+  picker.onclick = (e) => { if (e.target === picker) _bulkCloseConditionPicker(); };
+  picker.innerHTML = `
+    <div style="background:#151515;border:1px solid #2a2a2a;border-radius:16px 16px 0 0;padding:1rem 1.25rem 1.5rem;width:100%;max-width:420px">
+      <div style="font-size:.85rem;font-weight:700;color:#fff;margin-bottom:.75rem">Set condition</div>
+      <div style="display:flex;flex-direction:column;gap:.4rem">
+        ${BULK_CONDITIONS.map(c => `
+          <button onclick="bulkSetCondition('${rowId}','${c}')" style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .8rem;background:${c===current ? 'rgba(139,92,246,.18)' : 'rgba(255,255,255,.05)'};border:1px solid ${c===current ? 'rgba(139,92,246,.5)' : 'rgba(255,255,255,.12)'};border-radius:10px;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;width:100%;text-align:left">
+            <span>${c} — ${_esc(BULK_CONDITION_LABELS[c])}</span>
+            ${c===current ? '<span style="color:#4ade80">✓</span>' : ''}
+          </button>`).join('')}
+      </div>
+      <button onclick="_bulkCloseConditionPicker()" style="margin-top:.75rem;width:100%;padding:.55rem;background:transparent;color:rgba(255,255,255,.5);border:none;font-size:.78rem;cursor:pointer">Cancel</button>
+    </div>`;
+  document.body.appendChild(picker);
+}
+
+function _bulkCloseConditionPicker() {
+  const el = document.getElementById('bulkConditionPicker');
+  if (el) el.remove();
+}
+
+function bulkSetCondition(rowId, cond) {
+  const result = _bulkFindResult(rowId);
+  if (result) result.condition = cond;
+  _bulkCloseConditionPicker();
+  _bulkUpdateRow(rowId, result);
+}
+
+/* ── Manual name correction ── */
+async function bulkEditCardName(rowId) {
+  const result = _bulkFindResult(rowId);
+  if (!result) return;
+  const newName = prompt('Card name:', result.cardName || '');
+  if (newName == null) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === result.cardName) return;
+
+  result.cardName = trimmed;
+  _bulkUpdateRow(rowId, result);
+
+  const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber);
+  if (priceInfo) {
+    result.marketPrice  = priceInfo.marketPrice;
+    result.priceVariant = priceInfo.variant;
+    result.imageUrl     = priceInfo.imageUrl;
+    result.tcgplayerUrl = priceInfo.tcgplayerUrl;
+  } else {
+    result.marketPrice  = null;
+    result.priceVariant = null;
+  }
+  _bulkUpdateRow(rowId, result);
+  showToast('Card name updated');
+}
+
+/* ── Inline price edit ── */
+function bulkEditPrice(rowId) {
+  const result = _bulkFindResult(rowId);
+  if (!result) return;
+  const current = result.marketPrice != null ? result.marketPrice.toFixed(2) : '';
+  const input = prompt('Market value:', current);
+  if (input == null) return;
+  const val = parseFloat(input);
+  if (isNaN(val) || val < 0) return;
+  result.marketPrice = val;
+  result.priceVariant = null; // manually overridden — no longer tied to a TCGplayer variant
+  _bulkUpdateRow(rowId, result);
+}
+
+/* ── Retry failed scan (free) ── */
+async function bulkRetryRow(rowId) {
+  const idx = (window._bulkResults || []).findIndex(r => r.rowId === rowId);
+  if (idx === -1) return;
+  const oldResult = window._bulkResults[idx];
+
+  const row = document.getElementById(rowId);
+  if (row) {
+    row.innerHTML = `
+      <img src="${_esc(oldResult.objectUrl || '')}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.6" alt="Card" />
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.78rem;color:rgba(255,255,255,.35)">Retrying…</div>
+      </div>
+      <div style="width:20px;height:20px;border:2px solid rgba(139,92,246,.5);border-top-color:rgba(139,92,246,1);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div>`;
+    row.style.opacity = '';
+  }
+
+  const item = { file: oldResult.file, objectUrl: oldResult.objectUrl };
+
+  if (!item.file) {
+    showToast('Original photo unavailable — please rescan this card.', 'info');
+    if (row) _bulkUpdateRow(rowId, oldResult);
+    return;
+  }
+
+  const newResult = await _bulkScanOne(item, rowId, true);
+  if (newResult === 'STOP') return; // shouldn't happen on retry, but guard anyway
+  newResult.rowId = rowId;
+  window._bulkResults[idx] = newResult;
+  _bulkUpdateRow(rowId, newResult);
+
+  const successCount = window._bulkResults.filter(r => r.success).length;
+  const failCount    = window._bulkResults.filter(r => !r.success).length;
+  const summaryEl = document.getElementById('bulkSummaryLine');
+  if (summaryEl) {
+    summaryEl.textContent =
+      successCount + ' card' + (successCount!==1?'s':'') + ' identified' +
+      (failCount > 0 ? ' · ' + failCount + ' failed' : '') +
+      ' · Tap below to save to your Collection';
+  }
+}
+
+function bulkRemoveResult(rowId) {
+  window._bulkResults = (window._bulkResults || []).filter(r => r.rowId !== rowId);
+  const row = document.getElementById(rowId);
   if (row) row.remove();
   // Update summary
   const successCount = window._bulkResults.filter(r => r.success).length;
@@ -8392,13 +8785,20 @@ function bulkRemoveResult(btn) {
     successCount + ' card' + (successCount!==1?'s':'') + ' ready to add to Collection';
 }
 
+/* ── Save flow ── */
 function bulkAddAllToCollection() {
   const successful = window._bulkResults.filter(r => r.success);
   if (!successful.length) {
     showToast('No successfully identified cards to add.');
     return;
   }
-  // Show cost entry sheet instead of saving immediately
+  const anyPriced = successful.some(r => r.marketPrice != null);
+  if (!anyPriced) {
+    // Nothing to price — just save immediately at $0 cost each rather than
+    // showing an empty cost sheet.
+    _bulkSaveToCollection(successful, {});
+    return;
+  }
   openBulkCostSheet(successful);
 }
 
@@ -8406,14 +8806,16 @@ function openBulkCostSheet(cards) {
   const list = document.getElementById('bulkCostList');
   if (!list) return;
   list.innerHTML = cards.map((r, i) => {
-    const thumb = r.objectUrl ? `<img src="${_esc(r.objectUrl)}" style="width:38px;height:52px;object-fit:cover;border-radius:5px;flex-shrink:0">` : `<div style="width:38px;height:52px;background:#1a1a1a;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🃏</div>`;
+    const thumbSrc = r.imageUrl || r.objectUrl;
+    const thumb = thumbSrc ? `<img src="${_esc(thumbSrc)}" style="width:38px;height:52px;object-fit:cover;border-radius:5px;flex-shrink:0">` : `<div style="width:38px;height:52px;background:#1a1a1a;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem">🃏</div>`;
     const name = r.cardName || 'Unknown card';
+    const qtyStr = r.qty && r.qty > 1 ? ` ×${r.qty}` : '';
     const sub  = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
     const val  = r.marketPrice ? r.marketPrice.toFixed(2) : '';
     return `<div style="display:flex;align-items:center;gap:.65rem;padding:.55rem .25rem;border-bottom:1px solid #1a1a1a">
       ${thumb}
       <div style="flex:1;min-width:0">
-        <div style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(name)}</div>
+        <div style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(name)}${qtyStr}</div>
         <div style="font-size:.67rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(sub||'—')}</div>
         ${val ? `<div style="font-size:.67rem;color:rgba(212,175,55,.6);margin-top:.1rem">Market ~$${val}</div>` : ''}
       </div>
@@ -8430,36 +8832,83 @@ function openBulkCostSheet(cards) {
   _bulkShowSection('costSheet');
 }
 
+function bulkSkipPricingAndSave() {
+  const successful = window._bulkResults.filter(r => r.success);
+  _bulkSaveToCollection(successful, {}, true);
+}
+
 function confirmBulkCostSave() {
   const successful = window._bulkResults.filter(r => r.success);
+  const costs = {};
+  successful.forEach((r, i) => {
+    const inp = document.getElementById('bulkCost_' + i);
+    costs[i] = inp ? (parseFloat(inp.value) || 0) : 0;
+  });
+  _bulkSaveToCollection(successful, costs);
+}
+
+function _bulkSaveToCollection(successful, costs, skipPricing) {
   const port = loadPortData();
   const today = new Date().toISOString().slice(0,10);
   let added = 0;
   successful.forEach((r, i) => {
-    const inp = document.getElementById('bulkCost_' + i);
-    const buyPrice = inp ? (parseFloat(inp.value) || 0) : 0;
+    const buyPrice = skipPricing ? 0 : (costs[i] || 0);
     const setStr = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
-    port.push({
-      id: Date.now() + added,
-      card: r.cardName,
-      set: setStr,
-      buyPrice,
-      currentValue: r.marketPrice || null,
-      addedDate: today,
-      source: 'bulk-scan',
-      lastRefreshed: r.marketPrice ? new Date().toISOString() : null
-    });
-    added++;
+    const qty = r.qty && r.qty > 1 ? r.qty : 1;
+    for (let q = 0; q < qty; q++) {
+      port.push({
+        id: Date.now() + added + Math.floor(Math.random() * 1000),
+        card: r.cardName,
+        set: setStr,
+        buyPrice,
+        currentValue: r.marketPrice || null,
+        condition: r.condition || 'NM',
+        addedDate: today,
+        source: 'bulk-scan',
+        imageUrl: r.imageUrl || null,
+        lastRefreshed: r.marketPrice ? new Date().toISOString() : null
+      });
+      added++;
+    }
   });
   savePortData(port);
   _maybeRerenderCollection();
   showToast(added + ' card' + (added!==1?'s':'') + ' added to your Collection 📦', 'success');
-  closeBulkScan();
-  switchView('collection');
+
+  window._bulkSaved = true;
+  _bulkShowSection('processing');
+  _bulkShowPostSaveBar(added);
+}
+
+function _bulkResetBottomBarButtons() {
+  const bar = document.getElementById('bulkBottomBar');
+  if (!bar) return;
+  bar.innerHTML = `
+    <div id="bulkSummaryLine" style="font-size:.78rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.65rem"></div>
+    <div style="display:flex;gap:.75rem">
+      <button onclick="closeBulkScan()" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>
+      <button id="bulkAddAllBtn" onclick="bulkAddAllToCollection()" style="flex:2;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">📦 Add All to Collection</button>
+    </div>
+    <div style="margin-top:.5rem">
+      <button id="bulkScanMoreBtn" onclick="bulkScanMore()" style="width:100%;padding:.55rem;background:transparent;border:1px solid rgba(139,92,246,.4);color:rgba(139,92,246,1);border-radius:10px;font-weight:700;font-size:.8rem;cursor:pointer">+ Scan More Cards</button>
+    </div>`;
+}
+
+function _bulkShowPostSaveBar(added) {
+  const bar = document.getElementById('bulkBottomBar');
+  if (!bar) return;
+  bar.style.display = '';
+  bar.innerHTML = `
+    <div style="font-size:.78rem;color:rgba(255,255,255,.6);text-align:center;margin-bottom:.65rem">${added} card${added!==1?'s':''} added to your Collection 📦</div>
+    <div style="display:flex;gap:.75rem">
+      <button onclick="switchView('collection');closeBulkScan();" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">View Collection</button>
+      <button onclick="bulkScanMore()" style="flex:1;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">Scan More</button>
+    </div>`;
 }
 
 function bulkScanMore() {
   // Preserve existing results, go back to mode picker to add more
+  window._bulkSaved = false;
   _bulkShowSection('modePicker');
 }
 
@@ -8556,9 +9005,12 @@ function _esc(s) {
         <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.15rem">Optional — leave $0 to skip. Used for P&amp;L tracking.</div>
       </div>
       <div id="bulkCostList" style="flex:1;overflow-y:auto;padding:.5rem 1rem 1rem"></div>
-      <div style="padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0;display:flex;gap:.75rem">
-        <button onclick="_bulkShowSection('processing')" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">← Back</button>
-        <button onclick="confirmBulkCostSave()" style="flex:2;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">💾 Save to Collection</button>
+      <div style="padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0">
+        <div style="display:flex;gap:.75rem">
+          <button onclick="_bulkShowSection('processing')" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">← Back</button>
+          <button onclick="confirmBulkCostSave()" style="flex:2;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">💾 Save to Collection</button>
+        </div>
+        <button onclick="bulkSkipPricingAndSave()" style="width:100%;margin-top:.5rem;padding:.5rem;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:.75rem;cursor:pointer;text-decoration:underline">Skip pricing — save with $0 cost each</button>
       </div>
     </div>
   </div>
