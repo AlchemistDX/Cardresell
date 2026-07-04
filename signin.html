@@ -322,6 +322,9 @@
     <div class="auth-view" id="viewVerify">
       <div class="auth-title">Check your inbox 📬</div>
       <div class="auth-sub">We sent a verification link to <strong id="verifyEmailTarget">your inbox</strong>. Click it, then come back and press the button below to unlock your <strong>10 ID scans + 1 AI Grade</strong> signup bonus.</div>
+      <div style="background:#3a2a10;border:1px solid #a97010;border-radius:8px;padding:.55rem .7rem;margin:.5rem 0 .75rem;color:#fbbf24;font-size:.75rem;line-height:1.4">
+        ⚠️ <strong>Don’t see it?</strong> Check your <strong>Spam</strong> or <strong>Junk</strong> folder. The sender is <strong>noreply@cardresell-e0329.firebaseapp.com</strong>. Mark it “Not Spam” so future emails land in your inbox.
+      </div>
       <div id="errVerify" class="alert alert-error"></div>
       <div id="okVerify" class="alert alert-success"></div>
       <button class="btn-primary" id="btnCheckVerified" onclick="checkVerified()">I've verified — Continue</button>
@@ -354,7 +357,8 @@
       getAuth, onAuthStateChanged,
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
-      sendPasswordResetEmail, sendEmailVerification
+      sendPasswordResetEmail, sendEmailVerification,
+      setPersistence, browserLocalPersistence
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const app = initializeApp({
@@ -366,6 +370,12 @@
       appId: "1:107816299392:web:247dd67177459923866f65"
     });
     const auth = getAuth(app);
+    // Explicit local persistence so the session survives tab-switching to the
+    // email app and back. Falls through silently on private-mode browsers that
+    // block IndexedDB — Firebase will use in-memory persistence as a fallback.
+    setPersistence(auth, browserLocalPersistence).catch(e => {
+      console.warn('setPersistence(local) failed, using default:', e && e.code);
+    });
 
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
@@ -375,7 +385,31 @@
     window._fbEmailSignIn  = (e, p) => signInWithEmailAndPassword(auth, e, p);
     window._fbEmailSignUp  = (e, p) => createUserWithEmailAndPassword(auth, e, p);
     window._fbResetPassword = (e)   => sendPasswordResetEmail(auth, e);
-    window._fbSendVerification = () => auth.currentUser && sendEmailVerification(auth.currentUser);
+    // Pass actionCodeSettings so the verification email includes a clickable
+    // "Continue" link that redirects back to cardresell.org/?verified=1 after
+    // Firebase completes verification. index.html has a ?verified=1 handler
+    // that forces token refresh + claims the signup bonus.
+    // NOTE: cardresell.org + www.cardresell.org must be on Firebase Auth's
+    // Authorized Domains list (Authentication → Settings → Authorized domains).
+    // On failure we fall back to the default link (still deliverable).
+    window._fbSendVerification = async () => {
+      if (!auth.currentUser) return;
+      const acs = {
+        url: 'https://www.cardresell.org/?verified=1',
+        handleCodeInApp: false,
+      };
+      try {
+        await sendEmailVerification(auth.currentUser, acs);
+        return { ok: true, withReturn: true };
+      } catch (e) {
+        try {
+          await sendEmailVerification(auth.currentUser);
+          return { ok: true, withReturn: false, warning: (e && e.code) || 'fallback' };
+        } catch (e2) {
+          throw e2;
+        }
+      }
+    };
     window._fbReloadUser = () => auth.currentUser && auth.currentUser.reload();
     window._fbAuth = auth;
 

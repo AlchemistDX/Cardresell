@@ -774,7 +774,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       getAuth, onAuthStateChanged, signOut as fbSignOut,
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
-      sendPasswordResetEmail, sendEmailVerification
+      sendPasswordResetEmail, sendEmailVerification,
+      setPersistence, browserLocalPersistence
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const firebaseConfig = {
@@ -788,6 +789,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    // Explicit local persistence so the session survives tab-switching to the
+    // email app and back after tapping the verification link. Falls through on
+    // private-mode browsers that block IndexedDB (Firebase uses in-memory).
+    setPersistence(auth, browserLocalPersistence).catch(e => {
+      console.warn('setPersistence(local) failed, using default:', e && e.code);
+    });
 
     // Expose to global scope for use in non-module scripts
     window._fbAuth = auth;
@@ -6523,7 +6530,10 @@ async function _verifySendCode() {
           if (subtitle) {
             subtitle.innerHTML = '\u2709\ufe0f A verification link was sent to <strong>' +
               (window.googleUser?.email || 'your inbox') +
-              '</strong>. Tap the link, then come back and tap <strong>I\u2019ve verified</strong> below to claim your bonus.';
+              '</strong>. Tap the link, then come back and tap <strong>I\u2019ve verified</strong> below to claim your bonus.' +
+              '<div style="background:#3a2a10;border:1px solid #a97010;border-radius:8px;padding:.5rem .65rem;margin-top:.6rem;color:#fbbf24;font-size:.72rem;line-height:1.4">' +
+              '\u26a0\ufe0f <strong>Don\u2019t see it?</strong> Check your <strong>Spam</strong> or <strong>Junk</strong> folder \u2014 sender is <strong>noreply@cardresell-e0329.firebaseapp.com</strong>. Mark it \u201cNot Spam\u201d so future emails hit your inbox.' +
+              '</div>';
           }
           document.getElementById('verifyStepEmail').style.display = 'none';
           const codeStep = document.getElementById('verifyStepCode');
