@@ -30,7 +30,18 @@ export default async function handler(req, res) {
   }
 
   const type = event.type;
-  console.log('Stripe webhook:', type);
+  const eventId = event.id;
+  console.log('Stripe webhook:', type, eventId);
+
+  // ── Idempotency guard ──
+  // Stripe may re-deliver the same event on retry (e.g. after signing-secret rotation
+  // or transient 5xx). Setting a KV key with NX ensures each event.id is processed
+  // exactly once. If the key already exists we ACK 200 and return without side effects.
+  const alreadyProcessed = await markEventProcessed(eventId, type);
+  if (alreadyProcessed) {
+    console.log('DUPLICATE_WEBHOOK_IGNORED:', eventId, type);
+    return res.status(200).json({ received: true, duplicate: true });
+  }
 
   // Pro subscription checkout OR per-scan payment
   if (type === 'checkout.session.completed') {
@@ -81,6 +92,30 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({ received: true });
+}
+
+// Returns true if this event.id was already processed (should be ignored).
+// Uses Upstash Redis SETNX so the check-and-set is atomic — no race between
+// concurrent deliveries. Key TTL is 30 days (Stripe retries for 3 days max).
+async function markEventProcessed(eventId, type) {
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+  if (!kvUrl || !kvToken || !eventId) return false; // fail-open: don't break webhook if KV is down
+  try {
+    const key = `stripe_evt:${eventId}`;
+    const val = JSON.stringify({ type, at: new Date().toISOString() });
+    // Upstash Redis REST: SET key value EX <seconds> NX — path-segment form.
+    // Returns { result: 'OK' } on first write, { result: null } if the key already exists.
+    const r = await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(val)}/EX/2592000/NX`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` },
+    });
+    const data = await r.json();
+    return data.result === null;
+  } catch(e) {
+    console.error('KV idempotency check error:', e);
+    return false; // fail-open
+  }
 }
 
 async function storeProUser(googleSub, email, subscriptionId, status, plan = 'pro_monthly') {
