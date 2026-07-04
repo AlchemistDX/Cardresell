@@ -68,7 +68,8 @@ export default async function handler(req, res) {
   try {
     tokenInfo = await verifyTokenFlexible(idToken);
   } catch(e) {
-    return res.status(401).json({ error: 'Invalid token' });
+    console.error('verify-send token error:', e && e.message, 'tokenLen=', idToken.length);
+    return res.status(401).json({ error: 'Invalid token', detail: (e && e.message) || 'unknown' });
   }
   const userSub = tokenInfo.uid || '';
   if (!userSub) return res.status(400).json({ error: 'Missing uid' });

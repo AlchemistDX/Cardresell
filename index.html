@@ -6093,7 +6093,8 @@ async function _verifySendCode() {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || !data.ok) {
-      err.textContent = data.error || ('Could not send code (' + resp.status + ')');
+      const detail = data.detail ? ' — ' + data.detail : '';
+      err.textContent = (data.error || ('Could not send code (' + resp.status + ')')) + detail;
       err.style.display = '';
       btn.disabled = false;
       btn.textContent = 'Send code';
