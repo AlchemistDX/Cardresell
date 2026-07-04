@@ -5140,6 +5140,9 @@ function saveFlipEntry() {
   document.getElementById('flipModal').classList.remove('open');
   clearModal();
   renderFlipsView();
+  // If the Collection view is currently open, refresh it so newly added
+  // cards appear immediately instead of only on the next tab switch.
+  _maybeRerenderCollection();
 }
 
 /* ═══════════════════════════════════════
@@ -6061,15 +6064,26 @@ async function _verifySendCode() {
     return;
   }
 
-  const tok = window._googleIdToken;
+  btn.disabled = true;
+  btn.textContent = 'Sending\u2026';
+
+  // Always refresh the Firebase token first — stale tokens (>1h old)
+  // cause "Invalid token" on the backend.
+  let tok = window._googleIdToken;
+  try {
+    if (window._fbCurrentUser && typeof window._fbCurrentUser.getIdToken === 'function') {
+      tok = await window._fbCurrentUser.getIdToken(true);
+      window._googleIdToken = tok;
+    }
+  } catch(e) { /* fall back to cached tok */ }
+
   if (!tok) {
     err.textContent = 'Not signed in. Refresh the page and try again.';
     err.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Send code';
     return;
   }
-
-  btn.disabled = true;
-  btn.textContent = 'Sending\u2026';
 
   try {
     const resp = await fetch('/api/verify-send', {
@@ -6120,15 +6134,25 @@ async function _verifyConfirmCode() {
     return;
   }
   const email = window._verifyPendingEmail;
-  const tok = window._googleIdToken;
+  btn.disabled = true;
+  btn.textContent = 'Verifying\u2026';
+
+  // Refresh Firebase token before the confirm call too.
+  let tok = window._googleIdToken;
+  try {
+    if (window._fbCurrentUser && typeof window._fbCurrentUser.getIdToken === 'function') {
+      tok = await window._fbCurrentUser.getIdToken(true);
+      window._googleIdToken = tok;
+    }
+  } catch(e) { /* fall back to cached tok */ }
+
   if (!email || !tok) {
     err.textContent = 'Session expired. Close and try again.';
     err.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Verify';
     return;
   }
-
-  btn.disabled = true;
-  btn.textContent = 'Verifying\u2026';
 
   try {
     const resp = await fetch('/api/verify-confirm', {
