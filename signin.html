@@ -239,6 +239,13 @@
     Back to CardResell
   </a>
 
+  <!-- Private-mode warning banner (shown via JS if IndexedDB is blocked) -->
+  <div id="pmBanner" style="display:none;max-width:420px;width:100%;margin:0 auto 1rem;background:#3a1010;border:2px solid #dc2626;border-radius:12px;padding:.85rem 1rem;color:#fecaca;font-size:.82rem;line-height:1.45">
+    <div style="font-weight:800;color:#fca5a5;margin-bottom:.35rem;font-size:.9rem">⚠️ Private Browsing detected</div>
+    Sign-in will <strong>not persist</strong> in Private/Incognito mode. iOS Safari blocks the storage Firebase needs.
+    <div style="margin-top:.5rem"><strong>Fix:</strong> Close this tab → open a <strong>regular Safari tab</strong> → go to <strong>cardresell.org</strong> and try again.</div>
+  </div>
+
   <div class="auth-card">
 
     <!-- Logo -->
@@ -370,6 +377,24 @@
       appId: "1:107816299392:web:247dd67177459923866f65"
     });
     const auth = getAuth(app);
+
+    // Private-mode detection — IndexedDB is blocked in Safari Private mode
+    // (or errors on open). Show a red banner so the user knows sign-in won't
+    // persist and offers a fix. Also disable auto-clicks to avoid confusion.
+    (function detectPrivateMode() {
+      try {
+        const req = indexedDB.open('__pm_probe__', 1);
+        req.onerror = () => {
+          const b = document.getElementById('pmBanner');
+          if (b) b.style.display = '';
+        };
+        req.onsuccess = () => { try { indexedDB.deleteDatabase('__pm_probe__'); } catch(e){} };
+      } catch (e) {
+        const b = document.getElementById('pmBanner');
+        if (b) b.style.display = '';
+      }
+    })();
+
     // Explicit local persistence so the session survives tab-switching to the
     // email app and back. Falls through silently on private-mode browsers that
     // block IndexedDB — Firebase will use in-memory persistence as a fallback.
