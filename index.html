@@ -2283,13 +2283,59 @@ window.CARDSELL_SCANNER_KEY = '';
 window.CARDSELL_GOOGLE_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
 // PokemonTCG.io API key — free at dev.pokemontcg.io (raises limit from 1k to 20k/day)
 window.CARDSELL_PTCG_KEY = ''; // <-- paste your key here
-// ── Affiliate Links (replace with Awin/ShareASale links when approved) ──
-window.CARDSELL_AFFIL_PSA  = 'https://www.psacard.com/submit'; // PSA submission page — swap to referral link when approved
-window.CARDSELL_AFFIL_BCW  = '';  // BCW Supplies affiliate link — paste your affiliate tracking URL here
-window.CARDSELL_AFFIL_BCW_CODE = ''; // BCW coupon code (e.g. CARDRESELL10) — shown to users
-window.CARDSELL_AFFIL_CGC  = 'https://www.cgccomics.com/cards/submit/'; // CGC submission page
-window.CARDSELL_AFFIL_BGS  = 'https://www.beckett.com/grading/submit'; // BGS/Beckett submission page
-window.CARDSELL_AFFIL_SGC  = 'https://www.gosgc.com/submit-cards'; // SGC submission page
+// ─── AFFILIATE CONFIG — single source of truth ───
+// Every affiliate merchant is declared here. Each merchant has:
+//   enabled: false until we have a real tracking ID (buildXxxUrl returns raw URL when disabled)
+//   ...credentials specific to that network
+// When an approval email comes in, flip enabled=true and paste the ID. Done.
+window.AFFILIATE = {
+
+  // eBay Partner Network — LIVE
+  ebay: {
+    enabled: true,
+    campid:  '5339158497',
+    toolid:  '10001',
+    customid:'cardsell'
+  },
+
+  // TCGPlayer via Impact.com — application PENDING (Jul 2, 2026)
+  // Once approved, Impact gives you a Media Partner ID + Ad ID.
+  // Deep-link format: https://tcgplayer.pxf.io/c/<PARTNER_ID>/<CAMPAIGN_ID>/<AD_ID>?u=<encodeURIComponent(target_url)>
+  tcgplayer: {
+    enabled:     false,
+    partner_id:  '',   // Impact Media Partner ID (numeric)
+    campaign_id: '',   // Impact campaign ID for TCGPlayer
+    ad_id:       '',   // Impact ad/creative ID (usually a single number)
+    subid:       'cardresell'  // for reporting — safe to leave as-is
+  },
+
+  // BCW Supplies direct affiliate — application PENDING (Jul 2, 2026)
+  // BCW has two paths: pay-per-click ($0.02/unique click) via a tracked link,
+  // AND 5% commission via a coupon code shown to users.
+  bcw: {
+    enabled:      false,
+    link_url:     '',   // e.g. https://www.bcwsupplies.com/?aff=xxxxx — paste when approved
+    coupon_code:  '',   // e.g. CARDRESELL10 — shown to users to trigger the 5% path
+    coupon_pct:   5     // percent off / commission per sale
+  },
+
+  // Grading services — plain links today, will become referral links if programs approve
+  psa: { enabled: false, link_url: 'https://www.psacard.com/submit' },
+  cgc: { enabled: false, link_url: 'https://www.cgccomics.com/cards/submit/' },
+  bgs: { enabled: false, link_url: 'https://www.beckett.com/grading/submit' },
+  sgc: { enabled: false, link_url: 'https://www.gosgc.com/submit-cards' }
+};
+
+// ── Legacy globals for backward-compatibility with older call-sites ──
+// (New code should read from window.AFFILIATE directly.)
+window.CARDSELL_EPN_CAMPID     = window.AFFILIATE.ebay.campid;
+window.CARDSELL_TCGP_AFFID     = '';  // legacy — Impact uses a different scheme
+window.CARDSELL_AFFIL_PSA      = window.AFFILIATE.psa.link_url;
+window.CARDSELL_AFFIL_BCW      = window.AFFILIATE.bcw.link_url;
+window.CARDSELL_AFFIL_BCW_CODE = window.AFFILIATE.bcw.coupon_code;
+window.CARDSELL_AFFIL_CGC      = window.AFFILIATE.cgc.link_url;
+window.CARDSELL_AFFIL_BGS      = window.AFFILIATE.bgs.link_url;
+window.CARDSELL_AFFIL_SGC      = window.AFFILIATE.sgc.link_url;
 </script>
 <script>
 /* ═══════════════════════════════════════════
@@ -3083,8 +3129,8 @@ async function searchPokemonJP(q) {
       const jpName = entry.jpQuery;
       const ebayJPUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(jpName + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`;
       const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(jpName + ' japanese')}&type=prices`;
-      // Open eBay in new tab automatically
-      window.open(ebayJPUrl, '_blank');
+      // Open eBay in new tab automatically (wrapped for EPN commission)
+      window.open(buildEbayUrl(ebayJPUrl), '_blank');
       return {
         name: jpName + ' (Japanese)',
         game: 'pokemonjp',
@@ -3612,7 +3658,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
       const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=${_sacat2}&LH_Sold=1&LH_Complete=1&_sop=12`;
       statusTxt.innerHTML =
         `No recent sales found · ` +
-        `<a href="${fbUrl2}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
+        `<a href="${buildEbayUrl(fbUrl2)}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
       statusEl.style.display = 'flex';
       return;
     }
@@ -3641,7 +3687,8 @@ async function fetchAndApplySoldComps(forceRefresh) {
     const _num3 = card.number ? card.number.replace(/^0+/, '') : '';
     const fbQuery = encodeURIComponent([card.name, card.setName, _num3].filter(Boolean).join(' '));
     const _sacat3 = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
-    const fbUrl   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=${_sacat3}&LH_Sold=1&LH_Complete=1&_sop=12`;
+    const fbUrlRaw = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=${_sacat3}&LH_Sold=1&LH_Complete=1&_sop=12`;
+    const fbUrl    = buildEbayUrl(fbUrlRaw);
     // Try to get TCG market price from the price display
     const tcgPriceEl = document.getElementById('cardPriceDisplay');
     const tcgRaw = tcgPriceEl?.dataset?.market || tcgPriceEl?.textContent?.replace(/[^0-9.]/g,'');
@@ -4283,22 +4330,85 @@ async function syncGradeToPrintSelect() {
 }
 
 // ─── AFFILIATE LINK HELPERS ───
+// All helpers are SAFE when the merchant is not yet approved:
+// they return the raw URL so nothing breaks. When enabled=true is flipped
+// in window.AFFILIATE, they start returning the tracked/commissionable URL.
 
-// Builds an eBay URL with affiliate campaign ID appended (if available)
+function _aff() { return (window.AFFILIATE || {}); }
+
+// Builds an eBay URL with EPN campaign parameters appended.
+// Handles both search URLs and any other ebay.com URL.
 function buildEbayUrl(url) {
-  const campId = window.CARDSELL_EPN_CAMPID;
+  const cfg = _aff().ebay || {};
+  const campId = cfg.enabled ? cfg.campid : (window.CARDSELL_EPN_CAMPID || '');
   if (!campId) return url;
   const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=10001&customid=cardsell`;
+  const tool = cfg.toolid   || '10001';
+  const cust = cfg.customid || 'cardsell';
+  return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&customid=${encodeURIComponent(cust)}`;
 }
 
-// Builds a TCGPlayer search URL with affiliate tag appended (if available)
+// Wraps a TCGPlayer target URL through Impact's affiliate redirect (when approved).
+// Impact.com deep-link format:
+//   https://tcgplayer.pxf.io/c/<partner_id>/<campaign_id>/<ad_id>?subId1=<subid>&u=<encoded_target>
+// When TCGPlayer approval is not yet in, returns the raw target URL.
+function wrapTcgpAffiliate(targetUrl) {
+  const cfg = _aff().tcgplayer || {};
+  if (!cfg.enabled || !cfg.partner_id || !cfg.campaign_id || !cfg.ad_id) return targetUrl;
+  const u  = encodeURIComponent(targetUrl);
+  const s  = encodeURIComponent(cfg.subid || 'cardresell');
+  return `https://tcgplayer.pxf.io/c/${cfg.partner_id}/${cfg.campaign_id}/${cfg.ad_id}?subId1=${s}&u=${u}`;
+}
+
+// Builds a TCGPlayer search URL for a card, wrapped through the affiliate
+// redirect if TCGPlayer is enabled. Same signature as before — safe to call
+// from every existing site.
 function buildTcgpUrl(cardName, setName) {
   const q = encodeURIComponent(cardName + (setName ? ' ' + setName : ''));
   const base = `https://www.tcgplayer.com/search/all/product?q=${q}&view=grid`;
-  const affId = window.CARDSELL_TCGP_AFFID;
-  if (!affId) return base;
-  return `${base}&affiliate=${encodeURIComponent(affId)}`;
+  return wrapTcgpAffiliate(base);
+}
+
+// Wraps ANY TCGPlayer URL (product page, seller page, etc.) through the
+// affiliate redirect. Use this for buy-side links on card detail pages.
+function buildTcgpProductUrl(productId) {
+  return wrapTcgpAffiliate(`https://www.tcgplayer.com/product/${encodeURIComponent(productId)}`);
+}
+
+// Wraps a BCW Supplies URL. When approved, cfg.link_url is expected to be
+// a full BCW-tracked base URL (e.g. https://www.bcwsupplies.com/?aff=XXXX).
+// If a specific product path is supplied, we merge it with the tracked base.
+function buildBcwUrl(pathOrEmpty) {
+  const cfg = _aff().bcw || {};
+  const raw = pathOrEmpty || 'https://www.bcwsupplies.com';
+  if (!cfg.enabled || !cfg.link_url) return raw;
+  // If cfg.link_url already contains a full URL, append tracking
+  // params style. Best-effort: assume link_url is the tracked base.
+  try {
+    const base = new URL(cfg.link_url);
+    // If caller passed a path, use that path on BCW domain
+    if (pathOrEmpty && pathOrEmpty.startsWith('http')) {
+      const target = new URL(pathOrEmpty);
+      target.searchParams.set('aff', base.searchParams.get('aff') || '');
+      return target.toString();
+    }
+    return cfg.link_url;
+  } catch(e) { return cfg.link_url || raw; }
+}
+
+// Returns the BCW coupon code (or empty string) for display in the UI.
+// When set, callers can show a "Use code XXXX for 5% off" banner — that
+// coupon usage is what pays out the 5% commission per BCW's terms.
+function bcwCouponCode() {
+  const cfg = _aff().bcw || {};
+  return (cfg.enabled && cfg.coupon_code) ? String(cfg.coupon_code) : '';
+}
+
+// Generic merchant URL builder — useful for future networks (Awin, etc).
+// Usage: getAffiliateLink('psa') → returns tracked link if enabled, else plain link.
+function getAffiliateLink(merchantKey) {
+  const cfg = (_aff()[merchantKey] || {});
+  return cfg.link_url || '';
 }
 
 // Updates all the "Where to Sell" platform buttons for the currently loaded card
