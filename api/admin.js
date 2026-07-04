@@ -1,11 +1,18 @@
 // /api/admin.js
-// Private admin stats endpoint — only Will's Google sub may call it.
-// GET /api/admin?sub=<googleSub> → { proUsers, newsletters, referrals, scanRevenue }
-// GET /api/admin?sub=<googleSub>&all=1 → adds allEmails[] (full subscriber list)
+// Private admin stats endpoint — owner-only.
+// GET  /api/admin              → { proUsers, newsletters, referrals, scanRevenue }
+// GET  /api/admin?all=1        → adds allEmails[] (full subscriber list)
+// POST /api/admin { action: 'restore_scan_credit', target_uid, amount } → restore a burned credit
+//
+// AUTH: Requires Authorization: Bearer <Firebase/Google ID token>.
+// The token's uid must equal OWNER_SUB. `?sub=` query param is IGNORED (was spoofable).
+// KV credentials are read from process.env (KV_REST_API_URL / KV_REST_API_TOKEN) — no hardcoded secrets.
 
-const KV_URL   = 'https://patient-dragon-155704.upstash.io';
-const KV_TOKEN = 'gQAAAAAAAmA4AAIgcDIxZjgwYWU3ODEzOTM0NjdmYjlmZTNjZDE1MzExMjEwZQ';
+import { verifyTokenFlexible } from './_verifyToken.js';
+
 const OWNER_SUB = '111904685934190351595';
+const KV_URL   = process.env.KV_REST_API_URL   || '';
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || '';
 
 async function kv(cmd, ...args) {
   const res = await fetch(`${KV_URL}/${[cmd, ...args].map(encodeURIComponent).join('/')}`, {
@@ -15,16 +22,62 @@ async function kv(cmd, ...args) {
   return json.result;
 }
 
+async function requireOwner(req, res) {
+  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!idToken) { res.status(401).json({ error: 'Authorization token required' }); return null; }
+  try {
+    const info = await verifyTokenFlexible(idToken);
+    if (!info?.uid || info.uid !== OWNER_SUB) {
+      res.status(403).json({ error: 'Forbidden' });
+      return null;
+    }
+    return info.uid;
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid token' });
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const sub = req.query?.sub || '';
-  if (sub !== OWNER_SUB) {
-    return res.status(403).json({ error: 'Forbidden' });
+  if (!KV_URL || !KV_TOKEN) return res.status(503).json({ error: 'Storage not configured' });
+
+  // ── POST: owner-only admin actions ──
+  if (req.method === 'POST') {
+    const uid = await requireOwner(req, res);
+    if (!uid) return;
+
+    const { action, target_uid, amount } = req.body || {};
+
+    // Restore N paid scan credits to a target user
+    if (action === 'restore_scan_credit') {
+      const target = String(target_uid || '').trim();
+      const n = parseInt(amount) || 0;
+      if (!target)       return res.status(400).json({ error: 'target_uid required' });
+      if (!n || n < 1 || n > 100) return res.status(400).json({ error: 'amount must be 1..100' });
+
+      const key = `scans:${target}:paid_left`;
+      const cur = parseInt(await kv('GET', key) || '0', 10) || 0;
+      const next = cur + n;
+      await fetch(`${KV_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(next))}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${KV_TOKEN}` }
+      });
+      console.log(`ADMIN_RESTORE: uid=${target} +${n} paid_left ${cur}→${next} by owner`);
+      return res.status(200).json({ success: true, target_uid: target, added: n, new_balance: next });
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
   }
+
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  // ── GET: owner-only stats ──
+  const uid = await requireOwner(req, res);
+  if (!uid) return;
 
   try {
     // ── Newsletter subscribers ──

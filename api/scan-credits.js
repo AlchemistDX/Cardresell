@@ -1,8 +1,17 @@
 // /api/scan-credits — Scan credit management
-// GET  ?email=x&sub=y  → returns { credits, isPro }
-// POST { action: 'use', email, googleSub }         → use a credit
-// POST { action: 'verify_payment', sessionId, email, googleSub } → verify Stripe payment & grant credit
-// POST { action: 'add', email, googleSub, amount } → add credits (webhook)
+// GET  ?email=x&sub=y                           → returns { credits, isPro }  (public read-only)
+// POST { action: 'verify_payment',   sessionId } → verify Stripe payment & grant credit  (auth required)
+// POST { action: 'verify_id_payment',sessionId } → verify Stripe ID-scan payment          (auth required)
+// POST { action: 'verify_grade_payment', sessionId } → verify grade scan payment          (auth required)
+//
+// SECURITY:
+// - All POST verify_* actions require a valid Firebase/Google ID token in Authorization header.
+// - uid is derived from the token, NEVER from the body — prevents credit-injection attacks.
+// - The session's metadata.google_sub must match the token's uid.
+// - Dead 'use', 'use_id', 'add' actions were removed — they were unauthenticated and never
+//   called by any client; webhook grants credits directly via KV, not this endpoint.
+
+import { verifyTokenFlexible } from './_verifyToken.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -56,8 +65,37 @@ export default async function handler(req, res) {
   // ── POST ──
   if (req.method === 'POST') {
     const body = req.body || {};
-    const { action, email, googleSub, sessionId, amount } = body;
-    const key = googleSub || email;
+    const { action, sessionId } = body;
+
+    // ── AUTH REQUIRED: derive uid + email from verified token, NEVER trust body ──
+    const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+    if (!idToken) return res.status(401).json({ error: 'Authorization token required' });
+
+    let userSub = '';
+    let userEmail = '';
+    try {
+      const tokenInfo = await verifyTokenFlexible(idToken);
+      userSub   = tokenInfo.uid   || '';
+      userEmail = tokenInfo.email || '';
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    if (!userSub) return res.status(401).json({ error: 'Token missing uid' });
+
+    // key is ALWAYS the verified uid — body values are ignored for identity
+    const key   = userSub;
+    const email = userEmail;
+
+    // Helper: enforce that a Stripe session was issued to this exact user
+    function sessionBelongsToUser(session) {
+      const meta = session.metadata || {};
+      const sessSub   = meta.google_sub || '';
+      const sessEmail = (session.customer_email || '').toLowerCase();
+      // Prefer google_sub match; fall back to email match if metadata missing
+      if (sessSub) return sessSub === userSub;
+      if (sessEmail && userEmail) return sessEmail === userEmail.toLowerCase();
+      return false;
+    }
 
     // ── verify_payment: Stripe session → grant 1 credit ──
     if (action === 'verify_payment') {
@@ -76,6 +114,9 @@ export default async function handler(req, res) {
         }
         if (session.metadata?.type !== 'graded_scan') {
           return res.status(400).json({ error: 'Not a scan payment' });
+        }
+        if (!sessionBelongsToUser(session)) {
+          return res.status(403).json({ error: 'This payment does not belong to you' });
         }
         // Prevent double-credit
         if (session.metadata?.credited === 'true') {
@@ -108,47 +149,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── use: decrement a credit before scanning ──
-    if (action === 'use') {
-      if (!hasKV) {
-        // Without KV: verify user has at least 1 Stripe credit then allow
-        const paid = await countStripeCredits(stripeKey, email, googleSub);
-        if (paid < 1) {
-          const isPro = await checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email);
-          if (!isPro) return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
-        }
-        return res.status(200).json({ success: true, credits: paid });
-      }
-
-      const isPro    = await checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email);
-      const stamp    = getMonthStamp();
-      const monthKey = `scans:${key}:free_used_${stamp}`;
-      const freeUsed = await getKVInt(kvUrl, kvToken, monthKey);
-      const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
-      const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-
-      if (freeLeft > 0) {
-        await incrKV(kvUrl, kvToken, monthKey);
-        return res.status(200).json({ success: true, charged: false, credits: freeLeft - 1 + paid });
-      } else if (paid > 0) {
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - 1);
-        return res.status(200).json({ success: true, charged: false, usedPaid: true, credits: paid - 1 });
-      } else {
-        return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
-      }
-    }
-
-    // ── use_id: decrement an ID scan credit ──
-    if (action === 'use_id') {
-      if (!hasKV) return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
-      const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-      if (idPaid > 0) {
-        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
-        return res.status(200).json({ success: true, credits: idPaid - 1 });
-      }
-      return res.status(402).json({ success: false, needsPayment: true, credits: 0 });
-    }
-
     // ── verify_id_payment: Stripe session → grant ID scan credits ──
     if (action === 'verify_id_payment') {
       if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
@@ -161,6 +161,9 @@ export default async function handler(req, res) {
         const session = await r.json();
         if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
         if (session.metadata?.type !== 'id_scan') return res.status(400).json({ error: 'Not an ID scan payment' });
+        if (!sessionBelongsToUser(session)) {
+          return res.status(403).json({ error: 'This payment does not belong to you' });
+        }
         if (session.metadata?.credited === 'true') {
           const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
           return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
@@ -195,6 +198,9 @@ export default async function handler(req, res) {
         const session = await r.json();
         if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
         if (session.metadata?.type !== 'grade_scan') return res.status(400).json({ error: 'Not a grade scan payment' });
+        if (!sessionBelongsToUser(session)) {
+          return res.status(403).json({ error: 'This payment does not belong to you' });
+        }
         if (session.metadata?.credited === 'true') {
           const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
           return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
@@ -215,17 +221,6 @@ export default async function handler(req, res) {
       } catch(e) {
         return res.status(500).json({ error: 'Verification failed: ' + e.message });
       }
-    }
-
-    // ── add: grant credits (called by webhook) ──
-    if (action === 'add') {
-      const n = parseInt(amount) || 1;
-      if (hasKV) {
-        const current = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, current + n);
-        return res.status(200).json({ success: true, credits: current + n });
-      }
-      return res.status(200).json({ success: true, credits: n });
     }
 
     return res.status(400).json({ error: 'Unknown action' });

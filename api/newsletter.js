@@ -2,8 +2,8 @@
 // Stores newsletter subscriber emails in Upstash KV.
 // POST { email } → 200 subscribed | 409 already subscribed | 400 invalid
 
-const KV_URL   = 'https://patient-dragon-155704.upstash.io';
-const KV_TOKEN = 'gQAAAAAAAmA4AAIgcDIxZjgwYWU3ODEzOTM0NjdmYjlmZTNjZDE1MzExMjEwZQ';
+const KV_URL   = process.env.KV_REST_API_URL   || '';
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || '';
 
 async function kv(cmd, ...args) {
   const res = await fetch(`${KV_URL}/${[cmd, ...args].map(encodeURIComponent).join('/')}`, {
@@ -20,6 +20,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!KV_URL || !KV_TOKEN) return res.status(503).json({ error: 'Storage not configured' });
 
   let email = '';
   try {

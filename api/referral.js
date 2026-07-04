@@ -1,7 +1,12 @@
 // /api/referral — Dedicated referral endpoint
-// GET  ?action=code&sub=<googleSub>          → get or generate referral code for user
-// POST { action: 'claim', newUserSub, refCode } → claim a referral (called on first sign-in)
-// POST { action: 'stats', sub }               → get referral count + total credits earned
+// GET  ?action=code&sub=<googleSub>   → get or generate referral code for user (safe read-only)
+// POST { action: 'claim', refCode }   → claim a referral (called on first sign-in)
+//
+// AUTH: POST 'claim' REQUIRES a valid Firebase/Google ID token in Authorization header.
+// The newUserSub is derived from the verified token, NEVER from the body — this blocks
+// attackers from claiming referral rewards on someone else's account or grinding fake claims.
+
+import { verifyTokenFlexible } from './_verifyToken.js';
 
 const REFERRAL_REWARD = 5; // ID scan credits awarded to both parties
 
@@ -70,11 +75,24 @@ export default async function handler(req, res) {
 
   // ── POST ──
   if (req.method === 'POST') {
-    const { action, newUserSub, refCode } = req.body || {};
+    const { action, refCode } = req.body || {};
+
+    // ── AUTH REQUIRED: derive newUserSub from verified token, NEVER trust body ──
+    const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+    if (!idToken) return res.status(401).json({ error: 'Authorization token required' });
+
+    let newUserSub = '';
+    try {
+      const info = await verifyTokenFlexible(idToken);
+      newUserSub = info?.uid || '';
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    if (!newUserSub) return res.status(401).json({ error: 'Token missing uid' });
 
     // ── claim: new user redeems a referral code ──
     if (action === 'claim') {
-      if (!newUserSub || !refCode) return res.status(400).json({ error: 'newUserSub and refCode required' });
+      if (!refCode) return res.status(400).json({ error: 'refCode required' });
 
       const claimKey = `ref_claimed:${newUserSub}`;
       const alreadyClaimed = await getKVInt(kvUrl, kvToken, claimKey);

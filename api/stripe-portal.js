@@ -1,7 +1,12 @@
 // /api/stripe-portal — Open Stripe Customer Portal for subscription management
-// POST body: { email, userId }
-// Authorization: Bearer <google_id_token>
+// POST (no body needed)
+// Authorization: Bearer <Firebase/Google ID token>  (REQUIRED)
 // Returns: { url } — redirect user to this URL to manage/cancel subscription
+//
+// AUTH: email is derived from the verified token, NEVER from the body.
+// Prevents an attacker from opening someone else's Stripe billing portal.
+
+import { verifyTokenFlexible } from './_verifyToken.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,23 +15,18 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const body    = req.body || {};
+  // ── AUTH REQUIRED ──
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!idToken) return res.status(401).json({ error: 'Authorization token required' });
 
-  let userEmail = body.email || '';
-  let userSub   = body.userId || '';
-
-  // Verify token if present
-  if (idToken && idToken.length > 20) {
-    try {
-      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-      if (r.ok) {
-        const info = await r.json();
-        // Trust the verified sub regardless of email presence (legacy accounts).
-        if (info.sub)   userSub   = info.sub;
-        if (info.email) userEmail = info.email;
-      }
-    } catch(e) { /* fall through */ }
+  let userEmail = '';
+  let userSub   = '';
+  try {
+    const info = await verifyTokenFlexible(idToken);
+    userSub   = info?.uid   || '';
+    userEmail = info?.email || '';
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid token' });
   }
 
   if (!userEmail || !userEmail.includes('@')) {

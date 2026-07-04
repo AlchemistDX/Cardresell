@@ -5501,7 +5501,8 @@ async function exportSubscriberCSV() {
   if (window._userSub !== _OWNER_SUB) return;
   try {
     // Fetch all emails via admin endpoint with extended param
-    const res  = await fetch('/api/admin?sub=' + encodeURIComponent(window._userSub) + '&all=1');
+    const idTok = window._googleIdToken || '';
+    const res  = await fetch('/api/admin?all=1', { headers: { 'Authorization': 'Bearer ' + idTok } });
     const data = await res.json();
     if (!res.ok) { showToast('Could not load subscriber list.', 'error'); return; }
     const emails = data.allEmails || data.recentEmails || [];
@@ -5753,7 +5754,8 @@ async function loadAdminData() {
   if (btn) { btn.disabled = true; btn.textContent = '↻ Loading…'; }
 
   try {
-    const res  = await fetch('/api/admin?sub=' + encodeURIComponent(window._userSub));
+    const idTok = window._googleIdToken || '';
+    const res  = await fetch('/api/admin', { headers: { 'Authorization': 'Bearer ' + idTok } });
     const data = await res.json();
     if (!res.ok) { showToast('Admin API error: ' + (data.error || res.status), 'error'); return; }
 
@@ -7692,10 +7694,11 @@ function showToast(msg, duration) {
       }
       try {
         showToast('\u231b Confirming your credit…', 3000);
+        const idTok = window._googleIdToken || '';
         const r = await fetch('/api/scan-credits', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'verify_payment', sessionId, email, googleSub })
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idTok },
+          body: JSON.stringify({ action: 'verify_payment', sessionId })
         });
         const data = await r.json();
         if (data.success) {
@@ -7731,10 +7734,11 @@ function showToast(msg, duration) {
       }
       try {
         showToast('\u23f3 Confirming your ID Scanner Credits\u2026', 3000);
+        const idTok = window._googleIdToken || '';
         const r = await fetch('/api/scan-credits', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'verify_id_payment', sessionId, email, googleSub })
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idTok },
+          body: JSON.stringify({ action: 'verify_id_payment', sessionId })
         });
         const data = await r.json();
         if (data.success) {
@@ -7773,10 +7777,11 @@ function showToast(msg, duration) {
       }
       try {
         showToast('⏳ Confirming your Grade Scan Credits…', 3000);
+        const idTok = window._googleIdToken || '';
         const r = await fetch('/api/scan-credits', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'verify_grade_payment', sessionId, email, googleSub })
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idTok },
+          body: JSON.stringify({ action: 'verify_grade_payment', sessionId })
         });
         const data = await r.json();
         if (data.success) {

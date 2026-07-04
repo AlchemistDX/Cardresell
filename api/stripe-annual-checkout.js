@@ -1,6 +1,11 @@
 // /api/stripe-annual-checkout — Create Stripe checkout for annual Pro plan ($89.99/yr)
-// POST { googleSub, email }
+// POST (no body needed) with Authorization: Bearer <idToken>
 // Returns: { url } — redirect to Stripe checkout
+//
+// AUTH: uid + email are derived from the verified Firebase/Google ID token,
+// NEVER from the body — prevents identity spoofing on checkout metadata.
+
+import { verifyTokenFlexible } from './_verifyToken.js';
 
 const ANNUAL_PRICE_ID = 'price_1TosPSFW2YZoedIZ5e0abG3y'; // $89.99/yr
 
@@ -14,8 +19,20 @@ export default async function handler(req, res) {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
 
-  const { googleSub, email } = req.body || {};
-  if (!googleSub || !email) return res.status(400).json({ error: 'googleSub and email required' });
+  // ── AUTH REQUIRED: derive identity from verified token ──
+  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!idToken) return res.status(401).json({ error: 'Authorization token required' });
+
+  let googleSub = '';
+  let email = '';
+  try {
+    const info = await verifyTokenFlexible(idToken);
+    googleSub = info?.uid   || '';
+    email     = info?.email || '';
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  if (!googleSub || !email) return res.status(401).json({ error: 'Token missing uid or email' });
 
   const origin = req.headers.origin || 'https://www.cardresell.org';
 
