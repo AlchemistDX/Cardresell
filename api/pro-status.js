@@ -20,6 +20,7 @@ export default async function handler(req, res) {
   let userEmail = '';
   let emailVerified = false;
   let signInProvider = '';
+  let verifiedEmail = '';
   try {
     const tokenInfo = await verifyTokenFlexible(idToken);
     userSub        = tokenInfo.uid   || '';
@@ -80,7 +81,7 @@ export default async function handler(req, res) {
   }
 
   // 3. Get scan credits
-  let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0, isNewSignup = false;
+  let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0;
   if (kvUrl && kvToken) {
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
     idPaidLeft    = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_paid_left`);
@@ -90,35 +91,28 @@ export default async function handler(req, res) {
       freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
     }
 
-    // 4. Sign-up bonus — gift 10 ID credits + 1 Grader credit on first sign-in ever
-    //    ONLY granted when the email is verified. This blocks fake-email farming:
-    //    Google/Apple sign-in → emailVerified is true automatically.
-    //    Email/password sign-up → emailVerified is false until they click the link
-    //    in the verification email. Once verified, the bonus fires on next
-    //    /api/pro-status call (client reloads the user + refetches automatically).
-    const bonusKey   = `signup_bonus:${userSub}`;
-    const bonusGiven = await getKVInt(kvUrl, kvToken, bonusKey);
-    if (!bonusGiven && emailVerified) {
+    // 3b. Check KV email_verified:<uid> override — universal verify flow.
+    //     Bonus grant is handled EXCLUSIVELY by /api/verify-confirm (which enforces
+    //     both per-account and per-email one-time gates). This endpoint only READS
+    //     the verified state so the frontend can hide the verify banner.
+    if (!emailVerified) {
       try {
-        const newIdLeft   = idPaidLeft + 10;
-        const newPaidLeft = paidScansLeft + 1;
-        const kvSet = (key, val) => fetch(
-          `${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(val))}`,
-          { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
-        );
-        const [idRes, gradeRes] = await Promise.all([
-          kvSet(`scans:${userSub}:id_paid_left`, newIdLeft),
-          kvSet(`scans:${userSub}:paid_left`, newPaidLeft),
-        ]);
-        if (idRes.ok && gradeRes.ok) {
-          await kvSet(bonusKey, 1);
-          idPaidLeft    = newIdLeft;
-          paidScansLeft = newPaidLeft;
-          isNewSignup   = true;
-          console.log(`Sign-up bonus granted to ${userSub} (verified via ${signInProvider}): 10 ID + 1 Grade`);
-        }
-      } catch(e) { console.error('Sign-up bonus error:', e); }
+        const vr = await fetch(`${kvUrl}/get/${encodeURIComponent(`email_verified:${userSub}`)}`, {
+          headers: { Authorization: `Bearer ${kvToken}` },
+        });
+        const vd = await vr.json();
+        if (vd.result) emailVerified = true;
+      } catch(e) { /* non-fatal */ }
     }
+
+    // 3c. Expose which email address was verified (for "Change email" UI).
+    try {
+      const er = await fetch(`${kvUrl}/get/${encodeURIComponent(`verified_email:${userSub}`)}`, {
+        headers: { Authorization: `Bearer ${kvToken}` },
+      });
+      const ed = await er.json();
+      if (ed.result) verifiedEmail = String(ed.result).replace(/^"|"$/g, '');
+    } catch(e) { /* non-fatal */ }
   } else if (isPro) {
     freeScansLeft = FREE_SCANS_PER_MONTH;
   }
@@ -185,8 +179,8 @@ export default async function handler(req, res) {
     totalScansLeft: freeScansLeft + paidScansLeft,
     refCode,
     refRewarded,
-    isNewSignup,
     emailVerified,
+    verifiedEmail,
     signInProvider,
   });
 }

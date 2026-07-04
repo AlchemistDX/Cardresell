@@ -1116,6 +1116,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Grader Credits/mo</strong>. ID Scanner Credits never expire.</div>
   </div>
+  <!-- ── VERIFIED EMAIL ── -->
+  <div id="verifiedEmailSection" style="display:none;margin-top:.5rem">
+    <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
+    <div style="padding:.65rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.3rem">✉️ Verified email</div>
+      <div id="verifiedEmailValue" style="font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:.4rem;word-break:break-all">—</div>
+      <button onclick="openVerifyModal()" style="width:100%;padding:.4rem;background:transparent;color:var(--text);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">Change email</button>
+    </div>
+  </div>
+
   <!-- ── REFER A FRIEND ── -->
   <div id="referSection" style="display:none;margin-top:.5rem">
     <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
@@ -5942,9 +5952,8 @@ function _updateVerifyBanner() {
     banner.innerHTML =
       '<div style="display:flex;align-items:center;padding:.55rem .55rem .55rem .9rem;gap:.5rem">' +
         '<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;text-align:center">' +
-          '<span>⚠️ Verify your email to unlock <strong>10 ID scans + 1 AI Grade</strong> bonus</span>' +
-          '<button id="btnResendVerifyMain" onclick="resendVerifyEmail()" style="background:#000;color:#fff;border:none;border-radius:6px;padding:.35rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">Resend Email</button>' +
-          '<button id="btnCheckVerifiedMain" onclick="recheckVerified()" style="background:rgba(0,0,0,.15);color:#000;border:1.5px solid #000;border-radius:6px;padding:.32rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">I Verified</button>' +
+          '<span>⚠️ Verify any email to unlock <strong>10 ID scans + 1 AI Grade</strong> bonus</span>' +
+          '<button id="btnResendVerifyMain" onclick="openVerifyModal()" style="background:#000;color:#fff;border:none;border-radius:6px;padding:.35rem .8rem;font-weight:700;font-size:.75rem;cursor:pointer">Verify email</button>' +
         '</div>' +
         '<button id="btnDismissVerifyBanner" onclick="dismissVerifyBanner()" title="Dismiss" aria-label="Dismiss" style="flex-shrink:0;align-self:flex-start;background:rgba(0,0,0,.15);color:#000;border:1.5px solid rgba(0,0,0,.35);border-radius:6px;width:1.6rem;height:1.6rem;font-size:1rem;font-weight:800;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center">×</button>' +
       '</div>';
@@ -5958,132 +5967,208 @@ function dismissVerifyBanner() {
   if (b) b.remove();
 }
 
-async function resendVerifyEmail() {
-  const btn = document.getElementById('btnResendVerifyMain');
-  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+// ── Universal verify flow ────────────────────────────────────────────────
+// Works for every account, regardless of sign-in provider. User types any
+// email address, we send a 6-digit code via Resend, they enter it back.
+// Backend enforces one-per-account AND one-per-email bonus gates so the
+// same email can't be reused across throwaway accounts.
 
-  // Apple users are already trusted — defensive path in case they somehow reach here.
-  // Refresh the token so backend re-grants the bonus without sending an email.
-  const gu = window.googleUser;
-  if (gu && Array.isArray(gu.providers) && gu.providers.includes('apple.com')) {
-    try {
-      if (window._fbCurrentUser) {
-        await window._fbCurrentUser.reload();
-        const fresh = await window._fbCurrentUser.getIdToken(true);
-        window._googleIdToken = fresh;
-      }
-      if (window.googleUser) window.googleUser.emailVerified = true;
-      window._emailVerified = true;
-      try { checkProStatus?.(); } catch(e) {}
-      const b = document.getElementById('emailVerifyBanner'); if (b) b.remove();
-      showToast('Verified via Apple — bonus unlocked', 'gold');
-    } catch(e) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
-      alert('Could not refresh sign-in. Try signing out and back in.');
-    }
-    return;
-  }
-
-  // Detect broken legacy state up front: Firebase's sendEmailVerification reads
-  // auth.currentUser.email directly; if that's null, it throws auth/missing-email
-  // regardless of what we pass. First try a token reload — Firebase occasionally
-  // re-populates user.email from the Google token on refresh.
-  const u = window._fbCurrentUser;
-  if (u && !u.email) {
-    try { await u.reload(); } catch(e) {}
-    try { await u.getIdToken(true); } catch(e) {}
-  }
-  const topLevelEmail = u && u.email;
-  const providerEmail = u && Array.isArray(u.providerData)
-    ? (u.providerData.find(p => p?.email)?.email || '')
-    : '';
-  if (!topLevelEmail && !providerEmail) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
-    _showReauthPrompt('This account is missing an email on file. Sign out and sign back in with Google to fix it — you\'ll get your bonus right after.');
-    return;
-  }
-  if (!topLevelEmail && providerEmail) {
-    // Firebase SDK will still throw missing-email in this state; be honest and route
-    // the user to a re-auth flow that will populate user.email properly.
-    if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
-    _showReauthPrompt('Your Google sign-in didn\'t attach an email to this account (a known legacy Firebase quirk). Sign out and sign back in with Google — the fresh session will fix it, and you\'ll get your bonus.');
-    return;
-  }
-
-  try {
-    await window._fbSendVerification();
-    if (btn) { btn.textContent = 'Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Email'; }, 5000); }
-    showToast('Verification email sent to ' + topLevelEmail, 'gold');
-  } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
-    const code = e?.code || e?.message || '';
-    if (code.includes('missing-email')) {
-      _showReauthPrompt('Sign out and sign back in with Google to refresh your account — you\'ll get the bonus right after.');
-    } else if (code.includes('too-many-requests')) {
-      alert('Too many requests — wait a minute and try again.');
-    } else {
-      alert('Could not send verification email: ' + (e?.message || 'unknown error'));
-    }
+function _updateVerifiedEmailPanel() {
+  const sec = document.getElementById('verifiedEmailSection');
+  const val = document.getElementById('verifiedEmailValue');
+  if (!sec || !val) return;
+  const verified = window._emailVerified || (window.googleUser && window.googleUser.emailVerified);
+  const email = window._verifiedEmail || (window.googleUser && window.googleUser.email) || '';
+  if (verified && email) {
+    sec.style.display = '';
+    val.textContent = email;
+  } else {
+    sec.style.display = 'none';
   }
 }
 
-// Custom modal that offers a one-tap Sign Out + Sign In flow for accounts with missing email.
-function _showReauthPrompt(msg) {
-  // Remove any existing prompt
-  const existing = document.getElementById('reauthPromptModal');
+function openVerifyModal(prefillEmail) {
+  // Remove any existing modal first
+  const existing = document.getElementById('verifyEmailModal');
   if (existing) existing.remove();
+
+  const defaultEmail = prefillEmail
+    || (window.googleUser && window.googleUser.email)
+    || (window._verifiedEmail || '');
+
   const overlay = document.createElement('div');
-  overlay.id = 'reauthPromptModal';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.id = 'verifyEmailModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:1rem';
   overlay.innerHTML =
-    '<div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;max-width:22rem;width:100%;padding:1.25rem;color:#fff;font-size:.9rem;line-height:1.4">' +
-      '<div style="font-weight:700;font-size:1rem;margin-bottom:.6rem">Quick fix needed</div>' +
-      '<div style="margin-bottom:1rem;color:#ccc">' + msg + '</div>' +
-      '<div style="display:flex;gap:.5rem;justify-content:flex-end">' +
-        '<button onclick="document.getElementById(\'reauthPromptModal\').remove()" style="background:transparent;color:#aaa;border:1px solid #444;border-radius:6px;padding:.5rem .9rem;font-weight:600;cursor:pointer">Not now</button>' +
-        '<button onclick="_reauthNow()" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:.5rem .9rem;font-weight:700;cursor:pointer">Sign out &amp; back in</button>' +
+    '<div style="background:#1a1a1a;border:1px solid #333;border-radius:14px;max-width:22rem;width:100%;padding:1.35rem;color:#fff;font-size:.9rem;line-height:1.45;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+      '<div style="font-weight:800;font-size:1.05rem;margin-bottom:.35rem">Verify your email</div>' +
+      '<div id="verifyModalSubtitle" style="color:#bbb;font-size:.78rem;margin-bottom:.9rem">' +
+        'Enter any email you own — we\u2019ll send a 6-digit code. Unlocks <strong style="color:#f59e0b">10 ID scans + 1 AI Grade</strong>.' +
+      '</div>' +
+
+      // Step 1 — email input
+      '<div id="verifyStepEmail">' +
+        '<input id="verifyEmailInput" type="email" autocomplete="email" inputmode="email" placeholder="your@email.com" value="' + (defaultEmail || '').replace(/"/g, '&quot;') + '" ' +
+          'style="width:100%;padding:.6rem .7rem;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:#fff;font-size:.95rem;outline:none;margin-bottom:.75rem" />' +
+        '<div id="verifyEmailErr" style="display:none;color:#f87171;font-size:.72rem;margin-bottom:.55rem"></div>' +
+        '<button id="verifySendBtn" onclick="_verifySendCode()" style="width:100%;background:#f59e0b;color:#000;border:none;border-radius:8px;padding:.65rem;font-weight:800;font-size:.9rem;cursor:pointer">Send code</button>' +
+      '</div>' +
+
+      // Step 2 — code entry (hidden until send succeeds)
+      '<div id="verifyStepCode" style="display:none">' +
+        '<div id="verifyCodeSentTo" style="font-size:.75rem;color:#9ae6b4;margin-bottom:.55rem"></div>' +
+        '<input id="verifyCodeInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="123456" ' +
+          'style="width:100%;padding:.65rem;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:#fff;font-size:1.4rem;letter-spacing:.35em;text-align:center;font-weight:700;outline:none;margin-bottom:.6rem" />' +
+        '<div id="verifyCodeErr" style="display:none;color:#f87171;font-size:.72rem;margin-bottom:.55rem"></div>' +
+        '<button id="verifyConfirmBtn" onclick="_verifyConfirmCode()" style="width:100%;background:#f59e0b;color:#000;border:none;border-radius:8px;padding:.65rem;font-weight:800;font-size:.9rem;cursor:pointer;margin-bottom:.4rem">Verify</button>' +
+        '<button id="verifyResendBtn" onclick="_verifyBackToEmail()" style="width:100%;background:transparent;color:#aaa;border:1px solid #333;border-radius:8px;padding:.5rem;font-weight:600;font-size:.78rem;cursor:pointer">Use a different email / resend</button>' +
+      '</div>' +
+
+      '<div style="margin-top:.75rem;text-align:right">' +
+        '<button onclick="document.getElementById(\'verifyEmailModal\').remove()" style="background:transparent;color:#888;border:none;font-size:.75rem;cursor:pointer;padding:.3rem .5rem">Close</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(overlay);
+
+  // Autofocus + Enter key handling
+  setTimeout(() => {
+    const inp = document.getElementById('verifyEmailInput');
+    if (inp) {
+      inp.focus();
+      inp.select();
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); _verifySendCode(); } });
+    }
+  }, 50);
 }
 
-async function _reauthNow() {
-  const modal = document.getElementById('reauthPromptModal');
-  if (modal) modal.remove();
+function _verifyBackToEmail() {
+  document.getElementById('verifyStepCode').style.display = 'none';
+  document.getElementById('verifyStepEmail').style.display = '';
+  const inp = document.getElementById('verifyEmailInput');
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+async function _verifySendCode() {
+  const inp = document.getElementById('verifyEmailInput');
+  const err = document.getElementById('verifyEmailErr');
+  const btn = document.getElementById('verifySendBtn');
+  const email = (inp?.value || '').trim().toLowerCase();
+  err.style.display = 'none';
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    err.textContent = 'Enter a valid email address.';
+    err.style.display = '';
+    return;
+  }
+
+  const tok = window._googleIdToken;
+  if (!tok) {
+    err.textContent = 'Not signed in. Refresh the page and try again.';
+    err.style.display = '';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending\u2026';
+
   try {
-    // Sign out (Firebase onAuthStateChanged NULL branch clears storage + banner state)
-    if (typeof signOut === 'function') { signOut(); }
-    else if (window._fbAuth && typeof window._fbAuth.signOut === 'function') { await window._fbAuth.signOut(); }
-    // Give Firebase a beat to fire the NULL state, then re-launch Google popup.
-    setTimeout(() => {
-      try {
-        const btn = document.getElementById('googleSignInBtn');
-        if (btn) btn.click();
-      } catch(e) {}
-    }, 400);
+    const resp = await fetch('/api/verify-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ email }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      err.textContent = data.error || ('Could not send code (' + resp.status + ')');
+      err.style.display = '';
+      btn.disabled = false;
+      btn.textContent = 'Send code';
+      return;
+    }
+
+    // Move to step 2
+    window._verifyPendingEmail = email;
+    document.getElementById('verifyStepEmail').style.display = 'none';
+    document.getElementById('verifyStepCode').style.display = '';
+    document.getElementById('verifyCodeSentTo').textContent = '\u2709\ufe0f Code sent to ' + email + '. Check your inbox (and spam).';
+    const cInp = document.getElementById('verifyCodeInput');
+    if (cInp) {
+      cInp.value = '';
+      setTimeout(() => cInp.focus(), 50);
+      cInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); _verifyConfirmCode(); } });
+    }
+    btn.disabled = false;
+    btn.textContent = 'Send code';
   } catch(e) {
-    alert('Could not sign out automatically. Tap the avatar in the top bar to sign out, then sign in with Google again.');
+    err.textContent = 'Network error. Try again.';
+    err.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Send code';
   }
 }
 
-async function recheckVerified() {
-  const btn = document.getElementById('btnCheckVerifiedMain');
-  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+async function _verifyConfirmCode() {
+  const inp = document.getElementById('verifyCodeInput');
+  const err = document.getElementById('verifyCodeErr');
+  const btn = document.getElementById('verifyConfirmBtn');
+  const code = (inp?.value || '').trim().replace(/\D/g, '');
+  err.style.display = 'none';
+
+  if (code.length !== 6) {
+    err.textContent = 'Enter the 6-digit code from the email.';
+    err.style.display = '';
+    return;
+  }
+  const email = window._verifyPendingEmail;
+  const tok = window._googleIdToken;
+  if (!email || !tok) {
+    err.textContent = 'Session expired. Close and try again.';
+    err.style.display = '';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying\u2026';
+
   try {
-    await window._fbReloadUser();
-    const u = window._fbAuth?.currentUser;
-    if (u && u.emailVerified) {
-      window._emailVerified = true;
-      if (window.googleUser) window.googleUser.emailVerified = true;
-      try { const fresh = await u.getIdToken(true); window._googleIdToken = fresh; } catch(e) {}
-      clearInterval(window._verifyPollInterval);
-      try { checkProStatus?.(); } catch(e) {}
-      applyGoogleUser();
+    const resp = await fetch('/api/verify-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ email, code }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      err.textContent = data.error || ('Could not verify code (' + resp.status + ')');
+      err.style.display = '';
+      btn.disabled = false;
+      btn.textContent = 'Verify';
       return;
     }
-    if (btn) { btn.textContent = 'Not yet — retry'; setTimeout(() => { btn.disabled = false; btn.textContent = 'I Verified'; }, 2500); }
+
+    // Success — update client state and close modal
+    if (window.googleUser) window.googleUser.emailVerified = true;
+    window._emailVerified = true;
+    window._verifiedEmail = email;
+    try { const vBadge = document.getElementById('verifiedBadge'); if (vBadge) vBadge.style.display = 'inline-flex'; } catch(e) {}
+    const modal = document.getElementById('verifyEmailModal');
+    if (modal) modal.remove();
+    _updateVerifyBanner?.();
+    try { await checkProStatus?.(); } catch(e) {}
+    if (data.bonusGranted) {
+      showToast('\u2713 Verified — 10 ID scans + 1 AI Grade unlocked', 'gold');
+    } else {
+      const reason = data.bonusReason === 'email-already-claimed'
+        ? 'This email was already used for a bonus on another account'
+        : (data.bonusReason === 'already-granted-to-user'
+            ? 'Bonus already claimed on this account'
+            : 'Email verified');
+      showToast('\u2713 ' + reason, 'gold');
+    }
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'I Verified'; }
+    err.textContent = 'Network error. Try again.';
+    err.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Verify';
   }
 }
 
@@ -7190,6 +7275,11 @@ async function checkProStatus() {
         _updateVerifyBanner?.();
       }
     }
+    // Store which email is currently verified (for settings "Change email" UI)
+    if (typeof d.verifiedEmail === 'string') {
+      window._verifiedEmail = d.verifiedEmail;
+    }
+    try { _updateVerifiedEmailPanel?.(); } catch(e) {}
     // Store referral code and show reward toast if applicable
     if (d.refCode) {
       window._userRefCode = d.refCode;
