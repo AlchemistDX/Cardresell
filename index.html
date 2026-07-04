@@ -4989,7 +4989,10 @@ function switchView(view) {
     renderFlipsView();
   } else if (view === 'collection') {
     if (lookup)     lookup.classList.add('hidden');
-    if (collection) collection.style.display = '';
+    // MUST use display:block (not '') — CSS rule `.flips-view{display:none}` would
+    // otherwise re-hide the view. That single rule caused the Collection tab to
+    // render as a completely blank area (wall hidden, content hidden by CSS default).
+    if (collection) collection.style.display = 'block';
     renderCollectionView();
   } else if (view === 'admin') {
     // Extra guard: only inject & show admin UI after confirming owner sub server-side.
@@ -5542,7 +5545,9 @@ function renderCollectionView() {
       const retry = () => {
         window._collectionAuthRetry = false;
         const colView = document.getElementById('collectionView');
-        if (colView && colView.style.display !== 'none') renderCollectionView();
+        if (!colView) return;
+        const computed = window.getComputedStyle ? window.getComputedStyle(colView).display : colView.style.display;
+        if (computed !== 'none') renderCollectionView();
       };
       // Poll for auth resolution — up to 6s total
       let elapsed = 0;
@@ -5719,10 +5724,14 @@ async function refreshSingleCardPrice(id) {
 // ── Also re-render collection if active when port data changes ──
 // force=true bypasses the visibility check — use after sign-in completes so the
 // wall→content transition triggers a fresh render even if user is on another tab.
+// Uses getComputedStyle so a CSS rule (e.g. .flips-view{display:none}) is respected,
+// not just the inline style.
 function _maybeRerenderCollection(force) {
   const colView = document.getElementById('collectionView');
   if (!colView) return;
-  if (force || colView.style.display !== 'none') renderCollectionView();
+  if (force) { renderCollectionView(); return; }
+  const computed = window.getComputedStyle ? window.getComputedStyle(colView).display : colView.style.display;
+  if (computed !== 'none') renderCollectionView();
 }
 
 // ══════════════════════════════════════════════════════════
