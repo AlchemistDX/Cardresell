@@ -5140,9 +5140,10 @@ function saveFlipEntry() {
   document.getElementById('flipModal').classList.remove('open');
   clearModal();
   renderFlipsView();
-  // If the Collection view is currently open, refresh it so newly added
-  // cards appear immediately instead of only on the next tab switch.
-  _maybeRerenderCollection();
+  // Force-rerender the Collection view regardless of whether it's visible — covers
+  // the case where the user added from the Collection tab itself but the tab was
+  // display:'' rather than display:'block' (falsy check would still skip).
+  _maybeRerenderCollection(true);
 }
 
 /* ═══════════════════════════════════════
@@ -5520,7 +5521,9 @@ async function exportSubscriberCSV() {
 function _updateCollectionSignInWall() {
   const wall    = document.getElementById('collectionSignInWall');
   const content = document.getElementById('collectionContent');
-  const signedIn = !!window._userSub;
+  // Accept BOTH signals — googleUser (set atomically by Firebase) OR _userSub.
+  // This matches getUserKey()'s check so wall visibility and data reads stay in sync.
+  const signedIn = !!(window.googleUser && window.googleUser.sub) || !!window._userSub;
   if (wall)    wall.style.display    = signedIn ? 'none' : '';
   if (content) content.style.display = signedIn ? ''     : 'none';
 }
@@ -8823,12 +8826,15 @@ function _bulkUpdateRow(rowId, result) {
     const cond = result.condition || 'NM';
 
     row.innerHTML = `
-      <div style="position:relative;flex-shrink:0">
+      <div onclick="bulkOpenCardInLookup('${rowId}')" title="Tap to view details" style="position:relative;flex-shrink:0;cursor:pointer">
         <img src="${_esc(thumbSrc)}" onerror="this.src='${_esc(result.objectUrl || '')}'" style="width:44px;height:60px;object-fit:cover;border-radius:6px;background:#1a1a1a" alt="Card" />
         ${qtyBadge}
       </div>
       <div style="flex:1;min-width:0">
-        <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25)">${_esc(result.cardName)}</div>
+        <div style="display:flex;align-items:center;gap:.4rem">
+          <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25);flex:1;min-width:0">${_esc(result.cardName)}</div>
+          <button onclick="bulkOpenCardInLookup('${rowId}')" title="View details & eBay comps" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.4);color:rgba(196,181,253,1);border-radius:6px;padding:.15rem .4rem;font-size:.62rem;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1">🔍</button>
+        </div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(setStr)}</div>
         <div style="margin-top:.2rem;font-size:.78rem">${priceHtml}</div>
         <button onclick="bulkOpenConditionPicker('${rowId}')" style="margin-top:.3rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:99px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;cursor:pointer">${_esc(cond)} ▾</button>
@@ -9071,12 +9077,43 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     }
   });
   savePortData(port);
-  _maybeRerenderCollection();
+  // Verify the write landed — if getUserKey returned an unscoped key (googleUser was
+  // briefly null during the write), the data is orphaned and Collection won't show it.
+  try {
+    const verifyKey = getUserKey('portfolio');
+    const verified  = JSON.parse(localStorage.getItem(verifyKey) || '[]');
+    if (!Array.isArray(verified) || verified.length < port.length) {
+      console.warn('Portfolio write verification failed:', verifyKey, 'expected', port.length, 'got', verified.length);
+      showToast('Save issue detected — tap Refresh to retry.', 'info');
+    }
+  } catch(e) { /* non-fatal */ }
+  _maybeRerenderCollection(true);
   showToast(added + ' card' + (added!==1?'s':'') + ' added to your Collection 📦', 'success');
 
   window._bulkSaved = true;
   _bulkShowSection('processing');
   _bulkShowPostSaveBar(added);
+}
+
+// Tap a bulk-scan row to open that card in the main Card Lookup view.
+// Closes the bulk overlay, switches to Lookup, and runs a search for the card name +
+// number so the user can see eBay comps, grading info, and full pricing detail.
+function bulkOpenCardInLookup(rowId) {
+  const r = _bulkFindResult(rowId);
+  if (!r || !r.success) { showToast('Card not identified yet.'); return; }
+  try { closeBulkScan(); } catch(e) {}
+  try { switchView('lookup'); } catch(e) {}
+  const query = [r.cardName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' ').trim();
+  const si = document.getElementById('searchInput');
+  if (si && query) {
+    si.value = query;
+    // Fire the debounced search programmatically
+    si.dispatchEvent(new Event('input', { bubbles: true }));
+    // Also open the full-screen search modal so the user sees results immediately on mobile
+    setTimeout(() => {
+      try { if (typeof openSearchModal === 'function') openSearchModal(); } catch(e) {}
+    }, 250);
+  }
 }
 
 function _bulkResetBottomBarButtons() {
