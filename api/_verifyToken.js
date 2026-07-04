@@ -6,21 +6,34 @@
 const FIREBASE_PROJECT_ID = 'cardresell-e0329';
 const GOOGLE_OAUTH_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
 
-// Cache Google public keys (they rotate every 6hrs, cache for 5hrs)
+// Cache Google public keys (they rotate every 6hrs, cache for 5hrs).
+// We use the JWKS endpoint so we get raw JWKs — that lets crypto.subtle.importKey
+// consume them directly with format 'jwk', avoiding X.509/SPKI parsing pitfalls.
 let _cachedKeys = null;
 let _cacheExpiry = 0;
 
 async function getGooglePublicKeys() {
   if (_cachedKeys && Date.now() < _cacheExpiry) return _cachedKeys;
-  const r = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+  const r = await fetch('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
   if (!r.ok) throw new Error('Failed to fetch Google public keys');
-  _cachedKeys = await r.json();
+  const body = await r.json();
+  // Index the JWK array by kid for quick lookup.
+  const byKid = {};
+  for (const k of (body.keys || [])) {
+    if (k && k.kid) byKid[k.kid] = k;
+  }
+  _cachedKeys = byKid;
   _cacheExpiry = Date.now() + 5 * 60 * 60 * 1000;
   return _cachedKeys;
 }
 
 function base64urlToBuffer(str) {
-  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  // Restore standard base64 padding + charset from base64url before decoding.
+  let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4;
+  if (pad === 2) b64 += '==';
+  else if (pad === 3) b64 += '=';
+  else if (pad !== 0) throw new Error('Invalid base64url length');
   const bin = atob(b64);
   return Uint8Array.from(bin, c => c.charCodeAt(0));
 }
@@ -41,16 +54,14 @@ async function verifyFirebaseToken(idToken) {
   if (payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) throw new Error('Wrong issuer');
   if (!payload.sub || payload.sub.length === 0) throw new Error('Missing subject');
 
-  // Verify signature using Google's public keys
+  // Verify signature using Google's public keys (JWK format).
   const keys = await getGooglePublicKeys();
-  const certPem = keys[header.kid];
-  if (!certPem) throw new Error('Unknown key ID');
+  const jwk = keys[header.kid];
+  if (!jwk) throw new Error('Unknown key ID');
 
-  // Import the certificate and verify
-  const certBody = certPem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
-  const certDer  = base64urlToBuffer(certBody);
   const cryptoKey = await crypto.subtle.importKey(
-    'spki', certDer,
+    'jwk',
+    { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true },
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false, ['verify']
   );
