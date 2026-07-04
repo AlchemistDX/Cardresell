@@ -791,7 +791,33 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     // Expose to global scope for use in non-module scripts
     window._fbAuth = auth;
-    window._fbSendVerification = () => auth.currentUser && sendEmailVerification(auth.currentUser);
+    // Pass actionCodeSettings so Firebase's verification email includes a
+    // clickable link that redirects back to cardresell.org after the user
+    // taps it. Without this, the default action URL is a long
+    // firebaseapp.com/__/auth/action URL that lands on spam and looks sketchy.
+    // NOTE: cardresell.org (and www.cardresell.org) must be on Firebase Auth's
+    // Authorized Domains list for the redirect to work; if not, Firebase throws
+    // auth/unauthorized-continue-uri and we fall back to the default link.
+    window._fbSendVerification = async () => {
+      if (!auth.currentUser) return;
+      const actionCodeSettings = {
+        url: 'https://www.cardresell.org/?verified=1',
+        handleCodeInApp: false,
+      };
+      try {
+        await sendEmailVerification(auth.currentUser, actionCodeSettings);
+        return { ok: true, withReturn: true };
+      } catch (e) {
+        // Common cause: auth/unauthorized-continue-uri (domain not on allow-list).
+        // Fall back to default (still deliverable, just no return redirect).
+        try {
+          await sendEmailVerification(auth.currentUser);
+          return { ok: true, withReturn: false, warning: (e && e.code) || 'fallback' };
+        } catch (e2) {
+          return { ok: false, error: (e2 && e2.code) || 'send-failed' };
+        }
+      }
+    };
     window._fbReloadUser = () => auth.currentUser && auth.currentUser.reload();
     // If openAuthModal was called before Firebase was ready, open it now
     if (window._pendingAuthModal) {
@@ -914,6 +940,35 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         window._authResolved = true;
         window._authInitialized = true;
 
+        // If the user just came back from the Firebase verification link
+        // (?verified=1 was on the URL), force a token reload right now so
+        // the poll flips verified immediately and grants the bonus without
+        // making them wait for the next 5-second tick.
+        if (window._pendingVerifiedReturn && !effectiveVerified) {
+          window._pendingVerifiedReturn = false;
+          try {
+            await user.reload();
+            if (user.emailVerified) {
+              effectiveVerified = true;
+              window._emailVerified = true;
+              const fresh = await user.getIdToken(true);
+              window._googleIdToken = fresh;
+              try {
+                const r = await fetch('/api/verify-claim-firebase', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + fresh },
+                  body: JSON.stringify({}),
+                });
+                const d = await r.json().catch(() => ({}));
+                if (r.ok && d.ok && d.bonusGranted && typeof showToast === 'function') {
+                  showToast('\u2713 Verified \u2014 10 ID scans + 1 AI Grade unlocked', 'gold');
+                }
+              } catch(e) {}
+              try { document.getElementById('verifyEmailModal')?.remove(); } catch(e) {}
+            }
+          } catch(e) { /* fall through to poll */ }
+        }
+
         // If unverified, poll every 5s for up to 5 min (Firebase updates emailVerified
         // only after the user reloads the token). When it flips, refetch pro-status
         // so the signup bonus fires. Skip polling for Apple (already trusted).
@@ -930,11 +985,31 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
                 window._emailVerified = true;
                 if (window.googleUser) window.googleUser.emailVerified = true;
                 // Force fresh token so backend sees email_verified=true
+                let freshTok = null;
                 try {
-                  const fresh = await user.getIdToken(true);
-                  window._googleIdToken = fresh;
+                  freshTok = await user.getIdToken(true);
+                  window._googleIdToken = freshTok;
                 } catch(e) {}
-                // Refetch pro-status — this fires the signup bonus
+                // Claim the signup bonus via the Firebase-verified path.
+                // (checkProStatus alone doesn't grant the bonus — only
+                // verify-claim-firebase / verify-confirm do.)
+                try {
+                  if (freshTok) {
+                    const r = await fetch('/api/verify-claim-firebase', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + freshTok },
+                      body: JSON.stringify({}),
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (r.ok && d.ok && d.bonusGranted && typeof showToast === 'function') {
+                      showToast('\u2713 Verified \u2014 10 ID scans + 1 AI Grade unlocked', 'gold');
+                    }
+                  }
+                } catch(e) { /* non-fatal */ }
+                // Also close the verify modal if it's still open
+                try { document.getElementById('verifyEmailModal')?.remove(); } catch(e) {}
+                try { _updateVerifyBanner?.(); } catch(e) {}
+                // Refetch pro-status — refreshes credit UI
                 try { checkProStatus?.(); } catch(e) {}
                 try { applyGoogleUser?.(); } catch(e) {}
               }
@@ -2266,6 +2341,36 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
 </div>
 
+<!-- ── Collection Card Detail modal ── -->
+<!-- Opened by tapping any row in the Collection tab. Shows the card the same
+     way the scan-result screen does: image, name/set/number, price panel,
+     Sell / Look-Up / Refresh / Remove actions. Filled by openCollectionCardDetail(id). -->
+<div class="modal-overlay" id="collectionCardModal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:9999">
+  <div class="modal-box" style="max-width:400px;padding:1.1rem;text-align:left">
+    <div style="display:flex;align-items:flex-start;gap:.9rem;margin-bottom:.9rem">
+      <div id="ccmImgWrap" style="width:96px;height:134px;flex:0 0 96px;border-radius:10px;background:#111;border:1px solid #1f1f1f;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:2rem;color:#555">🃏</div>
+      <div style="flex:1;min-width:0">
+        <div id="ccmName" style="font-weight:900;font-size:1.05rem;line-height:1.15;margin-bottom:.15rem;word-break:break-word">—</div>
+        <div id="ccmSet" style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">—</div>
+        <div id="ccmValue" style="font-size:1.15rem;font-weight:800;color:var(--gold);line-height:1.1">$—</div>
+        <div id="ccmPnL" style="font-size:.72rem;margin-top:.15rem;color:#aaa">—</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
+      <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 Sell on eBay</a>
+      <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#1f1f1f;border:1px solid #333;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🔎 TCGPlayer</a>
+    </div>
+
+    <button id="ccmRefreshBtn" type="button" onclick="_ccmRefreshPrice()" style="width:100%;padding:.65rem;background:transparent;border:1px solid #333;border-radius:10px;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:.5rem">↻ Refresh current price</button>
+
+    <div style="display:flex;gap:.4rem">
+      <button type="button" onclick="document.getElementById('collectionCardModal').classList.remove('open')" style="flex:1;padding:.6rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.8rem;font-weight:700;cursor:pointer">Close</button>
+      <button id="ccmRemoveBtn" type="button" onclick="_ccmRemoveCard()" style="padding:.6rem 1rem;background:transparent;border:1px solid #4a1a1a;border-radius:10px;color:#f87171;font-size:.8rem;font-weight:700;cursor:pointer">Remove</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /wrap -->
 
 <script>
@@ -2277,6 +2382,17 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
   const p = new URLSearchParams(window.location.search);
   const ref = p.get('ref');
   if (ref) window._pendingRefCode = ref.slice(0, 16);
+  // If arriving from the Firebase verification link (?verified=1), strip the
+  // param so it doesn't stick in the URL bar, and set a flag so the auth-init
+  // handler knows to reload the user token and claim the bonus.
+  if (p.get('verified') === '1') {
+    window._pendingVerifiedReturn = true;
+    try {
+      p.delete('verified');
+      const clean = window.location.pathname + (p.toString() ? '?' + p.toString() : '') + window.location.hash;
+      window.history.replaceState({}, '', clean);
+    } catch(e) {}
+  }
 })();
 window.CARDSELL_TCGP_AFFID = '';
 window.CARDSELL_SCANNER_KEY = '';
@@ -5766,7 +5882,11 @@ function renderCollectionView() {
           const sellCell = ebayUrl && ebayUrl !== '#'
             ? `<a href="${ebayUrl}" target="_blank" rel="noopener" title="Sell ${esc2(p.card)} on eBay" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:#e53935;color:#fff;border-radius:8px;font-size:.7rem;font-weight:700;text-decoration:none;white-space:nowrap">🛍 Sell</a>`
             : '';
-          return `<tr>
+          // The whole row (except the action buttons) is a tap target that
+          // opens the card-detail modal — addresses "lack of at least a link
+          // to the card saved in your collection". Buttons inside the row
+          // stopPropagation so refresh/remove don't also fire the modal.
+          return `<tr class="col-row" onclick="openCollectionCardDetail(${p.id})" style="cursor:pointer">
             <td>${thumbCell}</td>
             <td><div class="ft-card" title="${esc2(p.card)}">${esc2(p.card)}</div></td>
             <td style="font-size:.72rem;color:var(--text-muted)">${esc2(p.set||'—')}</td>
@@ -5774,10 +5894,10 @@ function renderCollectionView() {
             <td class="ft-mono" style="color:var(--gold)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
-            <td>${sellCell}</td>
-            <td><div style="display:flex;gap:.3rem;align-items:center">
-              <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
-              <button class="ft-delete" onclick="deletePortEntry(${p.id})" title="Remove">✕</button>
+            <td onclick="event.stopPropagation()">${sellCell}</td>
+            <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">
+              <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="event.stopPropagation();refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
+              <button class="ft-delete" onclick="event.stopPropagation();deletePortEntry(${p.id})" title="Remove">✕</button>
             </div></td>
           </tr>`;
         }).join('')}</tbody>
@@ -5866,6 +5986,112 @@ async function refreshSingleCardPrice(id) {
     showToast('Network error — try again.', 'info');
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
   }
+}
+
+// ── Collection card-detail modal ──
+// Tapping any Collection row opens this modal. Shows the card the same way
+// the just-scanned view does: image, name/set/number, current market price,
+// Sell on eBay + TCGPlayer look-up buttons, Refresh price, Remove.
+
+window._ccmCurrentId = null;
+
+function openCollectionCardDetail(entryId) {
+  const port = loadPortData();
+  const p = port.find(x => x.id === entryId);
+  if (!p) return;
+  window._ccmCurrentId = entryId;
+
+  const imgUrl = p.img || p.imageUrl || '';
+  const wrap = document.getElementById('ccmImgWrap');
+  if (wrap) {
+    if (imgUrl) {
+      wrap.innerHTML = `<img src="${imgUrl.replace(/"/g,'&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+    } else {
+      wrap.textContent = '🃏';
+    }
+  }
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setEl('ccmName', p.card || 'Unknown card');
+  setEl('ccmSet', p.set || '—');
+
+  const cur = p.currentValue ?? p.buyPrice ?? 0;
+  const buy = p.buyPrice || 0;
+  const gain = cur - buy;
+  const gainPct = buy > 0 ? (gain / buy * 100) : 0;
+  setEl('ccmValue', '$' + cur.toFixed(2));
+  const pnl = document.getElementById('ccmPnL');
+  if (pnl) {
+    if (buy > 0) {
+      const color = gain >= 0 ? '#4ade80' : '#f87171';
+      pnl.innerHTML = `<span style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)} (${gainPct>=0?'+':''}${gainPct.toFixed(1)}%)</span> <span style="opacity:.6">from $${buy.toFixed(2)} cost</span>`;
+    } else {
+      pnl.innerHTML = '<span style="opacity:.6">No cost basis logged</span>';
+    }
+  }
+
+  // Build the eBay Sell link using the same helper as the row button.
+  const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
+  const num = (p.number || numFromSet || '').replace(/^0+/, '');
+  const parts = [p.card || '', num].filter(Boolean).join(' ');
+  const ebayRaw = parts
+    ? `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(parts)}&_sacat=212&LH_Sold=1&LH_Complete=1`
+    : 'https://www.ebay.com/';
+  const ebayUrl = (typeof buildEbayUrl === 'function') ? buildEbayUrl(ebayRaw) : ebayRaw;
+  const sellBtn = document.getElementById('ccmSellBtn');
+  if (sellBtn) sellBtn.href = ebayUrl;
+
+  // TCGPlayer look-up link.
+  const tcgUrl = (typeof buildTcgpUrl === 'function')
+    ? buildTcgpUrl(p.card || '', p.set || '')
+    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(parts)}&view=grid`;
+  const lookupBtn = document.getElementById('ccmLookupBtn');
+  if (lookupBtn) lookupBtn.href = tcgUrl;
+
+  document.getElementById('collectionCardModal').classList.add('open');
+}
+
+async function _ccmRefreshPrice() {
+  if (!window._ccmCurrentId) return;
+  const btn = document.getElementById('ccmRefreshBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing\u2026'; }
+  try {
+    // Reuse the existing per-row refresher; it updates port data + re-renders.
+    if (typeof refreshSingleCardPrice === 'function') {
+      await refreshSingleCardPrice(window._ccmCurrentId);
+    }
+    // Reopen with fresh data.
+    openCollectionCardDetail(window._ccmCurrentId);
+  } catch(e) {
+    showToast('Could not refresh price', 'info');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '\u21bb Refresh current price'; }
+  }
+}
+
+function _ccmRemoveCard() {
+  if (!window._ccmCurrentId) return;
+  if (!confirm('Remove this card from your collection?')) return;
+  if (typeof deletePortEntry === 'function') {
+    deletePortEntry(window._ccmCurrentId);
+  } else {
+    // Fallback if deletePortEntry isn't defined — handle inline.
+    const port = loadPortData().filter(x => x.id !== window._ccmCurrentId);
+    savePortData(port);
+    renderCollectionView();
+  }
+  window._ccmCurrentId = null;
+  document.getElementById('collectionCardModal').classList.remove('open');
+}
+
+// Long-missing: the ✕ button in each collection row referenced this function
+// but it was never defined — clicks were silent no-ops. Define it now.
+function deletePortEntry(entryId) {
+  const port = loadPortData();
+  const next = port.filter(x => x.id !== entryId);
+  if (next.length === port.length) return;
+  savePortData(next);
+  renderCollectionView();
+  if (typeof showToast === 'function') showToast('Card removed from collection');
 }
 
 // ── Also re-render collection if active when port data changes ──
