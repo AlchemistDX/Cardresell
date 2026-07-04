@@ -7238,9 +7238,59 @@ function getUserKey(suffix) {
 
 // Example card auto-load removed — app opens on clean homepage
 
+// ── One-time migration of pre-auth (anonymous) localStorage data ──
+// Prior to the auth/JWKS fix (Jul 2026), cards saved before sign-in landed in the
+// unscoped keys `cardsell_portfolio` / `cardsell_flips`. Once sign-in works and
+// `getUserKey` starts prefixing with the uid, those cards would vanish from the UI
+// unless we merge them into the user-scoped keys. Runs once per uid.
+function _migrateAnonDataToUser() {
+  try {
+    if (!window.googleUser || !window.googleUser.sub) return;
+    const uid = window.googleUser.sub;
+    const flagKey = 'cardsell_migrated_' + uid;
+    if (localStorage.getItem(flagKey)) return;
+
+    const pairs = [
+      { anon: 'cardsell_portfolio', user: 'cardsell_' + uid + '_portfolio' },
+      { anon: 'cardsell_flips',     user: 'cardsell_' + uid + '_flips'     }
+    ];
+    let migrated = 0;
+    pairs.forEach(({ anon, user }) => {
+      const anonRaw = localStorage.getItem(anon);
+      if (!anonRaw) return;
+      let anonArr = [];
+      try { anonArr = JSON.parse(anonRaw) || []; } catch(e) { return; }
+      if (!Array.isArray(anonArr) || !anonArr.length) return;
+
+      let userArr = [];
+      try { userArr = JSON.parse(localStorage.getItem(user) || '[]') || []; } catch(e) {}
+      if (!Array.isArray(userArr)) userArr = [];
+
+      // Merge, de-duping by id when possible
+      const seen = new Set(userArr.map(x => x && x.id).filter(Boolean));
+      anonArr.forEach(x => { if (x && (!x.id || !seen.has(x.id))) userArr.push(x); });
+
+      try {
+        localStorage.setItem(user, JSON.stringify(userArr));
+        localStorage.removeItem(anon); // prevent leaking into a different account later
+        migrated += anonArr.length;
+      } catch(e) {}
+    });
+
+    try { localStorage.setItem(flagKey, '1'); } catch(e) {}
+    if (migrated > 0) {
+      try { showToast(migrated + ' saved card' + (migrated !== 1 ? 's' : '') + ' restored to your collection 📦', 'success'); } catch(e) {}
+    }
+  } catch(e) { /* non-fatal */ }
+}
+
 function loadUserData() {
+  // Migrate any pre-sign-in data into the user-scoped keys first
+  _migrateAnonDataToUser();
   // Reload flips view if it's active so it shows the signed-in user's data
   if (document.getElementById('flipsView')?.classList.contains('active')) renderFlipsView();
+  // Also re-render collection if it's the active view — cards may have just been migrated in
+  _maybeRerenderCollection();
 }
 
 // Override storage helpers to be user-scoped when signed in
