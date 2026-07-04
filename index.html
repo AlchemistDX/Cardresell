@@ -5228,7 +5228,21 @@ function saveFlipEntry() {
     // Carry estimated grade if set/notes contains "Est." pattern
     const estGradeMatch = setName.match(/PSA\s*(\d+)\s*Est/i);
     const estGrade = estGradeMatch ? parseInt(estGradeMatch[1]) : null;
-    port.push({ id: Date.now(), card: cardName, set: setName, buyPrice, currentValue: curVal, addedDate: date, estGrade });
+    // Capture card image + number from selectedCard so the Collection view can
+    // render a thumbnail and a working "Sell on eBay" search link per row.
+    const cardImg = (selectedCard && (selectedCard.images?.small || selectedCard.images?.large)) || '';
+    const cardNum = (selectedCard && selectedCard.number) || '';
+    port.push({
+      id: Date.now(),
+      card: cardName,
+      set: setName,
+      buyPrice,
+      currentValue: curVal,
+      addedDate: date,
+      estGrade,
+      img: cardImg,
+      number: cardNum,
+    });
     savePortData(port);
   } else {
     // Log flip
@@ -5715,11 +5729,22 @@ function renderCollectionView() {
     return bGain - aGain;
   });
 
+  // Helper: build an eBay sold-listings URL for a collection entry.
+  // Uses card name + card number when available; falls back to name-only.
+  const _entryEbayUrl = (p) => {
+    const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
+    const num = (p.number || numFromSet || '').replace(/^0+/, '');
+    const parts = [p.card || '', num].filter(Boolean).join(' ');
+    if (!parts) return '#';
+    const raw = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(parts)}&_sacat=212&LH_Sold=1&LH_Complete=1`;
+    try { return typeof buildEbayUrl === 'function' ? buildEbayUrl(raw) : raw; } catch(e) { return raw; }
+  };
+
   wrap.innerHTML = `
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <table class="flip-table" style="min-width:520px">
+      <table class="flip-table" style="min-width:620px">
         <thead><tr>
-          <th>Card</th><th>Set</th><th>Cost</th><th>Current Value</th><th>P/L</th><th>P/L %</th><th></th>
+          <th style="width:56px"></th><th>Card</th><th>Set</th><th>Cost</th><th>Current Value</th><th>P/L</th><th>P/L %</th><th></th><th></th>
         </tr></thead>
         <tbody>${sorted.map(p => {
           const cur     = p.currentValue ?? p.buyPrice ?? 0;
@@ -5732,13 +5757,24 @@ function renderCollectionView() {
             const hrs = Math.round(mins / 60); if (hrs < 24) return hrs + 'h ago';
             return Math.round(hrs / 24) + 'd ago';
           })() : null;
+          // Thumbnail: prefer p.img (single-card save path) then p.imageUrl (bulk-scan path).
+          const thumb = p.img || p.imageUrl || '';
+          const thumbCell = thumb
+            ? `<img src="${esc2(thumb)}" loading="lazy" alt="" style="width:40px;height:56px;object-fit:cover;border-radius:6px;background:#111;border:1px solid #1f1f1f">`
+            : `<div style="width:40px;height:56px;border-radius:6px;background:#111;border:1px solid #1f1f1f;display:flex;align-items:center;justify-content:center;font-size:1.1rem;opacity:.5">🃏</div>`;
+          const ebayUrl = _entryEbayUrl(p);
+          const sellCell = ebayUrl && ebayUrl !== '#'
+            ? `<a href="${ebayUrl}" target="_blank" rel="noopener" title="Sell ${esc2(p.card)} on eBay" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:#e53935;color:#fff;border-radius:8px;font-size:.7rem;font-weight:700;text-decoration:none;white-space:nowrap">🛍 Sell</a>`
+            : '';
           return `<tr>
+            <td>${thumbCell}</td>
             <td><div class="ft-card" title="${esc2(p.card)}">${esc2(p.card)}</div></td>
             <td style="font-size:.72rem;color:var(--text-muted)">${esc2(p.set||'—')}</td>
             <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
             <td class="ft-mono" style="color:var(--gold)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
+            <td>${sellCell}</td>
             <td><div style="display:flex;gap:.3rem;align-items:center">
               <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
               <button class="ft-delete" onclick="deletePortEntry(${p.id})" title="Remove">✕</button>
@@ -6249,6 +6285,46 @@ async function _verifySendCode() {
       body: JSON.stringify({ email }),
     });
     const data = await resp.json().catch(() => ({}));
+
+    // Firebase-link fallback: Resend sandbox rejected the recipient.
+    // Send a native Firebase verification link instead — works for any inbox.
+    if (data && data.fallback === 'firebase_link') {
+      try {
+        if (typeof window._fbSendVerification === 'function') {
+          await window._fbSendVerification();
+          err.style.display = 'none';
+          const subtitle = document.getElementById('verifyModalSubtitle');
+          if (subtitle) {
+            subtitle.innerHTML = '\u2709\ufe0f A verification link was sent to <strong>' +
+              (window.googleUser?.email || 'your inbox') +
+              '</strong>. Tap the link, then come back and tap <strong>I\u2019ve verified</strong> below to claim your bonus.';
+          }
+          document.getElementById('verifyStepEmail').style.display = 'none';
+          const codeStep = document.getElementById('verifyStepCode');
+          if (codeStep) {
+            codeStep.style.display = '';
+            // Hide the code input row; show a single "I've verified" button.
+            codeStep.innerHTML =
+              '<button id="verifyLinkDoneBtn" onclick="_verifyFirebaseLinkDone()" ' +
+              'style="width:100%;padding:.75rem;background:var(--gold);color:#000;border:none;border-radius:8px;font-weight:800;font-size:.9rem;cursor:pointer">' +
+              'I\u2019ve verified \u2014 claim bonus</button>' +
+              '<div id="verifyLinkErr" style="color:#f87171;font-size:.75rem;margin-top:.5rem;display:none"></div>' +
+              '<button onclick="_verifyBackToEmail()" style="margin-top:.6rem;background:transparent;border:none;color:#888;font-size:.75rem;cursor:pointer;text-decoration:underline">Use a different email</button>';
+          }
+        } else {
+          err.textContent = 'Verification currently unavailable. Try again in a few minutes.';
+          err.style.display = '';
+        }
+      } catch(fbErr) {
+        console.error('Firebase verification send error:', fbErr);
+        err.textContent = 'Could not send Firebase verification link. Try again.';
+        err.style.display = '';
+      }
+      btn.disabled = false;
+      btn.textContent = 'Send code';
+      return;
+    }
+
     if (!resp.ok || !data.ok) {
       err.textContent = data.error || ('Could not send code (' + resp.status + ')');
       err.style.display = '';
@@ -6353,6 +6429,71 @@ async function _verifyConfirmCode() {
   }
 }
 
+// Firebase-link fallback confirm: user tapped the link in their inbox, now claim bonus.
+async function _verifyFirebaseLinkDone() {
+  const btn = document.getElementById('verifyLinkDoneBtn');
+  const err = document.getElementById('verifyLinkErr');
+  if (err) err.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking\u2026'; }
+
+  // Force-refresh the Firebase token so email_verified claim is current.
+  let tok = window._googleIdToken;
+  try {
+    if (window._fbCurrentUser && typeof window._fbCurrentUser.getIdToken === 'function') {
+      // Reload user first so email_verified propagates.
+      try { if (typeof window._fbCurrentUser.reload === 'function') await window._fbCurrentUser.reload(); } catch(e) {}
+      tok = await window._fbCurrentUser.getIdToken(true);
+      window._googleIdToken = tok;
+    }
+  } catch(e) { /* fall back to cached tok */ }
+
+  if (!tok) {
+    if (err) { err.textContent = 'Session expired. Close and try again.'; err.style.display = ''; }
+    if (btn) { btn.disabled = false; btn.textContent = 'I\u2019ve verified \u2014 claim bonus'; }
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/verify-claim-firebase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({}),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      const msg = data.error === 'email-not-verified'
+        ? 'Firebase says your email isn\u2019t verified yet. Tap the link in your inbox, then try again.'
+        : (data.error || ('Could not confirm verification (' + resp.status + ')'));
+      if (err) { err.textContent = msg; err.style.display = ''; }
+      if (btn) { btn.disabled = false; btn.textContent = 'I\u2019ve verified \u2014 claim bonus'; }
+      return;
+    }
+
+    // Success — update client state and close modal (mirrors _verifyConfirmCode).
+    if (window.googleUser) window.googleUser.emailVerified = true;
+    window._emailVerified = true;
+    window._verifiedEmail = data.email || (window.googleUser && window.googleUser.email) || null;
+    try { const vBadge = document.getElementById('verifiedBadge'); if (vBadge) vBadge.style.display = 'inline-flex'; } catch(e) {}
+    const modal = document.getElementById('verifyEmailModal');
+    if (modal) modal.remove();
+    _updateVerifyBanner?.();
+    try { await checkProStatus?.(); } catch(e) {}
+    if (data.bonusGranted) {
+      showToast('\u2713 Verified \u2014 10 ID scans + 1 AI Grade unlocked', 'gold');
+    } else {
+      const reason = data.bonusReason === 'email-already-claimed'
+        ? 'This email was already used for a bonus on another account'
+        : (data.bonusReason === 'already-granted-to-user'
+            ? 'Bonus already claimed on this account'
+            : 'Email verified');
+      showToast('\u2713 ' + reason, 'gold');
+    }
+  } catch(e) {
+    if (err) { err.textContent = 'Network error. Try again.'; err.style.display = ''; }
+    if (btn) { btn.disabled = false; btn.textContent = 'I\u2019ve verified \u2014 claim bonus'; }
+  }
+}
+
 
 function shareReferralLink() {
   const code = window._userRefCode || '';
@@ -6422,47 +6563,60 @@ function viewGradedCard(cardName, psaGrade) {
   // Switch to Card Lookup tab so search is visible
   if (typeof switchView === 'function') switchView('lookup');
 
+  const cleanName = (cardName || '').trim();
+  if (!cleanName) return;
+
   // Search for the card, then auto-apply PSA + grade
   const searchInput = document.getElementById('searchInput');
   if (!searchInput) return;
 
-  searchInput.value = cardName.trim();
+  searchInput.value = cleanName;
   searchInput.dispatchEvent(new Event('input'));
+  // Also fire the full search immediately so results show even if the
+  // autocomplete dropdown never populates (e.g. rare / misidentified cards).
+  const searchBtn = document.getElementById('searchBtn');
+  if (searchBtn) {
+    try { searchBtn.click(); } catch(e) {}
+  }
 
-  // After dropdown populates, click the best match
+  // After dropdown populates, click the best match; if none appears, fall
+  // back to using the search results directly with the requested PSA grade.
+  const applyGrade = () => {
+    const gradedToggle = document.getElementById('gradedToggle');
+    if (gradedToggle && !gradedToggle.classList.contains('active')) {
+      try { gradedToggle.click(); } catch(e) {}
+    }
+    const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
+    if (psaPill) {
+      try { setPill(psaPill, 'gradedPills'); } catch(e) {}
+      if (typeof toggleGrade === 'function') { try { toggleGrade(); } catch(e) {} }
+    }
+    setTimeout(() => {
+      const gradeSelect = document.getElementById('gradeSelect');
+      if (gradeSelect) {
+        gradeSelect.value = String(psaGrade);
+        gradeSelect.dispatchEvent(new Event('change'));
+        if (typeof calc === 'function') { try { calc(); } catch(e) {} }
+      }
+      const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
+      if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+  };
+
   setTimeout(() => {
     const best = document.querySelector('.drop-item');
     if (best) {
-      best.click();
-      // After card loads, switch to PSA pill + set grade
-      setTimeout(() => {
-        // Click the graded toggle if present
-        const gradedToggle = document.getElementById('gradedToggle');
-        if (gradedToggle && !gradedToggle.classList.contains('active')) gradedToggle.click();
-
-        const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
-        if (psaPill) {
-          setPill(psaPill, 'gradedPills');
-          if (typeof toggleGrade === 'function') toggleGrade();
-        }
-        setTimeout(() => {
-          const gradeSelect = document.getElementById('gradeSelect');
-          if (gradeSelect) {
-            gradeSelect.value = String(psaGrade);
-            gradeSelect.dispatchEvent(new Event('change'));
-            if (typeof calc === 'function') calc();
-          }
-          // Scroll to results
-          const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
-          if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 300);
-      }, 600);
+      try { best.click(); } catch(e) {}
+      setTimeout(applyGrade, 600);
     } else {
-      // No dropdown match — still show search results
-      const searchBtn = document.getElementById('searchBtn');
-      if (searchBtn) searchBtn.click();
+      // No dropdown match — leave the search query in place, still apply the
+      // graded pill + PSA grade so the price panel is meaningful. Also scroll
+      // to the search input so the user can see we DID execute their query
+      // instead of dumping them back to the home screen.
+      try { searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
+      applyGrade();
     }
-  }, 1000);
+  }, 800);
 }
 
 function openAboutModal() {
@@ -6660,6 +6814,105 @@ function _affiliateLinks() {
   };
 }
 
+// Low-confidence scan picker: server gave us 2–3 candidates and refunded the credit.
+// Show a chooser — user taps the correct card; we debit 1 ID credit and set it as the scan result.
+function _renderScanCandidatesPicker(candidates, statusEl, resultEl, objectUrl) {
+  if (!candidates || candidates.length < 2) return;
+  const topGuess = candidates[0];
+  statusEl.innerHTML = '<span style="color:#facc15;font-weight:800">\u26A0 Not 100% sure \u2014 pick the right card</span>' +
+    '<br><span style="font-size:.72rem;opacity:.6">No credit charged until you pick. If none match, tap Cancel.</span>';
+
+  const rows = candidates.map((c, i) => {
+    const parts = [
+      c.set_name || '',
+      c.card_number ? '#' + c.card_number : '',
+      c.rarity || '',
+      c.hp ? c.hp + ' HP' : '',
+    ].filter(Boolean).join(' \u00b7 ');
+    const conf = (typeof c.confidence_pct === 'number' && c.confidence_pct > 0)
+      ? '<span style="font-size:.65rem;color:rgba(255,255,255,.5);margin-left:.4rem">' + Math.round(c.confidence_pct) + '% match</span>'
+      : '';
+    return '<button type="button" onclick="_pickScanCandidate(' + i + ')" ' +
+      'style="display:block;width:100%;text-align:left;padding:.7rem .8rem;margin-bottom:.4rem;background:#151515;border:1px solid #2a2a2a;border-radius:10px;color:#fff;cursor:pointer;font-size:.85rem">' +
+      '<div style="font-weight:800">' + (c.card_name || 'Unknown') + conf + '</div>' +
+      (parts ? '<div style="font-size:.72rem;opacity:.6;margin-top:.15rem">' + parts + '</div>' : '') +
+      '</button>';
+  }).join('');
+
+  resultEl.innerHTML =
+    '<div style="margin-top:.4rem">' + rows +
+    '<button type="button" onclick="cancelScan()" ' +
+    'style="display:block;width:100%;padding:.55rem;margin-top:.3rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.78rem;cursor:pointer">None of these \u2014 cancel</button>' +
+    '</div>';
+
+  // Stash candidates + objectUrl for the picker handler.
+  window._pendingScanCandidates = candidates;
+  window._pendingScanObjectUrl  = objectUrl;
+}
+
+async function _pickScanCandidate(idx) {
+  const list = window._pendingScanCandidates || [];
+  const picked = list[idx];
+  if (!picked) return;
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  if (statusEl) statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + (picked.card_name || 'Card') + (picked.card_number ? ' #' + picked.card_number : '') + '</span>';
+  if (resultEl) resultEl.innerHTML = '<span style="font-size:.72rem;opacity:.6">Debiting credit\u2026</span>';
+
+  // Debit 1 ID scan credit now that the user has confirmed the answer.
+  const idToken = window._googleIdToken || '';
+  try {
+    const r = await fetch('/api/scan-debit-id', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+      body: JSON.stringify({ pickedCard: picked }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 402) {
+      cancelScan();
+      _setScanGateMode('identify');
+      document.getElementById('scanGateOverlay').classList.add('open');
+      return;
+    }
+    if (!r.ok || !d.ok) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:#f87171">Could not debit credit. Try again.</span>';
+      return;
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:#f87171">Network error. Try again.</span>';
+    return;
+  }
+
+  // Refresh credit UI
+  try { await checkProStatus?.(); } catch(e) {}
+
+  const parts = [picked.set_name || '', picked.rarity || '', picked.hp ? picked.hp + ' HP' : ''].filter(Boolean).join(' \u00b7 ');
+  if (statusEl) {
+    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + (picked.card_name || 'Card') +
+      (picked.card_number ? ' #' + picked.card_number : '') + '</span>' +
+      (parts ? '<br><span style="font-size:.8rem;opacity:.7">' + parts + '</span>' : '');
+  }
+  if (resultEl) resultEl.textContent = '';
+
+  showScanGradeCTA(picked.card_name || '', '', null);
+
+  window._scanTargetNumber = picked.card_number || '';
+  window._scanTargetName   = picked.card_name   || '';
+  window._scanTargetGrader = '';
+  window._scanTargetGrade  = null;
+  window._pendingScanBannerCard = picked.card_name || '';
+  window._pendingIdScanCard = {
+    name:   picked.card_name   || '',
+    number: picked.card_number || '',
+    setName: picked.set_name   || '',
+    rarity:  picked.rarity     || '',
+    hp:      picked.hp         || '',
+  };
+  try { if (window._pendingScanObjectUrl) URL.revokeObjectURL(window._pendingScanObjectUrl); } catch(e) {}
+  window._pendingScanCandidates = null;
+  window._pendingScanObjectUrl  = null;
+}
+
 function showScanGradeCTA(cardName, grader, grade) {
   const cta = document.getElementById('scanGradeCTA');
   if (!cta) return;
@@ -6777,6 +7030,19 @@ async function processScanImage(input) {
     }
 
     const data = await response.json();
+
+    // Low-confidence path: server returned top 2–3 candidates and refunded the credit.
+    // Show a picker; on user selection, apply that card as the ID (no extra credit charge
+    // since the debit already happened on the confirmed pick via the second scan? —
+    // in this build we accept the picked candidate directly. The credit is refunded on
+    // the low-confidence response, but selecting a candidate consumes the identification.
+    // To keep credit math consistent with intent ("credits only debit after user selection"),
+    // we re-deduct 1 ID credit locally via a lightweight decrement endpoint AFTER the user picks.
+    if (data.needsPicker && Array.isArray(data.candidates) && data.candidates.length >= 2) {
+      _renderScanCandidatesPicker(data.candidates, statusEl, resultEl, objectUrl);
+      return;
+    }
+
     const cardName   = data.card_name   || '';
     const cardNumber = data.card_number || '';
     const setName    = data.set_name    || '';
@@ -7497,6 +7763,10 @@ async function checkProStatus() {
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
     window._idScanCredits = d.idPaidLeft || 0;
+    // Refresh the ID Scan / AI Grade button badges now that we have fresh counts.
+    // Without this the ID Scan button label stays credit-less on the home screen
+    // even when the user has plenty of credits.
+    if (typeof updateScanBtnCredits === 'function') { try { updateScanBtnCredits(); } catch(e) {} }
     // Sync client state if server sees verification differently (e.g. token refresh needed)
     if (typeof d.emailVerified === 'boolean' && window.googleUser) {
       const prev = window.googleUser.emailVerified;
@@ -7854,6 +8124,7 @@ function showToast(msg, duration) {
         if (data.success) {
           const added = data.added || 0;
           window._idScanCredits = data.credits || 0;
+          if (typeof updateScanBtnCredits === 'function') { try { updateScanBtnCredits(); } catch(e) {} }
           const msg = data.alreadyCredited
             ? '\u2705 ID Scanner Credits already applied to your account.'
             : `\u2705 ${added} ID Scanner Credits added! Ready to use.`;

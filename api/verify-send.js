@@ -142,6 +142,20 @@ export default async function handler(req, res) {
     if (!resp.ok) {
       const errText = await resp.text();
       console.error('Resend error:', resp.status, errText);
+
+      // Resend sandbox restriction: on the free tier with an unverified domain,
+      // Resend rejects any recipient that isn't the account owner's email.
+      // Response is 403 with a specific message. Detect and surface a clear
+      // reason so the frontend can offer Firebase's built-in verification
+      // link as a fallback (works for password accounts with any email).
+      if (resp.status === 403 && /verify a domain/i.test(errText)) {
+        return res.status(200).json({
+          ok: false,
+          fallback: 'firebase_link',
+          message: 'Email delivery is restricted during beta. Use the Firebase verification link instead — check your inbox after tapping Continue.',
+        });
+      }
+
       return res.status(502).json({ error: 'Email send failed. Try again.' });
     }
   } catch(e) {

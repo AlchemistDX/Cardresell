@@ -213,16 +213,22 @@ Evaluate and return:
 
 Respond ONLY with valid JSON:
 {"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium"}`
-      : `You are a trading card expert. Look at this card image and extract:
+      : `You are a trading card expert. Look at this card image and identify it.
+
+BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
+
+Extract for the best match:
 1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
 2. card_number: The card number (e.g. "079/078", "025/165")
-3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm")
+3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm") — VERIFY the set matches the card number range and art style. Do not guess a set.
 4. hp: HP number if Pokémon card (e.g. "280")
 5. card_type: "pokemon", "sports", or "mtg"
 6. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
+7. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low".
+8. candidates: OPTIONAL array of top 2–3 matches when confidence is medium or low. Each element: {card_name, card_number, set_name, hp, card_type, rarity, confidence_pct}. Rank most likely first. If confidence is "high", omit or return an empty array.
 
 Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"..."}`;
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"...","confidence":"high|medium|low","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"...","confidence_pct":75}]}`;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -337,9 +343,53 @@ Respond ONLY with valid JSON, no explanation:
       });
     }
 
+    // ── Low-confidence path: return top candidates and refund the credit.
+    // Frontend shows a "Is it one of these?" picker; user selects the correct card;
+    // then a second scan-confirm call debits the credit. This prevents charging
+    // users when the AI wasn't sure and got it wrong.
+    const idConf = (typeof cardInfo.confidence === 'string')
+      ? cardInfo.confidence.toLowerCase()
+      : null;
+    const idConfNorm = ['high','medium','low'].includes(idConf) ? idConf : null;
+    const rawCandidates = Array.isArray(cardInfo.candidates) ? cardInfo.candidates : [];
+    const cleanCandidates = rawCandidates
+      .filter(c => c && typeof c === 'object' && (c.card_name || c.card_number))
+      .slice(0, 3)
+      .map(c => ({
+        card_name:      c.card_name      || '',
+        card_number:    c.card_number    || '',
+        set_name:       c.set_name       || '',
+        hp:             c.hp             || '',
+        card_type:      c.card_type      || 'pokemon',
+        rarity:         c.rarity         || '',
+        confidence_pct: (typeof c.confidence_pct === 'number' ? c.confidence_pct : null),
+      }));
+
+    // Only trigger the picker when the model is actually uncertain AND we got
+    // multiple candidates. High-confidence single answers pass straight through.
+    if ((idConfNorm === 'low' || idConfNorm === 'medium') && cleanCandidates.length >= 2) {
+      // Refund the ID credit — user hasn't gotten a final answer yet.
+      await refundCredits();
+      return res.status(200).json({
+        success:      true,
+        mode:         'identify',
+        needsPicker:  true,
+        confidence:   idConfNorm,
+        candidates:   cleanCandidates,
+        // Also include the top guess for UI convenience.
+        card_name:    cardInfo.card_name   || cleanCandidates[0].card_name   || '',
+        card_number:  cardInfo.card_number || cleanCandidates[0].card_number || '',
+        set_name:     cardInfo.set_name    || cleanCandidates[0].set_name    || '',
+        hp:           cardInfo.hp          || cleanCandidates[0].hp          || '',
+        card_type:    cardInfo.card_type   || cleanCandidates[0].card_type   || 'pokemon',
+        rarity:       cardInfo.rarity      || cleanCandidates[0].rarity      || '',
+      });
+    }
+
     return res.status(200).json({
       success: true,
       mode:        'identify',
+      confidence:  idConfNorm || 'high',
       card_name:   cardInfo.card_name   || '',
       card_number: cardInfo.card_number || '',
       set_name:    cardInfo.set_name    || '',
