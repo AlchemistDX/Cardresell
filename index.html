@@ -5527,7 +5527,32 @@ function _updateCollectionSignInWall() {
 
 function renderCollectionView() {
   _updateCollectionSignInWall();
-  if (!window._userSub) return;
+  // Sign-in check: prefer googleUser (matches what loadPortData reads via getUserKey).
+  // If Firebase auth hasn't finished restoring yet, retry once it does — otherwise the
+  // Collection tab would silently render nothing while the Portfolio table (which has
+  // no wall check) fills in from the same localStorage key a moment later.
+  const signedIn = !!(window.googleUser && window.googleUser.sub) || !!window._userSub;
+  if (!signedIn) {
+    // Auth not resolved yet — schedule one retry after Firebase fires
+    if (!window._authInitialized && !window._collectionAuthRetry) {
+      window._collectionAuthRetry = true;
+      const retry = () => {
+        window._collectionAuthRetry = false;
+        const colView = document.getElementById('collectionView');
+        if (colView && colView.style.display !== 'none') renderCollectionView();
+      };
+      // Poll for auth resolution — up to 6s total
+      let elapsed = 0;
+      const iv = setInterval(() => {
+        elapsed += 200;
+        if (window.googleUser || window._authInitialized || elapsed >= 6000) {
+          clearInterval(iv);
+          retry();
+        }
+      }, 200);
+    }
+    return;
+  }
 
   const port = loadPortData(); // reuse existing portfolio data
 
@@ -5689,9 +5714,12 @@ async function refreshSingleCardPrice(id) {
 }
 
 // ── Also re-render collection if active when port data changes ──
-function _maybeRerenderCollection() {
+// force=true bypasses the visibility check — use after sign-in completes so the
+// wall→content transition triggers a fresh render even if user is on another tab.
+function _maybeRerenderCollection(force) {
   const colView = document.getElementById('collectionView');
-  if (colView && colView.style.display !== 'none') renderCollectionView();
+  if (!colView) return;
+  if (force || colView.style.display !== 'none') renderCollectionView();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -5929,6 +5957,11 @@ function applyGoogleUser() {
   checkProStatus();
   _maybeShowAdminTab();
   _updateFlipsSignInWall?.();
+  // Flip the collection sign-in wall too, and rerender if Collection is the active tab.
+  // Without this, users who land directly on /collection see the wall stay up even after
+  // Firebase restores their session because renderCollectionView already ran and bailed.
+  _updateCollectionSignInWall?.();
+  _maybeRerenderCollection?.(true);
   updateProUI?.();
   // Prefill newsletter email if settings open
   const nlInput = document.getElementById('newsletterEmail');
@@ -7289,8 +7322,10 @@ function loadUserData() {
   _migrateAnonDataToUser();
   // Reload flips view if it's active so it shows the signed-in user's data
   if (document.getElementById('flipsView')?.classList.contains('active')) renderFlipsView();
-  // Also re-render collection if it's the active view — cards may have just been migrated in
-  _maybeRerenderCollection();
+  // Force-render collection whether or not it's the active view — cards may have just
+  // been migrated in, and if the user is on the Collection tab we need a fresh render
+  // now that _userSub is set (an earlier attempt may have bailed on the sign-in check).
+  _maybeRerenderCollection(true);
 }
 
 // Override storage helpers to be user-scoped when signed in
