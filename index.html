@@ -8383,12 +8383,15 @@ function closeBulkScan() {
   const ov = document.getElementById('bulkScanOverlay');
   ov.style.display = 'none';
   window._bulkProcessing = false;
+  window._bulkPaused     = false;
   // Clean up object URLs
   (window._bulkQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(e){} });
   (window._bulkResults || []).forEach(r => { try { URL.revokeObjectURL(r.objectUrl); } catch(e){} });
   window._bulkQueue   = [];
   window._bulkResults = [];
   window._bulkSaved   = false;
+  // Hide the floating "Back to Bulk Scan" pill — session is fully over
+  try { if (typeof _hideBackToBulkPill === 'function') _hideBackToBulkPill(); } catch(e) {}
 }
 
 function _bulkShowSection(section) {
@@ -9110,24 +9113,93 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
 }
 
 // Tap a bulk-scan row to open that card in the main Card Lookup view.
-// Closes the bulk overlay, switches to Lookup, and runs a search for the card name +
-// number so the user can see eBay comps, grading info, and full pricing detail.
-function bulkOpenCardInLookup(rowId) {
+// PAUSES the bulk overlay (state preserved) so the user can tap "Back to Bulk Scan" to return.
+// Uses _loadScannedCardExact — same exact-lookup path as single-card scan (name+number+set)
+// instead of stuffing text into the search box, because the search box uses a wildcard query
+// that doesn't reliably match by card number.
+async function bulkOpenCardInLookup(rowId) {
   const r = _bulkFindResult(rowId);
   if (!r || !r.success) { showToast('Card not identified yet.'); return; }
-  try { closeBulkScan(); } catch(e) {}
+
+  // ── PAUSE (don't destroy) so user can return ──
+  const ov = document.getElementById('bulkScanOverlay');
+  if (ov) ov.style.display = 'none';
+  window._bulkPaused = true;                // marker for the return button
+  // Do NOT clear _bulkResults / _bulkQueue — we need them to resume
+
   try { switchView('lookup'); } catch(e) {}
-  const query = [r.cardName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' ').trim();
-  const si = document.getElementById('searchInput');
-  if (si && query) {
-    si.value = query;
-    // Fire the debounced search programmatically
-    si.dispatchEvent(new Event('input', { bubbles: true }));
-    // Also open the full-screen search modal so the user sees results immediately on mobile
-    setTimeout(() => {
-      try { if (typeof openSearchModal === 'function') openSearchModal(); } catch(e) {}
-    }, 250);
+
+  // Bulk scanner always identifies Pokemon — force game to pokemon.
+  // Do this BEFORE calling _loadScannedCardExact because game context affects card rendering.
+  try {
+    if (typeof onGameSelectChange === 'function' && activeGame !== 'pokemon') {
+      onGameSelectChange('pokemon');
+    }
+  } catch(e) {}
+
+  // Show the floating "Back to Bulk Scan" pill immediately (before await)
+  _showBackToBulkPill();
+
+  // Use the exact same lookup path as single-card scan — this is what actually finds
+  // the correct card by name+number+set. The search input path is unreliable because
+  // "CardName #123" is not valid PokemonTCG.io query syntax.
+  try {
+    if (typeof _loadScannedCardExact === 'function') {
+      await _loadScannedCardExact({
+        name:    r.cardName    || '',
+        number:  r.cardNumber  || '',
+        setName: r.setName     || '',
+        rarity:  r.rarity      || '',
+      });
+    } else {
+      // Extremely defensive fallback — should never hit
+      const si = document.getElementById('searchInput');
+      if (si) { si.value = r.cardName || ''; si.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+  } catch(e) {
+    console.warn('bulkOpenCardInLookup: exact load failed', e);
+    showToast('Could not open that card. Tap the pill to return to bulk scan.', 'info');
   }
+
+  // Scroll to top so the card panel is visible on mobile
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
+}
+
+// Small floating button that lets the user return to their paused bulk scan.
+// Only visible while _bulkPaused is truthy and bulkResults has items.
+function _showBackToBulkPill() {
+  let pill = document.getElementById('backToBulkPill');
+  if (!pill) {
+    pill = document.createElement('button');
+    pill.id = 'backToBulkPill';
+    pill.onclick = resumeBulkScan;
+    pill.style.cssText = 'position:fixed;bottom:5.5rem;left:50%;transform:translateX(-50%);z-index:250;padding:.65rem 1.1rem;background:rgba(139,92,246,.95);color:#fff;border:none;border-radius:99px;font-size:.82rem;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;gap:.4rem';
+    document.body.appendChild(pill);
+  }
+  const n = (window._bulkResults || []).length;
+  pill.innerHTML = `↩ Back to Bulk Scan${n ? ` (${n})` : ''}`;
+  pill.style.display = 'flex';
+}
+
+function _hideBackToBulkPill() {
+  const pill = document.getElementById('backToBulkPill');
+  if (pill) pill.style.display = 'none';
+}
+
+// Return to the paused bulk overlay with all results intact.
+function resumeBulkScan() {
+  const ov = document.getElementById('bulkScanOverlay');
+  if (!ov) return;
+  // If somehow the state was cleared (e.g. page reload), fall back gracefully
+  if (!(window._bulkResults || []).length) {
+    _hideBackToBulkPill();
+    window._bulkPaused = false;
+    showToast('Bulk scan session ended.');
+    return;
+  }
+  ov.style.display = 'flex';
+  window._bulkPaused = false;
+  _hideBackToBulkPill();
 }
 
 function _bulkResetBottomBarButtons() {
