@@ -1027,6 +1027,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         _updateAuthDebug('AUTH OK: ' + (effectiveEmail || '(no email)').slice(0,30) + '\nuid=' + user.uid.slice(0,8) + ' | providers=' + _providers);
         // Apply UI immediately — don't wait for token
         applyGoogleUser();
+        // Drop the post-signin grace period (see safety net near top of file).
+        try { window._resolveAuthGrace && window._resolveAuthGrace(); } catch(e) {}
         // Fetch token async — doesn't block UI or checkout
         user.getIdToken().then(token => {
           window._googleIdToken = token;
@@ -1074,6 +1076,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         try { const b = document.getElementById('emailVerifyBanner'); if (b) b.remove(); } catch(e) {}
         try { document.getElementById('googleSignInBtn').style.display = 'flex'; } catch(e) {}
         try { document.getElementById('googleUserBtn').style.display = 'none'; } catch(e) {}
+        // Drop the post-signin grace period — Firebase confirmed no user, show the button.
+        try { window._resolveAuthGrace && window._resolveAuthGrace(); } catch(e) {}
         try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
         try { _updateFlipsSignInWall?.(); } catch(e) {}
         updateProUI?.();
@@ -2422,6 +2426,39 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
       window.history.replaceState({}, '', clean);
     } catch(e) {}
   }
+
+  // SAFETY NET: if signin.html redirected us here right after a successful
+  // sign-in, Firebase's IDB write may still be committing. Hide the "Sign In"
+  // button in the header for up to 2.5s while onAuthStateChanged catches up.
+  // Without this, the header flashes as signed-out and confuses the user even
+  // though the account is authenticated (or is about to be).
+  try {
+    const ts = parseInt(sessionStorage.getItem('_fbJustSignedIn') || '0', 10);
+    if (ts && (Date.now() - ts) < 15000) {
+      window._pendingAuthGrace = true;
+      // Clear so a manual refresh a minute later doesn't re-hide the button.
+      sessionStorage.removeItem('_fbJustSignedIn');
+      // Inject an early CSS rule so the sign-in button is hidden from first paint.
+      const style = document.createElement('style');
+      style.id = '_authGraceStyle';
+      style.textContent = '#googleSignInBtn{visibility:hidden!important}';
+      (document.head || document.documentElement).appendChild(style);
+      // Fallback timeout: after 2.5s, drop the style regardless so we never
+      // permanently hide the button if onAuthStateChanged fails to fire.
+      setTimeout(() => {
+        const s = document.getElementById('_authGraceStyle');
+        if (s) s.remove();
+        window._pendingAuthGrace = false;
+      }, 2500);
+      // Also expose a resolver so the auth handler can drop the style as soon
+      // as it knows the answer (either signed-in or truly signed-out).
+      window._resolveAuthGrace = () => {
+        const s = document.getElementById('_authGraceStyle');
+        if (s) s.remove();
+        window._pendingAuthGrace = false;
+      };
+    }
+  } catch(e) {}
 })();
 window.CARDSELL_TCGP_AFFID = '';
 window.CARDSELL_SCANNER_KEY = '';

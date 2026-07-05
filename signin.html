@@ -398,7 +398,12 @@
     // Explicit local persistence so the session survives tab-switching to the
     // email app and back. Falls through silently on private-mode browsers that
     // block IndexedDB — Firebase will use in-memory persistence as a fallback.
-    setPersistence(auth, browserLocalPersistence).catch(e => {
+    // CRITICAL: we expose this as a promise so doSignIn/doSignUp/googleSignIn
+    // can AWAIT it before running the auth call. Without this, a user who taps
+    // Sign In within a few ms of page load (fast Passwords autofill on Safari)
+    // races the persistence-set and Firebase stores the session in memory-only
+    // persistence — which does NOT survive the location.replace('/') redirect.
+    window._fbPersistenceReady = setPersistence(auth, browserLocalPersistence).catch(e => {
       console.warn('setPersistence(local) failed, using default:', e && e.code);
     });
 
@@ -520,9 +525,27 @@
       if (tab === 'signup') document.getElementById('tabSignUp')?.classList.add('active');
     }
 
+    // Ensure IDB persistence is fully committed for the just-signed-in user
+    // BEFORE we redirect. On Safari (esp. iOS), signInWithEmailAndPassword can
+    // resolve before Firebase's async IDB write completes; navigating away too
+    // fast means index.html boots with an empty auth store. Reading the ID token
+    // forces Firebase to flush, and the small tick gives IDB commit time.
+    async function _flushAuthToDisk() {
+      try {
+        const u = window._fbAuth && window._fbAuth.currentUser;
+        if (u && u.getIdToken) { await u.getIdToken(); }
+      } catch(e) { /* non-fatal */ }
+      await new Promise(r => setTimeout(r, 80));
+      try { sessionStorage.setItem('_fbJustSignedIn', String(Date.now())); } catch(e) {}
+    }
+
     async function googleSignIn() {
+      try { await window._fbPersistenceReady; } catch(e) {}
       window._justSignedIn = true;
-      try { await window._fbGoogleSignIn(); }
+      try {
+        await window._fbGoogleSignIn();
+        await _flushAuthToDisk();
+      }
       catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); }
     }
 
@@ -532,8 +555,12 @@
       clearErr('errSignIn');
       if (!email || !pass) return showErr('errSignIn', 'Please enter your email and password.');
       setLoading('btnSignIn', true, 'Signing in...');
+      try { await window._fbPersistenceReady; } catch(e) {}
       window._justSignedIn = true;
-      try { await window._fbEmailSignIn(email, pass); }
+      try {
+        await window._fbEmailSignIn(email, pass);
+        await _flushAuthToDisk();
+      }
       catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); setLoading('btnSignIn', false, 'Sign In'); }
     }
 
@@ -546,10 +573,12 @@
       if (pass.length < 6) return showErr('errSignUp', 'Password must be at least 6 characters.');
       if (pass !== pass2) return showErr('errSignUp', "Passwords don't match.");
       setLoading('btnSignUp', true, 'Creating account...');
+      try { await window._fbPersistenceReady; } catch(e) {}
       // Flag BEFORE the auth call so onAuthStateChanged sees it when it fires.
       window._justSignedUp = true;
       try {
         await window._fbEmailSignUp(email, pass);
+        await _flushAuthToDisk();
         // Fire the verification email. Non-fatal if it fails — user can resend.
         try { await window._fbSendVerification(); } catch(e) { console.error('Send verification failed:', e); }
       } catch(e) {
