@@ -890,7 +890,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     window._enableAuthDebug = () => { try { sessionStorage.setItem('_authDebug','1'); location.reload(); } catch(e) {} };
     window._disableAuthDebug = () => { try { sessionStorage.removeItem('_authDebug'); document.getElementById('_authDebugPanel')?.remove(); } catch(e) {} };
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
         _currentAuthUid = user.uid;
         // Firebase's top-level user.email can be empty when the account was linked oddly
