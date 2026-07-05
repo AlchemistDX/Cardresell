@@ -2618,7 +2618,7 @@ window.AFFILIATE = {
     enabled: true,
     campid:  '5339158497',
     toolid:  '10001',
-    customid:'cardsell'
+    customid:'cardresell'
   },
 
   // TCGPlayer via Impact.com — application PENDING (Jul 2, 2026)
@@ -4669,7 +4669,7 @@ function buildEbayUrl(url) {
   if (!campId) return url;
   const sep = url.includes('?') ? '&' : '?';
   const tool = cfg.toolid   || '10001';
-  const cust = cfg.customid || 'cardsell';
+  const cust = cfg.customid || 'cardresell';
   return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&customid=${encodeURIComponent(cust)}`;
 }
 
