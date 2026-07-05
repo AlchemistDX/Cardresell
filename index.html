@@ -1450,6 +1450,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="bulkCameraInput" accept="image/*" capture="environment" style="display:none" onchange="processBulkCameraCapture(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <!-- Framing guide (SVG) — swapped per step; hidden until scan flow starts -->
+    <div id="scanGuide" style="display:none;width:min(56vw,220px);text-align:center;margin-top:.25rem" aria-hidden="true"></div>
     <!-- Preview image -->
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
       <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,160px);text-align:center">
@@ -7064,6 +7066,7 @@ function scanAnother() {
 
 function cancelScan() {
   document.getElementById('scanOverlay').style.display = 'none';
+  if (typeof hideScanGuide === 'function') hideScanGuide();
   const spinner5 = document.getElementById('scanSpinner');
   if (spinner5) spinner5.style.display = 'none';
   _setScanBtns('scanning');
@@ -7497,6 +7500,80 @@ function openGradeScanGate() {
   document.getElementById('scanGateOverlay').classList.add('open');
 }
 
+// ── Card framing guide (SVG) ──
+// Reusable card-outline used across the grading capture flow so the user
+// knows exactly how to orient the card before tapping the shutter.
+// step: 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right'
+function renderCardGuide(step) {
+  // 63:88 card aspect. viewBox 126x176 (2x for crisp strokes).
+  const W = 126, H = 176;
+  const isEdge = (step === 'top' || step === 'bottom' || step === 'left' || step === 'right');
+  const stroke = 'rgba(255,255,255,.55)';
+  const gold   = '#facc15';
+  // Which side gets the highlighted "aim here" indicator
+  let hi = { x1:0,y1:0,x2:0,y2:0, cx:0, cy:0 };
+  if (step === 'top')    hi = { x1:8,  y1:8,   x2:W-8, y2:8,   cx:W/2, cy:16   };
+  if (step === 'bottom') hi = { x1:8,  y1:H-8, x2:W-8, y2:H-8, cx:W/2, cy:H-16 };
+  if (step === 'left')   hi = { x1:8,  y1:8,   x2:8,   y2:H-8, cx:16,  cy:H/2  };
+  if (step === 'right')  hi = { x1:W-8,y1:8,   x2:W-8, y2:H-8, cx:W-16,cy:H/2  };
+
+  const labelText = ({
+    front:  'FRONT',
+    back:   'BACK',
+    top:    'TOP EDGE',
+    bottom: 'BOTTOM EDGE',
+    left:   'LEFT EDGE',
+    right:  'RIGHT EDGE'
+  })[step] || '';
+
+  const cornerMark = step === 'front'
+    ? '<path d="M14 26 L14 14 L26 14" stroke="' + gold + '" stroke-width="2.5" fill="none" stroke-linecap="round" />'
+    : '';
+
+  const highlightLine = isEdge
+    ? '<line x1="' + hi.x1 + '" y1="' + hi.y1 + '" x2="' + hi.x2 + '" y2="' + hi.y2 + '" stroke="' + gold + '" stroke-width="5" stroke-linecap="round" />' +
+      '<circle cx="' + hi.cx + '" cy="' + hi.cy + '" r="4" fill="' + gold + '" />'
+    : '';
+
+  // Center label inside the card outline
+  const centerLabel = '<text x="' + (W/2) + '" y="' + (H/2 + 4) + '" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="14" font-weight="800" fill="rgba(255,255,255,.45)" letter-spacing="1.5">' + labelText + '</text>';
+
+  // Dashed rounded card outline
+  const svg =
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block" role="img" aria-label="Card framing guide: ' + (labelText || step) + '">' +
+      '<rect x="6" y="6" width="' + (W-12) + '" height="' + (H-12) + '" rx="10" ry="10" fill="rgba(255,255,255,.03)" stroke="' + stroke + '" stroke-width="2" stroke-dasharray="6 5" />' +
+      cornerMark +
+      highlightLine +
+      centerLabel +
+    '</svg>';
+
+  const helper = ({
+    front:  'Line up the card FRONT inside the dashed box',
+    back:   'Now flip it — line up the BACK inside the dashed box',
+    top:    'Rotate card so the TOP edge fills the frame',
+    bottom: 'Rotate card so the BOTTOM edge fills the frame',
+    left:   'Rotate card so the LEFT edge fills the frame',
+    right:  'Rotate card so the RIGHT edge fills the frame'
+  })[step] || '';
+
+  return '<div style="width:100%">' + svg +
+    '<div style="margin-top:.4rem;font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.35">' + helper + '</div>' +
+  '</div>';
+}
+
+function showScanGuide(step) {
+  const el = document.getElementById('scanGuide');
+  if (!el) return;
+  el.innerHTML = renderCardGuide(step);
+  el.style.display = 'block';
+}
+function hideScanGuide() {
+  const el = document.getElementById('scanGuide');
+  if (!el) return;
+  el.style.display = 'none';
+  el.innerHTML = '';
+}
+
 // ── Grade tier picker (Quick vs Deep) ──
 function openGradeTierPicker() {
   const overlay = document.getElementById('gradeTierOverlay');
@@ -7534,18 +7611,37 @@ function closeGradeTier(evt) {
   document.getElementById('gradeTierOverlay').classList.remove('open');
 }
 
+function _showGradeFrontGuide() {
+  const overlay  = document.getElementById('scanOverlay');
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const prevWrap = document.getElementById('scanPreviewWrap');
+  const cta      = document.getElementById('scanGradeCTA');
+  if (cta) cta.style.display = 'none';
+  if (prevWrap) prevWrap.style.display = 'none';
+  overlay.style.display = 'flex';
+  showScanGuide('front');
+  const tierLabel = window._gradeIsDeep
+    ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 1 of 3+)</span>'
+    : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 1 of 2)</span>';
+  statusEl.innerHTML = '\uD83D\uDCF7 Frame the FRONT of the card' + tierLabel +
+    '<br><span style="font-size:.8rem;opacity:.75;font-weight:500">Fill the dashed box \u2014 keep it flat and even lighting</span>';
+  resultEl.innerHTML =
+    '<button onclick="document.getElementById(\'gradeFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.65rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Front Photo</button>';
+}
+
 function startQuickGrade() {
   window._gradeIsDeep = false;
   window._gradeEdges = {}; // no edges for quick
   document.getElementById('gradeTierOverlay').classList.remove('open');
-  document.getElementById('gradeFileInput').click();
+  _showGradeFrontGuide();
 }
 
 function startDeepGrade() {
   window._gradeIsDeep = true;
   window._gradeEdges = {}; // reset edge collection
   document.getElementById('gradeTierOverlay').classList.remove('open');
-  document.getElementById('gradeFileInput').click();
+  _showGradeFrontGuide();
 }
 
 function _setScanGateMode(mode) {
@@ -7606,8 +7702,11 @@ async function processGradeImage(input) {
   window._gradeFrontBase64 = await compressImage(file, 1000);
   window._gradeFrontUrl    = frontUrl;
 
-  const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 1 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 1 of 2)</span>';
-  statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span>' + stepLabel + '<br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 take the BACK photo</span>';
+  // Swap guide to BACK orientation now that front is captured
+  showScanGuide('back');
+
+  const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 2 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 2 of 2)</span>';
+  statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span>' + stepLabel + '<br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 line up the BACK inside the box</span>';
   resultEl.innerHTML = '<button onclick="document.getElementById(\'gradeBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
 }
 
@@ -7648,6 +7747,12 @@ function showDeepGradeEdgeUI() {
   const edges = window._gradeEdges || {};
   const count = Object.keys(edges).length;
   const min = 2, max = 4;
+
+  // Show guide reflecting the FIRST missing edge — so the user has a visual
+  // hint of which orientation they should aim for next.
+  const order = ['top','bottom','left','right'];
+  const nextEdge = order.find(k => !edges[k]);
+  if (nextEdge) showScanGuide(nextEdge); else hideScanGuide();
 
   statusEl.innerHTML =
     '<span style="color:#4ade80">\u2713 Front + back captured</span> <span style="font-size:.7rem;color:var(--gold)">(Step 2 of 3)</span>' +
@@ -7720,6 +7825,8 @@ async function submitDeepGrade() {
 async function submitGradeScan(deepGrade) {
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
+  // Hide framing guide once we start analyzing — photos are locked in
+  hideScanGuide();
   const frontBase64 = window._gradeFrontBase64;
   const backBase64  = window._gradeBackBase64;
 
