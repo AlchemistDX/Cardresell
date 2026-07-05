@@ -248,6 +248,9 @@
 
   <div class="auth-card">
 
+    <!-- Diagnostic banner (temporary) — surfaces silent auth errors on-screen. Remove after we confirm iOS flow is fixed. -->
+    <div id="authDebugBanner" style="display:none;margin:0 0 .75rem;padding:.6rem .8rem;background:#1a1a2e;border:1px solid #4a4a6a;border-radius:8px;color:#e0e0f0;font-size:.72rem;line-height:1.4;font-family:ui-monospace,monospace;word-break:break-word;max-height:140px;overflow-y:auto"></div>
+
     <!-- Logo -->
     <div class="logo">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
@@ -544,13 +547,25 @@
     }
 
     async function googleSignIn() {
+      window._dbg('googleSignIn: clicked, _fbGoogleSignIn type=' + typeof window._fbGoogleSignIn);
+      clearErr('errSignIn'); clearErr('errSignUp');
       try { await window._fbPersistenceReady; } catch(e) {}
       window._justSignedIn = true;
       try {
+        if (typeof window._fbGoogleSignIn !== 'function') throw new Error('module-not-loaded: _fbGoogleSignIn missing');
+        window._dbg('googleSignIn: calling signInWithPopup');
         await window._fbGoogleSignIn();
+        window._dbg('googleSignIn: popup resolved, flushing');
         await _flushAuthToDisk();
+        window._dbg('googleSignIn: flushed, awaiting onAuthStateChanged redirect');
       }
-      catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); }
+      catch(e) {
+        window._justSignedIn = false;
+        window._dbg('googleSignIn ERROR: code=' + (e?.code||'none') + ' msg=' + (e?.message||e));
+        // Show on BOTH sign-in and sign-up error areas since the Google button appears on both tabs.
+        showErr('errSignIn', fbMsg(e));
+        showErr('errSignUp', fbMsg(e));
+      }
     }
 
     async function doSignIn() {
@@ -569,6 +584,7 @@
     }
 
     async function doSignUp() {
+      window._dbg('doSignUp: clicked, _fbEmailSignUp type=' + typeof window._fbEmailSignUp);
       const email = document.getElementById('suEmail').value.trim();
       const pass  = document.getElementById('suPass').value;
       const pass2 = document.getElementById('suPass2').value;
@@ -581,12 +597,17 @@
       // Flag BEFORE the auth call so onAuthStateChanged sees it when it fires.
       window._justSignedUp = true;
       try {
+        if (typeof window._fbEmailSignUp !== 'function') throw new Error('module-not-loaded: _fbEmailSignUp missing');
+        window._dbg('doSignUp: calling createUserWithEmailAndPassword');
         await window._fbEmailSignUp(email, pass);
+        window._dbg('doSignUp: user created, flushing');
         await _flushAuthToDisk();
+        window._dbg('doSignUp: flushed, sending verification');
         // Fire the verification email. Non-fatal if it fails — user can resend.
-        try { await window._fbSendVerification(); } catch(e) { console.error('Send verification failed:', e); }
+        try { await window._fbSendVerification(); window._dbg('doSignUp: verification email sent'); } catch(e) { window._dbg('sendVerification failed (non-fatal): ' + (e?.code||'') + ' ' + (e?.message||e)); console.error('Send verification failed:', e); }
       } catch(e) {
         window._justSignedUp = false;
+        window._dbg('doSignUp ERROR: code=' + (e?.code||'none') + ' msg=' + (e?.message||e));
         showErr('errSignUp', fbMsg(e));
         setLoading('btnSignUp', false, 'Create Account');
       }
@@ -658,7 +679,26 @@
       }
     }
 
-    function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.style.display = ''; } }
+    // TEMPORARY diagnostic — surfaces auth breadcrumbs + errors on screen.
+    // Call _dbg('event') to log a step. All handlers below now call it so we
+    // can see how far the flow gets on iOS/Safari before failing.
+    window._dbg = function(msg) {
+      try {
+        const el = document.getElementById('authDebugBanner');
+        if (!el) return;
+        const stamp = new Date().toISOString().slice(11, 19);
+        const line = document.createElement('div');
+        line.textContent = '[' + stamp + '] ' + msg;
+        el.appendChild(line);
+        el.style.display = '';
+        el.scrollTop = el.scrollHeight;
+      } catch(_) {}
+    };
+    window.addEventListener('error', (e) => { window._dbg && window._dbg('window.error: ' + (e.message || e.error?.message || 'unknown')); });
+    window.addEventListener('unhandledrejection', (e) => { window._dbg && window._dbg('unhandled: ' + (e.reason?.code || '') + ' ' + (e.reason?.message || e.reason || '')); });
+    window._dbg('page loaded, UA=' + navigator.userAgent.slice(0, 50));
+
+    function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.style.display = ''; } window._dbg && window._dbg('showErr[' + id + ']: ' + msg); }
     function clearErr(id) { const el = document.getElementById(id); if (el) { el.style.display = 'none'; el.textContent = ''; } }
     function setLoading(id, on, label) { const el = document.getElementById(id); if (el) { el.disabled = on; el.textContent = label; } }
     function fbMsg(e) {
