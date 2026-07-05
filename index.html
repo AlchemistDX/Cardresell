@@ -775,7 +775,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail, sendEmailVerification,
-      indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence
+      indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence,
+      browserPopupRedirectResolver
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const firebaseConfig = {
@@ -796,8 +797,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     // getAuth+setPersistence writes 0 records to firebaseLocalStorageDb;
     // initializeAuth writes 1. Array = ordered fallback: IDB, then
     // localStorage (cross-tab), then sessionStorage (in-tab only).
+    // MUST include popupRedirectResolver — initializeAuth() does NOT auto-attach it
+    // (only getAuth() does). Without it, signInWithPopup throws auth/argument-error.
+    // See: https://github.com/firebase/firebase-js-sdk/issues/7882
     const auth = initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver
     });
 
     // Expose to global scope for use in non-module scripts

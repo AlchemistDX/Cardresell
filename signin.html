@@ -368,7 +368,8 @@
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail, sendEmailVerification,
-      indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence
+      indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence,
+      browserPopupRedirectResolver
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const app = initializeApp({
@@ -387,8 +388,12 @@
     // 0 records to firebaseLocalStorageDb; initializeAuth writes 1. The array
     // form provides an ordered fallback chain — IDB first, then localStorage
     // (survives across tabs), then sessionStorage (survives within tab only).
+    // MUST include popupRedirectResolver — initializeAuth() does NOT auto-attach it
+    // (only getAuth() does). Without it, signInWithPopup throws auth/argument-error.
+    // See: https://github.com/firebase/firebase-js-sdk/issues/7882
     const auth = initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver
     });
 
     // Private-mode detection — IndexedDB is blocked in Safari Private mode
