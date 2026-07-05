@@ -137,18 +137,26 @@ body{min-height:100dvh;font-family:var(--font);font-size:15px;color:var(--text);
  * cat-pill click handler. Very subtle so cards remain the visual hero.
  * Themes: pokemon, pokemonjp, mtg, yugioh, lorcana, onepiece, sports, other.
  * Missing/unknown → no pattern (transparent), so we degrade to plain --bg. */
-.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.14;transition:background-image .35s ease,opacity .35s ease;background-repeat:repeat;background-size:120px 120px;background-position:center}
-[data-theme="dark"] .theme-bg{opacity:.17}
+.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.16;transition:background-image .35s ease,opacity .35s ease;background-repeat:repeat;background-size:120px 120px;background-position:center}
+[data-theme="dark"] .theme-bg{opacity:.13}
 .wrap,.hdr,.modal-shell,.overlay,#scanOverlay,header,main,footer,.auth-card{position:relative;z-index:1}
 @media (prefers-reduced-motion: reduce){.theme-bg{transition:none}}
 
-/* Pokéball — classic red/black */
+/* Pokéball — classic red-and-white (light mode) */
 body[data-game-theme="pokemon"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='4' stroke-linejoin='round'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70' stroke-width='4.5'/><circle cx='70' cy='70' r='8' fill='%23e8a020'/><circle cx='70' cy='70' r='4' fill='%23fbe6bf' stroke='none'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><defs><clipPath id='b'><circle cx='70' cy='70' r='30'/></clipPath></defs><g clip-path='url(%23b)'><rect x='40' y='40' width='60' height='30' fill='%23e63946'/><rect x='40' y='70' width='60' height='30' fill='%23f5f5f5'/></g><circle cx='70' cy='70' r='30' fill='none' stroke='%23111' stroke-width='3'/><rect x='40' y='66' width='60' height='8' fill='%23111' clip-path='url(%23b)'/><circle cx='70' cy='70' r='8' fill='%23111'/><circle cx='70' cy='70' r='4.5' fill='%23f5f5f5'/></svg>");
 }
-/* Pokéball JP — Great Ball vibe, blue tinted */
+/* Pokéball — Ultra Ball black-and-gold (dark mode) */
+html[data-theme="dark"] body[data-game-theme="pokemon"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><defs><clipPath id='b'><circle cx='70' cy='70' r='30'/></clipPath></defs><g clip-path='url(%23b)'><rect x='40' y='40' width='60' height='30' fill='%23111'/><rect x='40' y='70' width='60' height='30' fill='%23f5f5f5'/><path d='M56 44 L56 66 L64 66 L64 55 L76 55 L76 66 L84 66 L84 44 Z' fill='%23e8a020'/></g><circle cx='70' cy='70' r='30' fill='none' stroke='%23f5f5f5' stroke-width='2.5'/><rect x='40' y='66' width='60' height='8' fill='%23111' clip-path='url(%23b)'/><circle cx='70' cy='70' r='8' fill='%23111' stroke='%23f5f5f5' stroke-width='1.5'/><circle cx='70' cy='70' r='4' fill='%23f5f5f5'/></svg>");
+}
+/* Pokéball JP — Quick Ball yellow-and-blue (light mode) */
 body[data-game-theme="pokemonjp"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%234a90e2' stroke-width='4' stroke-linejoin='round'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70' stroke-width='4.5'/><circle cx='70' cy='70' r='8' fill='%234a90e2'/><circle cx='70' cy='70' r='4' fill='%23dbeaff' stroke='none'/><path d='M55 55 L70 62 L85 55' stroke-width='2.6'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><defs><clipPath id='b'><circle cx='70' cy='70' r='30'/></clipPath></defs><g clip-path='url(%23b)'><rect x='40' y='40' width='60' height='60' fill='%23f5cf1a'/><path d='M70 40 L58 60 L46 46 L44 66 L70 70 L96 66 L94 46 L82 60 Z' fill='%234a90e2'/><path d='M70 100 L58 82 L46 96 L44 78 L70 74 L96 78 L94 96 L82 82 Z' fill='%234a90e2'/></g><circle cx='70' cy='70' r='30' fill='none' stroke='%23111' stroke-width='3'/><rect x='40' y='66' width='60' height='8' fill='%23111' clip-path='url(%23b)'/><circle cx='70' cy='70' r='8' fill='%23111'/><circle cx='70' cy='70' r='4.5' fill='%23f5f5f5'/></svg>");
+}
+/* Pokéball JP — Great Ball blue-and-red (dark mode) */
+html[data-theme="dark"] body[data-game-theme="pokemonjp"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><defs><clipPath id='b'><circle cx='70' cy='70' r='30'/></clipPath></defs><g clip-path='url(%23b)'><rect x='40' y='40' width='60' height='30' fill='%232b6cd6'/><rect x='40' y='70' width='60' height='30' fill='%23f5f5f5'/><polygon points='48,44 62,44 56,58' fill='%23e63946'/><polygon points='78,44 92,44 84,58' fill='%23e63946'/><circle cx='70' cy='52' r='2.5' fill='%23f5f5f5'/><circle cx='76' cy='48' r='1.6' fill='%23f5f5f5'/></g><circle cx='70' cy='70' r='30' fill='none' stroke='%23111' stroke-width='3'/><rect x='40' y='66' width='60' height='8' fill='%23111' clip-path='url(%23b)'/><circle cx='70' cy='70' r='8' fill='%23111'/><circle cx='70' cy='70' r='4.5' fill='%23f5f5f5'/></svg>");
 }
 /* Magic: The Gathering — mana pentagon */
 body[data-game-theme="mtg"] .theme-bg{
