@@ -178,6 +178,22 @@ body[data-game-theme="onepiece"] .theme-bg{
 body[data-game-theme="sports"] .theme-bg{
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='3.6' stroke-linejoin='round'><path d='M56 48 L84 48 L82 78 Q70 86 58 78 Z'/><path d='M56 54 Q44 54 44 66 Q44 74 58 74'/><path d='M84 54 Q96 54 96 66 Q96 74 82 74'/><rect x='62' y='84' width='16' height='5' fill='%23c9a06a'/><rect x='55' y='89' width='30' height='5' fill='%23c9a06a'/></g></svg>");
 }
+/* My Flips / Portfolio — gold bars (Pokémon Pocket vibe). Overrides game-theme when on flips view. */
+body[data-view="flips"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g stroke='%238a5a12' stroke-width='1.5' stroke-linejoin='round'><rect x='6' y='14' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='52' y='14' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='98' y='14' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='-16' y='40' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='30' y='40' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='76' y='40' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='122' y='40' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='6' y='66' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='52' y='66' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='98' y='66' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='-16' y='92' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='30' y='92' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='76' y='92' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='122' y='92' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='6' y='118' width='42' height='20' rx='3' fill='%23f5cf1a'/><rect x='52' y='118' width='42' height='20' rx='3' fill='%23e8a020'/><rect x='98' y='118' width='42' height='20' rx='3' fill='%23f5cf1a'/></g><g fill='%23fff3c4' opacity='.55'><rect x='8' y='16' width='38' height='2' rx='1'/><rect x='54' y='16' width='38' height='2' rx='1'/><rect x='100' y='16' width='38' height='2' rx='1'/><rect x='32' y='42' width='38' height='2' rx='1'/><rect x='78' y='42' width='38' height='2' rx='1'/><rect x='8' y='68' width='38' height='2' rx='1'/><rect x='54' y='68' width='38' height='2' rx='1'/><rect x='100' y='68' width='38' height='2' rx='1'/><rect x='32' y='94' width='38' height='2' rx='1'/><rect x='78' y='94' width='38' height='2' rx='1'/><rect x='8' y='120' width='38' height='2' rx='1'/><rect x='54' y='120' width='38' height='2' rx='1'/><rect x='100' y='120' width='38' height='2' rx='1'/></g></svg>") !important;
+  background-size:180px 180px !important;
+  opacity:.18 !important;
+}
+html[data-theme="dark"] body[data-view="flips"] .theme-bg{ opacity:.15 !important; }
+
+/* Collection — treasure chest + gold coins (Gimmighoul vibe). Overrides game-theme when on collection view. */
+body[data-view="collection"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g stroke='%236b3a12' stroke-width='1.6' stroke-linejoin='round'><path d='M32 68 L32 102 L108 102 L108 68 Z' fill='%23a67436'/><path d='M32 58 Q32 46 50 46 L90 46 Q108 46 108 58 L108 72 L32 72 Z' fill='%23c48440'/><rect x='32' y='68' width='76' height='6' fill='%236b3a12'/><rect x='58' y='40' width='24' height='34' fill='%23a02020'/><rect x='58' y='40' width='24' height='4' fill='%236b1414'/><circle cx='70' cy='70' r='5' fill='%23f5cf1a' stroke='%236b3a12' stroke-width='1.2'/><rect x='68' y='72' width='4' height='6' fill='%236b3a12'/><path d='M40 76 L40 100 M50 76 L50 100 M100 76 L100 100' stroke-width='1.2' opacity='.6'/></g><g stroke='%238a5a12' stroke-width='1.2'><circle cx='16' cy='24' r='6' fill='%23f5cf1a'/><circle cx='16' cy='24' r='2.5' fill='none' stroke='%23c48440'/><circle cx='124' cy='20' r='6' fill='%23e8a020'/><circle cx='124' cy='20' r='2.5' fill='none' stroke='%236b3a12'/><circle cx='12' cy='118' r='6' fill='%23f5cf1a'/><circle cx='12' cy='118' r='2.5' fill='none' stroke='%23c48440'/><circle cx='128' cy='124' r='6' fill='%23e8a020'/><circle cx='128' cy='124' r='2.5' fill='none' stroke='%236b3a12'/><circle cx='70' cy='16' r='5' fill='%23f5cf1a'/><circle cx='70' cy='124' r='5' fill='%23e8a020'/></g></svg>") !important;
+  background-size:180px 180px !important;
+  opacity:.20 !important;
+}
+html[data-theme="dark"] body[data-view="collection"] .theme-bg{ opacity:.17 !important; }
+
 /* Other/default — subtle card corner motif */
 body[data-game-theme="other"] .theme-bg{
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='3.4' stroke-linejoin='round'><rect x='50' y='44' width='40' height='52' rx='5'/><path d='M56 54 L84 54 M56 62 L78 62 M56 70 L72 70' stroke-width='2.6'/><circle cx='70' cy='84' r='4' fill='%23a68a6b'/></g></svg>");
@@ -5327,6 +5343,7 @@ function _updateFlipsSignInWall() {
 
 function switchView(view) {
   document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  try { document.body.setAttribute('data-view', view); } catch(_) {}
   const lookup     = document.getElementById('lookupView');
   const flips      = document.getElementById('flipsView');
   const collection = document.getElementById('collectionView');
