@@ -439,19 +439,66 @@
     window._fbAuth = auth;
 
     // On sign-in success → go back to app.
-    // EXCEPTION: if the user just signed up with email/password and is unverified,
+    // EXCEPTION 1: if the user just signed up with email/password and is unverified,
     // stay on this page so we can show the "Check your inbox" view.
+    // EXCEPTION 2: if a user with a persisted session lands on /signin (e.g. tapped
+    // 'Sign In' from the header while already signed in), STAY here so they can
+    // see the option to sign out or sign in as a different user. Only redirect
+    // when they actively completed a sign-in/sign-up in this tab.
     onAuthStateChanged(auth, user => {
       if (!user) return;
-      // Google / Apple → emailVerified === true → redirect immediately.
-      // Email/password fresh signup → emailVerified === false → show verify screen.
       if (window._justSignedUp && !user.emailVerified) {
         window._showVerifyScreen && window._showVerifyScreen(user.email);
         return;
       }
-      const dest = new URLSearchParams(location.search).get('next') || '/';
-      window.location.replace(dest);
+      // Only auto-redirect if this tab explicitly initiated a sign-in
+      // (window._justSignedIn set by doSignIn / googleSignIn success paths)
+      // OR the URL has ?next=<something> indicating a deep-link redirect.
+      const params = new URLSearchParams(location.search);
+      const nextParam = params.get('next');
+      if (window._justSignedIn || nextParam) {
+        const dest = nextParam || '/';
+        window.location.replace(dest);
+        return;
+      }
+      // Persisted session on cold /signin visit — show a friendly panel
+      // instead of the sign-in form so the user isn't confused.
+      window._showAlreadySignedIn && window._showAlreadySignedIn(user);
     });
+
+    // Helper: render a "You're already signed in" panel with Continue / Sign out.
+    window._showAlreadySignedIn = function(user) {
+      const card = document.querySelector('.auth-card');
+      if (!card) return;
+      // Hide all views.
+      ['viewSignIn','viewSignUp','viewForgot','viewVerify'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      // Hide tab strip.
+      const tabs = card.querySelector('.auth-tabs');
+      if (tabs) tabs.style.display = 'none';
+      let panel = document.getElementById('viewAlready');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'viewAlready';
+        panel.className = 'auth-view active';
+        panel.innerHTML =
+          '<div class="auth-title">You\u2019re signed in \u2705</div>' +
+          '<div class="auth-sub" id="alreadyEmail" style="margin-bottom:1rem"></div>' +
+          '<button class="btn-primary" onclick="window.location.href=\'/\'">Continue to CardResell</button>' +
+          '<button class="btn-google" onclick="_signOutAndReset()" style="margin-top:.75rem">Sign out</button>';
+        card.appendChild(panel);
+      } else {
+        panel.classList.add('active');
+      }
+      const emailEl = document.getElementById('alreadyEmail');
+      if (emailEl) emailEl.textContent = 'Signed in as ' + (user.email || 'your account') + '.';
+    };
+    window._signOutAndReset = function() {
+      if (!window._fbAuth) return;
+      window._fbAuth.signOut().then(() => location.reload()).catch(() => location.reload());
+    };
   </script>
 
   <script>
@@ -474,8 +521,9 @@
     }
 
     async function googleSignIn() {
+      window._justSignedIn = true;
       try { await window._fbGoogleSignIn(); }
-      catch(e) { showErr('errSignIn', fbMsg(e)); }
+      catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); }
     }
 
     async function doSignIn() {
@@ -484,8 +532,9 @@
       clearErr('errSignIn');
       if (!email || !pass) return showErr('errSignIn', 'Please enter your email and password.');
       setLoading('btnSignIn', true, 'Signing in...');
+      window._justSignedIn = true;
       try { await window._fbEmailSignIn(email, pass); }
-      catch(e) { showErr('errSignIn', fbMsg(e)); setLoading('btnSignIn', false, 'Sign In'); }
+      catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); setLoading('btnSignIn', false, 'Sign In'); }
     }
 
     async function doSignUp() {
