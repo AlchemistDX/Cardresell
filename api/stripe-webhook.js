@@ -1,7 +1,31 @@
 // /api/stripe-webhook — Handle Stripe events
-// Handles: Pro subscription + per-scan payments
+// Handles: Pro/Pro+ subscription + per-scan payments
+//
+// Monthly credit grants (Phase 1b):
+//   On BOTH checkout.session.completed (first payment) AND
+//   invoice.payment_succeeded (recurring renewals), we deposit tier-specific
+//   credits into the user's KV pools:
+//     - Pro:      +50 id_paid_left,  +20 paid_left
+//     - Pro+:    +200 id_paid_left,  +75 paid_left
+//   Rollover ceiling enforced: credits cap at 3 months' worth for Pro,
+//   6 months' worth for Pro+. Excess grant is discarded (not stored).
+//
+// Idempotency: The Stripe event.id lock at the top of handler() prevents
+// duplicate grants if Stripe retries the same webhook.
 
 export const config = { api: { bodyParser: false } };
+
+// Tier configuration — MUST stay in sync with TIER_CONFIG in api/pro-status.js
+const TIER_CONFIG = {
+  pro:      { monthlyIds: 50,  monthlyGrade: 20, ceilingMonths: 3 },
+  pro_plus: { monthlyIds: 200, monthlyGrade: 75, ceilingMonths: 6 },
+};
+
+function tierFromPlan(plan) {
+  if (plan === 'pro_plus_monthly' || plan === 'pro_plus_annual') return 'pro_plus';
+  if (plan === 'pro_monthly'      || plan === 'pro_annual')      return 'pro';
+  return null;
+}
 
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -67,21 +91,31 @@ export default async function handler(req, res) {
         const qty = tierMap[obj.metadata?.tier] || 10;
         await addPaidScanCredit(googleSub, qty, 'id');
         console.log('ID_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email, qty }));
-      } else if (obj.mode === 'subscription' || paymentType === 'pro_annual') {
+      } else if (obj.mode === 'subscription' || paymentType === 'pro_annual' || paymentType === 'pro_plus_annual') {
         const subscriptionId = obj.subscription || obj.id;
         const plan = obj.metadata?.plan || 'pro_monthly';
         await storeProUser(googleSub, email, subscriptionId, 'active', plan);
+        // Grant initial month's credits on first checkout.
+        await grantMonthlyCredits(googleSub, plan, obj.id);
       }
     }
   }
 
-  // Recurring Pro invoice paid
+  // Recurring Pro/Pro+ invoice paid (monthly renewal) — grant monthly credits.
+  // First-month grants happen in checkout.session.completed above; Stripe does
+  // NOT re-fire invoice.payment_succeeded for the initial payment on new subs
+  // (checkout.session.completed is fired instead), so there's no double-grant.
   if (type === 'invoice.payment_succeeded') {
     const obj = event.data.object;
     const googleSub = obj.metadata?.google_sub || obj.subscription_details?.metadata?.google_sub || null;
     const email = obj.customer_email || obj.customer_details?.email || '';
     const subscriptionId = obj.subscription || obj.id;
-    if (googleSub) await storeProUser(googleSub, email, subscriptionId, 'active');
+    if (googleSub) {
+      // Fetch existing plan from KV so we know whether to grant Pro or Pro+.
+      const plan = await getStoredPlan(googleSub);
+      await storeProUser(googleSub, email, subscriptionId, 'active', plan || 'pro_monthly');
+      if (plan) await grantMonthlyCredits(googleSub, plan, obj.id);
+    }
   }
 
   // Subscription cancelled or payment failed
@@ -151,6 +185,96 @@ async function addPaidScanCredit(googleSub, amount, type = 'graded') {
       headers: { Authorization: `Bearer ${kvToken}` },
     });
   } catch(e) { console.error('KV scan credit error:', e); }
+}
+
+// Read the currently stored plan for a Pro user (used on invoice.payment_succeeded
+// to know whether to grant Pro or Pro+ credits). Returns null if no active record.
+async function getStoredPlan(googleSub) {
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+  if (!kvUrl || !kvToken) return null;
+  try {
+    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(`pro:${googleSub}`)}`, {
+      headers: { Authorization: `Bearer ${kvToken}` },
+    });
+    const data = await r.json();
+    if (data.result) {
+      const record = JSON.parse(data.result);
+      return record.plan || null;
+    }
+  } catch(e) { console.error('getStoredPlan error:', e); }
+  return null;
+}
+
+// Grant a month's worth of ID scans + grade credits to a subscriber,
+// enforcing the rollover ceiling (3 months for Pro, 6 for Pro+).
+// The Stripe event.id lock at handler() top ensures this can't double-fire
+// for the same invoice/checkout event.
+async function grantMonthlyCredits(googleSub, plan, sourceEventId) {
+  const kvUrl   = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+  if (!kvUrl || !kvToken) {
+    console.log('MONTHLY_GRANT_NO_KV:', JSON.stringify({ googleSub, plan }));
+    return;
+  }
+
+  const tier = tierFromPlan(plan);
+  if (!tier) {
+    console.log('MONTHLY_GRANT_UNKNOWN_PLAN:', plan);
+    return;
+  }
+  const cfg = TIER_CONFIG[tier];
+  const ceilingIds   = cfg.monthlyIds   * cfg.ceilingMonths; // Pro=150, Pro+=1200
+  const ceilingGrade = cfg.monthlyGrade * cfg.ceilingMonths; // Pro=60,  Pro+=450
+
+  try {
+    const idKey    = `scans:${googleSub}:id_paid_left`;
+    const gradeKey = `scans:${googleSub}:paid_left`;
+    const curId    = await getKVInt(kvUrl, kvToken, idKey);
+    const curGrade = await getKVInt(kvUrl, kvToken, gradeKey);
+
+    // Top up to ceiling. If balance is ALREADY above ceiling (e.g. user bought
+    // a big scan pack that pushed them over the monthly cap), leave the excess
+    // alone — do not truncate purchased credits. Grant is capped so it can't
+    // push above ceiling either.
+    const nextId    = curId    >= ceilingIds   ? curId    : Math.min(ceilingIds,   curId    + cfg.monthlyIds);
+    const nextGrade = curGrade >= ceilingGrade ? curGrade : Math.min(ceilingGrade, curGrade + cfg.monthlyGrade);
+    const grantedId    = Math.max(0, nextId    - curId);
+    const grantedGrade = Math.max(0, nextGrade - curGrade);
+
+    await Promise.all([
+      fetch(`${kvUrl}/set/${encodeURIComponent(idKey)}/${encodeURIComponent(String(nextId))}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}` },
+      }),
+      fetch(`${kvUrl}/set/${encodeURIComponent(gradeKey)}/${encodeURIComponent(String(nextGrade))}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}` },
+      }),
+    ]);
+
+    // Audit trail for support/debugging. Not used programmatically.
+    const stamp = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const auditKey = `credit_grants:${googleSub}:${stamp}`;
+    const auditVal = JSON.stringify({
+      tier, plan, grantedId, grantedGrade,
+      newIdBalance: nextId, newGradeBalance: nextGrade,
+      sourceEventId, at: new Date().toISOString(),
+    });
+    await fetch(`${kvUrl}/set/${encodeURIComponent(auditKey)}/${encodeURIComponent(auditVal)}/EX/7776000`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` },
+    });
+
+    console.log('MONTHLY_GRANT:', JSON.stringify({
+      googleSub, plan, tier,
+      granted: { id: grantedId, grade: grantedGrade },
+      newBalance: { id: nextId, grade: nextGrade },
+      ceiling: { id: ceilingIds, grade: ceilingGrade },
+    }));
+  } catch(e) {
+    console.error('grantMonthlyCredits error:', e);
+  }
 }
 
 async function getKVInt(kvUrl, kvToken, key) {
