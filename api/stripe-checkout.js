@@ -54,7 +54,9 @@ export default async function handler(req, res) {
       customer_email: userEmail,
       'metadata[google_sub]': userSub,
       'metadata[user_name]': userName,
+      'metadata[plan]': 'pro_monthly',
       'subscription_data[metadata][google_sub]': userSub,
+      'subscription_data[metadata][plan]': 'pro_monthly',
     });
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
