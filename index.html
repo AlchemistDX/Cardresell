@@ -129,7 +129,51 @@
 /* ─── RESET ─── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
-body{min-height:100dvh;font-family:var(--font);font-size:15px;color:var(--text);background:var(--bg);line-height:1.55}
+body{min-height:100dvh;font-family:var(--font);font-size:15px;color:var(--text);background:var(--bg);line-height:1.55;position:relative}
+
+/* ─── THEMED AMBIENT BACKGROUND ───
+ * A fixed, low-opacity SVG pattern layer that sits behind all content and
+ * swaps based on <body data-game-theme="...">. Set from onGameSelectChange /
+ * cat-pill click handler. Very subtle so cards remain the visual hero.
+ * Themes: pokemon, pokemonjp, mtg, yugioh, lorcana, onepiece, sports, other.
+ * Missing/unknown → no pattern (transparent), so we degrade to plain --bg. */
+.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.055;transition:background-image .35s ease,opacity .35s ease;background-repeat:repeat;background-size:140px 140px;background-position:center}
+[data-theme="dark"] .theme-bg{opacity:.07}
+.wrap,.hdr,.modal-shell,.overlay,#scanOverlay,header,main,footer,.auth-card{position:relative;z-index:1}
+@media (prefers-reduced-motion: reduce){.theme-bg{transition:none}}
+
+/* Pokéball — classic red/black */
+body[data-game-theme="pokemon"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='2.5'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70'/><circle cx='70' cy='70' r='7' fill='%23e8a020'/></g></svg>");
+}
+/* Pokéball JP — Great Ball vibe, blue tinted */
+body[data-game-theme="pokemonjp"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%234a90e2' stroke-width='2.5'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70'/><circle cx='70' cy='70' r='7' fill='%234a90e2'/><path d='M55 55 L70 62 L85 55' stroke-width='1.6'/></g></svg>");
+}
+/* Magic: The Gathering — mana pentagon */
+body[data-game-theme="mtg"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='2.2'><polygon points='70,40 96,58 86,90 54,90 44,58'/><circle cx='70' cy='40' r='3.5' fill='%23c9a06a'/><circle cx='96' cy='58' r='3.5' fill='%23c9a06a'/><circle cx='86' cy='90' r='3.5' fill='%23c9a06a'/><circle cx='54' cy='90' r='3.5' fill='%23c9a06a'/><circle cx='44' cy='58' r='3.5' fill='%23c9a06a'/></g></svg>");
+}
+/* Yu-Gi-Oh! — Millennium Eye inside pyramid */
+body[data-game-theme="yugioh"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23d4a418' stroke-width='2.2'><polygon points='70,40 100,95 40,95'/><path d='M52 78 Q70 68 88 78 Q70 88 52 78 Z'/><circle cx='70' cy='78' r='4' fill='%23d4a418'/></g></svg>");
+}
+/* Lorcana — six-pointed compass rune */
+body[data-game-theme="lorcana"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='2.2'><circle cx='70' cy='70' r='22'/><path d='M70 44 L70 96 M44 70 L96 70 M52 52 L88 88 M88 52 L52 88'/><circle cx='70' cy='70' r='5' fill='%23a68a6b'/></g></svg>");
+}
+/* One Piece — Straw Hat Jolly Roger skull */
+body[data-game-theme="onepiece"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='2.2'><path d='M50 62 Q70 45 90 62 L94 66 L46 66 Z'/><circle cx='70' cy='75' r='16'/><circle cx='63' cy='73' r='2.5' fill='%23e8a020'/><circle cx='77' cy='73' r='2.5' fill='%23e8a020'/><path d='M60 92 L62 88 L64 92 L66 88 L68 92 L70 88 L72 92 L74 88 L76 92 L78 88 L80 92'/></g></svg>");
+}
+/* Sports — stylized trophy */
+body[data-game-theme="sports"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='2.2'><path d='M58 50 L82 50 L80 78 Q70 84 60 78 Z'/><path d='M58 55 Q48 55 48 65 Q48 72 58 72'/><path d='M82 55 Q92 55 92 65 Q92 72 82 72'/><rect x='63' y='84' width='14' height='4'/><rect x='58' y='88' width='24' height='4'/></g></svg>");
+}
+/* Other/default — subtle card corner motif */
+body[data-game-theme="other"] .theme-bg{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='2'><rect x='52' y='46' width='36' height='48' rx='4'/><path d='M58 54 L82 54 M58 60 L74 60'/></g></svg>");
+}
 input,select,button,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:none;background:none}
 img{display:block;max-width:100%;height:auto}
@@ -1095,7 +1139,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     });
   </script>
 </head>
-<body>
+<body data-game-theme="pokemon">
+<div class="theme-bg" aria-hidden="true"></div>
 <div class="wrap">
 
 <!-- Private-mode banner (shown by JS when IndexedDB is blocked) -->
@@ -2935,6 +2980,7 @@ const SPORT_EMOJI = {
 // ── Category pills ──
 function onGameSelectChange(game) {
   activeGame = game;
+  try { document.body.setAttribute('data-game-theme', game); } catch(_) {}
 
   // Sync select
   const sel = document.getElementById('gameSelect');
@@ -2982,6 +3028,7 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
     const selEl = document.getElementById('gameSelect');
     if (selEl) selEl.value = p.dataset.game;
     activeGame = p.dataset.game;
+    try { document.body.setAttribute('data-game-theme', p.dataset.game); } catch(_) {}
     dropList.classList.remove('open');
     dropList.innerHTML = '';
 
