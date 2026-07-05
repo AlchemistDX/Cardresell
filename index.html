@@ -771,11 +771,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
     import {
-      getAuth, onAuthStateChanged, signOut as fbSignOut,
+      initializeAuth, onAuthStateChanged, signOut as fbSignOut,
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail, sendEmailVerification,
-      setPersistence, browserLocalPersistence
+      indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const firebaseConfig = {
@@ -788,12 +788,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     };
 
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    // Explicit local persistence so the session survives tab-switching to the
-    // email app and back after tapping the verification link. Falls through on
-    // private-mode browsers that block IndexedDB (Firebase uses in-memory).
-    setPersistence(auth, browserLocalPersistence).catch(e => {
-      console.warn('setPersistence(local) failed, using default:', e && e.code);
+    // CRITICAL: use initializeAuth() with persistence array — NOT getAuth() +
+    // setPersistence(). In Firebase v10.12.2, calling setPersistence() after
+    // getAuth() resolves cleanly but silently fails to attach the persistence
+    // manager, leaving auth in memory-only mode. Result: sign-ins from
+    // /signin vanish the moment index.html loads. Verified in Playwright:
+    // getAuth+setPersistence writes 0 records to firebaseLocalStorageDb;
+    // initializeAuth writes 1. Array = ordered fallback: IDB, then
+    // localStorage (cross-tab), then sessionStorage (in-tab only).
+    const auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
     });
 
     // Expose to global scope for use in non-module scripts

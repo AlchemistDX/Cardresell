@@ -361,11 +361,11 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
     import {
-      getAuth, onAuthStateChanged,
+      initializeAuth, onAuthStateChanged,
       GoogleAuthProvider, signInWithPopup,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       sendPasswordResetEmail, sendEmailVerification,
-      setPersistence, browserLocalPersistence
+      indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence
     } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
     const app = initializeApp({
@@ -376,7 +376,17 @@
       messagingSenderId: "107816299392",
       appId: "1:107816299392:web:247dd67177459923866f65"
     });
-    const auth = getAuth(app);
+    // CRITICAL: use initializeAuth() with persistence array — NOT getAuth() +
+    // setPersistence(). In Firebase v10.12.2, calling setPersistence() after
+    // getAuth() resolves cleanly but silently fails to attach the persistence
+    // manager, leaving auth in memory-only mode. Result: sign-ins vanish on
+    // every navigation. Verified in Playwright: getAuth+setPersistence writes
+    // 0 records to firebaseLocalStorageDb; initializeAuth writes 1. The array
+    // form provides an ordered fallback chain — IDB first, then localStorage
+    // (survives across tabs), then sessionStorage (survives within tab only).
+    const auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+    });
 
     // Private-mode detection — IndexedDB is blocked in Safari Private mode
     // (or errors on open). Show a red banner so the user knows sign-in won't
@@ -395,17 +405,11 @@
       }
     })();
 
-    // Explicit local persistence so the session survives tab-switching to the
-    // email app and back. Falls through silently on private-mode browsers that
-    // block IndexedDB — Firebase will use in-memory persistence as a fallback.
-    // CRITICAL: we expose this as a promise so doSignIn/doSignUp/googleSignIn
-    // can AWAIT it before running the auth call. Without this, a user who taps
-    // Sign In within a few ms of page load (fast Passwords autofill on Safari)
-    // races the persistence-set and Firebase stores the session in memory-only
-    // persistence — which does NOT survive the location.replace('/') redirect.
-    window._fbPersistenceReady = setPersistence(auth, browserLocalPersistence).catch(e => {
-      console.warn('setPersistence(local) failed, using default:', e && e.code);
-    });
+    // Persistence is now configured directly in initializeAuth() above — no
+    // separate setPersistence() call needed. This promise is kept for backward
+    // compat with the doSignIn/doSignUp/googleSignIn code below which awaits
+    // it as a safety no-op.
+    window._fbPersistenceReady = Promise.resolve();
 
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
