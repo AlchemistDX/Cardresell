@@ -137,42 +137,42 @@ body{min-height:100dvh;font-family:var(--font);font-size:15px;color:var(--text);
  * cat-pill click handler. Very subtle so cards remain the visual hero.
  * Themes: pokemon, pokemonjp, mtg, yugioh, lorcana, onepiece, sports, other.
  * Missing/unknown → no pattern (transparent), so we degrade to plain --bg. */
-.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.055;transition:background-image .35s ease,opacity .35s ease;background-repeat:repeat;background-size:140px 140px;background-position:center}
-[data-theme="dark"] .theme-bg{opacity:.07}
+.theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.14;transition:background-image .35s ease,opacity .35s ease;background-repeat:repeat;background-size:120px 120px;background-position:center}
+[data-theme="dark"] .theme-bg{opacity:.17}
 .wrap,.hdr,.modal-shell,.overlay,#scanOverlay,header,main,footer,.auth-card{position:relative;z-index:1}
 @media (prefers-reduced-motion: reduce){.theme-bg{transition:none}}
 
 /* Pokéball — classic red/black */
 body[data-game-theme="pokemon"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='2.5'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70'/><circle cx='70' cy='70' r='7' fill='%23e8a020'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='4' stroke-linejoin='round'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70' stroke-width='4.5'/><circle cx='70' cy='70' r='8' fill='%23e8a020'/><circle cx='70' cy='70' r='4' fill='%23fbe6bf' stroke='none'/></g></svg>");
 }
 /* Pokéball JP — Great Ball vibe, blue tinted */
 body[data-game-theme="pokemonjp"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%234a90e2' stroke-width='2.5'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70'/><circle cx='70' cy='70' r='7' fill='%234a90e2'/><path d='M55 55 L70 62 L85 55' stroke-width='1.6'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%234a90e2' stroke-width='4' stroke-linejoin='round'><circle cx='70' cy='70' r='30'/><line x1='40' y1='70' x2='100' y2='70' stroke-width='4.5'/><circle cx='70' cy='70' r='8' fill='%234a90e2'/><circle cx='70' cy='70' r='4' fill='%23dbeaff' stroke='none'/><path d='M55 55 L70 62 L85 55' stroke-width='2.6'/></g></svg>");
 }
 /* Magic: The Gathering — mana pentagon */
 body[data-game-theme="mtg"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='2.2'><polygon points='70,40 96,58 86,90 54,90 44,58'/><circle cx='70' cy='40' r='3.5' fill='%23c9a06a'/><circle cx='96' cy='58' r='3.5' fill='%23c9a06a'/><circle cx='86' cy='90' r='3.5' fill='%23c9a06a'/><circle cx='54' cy='90' r='3.5' fill='%23c9a06a'/><circle cx='44' cy='58' r='3.5' fill='%23c9a06a'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='3.6' stroke-linejoin='round'><polygon points='70,40 96,58 86,90 54,90 44,58'/><circle cx='70' cy='40' r='5' fill='%23c9a06a'/><circle cx='96' cy='58' r='5' fill='%23c9a06a'/><circle cx='86' cy='90' r='5' fill='%23c9a06a'/><circle cx='54' cy='90' r='5' fill='%23c9a06a'/><circle cx='44' cy='58' r='5' fill='%23c9a06a'/><path d='M70 40 L86 90 M70 40 L54 90 M44 58 L96 58 M44 58 L86 90 M96 58 L54 90' stroke-width='1.6' opacity='.55'/></g></svg>");
 }
 /* Yu-Gi-Oh! — Millennium Eye inside pyramid */
 body[data-game-theme="yugioh"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23d4a418' stroke-width='2.2'><polygon points='70,40 100,95 40,95'/><path d='M52 78 Q70 68 88 78 Q70 88 52 78 Z'/><circle cx='70' cy='78' r='4' fill='%23d4a418'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23d4a418' stroke-width='3.8' stroke-linejoin='round'><polygon points='70,38 102,96 38,96'/><path d='M50 78 Q70 66 90 78 Q70 90 50 78 Z' stroke-width='3'/><circle cx='70' cy='78' r='5.5' fill='%23d4a418'/><circle cx='70' cy='78' r='2.5' fill='%232a1e00' stroke='none'/></g></svg>");
 }
 /* Lorcana — six-pointed compass rune */
 body[data-game-theme="lorcana"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='2.2'><circle cx='70' cy='70' r='22'/><path d='M70 44 L70 96 M44 70 L96 70 M52 52 L88 88 M88 52 L52 88'/><circle cx='70' cy='70' r='5' fill='%23a68a6b'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='3.6' stroke-linejoin='round'><circle cx='70' cy='70' r='24'/><path d='M70 42 L70 98 M42 70 L98 70' stroke-width='3.8'/><path d='M52 52 L88 88 M88 52 L52 88' stroke-width='2.6'/><circle cx='70' cy='70' r='7' fill='%23a68a6b'/><circle cx='70' cy='70' r='3' fill='%23f2eadd' stroke='none'/></g></svg>");
 }
 /* One Piece — Straw Hat Jolly Roger skull */
 body[data-game-theme="onepiece"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='2.2'><path d='M50 62 Q70 45 90 62 L94 66 L46 66 Z'/><circle cx='70' cy='75' r='16'/><circle cx='63' cy='73' r='2.5' fill='%23e8a020'/><circle cx='77' cy='73' r='2.5' fill='%23e8a020'/><path d='M60 92 L62 88 L64 92 L66 88 L68 92 L70 88 L72 92 L74 88 L76 92 L78 88 L80 92'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23e8a020' stroke-width='3.6' stroke-linejoin='round' stroke-linecap='round'><path d='M46 62 Q70 42 94 62 L98 68 L42 68 Z' stroke-width='4'/><circle cx='70' cy='78' r='17'/><circle cx='63' cy='75' r='3.5' fill='%23e8a020'/><circle cx='77' cy='75' r='3.5' fill='%23e8a020'/><path d='M60 96 L64 90 L68 96 L72 90 L76 96 L80 90' stroke-width='3'/></g></svg>");
 }
 /* Sports — stylized trophy */
 body[data-game-theme="sports"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='2.2'><path d='M58 50 L82 50 L80 78 Q70 84 60 78 Z'/><path d='M58 55 Q48 55 48 65 Q48 72 58 72'/><path d='M82 55 Q92 55 92 65 Q92 72 82 72'/><rect x='63' y='84' width='14' height='4'/><rect x='58' y='88' width='24' height='4'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23c9a06a' stroke-width='3.6' stroke-linejoin='round'><path d='M56 48 L84 48 L82 78 Q70 86 58 78 Z'/><path d='M56 54 Q44 54 44 66 Q44 74 58 74'/><path d='M84 54 Q96 54 96 66 Q96 74 82 74'/><rect x='62' y='84' width='16' height='5' fill='%23c9a06a'/><rect x='55' y='89' width='30' height='5' fill='%23c9a06a'/></g></svg>");
 }
 /* Other/default — subtle card corner motif */
 body[data-game-theme="other"] .theme-bg{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='2'><rect x='52' y='46' width='36' height='48' rx='4'/><path d='M58 54 L82 54 M58 60 L74 60'/></g></svg>");
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><g fill='none' stroke='%23a68a6b' stroke-width='3.4' stroke-linejoin='round'><rect x='50' y='44' width='40' height='52' rx='5'/><path d='M56 54 L84 54 M56 62 L78 62 M56 70 L72 70' stroke-width='2.6'/><circle cx='70' cy='84' r='4' fill='%23a68a6b'/></g></svg>");
 }
 input,select,button,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:none;background:none}
