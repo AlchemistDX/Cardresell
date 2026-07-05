@@ -1448,6 +1448,42 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Bulk scan file inputs -->
   <input type="file" id="bulkUploadInput" accept="image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
   <input type="file" id="bulkCameraInput" accept="image/*" capture="environment" style="display:none" onchange="processBulkCameraCapture(this)" />
+  <!-- Live camera viewfinder (in-app) — opens ABOVE scanOverlay for framing guidance -->
+  <div id="camViewfinder" style="display:none;position:fixed;inset:0;background:#000;z-index:220;flex-direction:column;align-items:stretch;justify-content:stretch;overflow:hidden">
+    <video id="camVideo" playsinline autoplay muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>
+    <!-- Top bar: step pill + close + credits placeholder -->
+    <div id="camTopBar" style="position:absolute;top:0;left:0;right:0;padding:env(safe-area-inset-top,12px) 14px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:3;background:linear-gradient(to bottom,rgba(0,0,0,.55),rgba(0,0,0,0))">
+      <button id="camCloseBtn" onclick="closeCameraViewfinder()" aria-label="Close camera" style="width:36px;height:36px;border-radius:99px;background:rgba(0,0,0,.55);border:none;color:#fff;font-size:1.1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      <div id="camStepPill" style="background:#22d3ee;color:#062326;font-weight:900;font-size:.82rem;letter-spacing:1.2px;padding:.4rem .9rem;border-radius:99px;box-shadow:0 4px 14px rgba(34,211,238,.35)">FRONT</div>
+      <div id="camTiltChip" style="display:none;background:rgba(0,0,0,.55);color:#fff;font-size:.72rem;font-weight:700;padding:.35rem .65rem;border-radius:99px;min-width:36px;text-align:center"><span id="camTiltIcon">◎</span> <span id="camTiltText">Tilt</span></div>
+    </div>
+    <!-- SVG framing overlay (brackets swap per step) -->
+    <div id="camGuideWrap" style="position:absolute;inset:0;pointer-events:none;z-index:2;display:flex;align-items:center;justify-content:center">
+      <svg id="camGuideSvg" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet" style="width:78vw;max-width:340px;height:auto;filter:drop-shadow(0 2px 12px rgba(0,0,0,.5))" aria-hidden="true">
+        <!-- Brackets rendered by JS — keeps things dynamic per step -->
+      </svg>
+    </div>
+    <!-- Bottom controls -->
+    <div id="camBottom" style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px calc(env(safe-area-inset-bottom,12px) + 22px);display:flex;flex-direction:column;align-items:center;gap:14px;z-index:3;background:linear-gradient(to top,rgba(0,0,0,.6),rgba(0,0,0,0))">
+      <div id="camHelperText" style="background:rgba(0,0,0,.55);color:#fff;font-size:.82rem;font-weight:600;padding:.45rem .9rem;border-radius:99px">Fit entire card in frame</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:420px">
+        <button id="camRetakeBtn" onclick="closeCameraViewfinder()" aria-label="Cancel" style="width:44px;height:44px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:1rem;cursor:pointer">↩</button>
+        <button id="camShutterBtn" onclick="captureFromCameraViewfinder()" aria-label="Capture" style="width:78px;height:78px;border-radius:99px;background:#fff;border:5px solid #22d3ee;box-shadow:0 0 0 3px rgba(34,211,238,.35),0 8px 24px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.75rem">📷</button>
+        <button id="camSwapBtn" onclick="cameraFallbackToNative()" title="Use system camera" aria-label="Use system camera" style="width:44px;height:44px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:1.05rem;cursor:pointer">📱</button>
+      </div>
+    </div>
+    <!-- Permission-denied / error overlay -->
+    <div id="camPermMsg" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.85);z-index:4;padding:2rem 1.5rem;flex-direction:column;align-items:center;justify-content:center;gap:1rem;text-align:center;color:#fff">
+      <div style="font-size:2.5rem">📷</div>
+      <div id="camPermTitle" style="font-size:1.05rem;font-weight:800">Camera access needed</div>
+      <div id="camPermBody" style="font-size:.85rem;opacity:.75;max-width:320px;line-height:1.5">The framing guide needs your camera. You can grant access in your browser settings, or fall back to the system camera.</div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center">
+        <button onclick="cameraFallbackToNative()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.65rem 1.2rem;font-weight:800;font-size:.88rem;cursor:pointer">Use system camera instead</button>
+        <button onclick="closeCameraViewfinder()" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:.65rem 1.2rem;font-weight:700;font-size:.88rem;cursor:pointer">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- Framing guide (SVG) — swapped per step; hidden until scan flow starts -->
@@ -7576,6 +7612,226 @@ function hideScanGuide() {
   el.innerHTML = '';
 }
 
+// ── Live camera viewfinder (in-app) ──
+// Opens a fullscreen viewfinder with SVG framing brackets + tilt indicator.
+// On shutter, converts the current frame to a JPEG File and calls onCapture(file).
+// Falls back to the native OS camera (file input) if permission is denied
+// or getUserMedia is unavailable (older browsers, insecure contexts).
+window._camState = { stream: null, targetInputId: null, step: 'front', tiltHandler: null, tiltActive: false };
+
+function _renderCamBrackets(step) {
+  // Card outline: 63:88 aspect, viewBox 100x140. For edges the SAME card outline
+  // is drawn but the relevant edge gets a highlighted gold line.
+  const svg = document.getElementById('camGuideSvg');
+  if (!svg) return;
+  const W = 100, H = 140, gold = '#facc15', white = '#fff';
+  const isEdge = ['top','bottom','left','right'].includes(step);
+  // Corner brackets — 4 L-shaped strokes (TAG-style)
+  const armH = 14, armV = 20, sw = 3.2; // horizontal arm length, vertical arm length, stroke width
+  const brackets =
+    // top-left
+    '<path d="M2 '+(2+armV)+' L2 2 L'+(2+armH)+' 2" fill="none" stroke="'+white+'" stroke-width="'+sw+'" stroke-linecap="round" />' +
+    // top-right
+    '<path d="M'+(W-2-armH)+' 2 L'+(W-2)+' 2 L'+(W-2)+' '+(2+armV)+'" fill="none" stroke="'+white+'" stroke-width="'+sw+'" stroke-linecap="round" />' +
+    // bottom-left
+    '<path d="M2 '+(H-2-armV)+' L2 '+(H-2)+' L'+(2+armH)+' '+(H-2)+'" fill="none" stroke="'+white+'" stroke-width="'+sw+'" stroke-linecap="round" />' +
+    // bottom-right
+    '<path d="M'+(W-2-armH)+' '+(H-2)+' L'+(W-2)+' '+(H-2)+' L'+(W-2)+' '+(H-2-armV)+'" fill="none" stroke="'+white+'" stroke-width="'+sw+'" stroke-linecap="round" />';
+
+  let edgeHi = '';
+  if (isEdge) {
+    const t = 4.5; // edge stroke thickness
+    if (step === 'top')    edgeHi = '<line x1="6" y1="6" x2="'+(W-6)+'" y2="6" stroke="'+gold+'" stroke-width="'+t+'" stroke-linecap="round" />';
+    if (step === 'bottom') edgeHi = '<line x1="6" y1="'+(H-6)+'" x2="'+(W-6)+'" y2="'+(H-6)+'" stroke="'+gold+'" stroke-width="'+t+'" stroke-linecap="round" />';
+    if (step === 'left')   edgeHi = '<line x1="6" y1="6" x2="6" y2="'+(H-6)+'" stroke="'+gold+'" stroke-width="'+t+'" stroke-linecap="round" />';
+    if (step === 'right')  edgeHi = '<line x1="'+(W-6)+'" y1="6" x2="'+(W-6)+'" y2="'+(H-6)+'" stroke="'+gold+'" stroke-width="'+t+'" stroke-linecap="round" />';
+  }
+  svg.innerHTML = brackets + edgeHi;
+}
+
+function _setCamStepUI(step) {
+  const labels = { front:'FRONT', back:'BACK', top:'TOP EDGE', bottom:'BOTTOM EDGE', left:'LEFT EDGE', right:'RIGHT EDGE', id:'CARD ID' };
+  const helpers = {
+    front:  'Fit entire card in frame',
+    back:   'Flip card over — fit back in frame',
+    top:    'Fill frame with the TOP edge',
+    bottom: 'Fill frame with the BOTTOM edge',
+    left:   'Fill frame with the LEFT edge',
+    right:  'Fill frame with the RIGHT edge',
+    id:     'Fit entire card in frame'
+  };
+  document.getElementById('camStepPill').textContent = labels[step] || 'CARD';
+  document.getElementById('camHelperText').textContent = helpers[step] || 'Fit entire card in frame';
+  _renderCamBrackets(step);
+}
+
+function _stopCamStream() {
+  const s = window._camState.stream;
+  if (s) { try { s.getTracks().forEach(t => t.stop()); } catch (e) {} }
+  window._camState.stream = null;
+  const v = document.getElementById('camVideo');
+  if (v) { try { v.srcObject = null; } catch (e) {} }
+}
+
+function _stopCamTilt() {
+  const h = window._camState.tiltHandler;
+  if (h) { try { window.removeEventListener('deviceorientation', h); } catch (e) {} }
+  window._camState.tiltHandler = null;
+  window._camState.tiltActive = false;
+  const chip = document.getElementById('camTiltChip');
+  if (chip) chip.style.display = 'none';
+}
+
+function _startCamTilt() {
+  const chip = document.getElementById('camTiltChip');
+  if (!chip || !('DeviceOrientationEvent' in window)) return;
+  const attach = () => {
+    const handler = (ev) => {
+      // beta = front-back tilt (-180..180), gamma = left-right (-90..90)
+      const b = ev.beta || 0, g = ev.gamma || 0;
+      const level = Math.abs(b) < 8 && Math.abs(g) < 8;
+      const iconEl = document.getElementById('camTiltIcon');
+      const textEl = document.getElementById('camTiltText');
+      if (iconEl) iconEl.textContent = level ? '\u25c9' : '\u25ce';
+      if (textEl) textEl.textContent = level ? 'Level' : 'Tilt to level';
+      chip.style.background = level ? 'rgba(34,197,94,.85)' : 'rgba(0,0,0,.55)';
+    };
+    window._camState.tiltHandler = handler;
+    window._camState.tiltActive = true;
+    window.addEventListener('deviceorientation', handler);
+    chip.style.display = 'inline-block';
+  };
+  // iOS 13+ requires explicit permission
+  const DOE = window.DeviceOrientationEvent;
+  if (DOE && typeof DOE.requestPermission === 'function') {
+    DOE.requestPermission().then(res => { if (res === 'granted') attach(); }).catch(() => {});
+  } else {
+    attach();
+  }
+}
+
+function _showCamPermMsg(title, body) {
+  const box = document.getElementById('camPermMsg');
+  if (!box) return;
+  document.getElementById('camPermTitle').textContent = title || 'Camera access needed';
+  document.getElementById('camPermBody').textContent  = body  || 'The framing guide needs your camera. Grant access in your browser settings, or use the system camera.';
+  box.style.display = 'flex';
+}
+
+// Public entry point.
+// step: 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right' | 'id'
+// targetInputId: id of the hidden <input type=file> whose onchange handles the captured frame.
+async function openCameraViewfinder(step, targetInputId) {
+  const secureOK = window.isSecureContext !== false; // file:// counts as secure in dev
+  const hasGUM   = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  if (!secureOK || !hasGUM) {
+    // No live viewfinder possible — use native camera immediately
+    const inp = document.getElementById(targetInputId);
+    if (inp) inp.click();
+    return;
+  }
+
+  window._camState.step = step;
+  window._camState.targetInputId = targetInputId;
+  _setCamStepUI(step);
+  const vf = document.getElementById('camViewfinder');
+  vf.style.display = 'flex';
+  document.getElementById('camPermMsg').style.display = 'none';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
+    window._camState.stream = stream;
+    const v = document.getElementById('camVideo');
+    v.srcObject = stream;
+    // Safari sometimes needs an explicit play()
+    try { await v.play(); } catch (e) {}
+    _startCamTilt();
+  } catch (err) {
+    const name = (err && err.name) || '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      _showCamPermMsg('Camera access blocked', 'You denied camera access. Enable it in your browser settings, or use the system camera below.');
+    } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      _showCamPermMsg('No camera found', 'No usable camera on this device. Use the system camera instead.');
+    } else {
+      _showCamPermMsg('Camera unavailable', 'Could not start the camera. You can use the system camera instead.');
+    }
+  }
+}
+
+function closeCameraViewfinder() {
+  _stopCamStream();
+  _stopCamTilt();
+  const vf = document.getElementById('camViewfinder');
+  if (vf) vf.style.display = 'none';
+  document.getElementById('camPermMsg').style.display = 'none';
+  window._camState.targetInputId = null;
+}
+
+// Fallback: close the viewfinder and open the native OS camera via the target file input.
+function cameraFallbackToNative() {
+  const targetId = window._camState.targetInputId;
+  closeCameraViewfinder();
+  if (targetId) {
+    const inp = document.getElementById(targetId);
+    if (inp) inp.click();
+  }
+}
+
+// Capture the current video frame, convert to JPEG File, and dispatch it to the target input's onchange.
+async function captureFromCameraViewfinder() {
+  const v = document.getElementById('camVideo');
+  const targetId = window._camState.targetInputId;
+  if (!v || !v.videoWidth || !targetId) return;
+
+  const shutter = document.getElementById('camShutterBtn');
+  if (shutter) shutter.disabled = true;
+
+  // Draw the current frame at native video resolution
+  const cv = document.createElement('canvas');
+  cv.width = v.videoWidth;
+  cv.height = v.videoHeight;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(v, 0, 0, cv.width, cv.height);
+
+  const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+  if (!blob) { if (shutter) shutter.disabled = false; return; }
+
+  const step = window._camState.step || 'front';
+  const file = new File([blob], 'cardresell-'+step+'-'+Date.now()+'.jpg', { type: 'image/jpeg' });
+
+  // Feed it into the hidden file input so existing onchange handlers keep working.
+  const inp = document.getElementById(targetId);
+  if (!inp) { if (shutter) shutter.disabled = false; return; }
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    inp.files = dt.files;
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  } catch (e) {
+    // Older browsers without DataTransfer — call the handler directly
+    const handlers = {
+      scanFileInput:       () => processScanImage({ files: [file] }),
+      gradeFileInput:      () => processGradeImage({ files: [file] }),
+      gradeBackFileInput:  () => processGradeBack({ files: [file] }),
+      gradeEdgeTopInput:   () => processGradeEdge({ files: [file], value: '' }, 'top'),
+      gradeEdgeBottomInput:() => processGradeEdge({ files: [file], value: '' }, 'bottom'),
+      gradeEdgeLeftInput:  () => processGradeEdge({ files: [file], value: '' }, 'left'),
+      gradeEdgeRightInput: () => processGradeEdge({ files: [file], value: '' }, 'right')
+    };
+    if (handlers[targetId]) handlers[targetId]();
+  }
+
+  closeCameraViewfinder();
+  if (shutter) shutter.disabled = false;
+}
+
 // ── Grade tier picker (Quick vs Deep) ──
 function openGradeTierPicker() {
   const overlay = document.getElementById('gradeTierOverlay');
@@ -7636,14 +7892,14 @@ function startQuickGrade() {
   window._gradeIsDeep = false;
   window._gradeEdges = {}; // no edges for quick
   document.getElementById('gradeTierOverlay').classList.remove('open');
-  _showGradeFrontGuide();
+  openCameraViewfinder('front', 'gradeFileInput');
 }
 
 function startDeepGrade() {
   window._gradeIsDeep = true;
   window._gradeEdges = {}; // reset edge collection
   document.getElementById('gradeTierOverlay').classList.remove('open');
-  _showGradeFrontGuide();
+  openCameraViewfinder('front', 'gradeFileInput');
 }
 
 function _setScanGateMode(mode) {
@@ -7709,7 +7965,7 @@ async function processGradeImage(input) {
 
   const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 2 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 2 of 2)</span>';
   statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span>' + stepLabel + '<br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 line up the BACK inside the box</span>';
-  resultEl.innerHTML = '<button onclick="document.getElementById(\'gradeBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
+  resultEl.innerHTML = '<button onclick="openCameraViewfinder(\'back\',\'gradeBackFileInput\')" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
 }
 
 // Step 2: Back photo captured
@@ -7767,7 +8023,7 @@ function showDeepGradeEdgeUI() {
     const bord = done ? '1px solid rgba(74,222,128,.5)' : '1px solid rgba(255,255,255,.15)';
     const check = done ? '<span style="color:#4ade80;font-weight:900">\u2713 </span>' : '';
     const doneLabel = done ? ' <span style="font-size:.65rem;color:#4ade80">CAPTURED — tap to retake</span>' : '';
-    return '<button onclick="document.getElementById(\'gradeEdge' + key + 'Input\').click()" ' +
+    return '<button onclick="openCameraViewfinder(\'' + key.toLowerCase() + '\',\'gradeEdge' + key + 'Input\')" ' +
       'style="padding:.65rem .7rem;background:' + bg + ';color:#fff;border:' + bord + ';border-radius:10px;font-size:.8rem;text-align:left;cursor:pointer;width:100%;line-height:1.35">' +
       check + emoji + ' <strong>' + label + '</strong>' + doneLabel +
       '<br><span style="font-size:.66rem;color:rgba(255,255,255,.5);font-weight:500">' + tip + '</span>' +
@@ -8687,10 +8943,9 @@ function openGradedScanGate() {
     showToast('Sign in with Google first to use the scanner');
     return;
   }
-  // Show the framing guide before firing the OS camera so the user
-  // knows exactly how to line up the card. Tapping the button below
-  // triggers the file input — server remains source of truth on credits.
-  _showIdScanFrontGuide();
+  // Live viewfinder with framing brackets — server remains source of
+  // truth on credits (402 opens the pricing gate).
+  openCameraViewfinder('id', 'scanFileInput');
 }
 
 function _showIdScanFrontGuide() {
