@@ -7354,6 +7354,7 @@ async function processScanImage(input) {
   if (!window._googleIdToken) {
     const overlay2 = document.getElementById('scanOverlay');
     overlay2.style.display = 'flex';
+    hideScanGuide();
     document.getElementById('scanStatus').innerHTML = '<span style="color:#f87171">Sign-in expired. Please sign in again.</span>';
     document.getElementById('scanResult').innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
     return;
@@ -7366,6 +7367,7 @@ async function processScanImage(input) {
   const prevImg  = document.getElementById('scanPreviewImg');
 
   overlay.style.display = 'flex';
+  hideScanGuide(); // photo captured — swap guide out for the preview + spinner
   resultEl.textContent = '';
   statusEl.textContent = 'Identifying card\u2026';
 
@@ -8685,10 +8687,26 @@ function openGradedScanGate() {
     showToast('Sign in with Google first to use the scanner');
     return;
   }
-  // Always try to open the camera — server is the source of truth on credits.
-  // If credits are actually 0, the server returns 402 and the gate modal opens then.
-  // This avoids race conditions where _scanCredits hasn't loaded yet.
-  document.getElementById('scanFileInput').click();
+  // Show the framing guide before firing the OS camera so the user
+  // knows exactly how to line up the card. Tapping the button below
+  // triggers the file input — server remains source of truth on credits.
+  _showIdScanFrontGuide();
+}
+
+function _showIdScanFrontGuide() {
+  const overlay  = document.getElementById('scanOverlay');
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  const prevWrap = document.getElementById('scanPreviewWrap');
+  const cta      = document.getElementById('scanGradeCTA');
+  if (cta) cta.style.display = 'none';
+  if (prevWrap) prevWrap.style.display = 'none';
+  overlay.style.display = 'flex';
+  showScanGuide('front');
+  statusEl.innerHTML = '\uD83D\uDCF7 Frame the card <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(ID scan)</span>' +
+    '<br><span style="font-size:.8rem;opacity:.75;font-weight:500">Fill the dashed box \u2014 keep the whole card visible</span>';
+  resultEl.innerHTML =
+    '<button onclick="document.getElementById(\'scanFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.65rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Photo</button>';
 }
 
 function closeScanGate(evt) {
