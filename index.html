@@ -1353,6 +1353,25 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <button id="tplRevealBtn"></button>
     <div id="settingsStatus"><span class="status-dot inactive" id="statusDot"></span><span id="statusText"></span></div>
   </div>
+
+  <!-- eBay Partner Network debug stamp — lives in settings so you can
+       confirm clicks are firing before EPN's dashboard reports them. -->
+  <div class="settings-inner" id="epnDebugCard">
+    <div class="settings-title">eBay Affiliate (EPN)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-bottom:.5rem">
+      <div style="padding:.5rem .7rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div style="font-size:.58rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.15rem">Campaign ID</div>
+        <div style="font-size:.78rem;font-weight:800;font-family:var(--mono);color:var(--text)"><span id="epnCampidStamp">—</span> <span id="epnCampidCheck" style="color:#4ade80"></span></div>
+      </div>
+      <div style="padding:.5rem .7rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
+        <div style="font-size:.58rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.15rem">Clicks Logged</div>
+        <div style="font-size:.95rem;font-weight:800;color:var(--gold)"><span id="epnClicksTotal">—</span></div>
+        <div style="font-size:.6rem;color:var(--text-muted);margin-top:.1rem">Last: <span id="epnClicksLast">—</span></div>
+      </div>
+    </div>
+    <button onclick="refreshEpnDebug()" style="width:100%;padding:.4rem;background:none;border:1px solid var(--border);border-radius:var(--radius-md);font-size:.7rem;font-weight:700;color:var(--text-muted);cursor:pointer">Refresh</button>
+    <div style="margin-top:.35rem;font-size:.6rem;color:var(--text-muted);line-height:1.4">How it earns: any tap on an eBay link tags the URL with your campid. eBay then pays you a % of anything the shopper buys in the next 24h.</div>
+  </div>
 </div>
 
 
@@ -3436,7 +3455,7 @@ async function searchPokemonJP(q) {
       const ebayJPUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(jpName + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`;
       const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(jpName + ' japanese')}&type=prices`;
       // Open eBay in new tab automatically (wrapped for EPN commission)
-      window.open(buildEbayUrl(ebayJPUrl), '_blank');
+      { const _u = buildEbayUrl(ebayJPUrl); logEpnClick(_u, 'ebay-jp-auto'); window.open(_u, '_blank'); }
       return {
         name: jpName + ' (Japanese)',
         game: 'pokemonjp',
@@ -4030,7 +4049,7 @@ function openEbayComps() {
   if (!parts.length) { alert('Enter at least a player name first.'); return; }
 
   const query = encodeURIComponent(parts.join(' '));
-  window.open(buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=212&LH_Sold=1&LH_Complete=1`), '_blank');
+  { const _u = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=212&LH_Sold=1&LH_Complete=1`); logEpnClick(_u, 'view-comps'); window.open(_u, '_blank'); }
 
   // Sync search input so it shows what was searched
   const ssi = document.getElementById('sportsSearchInput');
@@ -4146,7 +4165,7 @@ async function doSportsSearchLive(q) {
     el.addEventListener('click', () => {
       const idx = el.dataset.sportsIdx;
       if (idx === 'ebay-direct') {
-        window.open(buildEbayUrl(ebayUrl), '_blank');
+        { const _u = buildEbayUrl(ebayUrl); logEpnClick(_u, 'ebay-sports'); window.open(_u, '_blank'); }
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
@@ -4156,7 +4175,7 @@ async function doSportsSearchLive(q) {
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
       } else if (el.dataset.ebayUrl) {
-        window.open(buildEbayUrl(el.dataset.ebayUrl), '_blank');
+        { const _u = buildEbayUrl(el.dataset.ebayUrl); logEpnClick(_u, 'ebay-sports-drop'); window.open(_u, '_blank'); }
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         // Set grade dropdown
@@ -4652,6 +4671,92 @@ function buildEbayUrl(url) {
   const tool = cfg.toolid   || '10001';
   const cust = cfg.customid || 'cardsell';
   return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&customid=${encodeURIComponent(cust)}`;
+}
+
+// EPN debug readout — populates the Settings > eBay Affiliate card with
+// the current campid, total logged clicks, and the last-click timestamp.
+async function refreshEpnDebug() {
+  const stampCamp = document.getElementById('epnCampidStamp');
+  const stampChk  = document.getElementById('epnCampidCheck');
+  const stampTot  = document.getElementById('epnClicksTotal');
+  const stampLast = document.getElementById('epnClicksLast');
+  if (!stampCamp || !stampTot) return;
+  const campid = (window.AFFILIATE && window.AFFILIATE.ebay && window.AFFILIATE.ebay.campid) || window.CARDSELL_EPN_CAMPID || '';
+  stampCamp.textContent = campid || '(missing)';
+  stampChk.textContent  = campid ? '\u2713' : '';
+  try {
+    const r = await fetch('/api/epn-click', { method: 'GET' });
+    if (r.ok) {
+      const j = await r.json();
+      stampTot.textContent  = String(j.total || 0);
+      stampLast.textContent = j.last ? new Date(j.last).toLocaleString() : '\u2014';
+      // Green check only if campid_seen matches our configured one
+      if (j.campid_seen && campid && j.campid_seen !== campid) {
+        stampChk.textContent = '\u26A0';
+        stampChk.style.color = '#f59e0b';
+        stampChk.title = 'Last click had campid ' + j.campid_seen + ' — not the configured one';
+      }
+    } else {
+      stampTot.textContent  = 'n/a';
+      stampLast.textContent = '\u2014';
+    }
+  } catch (e) {
+    stampTot.textContent  = 'n/a';
+    stampLast.textContent = '\u2014';
+  }
+}
+
+// Local-only bump (before the beacon roundtrips) so the readout feels live.
+function _bumpEpnDebugStamp() {
+  const stampTot  = document.getElementById('epnClicksTotal');
+  const stampLast = document.getElementById('epnClicksLast');
+  if (!stampTot) return;
+  const n = parseInt(stampTot.textContent, 10);
+  if (!isNaN(n)) stampTot.textContent = String(n + 1);
+  else stampTot.textContent = '1';
+  if (stampLast) stampLast.textContent = new Date().toLocaleString();
+}
+
+// EPN click telemetry — fires a non-blocking beacon to /api/epn-click so
+// we can confirm clicks are flowing before EPN's dashboard catches up.
+// Uses navigator.sendBeacon when available so nav is never delayed.
+function logEpnClick(url, source) {
+  try {
+    if (!url || !/ebay\.com/i.test(url)) return;
+    const body = JSON.stringify({ url, source: source || 'other' });
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon('/api/epn-click', blob);
+    } else {
+      // Fire-and-forget fetch; keepalive keeps it alive across nav.
+      fetch('/api/epn-click', { method: 'POST', headers: {'Content-Type':'application/json'}, body, keepalive: true }).catch(()=>{});
+    }
+    // Update the debug stamp locally so the user sees the increment right away.
+    try { _bumpEpnDebugStamp(); } catch (e) {}
+  } catch (e) {}
+}
+
+// Global click delegate — any anchor pointing to ebay.com gets logged,
+// regardless of whether it was rendered by openEbayComps, buildEbayUrl,
+// or inline HTML. Runs once at boot.
+document.addEventListener('click', function _epnClickDelegate(ev) {
+  const a = ev.target && ev.target.closest ? ev.target.closest('a[href*="ebay.com"]') : null;
+  if (!a) return;
+  // Categorize by nearby id/class for the readout
+  let source = 'ebay-link';
+  const id = a.id || '';
+  if      (id === 'slEbayBuy')   source = 'ebay-buy';
+  else if (id === 'slEbaySell')  source = 'ebay-sell';
+  else if (id === 'ebayListBtn') source = 'ebay-list';
+  else if (a.href.includes('LH_Sold=1')) source = 'ebay-sold';
+  logEpnClick(a.href, source);
+}, { capture: true });
+
+// Populate the EPN debug card on load. Retry once on failure.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(refreshEpnDebug, 400));
+} else {
+  setTimeout(refreshEpnDebug, 400);
 }
 
 // Wraps a TCGPlayer target URL through Impact's affiliate redirect (when approved).
@@ -7784,6 +7889,71 @@ function cameraFallbackToNative() {
   }
 }
 
+// Compute the crop rectangle (in native video pixels) that corresponds to
+// the on-screen SVG framing box. Accounts for object-fit:cover mapping
+// from the video's intrinsic size to the CSS-rendered size. Returns null if
+// anything is missing (caller falls back to a full-frame capture).
+function _computeCamCropRect(step) {
+  const v = document.getElementById('camVideo');
+  const svg = document.getElementById('camGuideSvg');
+  if (!v || !svg || !v.videoWidth) return null;
+
+  const vRect = v.getBoundingClientRect();
+  const sRect = svg.getBoundingClientRect();
+  if (!vRect.width || !vRect.height || !sRect.width || !sRect.height) return null;
+
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const cw = vRect.width,  ch = vRect.height;
+
+  // object-fit:cover — the video source is scaled to fill the CSS box while
+  // preserving aspect ratio; the shorter axis fills, the longer axis is cropped.
+  const vidAR = vw / vh;
+  const cssAR = cw / ch;
+  let scale, srcVisibleW, srcVisibleH, srcOffX, srcOffY;
+  if (vidAR > cssAR) {
+    // Video is wider than CSS box — vertical fills, horizontal is cropped
+    scale = vh / ch;                 // 1 CSS px = `scale` source px vertically
+    srcVisibleH = vh;
+    srcVisibleW = cw * scale;
+    srcOffX = (vw - srcVisibleW) / 2;
+    srcOffY = 0;
+  } else {
+    // Video is taller (or equal) — horizontal fills, vertical is cropped
+    scale = vw / cw;
+    srcVisibleW = vw;
+    srcVisibleH = ch * scale;
+    srcOffX = 0;
+    srcOffY = (vh - srcVisibleH) / 2;
+  }
+
+  // SVG bbox in CSS coords, relative to the video CSS box
+  const relX = sRect.left - vRect.left;
+  const relY = sRect.top  - vRect.top;
+
+  // Map CSS → source-pixel space
+  let sx = srcOffX + relX * scale;
+  let sy = srcOffY + relY * scale;
+  let sw = sRect.width  * scale;
+  let sh = sRect.height * scale;
+
+  // Safety margin — hard-crop, but give the user some slack on framing.
+  // 15% for card front/back/id, 10% for the tighter edge captures.
+  const isEdge = ['top','bottom','left','right'].includes(step);
+  const marginPct = isEdge ? 0.10 : 0.15;
+  const mx = sw * marginPct;
+  const my = sh * marginPct;
+  sx -= mx; sy -= my; sw += mx * 2; sh += my * 2;
+
+  // Clamp to source bounds
+  if (sx < 0) { sw += sx; sx = 0; }
+  if (sy < 0) { sh += sy; sy = 0; }
+  if (sx + sw > vw) sw = vw - sx;
+  if (sy + sh > vh) sh = vh - sy;
+  if (sw <= 0 || sh <= 0) return null;
+
+  return { sx: Math.round(sx), sy: Math.round(sy), sw: Math.round(sw), sh: Math.round(sh) };
+}
+
 // Capture the current video frame, convert to JPEG File, and dispatch it to the target input's onchange.
 async function captureFromCameraViewfinder() {
   const v = document.getElementById('camVideo');
@@ -7793,17 +7963,25 @@ async function captureFromCameraViewfinder() {
   const shutter = document.getElementById('camShutterBtn');
   if (shutter) shutter.disabled = true;
 
-  // Draw the current frame at native video resolution
+  const step = window._camState.step || 'front';
+  const crop = _computeCamCropRect(step);
   const cv = document.createElement('canvas');
-  cv.width = v.videoWidth;
-  cv.height = v.videoHeight;
   const ctx = cv.getContext('2d');
-  ctx.drawImage(v, 0, 0, cv.width, cv.height);
+  if (crop) {
+    // Hard crop — draw only the framed region into a canvas sized to that region.
+    cv.width = crop.sw;
+    cv.height = crop.sh;
+    ctx.drawImage(v, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
+  } else {
+    // Fallback — full frame if crop math failed for any reason
+    cv.width = v.videoWidth;
+    cv.height = v.videoHeight;
+    ctx.drawImage(v, 0, 0, cv.width, cv.height);
+  }
 
   const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
   if (!blob) { if (shutter) shutter.disabled = false; return; }
 
-  const step = window._camState.step || 'front';
   const file = new File([blob], 'cardresell-'+step+'-'+Date.now()+'.jpg', { type: 'image/jpeg' });
 
   // Feed it into the hidden file input so existing onchange handlers keep working.
