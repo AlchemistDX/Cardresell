@@ -4413,12 +4413,21 @@ function loadCardUI(card) {
   cardMetaEl.textContent = metaParts.join(' · ');
   cardNameBlock.style.display = 'block';
 
-  // eBay Sell button — pre-fill with card name
+  // eBay Sell button — use the same prelist deep-link + clipboard-copy flow
+  // as the scan-overlay button so titles land pre-filled in eBay Sell.
   const ebayListBtn = document.getElementById('ebayListBtn');
   if (ebayListBtn) {
-    const ebayQuery = encodeURIComponent(card.name + (card.setName ? ' ' + card.setName : ''));
-    ebayListBtn.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQuery}`);
+    const ebayOpts = {
+      cardName: card.name || '',
+      setName:  card.setName || '',
+      number:   card.number  || ''
+    };
+    ebayListBtn.href = buildEbayListingUrl(ebayOpts);
     ebayListBtn.style.display = 'flex';
+    ebayListBtn.onclick = function(e) {
+      e.preventDefault();
+      openEbayListing(ebayOpts);
+    };
   }
 
   // Update platform sell/buy links (skip auto-recalc — loadCardUI handles calc below)
@@ -7705,6 +7714,8 @@ async function _pickScanCandidate(idx) {
   try { if (window._pendingScanObjectUrl) URL.revokeObjectURL(window._pendingScanObjectUrl); } catch(e) {}
   window._pendingScanCandidates = null;
   window._pendingScanObjectUrl  = null;
+  // Reveal the scan-overlay eBay button now that we have a confirmed card
+  try { _setScanBtns('success'); } catch(e) {}
 }
 
 function showScanGradeCTA(cardName, grader, grade) {
