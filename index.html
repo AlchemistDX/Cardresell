@@ -7441,41 +7441,74 @@ function cancelScan() {
 async function _loadScannedCardExact(pending) {
   const { name, number, setName, rarity } = pending;
   const si = document.getElementById('searchInput');
-  if (si) si.value = name;
+  // Show name + number in the search bar immediately so the user sees the
+  // full identity (matches what the Search→Back workaround produced).
+  const displayName = (n, num) => {
+    const cleanN = String(n || '').replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+    const cleanNum = String(num || '').trim();
+    return cleanN + (cleanNum ? ' ' + cleanNum : '');
+  };
+  if (si) si.value = displayName(name, number);
 
   try {
-    // Strategy: search by name only (wildcard), then filter client-side by number.
+    // Strategy: run ALL query strategies and merge — the exact-name query
+    // returns oldest sets first and often truncates modern sets past pageSize.
+    // Match the server-side verifyCardWithPokemonTCG scoring so the picked
+    // card is always the same one the /api/scan endpoint verified.
     // DO NOT encodeURIComponent the field values — PokemonTCG.io query syntax uses raw text.
     // The whole URL param is encoded once by the URL constructor.
-    const cleanName = name.replace(/["\\]/g, ''); // strip quotes/backslashes only
-    const cleanNumber = number ? number.replace(/\/.*$/, '').trim() : ''; // strip /setsize e.g. "173/236" → "173"
+    // Strip any trailing collector number so we don't feed "Wigglytuff 105/094"
+    // into the name query and get zero hits.
+    const cleanName = name.replace(/["\\]/g, '').replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+    const cleanNumber = number ? number.replace(/\/.*$/, '').replace(/^0+/, '').trim() : '';
+    const cleanRarity = (rarity || '').toString().toLowerCase();
+    const gptSetNorm = (setName || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // Try multiple query strategies in order, stop at first that returns results.
-    // PokemonTCG.io query syntax: field:value — NO encodeURIComponent on the value itself.
-    // The whole q= param gets encodeURIComponent once below.
     const firstWord = cleanName.split(/\s+/)[0]; // e.g. "Lillie" from "Lillie's Clefairy GX"
+    // Number-scoped query FIRST — usually definitive when GPT read the number correctly.
     const queries = [
-      `name:"${cleanName}"`,            // exact phrase (works for simple names)
-      `name:${firstWord}* number:${cleanNumber}`, // first-word wildcard + number filter
-      `name:${firstWord}*`,             // broad first-word wildcard, filter client-side
+      ...(cleanNumber ? [`name:${firstWord}* number:${cleanNumber}`] : []),
+      `name:"${cleanName}"`,
+      `name:${firstWord}*`,
     ].filter(q => q.trim());
 
-    let cards = [];
+    const merged = new Map();
     for (const q of queries) {
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=30&select=id,name,set,number,rarity,hp,images,tcgplayer,supertype,subtypes`;
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        cards = json.data || [];
-        if (cards.length > 0) break; // got results, stop trying
+        for (const c of (json.data || [])) {
+          if (c && c.id && !merged.has(c.id)) merged.set(c.id, c);
+        }
+        // Early-exit after number-scoped query if it returned hits
+        if (q.startsWith(`name:${firstWord}* number:`) && merged.size > 0) break;
       }
     }
+    const cards = Array.from(merged.values());
 
-    // Pick the best match: prefer exact number match, then rarity match
-    let match = cleanNumber ? cards.find(c => c.number === cleanNumber) : null;
-    if (!match && cleanNumber) match = cards.find(c => c.number?.split('/')[0] === cleanNumber);
-    if (!match && rarity) match = cards.find(c => (c.rarity || '').toLowerCase() === rarity.toLowerCase());
-    if (!match) match = cards[0];
+    // Score each candidate — mirror the server-side ranking so client + server pick the same card.
+    const normSet = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const numOf = (c) => (c.number || '').toString().split('/')[0].replace(/^0+/, '').trim();
+    const score = (c) => {
+      let s = 0;
+      const cNum = numOf(c);
+      const cSet = normSet(c.set?.name);
+      const cRar = (c.rarity || '').toString().toLowerCase();
+      if (cleanNumber && cNum === cleanNumber) s += 100;
+      if (gptSetNorm && cSet && (cSet.includes(gptSetNorm) || gptSetNorm.includes(cSet))) s += 40;
+      if (cleanRarity && cRar) {
+        if (cRar === cleanRarity) s += 20;
+        else {
+          const tokens = cleanRarity.split(/\s+/).filter(t => t.length > 3);
+          if (tokens.some(t => cRar.includes(t))) s += 10;
+        }
+      }
+      if ((c.name || '').toLowerCase() === cleanName.toLowerCase()) s += 5;
+      return s;
+    };
+    const ranked = cards.map(c => ({ c, s: score(c) })).sort((a, b) => b.s - a.s);
+    const match = ranked[0]?.c || null;
 
     if (match) {
       const prices = match.tcgplayer?.prices || {};
@@ -7499,7 +7532,10 @@ async function _loadScannedCardExact(pending) {
         updatedAt: match.tcgplayer?.updatedAt || '',
       };
       selectedCard = card;
-      if (si) si.value = card.name;
+      // Populate the search bar with name + number so it reads like the
+      // Search→Back workaround produced ("Wigglytuff 105/094") instead of
+      // just the name.
+      if (si) si.value = displayName(card.name, card.number);
       dropList.classList.remove('open');
       loadCardUI(card);
       // If AI grading was requested, open the grade gate now
@@ -7528,7 +7564,7 @@ async function _loadScannedCardExact(pending) {
   //   • all API queries threw (network error) — caught above
   //   • all API queries returned 200 but with no data — no exception, falls here
   //   • API returned data but no candidate matched the scanned number/rarity
-  if (si) si.value = name;
+  if (si) si.value = displayName(name, number);
   switchView('lookup');
   // Force a fresh catalog open even if the same name was searched before,
   // so the user always sees a result set instead of stale UI.
