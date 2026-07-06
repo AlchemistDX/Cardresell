@@ -4712,19 +4712,18 @@ function buildEbayUrl(url) {
 
 // ─── eBay LISTING (SELL) URL BUILDER ───
 // Sends the user to eBay's Sell prelist page with a prefilled title.
-// eBay's catalog matcher works BEST with a short query — just name + number.
-// A long literal title (with set + "Pokemon TCG" suffix) is treated as a raw
-// listing title and never matches an existing eBay catalog entry, so the user
-// loses the auto-filled category / aspects / condition / stock photo.
-// With just "<name> <number>" eBay pops up its "We found this in our catalog"
-// suggestion, which is what the user actually wants for one-tap listing.
+// Format: "[PSA N] <Name> <SetName> <Number>"
+// Field-tested: eBay's catalog matcher needs the FULL name + set + number
+// to reliably land on the exact product record with the card image + fast
+// return. Without set name it falls back to slow generic search / catalog
+// suggestion with no picture. Until we get an eBay API we lean on the
+// prelist title as our matching key.
 // Params (all optional except cardName):
 //   cardName  — canonical card name (e.g. "Wigglytuff")
+//   setName   — set name as printed (e.g. "Phantasmal Flames", "Black Bolt")
 //   number    — card number (e.g. "105/094" or "105")
 //   psaGrade  — integer 1-10 (adds "PSA <N>" prefix for graded listings)
-//   setName   — accepted but ignored for the prelist title (kept for future
-//               non-catalog fallback flows / logging)
-//   condition — same; ignored for prelist title
+//   condition — accepted but ignored for the prelist title
 function buildEbayListingTitle(opts) {
   const o = opts || {};
   const parts = [];
@@ -4737,18 +4736,33 @@ function buildEbayListingTitle(opts) {
   let cleanName = String(o.cardName || '').trim();
   // Strip trailing "#123", "123", "123/094", "0123/094" (with optional leading zeros)
   cleanName = cleanName.replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
-  if (cleanName)  parts.push(cleanName);
+  if (cleanName) parts.push(cleanName);
+  // Set name — include when present so eBay catalog matches to exact product.
+  // Strip common junk prefixes that don't help matching ("Pokémon TCG:",
+  // "Me02:") so the human-readable set name lands in the title
+  // ("Phantasmal Flames" not "Me02: Phantasmal Flames"). Preserve
+  // trailing "Set" for "Base Set" / "Jungle Set" etc.
+  if (o.setName) {
+    let setClean = String(o.setName).trim()
+      .replace(/^Pok[ée]mon\s*TCG[:\-]?\s*/i, '')     // drop "Pokémon TCG:" prefix
+      .replace(/^[a-z]{2,4}[0-9]{1,3}\s*:\s*/i, '')   // drop set-code prefix like "Me02:", "SV07:", "BLK:"
+      .replace(/\s+/g, ' ')
+      .trim();
+    // Do NOT strip trailing "Set" — iconic Pokémon sets include it in the
+    // official name ("Base Set", "Jungle Set", etc.) and eBay's catalog
+    // matcher expects it verbatim.
+    if (setClean && setClean.toLowerCase() !== cleanName.toLowerCase()) {
+      parts.push(setClean);
+    }
+  }
   if (o.number) {
     // Send the FULL collector number including denominator when available
     // (e.g. "148/086" not just "148"). eBay's catalog matcher hits its
     // product record faster and returns the card image + preview when the
-    // full number is provided; the bare numerator sometimes matches but
-    // falls back to a slow generic search with no picture.
+    // full number is provided.
     // Normalize: strip leading "#", collapse whitespace around the slash,
     // strip leading zeros from the NUMERATOR only (e.g. "0148 / 086" ->
-    // "148/086"). The denominator is the set size printed on the card
-    // (e.g. "086" for an 86-card set) — preserve it verbatim so eBay's
-    // catalog matcher can hit the exact product record.
+    // "148/086"). Denominator is the set size printed on the card — keep it.
     let raw = String(o.number).replace(/^#/, '').replace(/\s*\/\s*/, '/').trim();
     const bits = raw.split('/');
     bits[0] = bits[0].replace(/^0+/, '') || '0';
