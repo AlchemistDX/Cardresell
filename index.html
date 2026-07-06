@@ -4739,11 +4739,15 @@ function buildEbayListingTitle(opts) {
   cleanName = cleanName.replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
   if (cleanName)  parts.push(cleanName);
   if (o.number) {
-    // Prefer just the numerator ("105" not "105/094") — eBay's catalog
-    // matcher indexes on the printed collector number, not the set-size
-    // denominator, and short queries yield better matches.
-    const raw = String(o.number).replace(/^#?0*/, '').trim();
-    const num = raw.split('/')[0].trim();
+    // Send the FULL collector number including denominator when available
+    // (e.g. "148/086" not just "148"). eBay's catalog matcher hits its
+    // product record faster and returns the card image + preview when the
+    // full number is provided; the bare numerator sometimes matches but
+    // falls back to a slow generic search with no picture.
+    // Normalize: strip leading "#", collapse whitespace around the slash,
+    // strip leading zeros from BOTH sides (e.g. "0148 / 0086" -> "148/086").
+    let raw = String(o.number).replace(/^#/, '').replace(/\s*\/\s*/, '/').trim();
+    const num = raw.split('/').map(p => p.replace(/^0+/, '') || '0').join('/');
     if (num) parts.push(num);
   }
   // eBay title cap is 80 chars — trim if needed
