@@ -7345,11 +7345,29 @@ function listScannedCardOnEbay() {
   }
 }
 
+// Clear ALL transient scan state — pending card, picker candidates, target
+// hints for the search-then-back flow. Called from every re-scan path so a
+// fresh scan never inherits stale identification data.
+function _clearScanState() {
+  window._pendingIdScanCard     = null;
+  window._pendingScanCandidates = null;
+  if (window._pendingScanObjectUrl) {
+    try { URL.revokeObjectURL(window._pendingScanObjectUrl); } catch(e) {}
+    window._pendingScanObjectUrl = null;
+  }
+  window._scanTargetNumber      = null;
+  window._scanTargetName        = null;
+  window._scanTargetGrader      = '';
+  window._scanTargetGrade       = null;
+  window._pendingScanBannerCard = null;
+}
+
 // Retry — re-trigger camera without closing overlay
 function retryIdScan() {
+  _clearScanState();
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
-  if (statusEl) statusEl.textContent = 'Identifying card…';
+  if (statusEl) statusEl.textContent = 'Identifying card\u2026';
   if (resultEl) resultEl.textContent = '';
   const gradeCTA = document.getElementById('scanGradeCTA');
   if (gradeCTA) gradeCTA.classList.remove('show');
@@ -7369,8 +7387,8 @@ function retryIdScan() {
 
 // Scan another — close result, immediately open camera again
 function scanAnother() {
-  // Clear pending card so cancelScan doesn't navigate away
-  window._pendingIdScanCard = null;
+  // Clear pending card + picker candidates so the new scan starts clean.
+  _clearScanState();
   cancelScan();
   // Brief delay then reopen
   setTimeout(() => openGradedScanGate(), 150);
@@ -7490,15 +7508,32 @@ async function _loadScannedCardExact(pending) {
       if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
+    // No match found across all query strategies — fall through to the
+    // catalog grid so the user still sees SOMETHING for their scanned name
+    // instead of a silent no-op that forces them to tap Search → Back.
   } catch(e) {
     console.warn('[_loadScannedCardExact] error:', e);
     /* fall through to autocomplete */
   }
 
-  // Fallback: open the full card grid so user can pick from portrait results
+  // Fallback: open the full card grid so user can pick from portrait results.
+  // This runs when:
+  //   • all API queries threw (network error) — caught above
+  //   • all API queries returned 200 but with no data — no exception, falls here
+  //   • API returned data but no candidate matched the scanned number/rarity
   if (si) si.value = name;
   switchView('lookup');
-  openCatalog(name); // opens the portrait card grid for the scanned card name
+  // Force a fresh catalog open even if the same name was searched before,
+  // so the user always sees a result set instead of stale UI.
+  try {
+    openCatalog(name); // opens the portrait card grid for the scanned card name
+  } catch(e) {
+    console.warn('[_loadScannedCardExact] openCatalog failed:', e);
+    // Last-resort fallback: trigger the search button directly so at least
+    // the manual search-then-back workaround the user reported keeps working.
+    const searchBtn = document.getElementById('searchBtn');
+    if (searchBtn) searchBtn.click();
+  }
 }
 
 // ── Affiliate grading CTA helpers ──
@@ -7679,6 +7714,11 @@ function dismissGradingCta() {
 async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
+  // Clear any residual state from a previous scan (picker candidates,
+  // pending card, target hints) before starting the new one — otherwise
+  // stale state can shadow the new result and force the user to hit
+  // Search → Back to see the correct card.
+  if (typeof _clearScanState === 'function') _clearScanState();
 
   if (!window.googleUser) { openScanner(); return; }
 
