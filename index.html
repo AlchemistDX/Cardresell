@@ -4745,9 +4745,14 @@ function buildEbayListingTitle(opts) {
     // full number is provided; the bare numerator sometimes matches but
     // falls back to a slow generic search with no picture.
     // Normalize: strip leading "#", collapse whitespace around the slash,
-    // strip leading zeros from BOTH sides (e.g. "0148 / 0086" -> "148/086").
+    // strip leading zeros from the NUMERATOR only (e.g. "0148 / 086" ->
+    // "148/086"). The denominator is the set size printed on the card
+    // (e.g. "086" for an 86-card set) — preserve it verbatim so eBay's
+    // catalog matcher can hit the exact product record.
     let raw = String(o.number).replace(/^#/, '').replace(/\s*\/\s*/, '/').trim();
-    const num = raw.split('/').map(p => p.replace(/^0+/, '') || '0').join('/');
+    const bits = raw.split('/');
+    bits[0] = bits[0].replace(/^0+/, '') || '0';
+    const num = bits.join('/');
     if (num) parts.push(num);
   }
   // eBay title cap is 80 chars — trim if needed
