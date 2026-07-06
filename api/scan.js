@@ -648,6 +648,18 @@ async function verifyCardWithPokemonTCG(name, number, setName, hp, rarity) {
     const raw = (c.number || '').toString();
     return raw.split('/')[0].replace(/^0+/, '').trim();
   };
+  // Assemble full "X/Y" collector number. PokemonTCG.io stores `card.number`
+  // as just the numerator (e.g. "197") and the denominator on
+  // `card.set.printedTotal` (e.g. 196 for a Secret Rare 197/196). eBay's
+  // catalog matcher needs the full X/Y to hit the right print variant, so
+  // always emit "X/Y" when we have a printedTotal.
+  const fullNumOf = (c) => {
+    const raw = (c.number || '').toString().trim();
+    if (!raw) return '';
+    if (raw.includes('/')) return raw; // already X/Y (rare, but be safe)
+    const denom = c.set?.printedTotal || c.set?.total;
+    return denom ? `${raw}/${denom}` : raw;
+  };
   const score = (c) => {
     let s = 0;
     const cNum = numOf(c);
@@ -691,7 +703,7 @@ async function verifyCardWithPokemonTCG(name, number, setName, hp, rarity) {
       status: 'match',
       card: {
         card_name:   topCard.name || cleanName,
-        card_number: topCard.number || cleanNumber,
+        card_number: fullNumOf(topCard) || cleanNumber,
         set_name:    topCard.set?.name || setName,
         hp:          topCard.hp || '',
         rarity:      topCard.rarity || '',
@@ -702,7 +714,7 @@ async function verifyCardWithPokemonTCG(name, number, setName, hp, rarity) {
   // Otherwise return top-N candidates for the picker so the user resolves it.
   const candidates = ranked.slice(0, 3).map(({ c }) => ({
     card_name:      c.name || cleanName,
-    card_number:    c.number || '',
+    card_number:    fullNumOf(c),
     set_name:       c.set?.name || '',
     hp:             c.hp || '',
     card_type:      'pokemon',
@@ -715,7 +727,7 @@ async function verifyCardWithPokemonTCG(name, number, setName, hp, rarity) {
     status: 'rewrite',
     card: {
       card_name:   topCard.name || cleanName,
-      card_number: topCard.number || '',
+      card_number: fullNumOf(topCard),
       set_name:    topCard.set?.name || '',
       hp:          topCard.hp || '',
       rarity:      topCard.rarity || '',
