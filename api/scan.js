@@ -454,7 +454,9 @@ Respond ONLY with valid JSON, no explanation:
     const verified = await verifyCardWithPokemonTCG(
       cardInfo.card_name   || '',
       cardInfo.card_number || '',
-      cardInfo.set_name    || ''
+      cardInfo.set_name    || '',
+      cardInfo.hp          || '',
+      cardInfo.rarity      || ''
     );
 
     if (verified.status === 'match') {
@@ -469,6 +471,7 @@ Respond ONLY with valid JSON, no explanation:
         hp:          cardInfo.hp        || verified.card.hp        || '',
         card_type:   cardInfo.card_type || 'pokemon',
         rarity:      cardInfo.rarity    || verified.card.rarity    || '',
+        verified_by: 'pokemontcg',
       });
     }
 
@@ -584,84 +587,120 @@ async function incrKV(kvUrl, kvToken, key) {
 //                hallucination — downgrade confidence + mark unverified.
 //   'skip'     - PokemonTCG.io was unreachable. Don't block on it — trust GPT.
 // Timeout of 4s so a slow API doesn't wedge the scanner.
-async function verifyCardWithPokemonTCG(name, number, setName) {
+async function verifyCardWithPokemonTCG(name, number, setName, hp, rarity) {
   if (!name || typeof name !== 'string') return { status: 'skip' };
-  const cleanName   = name.replace(/["\\]/g, '').trim();
-  const cleanNumber = (number || '').replace(/\/.*$/, '').trim();
+  // Strip any trailing collector number from name ("Wigglytuff 105/094" —> "Wigglytuff")
+  // so we don't feed it into the API's `name:` query and get zero hits.
+  const cleanName = name.replace(/["\\]/g, '').replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+  const cleanNumber = (number || '').replace(/\/.*$/, '').replace(/^0+/, '').trim();
   const cleanSet    = (setName || '').trim().toLowerCase();
+  const cleanHp     = (hp || '').toString().replace(/[^0-9]/g, '');
+  const cleanRarity = (rarity || '').toString().toLowerCase();
   if (!cleanName) return { status: 'skip' };
 
-  // Try multiple query strategies — exact name first, then first-word wildcard.
+  // Try multiple query strategies. Critically, we run ALL of them and merge
+  // the results — the exact-name query returns oldest-set-first and often
+  // truncates modern sets past pageSize; the number-scoped query catches those.
   const firstWord = cleanName.split(/\s+/)[0];
   const queries = [
-    `name:"${cleanName}"`,
     ...(cleanNumber ? [`name:${firstWord}* number:${cleanNumber}`] : []),
+    `name:"${cleanName}"`,
     `name:${firstWord}*`,
   ];
 
-  let cards = [];
-  let anyQueryReachedApi = false; // did we get at least one 2xx from the API?
+  const merged = new Map(); // id -> card
+  let anyQueryReachedApi = false;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4000);
+  const timer = setTimeout(() => controller.abort(), 4500);
   try {
     for (const q of queries) {
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,hp,supertype,images`;
-      const r = await fetch(url, { signal: controller.signal });
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=30&select=id,name,set,number,rarity,hp,supertype,images`;
+      let r;
+      try { r = await fetch(url, { signal: controller.signal }); } catch(e) { continue; }
       if (!r.ok) continue;
       anyQueryReachedApi = true;
-      const j = await r.json();
-      cards = j.data || [];
-      if (cards.length > 0) break;
+      let j;
+      try { j = await r.json(); } catch(e) { continue; }
+      for (const c of (j.data || [])) {
+        if (c && c.id && !merged.has(c.id)) merged.set(c.id, c);
+      }
+      // Early-exit only after the number-scoped query if it returned a hit —
+      // that's usually the definitive answer.
+      if (q.startsWith(`name:${firstWord}* number:`) && merged.size > 0) break;
     }
   } catch(e) {
-    return { status: 'skip' }; // network/timeout — trust GPT
+    return { status: 'skip' };
   } finally {
     clearTimeout(timer);
   }
 
-  // If every query returned non-2xx (API outage, rate limit, etc.), don't
-  // punish GPT for a 3rd-party failure — skip and return the model's answer.
   if (!anyQueryReachedApi) return { status: 'skip' };
-  if (!cards || cards.length === 0) return { status: 'no_match' };
+  const cards = Array.from(merged.values());
+  if (cards.length === 0) return { status: 'no_match' };
 
-  // Try to find an exact match on {number AND set}. Number match alone is not
-  // enough — many cards share the same number across different sets.
   const normSet = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const gptSetNorm = normSet(cleanSet);
 
-  const exactMatch = cards.find(c => {
-    const cNum = (c.number || '').toString();
+  // Score each candidate. Higher = better. Number is the strongest signal;
+  // HP is a fingerprint (same Pokemon has different HP across sets);
+  // rarity narrows to the right print variant.
+  const numOf = (c) => {
+    const raw = (c.number || '').toString();
+    return raw.split('/')[0].replace(/^0+/, '').trim();
+  };
+  const score = (c) => {
+    let s = 0;
+    const cNum = numOf(c);
     const cSet = normSet(c.set?.name);
-    const numMatch = cleanNumber && (cNum === cleanNumber || cNum.split('/')[0] === cleanNumber);
-    const setMatch = gptSetNorm && (cSet.includes(gptSetNorm) || gptSetNorm.includes(cSet));
-    return numMatch && setMatch;
-  });
+    const cHp  = (c.hp || '').toString().replace(/[^0-9]/g, '');
+    const cRar = (c.rarity || '').toString().toLowerCase();
+    // Number match — the strongest signal we have
+    if (cleanNumber && cNum === cleanNumber) s += 100;
+    // Set fuzzy match — GPT often gets this wrong so weight lower than num
+    if (gptSetNorm && cSet && (cSet.includes(gptSetNorm) || gptSetNorm.includes(cSet))) s += 40;
+    // HP fingerprint — very reliable when the model actually read HP off the card
+    if (cleanHp && cHp && cleanHp === cHp) s += 30;
+    // Rarity signal — illustration rare / secret rare / etc
+    if (cleanRarity && cRar) {
+      if (cRar === cleanRarity) s += 20;
+      else {
+        // partial rarity token match (e.g. "illustration" ≤≥ "illustration rare")
+        const tokens = cleanRarity.split(/\s+/).filter(t => t.length > 3);
+        if (tokens.some(t => cRar.includes(t))) s += 10;
+      }
+    }
+    // Prefer exact-name matches over wildcard "name*" hits
+    if ((c.name || '').toLowerCase() === cleanName.toLowerCase()) s += 5;
+    return s;
+  };
 
-  if (exactMatch) {
+  const ranked = cards
+    .map(c => ({ c, s: score(c) }))
+    .sort((a, b) => b.s - a.s);
+
+  const topScore   = ranked[0].s;
+  const runnerUp   = ranked[1] ? ranked[1].s : -1;
+  const topCard    = ranked[0].c;
+
+  // High-confidence match: number matched AND (set OR hp OR rarity) matched
+  // and no other card is close in score.
+  const decisive = topScore >= 100 && (topScore - runnerUp) >= 20;
+
+  if (decisive) {
     return {
       status: 'match',
       card: {
-        card_name:   exactMatch.name || cleanName,
-        card_number: exactMatch.number || cleanNumber,
-        set_name:    exactMatch.set?.name || setName,
-        hp:          exactMatch.hp || '',
-        rarity:      exactMatch.rarity || '',
+        card_name:   topCard.name || cleanName,
+        card_number: topCard.number || cleanNumber,
+        set_name:    topCard.set?.name || setName,
+        hp:          topCard.hp || '',
+        rarity:      topCard.rarity || '',
       },
     };
   }
 
-  // Name matched real cards but {number,set} combo doesn't exist as-is.
-  // Pick the best real card: prefer number-only match, then first-word name match.
-  const numOnlyMatch = cleanNumber
-    ? cards.find(c => (c.number || '').toString() === cleanNumber
-                   || (c.number || '').toString().split('/')[0] === cleanNumber)
-    : null;
-
-  const best = numOnlyMatch || cards[0];
-  // Build candidates list for optional picker.
-  // Include image_small (PokemonTCG.io CDN) so the client can render a
-  // thumbnail grid — users identify their card visually, not by set name.
-  const candidates = cards.slice(0, 3).map(c => ({
+  // Otherwise return top-N candidates for the picker so the user resolves it.
+  const candidates = ranked.slice(0, 3).map(({ c }) => ({
     card_name:      c.name || cleanName,
     card_number:    c.number || '',
     set_name:       c.set?.name || '',
@@ -675,11 +714,11 @@ async function verifyCardWithPokemonTCG(name, number, setName) {
   return {
     status: 'rewrite',
     card: {
-      card_name:   best.name || cleanName,
-      card_number: best.number || '',
-      set_name:    best.set?.name || '',
-      hp:          best.hp || '',
-      rarity:      best.rarity || '',
+      card_name:   topCard.name || cleanName,
+      card_number: topCard.number || '',
+      set_name:    topCard.set?.name || '',
+      hp:          topCard.hp || '',
+      rarity:      topCard.rarity || '',
     },
     candidates,
   };

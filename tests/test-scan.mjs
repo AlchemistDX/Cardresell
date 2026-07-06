@@ -831,6 +831,73 @@ await test('identify — GPT name is total hallucination — downgrades to low +
   assert(res.body.verified_by === 'pokemontcg', 'verified_by set');
 });
 
+await test('identify — correct number+hp finds right card across multiple sets (Wigglytuff #105 regression)', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '5' });
+  // GPT correctly reads number+hp off the card, but guesses the wrong set
+  const openai = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Wigglytuff',
+        card_number: '105/094',
+        set_name: 'Paradox Rift',  // wrong — real answer is Phantasmal Flames
+        hp: '120',
+        card_type: 'pokemon',
+        rarity: 'Illustration Rare',
+        confidence: 'high',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  // Simulate the real Pokemon TCG API behavior: first query (name-scoped)
+  // returns 20 old Wigglytuffs, none numbered 105. Second query
+  // (name+number-scoped) returns the correct me2-105 Phantasmal Flames card.
+  let callIdx = 0;
+  const pokemonTcg = (url) => {
+    callIdx++;
+    // The first query is number-scoped now (`name:Wigglytuff* number:105`)
+    // and returns the correct me2-105 directly.
+    if (url.includes('number%3A105') || url.includes('number:105')) {
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: () => Promise.resolve({
+          data: [{
+            id: 'me2-105',
+            name: 'Wigglytuff',
+            number: '105',
+            set: { name: 'Phantasmal Flames' },
+            hp: '120',
+            rarity: 'Illustration Rare',
+            supertype: 'Pokemon',
+          }],
+        }),
+        text: () => Promise.resolve(''),
+      });
+    }
+    // Fallback queries return the wrong-set cards
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: () => Promise.resolve({
+        data: [
+          { id: 'ex14-13', name: 'Wigglytuff', number: '13', set: { name: 'Crystal Guardians' }, hp: '90', rarity: 'Rare Holo' },
+          { id: 'swsh3-68', name: 'Wigglytuff', number: '68', set: { name: 'Darkness Ablaze' }, hp: '120', rarity: 'Rare' },
+        ],
+      }),
+      text: () => Promise.resolve(''),
+    });
+  };
+  installMocks(kv, openai, pokemonTcg);
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode);
+  assert(res.body.card_name === 'Wigglytuff', 'name kept');
+  assert(res.body.card_number === '105', `number preserved got ${res.body.card_number}`);
+  assert(res.body.set_name === 'Phantasmal Flames', `set corrected to Phantasmal Flames got ${res.body.set_name}`);
+  assert(res.body.verified_by === 'pokemontcg', 'flagged verified');
+});
+
 await test('identify — PokemonTCG.io unavailable — still returns GPT answer (skip)', async () => {
   const kv = new MockKV({ 'scans:user123:id_paid_left': '5' });
   const pokemonTcg = () => Promise.resolve({
