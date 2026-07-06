@@ -1551,7 +1551,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Shown while scanning -->
       <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
       <!-- Shown after success -->
-      <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View Card Prices →</button>
+      <button id="scanAddToCollectionBtn" onclick="addScannedCardToCollection()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">+ Add to Collection</button>
+      <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.6rem 1.25rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:12px;font-weight:700;font-size:.85rem;width:100%;cursor:pointer">View Card Prices →</button>
       <button id="scanListEbayBtn" onclick="listScannedCardOnEbay()" style="display:none;padding:.65rem 1.25rem;background:#e53935;color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.85rem;width:100%;cursor:pointer">🛠 List on eBay</button>
       <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
       <!-- Shown after failure -->
@@ -7346,26 +7347,33 @@ function openAboutModal() {
 function _setScanBtns(state) {
   // state: 'scanning' | 'success' | 'error'
   const cancelBtn   = document.getElementById('scanCancelBtn');
+  const addBtn      = document.getElementById('scanAddToCollectionBtn');
   const viewBtn     = document.getElementById('scanViewCardBtn');
   const anotherBtn  = document.getElementById('scanAnotherBtn');
   const retryBtn    = document.getElementById('scanRetryBtn');
   const ebayBtn     = document.getElementById('scanListEbayBtn');
   if (!cancelBtn) return;
+  const hasCard = !!(window._pendingIdScanCard && window._pendingIdScanCard.name);
   if (state === 'scanning') {
     cancelBtn.style.display  = '';
+    if (addBtn) addBtn.style.display = 'none';
     viewBtn.style.display    = 'none';
     anotherBtn.style.display = 'none';
     retryBtn.style.display   = 'none';
     if (ebayBtn) ebayBtn.style.display = 'none';
   } else if (state === 'success') {
     cancelBtn.style.display  = 'none';
+    // Primary CTA on success is now "Add to Collection" — one-tap add,
+    // no drill-through required. Only show when we have a real card.
+    if (addBtn) addBtn.style.display = hasCard ? '' : 'none';
     viewBtn.style.display    = '';
     anotherBtn.style.display = '';
     retryBtn.style.display   = 'none';
     // Only show the eBay listing button when we actually have a scanned card.
-    if (ebayBtn) ebayBtn.style.display = (window._pendingIdScanCard && window._pendingIdScanCard.name) ? '' : 'none';
+    if (ebayBtn) ebayBtn.style.display = hasCard ? '' : 'none';
   } else if (state === 'error') {
     cancelBtn.style.display  = 'none';
+    if (addBtn) addBtn.style.display = 'none';
     viewBtn.style.display    = 'none';
     anotherBtn.style.display = 'none';
     retryBtn.style.display   = '';
@@ -7381,6 +7389,70 @@ function listScannedCardOnEbay() {
   if (!c.name) { showToast('No scanned card to list', 'info'); return; }
   if (typeof openEbayListing === 'function') {
     openEbayListing({ cardName: c.name, setName: c.setName || '', number: c.number || '' });
+  }
+}
+
+// One-tap: add the scanned card to the collection/portfolio without forcing
+// the user to drill into the card-detail panel first. Fetches the exact
+// card via _loadScannedCardExact (populates selectedCard + currentPrices),
+// then writes a portfolio row with the current market price prefilled.
+// Purchase price defaults to 0 — the user can edit it from the Collection view.
+async function addScannedCardToCollection() {
+  const pending = window._pendingIdScanCard;
+  if (!pending || !pending.name) {
+    showToast('No scanned card to add', 'info');
+    return;
+  }
+  const btn = document.getElementById('scanAddToCollectionBtn');
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding\u2026'; }
+  try {
+    // Hydrate selectedCard + price data if we haven't already loaded the
+    // exact card. _loadScannedCardExact is idempotent and safe to call again.
+    if (typeof _loadScannedCardExact === 'function' && (!selectedCard || (selectedCard.name || '').toLowerCase() !== (pending.name || '').toLowerCase())) {
+      await _loadScannedCardExact(pending);
+    }
+    // Best-effort market price. getEffectivePrice reads currentPrices which
+    // is populated by loadCardUI inside _loadScannedCardExact.
+    let curVal = null;
+    try {
+      const p = (typeof getEffectivePrice === 'function') ? getEffectivePrice() : 0;
+      if (p && !isNaN(p)) curVal = +p.toFixed(2);
+    } catch(e) {}
+
+    // Compose the portfolio row. Prefer the freshly loaded selectedCard for
+    // image + set name, fall back to _pendingIdScanCard values.
+    const src   = selectedCard || {};
+    const name  = src.name || pending.name || '';
+    const setNm = src.setName || pending.setName || '';
+    const num   = src.number || pending.number || '';
+    const img   = (src.images?.small || src.images?.large) || '';
+    const setLine = [setNm, num].filter(Boolean).join(' · ');
+
+    const port = loadPortData();
+    port.push({
+      id: Date.now(),
+      card: name,
+      set: setLine,
+      buyPrice: 0,
+      currentValue: curVal,
+      addedDate: new Date().toISOString().slice(0,10),
+      estGrade: null,
+      img,
+      number: num,
+    });
+    savePortData(port);
+
+    showToast(curVal ? `Added to Collection — $${curVal.toFixed(2)}` : 'Added to Collection', 2200);
+    if (btn) btn.textContent = '✓ Added';
+    // Refresh the portfolio view if it's rendered in the background so the
+    // count/list updates the moment the user closes the overlay.
+    try { if (typeof renderCollectionView === 'function') renderCollectionView(); } catch(e) {}
+    try { if (typeof renderFlipsView === 'function') renderFlipsView(); } catch(e) {}
+  } catch(e) {
+    console.warn('[addScannedCardToCollection] error:', e);
+    showToast('Could not add card', 2200);
+    if (btn) { btn.disabled = false; btn.textContent = origLabel; }
   }
 }
 
