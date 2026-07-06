@@ -2560,6 +2560,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#1f1f1f;border:1px solid #333;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🔎 TCGPlayer</a>
     </div>
 
+    <button id="ccmOpenLookupBtn" type="button" onclick="_ccmOpenInLookup()" style="width:100%;padding:.7rem;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:10px;color:#fff;font-size:.85rem;font-weight:800;cursor:pointer;margin-bottom:.5rem;box-shadow:0 2px 8px rgba(124,58,237,.35)">🔎 Open card in Lookup</button>
+
     <button id="ccmRefreshBtn" type="button" onclick="_ccmRefreshPrice()" style="width:100%;padding:.65rem;background:transparent;border:1px solid #333;border-radius:10px;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:.5rem">↻ Refresh current price</button>
 
     <div style="display:flex;gap:.4rem">
@@ -6370,6 +6372,48 @@ function openCollectionCardDetail(entryId) {
   document.getElementById('collectionCardModal').classList.add('open');
 }
 
+// Reopen a collection card in the full Card Lookup view as if it were
+// just scanned — reuses _pendingIdScanCard + _loadScannedCardExact pattern.
+function _ccmOpenInLookup() {
+  if (!window._ccmCurrentId) return;
+  const port = loadPortData();
+  const p = port.find(x => x.id === window._ccmCurrentId);
+  if (!p) { showToast('Card not found in collection', 'info'); return; }
+
+  // Extract card number: prefer p.number, else parse from "SetName · #123" in p.set
+  const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
+  const number = (p.number || numFromSet || '').replace(/^0+/, '');
+  // Extract set name: strip the " · #123" suffix if present
+  const setName = (p.set || '').replace(/\s*[\u00b7\u2022|-]\s*#.*$/, '').trim();
+
+  window._pendingIdScanCard = {
+    name:    p.card || '',
+    number:  number,
+    setName: setName,
+    rarity:  p.rarity || '',
+  };
+
+  // Close the collection modal and jump to Lookup tab
+  document.getElementById('collectionCardModal').classList.remove('open');
+  const openLookupBtn = document.getElementById('ccmOpenLookupBtn');
+  if (openLookupBtn) { openLookupBtn.disabled = true; openLookupBtn.textContent = 'Loading\u2026'; }
+
+  try {
+    if (typeof switchView === 'function') switchView('lookup');
+  } catch(e) {}
+
+  // Fire the exact-load fetch on next tick so the view has switched.
+  setTimeout(() => {
+    const pending = window._pendingIdScanCard;
+    window._pendingIdScanCard = null;
+    if (pending && typeof _loadScannedCardExact === 'function') {
+      _loadScannedCardExact(pending);
+    }
+    // Reset the button for next open
+    if (openLookupBtn) { openLookupBtn.disabled = false; openLookupBtn.innerHTML = '\ud83d\udd0e Open card in Lookup'; }
+  }, 80);
+}
+
 async function _ccmRefreshPrice() {
   if (!window._ccmCurrentId) return;
   const btn = document.getElementById('ccmRefreshBtn');
@@ -8665,6 +8709,9 @@ function loadUserData() {
   // been migrated in, and if the user is on the Collection tab we need a fresh render
   // now that _userSub is set (an earlier attempt may have bailed on the sign-in check).
   _maybeRerenderCollection(true);
+  // Pull the server-side collection backup and reconcile with localStorage.
+  // Runs once per session; safe to call multiple times (guarded by _collectionHydrated).
+  hydrateCollectionFromServer();
 }
 
 // Override storage helpers to be user-scoped when signed in
@@ -8679,6 +8726,95 @@ function loadPortData() {
 }
 function savePortData(data) {
   try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(data)); } catch(e) {}
+  // Mirror to server (debounced, best-effort) so the collection survives
+  // sign-out / device switch / localStorage wipe.
+  _syncCollectionToServer();
+}
+
+// ── Server sync (debounced) ──
+// Fire-and-forget PUT to /api/collection. Debounced so rapid saves collapse
+// to a single network call. Silent on failure — localStorage is the source
+// of truth for the current session; server is the backup for future sessions.
+window._collectionSyncTimer = null;
+window._collectionSyncInFlight = false;
+function _syncCollectionToServer() {
+  if (!window.googleUser || !window._googleIdToken) return;
+  clearTimeout(window._collectionSyncTimer);
+  window._collectionSyncTimer = setTimeout(async () => {
+    if (window._collectionSyncInFlight) {
+      // Re-queue if a sync is already flying
+      _syncCollectionToServer();
+      return;
+    }
+    window._collectionSyncInFlight = true;
+    try {
+      const items = loadPortData();
+      await fetch('/api/collection', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + window._googleIdToken
+        },
+        body: JSON.stringify({ items }),
+        keepalive: true,
+      });
+    } catch(e) {
+      // Silent — next save will retry. Log for debug only.
+      console.warn('collection sync failed:', e && e.message);
+    } finally {
+      window._collectionSyncInFlight = false;
+    }
+  }, 800);
+}
+
+// ── Hydrate collection from server on sign-in ──
+// Called once after Firebase auth resolves. Fetches the server's collection
+// and reconciles it with localStorage using a longest-wins strategy:
+//   • Server has data, local is empty  → restore from server (this is the fix
+//                                       for logout → back-in → empty collection)
+//   • Local has data, server is empty  → push local to server (first-time sync)
+//   • Both have data                   → keep the larger set (union by id, then
+//                                       push merged set to server)
+//   • Both empty                       → no-op
+async function hydrateCollectionFromServer() {
+  if (!window.googleUser || !window._googleIdToken) return;
+  if (window._collectionHydrated) return;
+  try {
+    const r = await fetch('/api/collection', {
+      headers: { 'Authorization': 'Bearer ' + window._googleIdToken }
+    });
+    if (!r.ok) { window._collectionHydrated = true; return; }
+    const data = await r.json();
+    const serverItems = Array.isArray(data.items) ? data.items : [];
+    const localItems  = loadPortData();
+
+    if (serverItems.length && !localItems.length) {
+      // Restore from server — this is the primary logout/login recovery path
+      localStorage.setItem(getUserKey('portfolio'), JSON.stringify(serverItems));
+    } else if (!serverItems.length && localItems.length) {
+      // First sync — push local up
+      _syncCollectionToServer();
+    } else if (serverItems.length && localItems.length) {
+      // Merge: prefer local for any id that exists on both sides (user's
+      // most recent edit wins on the device where it was made), then union
+      // in any server-only items.
+      const localById = new Map(localItems.map(it => [String(it.id), it]));
+      const merged = [...localItems];
+      serverItems.forEach(it => {
+        if (!localById.has(String(it.id))) merged.push(it);
+      });
+      if (merged.length !== localItems.length) {
+        localStorage.setItem(getUserKey('portfolio'), JSON.stringify(merged));
+        _syncCollectionToServer();
+      }
+    }
+    window._collectionHydrated = true;
+    // Kick a re-render if the Collection tab is currently visible
+    _maybeRerenderCollection?.(true);
+  } catch(e) {
+    console.warn('hydrateCollection error:', e && e.message);
+    window._collectionHydrated = true;
+  }
 }
 
 

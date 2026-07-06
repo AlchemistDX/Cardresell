@@ -18,7 +18,7 @@ const PRO_LIMIT  = 500;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -106,6 +106,39 @@ export default async function handler(req, res) {
     items.push(entry);
     await writeCollection(kvUrl, kvToken, key, items);
     return res.status(200).json({ ok: true, entry, count: items.length });
+  }
+
+  // ── PUT: bulk-sync entire collection (client-first sync path) ──
+  // Body: { items: [...] } — the client's full localStorage portfolio array,
+  // stored verbatim so the server acts as a device-agnostic backup.
+  // Free tier is capped at 25 items, Pro/Pro+ at 500. Payload is size-capped
+  // at 200 KB to prevent abuse.
+  if (req.method === 'PUT') {
+    const body = req.body || {};
+    const items = Array.isArray(body.items) ? body.items : null;
+    if (!items) return res.status(400).json({ error: 'items array required' });
+
+    // Size ceiling — reject payloads that would balloon KV storage.
+    const serialized = JSON.stringify(items);
+    if (serialized.length > 200 * 1024) {
+      return res.status(413).json({ error: 'payload too large', max: '200KB' });
+    }
+
+    // Card-count cap based on Pro status.
+    const isPro = await checkProStatus(kvUrl, kvToken, googleSub);
+    const cap = isPro ? PRO_LIMIT : FREE_LIMIT;
+    if (items.length > cap) {
+      return res.status(400).json({
+        error: 'limit_reached',
+        message: isPro
+          ? `Collection cap is ${PRO_LIMIT} cards. Contact support if you need more.`
+          : `Free plan holds up to ${FREE_LIMIT} cards. Upgrade to Pro for ${PRO_LIMIT}.`,
+        cap, isPro,
+      });
+    }
+
+    await writeCollection(kvUrl, kvToken, key, items);
+    return res.status(200).json({ ok: true, count: items.length });
   }
 
   // ── DELETE: remove card ──
