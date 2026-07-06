@@ -605,7 +605,7 @@ async function verifyCardWithPokemonTCG(name, number, setName) {
   const timer = setTimeout(() => controller.abort(), 4000);
   try {
     for (const q of queries) {
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,hp,supertype`;
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,hp,supertype,images`;
       const r = await fetch(url, { signal: controller.signal });
       if (!r.ok) continue;
       anyQueryReachedApi = true;
@@ -658,7 +658,9 @@ async function verifyCardWithPokemonTCG(name, number, setName) {
     : null;
 
   const best = numOnlyMatch || cards[0];
-  // Build candidates list for optional picker
+  // Build candidates list for optional picker.
+  // Include image_small (PokemonTCG.io CDN) so the client can render a
+  // thumbnail grid — users identify their card visually, not by set name.
   const candidates = cards.slice(0, 3).map(c => ({
     card_name:      c.name || cleanName,
     card_number:    c.number || '',
@@ -667,6 +669,7 @@ async function verifyCardWithPokemonTCG(name, number, setName) {
     card_type:      'pokemon',
     rarity:         c.rarity || '',
     confidence_pct: null,
+    image_small:    c.images?.small || c.images?.large || '',
   }));
 
   return {

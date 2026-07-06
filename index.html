@@ -4702,13 +4702,19 @@ function buildEbayUrl(url) {
 
 // ─── eBay LISTING (SELL) URL BUILDER ───
 // Sends the user to eBay's Sell prelist page with a prefilled title.
-// eBay's own catalog matcher fills in category/aspects/condition from the title.
+// eBay's catalog matcher works BEST with a short query — just name + number.
+// A long literal title (with set + "Pokemon TCG" suffix) is treated as a raw
+// listing title and never matches an existing eBay catalog entry, so the user
+// loses the auto-filled category / aspects / condition / stock photo.
+// With just "<name> <number>" eBay pops up its "We found this in our catalog"
+// suggestion, which is what the user actually wants for one-tap listing.
 // Params (all optional except cardName):
-//   cardName  — canonical card name (e.g. "Charizard ex")
-//   setName   — set display name (e.g. "Obsidian Flames")
-//   number    — card number (e.g. "125/197" or "125")
+//   cardName  — canonical card name (e.g. "Wigglytuff")
+//   number    — card number (e.g. "105/094" or "105")
 //   psaGrade  — integer 1-10 (adds "PSA <N>" prefix for graded listings)
-//   condition — free-form (e.g. "Near Mint", "Raw Ungraded")
+//   setName   — accepted but ignored for the prelist title (kept for future
+//               non-catalog fallback flows / logging)
+//   condition — same; ignored for prelist title
 function buildEbayListingTitle(opts) {
   const o = opts || {};
   const parts = [];
@@ -4716,13 +4722,14 @@ function buildEbayListingTitle(opts) {
     parts.push('PSA ' + Number(o.psaGrade));
   }
   if (o.cardName)  parts.push(String(o.cardName).trim());
-  if (o.setName)   parts.push(String(o.setName).trim());
   if (o.number) {
-    const n = String(o.number).replace(/^#?0*/, '');
-    if (n) parts.push('#' + n);
+    // Prefer just the numerator ("105" not "105/094") — eBay's catalog
+    // matcher indexes on the printed collector number, not the set-size
+    // denominator, and short queries yield better matches.
+    const raw = String(o.number).replace(/^#?0*/, '').trim();
+    const num = raw.split('/')[0].trim();
+    if (num) parts.push(num);
   }
-  parts.push('Pokemon TCG');
-  if (o.condition && !o.psaGrade) parts.push('[' + String(o.condition).trim() + ']');
   // eBay title cap is 80 chars — trim if needed
   let title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   if (title.length > 80) title = title.slice(0, 80).replace(/\s+\S*$/, '');
@@ -7512,6 +7519,16 @@ function _renderScanCandidatesPicker(candidates, statusEl, resultEl, objectUrl) 
   statusEl.innerHTML = '<span style="color:#facc15;font-weight:800">\u26A0 Not 100% sure \u2014 pick the right card</span>' +
     '<br><span style="font-size:.72rem;opacity:.6">No credit charged until you pick. If none match, tap Cancel.</span>';
 
+  // Escape HTML in strings we splice into innerHTML (defense-in-depth against
+  // future API changes that could return unexpected characters).
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // Thumbnail-first picker: users just scanned a card and don't know its set
+  // name — they recognize the artwork. Show a horizontal card thumbnail with
+  // a compact metadata strip beside it. Fall back to a placeholder if the
+  // PokemonTCG.io CDN URL is missing or fails to load.
   const rows = candidates.map((c, i) => {
     const parts = [
       c.set_name || '',
@@ -7522,10 +7539,19 @@ function _renderScanCandidatesPicker(candidates, statusEl, resultEl, objectUrl) 
     const conf = (typeof c.confidence_pct === 'number' && c.confidence_pct > 0)
       ? '<span style="font-size:.65rem;color:rgba(255,255,255,.5);margin-left:.4rem">' + Math.round(c.confidence_pct) + '% match</span>'
       : '';
+    const img = c.image_small
+      ? '<img src="' + esc(c.image_small) + '" alt="' + esc(c.card_name || 'card') + '" loading="lazy" ' +
+        'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" ' +
+        'style="width:64px;height:88px;object-fit:contain;border-radius:6px;background:#0a0a0a;flex-shrink:0">' +
+        '<div style="display:none;width:64px;height:88px;border-radius:6px;background:#0a0a0a;border:1px solid #2a2a2a;align-items:center;justify-content:center;color:#555;font-size:1.4rem;flex-shrink:0">?</div>'
+      : '<div style="display:flex;width:64px;height:88px;border-radius:6px;background:#0a0a0a;border:1px solid #2a2a2a;align-items:center;justify-content:center;color:#555;font-size:1.4rem;flex-shrink:0">?</div>';
     return '<button type="button" onclick="_pickScanCandidate(' + i + ')" ' +
-      'style="display:block;width:100%;text-align:left;padding:.7rem .8rem;margin-bottom:.4rem;background:#151515;border:1px solid #2a2a2a;border-radius:10px;color:#fff;cursor:pointer;font-size:.85rem">' +
-      '<div style="font-weight:800">' + (c.card_name || 'Unknown') + conf + '</div>' +
-      (parts ? '<div style="font-size:.72rem;opacity:.6;margin-top:.15rem">' + parts + '</div>' : '') +
+      'style="display:flex;align-items:center;gap:.75rem;width:100%;text-align:left;padding:.55rem;margin-bottom:.4rem;background:#151515;border:1px solid #2a2a2a;border-radius:10px;color:#fff;cursor:pointer;font-size:.85rem">' +
+      img +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.card_name || 'Unknown') + conf + '</div>' +
+        (parts ? '<div style="font-size:.72rem;opacity:.6;margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(parts) + '</div>' : '') +
+      '</div>' +
       '</button>';
   }).join('');
 
