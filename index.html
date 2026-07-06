@@ -1486,10 +1486,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div id="camStepPill" style="background:#22d3ee;color:#062326;font-weight:900;font-size:.82rem;letter-spacing:1.2px;padding:.4rem .9rem;border-radius:99px;box-shadow:0 4px 14px rgba(34,211,238,.35)">FRONT</div>
       <div id="camTiltChip" style="display:none;background:rgba(0,0,0,.55);color:#fff;font-size:.72rem;font-weight:700;padding:.35rem .65rem;border-radius:99px;min-width:36px;text-align:center"><span id="camTiltIcon">◎</span> <span id="camTiltText">Tilt</span></div>
     </div>
-    <!-- SVG framing overlay (brackets swap per step) -->
-    <div id="camGuideWrap" style="position:absolute;inset:0;pointer-events:none;z-index:2;display:flex;align-items:center;justify-content:center">
-      <svg id="camGuideSvg" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet" style="width:78vw;max-width:340px;height:auto;filter:drop-shadow(0 2px 12px rgba(0,0,0,.5))" aria-hidden="true">
-        <!-- Brackets rendered by JS — keeps things dynamic per step -->
+    <!-- SVG framing overlay (brackets swap per step). Full-screen SVG so the
+         dim mask can cover the whole viewfinder outside the capture rect. -->
+    <div id="camGuideWrap" style="position:absolute;inset:0;pointer-events:none;z-index:2">
+      <svg id="camGuideSvg" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet" style="position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 2px 12px rgba(0,0,0,.5))" aria-hidden="true">
+        <!-- Brackets + dim mask rendered by JS — keeps things dynamic per step -->
       </svg>
     </div>
     <!-- Bottom controls -->
@@ -7965,7 +7966,25 @@ function _renderCamBrackets(step) {
   if (!svg) return;
   const W = 100, H = 140, gold = '#facc15', white = '#fff';
   const isEdge = ['top','bottom','left','right'].includes(step);
-  // Corner brackets — 4 L-shaped strokes (TAG-style)
+
+  // Dim mask outside the card outline so the user can literally see the
+  // capture region. Everything OUTSIDE the rounded rect is darkened; the
+  // capture rectangle stays fully lit. This makes the promise "the box IS
+  // what gets captured" visually explicit.
+  const mask =
+    '<defs><mask id="camCropMask" maskUnits="userSpaceOnUse">' +
+      '<rect x="-50" y="-50" width="'+(W+100)+'" height="'+(H+100)+'" fill="white" />' +
+      '<rect x="2" y="2" width="'+(W-4)+'" height="'+(H-4)+'" rx="4" ry="4" fill="black" />' +
+    '</mask></defs>' +
+    '<rect x="-50" y="-50" width="'+(W+100)+'" height="'+(H+100)+'" fill="rgba(0,0,0,0.45)" mask="url(#camCropMask)" />';
+
+  // Outlined capture rectangle — white dashed for the card face, so it reads
+  // as "this is the crop line, everything inside will be kept".
+  const captureRect =
+    '<rect x="2" y="2" width="'+(W-4)+'" height="'+(H-4)+'" rx="4" ry="4" ' +
+    'fill="none" stroke="'+white+'" stroke-width="1.6" stroke-dasharray="3 2" opacity="0.9" />';
+
+  // Corner brackets — 4 L-shaped strokes (TAG-style), drawn on top for emphasis
   const armH = 14, armV = 20, sw = 3.2; // horizontal arm length, vertical arm length, stroke width
   const brackets =
     // top-left
@@ -7985,7 +8004,7 @@ function _renderCamBrackets(step) {
     if (step === 'left')   edgeHi = '<line x1="6" y1="6" x2="6" y2="'+(H-6)+'" stroke="'+gold+'" stroke-width="'+t+'" stroke-linecap="round" />';
     if (step === 'right')  edgeHi = '<line x1="'+(W-6)+'" y1="6" x2="'+(W-6)+'" y2="'+(H-6)+'" stroke="'+gold+'" stroke-width="'+t+'" stroke-linecap="round" />';
   }
-  svg.innerHTML = brackets + edgeHi;
+  svg.innerHTML = mask + captureRect + brackets + edgeHi;
 }
 
 function _setCamStepUI(step) {
@@ -8124,9 +8143,11 @@ function cameraFallbackToNative() {
 }
 
 // Compute the crop rectangle (in native video pixels) that corresponds to
-// the on-screen SVG framing box. Accounts for object-fit:cover mapping
-// from the video's intrinsic size to the CSS-rendered size. Returns null if
-// anything is missing (caller falls back to a full-frame capture).
+// the on-screen card outline (the viewBox card-shape region inside the SVG,
+// NOT the full-screen SVG element itself). Accounts for object-fit:cover
+// mapping from the video's intrinsic size to the CSS-rendered size, plus
+// preserveAspectRatio letter-boxing inside the SVG. Returns null if anything
+// is missing (caller falls back to a full-frame capture).
 function _computeCamCropRect(step) {
   const v = document.getElementById('camVideo');
   const svg = document.getElementById('camGuideSvg');
@@ -8160,20 +8181,39 @@ function _computeCamCropRect(step) {
     srcOffY = (vh - srcVisibleH) / 2;
   }
 
-  // SVG bbox in CSS coords, relative to the video CSS box
-  const relX = sRect.left - vRect.left;
-  const relY = sRect.top  - vRect.top;
+  // Card outline lives at viewBox coords (2,2) to (98,138) inside a 100x140
+  // viewBox. With preserveAspectRatio="xMidYMid meet", the viewBox is
+  // uniformly scaled to fit inside the SVG's CSS box and centered. Compute
+  // the CSS-space rectangle of the card outline.
+  const VBW = 100, VBH = 140; // viewBox size
+  const cardVB = { x: 2, y: 2, w: VBW - 4, h: VBH - 4 };
+  const svgScale = Math.min(sRect.width / VBW, sRect.height / VBH);
+  const vbRenderedW = VBW * svgScale;
+  const vbRenderedH = VBH * svgScale;
+  const vbOffX = sRect.left + (sRect.width  - vbRenderedW) / 2;
+  const vbOffY = sRect.top  + (sRect.height - vbRenderedH) / 2;
+  const cardCssLeft = vbOffX + cardVB.x * svgScale;
+  const cardCssTop  = vbOffY + cardVB.y * svgScale;
+  const cardCssW    = cardVB.w * svgScale;
+  const cardCssH    = cardVB.h * svgScale;
+
+  // Card outline in CSS coords, relative to the video CSS box
+  const relX = cardCssLeft - vRect.left;
+  const relY = cardCssTop  - vRect.top;
 
   // Map CSS → source-pixel space
   let sx = srcOffX + relX * scale;
   let sy = srcOffY + relY * scale;
-  let sw = sRect.width  * scale;
-  let sh = sRect.height * scale;
+  let sw = cardCssW * scale;
+  let sh = cardCssH * scale;
 
-  // Safety margin — hard-crop, but give the user some slack on framing.
-  // 15% for card front/back/id, 10% for the tighter edge captures.
+  // Safety margin — tight enough that the framing box is an honest promise
+  // (users complained "the white box captures everything around"), loose
+  // enough to handle shutter shake and borderline framing. 3% for card
+  // front/back/id, 2% for the tighter edge captures. Server-side autoCropCard
+  // still runs as a second-line defense if the user's card drifted past this.
   const isEdge = ['top','bottom','left','right'].includes(step);
-  const marginPct = isEdge ? 0.10 : 0.15;
+  const marginPct = isEdge ? 0.02 : 0.03;
   const mx = sw * marginPct;
   const my = sh * marginPct;
   sx -= mx; sy -= my; sw += mx * 2; sh += my * 2;
