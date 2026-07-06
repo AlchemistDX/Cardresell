@@ -9212,7 +9212,7 @@ async function startAnnualCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-annual-checkout',
-    { googleSub: window.googleUser.sub, email: window.googleUser.email },
+    { email: window.googleUser.email, userId: window.googleUser.sub },
     'pricingAnnualBtn', 'pricingAnnualBtnText', 'Get Annual — $89.99/yr');
 }
 
@@ -9220,7 +9220,8 @@ async function startAnnualCheckout() {
 async function startPlusCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
-  _stripeCheckout('/api/stripe-plus-checkout', {},
+  _stripeCheckout('/api/stripe-plus-checkout',
+    { email: window.googleUser.email, userId: window.googleUser.sub },
     'pricingPlusBtn', 'pricingPlusBtnText', 'Get Pro+ — $24.99/mo');
 }
 
@@ -9228,7 +9229,8 @@ async function startPlusCheckout() {
 async function startPlusAnnualCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
-  _stripeCheckout('/api/stripe-plus-annual-checkout', {},
+  _stripeCheckout('/api/stripe-plus-annual-checkout',
+    { email: window.googleUser.email, userId: window.googleUser.sub },
     'pricingPlusBtn', 'pricingPlusBtnText', 'Get Pro+ — $199/yr');
 }
 

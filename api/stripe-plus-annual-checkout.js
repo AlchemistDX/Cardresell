@@ -1,9 +1,9 @@
 // /api/stripe-plus-annual-checkout — Create Stripe checkout for Pro+ ANNUAL ($199/yr)
-// POST (no body needed) with Authorization: Bearer <idToken>
+// POST body: { email, userId } — Authorization: Bearer <idToken> (optional, verified if present)
 // Returns: { url } — redirect to Stripe checkout
 //
-// AUTH: uid + email are derived from the verified Firebase/Google ID token,
-// NEVER from the body — prevents identity spoofing on checkout metadata.
+// AUTH: prefer verified Firebase/Google token when present, but fall back to body
+// email/userId so expired-token users can still check out (matches stripe-checkout.js).
 //
 // Plan metadata is set to 'pro_plus_annual' so the webhook's tierFromPlan()
 // grants the correct 200 IDs + 75 grade credits per month (annual billing,
@@ -23,20 +23,24 @@ export default async function handler(req, res) {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
 
-  // ── AUTH REQUIRED: derive identity from verified token ──
+  const body = req.body || {};
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  if (!idToken) return res.status(401).json({ error: 'Authorization token required' });
 
-  let googleSub = '';
-  let email = '';
-  try {
-    const info = await verifyTokenFlexible(idToken);
-    googleSub = info?.uid   || '';
-    email     = info?.email || '';
-  } catch (e) {
-    return res.status(401).json({ error: 'Invalid token' });
+  let googleSub = body.userId || body.googleSub || '';
+  let email     = body.email  || '';
+
+  // Try token verify (non-blocking) — overwrite with verified values if present
+  if (idToken && idToken.length > 20) {
+    try {
+      const info = await verifyTokenFlexible(idToken);
+      if (info?.uid)   googleSub = info.uid;
+      if (info?.email) email     = info.email;
+    } catch (e) { /* fall through to body values */ }
   }
-  if (!googleSub || !email) return res.status(401).json({ error: 'Token missing uid or email' });
+
+  if (!email || !email.includes('@')) {
+    return res.status(401).json({ error: 'Sign in with Google first.' });
+  }
 
   const origin = req.headers.origin || 'https://www.cardresell.org';
 
