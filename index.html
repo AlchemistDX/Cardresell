@@ -10492,6 +10492,7 @@ function openBulkScan() {
   window._bulkMode       = null;
   window._bulkProcessing = false;
   window._bulkSaved      = false;
+  window._bulkPackCost   = 0;  // fresh pack — clear any prior cost tally
 
   // Show overlay in mode-picker state
   const ov = document.getElementById('bulkScanOverlay');
@@ -10846,13 +10847,12 @@ function _bulkFinishQueue(total) {
   document.getElementById('bulkProgressLabel').textContent = 'Done!';
 
   const successCount = window._bulkResults.filter(r => r.success).length;
-  const failCount    = window._bulkResults.filter(r => !r.success).length;
-  document.getElementById('bulkSummaryLine').textContent =
-    successCount + ' card' + (successCount!==1?'s':'') + ' identified' +
-    (failCount > 0 ? ' · ' + failCount + ' failed' : '') +
-    ' · Tap below to save to your Collection';
 
   document.getElementById('bulkBottomBar').style.display = '';
+  // _bulkResetBottomBarButtons re-renders the bar (which includes the pack-cost
+  // input) and then calls _bulkRefreshSummary() to fill the summary line with
+  // either the "N cards identified" text or the break-even tally (if the user
+  // has typed a pack cost).
   _bulkResetBottomBarButtons();
 
   // Update subtitle
@@ -10936,9 +10936,7 @@ function bulkMergeDuplicates() {
   _bulkClearDupBanner();
   showToast('Duplicates merged');
 
-  const successCount = window._bulkResults.filter(r => r.success).length;
-  document.getElementById('bulkSummaryLine').textContent =
-    successCount + ' card' + (successCount!==1?'s':'') + ' ready to add to Collection';
+  _bulkRefreshSummary();
 }
 
 /* ── Row rendering ── */
@@ -11074,6 +11072,7 @@ function bulkEditPrice(rowId) {
   result.marketPrice = val;
   result.priceVariant = null; // manually overridden — no longer tied to a TCGplayer variant
   _bulkUpdateRow(rowId, result);
+  _bulkRefreshSummary();
 }
 
 /* ── Retry failed scan (free) ── */
@@ -11109,7 +11108,8 @@ async function bulkRetryRow(rowId) {
 
   const successCount = window._bulkResults.filter(r => r.success).length;
   const failCount    = window._bulkResults.filter(r => !r.success).length;
-  const summaryEl = document.getElementById('bulkSummaryLine');
+  _bulkRefreshSummary();
+  const summaryEl = null; // legacy variable kept null so the block below no-ops
   if (summaryEl) {
     summaryEl.textContent =
       successCount + ' card' + (successCount!==1?'s':'') + ' identified' +
@@ -11123,9 +11123,7 @@ function bulkRemoveResult(rowId) {
   const row = document.getElementById(rowId);
   if (row) row.remove();
   // Update summary
-  const successCount = window._bulkResults.filter(r => r.success).length;
-  document.getElementById('bulkSummaryLine').textContent =
-    successCount + ' card' + (successCount!==1?'s':'') + ' ready to add to Collection';
+  _bulkRefreshSummary();
 }
 
 /* ── Save flow ── */
@@ -11326,7 +11324,19 @@ function resumeBulkScan() {
 function _bulkResetBottomBarButtons() {
   const bar = document.getElementById('bulkBottomBar');
   if (!bar) return;
+  // Preserve any pack-cost the user already typed across re-renders (Scan More etc.)
+  const priorCost = (typeof window._bulkPackCost === 'number' && window._bulkPackCost > 0)
+    ? window._bulkPackCost.toFixed(2) : '';
   bar.innerHTML = `
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+      <label for="bulkPackCostInput" style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:700;white-space:nowrap">Pack cost</label>
+      <div style="position:relative;flex:1">
+        <span style="position:absolute;left:.55rem;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.4);font-size:.82rem;pointer-events:none">$</span>
+        <input id="bulkPackCostInput" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="${priorCost}"
+          oninput="_bulkOnPackCostInput()"
+          style="width:100%;padding:.4rem .55rem .4rem 1.25rem;background:#0f0f0f;border:1px solid rgba(139,92,246,.3);color:#fff;border-radius:8px;font-size:.82rem;font-weight:700;outline:none">
+      </div>
+    </div>
     <div id="bulkSummaryLine" style="font-size:.78rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.65rem"></div>
     <div style="display:flex;gap:.75rem">
       <button onclick="closeBulkScan()" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>
@@ -11335,6 +11345,47 @@ function _bulkResetBottomBarButtons() {
     <div style="margin-top:.5rem">
       <button id="bulkScanMoreBtn" onclick="bulkScanMore()" style="width:100%;padding:.55rem;background:transparent;border:1px solid rgba(139,92,246,.4);color:rgba(139,92,246,1);border-radius:10px;font-weight:700;font-size:.8rem;cursor:pointer">+ Scan More Cards</button>
     </div>`;
+  // Refresh summary now that the input + line exist.
+  _bulkRefreshSummary();
+}
+
+// Live tally: reads pack-cost input + sums result.marketPrice across successful
+// scans. Called from oninput on the pack-cost field and from every path that
+// mutates _bulkResults (finish, retry, delete, price edit).
+window._bulkPackCost = window._bulkPackCost || 0;
+function _bulkOnPackCostInput() {
+  const el = document.getElementById('bulkPackCostInput');
+  const v = el ? parseFloat(el.value) : NaN;
+  window._bulkPackCost = (!isNaN(v) && v > 0) ? v : 0;
+  _bulkRefreshSummary();
+}
+function _bulkRefreshSummary() {
+  const line = document.getElementById('bulkSummaryLine');
+  if (!line) return;
+  const results = window._bulkResults || [];
+  const successCount = results.filter(r => r.success).length;
+  const failCount    = results.filter(r => !r.success).length;
+  const pulled = results.reduce((s, r) => s + (r.success && typeof r.marketPrice === 'number' ? r.marketPrice : 0), 0);
+  const cost = +window._bulkPackCost || 0;
+
+  if (cost > 0) {
+    // Break-even mode — show spent / pulled / profit with color coding.
+    const diff = pulled - cost;
+    const pct = cost > 0 ? Math.round((pulled / cost) * 100) : 0;
+    const diffStr = (diff >= 0 ? '+$' : '-$') + Math.abs(diff).toFixed(2);
+    const color = diff >= 0 ? '#4ade80' : '#f87171';
+    line.innerHTML =
+      `<span style="color:rgba(255,255,255,.55)">Spent $${cost.toFixed(2)} · Pulled </span>` +
+      `<span style="color:var(--gold);font-weight:800">$${pulled.toFixed(2)}</span>` +
+      `<span style="color:rgba(255,255,255,.55)"> · </span>` +
+      `<span style="color:${color};font-weight:800">${diffStr} (${pct}%)</span>`;
+  } else {
+    // No cost entered — original message.
+    line.textContent =
+      successCount + ' card' + (successCount!==1?'s':'') + ' identified' +
+      (failCount > 0 ? ' · ' + failCount + ' failed' : '') +
+      ' · Tap below to save to your Collection';
+  }
 }
 
 function _bulkShowPostSaveBar(added) {
