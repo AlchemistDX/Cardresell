@@ -423,7 +423,34 @@ Respond ONLY with valid JSON, no explanation:
         card_type:      c.card_type      || 'pokemon',
         rarity:         c.rarity         || '',
         confidence_pct: (typeof c.confidence_pct === 'number' ? c.confidence_pct : null),
+        image_small:    '',
       }));
+
+    // Enrich candidates with PokemonTCG.io thumbnails so the picker shows real
+    // card art instead of '?' placeholders. Users pick by recognizing the
+    // artwork — blind text-only rows are useless. 2s per-candidate timeout,
+    // fully parallel, all failures swallowed — never block the picker for a
+    // missing image.
+    if (cleanCandidates.length > 0) {
+      await Promise.all(cleanCandidates.map(async (cand) => {
+        try {
+          const nm = (cand.card_name || '').replace(/["\\]/g, '').replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+          const nmFirst = nm.split(/\s+/)[0];
+          const num = (cand.card_number || '').replace(/\/.*$/, '').replace(/^0+/, '').trim();
+          if (!nmFirst) return;
+          const q = num ? `name:${nmFirst}* number:${num}` : `name:"${nm}"`;
+          const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=3&select=id,name,images`;
+          const ctl = new AbortController();
+          const t = setTimeout(() => ctl.abort(), 2000);
+          let r;
+          try { r = await fetch(url, { signal: ctl.signal }); } finally { clearTimeout(t); }
+          if (!r || !r.ok) return;
+          const j = await r.json();
+          const hit = (j.data || [])[0];
+          if (hit) cand.image_small = hit.images?.small || hit.images?.large || '';
+        } catch(e) { /* leave image_small empty on failure */ }
+      }));
+    }
 
     // Only trigger the picker when the model is actually uncertain AND we got
     // multiple candidates. High-confidence single answers pass straight through.
