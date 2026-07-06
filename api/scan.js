@@ -179,7 +179,18 @@ export default async function handler(req, res) {
 
     const deepGradeInstructions = isDeepGrade ? `
 
-DEEP GRADE MODE — You have ${orderedImages.length} photos including ${edgeImages.length} dedicated edge close-up${edgeImages.length === 1 ? '' : 's'}. This is a professional-tier inspection. Be MORE precise on the per-pillar sub-grades because you can actually see corner and edge detail. Use the edge close-ups to catch flaws that would be invisible in a whole-card shot.${edgeImages.length < 4 ? ` (Note: fewer than 4 edge shots — use "medium" confidence unless the shots you have are very clear.)` : ''}` : '';
+DEEP GRADE MODE — You have ${orderedImages.length} photos including ${edgeImages.length} dedicated edge close-up${edgeImages.length === 1 ? '' : 's'}. This is a professional-tier inspection. Be MORE precise on the per-pillar sub-grades because you can actually see corner and edge detail. Use the edge close-ups to catch flaws that would be invisible in a whole-card shot.${edgeImages.length < 4 ? ` (Note: fewer than 4 edge shots — use "medium" confidence unless the shots you have are very clear.)` : ''}
+
+DEEP GRADE PRECISION RULES (mandatory — no ranges allowed):
+1. Return ONE integer psa_estimate (1-10). NEVER return a range like "8-10" or "9 or 10".
+2. Return confidence_pct as an integer 0-100 reflecting how sure you are of that single grade.
+   - 85-100 = confident (multiple photos, all pillars clearly visible)
+   - 60-84  = reasonably sure (minor angles/lighting could change one pillar)
+   - 40-59  = tentative (some pillar was hard to read — you're still committing to ONE grade)
+   - 0-39   = low confidence — in this case ALSO set needs_more_photos:true and explain in grade_notes what's missing (e.g. "back edge not visible")
+3. Return located_flaws: an array where each entry is {"location":"...","severity":"faint|light|moderate|heavy","description":"..."}. Locations MUST be specific: "top-left corner", "top-right corner", "bottom-left corner", "bottom-right corner", "top edge", "bottom edge", "left edge", "right edge", "front surface — top half", "front surface — bottom half", "front surface — holo area", "back surface", "centering". Include ONLY flaws you can actually see. If the card is genuinely flawless return [].
+4. Sub-grades stay on the 0.5 grid (e.g. 9.5, 8.0). Match the located_flaws — a flaw at "top-left corner" should pull the corners sub-grade down.
+5. Committing to a single grade with lower confidence is ALWAYS preferred over returning a range or hedging with "8-9".` : '';
 
     const prompt = isGradeMode
       ? `You are a strict, professional trading card grader trained to PSA standards. You are analyzing ${imageDescription}.${deepGradeInstructions}
@@ -210,9 +221,15 @@ Evaluate and return:
 9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
 10. subgrades: object with numeric 1-10 sub-scores for each pillar: { "centering": 9.5, "corners": 8.5, "edges": 9, "surface": 9 }. Use half-steps (e.g. 8.5). Be strict — match the descriptors above.
 11. confidence: "high" | "medium" | "low" — how confident you are in this grade given the photo quality and angles you had to work with.
+${isDeepGrade ? `12. confidence_pct: integer 0-100 (see DEEP GRADE PRECISION RULES above).
+13. located_flaws: array of {location, severity, description} — empty array [] if the card is genuinely flawless.
+14. needs_more_photos: boolean — true ONLY when confidence_pct < 40 and the missing photo would resolve the ambiguity.` : ''}
 
 Respond ONLY with valid JSON:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium"}`
+${isDeepGrade
+  ? `{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium","confidence_pct":72,"located_flaws":[{"location":"top-left corner","severity":"light","description":"faint whitening visible under angled light"}],"needs_more_photos":false}`
+  : `{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium"}`
+}`
       : `You are a trading card expert. Look at this card image and identify it.
 
 BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
@@ -323,6 +340,45 @@ Respond ONLY with valid JSON, no explanation:
       let confidence = gptConfNorm || defaultConf;
       if (capOrder[confidence] > capOrder[photoCap]) confidence = photoCap;
 
+      // ── Deep-Grade-only precision fields ──
+      // confidence_pct: integer 0-100. Committed to a single PSA number.
+      // located_flaws:  array of {location, severity, description}.
+      // needs_more_photos: true only when confidence_pct is very low.
+      let confidencePct = null;
+      let locatedFlaws = [];
+      let needsMorePhotos = false;
+      if (isDeepGrade) {
+        // Parse confidence_pct — accept number or "72%" style strings.
+        const rawPct = cardInfo.confidence_pct;
+        const pctNum = typeof rawPct === 'number' ? rawPct : parseFloat(String(rawPct || '').replace('%', ''));
+        if (isFinite(pctNum)) confidencePct = Math.max(0, Math.min(100, Math.round(pctNum)));
+
+        // Fall back to deriving a pct from the string confidence if the model didn't return one.
+        if (confidencePct == null) {
+          confidencePct = confidence === 'high' ? 85 : confidence === 'low' ? 40 : 65;
+        }
+
+        // Clamp confidence_pct by photo count so the model can't over-claim on 4-photo Deep Grade.
+        const pctCap = totalPhotos >= 6 ? 95 : (totalPhotos >= 4 ? 80 : 65);
+        if (confidencePct > pctCap) confidencePct = pctCap;
+
+        // Located flaws — sanitize each entry.
+        const rawFlaws = Array.isArray(cardInfo.located_flaws) ? cardInfo.located_flaws : [];
+        const okSeverity = new Set(['faint','light','moderate','heavy']);
+        locatedFlaws = rawFlaws
+          .filter(f => f && typeof f === 'object' && (f.location || f.description))
+          .slice(0, 8)
+          .map(f => ({
+            location:    String(f.location || '').slice(0, 60).trim() || 'unspecified',
+            severity:    okSeverity.has(String(f.severity || '').toLowerCase())
+                           ? String(f.severity).toLowerCase()
+                           : 'light',
+            description: String(f.description || '').slice(0, 200).trim(),
+          }));
+
+        needsMorePhotos = cardInfo.needs_more_photos === true || confidencePct < 40;
+      }
+
       return res.status(200).json({
         success:       true,
         mode:          'grade',
@@ -340,6 +396,10 @@ Respond ONLY with valid JSON, no explanation:
         worth_grading: cardInfo.worth_grading ?? false,
         subgrades,
         confidence,
+        // Deep-Grade-only precision fields (null/empty for Quick Grade for backward compat)
+        confidence_pct:    isDeepGrade ? confidencePct   : null,
+        located_flaws:     isDeepGrade ? locatedFlaws    : [],
+        needs_more_photos: isDeepGrade ? needsMorePhotos : false,
       });
     }
 

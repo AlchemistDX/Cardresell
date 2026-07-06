@@ -849,6 +849,157 @@ await test('identify — PokemonTCG.io unavailable — still returns GPT answer 
   assert(res.body.unverified !== true, 'not marked unverified on outage');
 });
 
+// ─── Group 11: Deep Grade precision fields (single PSA + confidence % + located flaws) ───
+console.log('\n[11] Deep Grade precision fields — single PSA + confidence % + located flaws');
+
+// Reusable OpenAI stub returning the new Deep Grade schema.
+function deepGradePrecisionOpenAI(overrides = {}) {
+  return () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Charizard VMAX',
+        centering: '55/45 L/R, 50/50 T/B',
+        corners: 'Near Mint',
+        edges: 'Mint',
+        surface: 'Mint',
+        psa_estimate: 9,
+        grade_label: 'Mint',
+        grade_notes: 'Light corner wear on top-left.',
+        worth_grading: true,
+        subgrades: { centering: 9, corners: 8.5, edges: 9.5, surface: 9.5 },
+        confidence: 'high',
+        confidence_pct: 82,
+        located_flaws: [
+          { location: 'top-left corner', severity: 'light', description: 'faint whitening under angled light' },
+          { location: 'front surface — holo area', severity: 'faint', description: 'one micro print line' },
+        ],
+        needs_more_photos: false,
+        ...overrides,
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+}
+
+await test('deep grade (6 photos) returns confidence_pct + located_flaws + needs_more_photos', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, deepGradePrecisionOpenAI());
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode);
+  assert(res.body.deepGrade === true, 'deepGrade true');
+  // Single integer PSA — no range.
+  assert(res.body.psa_estimate === 9, 'psa_estimate=9');
+  // confidence_pct present as number 0-100.
+  assert(typeof res.body.confidence_pct === 'number', 'confidence_pct is number');
+  assert(res.body.confidence_pct === 82, 'confidence_pct passthrough = 82');
+  // Located flaws sanitized + preserved.
+  assert(Array.isArray(res.body.located_flaws), 'located_flaws is array');
+  assert(res.body.located_flaws.length === 2, 'two flaws');
+  assert(res.body.located_flaws[0].location === 'top-left corner', 'flaw location');
+  assert(res.body.located_flaws[0].severity === 'light', 'flaw severity');
+  assert(typeof res.body.located_flaws[0].description === 'string' && res.body.located_flaws[0].description.length > 0, 'flaw description');
+  assert(res.body.needs_more_photos === false, 'needs_more_photos false');
+});
+
+await test('deep grade low confidence (< 40%) auto-sets needs_more_photos=true', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, deepGradePrecisionOpenAI({ confidence_pct: 30, needs_more_photos: false }));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(res.body.confidence_pct === 30, 'pct passthrough');
+  // Server forces needs_more_photos=true when pct < 40 even if GPT said false.
+  assert(res.body.needs_more_photos === true, 'needs_more_photos auto-forced when pct < 40');
+});
+
+await test('deep grade confidence_pct clamped by photo count (4 photos → cap 80)', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  // GPT over-claims 95% on 4 photos (front+back+2 edges).
+  installMocks(kv, deepGradePrecisionOpenAI({ confidence_pct: 95 }));
+  const b = bodyFor({ mode: 'grade', deepGrade: true, hasBack: true });
+  b.topEdgeBase64 = 'CCCC'; b.topEdgeMimeType = 'image/jpeg';
+  b.bottomEdgeBase64 = 'DDDD'; b.bottomEdgeMimeType = 'image/jpeg';
+  const req = makeReq(b, makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(res.body.photoCount === 4, '4 photos');
+  assert(res.body.confidence_pct === 80, `confidence_pct capped at 80, got ${res.body.confidence_pct}`);
+});
+
+await test('deep grade with malformed located_flaws entries — sanitized', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, deepGradePrecisionOpenAI({
+    located_flaws: [
+      { location: 'top-left corner', severity: 'LiGhT', description: 'ok' },  // severity case-insensitive
+      { location: '', severity: 'bogus', description: 'dropped severity' },   // bad severity → defaults
+      null,                                                                    // null entry — filtered
+      { severity: 'heavy' },                                                   // no location — defaults
+      'not an object',                                                         // filtered
+    ],
+  }));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  const flaws = res.body.located_flaws;
+  // Must NOT contain null/string entries and severity is normalized lowercase.
+  assert(flaws.every(f => f && typeof f === 'object'), 'no non-objects');
+  assert(flaws[0].severity === 'light', 'severity lowercased');
+  // Bogus severity defaults to "light".
+  const bogus = flaws.find(f => f.description === 'dropped severity');
+  assert(bogus && bogus.severity === 'light', 'bogus severity defaults to light');
+});
+
+await test('deep grade empty located_flaws is valid (flawless card)', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, deepGradePrecisionOpenAI({ located_flaws: [], confidence_pct: 90 }));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(Array.isArray(res.body.located_flaws), 'located_flaws is array');
+  assert(res.body.located_flaws.length === 0, 'zero flaws');
+});
+
+await test('deep grade falls back to derived confidence_pct when GPT omits it', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  // Omit confidence_pct entirely; GPT says confidence="high", 6 photos.
+  installMocks(kv, deepGradePrecisionOpenAI({ confidence_pct: undefined }));
+  const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(typeof res.body.confidence_pct === 'number', 'derived pct is a number');
+  // 6 photos + confidence "high" → fallback = 85, cap = 95, so expect 85.
+  assert(res.body.confidence_pct === 85, 'derived pct = 85, got ' + res.body.confidence_pct);
+});
+
+await test('quick grade does NOT include Deep-only fields as populated values', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  const req = makeReq(bodyFor({ mode: 'grade', hasBack: true }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200');
+  assert(res.body.deepGrade === false, 'deepGrade false');
+  // Backward compat: Deep-only fields are present but null/empty for Quick Grade.
+  assert(res.body.confidence_pct === null, 'confidence_pct null for Quick Grade');
+  assert(Array.isArray(res.body.located_flaws) && res.body.located_flaws.length === 0, 'located_flaws empty for Quick Grade');
+  assert(res.body.needs_more_photos === false, 'needs_more_photos false for Quick Grade');
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n──────────────────────────────`);
 console.log(`  ${passed} passed, ${failed} failed`);

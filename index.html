@@ -1551,6 +1551,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
       <!-- Shown after success -->
       <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View Card Prices →</button>
+      <button id="scanListEbayBtn" onclick="listScannedCardOnEbay()" style="display:none;padding:.65rem 1.25rem;background:#e53935;color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.85rem;width:100%;cursor:pointer">🛠 List on eBay</button>
       <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
       <!-- Shown after failure -->
       <button id="scanRetryBtn" onclick="retryIdScan()" style="display:none;padding:.65rem 1.5rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:12px;font-weight:800;font-size:.88rem;width:100%;cursor:pointer">📷 Try Again</button>
@@ -4699,6 +4700,73 @@ function buildEbayUrl(url) {
   return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&customid=${encodeURIComponent(cust)}`;
 }
 
+// ─── eBay LISTING (SELL) URL BUILDER ───
+// Sends the user to eBay's Sell prelist page with a prefilled title.
+// eBay's own catalog matcher fills in category/aspects/condition from the title.
+// Params (all optional except cardName):
+//   cardName  — canonical card name (e.g. "Charizard ex")
+//   setName   — set display name (e.g. "Obsidian Flames")
+//   number    — card number (e.g. "125/197" or "125")
+//   psaGrade  — integer 1-10 (adds "PSA <N>" prefix for graded listings)
+//   condition — free-form (e.g. "Near Mint", "Raw Ungraded")
+function buildEbayListingTitle(opts) {
+  const o = opts || {};
+  const parts = [];
+  if (o.psaGrade && Number(o.psaGrade) >= 1 && Number(o.psaGrade) <= 10) {
+    parts.push('PSA ' + Number(o.psaGrade));
+  }
+  if (o.cardName)  parts.push(String(o.cardName).trim());
+  if (o.setName)   parts.push(String(o.setName).trim());
+  if (o.number) {
+    const n = String(o.number).replace(/^#?0*/, '');
+    if (n) parts.push('#' + n);
+  }
+  parts.push('Pokemon TCG');
+  if (o.condition && !o.psaGrade) parts.push('[' + String(o.condition).trim() + ']');
+  // eBay title cap is 80 chars — trim if needed
+  let title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  if (title.length > 80) title = title.slice(0, 80).replace(/\s+\S*$/, '');
+  return title;
+}
+
+function buildEbayListingUrl(opts) {
+  const title = buildEbayListingTitle(opts);
+  const raw = 'https://www.ebay.com/sl/prelist/suggest?title=' + encodeURIComponent(title);
+  return buildEbayUrl(raw);
+}
+
+// Copy the ready-made eBay title to clipboard (fallback for cases where
+// prelist prefill doesn't stick or the user wants to paste it manually).
+function copyEbayTitleToClipboard(opts) {
+  const title = buildEbayListingTitle(opts);
+  const done = () => showToast('Copied listing title — paste it into eBay Sell', 'gold');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(title).then(done).catch(() => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = title; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+          document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+          document.body.removeChild(ta); done();
+        } catch (e) { showToast('Copy blocked — long-press to copy: ' + title, 'info'); }
+      });
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = title; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta); done();
+    }
+  } catch (e) { showToast('Copy blocked — title: ' + title, 'info'); }
+}
+
+// One-tap "List on eBay" — copies title to clipboard AND opens prelist URL in
+// a new tab. Used by scan / grade / collection sell buttons.
+function openEbayListing(opts) {
+  const url = buildEbayListingUrl(opts);
+  copyEbayTitleToClipboard(opts);
+  window.open(url, '_blank', 'noopener');
+}
+
 // EPN debug readout — populates the Settings > eBay Affiliate card with
 // the current campid, total logged clicks, and the last-click timestamp.
 async function refreshEpnDebug() {
@@ -6354,13 +6422,25 @@ function openCollectionCardDetail(entryId) {
   // Build the eBay Sell link using the same helper as the row button.
   const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
   const num = (p.number || numFromSet || '').replace(/^0+/, '');
-  const parts = [p.card || '', num].filter(Boolean).join(' ');
-  const ebayRaw = parts
-    ? `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(parts)}&_sacat=212&LH_Sold=1&LH_Complete=1`
-    : 'https://www.ebay.com/';
-  const ebayUrl = (typeof buildEbayUrl === 'function') ? buildEbayUrl(ebayRaw) : ebayRaw;
+  // Extract set name: strip " · #123" suffix if present
+  const ccmSetName = (p.set || '').replace(/\s*[\u00b7\u2022|-]\s*#.*$/, '').trim();
+  // Sell button — send the user to eBay's Sell prelist with a prefilled title.
+  // Include PSA grade in the title if the card is graded in the user's collection.
+  const ccmPsaGrade = (typeof p.grade === 'number' && p.grade >= 1 && p.grade <= 10) ? p.grade
+                    : (typeof p.psa   === 'number' && p.psa   >= 1 && p.psa   <= 10) ? p.psa
+                    : null;
+  const sellUrl = (typeof buildEbayListingUrl === 'function')
+    ? buildEbayListingUrl({ cardName: p.card || '', setName: ccmSetName, number: num, psaGrade: ccmPsaGrade })
+    : ('https://www.ebay.com/sl/prelist/suggest?title=' + encodeURIComponent([p.card||'', num].filter(Boolean).join(' ')));
   const sellBtn = document.getElementById('ccmSellBtn');
-  if (sellBtn) sellBtn.href = ebayUrl;
+  if (sellBtn) {
+    sellBtn.href = sellUrl;
+    sellBtn.onclick = function(){
+      if (typeof copyEbayTitleToClipboard === 'function') {
+        copyEbayTitleToClipboard({ cardName: p.card||'', setName: ccmSetName, number: num, psaGrade: ccmPsaGrade });
+      }
+    };
+  }
 
   // TCGPlayer look-up link.
   const tcgUrl = (typeof buildTcgpUrl === 'function')
@@ -7223,22 +7303,38 @@ function _setScanBtns(state) {
   const viewBtn     = document.getElementById('scanViewCardBtn');
   const anotherBtn  = document.getElementById('scanAnotherBtn');
   const retryBtn    = document.getElementById('scanRetryBtn');
+  const ebayBtn     = document.getElementById('scanListEbayBtn');
   if (!cancelBtn) return;
   if (state === 'scanning') {
     cancelBtn.style.display  = '';
     viewBtn.style.display    = 'none';
     anotherBtn.style.display = 'none';
     retryBtn.style.display   = 'none';
+    if (ebayBtn) ebayBtn.style.display = 'none';
   } else if (state === 'success') {
     cancelBtn.style.display  = 'none';
     viewBtn.style.display    = '';
     anotherBtn.style.display = '';
     retryBtn.style.display   = 'none';
+    // Only show the eBay listing button when we actually have a scanned card.
+    if (ebayBtn) ebayBtn.style.display = (window._pendingIdScanCard && window._pendingIdScanCard.name) ? '' : 'none';
   } else if (state === 'error') {
     cancelBtn.style.display  = 'none';
     viewBtn.style.display    = 'none';
     anotherBtn.style.display = 'none';
     retryBtn.style.display   = '';
+    if (ebayBtn) ebayBtn.style.display = 'none';
+  }
+}
+
+// Handler for the "List on eBay" button on the scan success state.
+// Reads _pendingIdScanCard (populated when the ID scan resolves) and jumps to
+// the eBay Sell prelist page with the title prefilled + copied to clipboard.
+function listScannedCardOnEbay() {
+  const c = window._pendingIdScanCard || {};
+  if (!c.name) { showToast('No scanned card to list', 'info'); return; }
+  if (typeof openEbayListing === 'function') {
+    openEbayListing({ cardName: c.name, setName: c.setName || '', number: c.number || '' });
   }
 }
 
@@ -8412,15 +8508,28 @@ async function submitGradeScan(deepGrade) {
 
     const gradeColor = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
 
-    // Confidence range: show PSA low–high range + confidence label
+    const isDeep    = data.deepGrade === true;
+
+    // Grade display
+    //   Deep Grade  – commit to a single PSA number + confidence %.
+    //   Quick Grade – keep the loose low–high range (backward compat).
     const psaLow  = Math.max(1, psa - 1);
     const psaHigh = Math.min(10, psa + (psa >= 9 ? 1 : 0));
-    const confidenceLabel = data.confidence
-      ? (data.confidence === 'high' ? 'High confidence' : data.confidence === 'low' ? 'Low confidence' : 'Moderate confidence')
-      : (psa >= 8 ? 'High confidence' : psa >= 6 ? 'Moderate confidence' : 'Low confidence');
-    const rangeStr = psaLow === psaHigh ? 'PSA ' + psaLow : 'PSA ' + psaLow + '\u2013' + psaHigh + ' likely';
+    const rangeStr = isDeep
+      ? 'PSA ' + psa
+      : (psaLow === psaHigh ? 'PSA ' + psaLow : 'PSA ' + psaLow + '\u2013' + psaHigh + ' likely');
 
-    const isDeep    = data.deepGrade === true;
+    // Deep Grade: prefer numeric confidence_pct. Quick Grade: use text label.
+    let confidenceLabel;
+    if (isDeep && typeof data.confidence_pct === 'number') {
+      const pct = data.confidence_pct;
+      const pctTier = pct >= 85 ? 'Confident' : pct >= 60 ? 'Reasonably sure' : pct >= 40 ? 'Tentative' : 'Low confidence';
+      confidenceLabel = pctTier + ' · ' + pct + '%';
+    } else {
+      confidenceLabel = data.confidence
+        ? (data.confidence === 'high' ? 'High confidence' : data.confidence === 'low' ? 'Low confidence' : 'Moderate confidence')
+        : (psa >= 8 ? 'High confidence' : psa >= 6 ? 'Moderate confidence' : 'Low confidence');
+    }
     const photoCount= data.photoCount || (isDeep ? 6 : 2);
     const creditsUsed = data.creditsUsed || (isDeep ? 2 : 1);
     const tierBadge = isDeep
@@ -8518,6 +8627,43 @@ async function submitGradeScan(deepGrade) {
       '</div>';
     };
 
+    // Small HTML escape helper (local scope) so user-derived flaw strings can't inject markup.
+    const _escHtml = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    // ── Deep Grade: located flaws list (rendered above grader notes) ──
+    const locatedFlaws = Array.isArray(data.located_flaws) ? data.located_flaws : [];
+    const flawSevColor = s => {
+      const t = String(s || '').toLowerCase();
+      if (t === 'heavy')    return '#f87171';
+      if (t === 'moderate') return '#fb923c';
+      if (t === 'light')    return '#facc15';
+      return '#a3a3a3'; // faint / unspecified
+    };
+    const locatedFlawsHtml = (isDeep && locatedFlaws.length > 0)
+      ? '<div style="margin-bottom:.55rem;padding:.5rem .6rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;text-align:left">' +
+          '<div style="font-size:.66rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.35rem">\uD83D\uDCCD LOCATED FLAWS</div>' +
+          locatedFlaws.map(f => {
+            const loc  = _escHtml(f.location || '');
+            const sev  = String(f.severity || 'light').toLowerCase();
+            const desc = _escHtml(f.description || '');
+            const col  = flawSevColor(sev);
+            return '<div style="display:flex;gap:.5rem;align-items:flex-start;font-size:.72rem;margin-bottom:.28rem;line-height:1.35">' +
+                     '<span style="flex:0 0 auto;padding:.08rem .4rem;border-radius:99px;background:rgba(255,255,255,.06);color:' + col + ';font-weight:800;font-size:.62rem;text-transform:uppercase;letter-spacing:.04em">' + _escHtml(sev) + '</span>' +
+                     '<span style="flex:1 1 auto"><strong style="color:rgba(255,255,255,.85)">' + loc + '</strong>' + (desc ? ' \u2014 <span style="color:rgba(255,255,255,.6)">' + desc + '</span>' : '') + '</span>' +
+                   '</div>';
+          }).join('') +
+        '</div>'
+      : (isDeep && locatedFlaws.length === 0
+          ? '<div style="margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px;font-size:.72rem;color:#4ade80;text-align:left">\u2713 No specific flaws located across the pillars.</div>'
+          : '');
+
+    // Deep Grade: banner asking for more photos when confidence is very low.
+    const needsMoreHtml = (isDeep && data.needs_more_photos === true)
+      ? '<div style="margin-bottom:.5rem;padding:.5rem .6rem;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.35);border-radius:10px;font-size:.72rem;color:#fb923c;text-align:left"><strong>Grade tentative</strong> \u2014 more photos (better lighting or a missing edge) would sharpen this call.</div>'
+      : '';
+
     resultEl.innerHTML =
       '<div style="margin:.3rem 0 .5rem">' +
         scoreBar('Centering', data.centering, centeringTip, 'centering') +
@@ -8525,7 +8671,9 @@ async function submitGradeScan(deepGrade) {
         scoreBar('Edges',     data.edges,     edgeTip,     'edges')     +
         scoreBar('Surface',   data.surface,   surfaceTip,  'surface')   +
       '</div>' +
-      (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + notes + '</div>' : '') +
+      locatedFlawsHtml +
+      needsMoreHtml +
+      (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + _escHtml(notes) + '</div>' : '') +
       (worth
         ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.4rem">\u2713 Worth submitting for grading</div>' +
           // PSA referral CTA
@@ -8560,6 +8708,20 @@ async function submitGradeScan(deepGrade) {
     const psaGrade = psa >= 10 ? 10 : psa >= 9 ? 9 : psa >= 8 ? 8 : psa >= 7 ? 7 : psa >= 6 ? 6 : psa >= 5 ? 5 : 1;
     const gradeColor2 = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
     resultEl.innerHTML += `<button onclick="viewGradedCard('${(data.card_name||'').replace(/'/g,"\'")}', ${psaGrade})" style="margin-top:.65rem;width:100%;padding:.6rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">📊 View PSA ${psaGrade} price →</button>`;
+
+    // "List on eBay" button — sends the user to eBay's Sell prelist with a
+    // PSA-prefixed title (their catalog matcher fills the rest).
+    // Uses window._pendingIdScanCard for set/number if the grade came right
+    // after an ID scan; falls back to card_name only otherwise.
+    const _ebayPending = window._pendingIdScanCard || {};
+    const _ebayOpts = {
+      cardName: data.card_name || _ebayPending.name || '',
+      setName:  _ebayPending.setName || '',
+      number:   _ebayPending.number  || '',
+      psaGrade: psaGrade,
+    };
+    const _ebayOptsJson = JSON.stringify(_ebayOpts).replace(/'/g, "\\'");
+    resultEl.innerHTML += `<button onclick='openEbayListing(${_ebayOptsJson})' style="margin-top:.5rem;width:100%;padding:.6rem 1rem;background:#e53935;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">🛠 List PSA ${psaGrade} on eBay</button>`;
 
     window._pendingScanBannerCard = data.card_name;
 
