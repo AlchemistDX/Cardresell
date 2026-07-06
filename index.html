@@ -698,13 +698,23 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 /* --- PRICING MODAL --- */
 .pricing-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
 .pricing-overlay.open{opacity:1;pointer-events:auto}
-.pricing-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.75rem 1.5rem;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.pricing-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.75rem 1.5rem;width:100%;max-width:720px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
 .pricing-overlay.open .pricing-box{transform:translateY(0)}
 .pricing-header{text-align:center;margin-bottom:1.5rem}
 .pricing-title{font-size:1.2rem;font-weight:800;letter-spacing:-.025em;color:var(--text);margin-bottom:.3rem}
 .pricing-sub{font-size:.82rem;color:var(--text-muted);line-height:1.5}
-.pricing-cards{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.25rem}
-@media(max-width:420px){.pricing-cards{grid-template-columns:1fr}}
+.pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:1.25rem}
+@media(max-width:640px){.pricing-cards{grid-template-columns:1fr}}
+/* Monthly/Annual toggle inside paid plan cards */
+.plan-billing-toggle{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.15rem;margin:.5rem 0 .75rem;gap:.15rem}
+.plan-billing-toggle button{flex:1;padding:.32rem .4rem;border:none;background:transparent;color:var(--text-muted);font-size:.68rem;font-weight:700;letter-spacing:.03em;border-radius:99px;cursor:pointer;transition:all .15s;text-transform:uppercase}
+.plan-billing-toggle button.active{background:var(--gold);color:#000;box-shadow:0 1px 4px rgba(245,197,24,.35)}
+.plan-save-hint{font-size:.63rem;font-weight:700;color:#4ade80;text-align:center;margin:-.35rem 0 .55rem;min-height:.85rem;letter-spacing:.02em}
+.plan-card.plus{border-color:#a855f7;background:linear-gradient(160deg,rgba(168,85,247,.09),rgba(168,85,247,.02))}
+.plan-card.plus .plan-badge{background:linear-gradient(90deg,#7c3aed,#a855f7);color:#fff}
+.plan-btn.plus-btn{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;box-shadow:0 2px 8px rgba(168,85,247,.4)}
+.plan-btn.plus-btn:hover{filter:brightness(1.1)}
+.plan-btn.plus-btn:active{transform:scale(.97)}
 .plan-card{border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:1.1rem;position:relative;transition:border-color .2s}
 .plan-card.featured{border-color:var(--gold);background:linear-gradient(160deg,rgba(245,197,24,.06),transparent)}
 .plan-badge{position:absolute;top:-.65rem;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.6rem;font-weight:800;padding:.15rem .6rem;border-radius:99px;white-space:nowrap;letter-spacing:.05em}
@@ -2333,51 +2343,65 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div class="plan-card">
         <div class="plan-name">Free</div>
         <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
+        <div style="font-size:.68rem;color:var(--text-faint);margin-bottom:.6rem;line-height:1.4">Try before you buy</div>
         <ul class="plan-features">
-          <li>Card price lookup (all games)</li>
-          <li>eBay &amp; TCGPlayer fee breakdown</li>
+          <li>eBay &amp; TCGPlayer prices</li>
           <li>Flip calculator + Deal Score</li>
+          <li>10 ID scans (lifetime)</li>
+          <li>1 grade credit (lifetime)</li>
           <li>5 flips tracked</li>
-          <li class="faded">Poshmark, COMC, Fanatics, PWCC fees</li>
-          <li class="faded">Unlimited flip &amp; portfolio tracking</li>
-          <li class="faded">AI Grading Estimate scans</li>
-          <li class="faded">Payout bar chart comparison</li>
+          <li class="faded">Whatnot listings</li>
+          <li class="faded">Bulk upload</li>
+          <li class="faded">Monthly credit refills</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
-      <!-- PRO MONTHLY plan -->
+      <!-- PRO plan (monthly/annual toggle) -->
       <div class="plan-card featured">
-        <div class="plan-badge">MONTHLY</div>
+        <div class="plan-badge">POPULAR</div>
         <div class="plan-name">Pro</div>
-        <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
-        <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-bottom:.6rem;line-height:1.4">Everything to run a serious resell operation</div>
+        <div class="plan-price" id="proPriceDisplay"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
+        <div class="plan-billing-toggle" role="tablist" aria-label="Pro billing period">
+          <button type="button" class="active" data-plan="pro" data-billing="monthly" onclick="switchPlanBilling('pro','monthly')">Monthly</button>
+          <button type="button" data-plan="pro" data-billing="annual" onclick="switchPlanBilling('pro','annual')">Annual</button>
+        </div>
+        <div class="plan-save-hint" id="proSaveHint">&nbsp;</div>
         <ul class="plan-features">
-          <li><strong>6 platforms compared</strong> — adds Poshmark, COMC, Fanatics &amp; PWCC</li>
-          <li><strong>Payout bar chart</strong> — see all platforms side-by-side at a glance</li>
-          <li><strong>Unlimited flip tracking</strong> + P&amp;L dashboard</li>
-          <li><strong>10 AI Grading Estimate scans/mo</strong> — corners, edges, centering, surface</li>
-          <li><strong>Deal Score on every card</strong> — Buy / Maybe / Pass verdict</li>
-          <li><strong>Max Buy Price calculator</strong> — know your ceiling before bidding</li>
-          <li>PRO badge on account</li>
+          <li><strong>50 ID scans / mo</strong></li>
+          <li><strong>20 grade credits / mo</strong></li>
+          <li>Whatnot listings unlocked</li>
+          <li>Bulk upload — 10 cards at a time</li>
+          <li>Unlimited flip tracking + P&amp;L</li>
+          <li>Deal Score on every card</li>
+          <li>Max Buy Price calculator</li>
+          <li>Credits persist after cancel</li>
         </ul>
-        <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
+        <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProPlanCheckout()">
           <span id="pricingProBtnText">Get Pro &mdash; $9.99/mo</span>
         </button>
       </div>
-      <!-- PRO ANNUAL plan -->
-      <div class="plan-card" style="border:1.5px solid rgba(196,122,0,.5);background:linear-gradient(135deg,rgba(196,122,0,.08),rgba(196,122,0,.03));position:relative">
-        <div class="plan-badge" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">BEST VALUE</div>
-        <div class="plan-name">Pro Annual</div>
-        <div class="plan-price" style="font-size:1.6rem"><sup>$</sup>89<span style="font-size:1rem">.99</span><sub>/yr</sub></div>
-        <div style="font-size:.68rem;color:#4ade80;font-weight:700;margin-bottom:.5rem">Save $30 vs monthly &mdash; that's 3 months free</div>
+      <!-- PRO+ plan (monthly/annual toggle) -->
+      <div class="plan-card plus">
+        <div class="plan-badge">BEST VALUE</div>
+        <div class="plan-name">Pro+</div>
+        <div class="plan-price" id="plusPriceDisplay"><sup>$</sup>24<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
+        <div class="plan-billing-toggle" role="tablist" aria-label="Pro+ billing period">
+          <button type="button" class="active" data-plan="plus" data-billing="monthly" onclick="switchPlanBilling('plus','monthly')">Monthly</button>
+          <button type="button" data-plan="plus" data-billing="annual" onclick="switchPlanBilling('plus','annual')">Annual</button>
+        </div>
+        <div class="plan-save-hint" id="plusSaveHint">&nbsp;</div>
         <ul class="plan-features">
-          <li>Everything in Pro</li>
-          <li>Billed once per year</li>
-          <li>Cancel anytime</li>
-          <li style="color:var(--gold);font-weight:700">~$7.50/mo &mdash; less than a pack of cards</li>
+          <li><strong>200 ID scans / mo</strong></li>
+          <li><strong>75 grade credits / mo</strong></li>
+          <li>Whatnot listings unlocked</li>
+          <li>Bulk upload — 20 cards at a time</li>
+          <li>Unlimited flip tracking + P&amp;L</li>
+          <li>Deal Score on every card</li>
+          <li>Max Buy Price calculator</li>
+          <li>Credits persist after cancel</li>
         </ul>
-        <button id="pricingAnnualBtn" class="plan-btn pro-btn" onclick="startAnnualCheckout()" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">
-          <span id="pricingAnnualBtnText">Get Annual &mdash; $89.99/yr</span>
+        <button id="pricingPlusBtn" class="plan-btn plus-btn" onclick="startPlusPlanCheckout()">
+          <span id="pricingPlusBtnText">Get Pro+ &mdash; $24.99/mo</span>
         </button>
       </div>
     </div>
@@ -8877,7 +8901,7 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
   }
 }
 
-// ── Start Pro subscription checkout ──
+// ── Start Pro subscription checkout (legacy — monthly) ──
 async function startProCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
@@ -8886,13 +8910,71 @@ async function startProCheckout() {
     'pricingProBtn', 'pricingProBtnText', 'Get Pro — $9.99/mo');
 }
 
-// ── Start annual Pro checkout ──
+// ── Start annual Pro checkout (legacy) ──
 async function startAnnualCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
   _stripeCheckout('/api/stripe-annual-checkout',
     { googleSub: window.googleUser.sub, email: window.googleUser.email },
     'pricingAnnualBtn', 'pricingAnnualBtnText', 'Get Annual — $89.99/yr');
+}
+
+// ── Start Pro+ MONTHLY checkout ──
+async function startPlusCheckout() {
+  await window._waitForAuth();
+  if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  _stripeCheckout('/api/stripe-plus-checkout', {},
+    'pricingPlusBtn', 'pricingPlusBtnText', 'Get Pro+ — $24.99/mo');
+}
+
+// ── Start Pro+ ANNUAL checkout ──
+async function startPlusAnnualCheckout() {
+  await window._waitForAuth();
+  if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  _stripeCheckout('/api/stripe-plus-annual-checkout', {},
+    'pricingPlusBtn', 'pricingPlusBtnText', 'Get Pro+ — $199/yr');
+}
+
+// ── Track which billing period is selected for each plan card ──
+window._planBilling = { pro: 'monthly', plus: 'monthly' };
+
+// Route the CTA button to the right endpoint based on selected billing period.
+function startProPlanCheckout() {
+  return window._planBilling.pro === 'annual' ? startAnnualCheckout() : startProCheckout();
+}
+function startPlusPlanCheckout() {
+  return window._planBilling.plus === 'annual' ? startPlusAnnualCheckout() : startPlusCheckout();
+}
+
+// Toggle the monthly/annual selector inside a plan card. Updates price display,
+// save-hint text, CTA button label, and the toggle button active state.
+function switchPlanBilling(plan, billing) {
+  window._planBilling[plan] = billing;
+
+  // Toggle button visual state
+  document.querySelectorAll(`.plan-billing-toggle button[data-plan="${plan}"]`).forEach(b => {
+    b.classList.toggle('active', b.dataset.billing === billing);
+  });
+
+  const CONFIG = {
+    pro: {
+      monthly: { priceHtml: '<sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub>', hint: '', btnText: 'Get Pro — $9.99/mo' },
+      annual:  { priceHtml: '<sup>$</sup>89<span style="font-size:1rem">.99</span><sub>/yr</sub>', hint: 'Save $30 — 3 months free', btnText: 'Get Pro — $89.99/yr' },
+    },
+    plus: {
+      monthly: { priceHtml: '<sup>$</sup>24<span style="font-size:1rem">.99</span><sub>/mo</sub>', hint: '', btnText: 'Get Pro+ — $24.99/mo' },
+      annual:  { priceHtml: '<sup>$</sup>199<sub>/yr</sub>',                                       hint: 'Save $100 — 4 months free', btnText: 'Get Pro+ — $199/yr' },
+    },
+  };
+  const cfg = CONFIG[plan]?.[billing];
+  if (!cfg) return;
+
+  const priceEl = document.getElementById(plan === 'plus' ? 'plusPriceDisplay' : 'proPriceDisplay');
+  const hintEl  = document.getElementById(plan === 'plus' ? 'plusSaveHint'     : 'proSaveHint');
+  const btnTxt  = document.getElementById(plan === 'plus' ? 'pricingPlusBtnText' : 'pricingProBtnText');
+  if (priceEl) priceEl.innerHTML = cfg.priceHtml;
+  if (hintEl)  hintEl.innerHTML  = cfg.hint || '&nbsp;';
+  if (btnTxt)  btnTxt.textContent = cfg.btnText;
 }
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──
@@ -8977,12 +9059,32 @@ function showToast(msg, duration) {
 // ── Handle return from Stripe ──
 (function handleStripeReturn() {
   const params = new URLSearchParams(window.location.search);
+  // Legacy "?pro=1" success URL from stripe-checkout.js
   if (params.get('pro') === '1') {
     window._isPro = true;
-    window._freeScansLeft = 5;
     updateProUI();
-    showToast('⭐ Welcome to CardResell Pro! 10 Estimated Grade Scans added.', 5000);
-    // Clean URL
+    showToast('⭐ Welcome to CardResell Pro! Credits added.', 5000);
+    history.replaceState({}, '', window.location.pathname);
+  }
+  // Pro annual return
+  if (params.get('annual_success') === '1') {
+    window._isPro = true;
+    updateProUI();
+    showToast('⭐ Welcome to CardResell Pro Annual! Credits added.', 5000);
+    history.replaceState({}, '', window.location.pathname);
+  }
+  // Pro+ monthly return
+  if (params.get('plus_success') === '1') {
+    window._isPro = true;
+    updateProUI();
+    showToast('💎 Welcome to CardResell Pro+! 200 ID scans + 75 grade credits added.', 6000);
+    history.replaceState({}, '', window.location.pathname);
+  }
+  // Pro+ annual return
+  if (params.get('plus_annual_success') === '1') {
+    window._isPro = true;
+    updateProUI();
+    showToast('💎 Welcome to CardResell Pro+ Annual! 200 ID scans + 75 grade credits added.', 6000);
     history.replaceState({}, '', window.location.pathname);
   }
   if (params.get('scan_paid') === '1') {
