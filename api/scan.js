@@ -386,10 +386,78 @@ Respond ONLY with valid JSON, no explanation:
       });
     }
 
+    // ── HIGH-CONFIDENCE PATH: verify against PokemonTCG.io before returning ──
+    // GPT-4o often nails the card_name but hallucinates card_number + set_name.
+    // If the {name, number, set} combo isn't a real card, either rewrite it
+    // with the actual best match or downgrade to a picker.
+    const startingConf = idConfNorm || 'high';
+    const verified = await verifyCardWithPokemonTCG(
+      cardInfo.card_name   || '',
+      cardInfo.card_number || '',
+      cardInfo.set_name    || ''
+    );
+
+    if (verified.status === 'match') {
+      // GPT's answer matched a real card. Trust it, optionally normalizing.
+      return res.status(200).json({
+        success: true,
+        mode:        'identify',
+        confidence:  startingConf,
+        card_name:   verified.card.card_name,
+        card_number: verified.card.card_number,
+        set_name:    verified.card.set_name,
+        hp:          cardInfo.hp        || verified.card.hp        || '',
+        card_type:   cardInfo.card_type || 'pokemon',
+        rarity:      cardInfo.rarity    || verified.card.rarity    || '',
+      });
+    }
+
+    if (verified.status === 'rewrite') {
+      // Name matched but number/set was hallucinated. Rewrite with the real card.
+      // Downgrade confidence slightly since we corrected the model.
+      return res.status(200).json({
+        success: true,
+        mode:        'identify',
+        confidence:  startingConf === 'high' ? 'medium' : startingConf,
+        card_name:   verified.card.card_name,
+        card_number: verified.card.card_number,
+        set_name:    verified.card.set_name,
+        hp:          verified.card.hp        || cardInfo.hp        || '',
+        card_type:   cardInfo.card_type || 'pokemon',
+        rarity:      verified.card.rarity    || cardInfo.rarity    || '',
+        verified_by: 'pokemontcg',
+        // If we have multiple plausible matches, offer picker so user can confirm
+        ...(verified.candidates && verified.candidates.length >= 2 ? {
+          needsPicker: true,
+          candidates: verified.candidates,
+        } : {}),
+      });
+    }
+
+    // status === 'no_match' (name didn't even match any real card) OR
+    // status === 'skip' (PokemonTCG.io unavailable — trust GPT as-is)
+    // For 'no_match' we downgrade because GPT is likely hallucinating the whole card.
+    // For 'skip' we return unchanged so we never block on a 3rd-party outage.
+    if (verified.status === 'no_match') {
+      return res.status(200).json({
+        success: true,
+        mode:        'identify',
+        confidence:  'low',
+        card_name:   cardInfo.card_name   || '',
+        card_number: cardInfo.card_number || '',
+        set_name:    cardInfo.set_name    || '',
+        hp:          cardInfo.hp          || '',
+        card_type:   cardInfo.card_type   || 'pokemon',
+        rarity:      cardInfo.rarity      || '',
+        verified_by: 'pokemontcg',
+        unverified:  true,
+      });
+    }
+
     return res.status(200).json({
       success: true,
       mode:        'identify',
-      confidence:  idConfNorm || 'high',
+      confidence:  startingConf,
       card_name:   cardInfo.card_name   || '',
       card_number: cardInfo.card_number || '',
       set_name:    cardInfo.set_name    || '',
@@ -443,6 +511,115 @@ async function incrKV(kvUrl, kvToken, key) {
       headers: { Authorization: `Bearer ${kvToken}` }
     });
   } catch(e) {}
+}
+
+// ── PokemonTCG.io verification ──
+// GPT-4o can return a confident card_name but hallucinate a fake set_name +
+// card_number combo (e.g. "MEO2: Phantasmal Flames · 105/094" for a card that
+// actually lives in "Crystal Guardians"). Query PokemonTCG.io and:
+//   'match'    - the {name, number, set} combo is a real card. Trust GPT.
+//   'rewrite'  - the name matched real cards but the number/set was wrong.
+//                Replace them with the best real match, offer picker if ambiguous.
+//   'no_match' - the name doesn't match any card in the database. Likely full
+//                hallucination — downgrade confidence + mark unverified.
+//   'skip'     - PokemonTCG.io was unreachable. Don't block on it — trust GPT.
+// Timeout of 4s so a slow API doesn't wedge the scanner.
+async function verifyCardWithPokemonTCG(name, number, setName) {
+  if (!name || typeof name !== 'string') return { status: 'skip' };
+  const cleanName   = name.replace(/["\\]/g, '').trim();
+  const cleanNumber = (number || '').replace(/\/.*$/, '').trim();
+  const cleanSet    = (setName || '').trim().toLowerCase();
+  if (!cleanName) return { status: 'skip' };
+
+  // Try multiple query strategies — exact name first, then first-word wildcard.
+  const firstWord = cleanName.split(/\s+/)[0];
+  const queries = [
+    `name:"${cleanName}"`,
+    ...(cleanNumber ? [`name:${firstWord}* number:${cleanNumber}`] : []),
+    `name:${firstWord}*`,
+  ];
+
+  let cards = [];
+  let anyQueryReachedApi = false; // did we get at least one 2xx from the API?
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    for (const q of queries) {
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,hp,supertype`;
+      const r = await fetch(url, { signal: controller.signal });
+      if (!r.ok) continue;
+      anyQueryReachedApi = true;
+      const j = await r.json();
+      cards = j.data || [];
+      if (cards.length > 0) break;
+    }
+  } catch(e) {
+    return { status: 'skip' }; // network/timeout — trust GPT
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // If every query returned non-2xx (API outage, rate limit, etc.), don't
+  // punish GPT for a 3rd-party failure — skip and return the model's answer.
+  if (!anyQueryReachedApi) return { status: 'skip' };
+  if (!cards || cards.length === 0) return { status: 'no_match' };
+
+  // Try to find an exact match on {number AND set}. Number match alone is not
+  // enough — many cards share the same number across different sets.
+  const normSet = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const gptSetNorm = normSet(cleanSet);
+
+  const exactMatch = cards.find(c => {
+    const cNum = (c.number || '').toString();
+    const cSet = normSet(c.set?.name);
+    const numMatch = cleanNumber && (cNum === cleanNumber || cNum.split('/')[0] === cleanNumber);
+    const setMatch = gptSetNorm && (cSet.includes(gptSetNorm) || gptSetNorm.includes(cSet));
+    return numMatch && setMatch;
+  });
+
+  if (exactMatch) {
+    return {
+      status: 'match',
+      card: {
+        card_name:   exactMatch.name || cleanName,
+        card_number: exactMatch.number || cleanNumber,
+        set_name:    exactMatch.set?.name || setName,
+        hp:          exactMatch.hp || '',
+        rarity:      exactMatch.rarity || '',
+      },
+    };
+  }
+
+  // Name matched real cards but {number,set} combo doesn't exist as-is.
+  // Pick the best real card: prefer number-only match, then first-word name match.
+  const numOnlyMatch = cleanNumber
+    ? cards.find(c => (c.number || '').toString() === cleanNumber
+                   || (c.number || '').toString().split('/')[0] === cleanNumber)
+    : null;
+
+  const best = numOnlyMatch || cards[0];
+  // Build candidates list for optional picker
+  const candidates = cards.slice(0, 3).map(c => ({
+    card_name:      c.name || cleanName,
+    card_number:    c.number || '',
+    set_name:       c.set?.name || '',
+    hp:             c.hp || '',
+    card_type:      'pokemon',
+    rarity:         c.rarity || '',
+    confidence_pct: null,
+  }));
+
+  return {
+    status: 'rewrite',
+    card: {
+      card_name:   best.name || cleanName,
+      card_number: best.number || '',
+      set_name:    best.set?.name || '',
+      hp:          best.hp || '',
+      rarity:      best.rarity || '',
+    },
+    candidates,
+  };
 }
 
 async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {

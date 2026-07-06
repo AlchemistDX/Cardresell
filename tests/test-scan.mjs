@@ -93,15 +93,38 @@ process.env.STRIPE_SECRET_KEY   = ''; // avoid Stripe fallback path
 // Global fetch mock — routed based on URL host
 let currentKV = null;
 let openaiHandler = null;
+let pokemonTcgHandler = null;
 const originalFetch = globalThis.fetch;
 
-function installMocks(kv, openaiFn) {
+// Default PokemonTCG.io mock — returns the card GPT identified as a real match,
+// so the identify-path returns the same values it did pre-verification.
+function defaultPokemonTcgHandler() {
+  return Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      data: [{
+        id: 'swsh3-020',
+        name: 'Charizard VMAX',
+        number: '020',
+        set: { name: 'Darkness Ablaze' },
+        hp: '330',
+        rarity: 'Rainbow Rare',
+        supertype: 'Pokemon',
+      }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+}
+
+function installMocks(kv, openaiFn, pokemonTcgFn) {
   currentKV = kv;
   openaiHandler = openaiFn;
+  pokemonTcgHandler = pokemonTcgFn || defaultPokemonTcgHandler;
   globalThis.fetch = (url, options) => {
     const u = typeof url === 'string' ? url : url.toString();
     if (u.startsWith(process.env.KV_REST_API_URL)) return currentKV.handleRequest(u, options);
     if (u.includes('openai.com'))               return openaiHandler(u, options);
+    if (u.includes('api.pokemontcg.io'))         return pokemonTcgHandler(u, options);
     if (u.includes('stripe.com'))               return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}), text: () => Promise.resolve('') });
     throw new Error('Unexpected fetch: ' + u);
   };
@@ -710,6 +733,120 @@ await test('deep grade for Pro with 1 free + 10 paid — uses paid (no bucket mi
   assert(res.statusCode === 200, '200');
   assert(kv.getInt('scans:user123:paid_left') === 8, `paid_left -2 got ${kv.getInt('scans:user123:paid_left')}`);
   assert(kv.getInt(`scans:user123:free_used_${stamp}`) === 9, 'free_used unchanged');
+});
+
+// ─── Group 10: PokemonTCG.io verification (hallucination guard) ───
+console.log('\n[10] Server-side PokemonTCG.io verification');
+
+await test('identify — GPT high confidence + PokemonTCG match — passes through', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '5' });
+  installMocks(kv, goodOpenAI('identify')); // default PokemonTCG mock returns matching card
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode);
+  assert(res.body.card_name === 'Charizard VMAX', 'name preserved');
+  assert(res.body.card_number === '020', 'number normalized to match');
+  assert(res.body.set_name === 'Darkness Ablaze', 'set preserved');
+  assert(res.body.confidence !== 'low', 'not downgraded when verified');
+});
+
+await test('identify — hallucinated set+number, real name — rewrites with real card', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '5' });
+  // GPT returns real Wigglytuff name but hallucinates "MEO2: Phantasmal Flames · 105/094"
+  const openai = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Wigglytuff',
+        card_number: '105/094',
+        set_name: 'MEO2: Phantasmal Flames', // fake set
+        hp: '90',
+        card_type: 'pokemon',
+        rarity: 'Rare Holo',
+        confidence: 'high',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  // PokemonTCG.io returns the REAL Wigglytuff card
+  const pokemonTcg = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      data: [{
+        id: 'cg1-13',
+        name: 'Wigglytuff',
+        number: '13',
+        set: { name: 'Crystal Guardians' },
+        hp: '80',
+        rarity: 'Rare Holo',
+        supertype: 'Pokemon',
+      }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, openai, pokemonTcg);
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode);
+  assert(res.body.card_name === 'Wigglytuff', 'name kept');
+  assert(res.body.card_number === '13', `number rewritten got ${res.body.card_number}`);
+  assert(res.body.set_name === 'Crystal Guardians', `set rewritten got ${res.body.set_name}`);
+  assert(res.body.verified_by === 'pokemontcg', 'flagged as verified');
+  // Confidence downgraded because we corrected the model
+  assert(res.body.confidence === 'medium', `confidence downgraded got ${res.body.confidence}`);
+});
+
+await test('identify — GPT name is total hallucination — downgrades to low + unverified', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '5' });
+  const openai = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      choices: [{ message: { content: JSON.stringify({
+        card_name: 'Fakemon Ultra V',
+        card_number: '999/999',
+        set_name: 'Made Up Set',
+        confidence: 'high',
+      }) } }],
+    }),
+    text: () => Promise.resolve(''),
+  });
+  // PokemonTCG.io returns no results
+  const pokemonTcg = () => Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({ data: [] }),
+    text: () => Promise.resolve(''),
+  });
+  installMocks(kv, openai, pokemonTcg);
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode);
+  assert(res.body.confidence === 'low', `confidence low got ${res.body.confidence}`);
+  assert(res.body.unverified === true, 'flagged unverified');
+  assert(res.body.verified_by === 'pokemontcg', 'verified_by set');
+});
+
+await test('identify — PokemonTCG.io unavailable — still returns GPT answer (skip)', async () => {
+  const kv = new MockKV({ 'scans:user123:id_paid_left': '5' });
+  const pokemonTcg = () => Promise.resolve({
+    ok: false, status: 500,
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve('server error'),
+  });
+  installMocks(kv, goodOpenAI('identify'), pokemonTcg);
+  const req = makeReq(bodyFor({ mode: 'identify' }), makeFakeToken());
+  const res = makeRes();
+  await handler(req, res);
+  restoreFetch();
+  assert(res.statusCode === 200, '200 got ' + res.statusCode);
+  assert(res.body.card_name === 'Charizard VMAX', 'GPT answer preserved on API outage');
+  assert(res.body.card_number === '020/189', 'number unchanged on outage');
+  assert(res.body.unverified !== true, 'not marked unverified on outage');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
