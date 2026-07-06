@@ -7584,8 +7584,12 @@ async function processScanImage(input) {
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
 
-  // Compress image before sending — resize to max 1000px to stay under payload limits
-  const imageBase64 = await compressImage(file, 1000);
+  // Auto-crop the card out of the frame before compression — dramatically
+  // reduces scanner misfires caused by hands / backgrounds / clutter in
+  // full-frame native camera captures. autoCropCard falls back to plain
+  // compressImage() behavior if it can't confidently find a card, so this
+  // is always ≥ the previous behavior.
+  const imageBase64 = await autoCropCard(file, 1000);
   const idToken = window._googleIdToken || '';
 
   try {
@@ -8609,6 +8613,163 @@ function compressImage(file, maxPx) {
     img.onerror = reject;
     img.src = url;
   });
+}
+
+// ── Auto-crop a card photo to the card's bounding box ──
+// Fixes BUG 1: full-frame captures (hands, backgrounds, clutter) were causing
+// scanner misfires because the model had too much off-card context. This
+// scans a downsampled copy for the largest high-contrast/high-saturation
+// region (the card face against a duller background), then crops the full-
+// resolution source to that box + a small margin before JPEG compression.
+//
+// Falls back to the original compressImage output if we can't confidently
+// find a card (blank image, extreme low contrast, tiny image, etc.) so we
+// NEVER degrade the current behavior.
+//
+// Returns: base64 JPEG string (no data URL prefix), same shape as compressImage.
+async function autoCropCard(file, maxPx) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        const srcW = img.width, srcH = img.height;
+        if (srcW < 200 || srcH < 200) {
+          // Too small to bother — fall back to plain compress
+          return resolve(_compressCanvas(img, srcW, srcH, maxPx));
+        }
+
+        // 1) Downsample to ≤ 240px for the analysis pass. Small size keeps
+        //    the pixel loop cheap on phones.
+        const ANALYZE = 240;
+        const scale = Math.min(ANALYZE / srcW, ANALYZE / srcH, 1);
+        const aw = Math.max(1, Math.round(srcW * scale));
+        const ah = Math.max(1, Math.round(srcH * scale));
+        const acan = document.createElement('canvas');
+        acan.width = aw; acan.height = ah;
+        const actx = acan.getContext('2d', { willReadFrequently: true });
+        actx.drawImage(img, 0, 0, aw, ah);
+        const data = actx.getImageData(0, 0, aw, ah).data;
+
+        // 2) Compute a "card-likeness" score per pixel = local edge magnitude
+        //    + saturation. Cards have printed art (edges) and vivid color;
+        //    palms, tables, and backgrounds are dull and low-edge.
+        //    Score matrix: uint16 array of length aw*ah.
+        const score = new Uint16Array(aw * ah);
+        for (let y = 1; y < ah - 1; y++) {
+          for (let x = 1; x < aw - 1; x++) {
+            const i = (y * aw + x) * 4;
+            const r = data[i], g = data[i+1], b = data[i+2];
+            // Saturation ≈ (max-min)/max, scaled 0-255
+            const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+            const sat = mx === 0 ? 0 : ((mx - mn) * 255 / mx) | 0;
+            // Horizontal + vertical edge magnitude vs. neighbors
+            const iL = i - 4, iR = i + 4, iU = i - aw * 4, iD = i + aw * 4;
+            const gr  = (r + g + b);
+            const grL = (data[iL] + data[iL+1] + data[iL+2]);
+            const grR = (data[iR] + data[iR+1] + data[iR+2]);
+            const grU = (data[iU] + data[iU+1] + data[iU+2]);
+            const grD = (data[iD] + data[iD+1] + data[iD+2]);
+            const edge = (Math.abs(gr - grL) + Math.abs(gr - grR) +
+                          Math.abs(gr - grU) + Math.abs(gr - grD)) >> 2;
+            // Weight: edge dominates, saturation is a nudge
+            score[y * aw + x] = Math.min(65535, edge * 2 + (sat >> 1));
+          }
+        }
+
+        // 3) Row + column projections
+        const rowSum = new Uint32Array(ah);
+        const colSum = new Uint32Array(aw);
+        for (let y = 0; y < ah; y++) {
+          let s = 0;
+          for (let x = 0; x < aw; x++) s += score[y * aw + x];
+          rowSum[y] = s;
+        }
+        for (let x = 0; x < aw; x++) {
+          let s = 0;
+          for (let y = 0; y < ah; y++) s += score[y * aw + x];
+          colSum[x] = s;
+        }
+
+        // 4) Find the card bounding box using a two-pass strategy:
+        //    (a) Threshold each row/col against a fraction of the max
+        //        activity level. Rows below the threshold are "background".
+        //    (b) Bounding box = first-to-last row/col that stays above the
+        //        threshold. This is robust when the card is a small fraction
+        //        of the frame (the actual worst case for misfires).
+        let maxRow = 0, maxCol = 0;
+        for (let y = 0; y < ah; y++) if (rowSum[y] > maxRow) maxRow = rowSum[y];
+        for (let x = 0; x < aw; x++) if (colSum[x] > maxCol) maxCol = colSum[x];
+
+        // Low-signal frame guard: if peak row activity is tiny in absolute
+        //   terms, this is a blurry / uniform / dark frame — the detector
+        //   can't reliably find a card, so send the whole thing.
+        //   Threshold: peak row must average > 60 score per pixel across the row
+        //   (i.e. real edge/color content present).
+        if (maxRow < aw * 60 || maxCol < ah * 60) {
+          return resolve(_compressCanvas(img, srcW, srcH, maxPx));
+        }
+
+        // Threshold: 25% of peak activity separates card rows from background.
+        const rowThr = maxRow * 0.25;
+        const colThr = maxCol * 0.25;
+
+        let top = 0, bot = ah - 1, left = 0, right = aw - 1;
+        while (top < ah - 1 && rowSum[top] < rowThr) top++;
+        while (bot > 0     && rowSum[bot] < rowThr) bot--;
+        while (left < aw - 1 && colSum[left] < colThr) left++;
+        while (right > 0     && colSum[right] < colThr) right--;
+
+        // Sanity: crop must be at least 25% of image on each side, else
+        //   fall back (probably an empty/blurry frame, and cropping would hurt).
+        const cropW = right - left + 1, cropH = bot - top + 1;
+        if (cropW < aw * 0.25 || cropH < ah * 0.25) {
+          return resolve(_compressCanvas(img, srcW, srcH, maxPx));
+        }
+
+        // 5) Map crop rect back to source image with a 3% safety margin
+        const invScale = srcW / aw; // (srcW/aw) === (srcH/ah)
+        const mL = Math.max(0, Math.floor((left  - aw * 0.03) * invScale));
+        const mT = Math.max(0, Math.floor((top   - ah * 0.03) * invScale));
+        const mR = Math.min(srcW - 1, Math.ceil((right + aw * 0.03) * invScale));
+        const mB = Math.min(srcH - 1, Math.ceil((bot   + ah * 0.03) * invScale));
+        const cw = mR - mL + 1, ch = mB - mT + 1;
+
+        // 6) Compress-with-crop directly onto the target-sized canvas
+        let outW = cw, outH = ch;
+        if (outW > maxPx || outH > maxPx) {
+          if (outW > outH) { outH = Math.round(outH * maxPx / outW); outW = maxPx; }
+          else             { outW = Math.round(outW * maxPx / outH); outH = maxPx; }
+        }
+        const out = document.createElement('canvas');
+        out.width = outW; out.height = outH;
+        out.getContext('2d').drawImage(img, mL, mT, cw, ch, 0, 0, outW, outH);
+        const dataUrl = out.toDataURL('image/jpeg', 0.85);
+        resolve(dataUrl.split(',')[1]);
+      } catch(e) {
+        // Any error — fall back to plain compression
+        console.warn('[autoCropCard] fell back to plain compress:', e && e.message);
+        try { resolve(_compressCanvas(img, img.width, img.height, maxPx)); }
+        catch(e2) { resolve(''); }
+      }
+    };
+    img.onerror = () => resolve('');
+    img.src = url;
+  });
+}
+
+// Small helper reused by autoCropCard for the fallback path
+function _compressCanvas(img, srcW, srcH, maxPx) {
+  let w = srcW, h = srcH;
+  if (w > maxPx || h > maxPx) {
+    if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+    else       { w = Math.round(w * maxPx / h); h = maxPx; }
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(img, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.82).split(',')[1];
 }
 
 async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
