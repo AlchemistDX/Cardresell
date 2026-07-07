@@ -4732,11 +4732,20 @@ function buildEbayListingTitle(opts) {
     parts.push('PSA ' + Number(o.psaGrade));
   }
   // Card name may arrive with the number already appended by upstream code
-  // (e.g. "Wigglytuff 105/094" or "Wigglytuff #105") — strip any trailing
-  // number/number-denominator/#number so we don't emit "Wigglytuff 105/094 105".
+  // (e.g. "Wigglytuff 105/094", "Wigglytuff #105", or even "KyuremVMAX197/196"
+  // with no space). Strip any trailing number/number-denominator/#number so
+  // we don't emit "Wigglytuff 105/094 105". Use \s* (not \s+) so the strip
+  // also works when the number is glued to the name with no separator.
   let cleanName = String(o.cardName || '').trim();
-  // Strip trailing "#123", "123", "123/094", "0123/094" (with optional leading zeros)
-  cleanName = cleanName.replace(/\s+#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+  // Strip trailing "#123", "123", "123/094", "0123/094" (with optional leading
+  // zeros and optional leading whitespace). Loop to catch cases where upstream
+  // code has already doubled the number onto the name (e.g. Wigglytuff scan
+  // returning "Wigglytuff 105/094 105/094" — strip both, not just the last).
+  let prevName;
+  do {
+    prevName = cleanName;
+    cleanName = cleanName.replace(/\s*#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+  } while (cleanName && cleanName !== prevName);
   if (cleanName) parts.push(cleanName);
   // Set name — include when present so eBay catalog matches to exact product.
   // Strip common junk prefixes that don't help matching ("Pokémon TCG:",
@@ -4752,7 +4761,15 @@ function buildEbayListingTitle(opts) {
     // Do NOT strip trailing "Set" — iconic Pokémon sets include it in the
     // official name ("Base Set", "Jungle Set", etc.) and eBay's catalog
     // matcher expects it verbatim.
-    if (setClean && setClean.toLowerCase() !== cleanName.toLowerCase()) {
+    // Skip the set name if:
+    //   1. It exactly matches the cleaned card name, OR
+    //   2. The card name already contains the full set name as a substring
+    //      (e.g. cleanName = "Kyurem VMAX Lost Origin", setClean = "Lost Origin").
+    //      This prevents doubling the set name in the eBay title.
+    const setLc = setClean.toLowerCase();
+    const nameLc = cleanName.toLowerCase();
+    const nameContainsSet = setLc.length > 2 && nameLc.includes(setLc);
+    if (setClean && !nameContainsSet) {
       parts.push(setClean);
     }
   }
