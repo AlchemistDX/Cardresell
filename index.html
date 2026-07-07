@@ -10979,7 +10979,7 @@ function _bulkUpdateRow(rowId, result) {
     const cond = result.condition || 'NM';
 
     row.innerHTML = `
-      <div onclick="bulkOpenCardInLookup('${rowId}')" title="Tap to view details" style="position:relative;flex-shrink:0;cursor:pointer">
+      <div style="position:relative;flex-shrink:0">
         <img src="${_esc(thumbSrc)}" onerror="this.src='${_esc(result.objectUrl || '')}'" style="width:44px;height:60px;object-fit:cover;border-radius:6px;background:#1a1a1a" alt="Card" />
         ${qtyBadge}
       </div>
