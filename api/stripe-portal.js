@@ -29,7 +29,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 
-  if (!userEmail || !userEmail.includes('@')) {
+  // We need EITHER a verified email OR a verified uid. The verified uid is
+  // sufficient because stripe-checkout writes metadata.google_sub={uid} on every
+  // subscription, so we can find the customer by uid without trusting body email.
+  if (!userSub && (!userEmail || !userEmail.includes('@'))) {
     return res.status(401).json({ error: 'Sign in with Google first.' });
   }
 
@@ -39,14 +42,34 @@ export default async function handler(req, res) {
   const origin     = (req.headers.origin || 'https://www.cardresell.org').replace(/\/$/, '');
   const returnUrl  = `${origin}/`;
 
+  // Escape single-quotes inside the Stripe search query value.
+  const esc = (v) => String(v).replace(/'/g, "\\'");
+
   try {
-    // Find existing Stripe customer by email
-    const searchRes = await fetch(
-      `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(userEmail)}'&limit=1`,
-      { headers: { 'Authorization': `Bearer ${stripeKey}` } }
-    );
-    const searchData = await searchRes.json();
-    const customer   = searchData.data?.[0];
+    let customer = null;
+
+    // 1) Prefer lookup by verified uid via Stripe customer metadata.google_sub.
+    //    stripe-checkout.js writes this on every new subscription, so this is the
+    //    strongest signal and avoids any dependence on the token carrying `email`.
+    if (userSub) {
+      const bySubRes = await fetch(
+        `https://api.stripe.com/v1/customers/search?query=metadata['google_sub']:'${encodeURIComponent(esc(userSub))}'&limit=1`,
+        { headers: { 'Authorization': `Bearer ${stripeKey}` } }
+      );
+      const bySubData = await bySubRes.json();
+      customer = bySubData.data?.[0] || null;
+    }
+
+    // 2) Fallback: look up by verified email (older subscriptions created before
+    //    metadata.google_sub was written, or Apple sign-in that carries email).
+    if (!customer && userEmail && userEmail.includes('@')) {
+      const byEmailRes = await fetch(
+        `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(esc(userEmail))}'&limit=1`,
+        { headers: { 'Authorization': `Bearer ${stripeKey}` } }
+      );
+      const byEmailData = await byEmailRes.json();
+      customer = byEmailData.data?.[0] || null;
+    }
 
     if (!customer) {
       return res.status(404).json({ error: 'No subscription found for this account.' });
