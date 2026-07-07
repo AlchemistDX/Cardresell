@@ -11007,7 +11007,10 @@ function _bulkUpdateRow(rowId, result) {
         ${qtyBadge}
       </div>
       <div style="flex:1;min-width:0">
-        <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25);min-width:0">${_esc(result.cardName)}</div>
+        <div style="display:flex;align-items:center;gap:.4rem">
+          <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25);flex:1;min-width:0">${_esc(result.cardName)}</div>
+          <button onclick="bulkOpenCardInLookup('${rowId}')" title="View card details & eBay comps" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.4);color:rgba(196,181,253,1);border-radius:6px;padding:.15rem .4rem;font-size:.62rem;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1">🔍</button>
+        </div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(setStr)}</div>
         <div style="margin-top:.2rem;font-size:.78rem">${priceHtml}</div>
         <button onclick="bulkOpenConditionPicker('${rowId}')" style="margin-top:.3rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:99px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;cursor:pointer">${_esc(cond)} ▾</button>
