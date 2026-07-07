@@ -10515,6 +10515,10 @@ function openBulkScan() {
   const ov = document.getElementById('bulkScanOverlay');
   ov.style.display = 'flex';
   _bulkShowSection('modePicker');
+  // Clear the up-front pack-cost field so a stale value from a previous session
+  // doesn't linger. Focus is not stolen — the user has to tap into it.
+  const startInp = document.getElementById('bulkPackCostStartInput');
+  if (startInp) startInp.value = '';
   document.getElementById('bulkScanSubtitle').textContent = '1 credit per card';
 }
 
@@ -11397,6 +11401,24 @@ function _bulkOnPackCostInput() {
   const el = document.getElementById('bulkPackCostInput');
   const v = el ? parseFloat(el.value) : NaN;
   window._bulkPackCost = (!isNaN(v) && v > 0) ? v : 0;
+  // Mirror to the mode-picker input so it stays in sync if the user scans more.
+  const start = document.getElementById('bulkPackCostStartInput');
+  if (start && document.activeElement !== start) {
+    start.value = window._bulkPackCost > 0 ? window._bulkPackCost.toFixed(2) : '';
+  }
+  _bulkRefreshSummary();
+}
+
+// Up-front pack cost entry on the bulk mode picker. Writes to the same global
+// _bulkPackCost used by the bottom-bar input during scanning.
+function _bulkOnPackCostStartInput(raw) {
+  const v = parseFloat(raw);
+  window._bulkPackCost = (!isNaN(v) && v > 0) ? v : 0;
+  // If the bottom-bar input is already rendered, keep it in sync.
+  const bar = document.getElementById('bulkPackCostInput');
+  if (bar && document.activeElement !== bar) {
+    bar.value = window._bulkPackCost > 0 ? window._bulkPackCost.toFixed(2) : '';
+  }
   _bulkRefreshSummary();
 }
 function _bulkRefreshSummary() {
@@ -11476,8 +11498,17 @@ function _esc(s) {
     </div>
 
     <!-- Mode picker (shown at start) -->
-    <div id="bulkModePicker" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:2.5rem 1.5rem;flex:1">
-      <div style="font-size:.85rem;color:rgba(255,255,255,.55);text-align:center;margin-bottom:.5rem">How do you want to scan?</div>
+    <div id="bulkModePicker" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;flex:1;overflow-y:auto">
+      <!-- Optional pack cost (up-front) — syncs with bottom-bar input during scanning -->
+      <div style="width:100%;max-width:320px;background:#111;border:1px solid #232323;border-radius:14px;padding:.8rem .9rem">
+        <label for="bulkPackCostStartInput" style="display:block;font-size:.72rem;color:rgba(255,255,255,.6);font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.35rem">Pack cost <span style="color:rgba(255,255,255,.35);font-weight:500;text-transform:none;letter-spacing:0">· optional</span></label>
+        <div style="display:flex;align-items:center;gap:.4rem">
+          <span style="font-size:1rem;color:rgba(255,255,255,.55);font-weight:700">$</span>
+          <input id="bulkPackCostStartInput" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" oninput="_bulkOnPackCostStartInput(this.value)" style="flex:1;background:#0a0a0a;border:1px solid #2a2a2a;color:#fff;border-radius:8px;padding:.5rem .65rem;font-size:.95rem;font-weight:700;outline:none;min-width:0" />
+        </div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.4);margin-top:.4rem;line-height:1.35">Live tally: <span style="color:rgba(255,255,255,.55)">Spent · Pulled · +/- profit</span> shows up as cards scan in.</div>
+      </div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.55);text-align:center;margin:.25rem 0 .25rem">How do you want to scan?</div>
       <button onclick="startBulkCamera()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.6)'" onmouseout="this.style.borderColor='#2a2a2a'">
         <span style="font-size:1.5rem">📷</span>
         <div>
