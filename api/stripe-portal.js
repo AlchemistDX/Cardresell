@@ -48,10 +48,56 @@ export default async function handler(req, res) {
   try {
     let customer = null;
 
-    // 1) Prefer lookup by verified uid via Stripe customer metadata.google_sub.
-    //    stripe-checkout.js writes this on every new subscription, so this is the
-    //    strongest signal and avoids any dependence on the token carrying `email`.
-    if (userSub) {
+    // 1) BEST: read the KV pro:<uid> record we wrote at subscription time.
+    //    It contains { email, subscriptionId, status, plan } for this exact uid,
+    //    so it's authoritative even if the user later changed their signed-in
+    //    email or the Firebase token no longer carries an email claim.
+    let kvEmail = '';
+    let kvSubId = '';
+    const kvUrl   = process.env.KV_REST_API_URL;
+    const kvToken = process.env.KV_REST_API_TOKEN;
+    if (userSub && kvUrl && kvToken) {
+      try {
+        const kr = await fetch(`${kvUrl}/get/${encodeURIComponent(`pro:${userSub}`)}`,
+          { headers: { 'Authorization': `Bearer ${kvToken}` } });
+        const kd = await kr.json();
+        if (kd.result) {
+          const rec = JSON.parse(kd.result);
+          kvEmail = rec.email || '';
+          kvSubId = rec.subscriptionId || '';
+        }
+      } catch(e) { /* non-fatal */ }
+    }
+
+    // 1a) If we have a subscriptionId from KV, retrieve the subscription to get
+    //     the exact customer — no search-index staleness, no email dependency.
+    if (kvSubId) {
+      try {
+        const sr = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(kvSubId)}`,
+          { headers: { 'Authorization': `Bearer ${stripeKey}` } });
+        if (sr.ok) {
+          const sd = await sr.json();
+          if (sd.customer) {
+            const cr = await fetch(`https://api.stripe.com/v1/customers/${encodeURIComponent(sd.customer)}`,
+              { headers: { 'Authorization': `Bearer ${stripeKey}` } });
+            if (cr.ok) customer = await cr.json();
+          }
+        }
+      } catch(e) { /* non-fatal, fall through */ }
+    }
+
+    // 1b) If KV had an email (from subscription time), use it before touching the token email.
+    if (!customer && kvEmail && kvEmail.includes('@')) {
+      const kvEmailRes = await fetch(
+        `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(esc(kvEmail))}'&limit=1`,
+        { headers: { 'Authorization': `Bearer ${stripeKey}` } }
+      );
+      const kvEmailData = await kvEmailRes.json();
+      customer = kvEmailData.data?.[0] || null;
+    }
+
+    // 2) Fallback: lookup by verified uid via Stripe customer metadata.google_sub.
+    if (!customer && userSub) {
       const bySubRes = await fetch(
         `https://api.stripe.com/v1/customers/search?query=metadata['google_sub']:'${encodeURIComponent(esc(userSub))}'&limit=1`,
         { headers: { 'Authorization': `Bearer ${stripeKey}` } }
@@ -60,8 +106,7 @@ export default async function handler(req, res) {
       customer = bySubData.data?.[0] || null;
     }
 
-    // 2) Fallback: look up by verified email (older subscriptions created before
-    //    metadata.google_sub was written, or Apple sign-in that carries email).
+    // 3) Last resort: lookup by the currently-verified token email.
     if (!customer && userEmail && userEmail.includes('@')) {
       const byEmailRes = await fetch(
         `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(esc(userEmail))}'&limit=1`,
