@@ -10639,26 +10639,45 @@ function _bulkSetMatchScore(candidateSetName, targetSetName) {
 async function _bulkFetchPrice(cardName, setName, cardNumber) {
   if (!cardName) return null;
   try {
-    const cleanName = String(cardName).replace(/["\\]/g, '').trim();
+    // Strip any trailing number already glued onto the name (e.g. "Wigglytuff 105/094")
+    // AND strip leading zeros from the numerator so "0148/086" —> "148".
+    let cleanName = String(cardName).replace(/["\\]/g, '').trim();
+    let prevName;
+    do {
+      prevName = cleanName;
+      cleanName = cleanName.replace(/\s*#?0*\d+(?:\s*\/\s*\d+)?\s*$/,'').trim();
+    } while (cleanName && cleanName !== prevName);
     if (!cleanName) return null;
-    const cleanNumber = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
+    const firstWord = cleanName.split(/\s+/)[0];
+    const cleanNumber = cardNumber
+      ? String(cardNumber).replace(/\/.*$/, '').replace(/^0+/, '').trim()
+      : '';
 
-    let q = `name:"${cleanName}"`;
-    if (cleanNumber) q += ` number:"${cleanNumber}"`;
-
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer`;
-
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 4000);
-    let resp;
-    try {
-      resp = await fetch(url, { signal: ctrl.signal });
-    } finally {
-      clearTimeout(timeout);
+    // Try 3 progressively looser queries. The strict name+number combo works for
+    // most cards; the wildcard name+number catches cards where GPT slightly
+    // misread the name (e.g. missing suffix like "ex"); the last name-only
+    // query guarantees we return SOME price rather than "Price unavailable".
+    const queries = [];
+    if (cleanNumber) {
+      queries.push(`name:"${cleanName}" number:${cleanNumber}`);
+      queries.push(`name:${firstWord}* number:${cleanNumber}`);
     }
-    if (!resp || !resp.ok) return null;
-    const json = await resp.json();
-    let cards = json.data || [];
+    queries.push(`name:"${cleanName}"`);
+
+    let cards = [];
+    for (const q of queries) {
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=15&select=id,name,set,number,rarity,images,tcgplayer`;
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 4000);
+      let resp;
+      try { resp = await fetch(url, { signal: ctrl.signal }); }
+      catch(e) { clearTimeout(timeout); continue; }
+      finally { clearTimeout(timeout); }
+      if (!resp || !resp.ok) continue;
+      const json = await resp.json();
+      cards = json.data || [];
+      if (cards.length) break; // first query with hits wins
+    }
     if (!cards.length) return null;
 
     // Score by set-name similarity: exact match first, then prefix, then any.
@@ -10975,7 +10994,11 @@ function _bulkUpdateRow(rowId, result) {
         (result.priceVariant ? `<span style="color:rgba(255,255,255,.35);font-size:.68rem"> · ${_esc(formatVariantName(result.priceVariant))}</span>` : '') +
         ` <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`
       : `<span style="color:rgba(255,255,255,.3)">Price unavailable</span> <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`;
-    const setStr = [result.setName, result.cardNumber ? '#' + result.cardNumber : ''].filter(Boolean).join(' ');
+    // Strip leading zeros from numerator so "148/086" —> "148/86" (denominator kept).
+    const displayNumber = result.cardNumber
+      ? String(result.cardNumber).replace(/^0+(?=\d)/, '').replace(/\/0+(?=\d)/, '/')
+      : '';
+    const setStr = [result.setName, displayNumber ? '#' + displayNumber : ''].filter(Boolean).join(' ');
     const cond = result.condition || 'NM';
 
     row.innerHTML = `
@@ -10984,10 +11007,7 @@ function _bulkUpdateRow(rowId, result) {
         ${qtyBadge}
       </div>
       <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:.4rem">
-          <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25);flex:1;min-width:0">${_esc(result.cardName)}</div>
-          <button onclick="bulkOpenCardInLookup('${rowId}')" title="View details & eBay comps" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.4);color:rgba(196,181,253,1);border-radius:6px;padding:.15rem .4rem;font-size:.62rem;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1">🔍</button>
-        </div>
+        <div onclick="bulkEditCardName('${rowId}')" title="Tap to correct name" style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline dotted rgba(255,255,255,.25);min-width:0">${_esc(result.cardName)}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(setStr)}</div>
         <div style="margin-top:.2rem;font-size:.78rem">${priceHtml}</div>
         <button onclick="bulkOpenConditionPicker('${rowId}')" style="margin-top:.3rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:99px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;cursor:pointer">${_esc(cond)} ▾</button>
