@@ -5175,7 +5175,15 @@ function feeCOMC(price, service, isGraded, cashout) {
 function calc() {
   const price = getEffectivePrice();
   if (price <= 0) {
-    showIntro();
+    // If we have a card loaded but no price (e.g. brand-new set not in the
+    // TCGPlayer price feed yet), don't dump the user back on the intro state.
+    // Show a lightweight 'no market data yet' panel with the sell/comps links
+    // so they can still list the card or search comps manually.
+    if (selectedCard) {
+      showNoPricePanel();
+    } else {
+      showIntro();
+    }
     return;
   }
 
@@ -5550,6 +5558,42 @@ function setSort(m) {
 function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return (n < 0 ? '−' : '') + '$' + Math.abs(n).toFixed(2);
+}
+
+// Rendered when a card is loaded but the price feed returned nothing.
+// Common for brand-new sets before TCGPlayer's price feed populates.
+// We still expose sell / comps buttons so the card page isn't useless.
+function showNoPricePanel() {
+  const urls = window._platSellUrls || {};
+  const card = selectedCard || {};
+  const rawName = (card.name || '').replace(/\s*-\s*\d+\/\d+\s*$/, '').trim();
+  const setName = card.setName || '';
+  const number  = card.number || '';
+  const game    = card.game || 'pokemon';
+  const isPokemon = game === 'pokemon' || game === 'pokemon_jp';
+  const isMagic   = game === 'mtg';
+  const isYugioh  = game === 'yugioh';
+  const gameTag   = isPokemon ? 'pokemon card' : isMagic ? 'mtg card' : isYugioh ? 'yugioh card' : 'trading card';
+  const ebaycat   = (isPokemon || isMagic || isYugioh) ? '183454' : '212';
+  const ebaySoldQ = encodeURIComponent(`${rawName}${number ? ' ' + number : ''}${setName ? ' ' + setName : ''} ${gameTag}`);
+  const ebayBuyRaw= `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
+  const ebayBuyUrl= typeof buildEbayUrl === 'function' ? buildEbayUrl(ebayBuyRaw) : ebayBuyRaw;
+
+  // Which sell/buy links are available (URLs come from updateSellLinks -> window._platSellUrls)
+  const ebaySellUrl = urls.ebay || '';
+  const tcgUrl      = urls.tcgplayer || '';
+
+  resultsArea.innerHTML = `<div class="intro-state" style="padding:1.25rem 1rem">
+    <div class="intro-icon">✨</div>
+    <div class="intro-h">No market data yet</div>
+    <p class="intro-p" style="margin-bottom:1rem">This card is likely from a brand-new set that hasn't populated the TCGPlayer price feed yet. You can still list it or search recent comps below.</p>
+    <div style="display:flex;flex-direction:column;gap:.5rem;max-width:320px;margin:0 auto">
+      ${ebaySellUrl ? `<a href="${ebaySellUrl}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.75rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-weight:800;font-size:.9rem;text-decoration:none">🛒 List on eBay</a>` : ''}
+      ${tcgUrl      ? `<a href="${tcgUrl}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.75rem 1rem;background:#f39c12;color:#111;border-radius:10px;font-weight:800;font-size:.9rem;text-decoration:none">🃏 Sell on TCGPlayer</a>` : ''}
+      <a href="${ebayBuyUrl}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.65rem 1rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:10px;font-weight:700;font-size:.82rem;text-decoration:none">🔍 View eBay sold comps</a>
+    </div>
+    <p class="intro-p" style="margin-top:1rem;font-size:.75rem;color:rgba(255,255,255,.4)">Tip: type a price in the <strong>Override</strong> field to see full platform payout comparisons.</p>
+  </div>`;
 }
 
 function showIntro() {
