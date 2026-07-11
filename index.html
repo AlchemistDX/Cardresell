@@ -4010,6 +4010,30 @@ async function fetchAndApplySoldComps(forceRefresh) {
       const fbQuery2 = encodeURIComponent([card.name, card.setName, _num2].filter(Boolean).join(' '));
       const _sacat2 = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
       const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=${_sacat2}&LH_Sold=1&LH_Complete=1&_sop=12`;
+
+      // FALLBACK: /api/ebay-sold now returns activeMedian from the Browse API
+      // (active listings) when EBAY_APP_ID / EBAY_CERT_ID are configured.
+      // Sold data has been unavailable since eBay killed the Finding API in
+      // Feb 2025, so an active-listing median is our best signal for new sets
+      // (Chaos Rising, Prismatic Evolutions, etc.) that TCGPlayer hasn't
+      // populated yet. It's a rough upper-bound on true sold prices.
+      const activeMed = typeof data.activeMedian === 'number' ? data.activeMedian : null;
+      const activeCnt = typeof data.activeCount  === 'number' ? data.activeCount  : 0;
+      if (activeMed && activeMed > 0 && activeCnt > 0) {
+        const ovField = document.getElementById('priceOverride');
+        if (ovField && (!ovField.value || forceRefresh)) {
+          ovField.value = activeMed.toFixed(2);
+          calc();
+        }
+        statusTxt.innerHTML =
+          `<span style="color:var(--text)">eBay active listings</span>` +
+          ` · <strong style="color:var(--gold)">${activeCnt} live</strong>` +
+          ` · median <strong style="color:var(--text)">$${activeMed.toFixed(2)}</strong>` +
+          ` · <a href="${buildEbayUrl(fbUrl2)}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View sold →</a>`;
+        statusEl.style.display = 'flex';
+        return;
+      }
+
       statusTxt.innerHTML =
         `No recent sales found · ` +
         `<a href="${buildEbayUrl(fbUrl2)}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
