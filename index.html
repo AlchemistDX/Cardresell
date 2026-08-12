@@ -4270,7 +4270,41 @@ function loadCardUI(card) {
 
   const variants = card.priceVariants || [];
   if (!variants.length) {
-    printSelect.innerHTML = '<option value="">No price data</option>';
+    printSelect.innerHTML = '<option value="">Loading price…</option>';
+    // Live TCGPlayer price fetch for new sets with no embedded price data
+    if (card.game === 'pokemon' && card.name && card.setName) {
+      const _liveCard = card;
+      (async () => {
+        try {
+          const p = new URLSearchParams({ name: _liveCard.name, set: _liveCard.setName });
+          if (_liveCard.number) p.set('number', _liveCard.number);
+          const r = await fetch('/api/tcg-price?' + p.toString());
+          if (!r.ok) throw new Error('status ' + r.status);
+          const d = await r.json();
+          // Only apply if this card is still selected
+          if (selectedCard?.name !== _liveCard.name || selectedCard?.setName !== _liveCard.setName) return;
+          printSelect.innerHTML = '';
+          currentPrices = {};
+          if (d.market && d.market > 0) {
+            const liveVariant = { key: 'tcgplayer_live', label: 'TCGPlayer Live', market: d.market, low: d.low || null, mid: d.market, high: null };
+            currentPrices['tcgplayer_live'] = liveVariant;
+            const opt = document.createElement('option');
+            opt.value = 'tcgplayer_live';
+            opt.textContent = `TCGPlayer Live — $${d.market.toFixed(2)}`;
+            printSelect.appendChild(opt);
+            printSelect.value = 'tcgplayer_live';
+            updatePriceFromPrinting();
+            calc();
+          } else {
+            printSelect.innerHTML = '<option value="">No price data</option>';
+          }
+        } catch(e) {
+          printSelect.innerHTML = '<option value="">No price data</option>';
+        }
+      })();
+    } else {
+      printSelect.innerHTML = '<option value="">No price data</option>';
+    }
   } else {
     variants.forEach(v => {
       currentPrices[v.key] = v;
