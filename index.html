@@ -2409,6 +2409,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="flex:1;min-width:0">
         <div id="ccmName" style="font-weight:900;font-size:1.05rem;line-height:1.15;margin-bottom:.15rem;word-break:break-word">—</div>
         <div id="ccmSet" style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">—</div>
+        <!-- Grade chip: shown only when the user saved this card at a specific grade
+             (e.g. PSA 10). Hidden by default; populated by openCollectionCardDetail. -->
+        <div id="ccmGradeChip" style="display:none;margin-bottom:.35rem"><span id="ccmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold);letter-spacing:.02em"></span></div>
         <div id="ccmValue" style="font-size:1.15rem;font-weight:800;color:var(--gold);line-height:1.1">$—</div>
         <div id="ccmPnL" style="font-size:.72rem;margin-top:.15rem;color:#aaa">—</div>
       </div>
@@ -2418,6 +2421,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 List on eBay</a>
       <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">💰 List on TCGplayer</a>
     </div>
+
+    <!-- View full card: opens the Card Lookup view for this card and, if a grade
+         was saved on the entry, auto-applies the grader/grade pill so the user
+         lands on their exact configuration (e.g. PSA 10). -->
+    <button id="ccmViewFullBtn" type="button" onclick="_ccmViewFullCard()" style="width:100%;padding:.7rem;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:10px;color:#93c5fd;font-size:.82rem;font-weight:800;cursor:pointer;margin-bottom:.5rem">🔍 View full card</button>
 
     <button id="ccmRefreshBtn" type="button" onclick="_ccmRefreshPrice()" style="width:100%;padding:.65rem;background:transparent;border:1px solid #333;border-radius:10px;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:.5rem">↻ Refresh current price</button>
 
@@ -6455,11 +6463,46 @@ function openCollectionCardDetail(entryId) {
   setEl('ccmName', p.card || 'Unknown card');
   setEl('ccmSet', p.set || '—');
 
-  const cur = p.currentValue ?? p.buyPrice ?? 0;
+  // Grade chip — show ONLY when the user has explicitly saved this card at a
+  // specific grader + grade (e.g. PSA 10). Estimated grades (estGrade) are
+  // AI guesses and shown as "Est." so users don't confuse them with a real
+  // slabbed grade.
+  const chipWrap = document.getElementById('ccmGradeChip');
+  const chipText = document.getElementById('ccmGradeChipText');
+  if (chipWrap && chipText) {
+    const graderNames = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
+    if (p.grader && p.grade != null && p.grade !== '') {
+      const gLabel = graderNames[String(p.grader).toLowerCase()] || String(p.grader).toUpperCase();
+      chipText.textContent = `🏅 ${gLabel} ${p.grade}`;
+      chipWrap.style.display = '';
+    } else if (p.estGrade) {
+      chipText.textContent = `Est. PSA ${p.estGrade}`;
+      chipWrap.style.display = '';
+    } else {
+      chipWrap.style.display = 'none';
+    }
+  }
+
+  // If we have no current price yet (bulk-scan couldn't resolve one), show a
+  // muted placeholder instead of a misleading $0.00. Users can hit "Refresh
+  // current price" or "View full card" to fetch one.
+  const hasCurrent = p.currentValue != null && !isNaN(p.currentValue) && p.currentValue > 0;
+  const cur = hasCurrent ? p.currentValue : (p.buyPrice || 0);
   const buy = p.buyPrice || 0;
   const gain = cur - buy;
   const gainPct = buy > 0 ? (gain / buy * 100) : 0;
-  setEl('ccmValue', '$' + cur.toFixed(2));
+  const valEl = document.getElementById('ccmValue');
+  if (valEl) {
+    if (hasCurrent) {
+      valEl.textContent = '$' + cur.toFixed(2);
+      valEl.style.color = '';
+      valEl.title = '';
+    } else {
+      valEl.textContent = 'Price not fetched';
+      valEl.style.color = '#888';
+      valEl.title = 'Tap Refresh or View full card to fetch a current price';
+    }
+  }
   const pnl = document.getElementById('ccmPnL');
   if (pnl) {
     if (buy > 0) {
@@ -6509,6 +6552,83 @@ function openCollectionCardDetail(entryId) {
   }
 
   document.getElementById('collectionCardModal').classList.add('open');
+}
+
+// Open the full Card Lookup view for the collection entry.
+// Closes the modal, switches to the Lookup tab, prefills the search box
+// with "<name> <number>", clicks the top result, and (if the entry was
+// saved at a specific grader+grade) auto-selects that grader pill + grade
+// so the user lands on the exact configuration they saved.
+function _ccmViewFullCard() {
+  if (!window._ccmCurrentId) return;
+  const port = loadPortData();
+  const p = port.find(x => x.id === window._ccmCurrentId);
+  if (!p) return;
+
+  // Close the collection modal so the lookup view is visible
+  document.getElementById('collectionCardModal').classList.remove('open');
+
+  // Switch to the Card Lookup tab
+  if (typeof switchView === 'function') { try { switchView('lookup'); } catch(e) {} }
+
+  // Build the search query: prefer name + number for a precise match
+  const cardName = String(p.card || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
+  const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
+  const num = String(p.number || numFromSet || '').replace(/^0+/, '').trim();
+  const query = [cardName, num].filter(Boolean).join(' ');
+  if (!query) return;
+
+  const searchInput = document.getElementById('searchInput');
+  if (!searchInput) return;
+  searchInput.value = query;
+  searchInput.dispatchEvent(new Event('input'));
+
+  // Also fire the full search button so results appear even if the
+  // autocomplete dropdown never populates.
+  const searchBtn = document.getElementById('searchBtn');
+  if (searchBtn) { try { searchBtn.click(); } catch(e) {} }
+
+  // After results settle, click the best match, then optionally apply the
+  // saved grader/grade. Only apply grade if the entry has a real saved
+  // grader+grade pair — estGrade is a guess and shouldn't force a graded
+  // price display.
+  const graderKey = p.grader ? String(p.grader).toLowerCase() : null;
+  const grade     = (p.grade != null && p.grade !== '') ? String(p.grade) : null;
+
+  setTimeout(() => {
+    const best = document.querySelector('.drop-item');
+    if (best) { try { best.click(); } catch(e) {} }
+    if (!graderKey || !grade) {
+      // No grade to apply — just scroll to results
+      setTimeout(() => {
+        const results = document.getElementById('sellSection') || document.getElementById('platformCards');
+        if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 500);
+      return;
+    }
+    // Apply grader pill + grade
+    setTimeout(() => {
+      const gradedToggle = document.getElementById('gradedToggle');
+      if (gradedToggle && !gradedToggle.classList.contains('active')) {
+        try { gradedToggle.click(); } catch(e) {}
+      }
+      const pill = document.querySelector(`#gradedPills .pill[data-val="${graderKey}"]`);
+      if (pill) {
+        try { setPill(pill, 'gradedPills'); } catch(e) {}
+        if (typeof toggleGrade === 'function') { try { toggleGrade(); } catch(e) {} }
+      }
+      setTimeout(() => {
+        const gradeSelect = document.getElementById('gradeSelect');
+        if (gradeSelect) {
+          gradeSelect.value = grade;
+          gradeSelect.dispatchEvent(new Event('change'));
+          if (typeof calc === 'function') { try { calc(); } catch(e) {} }
+        }
+        const results = document.getElementById('sellSection') || document.getElementById('platformCards');
+        if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+    }, 600);
+  }, 800);
 }
 
 async function _ccmRefreshPrice() {
@@ -9904,6 +10024,26 @@ function _bulkSetMatchScore(candidateSetName, targetSetName) {
   return 0;
 }
 
+// Fetch a card from pokemontcg.io with a fetch timeout. Returns the raw
+// cards[] array or null on failure. Bumped from 4s→7s so slower networks
+// don't produce false null returns (which is what caused bulk-scan cards
+// to save with $0 + no thumbnail).
+async function _bulkFetchPokemonCards(q, timeoutMs) {
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs || 7000);
+  try {
+    const resp = await fetch(url, { signal: ctrl.signal });
+    if (!resp || !resp.ok) return null;
+    const json = await resp.json();
+    return json.data || [];
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function _bulkFetchPrice(cardName, setName, cardNumber) {
   if (!cardName) return null;
   try {
@@ -9911,23 +10051,21 @@ async function _bulkFetchPrice(cardName, setName, cardNumber) {
     if (!cleanName) return null;
     const cleanNumber = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
 
-    let q = `name:"${cleanName}"`;
-    if (cleanNumber) q += ` number:"${cleanNumber}"`;
+    // Try three progressively broader queries. Bulk-scan cards that saved as
+    // "$0 + no thumbnail" were mostly caused by a strict name+number query
+    // returning zero matches (e.g. AI mis-read the number, or the card uses
+    // an alphanumeric suffix like "179a"). Falling through to name-only
+    // recovers the image + price for the vast majority of these.
+    const queries = [];
+    if (cleanNumber) queries.push(`name:"${cleanName}" number:"${cleanNumber}"`);
+    queries.push(`name:"${cleanName}"`);
 
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer`;
-
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 4000);
-    let resp;
-    try {
-      resp = await fetch(url, { signal: ctrl.signal });
-    } finally {
-      clearTimeout(timeout);
+    let cards = null;
+    for (const q of queries) {
+      cards = await _bulkFetchPokemonCards(q, 7000);
+      if (cards && cards.length) break;
     }
-    if (!resp || !resp.ok) return null;
-    const json = await resp.json();
-    let cards = json.data || [];
-    if (!cards.length) return null;
+    if (!cards || !cards.length) return null;
 
     // Score by set-name similarity: exact match first, then prefix, then any.
     cards = cards.map(c => ({ c, score: _bulkSetMatchScore(c.set?.name, setName) }))
@@ -10050,11 +10188,20 @@ async function _bulkScanOne(item, rowId, isRetry) {
   const listEl = document.getElementById('bulkResultsList');
   let result = {
     objectUrl: item.objectUrl, file: item.file, success: false, cardName: '', setName: '', cardNumber: '',
-    marketPrice: null, imageUrl: null, tcgplayerUrl: null, error: '', condition: 'NM',
+    marketPrice: null, imageUrl: null, imageDataUrl: null, tcgplayerUrl: null, error: '', condition: 'NM',
     rowId, wasRetry: !!isRetry,
   };
   try {
     const imageBase64 = await compressImage(item.file, 1000);
+    // Keep a tiny (~350px) compressed base64 as a persistent thumbnail
+    // fallback if pokemontcg.io doesn't return an image (rare cards, API
+    // timeouts, mis-identified sets). Stored as a data: URL so it survives
+    // page reload (unlike the blob: objectUrl). Kept small to avoid
+    // blowing out localStorage on large bulk scans.
+    try {
+      const thumbBase64 = await compressImage(item.file, 350);
+      result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64;
+    } catch(e) { /* thumbnail fallback is best-effort */ }
     const idToken     = window._googleIdToken || '';
 
     const resp = await fetch('/api/scan', {
@@ -10484,6 +10631,13 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     const buyPrice = skipPricing ? 0 : (costs[i] || 0);
     const setStr = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
     const qty = r.qty && r.qty > 1 ? r.qty : 1;
+    // Thumbnail fallback: if pokemontcg.io didn't return an image (rare card,
+    // API timeout, mis-identified set), fall back to the user's own uploaded
+    // photo. r.objectUrl is a blob: URL that goes stale on page reload, so we
+    // use r.imageDataUrl (a base64 data: URL captured at scan time) when
+    // available. That way the collection thumbnail persists forever, even for
+    // cards we couldn't find in the API.
+    const thumb = r.imageUrl || r.imageDataUrl || null;
     for (let q = 0; q < qty; q++) {
       port.push({
         id: Date.now() + added + Math.floor(Math.random() * 1000),
@@ -10494,7 +10648,14 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
         condition: r.condition || 'NM',
         addedDate: today,
         source: 'bulk-scan',
-        imageUrl: r.imageUrl || null,
+        // Save under BOTH field names — openCollectionCardDetail reads
+        // p.img || p.imageUrl, and older code paths only look at p.img.
+        img: thumb,
+        imageUrl: thumb,
+        // Persist number + tcgplayer URL so "View full card" and
+        // "List on TCGplayer" work as well as the single-add path.
+        number: r.cardNumber || '',
+        tcgplayerUrl: r.tcgplayerUrl || '',
         lastRefreshed: r.marketPrice ? new Date().toISOString() : null
       });
       added++;

@@ -118,6 +118,22 @@ check('Stale-check bail after fetchTPLGradedByNameNumber',   INDEX.includes('if 
 check('Final stale-check guard before updatePriceFromPrinting', INDEX.includes("if (myGen !== window._syncGen) return;\n  updatePriceFromPrinting()"));
 check('fetchAndApplySoldComps skips override when grader != Raw', INDEX.includes("const isRawContext      = currentGraderPill === 'no' && !gradedRequest"));
 
+console.log('\n[Bulk-scan hardening + View full card 2026-08-13]');
+check('Bulk fetch has extracted helper _bulkFetchPokemonCards', INDEX.includes('async function _bulkFetchPokemonCards(q, timeoutMs)'));
+check('Bulk fetch timeout bumped to 7s',                        INDEX.includes('setTimeout(() => ctrl.abort(), timeoutMs || 7000)'));
+check('Bulk fetch falls back to name-only query',               INDEX.includes('queries.push(`name:"${cleanName}"`)'));
+check('_bulkScanOne captures thumbnail data URL',               INDEX.includes("result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64"));
+check('Bulk save uses user-photo thumbnail fallback',           INDEX.includes('const thumb = r.imageUrl || r.imageDataUrl || null'));
+check('Bulk save writes img field (single-add compat)',         INDEX.includes("img: thumb,\n        imageUrl: thumb"));
+check('Bulk save persists number field',                        INDEX.includes("number: r.cardNumber || ''"));
+check('Bulk save persists tcgplayerUrl',                        INDEX.includes("tcgplayerUrl: r.tcgplayerUrl || ''"));
+check('Collection modal has View full card button',             INDEX.includes("id=\"ccmViewFullBtn\""));
+check('_ccmViewFullCard function exists',                       INDEX.includes("function _ccmViewFullCard()"));
+check('_ccmViewFullCard applies saved grader+grade',            INDEX.includes("const graderKey = p.grader ? String(p.grader).toLowerCase() : null"));
+check('Collection modal has grade chip element',                INDEX.includes("id=\"ccmGradeChip\""));
+check('Grade chip populated when p.grader + p.grade present',   INDEX.includes("if (p.grader && p.grade != null && p.grade !== '')"));
+check('No-price entries show placeholder not $0.00',            INDEX.includes("valEl.textContent = 'Price not fetched'"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
