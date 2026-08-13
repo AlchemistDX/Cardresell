@@ -2401,8 +2401,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
-      <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 Sell on eBay</a>
-      <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#1f1f1f;border:1px solid #333;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🔎 TCGPlayer</a>
+      <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 List on eBay</a>
+      <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">💰 List on TCGplayer</a>
     </div>
 
     <button id="ccmRefreshBtn" type="button" onclick="_ccmRefreshPrice()" style="width:100%;padding:.65rem;background:transparent;border:1px solid #333;border-radius:10px;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:.5rem">↻ Refresh current price</button>
@@ -6152,25 +6152,32 @@ function openCollectionCardDetail(entryId) {
     }
   }
 
-  // Build the eBay Sell link using the same helper as the row button.
+  // Build sell URLs identical to the ones on the card detail view.
   // Strip any trailing number the card name already contains (e.g.
-  // "Charizard 4/175") so we don't double-paste the number when we
-  // append `num` below.
+  // "Charizard 4/175") so we don't double-paste the number.
   const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
   const num = (p.number || numFromSet || '').replace(/^0+/, '');
   const cardNameNoNum = String(p.card || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
-  const parts = [cardNameNoNum, num].filter(Boolean).join(' ');
-  const ebayRaw = parts
-    ? `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(parts)}&_sacat=212&LH_Sold=1&LH_Complete=1`
-    : 'https://www.ebay.com/';
+  const sellQuery = [cardNameNoNum, num].filter(Boolean).join(' ');
+
+  // eBay: use the sell/listing flow (opens pre-canned listing template) so
+  // users can list immediately, not just view sold comps. This is what the
+  // "Where to Sell" panel on the card detail view uses — keeping them in sync
+  // so users see the same behavior everywhere.
+  const ebayRaw = sellQuery
+    ? `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(sellQuery)}`
+    : 'https://www.ebay.com/sell/listing?flow=startSell';
   const ebayUrl = (typeof buildEbayUrl === 'function') ? buildEbayUrl(ebayRaw) : ebayRaw;
   const sellBtn = document.getElementById('ccmSellBtn');
   if (sellBtn) sellBtn.href = ebayUrl;
 
-  // TCGPlayer look-up link.
+  // TCGplayer: send them to the product listing page via our Impact affiliate
+  // link. TCGplayer doesn't have a public sell-flow deeplink, but landing on
+  // the product page gives sellers the "List this card" CTA there, and any
+  // subsequent action on TCGplayer within the affiliate cookie window pays.
   const tcgUrl = (typeof buildTcgpUrl === 'function')
     ? buildTcgpUrl(p.card || '', p.set || '')
-    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(parts)}&view=grid`;
+    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(sellQuery)}&view=grid`;
   const lookupBtn = document.getElementById('ccmLookupBtn');
   if (lookupBtn) lookupBtn.href = tcgUrl;
 
