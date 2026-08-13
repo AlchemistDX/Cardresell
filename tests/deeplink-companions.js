@@ -48,6 +48,12 @@ check('Scan-miss panel has ebaySellUrl variable',           /const ebaySellUrl =
 check('Scan-miss panel renders "List on eBay" button',      /List on eBay \u2192/.test(INDEX));
 check('Scan-miss sell URL uses sell/listing flow',          /sell\/listing\?flow=startSell&presetNameSearchQuery=\$\{ebayQ\}/.test(INDEX));
 
+console.log('\n[Scan-miss UX bug fixes 2026-08-13]');
+check('Scan-miss enriches pending.imageUrl from candidates',  /if \(!pending\.imageUrl\)/.test(INDEX));
+check('Scan-miss fires doSearch to populate main view',      /doSearch\(name\)\.catch/.test(INDEX));
+check('Scan-miss fallback thumbnail is NOT joker emoji',     !INDEX.includes('font-size:1.8rem">🃏'));
+check('Scan-miss fallback thumbnail uses "?" (not 🃏)',       INDEX.includes('font-weight:900">?</div>'));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

@@ -7310,6 +7310,9 @@ async function _loadScannedCardExact(pending) {
   // often reads only the visible portion (e.g. "165" instead of "165/086" on
   // Special Illustration Rares). Grabbing the full number from PokemonTCG.io
   // makes eBay/TCGplayer search 100% more precise.
+  // ALSO: pull a real card image from the fetched candidates so the scan-miss
+  // panel thumbnail shows a real card silhouette instead of the fallback
+  // playing-card emoji (which looked like a joker face — wrong for Pokemon).
   try {
     if (typeof cards !== 'undefined' && Array.isArray(cards) && cards.length > 0) {
       const cn = pending?.number || '';
@@ -7317,10 +7320,32 @@ async function _loadScannedCardExact(pending) {
         const hit = cards.find(c => (c.number || '').split('/')[0] === cn);
         if (hit && hit.number) pending = { ...pending, number: hit.number };
       }
+      // If we don't have an imageUrl yet, use the first candidate's image so
+      // the scan-miss panel shows a real Pokemon card (even if we couldn't
+      // confidently pick THE right one, an Audino search returns real Audino
+      // images — close enough for a visual anchor).
+      if (!pending.imageUrl) {
+        const cnClean = (pending?.number || '').split('/')[0];
+        // Prefer a candidate whose number matches (partial), otherwise cards[0]
+        const preferred = (cnClean && cards.find(c => (c.number || '').split('/')[0] === cnClean)) || cards[0];
+        const img = preferred?.images?.small || preferred?.images?.large;
+        if (img) pending = { ...pending, imageUrl: img };
+      }
     }
   } catch(e) { /* enrichment is best-effort */ }
   _renderScanMissPanel(pending);
   _logScanMiss(pending);
+  // Bug fix 2026-08-13: After a scan misses, the main card area still
+  // showed "No card selected" until the user manually pressed Enter on the
+  // search input. Fire the same doSearch() that Enter would trigger, so the
+  // dropdown populates with candidate cards immediately — user can pick the
+  // right one from the results grid without any extra keystroke.
+  try {
+    if (typeof doSearch === 'function' && name) {
+      // Fire and forget — dropList populates asynchronously
+      doSearch(name).catch(() => {});
+    }
+  } catch(e) { /* best-effort */ }
 }
 
 // Render a card-shaped "not found" panel for scans that PokemonTCG.io
@@ -7371,9 +7396,12 @@ function _renderScanMissPanel(pending) {
 
   const esc = (typeof _esc === 'function') ? _esc : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 
+  // Thumbnail: prefer scanned/fetched image, otherwise show a subtle
+  // question-mark card silhouette (NOT the 🃏 playing-card emoji which
+  // renders as a joker face and looks wrong for Pokemon cards).
   const thumbHtml = imageUrl
     ? `<img src="${esc(imageUrl)}" alt="Scanned card" style="width:72px;height:100px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#000" loading="lazy" decoding="async" />`
-    : `<div style="width:72px;height:100px;display:flex;align-items:center;justify-content:center;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;flex-shrink:0;font-size:1.8rem">🃏</div>`;
+    : `<div style="width:72px;height:100px;display:flex;align-items:center;justify-content:center;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;flex-shrink:0;font-size:1.6rem;color:var(--gold,#f2c14e);font-weight:900">?</div>`;
 
   panel.innerHTML = `
     <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;font-weight:700;color:var(--gold,#f2c14e);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem">
