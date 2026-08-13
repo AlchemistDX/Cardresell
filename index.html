@@ -4414,7 +4414,8 @@ function updatePriceFromPrinting() {
 
 // ── Condition multipliers ──
 function isGradedVariant(key) {
-  return /^(psa|bgs|cgc)_/.test(key || printSelect.value);
+  // All 6 graders — keep in sync with #gradedPills
+  return /^(psa|bgs|cgc|sgc|ace|tag)_/.test(key || printSelect.value);
 }
 
 function getCondMultiplier() {
@@ -4461,9 +4462,12 @@ async function syncGradeToPrintSelect() {
   const graderNames = { psa: 'PSA', bgs: 'BGS/Beckett', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
 
   if (grader === 'no') {
-    // Raw / Ungraded — switch printSelect back to first non-graded variant
+    // Raw / Ungraded — switch printSelect back to first non-graded variant.
+    // IMPORTANT: exclude ALL graders (added sgc|ace|tag after this regex was
+    // written) — otherwise 'sgc_10' passed the old !(psa|bgs|cgc) filter and
+    // got selected as "first raw", forcing SGC 10 price on the Raw toggle.
     const opts = Array.from(printSelect.options);
-    const firstRaw = opts.find(o => !/^(psa|bgs|cgc)_/.test(o.value));
+    const firstRaw = opts.find(o => !/^(psa|bgs|cgc|sgc|ace|tag)_/.test(o.value));
     if (firstRaw) printSelect.value = firstRaw.value;
     if (banner) banner.style.display = 'none';
     // Reset override field styling
@@ -4823,6 +4827,9 @@ function toggleGrade() {
   const isGraded = grader !== 'no';
   gradeRow.style.display = isGraded ? 'block' : 'none';
   if (gradeLabel) gradeLabel.style.display = isGraded ? 'block' : 'none';
+  // Rebuild grade dropdown so options match the selected grader (fixes
+  // 'PSA grades in CGC dropdown' + adds CGC/BGS Pristine 10 options).
+  if (isGraded) rebuildGradeSelect(grader);
   updateGradeLabel();        // update label text only
   syncGradeToPrintSelect();  // then sync price (calls updatePriceFromPrinting internally)
 }
@@ -4835,6 +4842,113 @@ function updateGradeLabel() {
     const names = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
     gradeLabel.textContent = `${names[grader] || grader.toUpperCase()} ${grade}`;
   }
+}
+
+// Grade scales per grader. CGC/BGS have a Pristine 10 (perfect subgrades)
+// which commands a HUGE premium over regular 10 — that's the difference the
+// user flagged. Keys are the option value used in variant keys (e.g. cgc_10p).
+// Order: top grades first so the dropdown defaults to the most valuable.
+const GRADE_SCALES = {
+  psa: [
+    { v: '10',  label: 'PSA 10 — Gem Mint' },
+    { v: '9',   label: 'PSA 9 — Mint' },
+    { v: '8',   label: 'PSA 8 — NM-Mint' },
+    { v: '7',   label: 'PSA 7 — Near Mint' },
+    { v: '6',   label: 'PSA 6 — EX-MT' },
+    { v: '5',   label: 'PSA 5 — Excellent' },
+    { v: '4',   label: 'PSA 4 — VG-EX' },
+    { v: '3',   label: 'PSA 3 — VG' },
+    { v: '2',   label: 'PSA 2 — Good' },
+    { v: '1.5', label: 'PSA 1.5 — Fair' },
+    { v: '1',   label: 'PSA 1 — Poor' },
+  ],
+  bgs: [
+    { v: '10p', label: 'BGS 10 Pristine — Black Label' },
+    { v: '10',  label: 'BGS 10 — Pristine' },
+    { v: '9.5', label: 'BGS 9.5 — Gem Mint' },
+    { v: '9',   label: 'BGS 9 — Mint' },
+    { v: '8.5', label: 'BGS 8.5 — NM-Mint+' },
+    { v: '8',   label: 'BGS 8 — NM-Mint' },
+    { v: '7.5', label: 'BGS 7.5' },
+    { v: '7',   label: 'BGS 7 — Near Mint' },
+    { v: '6',   label: 'BGS 6 — EX-MT' },
+    { v: '5',   label: 'BGS 5 — Excellent' },
+    { v: '4',   label: 'BGS 4 — VG-EX' },
+    { v: '3',   label: 'BGS 3 — VG' },
+    { v: '2',   label: 'BGS 2 — Good' },
+    { v: '1',   label: 'BGS 1 — Poor' },
+  ],
+  cgc: [
+    { v: '10p', label: 'CGC 10 Pristine — Perfect' },
+    { v: '10',  label: 'CGC 10 — Gem Mint' },
+    { v: '9.5', label: 'CGC 9.5 — Mint+' },
+    { v: '9',   label: 'CGC 9 — Mint' },
+    { v: '8.5', label: 'CGC 8.5 — NM-Mint+' },
+    { v: '8',   label: 'CGC 8 — NM-Mint' },
+    { v: '7.5', label: 'CGC 7.5' },
+    { v: '7',   label: 'CGC 7 — Near Mint' },
+    { v: '6',   label: 'CGC 6 — EX-MT' },
+    { v: '5',   label: 'CGC 5 — Excellent' },
+    { v: '4',   label: 'CGC 4 — VG-EX' },
+    { v: '3',   label: 'CGC 3 — VG' },
+    { v: '2',   label: 'CGC 2 — Good' },
+    { v: '1',   label: 'CGC 1 — Poor' },
+  ],
+  sgc: [
+    { v: '10p', label: 'SGC 10 Pristine — Gold Label' },
+    { v: '10',  label: 'SGC 10 — Gem Mint' },
+    { v: '9.5', label: 'SGC 9.5 — Mint+' },
+    { v: '9',   label: 'SGC 9 — Mint' },
+    { v: '8.5', label: 'SGC 8.5' },
+    { v: '8',   label: 'SGC 8 — NM-Mint' },
+    { v: '7',   label: 'SGC 7 — NM' },
+    { v: '6',   label: 'SGC 6' },
+    { v: '5',   label: 'SGC 5' },
+    { v: '4',   label: 'SGC 4' },
+    { v: '3',   label: 'SGC 3' },
+    { v: '2',   label: 'SGC 2' },
+    { v: '1',   label: 'SGC 1' },
+  ],
+  ace: [
+    { v: '10',  label: 'ACE 10 — Gem Mint' },
+    { v: '9',   label: 'ACE 9 — Mint' },
+    { v: '8',   label: 'ACE 8' },
+    { v: '7',   label: 'ACE 7' },
+    { v: '6',   label: 'ACE 6' },
+    { v: '5',   label: 'ACE 5' },
+    { v: '4',   label: 'ACE 4' },
+    { v: '3',   label: 'ACE 3' },
+    { v: '2',   label: 'ACE 2' },
+    { v: '1',   label: 'ACE 1' },
+  ],
+  tag: [
+    { v: '10',  label: 'TAG 10 — Pristine' },
+    { v: '9',   label: 'TAG 9 — Mint' },
+    { v: '8',   label: 'TAG 8' },
+    { v: '7',   label: 'TAG 7' },
+    { v: '6',   label: 'TAG 6' },
+    { v: '5',   label: 'TAG 5' },
+    { v: '4',   label: 'TAG 4' },
+    { v: '3',   label: 'TAG 3' },
+    { v: '2',   label: 'TAG 2' },
+    { v: '1',   label: 'TAG 1' },
+  ],
+};
+
+// Rebuild the gradeSelect dropdown based on the selected grader. Called
+// from toggleGrade() whenever the grader pill changes. Preserves the
+// selected value if the new grader's scale contains that value; otherwise
+// falls back to the top (highest-grade) option.
+function rebuildGradeSelect(grader) {
+  const sel = document.getElementById('gradeSelect');
+  if (!sel) return;
+  const scale = GRADE_SCALES[grader];
+  if (!scale) return; // 'no' grader — skip
+  const prev = sel.value;
+  sel.innerHTML = scale.map(g => `<option value="${g.v}">${g.label}</option>`).join('');
+  // Preserve previous grade if valid in new scale, else default to top option
+  const keep = scale.find(g => g.v === prev);
+  sel.value = keep ? prev : scale[0].v;
 }
 
 function setPill(el, groupId) {
@@ -7285,7 +7399,7 @@ async function _loadScannedCardExact(pending) {
         }, 600);
       }
       // Scroll card into view
-      const mainCard = document.getElementById('cardMain') || document.getElementById('cardPanel');
+      const mainCard = document.getElementById('cardHero');
       if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
@@ -7324,7 +7438,7 @@ async function _loadScannedCardExact(pending) {
               window._openGradeAfterScan = false;
               setTimeout(() => { typeof openGradeScanGate === 'function' && openGradeScanGate(); }, 600);
             }
-            const mainCard = document.getElementById('cardMain') || document.getElementById('cardPanel');
+            const mainCard = document.getElementById('cardHero');
             if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
             return;
           }
@@ -7370,7 +7484,7 @@ async function _loadScannedCardExact(pending) {
       selectedCard = synthCard;
       if (si) si.value = synthCard.name;
       try { loadCardUI(synthCard); } catch(uiErr) { console.warn('[synth loadCardUI]', uiErr); }
-      const mainCard = document.getElementById('cardMain') || document.getElementById('cardPanel');
+      const mainCard = document.getElementById('cardHero');
       if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   } catch(synthErr) {
@@ -7480,25 +7594,20 @@ function _renderScanMissPanel(pending) {
 
   const esc = (typeof _esc === 'function') ? _esc : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
 
-  // Thumbnail: prefer scanned/fetched image, otherwise show a subtle
-  // question-mark card silhouette (NOT the 🃏 playing-card emoji which
-  // renders as a joker face and looks wrong for Pokemon cards).
-  const thumbHtml = imageUrl
-    ? `<img src="${esc(imageUrl)}" alt="Scanned card" style="width:72px;height:100px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#000" loading="lazy" decoding="async" />`
-    : `<div style="width:72px;height:100px;display:flex;align-items:center;justify-content:center;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;flex-shrink:0;font-size:1.6rem;color:var(--gold,#f2c14e);font-weight:900">?</div>`;
+  // No thumbnail here — the big hero image (cardHero) already shows the
+  // scanned card at the top of the page. A second mini-image in the notice
+  // panel would be redundant and often "doesn't display" for cards missing
+  // from PokemonTCG.io.
 
   panel.innerHTML = `
     <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;font-weight:700;color:var(--gold,#f2c14e);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem">
       <span>Scanned — not in database yet</span>
     </div>
-    <div style="display:flex;gap:.85rem;align-items:flex-start;margin-bottom:.9rem">
-      ${thumbHtml}
-      <div style="flex:1;min-width:0">
-        <div style="font-size:1rem;font-weight:800;color:var(--text,#fff);line-height:1.25;letter-spacing:-.01em">${esc(displayName)} ${esc(displayNumber)}</div>
-        ${displaySet ? `<div style="font-size:.78rem;color:var(--text-muted,#9a9a9a);margin-top:.2rem">${esc(displaySet)}</div>` : ''}
-        ${displayRarity ? `<div style="font-size:.72rem;color:var(--text-muted,#9a9a9a);margin-top:.15rem">${esc(displayRarity)}</div>` : ''}
-        <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.5rem;line-height:1.4">Live market data isn't available for this card yet. Check current sold prices on eBay or listings on TCGplayer.</div>
-      </div>
+    <div style="margin-bottom:.9rem">
+      <div style="font-size:1rem;font-weight:800;color:var(--text,#fff);line-height:1.25;letter-spacing:-.01em">${esc(displayName)} ${esc(displayNumber)}</div>
+      ${displaySet ? `<div style="font-size:.78rem;color:var(--text-muted,#9a9a9a);margin-top:.2rem">${esc(displaySet)}</div>` : ''}
+      ${displayRarity ? `<div style="font-size:.72rem;color:var(--text-muted,#9a9a9a);margin-top:.15rem">${esc(displayRarity)}</div>` : ''}
+      <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.5rem;line-height:1.4">Live market data isn't available for this card yet. Check current sold prices on eBay or listings on TCGplayer.</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:.5rem">
       <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
@@ -7511,12 +7620,26 @@ function _renderScanMissPanel(pending) {
     </div>
   `;
 
-  // Prepend into lookup view so it's at the top; falls back to top of body
-  if (host.firstChild) host.insertBefore(panel, host.firstChild);
-  else host.appendChild(panel);
+  // Insert AFTER cardHero (big card image stays at top) so users see their
+  // scanned card first, then this notice + CTAs as a section below. Falls
+  // back to prepending #lookupView if cardHero isn't in the DOM.
+  const cardHero = document.getElementById('cardHero');
+  if (cardHero && cardHero.parentNode) {
+    // Insert as the next sibling of cardHero
+    if (cardHero.nextSibling) cardHero.parentNode.insertBefore(panel, cardHero.nextSibling);
+    else cardHero.parentNode.appendChild(panel);
+  } else if (host.firstChild) {
+    host.insertBefore(panel, host.firstChild);
+  } else {
+    host.appendChild(panel);
+  }
 
-  // Scroll into view on mobile
-  try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
+  // Scroll to the BIG card image at the top, not the notice panel. The user
+  // wants to see their scanned card first — the notice is a section below.
+  try {
+    const target = cardHero || panel;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e) {}
 }
 
 // User tapped "Adjust name and search again" — focus the search input with
