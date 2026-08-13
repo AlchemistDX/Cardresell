@@ -73,6 +73,12 @@ check('Scan-miss inserts AFTER cardHero',                    INDEX.includes('con
 check('Scan scrolls to big hero, not scan-miss panel',       INDEX.includes('const target = cardHero || panel'));
 check('Synthetic card scroll target uses cardHero',          INDEX.includes("const mainCard = document.getElementById('cardHero')"));
 
+console.log('\n[Friendlier scan-miss + Add to Collection CTA 2026-08-13]');
+check('Scan-miss message softened (no "not in database")',   !INDEX.includes('Scanned — not in database yet'));
+check('Scan-miss uses friendly "Live pricing unavailable"',  INDEX.includes('Live pricing unavailable'));
+check('Scan-miss has Add to Collection CTA',                 INDEX.includes('_scanMissAddToCollection()'));
+check('_scanMissAddToCollection function defined',           /function _scanMissAddToCollection\(\)/.test(INDEX));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

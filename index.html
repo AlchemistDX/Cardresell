@@ -7601,19 +7601,20 @@ function _renderScanMissPanel(pending) {
 
   panel.innerHTML = `
     <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;font-weight:700;color:var(--gold,#f2c14e);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem">
-      <span>Scanned — not in database yet</span>
+      <span>Live pricing unavailable</span>
     </div>
     <div style="margin-bottom:.9rem">
       <div style="font-size:1rem;font-weight:800;color:var(--text,#fff);line-height:1.25;letter-spacing:-.01em">${esc(displayName)} ${esc(displayNumber)}</div>
       ${displaySet ? `<div style="font-size:.78rem;color:var(--text-muted,#9a9a9a);margin-top:.2rem">${esc(displaySet)}</div>` : ''}
       ${displayRarity ? `<div style="font-size:.72rem;color:var(--text-muted,#9a9a9a);margin-top:.15rem">${esc(displayRarity)}</div>` : ''}
-      <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.5rem;line-height:1.4">Live market data isn't available for this card yet. Check current sold prices on eBay or listings on TCGplayer.</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.4">This card loaded but we don't have live market prices yet — you can still track it in your Collection and check sold comps on eBay/TCGplayer below.</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:.5rem">
-      <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
+      <button type="button" onclick="_scanMissAddToCollection()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border:none;border-radius:10px;font-size:.88rem;font-weight:800;cursor:pointer">➕ Add to My Collection</button>
+      <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
       <a href="${esc(ebaySellUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem 1rem;background:transparent;color:var(--gold,#f2c14e);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.78rem;font-weight:700;text-decoration:none">List on eBay →</a>
-      <a href="${esc(tcgSearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search on TCGplayer →</a>
-      <button type="button" onclick="_scanMissAdjustName()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:transparent;color:var(--text,#fff);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.82rem;font-weight:600;cursor:pointer">Adjust name and search again</button>
+      <a href="${esc(tcgSearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:transparent;color:var(--text,#fff);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.82rem;font-weight:600;text-decoration:none">Search on TCGplayer →</a>
+      <button type="button" onclick="_scanMissAdjustName()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:transparent;color:var(--text-muted,#9a9a9a);border:none;border-radius:10px;font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:underline">Wrong card? Adjust name</button>
     </div>
     <div style="text-align:center;margin-top:.7rem">
       <button type="button" onclick="_scanMissDismiss()" style="background:none;border:none;color:rgba(255,255,255,.4);font-size:.72rem;cursor:pointer;padding:.3rem;text-decoration:underline">Dismiss</button>
@@ -7640,6 +7641,16 @@ function _renderScanMissPanel(pending) {
     const target = cardHero || panel;
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e) {}
+}
+
+// User tapped "Add to My Collection" from the scan-miss notice. Delegates
+// to the main addCurrentCardToCollection() which uses selectedCard (already
+// populated with the synthetic card from _loadScannedCardExact).
+function _scanMissAddToCollection() {
+  if (typeof addCurrentCardToCollection === 'function') {
+    _scanMissDismiss();
+    addCurrentCardToCollection();
+  }
 }
 
 // User tapped "Adjust name and search again" — focus the search input with
