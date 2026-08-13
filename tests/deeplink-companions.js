@@ -140,6 +140,15 @@ check('Collection row renders gold corner badge on thumbnail', INDEX.includes("l
 check('Collection row shows grade chip inline with card name', INDEX.includes("const cardNameHtml = _hasGrade"));
 check('Thumbnail wrapped in position:relative container',      INDEX.includes("position:relative;width:40px;height:56px"));
 
+console.log('\n[Flip modal grade capture 2026-08-13]');
+check('Flip modal has gold grade banner element',              INDEX.includes("id=\"mGradeBanner\""));
+check('Grade banner has label span',                           INDEX.includes("id=\"mGradeBannerLabel\""));
+check('_syncFlipModalGradeBanner helper defined',              INDEX.includes("function _syncFlipModalGradeBanner()"));
+check('Add-to-Collection button calls grade sync',             INDEX.includes("_syncFlipModalGradeBanner();\n  modal.classList.add('open');"));
+check('Save persists grader field on portfolio entry',         INDEX.includes("grader: savedGrader || null"));
+check('Save persists grade field on portfolio entry',          INDEX.includes("grade: savedGrade || null"));
+check('Close resets grader dataset to prevent leak',           INDEX.includes("delete modalBox.dataset.grader; delete modalBox.dataset.grade;"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

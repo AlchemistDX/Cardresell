@@ -2303,6 +2303,16 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div class="modal-overlay" id="flipModal" onclick="closeFlipModal(event)">
   <div class="modal-box">
     <div class="modal-title" id="modalTitle">Log a Flip</div>
+    <!--
+      Grade banner: only shown when the flip modal was opened while a grader
+      pill + grade were selected on the lookup page. Makes it obvious the
+      entry will be saved as graded (e.g. PSA 10) so the user doesn't confuse
+      a graded save with a raw one.
+    -->
+    <div id="mGradeBanner" style="display:none;margin:-.4rem 0 .8rem;padding:.55rem .75rem;background:linear-gradient(135deg,rgba(240,180,41,.18),rgba(212,175,55,.10));border:1px solid rgba(212,175,55,.55);border-radius:8px;color:var(--gold);font-weight:700;font-size:.85rem;display:flex;align-items:center;gap:.5rem">
+      <span style="font-size:1.1rem">🏅</span>
+      <span>Saving as <span id="mGradeBannerLabel">PSA 10</span></span>
+    </div>
     <div class="modal-grid">
       <div class="modal-field modal-full">
         <label>Card Name</label>
@@ -5726,9 +5736,40 @@ function addCurrentCardToCollection() {
   document.getElementById('mSetName').value = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
   const price = getEffectivePrice();
   if (price) document.getElementById('mCurrentValue').value = price.toFixed(2);
+  // Capture the current grader + grade selection so saveFlipEntry() can
+  // persist them on the portfolio entry. Also show the banner so the user
+  // sees they're saving a graded card (not a raw one) BEFORE hitting save.
+  _syncFlipModalGradeBanner();
   modal.classList.add('open');
   // Show a brief toast hint
   showToast('Fill in your purchase cost and tap Save to track this card 📦');
+}
+
+// Read the currently-selected grader pill + grade on the lookup page and
+// (a) stash them on the modal for saveFlipEntry to persist, (b) toggle the
+// gold "Saving as PSA 10" banner inside the modal.
+function _syncFlipModalGradeBanner() {
+  const banner    = document.getElementById('mGradeBanner');
+  const labelEl   = document.getElementById('mGradeBannerLabel');
+  const modalBox  = document.querySelector('#flipModal .modal-box');
+  const graderKey = document.querySelector('#gradedPills .pill.sel')?.dataset?.val || 'no';
+  const gradeVal  = document.getElementById('gradeSelect')?.value || '';
+  if (graderKey && graderKey !== 'no' && gradeVal) {
+    const names = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
+    const label = `${names[graderKey] || graderKey.toUpperCase()} ${gradeVal}`;
+    if (labelEl) labelEl.textContent = label;
+    if (banner) banner.style.display = 'flex';
+    if (modalBox) {
+      modalBox.dataset.grader = graderKey;
+      modalBox.dataset.grade  = gradeVal;
+    }
+  } else {
+    if (banner) banner.style.display = 'none';
+    if (modalBox) {
+      delete modalBox.dataset.grader;
+      delete modalBox.dataset.grade;
+    }
+  }
 }
 
 function openAddFlip(mode) {
@@ -5756,12 +5797,20 @@ function openAddFlip(mode) {
     const price = getEffectivePrice();
     if (price) document.getElementById('mCurrentValue').value = price.toFixed(2);
   }
+  // Capture grader/grade on this entry path too (Portfolio 'Add' button).
+  if (mode === 'hold') _syncFlipModalGradeBanner();
   modal.classList.add('open');
 }
 
 function closeFlipModal(e) {
   // Only close when clicking the dark backdrop itself, not children
   if (e && !e.target.classList.contains('modal-overlay')) return;
+  // Reset the graded banner / dataset so a stale grade never leaks into the
+  // next open of the modal for a different (raw) card.
+  const banner   = document.getElementById('mGradeBanner');
+  const modalBox = document.querySelector('#flipModal .modal-box');
+  if (banner) banner.style.display = 'none';
+  if (modalBox) { delete modalBox.dataset.grader; delete modalBox.dataset.grade; }
   document.getElementById('flipModal').classList.remove('open');
   clearModal();
 }
@@ -5790,6 +5839,13 @@ function saveFlipEntry() {
     // Carry estimated grade if set/notes contains "Est." pattern
     const estGradeMatch = setName.match(/PSA\s*(\d+)\s*Est/i);
     const estGrade = estGradeMatch ? parseInt(estGradeMatch[1]) : null;
+    // Persist the confirmed grader + grade the user had selected when they
+    // hit "Add to Collection" — without this, the collection view shows the
+    // graded price ($405 PSA 10 Lucario) with no indication it's graded, so
+    // it's indistinguishable from a raw entry at the same price.
+    const modalBox   = document.querySelector('#flipModal .modal-box');
+    const savedGrader = modalBox?.dataset?.grader || '';
+    const savedGrade  = modalBox?.dataset?.grade || '';
     // Capture card image + number + tcgplayer.url from selectedCard so the
     // Collection view can render a thumbnail and route users straight to the
     // exact TCGplayer product page (via our Impact affiliate) later.
@@ -5807,6 +5863,8 @@ function saveFlipEntry() {
       img: cardImg,
       number: cardNum,
       tcgplayerUrl: cardTcgpUrl,
+      grader: savedGrader || null,
+      grade: savedGrade || null,
     });
     savePortData(port);
   } else {
