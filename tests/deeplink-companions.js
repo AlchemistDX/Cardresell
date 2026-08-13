@@ -94,6 +94,15 @@ check('Main lookup view passes number to buildTcgpUrl',      INDEX.includes("bui
 check('Collection modal passes number to buildTcgpUrl',      INDEX.includes("buildTcgpUrl(p.card || '', p.set || '', p.number || '')"));
 check('Scan-miss passes number to buildTcgpUrl',             INDEX.includes("buildTcgpUrl(name || '', setName || '', number || '')"));
 
+console.log('\n[Every card link now includes name + number 2026-08-13]');
+check('Platform queries share numTail suffix',               INDEX.includes("const numTail    = number ? ' ' + number : '';"));
+check('COMC search query includes card number',              INDEX.includes("encodeURIComponent(`${searchName}${numTail}`)"));
+check('Poshmark search query includes card number',          INDEX.includes("${setName ? ' ' + setName : ''}${numTail} ${gameTag}"));
+check('Fanatics search query includes card number',          INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));
+check('PWCC search query includes card number',              INDEX.includes("${setName ? ' ' + setName : ''}${numTail}`)"));
+check('JP EN-ref ebay/PC/sell all use jpRefNum',             INDEX.includes("const jpRefNum = card.number ? ' ' + card.number : '';"));
+check('Graded comps banner ebay query includes number',      INDEX.includes("${cardName}${cardNum} ${graderLabel} ${grade} pokemon card"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

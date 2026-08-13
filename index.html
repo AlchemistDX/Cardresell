@@ -4218,11 +4218,12 @@ function loadCardUI(card) {
   } else if (isJPCard) {
     // EN ref card in JP tab — still show JP links for the card name
     const rawName = card.name.replace(' (JP — use Override for JP price)', '').trim();
+    const jpRefNum = card.number ? ' ' + card.number : '';
     jpLinksPanel.style.display = 'block';
-    jpEbayLink.href = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(rawName + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`);
-    jpPCLink.href   = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(rawName + ' japanese')}&type=prices`;
+    jpEbayLink.href = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(rawName + jpRefNum + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`);
+    jpPCLink.href   = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(rawName + jpRefNum + ' japanese')}&type=prices`;
     if (jpEbaySellLink) {
-      jpEbaySellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(rawName + ' japanese pokemon')}`);
+      jpEbaySellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(rawName + jpRefNum + ' japanese pokemon')}`);
     }
   } else {
     jpLinksPanel.style.display = 'none';
@@ -4537,8 +4538,9 @@ async function syncGradeToPrintSelect() {
       // Still no data after fetch — show banner
       // No graded variant in API — show eBay comps banner
       const cardName = selectedCard?.name?.replace(/ \(JP.*?\)/,'').replace(/ \(EN.*?\)/,'') || '';
+      const cardNum  = selectedCard?.number ? ' ' + selectedCard.number : '';
       const graderLabel = graderNames[grader] || grader.toUpperCase();
-      const ebayQuery = encodeURIComponent(`${cardName} ${graderLabel} ${grade} pokemon card`);
+      const ebayQuery = encodeURIComponent(`${cardName}${cardNum} ${graderLabel} ${grade} pokemon card`);
       const ebayUrl = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${ebayQuery}&LH_Sold=1&LH_Complete=1&_sacat=183454`);
 
       if (banner) {
@@ -4767,10 +4769,15 @@ function updateSellLinks(card) {
   // 2025 Pokemon Black Bolt). Name + number lets eBay's presetNameSearchQuery
   // match to the correct pre-canned listing template every time.
   const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(searchName + (number ? ' ' + number : ''))}`;
-  const comcQ       = encodeURIComponent(searchName);
-  const poshQ       = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
-  const fanaticsQ   = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${isPokemon ? ' pokemon' : ''}`);
-  const pwccQ       = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}`);
+  // All platform search queries now include the card number for precise
+  // printing match (e.g. 'Mega Lucario EX 179/188'). Empty number is
+  // silently omitted so behavior for graded/singles-only sites like PWCC
+  // stays sane when scan metadata is missing.
+  const numTail    = number ? ' ' + number : '';
+  const comcQ      = encodeURIComponent(`${searchName}${numTail}`);
+  const poshQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail} ${gameTag}`);
+  const fanaticsQ  = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}${isPokemon ? ' pokemon' : ''}`);
+  const pwccQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}`);
   const isTCGGame   = isPokemon || isMagic || isYugioh || game === 'lorcana' || game === 'onepiece';
   const tcgpUrl     = isTCGGame ? buildTcgpUrl(searchName, setName, number) : '';
 
