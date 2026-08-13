@@ -4654,7 +4654,11 @@ function updateSellLinks(card) {
   const isMagic   = game === 'mtg';
   const isYugioh  = game === 'yugioh';
 
-  const searchName = rawName;
+  // Strip trailing card-number patterns aggressively — TPL sometimes glues
+  // number onto the name in formats the top regex doesn't catch (e.g.
+  // "Charizard 4/175", "Pikachu 172/165", "Mew 025/165"). Without this,
+  // appending `number` below double-pastes the number in the sell URL.
+  const searchName = rawName.replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
   const gameTag = isPokemon ? 'pokemon card' : isMagic ? 'mtg card' : isYugioh ? 'yugioh card' : 'trading card';
   const ebaycat = (isPokemon || isMagic || isYugioh) ? '183454' : '212';
 
@@ -6140,9 +6144,13 @@ function openCollectionCardDetail(entryId) {
   }
 
   // Build the eBay Sell link using the same helper as the row button.
+  // Strip any trailing number the card name already contains (e.g.
+  // "Charizard 4/175") so we don't double-paste the number when we
+  // append `num` below.
   const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
   const num = (p.number || numFromSet || '').replace(/^0+/, '');
-  const parts = [p.card || '', num].filter(Boolean).join(' ');
+  const cardNameNoNum = String(p.card || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
+  const parts = [cardNameNoNum, num].filter(Boolean).join(' ');
   const ebayRaw = parts
     ? `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(parts)}&_sacat=212&LH_Sold=1&LH_Complete=1`
     : 'https://www.ebay.com/';
@@ -7190,7 +7198,13 @@ function _renderScanMissPanel(pending) {
 
   // Build affiliate-tagged search URLs. Reuse existing builders so we
   // inherit EPN + Impact tracking without duplicating URL construction.
-  const ebayQ = encodeURIComponent([name, number, setName].filter(Boolean).join(' '));
+  //
+  // eBay: name + number only. Including set name over-constrains the query
+  // and Chaos Rising / Japanese-set names return zero sold listings.
+  // Also strip any trailing number the OCR/scanner already glued onto name
+  // (e.g. "Charizard 4/175") so we don't double-paste the number.
+  const nameNoNum = String(name || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
+  const ebayQ = encodeURIComponent([nameNoNum, number].filter(Boolean).join(' '));
   const ebaySearchUrl = (typeof buildEbayUrl === 'function')
     ? buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${ebayQ}&_sacat=183454&LH_Sold=1&LH_Complete=1`)
     : `https://www.ebay.com/sch/i.html?_nkw=${ebayQ}`;
