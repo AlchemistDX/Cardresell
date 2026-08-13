@@ -149,6 +149,18 @@ check('Save persists grader field on portfolio entry',         INDEX.includes("g
 check('Save persists grade field on portfolio entry',          INDEX.includes("grade: savedGrade || null"));
 check('Close resets grader dataset to prevent leak',           INDEX.includes("delete modalBox.dataset.grader; delete modalBox.dataset.grade;"));
 
+console.log('\n[Launch analytics 2026-08-13]');
+check('Vercel Insights script loaded',                          INDEX.includes("/_vercel/insights/script.js"));
+check('trackEvent helper defined',                              INDEX.includes("window.trackEvent = function trackEvent(name, props)"));
+check('trackEvent uses safe try/catch',                         INDEX.includes("analytics must never break the app"));
+check('search_zero_results event fires',                        INDEX.includes("'search_zero_results'"));
+check('search_results event fires',                             INDEX.includes("'search_results'"));
+check('collection_add event fires on single save',              INDEX.includes("'collection_add'"));
+check('bulk_scan_save event fires on bulk save',                INDEX.includes("'bulk_scan_save'"));
+check('checkout_attempt event fires on Pro monthly',            INDEX.includes("plan: 'pro_monthly'"));
+check('checkout_attempt event fires on Pro annual',             INDEX.includes("plan: 'pro_annual'"));
+check('checkout_attempt event fires on grade pack',             INDEX.includes("plan: 'grade_pack', tier"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

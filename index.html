@@ -1101,6 +1101,24 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       }
     });
   </script>
+  <!--
+    Vercel Web Analytics (2026-08-13) — launch prep. Loaded via the official
+    /_vercel/insights/script.js so it works with our existing Vercel deploy
+    without adding an npm dep. `window.va` becomes available and we call it
+    manually for the funnel events we care about (see va() helper below).
+  -->
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script>
+    // Safe wrapper: never throws if analytics is blocked (ad-blockers) or
+    // hasn't loaded yet. All CardResell funnel events go through this.
+    window.trackEvent = function trackEvent(name, props) {
+      try {
+        if (typeof window.va === 'function') {
+          window.va('event', { name, ...(props && typeof props === 'object' ? props : {}) });
+        }
+      } catch (e) { /* swallow — analytics must never break the app */ }
+    };
+  </script>
 </head>
 <body>
 <div class="wrap">
@@ -3339,10 +3357,17 @@ async function searchPokemonJP(q) {
   }
 
   if (!items.length) {
+    // Zero-result telemetry: this is one of the most valuable signals we can
+    // collect at launch. If a set/card keeps showing up as "no results", it
+    // tells us exactly which newer sets to seed manually vs. relying on
+    // PokemonTCG.io ingestion. Also tells us whether users are searching for
+    // things we simply don't cover (foreign, sports, custom).
+    window.trackEvent?.('search_zero_results', { game: activeGame || 'pokemon', q: (q || '').slice(0, 60) });
     dropList.innerHTML = '<div class="drop-empty">No results found. Try clicking the JP COMPS button above.</div>';
     return;
   }
 
+  window.trackEvent?.('search_results', { game: activeGame || 'pokemon', count: items.length });
   dropList.innerHTML = items.join('');
 
   attachDropHandlers(i => {
@@ -5867,6 +5892,11 @@ function saveFlipEntry() {
       grade: savedGrade || null,
     });
     savePortData(port);
+    window.trackEvent?.('collection_add', {
+      source: 'single',
+      graded: !!(savedGrader && savedGrade),
+      hasPrice: curVal > 0,
+    });
   } else {
     // Log flip
     const sellPrice = parseFloat(document.getElementById('mSellPrice').value) || 0;
@@ -9180,6 +9210,7 @@ async function _stripeCheckout(endpoint, payload, btnId, txtId, defaultTxt) {
 async function startProCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  window.trackEvent?.('checkout_attempt', { plan: 'pro_monthly' });
   _stripeCheckout('/api/stripe-checkout',
     { email: window.googleUser.email, userId: window.googleUser.sub },
     'pricingProBtn', 'pricingProBtnText', 'Get Pro — $9.99/mo');
@@ -9189,6 +9220,7 @@ async function startProCheckout() {
 async function startAnnualCheckout() {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  window.trackEvent?.('checkout_attempt', { plan: 'pro_annual' });
   _stripeCheckout('/api/stripe-annual-checkout',
     { googleSub: window.googleUser.sub, email: window.googleUser.email },
     'pricingAnnualBtn', 'pricingAnnualBtnText', 'Get Annual — $89.99/yr');
@@ -9202,6 +9234,7 @@ async function startGradeScanCheckout(tier) {
   // Wait for Firebase auth to resolve (handles tap-before-auth-ready case)
   await window._waitForAuth();
   if (!window.googleUser) { setTimeout(() => triggerGoogleSignIn(), 600); return; }
+  window.trackEvent?.('checkout_attempt', { plan: 'grade_pack', tier });
   const tierBtns = document.querySelectorAll('[onclick^="startGradeScanCheckout"]');
   tierBtns.forEach(b => { b.disabled = true; });
   const clickedBtn = document.querySelector(`[onclick="startGradeScanCheckout('${tier}')"]`);
@@ -10740,6 +10773,12 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     }
   });
   savePortData(port);
+  window.trackEvent?.('bulk_scan_save', {
+    added,
+    // If price fetch missed and we saved as "Price not fetched", capture that
+    // rate — it's the single best signal for how well bulk-scan pricing works.
+    withoutPrice: results.filter(r => !r.marketPrice).length,
+  });
   // Verify the write landed — if getUserKey returned an unscoped key (googleUser was
   // briefly null during the write), the data is orphaned and Collection won't show it.
   try {
