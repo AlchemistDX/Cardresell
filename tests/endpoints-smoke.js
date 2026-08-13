@@ -14,6 +14,8 @@ const cases = [
   ['/api/pro-status',                    'GET',  [200, 401]],
   ['/api/sports',                        'GET',  [200, 400, 404]],
   ['/api/scan-miss',                     'POST', [204, 400], { name: 'smoke-test', number: '0/0', setName: 'smoke', rarity: '' }],
+  ['/api/tcgp-resolve?url=' + encodeURIComponent('https://prices.pokemontcg.io/tcgplayer/xy1-1'), 'GET', [200, 404, 502]],
+  ['/api/tcgp-resolve?url=https://evil.example.com',                                              'GET', [400]],  // SSRF whitelist check
 
   // Auth-required endpoints — should 401 without token
   ['/api/stripe-checkout',               'POST', [401],       {}],

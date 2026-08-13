@@ -1620,6 +1620,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               <span id="gradedCompsLinkLabel">eBay sold →</span>
             </a>
+            <a id="gradedSellLink" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;font-weight:700;color:#000;background:var(--gold);text-decoration:none;padding:.25rem .55rem;border:1px solid var(--gold);border-radius:99px">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              <span>List on eBay</span>
+            </a>
           </div>
           <!-- Inline grading CTA removed — grading CTA lives only in #scanGradeCTA (post-scan overlay) -->
         </div>
@@ -1633,6 +1637,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <a id="jpPCLink" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:600;color:var(--text);text-decoration:none;padding:.4rem .5rem;border-radius:.4rem;transition:background .15s" onmouseover="this.style.background='rgba(0,0,0,.06)'" onmouseout="this.style.background='transparent'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             PriceCharting JP Search
+          </a>
+          <a id="jpEbaySellLink" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:700;color:#000;background:var(--gold);text-decoration:none;padding:.4rem .5rem;border-radius:.4rem;margin-top:.2rem">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            List JP Card on eBay
           </a>
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:.4rem;padding-left:.5rem">Set price via Override field below after checking comps</div>
         </div>
@@ -4196,16 +4204,26 @@ function loadCardUI(card) {
   if (gcb) gcb.style.display = 'none';
 
   // Show/hide JP links panel
+  const jpEbaySellLink = document.getElementById('jpEbaySellLink');
   if (isJPCard && card._jpEbayUrl) {
     jpLinksPanel.style.display = 'block';
     jpEbayLink.href = card._jpEbayUrl;
     jpPCLink.href   = card._jpPCUrl || '#';
+    // Companion sell-flow link — JP category (183454) so eBay routes correctly
+    if (jpEbaySellLink) {
+      const jpNameForSell = card.name.replace(' (JP — use Override for JP price)', '').trim();
+      const jpNum = card.number ? ` ${card.number}` : '';
+      jpEbaySellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(jpNameForSell + jpNum + ' japanese pokemon')}`);
+    }
   } else if (isJPCard) {
     // EN ref card in JP tab — still show JP links for the card name
     const rawName = card.name.replace(' (JP — use Override for JP price)', '').trim();
     jpLinksPanel.style.display = 'block';
     jpEbayLink.href = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(rawName + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`);
     jpPCLink.href   = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(rawName + ' japanese')}&type=prices`;
+    if (jpEbaySellLink) {
+      jpEbaySellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(rawName + ' japanese pokemon')}`);
+    }
   } else {
     jpLinksPanel.style.display = 'none';
   }
@@ -4539,6 +4557,17 @@ async function syncGradeToPrintSelect() {
         }
         if (link) link.href = ebayUrl;
 
+        // Companion "List on eBay" affiliate link — name+number+grade, no set
+        // (see 2026-08-12 fixes: sellers don't type set names). Uses the graded
+        // sell-flow so sellers land directly in eBay's listing template with
+        // the card pre-filled.
+        const sellLink = document.getElementById('gradedSellLink');
+        if (sellLink) {
+          const scNum = (selectedCard && selectedCard.number) ? ` ${selectedCard.number}` : '';
+          const sellQuery = encodeURIComponent(`${cardName2}${scNum} ${graderLabel2} ${grade}`.trim());
+          sellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${sellQuery}`);
+        }
+
         // TCGPriceLookup card page deep link
         const tplCardUrl = `https://tcgpricelookup.com/cards/pokemon/${selectedCard?.id || encodeURIComponent(cardName.toLowerCase().replace(/ /g,'-'))}#graded`;
         if (tplLink) tplLink.href = tplCardUrl;
@@ -4599,6 +4628,63 @@ function buildTcgpUrl(cardName, setName) {
 // affiliate redirect. Use this for buy-side links on card detail pages.
 function buildTcgpProductUrl(productId) {
   return wrapTcgpAffiliate(`https://www.tcgplayer.com/product/${encodeURIComponent(productId)}`);
+}
+
+// Extracts the TCGplayer product ID from PokemonTCG.io's `card.tcgplayer.url`
+// field. That URL is a redirect (prices.pokemontcg.io/tcgplayer/<setId>-<num>)
+// that lands on tcgplayer.com/product/<id>, so we can't use it directly —
+// it routes through Scrydex's affiliate ID, not ours. We resolve to product ID
+// at build time via a lightweight redirect probe cache.
+// Result: `{productId}` or empty string.
+async function _tcgpProductIdFromUrl(pricesUrl) {
+  if (!pricesUrl || !pricesUrl.includes('prices.pokemontcg.io/tcgplayer/')) return '';
+  const cacheKey = 'tcgpProductId:' + pricesUrl;
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) return cached;
+  } catch(e) {}
+  try {
+    // Fetch with redirect=manual would be ideal, but browsers won't expose
+    // the Location header on CORS. Instead we HEAD the URL and read from
+    // response.url which is the final resolved URL after redirects.
+    const res = await fetch(pricesUrl, { method: 'HEAD', mode: 'no-cors' }).catch(() => null);
+    // With mode:'no-cors' we can't read anything. Fall through to server proxy.
+  } catch(e) {}
+  // Best-effort: fire a lightweight server-side resolver. Non-blocking
+  // fallback — UI stays functional even if this returns nothing.
+  try {
+    const r = await fetch(`/api/tcgp-resolve?url=${encodeURIComponent(pricesUrl)}`, { cache: 'force-cache' });
+    if (r.ok) {
+      const j = await r.json().catch(() => ({}));
+      const id = String(j.productId || '');
+      if (id) {
+        try { sessionStorage.setItem(cacheKey, id); } catch(e) {}
+        return id;
+      }
+    }
+  } catch(e) {}
+  return '';
+}
+
+// Preferred TCGplayer link builder — lands users on the exact product page
+// (one tap from "Sell Yours") when we have a product ID, otherwise falls
+// back to a name+set search. Product ID is discovered from the
+// PokemonTCG.io tcgplayer.url field via `/api/tcgp-resolve`.
+// Returns a Promise<string> because product-ID resolution may need a network
+// round-trip on first look (cached in sessionStorage after that).
+async function buildTcgpSmart(cardOrName, setName) {
+  // Accept either (card object) or (name, setName) for backward compatibility
+  if (typeof cardOrName === 'string') {
+    return buildTcgpUrl(cardOrName, setName);
+  }
+  const card = cardOrName || {};
+  const tcgpUrl = card.tcgplayer?.url || '';
+  if (tcgpUrl) {
+    const pid = await _tcgpProductIdFromUrl(tcgpUrl);
+    if (pid) return buildTcgpProductUrl(pid);
+  }
+  // Fallback: name+set search
+  return buildTcgpUrl(card.name || '', card.setName || card.set?.name || '');
 }
 
 // Wraps a BCW Supplies URL. When approved, cfg.link_url is expected to be
@@ -4687,6 +4773,18 @@ function updateSellLinks(card) {
     fanatics:  `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
     pwcc:      `https://www.pwccmarketplace.com/search?query=${pwccQ}`
   };
+  // Upgrade TCGplayer URL to product-page deeplink if we have a card object.
+  // This routes users to the EXACT product page where they tap "Sell Yours"
+  // — much better UX than dumping them on a search-results grid.
+  if (isTCGGame && card && card.tcgplayer?.url && typeof buildTcgpSmart === 'function') {
+    buildTcgpSmart(card).then(url => {
+      if (url) {
+        window._platSellUrls.tcgplayer = url;
+        const slEl = document.getElementById('slTcgpSell');
+        if (slEl && slEl.style.display !== 'none') slEl.href = url;
+      }
+    }).catch(() => {});
+  }
   // Show TCGPlayer sell button for card games (MTG + YGO primarily)
   const slTcgpSellEl = document.getElementById('slTcgpSell');
   if (slTcgpSellEl) {
@@ -5467,10 +5565,12 @@ function saveFlipEntry() {
     // Carry estimated grade if set/notes contains "Est." pattern
     const estGradeMatch = setName.match(/PSA\s*(\d+)\s*Est/i);
     const estGrade = estGradeMatch ? parseInt(estGradeMatch[1]) : null;
-    // Capture card image + number from selectedCard so the Collection view can
-    // render a thumbnail and a working "Sell on eBay" search link per row.
+    // Capture card image + number + tcgplayer.url from selectedCard so the
+    // Collection view can render a thumbnail and route users straight to the
+    // exact TCGplayer product page (via our Impact affiliate) later.
     const cardImg = (selectedCard && (selectedCard.images?.small || selectedCard.images?.large)) || '';
     const cardNum = (selectedCard && selectedCard.number) || '';
+    const cardTcgpUrl = (selectedCard && selectedCard.tcgplayer?.url) || '';
     port.push({
       id: Date.now(),
       card: cardName,
@@ -5481,6 +5581,7 @@ function saveFlipEntry() {
       estGrade,
       img: cardImg,
       number: cardNum,
+      tcgplayerUrl: cardTcgpUrl,
     });
     savePortData(port);
   } else {
@@ -6171,15 +6272,24 @@ function openCollectionCardDetail(entryId) {
   const sellBtn = document.getElementById('ccmSellBtn');
   if (sellBtn) sellBtn.href = ebayUrl;
 
-  // TCGplayer: send them to the product listing page via our Impact affiliate
-  // link. TCGplayer doesn't have a public sell-flow deeplink, but landing on
-  // the product page gives sellers the "List this card" CTA there, and any
-  // subsequent action on TCGplayer within the affiliate cookie window pays.
-  const tcgUrl = (typeof buildTcgpUrl === 'function')
-    ? buildTcgpUrl(p.card || '', p.set || '')
-    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(sellQuery)}&view=grid`;
+  // TCGplayer: send them to the exact product page via our Impact affiliate
+  // link. TCGplayer has no public sell-flow deeplink, so we land users on
+  // the product page where the "Sell Yours" CTA lives one tap away. If we
+  // stored the PokemonTCG.io tcgplayer.url on the collection entry, we
+  // resolve it to a product ID so users skip the search step entirely.
   const lookupBtn = document.getElementById('ccmLookupBtn');
-  if (lookupBtn) lookupBtn.href = tcgUrl;
+  if (lookupBtn) {
+    // Set a search-based URL immediately so the button is never blank/broken
+    lookupBtn.href = (typeof buildTcgpUrl === 'function')
+      ? buildTcgpUrl(p.card || '', p.set || '')
+      : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(sellQuery)}&view=grid`;
+    // Then upgrade to product-page deeplink if we can resolve the product ID
+    if (p.tcgplayerUrl && typeof buildTcgpSmart === 'function') {
+      buildTcgpSmart({ tcgplayer: { url: p.tcgplayerUrl }, name: p.card, setName: p.set })
+        .then(url => { if (url && lookupBtn) lookupBtn.href = url; })
+        .catch(() => {});
+    }
+  }
 
   document.getElementById('collectionCardModal').classList.add('open');
 }
@@ -7237,6 +7347,12 @@ function _renderScanMissPanel(pending) {
   const ebaySearchUrl = (typeof buildEbayUrl === 'function')
     ? buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${ebayQ}&_sacat=183454&LH_Sold=1&LH_Complete=1`)
     : `https://www.ebay.com/sch/i.html?_nkw=${ebayQ}`;
+  // Companion sell-flow link — user landed here because we couldn't ID the
+  // card. If they've researched and want to list anyway, one tap into eBay's
+  // sell template with the query pre-filled.
+  const ebaySellUrl = (typeof buildEbayUrl === 'function')
+    ? buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQ}`)
+    : `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQ}`;
   const tcgSearchUrl = (typeof buildTcgpUrl === 'function')
     ? buildTcgpUrl(name || '', setName || '')
     : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent([name, setName].filter(Boolean).join(' '))}`;
@@ -7274,6 +7390,7 @@ function _renderScanMissPanel(pending) {
     </div>
     <div style="display:flex;flex-direction:column;gap:.5rem">
       <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
+      <a href="${esc(ebaySellUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem 1rem;background:transparent;color:var(--gold,#f2c14e);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.78rem;font-weight:700;text-decoration:none">List on eBay →</a>
       <a href="${esc(tcgSearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search on TCGplayer →</a>
       <button type="button" onclick="_scanMissAdjustName()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:transparent;color:var(--text,#fff);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.82rem;font-weight:600;cursor:pointer">Adjust name and search again</button>
     </div>

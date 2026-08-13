@@ -27,7 +27,7 @@ echo "  CardResell regression suite"
 echo "════════════════════════════════════════════════════"
 
 echo ""
-echo "▶ [1/4] Syntax check (all inline <script> blocks)"
+echo "▶ [1/5] Syntax check (all inline <script> blocks)"
 if node "$ROOT/tests/syntax-check.js"; then
   echo "  passed"
 else
@@ -35,7 +35,7 @@ else
 fi
 
 echo ""
-echo "▶ [2/4] Auth stack integrity"
+echo "▶ [2/5] Auth stack integrity"
 if node "$ROOT/tests/auth-integrity.js"; then
   :
 else
@@ -43,8 +43,16 @@ else
 fi
 
 echo ""
-echo "▶ [3/4] Scan-miss regression checks"
+echo "▶ [3/5] Scan-miss regression checks"
 if node "$ROOT/tests/scan-miss.js"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [4/5] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
+if node "$ROOT/tests/deeplink-companions.js"; then
   :
 else
   FAIL=1
@@ -52,7 +60,7 @@ fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [4/4] Prod endpoint smoke ($BASE)"
+  echo "▶ [5/5] Prod endpoint smoke ($BASE)"
   if node "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else
@@ -60,7 +68,7 @@ if [[ "$LOCAL_ONLY" == "0" ]]; then
   fi
 else
   echo ""
-  echo "▶ [4/4] Prod endpoint smoke — SKIPPED (--local)"
+  echo "▶ [5/5] Prod endpoint smoke — SKIPPED (--local)"
 fi
 
 echo ""
