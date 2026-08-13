@@ -7,6 +7,7 @@
   <meta name="description" content="Search any Pokémon, Magic, Yu-Gi-Oh!, sports, or TCG card, get live market value, and instantly see which platform pays you the most after all 2026 fees." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&family=DM+Mono:wght@400;500&display=swap" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
 /* ─── SETTINGS PANEL ─── */
@@ -3186,7 +3187,7 @@ async function searchPokemon(q) {
     const num = c.number ? `#${c.number}` : '';
     const rarity = c.rarity || '';
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
+      ${img ? `<img class="drop-thumb" src="${img}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🃏</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(setName)}${num ? ' · ' + num : ''}${rarity ? ' · ' + esc(rarity) : ''}</div>
@@ -3295,7 +3296,7 @@ async function searchPokemonJP(q) {
       const setName = c.set?.name || '';
       const num = c.number ? `#${c.number}` : '';
       items.push(`<div class="drop-item" data-idx="${idx}" role="option">
-        ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🏃</div>`}
+        ${img ? `<img class="drop-thumb" src="${img}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🏃</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)} <span style="font-size:.7rem;color:var(--text-muted)">[EN ref]</span></div>
           <div class="drop-meta">${esc(setName)}${num ? ' · ' + num : ''} · <em>English version — use JP COMPS for JP pricing</em></div>
@@ -3415,7 +3416,7 @@ async function searchMTG(q) {
     const bestPrice = usd || usdFoil;
     const rarity = c.rarity ? c.rarity.charAt(0).toUpperCase() + c.rarity.slice(1) : '';
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🧙</div>`}
+      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🧙</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(c.set_name || '')} · ${esc(rarity)}</div>
@@ -3475,7 +3476,7 @@ async function searchLorcana(q) {
       window._searchCards[i] = { _tpl: c, game: 'lorcana' };
       const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
       return `<div class="drop-item" data-idx="${i}" role="option">
-        ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
+        ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
           <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
@@ -3521,7 +3522,7 @@ async function searchLorcana(q) {
     window._searchCards[i] = { _raw: c, game: 'lorcana' };
     const img = c.Image || '';
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${img ? `<img class="drop-thumb" src="${img}" loading="eager" alt="${esc(c.Name||'')}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
+      ${img ? `<img class="drop-thumb" src="${img}" loading="lazy" decoding="async" alt="${esc(c.Name||'')}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.Name||'')}</div>
         <div class="drop-meta">${esc(c.Set_Name||'')}${c.Rarity?' · '+esc(c.Rarity):''}</div>
@@ -3556,7 +3557,7 @@ async function searchOnePiece(q) {
       window._searchCards[i] = { _tpl: c, game: 'onepiece' };
       const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
       return `<div class="drop-item" data-idx="${i}" role="option">
-        ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">⚓</div>`}
+        ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">⚓</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
           <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
@@ -3597,7 +3598,7 @@ async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
     window._searchCards[i] = { _tpl: c, game: gameSlug };
     const nmPrice = c.prices?.raw?.near_mint?.tcgplayer?.market ?? null;
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">${emoji}</div>`}
+      ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">${emoji}</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
@@ -3655,7 +3656,7 @@ async function searchYugioh(q) {
     const imgSrc = c.card_images?.[0]?.image_url_small || '';
     const tcgPrice = c.card_prices?.[0]?.tcgplayer_price ? parseFloat(c.card_prices[0].tcgplayer_price) : null;
     return `<div class="drop-item" data-idx="${i}" role="option">
-      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="eager" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🐉</div>`}
+      ${imgSrc ? `<img class="drop-thumb" src="${imgSrc}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🐉</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
         <div class="drop-meta">${esc(c.card_sets?.[0]?.set_name || c.type || '')}${c.card_sets?.[0]?.set_rarity ? ' · ' + esc(c.card_sets[0].set_rarity) : (c.race ? ' · ' + esc(c.race) : '')}</div>
