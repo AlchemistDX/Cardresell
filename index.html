@@ -3891,9 +3891,15 @@ async function fetchAndApplySoldComps(forceRefresh) {
     const avg = data.avg;
     const cnt = data.count;
 
-    // Auto-populate override with median if user hasn't typed one
+    // Auto-populate override with median if user hasn't typed one.
+    // Guard: only auto-populate when the current grader pill is Raw. If the
+    // user has already toggled to PSA/BGS/CGC/etc while this async fetch was
+    // in flight, setting the override would block the graded price display.
     const ovField = document.getElementById('priceOverride');
-    if (ovField && (!ovField.value || forceRefresh)) {
+    const currentGraderPill = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
+    const gradedRequest     = !!grade; // this fetch was for a specific grade
+    const isRawContext      = currentGraderPill === 'no' && !gradedRequest;
+    if (ovField && isRawContext && (!ovField.value || forceRefresh)) {
       ovField.value = med.toFixed(2);
       calc();
     }
@@ -4498,7 +4504,16 @@ function rebuildPrintSelect(variants) {
   });
 }
 
+// Generation counter guards against stale async syncGradeToPrintSelect calls.
+// Scenario the counter fixes: user clicks PSA → async TPL fetch starts → user
+// clicks Raw before fetch finishes → Raw path completes synchronously → stale
+// PSA fetch resumes and overwrites printSelect back to a graded key, so the
+// Raw pill visually stays selected but the price section keeps showing PSA.
+// Every call bumps _syncGen; after each await we bail if a newer call started.
+window._syncGen = 0;
+
 async function syncGradeToPrintSelect() {
+  const myGen = ++window._syncGen;
   const grader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const grade  = document.getElementById('gradeSelect').value;
   const banner = document.getElementById('gradedCompsBanner');
@@ -4572,6 +4587,9 @@ async function syncGradeToPrintSelect() {
       if (selectedCard?.tplId) {
         // Has TPL ID — fetch by ID for most accurate result
         const fullCard = await fetchTPLCardById(selectedCard.tplId, selectedCard.tplGameSlug);
+        // Bail if a newer sync started (e.g. user clicked Raw) — we don't want
+        // to overwrite the current UI state with our stale graded data.
+        if (myGen !== window._syncGen) return;
         if (fullCard) {
           gradedVariants = fullCard.priceVariants.filter(v => /^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key));
         }
@@ -4582,6 +4600,7 @@ async function syncGradeToPrintSelect() {
           selectedCard.number,
           selectedCard.game === 'pokemon' ? 'pokemon' : selectedCard.tplGameSlug || 'pokemon'
         );
+        if (myGen !== window._syncGen) return; // stale — bail
       }
 
       if (gradedVariants && gradedVariants.length) {
@@ -4654,6 +4673,9 @@ async function syncGradeToPrintSelect() {
       // Keep printSelect on whatever raw variant it had
     }
   }
+  // Final stale-check guard: don't touch the price display if a newer
+  // syncGradeToPrintSelect has already run to completion.
+  if (myGen !== window._syncGen) return;
   updatePriceFromPrinting();
 }
 

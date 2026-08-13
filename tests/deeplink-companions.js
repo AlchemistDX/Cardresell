@@ -111,6 +111,13 @@ check('Image gets fetchPriority=high + eager loading',       INDEX.includes("car
 check('Preconnect to pokemontcg.io image CDN',               INDEX.includes('href="https://images.pokemontcg.io"'));
 check('Client-side timeout on ebay-sold fetch',              INDEX.includes("setTimeout(() => _clientController.abort(), 10000)"));
 
+console.log('\n[Raw pill race guard 2026-08-13]');
+check('syncGradeToPrintSelect bumps generation counter',     INDEX.includes('const myGen = ++window._syncGen'));
+check('Stale-check bail after fetchTPLCardById',             INDEX.includes('if (myGen !== window._syncGen) return;\n        if (fullCard)'));
+check('Stale-check bail after fetchTPLGradedByNameNumber',   INDEX.includes('if (myGen !== window._syncGen) return; // stale'));
+check('Final stale-check guard before updatePriceFromPrinting', INDEX.includes("if (myGen !== window._syncGen) return;\n  updatePriceFromPrinting()"));
+check('fetchAndApplySoldComps skips override when grader != Raw', INDEX.includes("const isRawContext      = currentGraderPill === 'no' && !gradedRequest"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
