@@ -2489,14 +2489,13 @@ window.AFFILIATE = {
     customid:'cardsell'
   },
 
-  // TCGPlayer via Impact.com — application PENDING (Jul 2, 2026)
-  // Once approved, Impact gives you a Media Partner ID + Ad ID.
-  // Deep-link format: https://tcgplayer.pxf.io/c/<PARTNER_ID>/<CAMPAIGN_ID>/<AD_ID>?u=<encodeURIComponent(target_url)>
+  // TCGPlayer via Impact.com — APPROVED Jul 11, 2026 · 3.5% Order Received
+  // Deep-link format: https://partner.tcgplayer.com/c/<PARTNER_ID>/<CAMPAIGN_ID>/<AD_ID>?u=<encodeURIComponent(target_url)>
   tcgplayer: {
-    enabled:     false,
-    partner_id:  '',   // Impact Media Partner ID (numeric)
-    campaign_id: '',   // Impact campaign ID for TCGPlayer
-    ad_id:       '',   // Impact ad/creative ID (usually a single number)
+    enabled:     true,
+    partner_id:  '7445683',
+    campaign_id: '1780961',
+    ad_id:       '21018',
     subid:       'cardresell'  // for reporting — safe to leave as-is
   },
 
@@ -4570,19 +4569,20 @@ function buildEbayUrl(url) {
   const sep = url.includes('?') ? '&' : '?';
   const tool = cfg.toolid   || '10001';
   const cust = cfg.customid || 'cardsell';
-  return `${url}${sep}campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&customid=${encodeURIComponent(cust)}`;
+  // Modern eBay Partner Network format — mkcid=1 required for commission tracking
+  return `${url}${sep}mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&mkevt=1&customid=${encodeURIComponent(cust)}`;
 }
 
 // Wraps a TCGPlayer target URL through Impact's affiliate redirect (when approved).
 // Impact.com deep-link format:
-//   https://tcgplayer.pxf.io/c/<partner_id>/<campaign_id>/<ad_id>?subId1=<subid>&u=<encoded_target>
+//   https://partner.tcgplayer.com/c/<partner_id>/<campaign_id>/<ad_id>?subId1=<subid>&u=<encoded_target>
 // When TCGPlayer approval is not yet in, returns the raw target URL.
 function wrapTcgpAffiliate(targetUrl) {
   const cfg = _aff().tcgplayer || {};
   if (!cfg.enabled || !cfg.partner_id || !cfg.campaign_id || !cfg.ad_id) return targetUrl;
   const u  = encodeURIComponent(targetUrl);
   const s  = encodeURIComponent(cfg.subid || 'cardresell');
-  return `https://tcgplayer.pxf.io/c/${cfg.partner_id}/${cfg.campaign_id}/${cfg.ad_id}?subId1=${s}&u=${u}`;
+  return `https://partner.tcgplayer.com/c/${cfg.partner_id}/${cfg.campaign_id}/${cfg.ad_id}?subId1=${s}&u=${u}`;
 }
 
 // Builds a TCGPlayer search URL for a card, wrapped through the affiliate
