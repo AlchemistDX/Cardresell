@@ -4622,8 +4622,13 @@ function wrapTcgpAffiliate(targetUrl) {
 // Builds a TCGPlayer search URL for a card, wrapped through the affiliate
 // redirect if TCGPlayer is enabled. Same signature as before — safe to call
 // from every existing site.
-function buildTcgpUrl(cardName, setName) {
-  const q = encodeURIComponent(cardName + (setName ? ' ' + setName : ''));
+// cardNumber is optional — when provided we prepend it (e.g. "179 Mega Lucario ex Mega Evolution")
+// which TCGplayer treats as a phrase-ish search and returns exact printing first.
+// We strip trailing /setsize ("179/188" → "179") so the query stays tight.
+function buildTcgpUrl(cardName, setName, cardNumber) {
+  const num = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
+  const parts = [cardName || '', setName || '', num].filter(Boolean);
+  const q = encodeURIComponent(parts.join(' '));
   const base = `https://www.tcgplayer.com/search/all/product?q=${q}&view=grid`;
   return wrapTcgpAffiliate(base);
 }
@@ -4687,8 +4692,9 @@ async function buildTcgpSmart(cardOrName, setName) {
     const pid = await _tcgpProductIdFromUrl(tcgpUrl);
     if (pid) return buildTcgpProductUrl(pid);
   }
-  // Fallback: name+set search
-  return buildTcgpUrl(card.name || '', card.setName || card.set?.name || '');
+  // Fallback: name+set+number search (number is the strongest disambiguator for
+  // printings that share a name across sets — e.g. Mega Lucario ex #179 vs #77).
+  return buildTcgpUrl(card.name || '', card.setName || card.set?.name || '', card.number || '');
 }
 
 // Wraps a BCW Supplies URL. When approved, cfg.link_url is expected to be
@@ -4766,7 +4772,7 @@ function updateSellLinks(card) {
   const fanaticsQ   = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${isPokemon ? ' pokemon' : ''}`);
   const pwccQ       = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}`);
   const isTCGGame   = isPokemon || isMagic || isYugioh || game === 'lorcana' || game === 'onepiece';
-  const tcgpUrl     = isTCGGame ? buildTcgpUrl(searchName, setName) : '';
+  const tcgpUrl     = isTCGGame ? buildTcgpUrl(searchName, setName, number) : '';
 
   // Store URLs globally — calc() reads these to make cards clickable
   window._platSellUrls = {
@@ -6395,7 +6401,7 @@ function openCollectionCardDetail(entryId) {
   if (lookupBtn) {
     // Set a search-based URL immediately so the button is never blank/broken
     lookupBtn.href = (typeof buildTcgpUrl === 'function')
-      ? buildTcgpUrl(p.card || '', p.set || '')
+      ? buildTcgpUrl(p.card || '', p.set || '', p.number || '')
       : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(sellQuery)}&view=grid`;
     // Then upgrade to product-page deeplink if we can resolve the product ID
     if (p.tcgplayerUrl && typeof buildTcgpSmart === 'function') {
@@ -7612,8 +7618,8 @@ function _renderScanMissPanel(pending) {
     ? buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQ}`)
     : `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQ}`;
   const tcgSearchUrl = (typeof buildTcgpUrl === 'function')
-    ? buildTcgpUrl(name || '', setName || '')
-    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent([name, setName].filter(Boolean).join(' '))}`;
+    ? buildTcgpUrl(name || '', setName || '', number || '')
+    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent([name, setName, number].filter(Boolean).join(' '))}`;
 
   // Remove any previous scan-miss panel
   const prev = document.getElementById('scanMissPanel');

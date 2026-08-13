@@ -86,6 +86,14 @@ check('Number-only fallback query exists',                   INDEX.includes("cle
 check('nameMatches guard prevents wrong-name number collision', INDEX.includes('const nameMatches = (c) =>'));
 check('New match reason exact-number+name',                  INDEX.includes("matchReason = 'exact-number+name'"));
 
+console.log('\n[TCGplayer search now includes card number 2026-08-13]');
+check('buildTcgpUrl signature accepts cardNumber',           /function buildTcgpUrl\(cardName, setName, cardNumber\)/.test(INDEX));
+check('buildTcgpUrl strips /setsize from number',            INDEX.includes("String(cardNumber).replace(/\\/.*$/, '').trim()"));
+check('buildTcgpSmart passes card.number through',           INDEX.includes("buildTcgpUrl(card.name || '', card.setName || card.set?.name || '', card.number || '')"));
+check('Main lookup view passes number to buildTcgpUrl',      INDEX.includes("buildTcgpUrl(searchName, setName, number)"));
+check('Collection modal passes number to buildTcgpUrl',      INDEX.includes("buildTcgpUrl(p.card || '', p.set || '', p.number || '')"));
+check('Scan-miss passes number to buildTcgpUrl',             INDEX.includes("buildTcgpUrl(name || '', setName || '', number || '')"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
