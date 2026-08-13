@@ -4663,7 +4663,14 @@ function updateSellLinks(card) {
   const ebaycat = (isPokemon || isMagic || isYugioh) ? '183454' : '212';
 
   // Build per-platform sell URLs
-  const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(searchName + (setName ? ' ' + setName : '') + (number ? ' ' + number : ''))}`;
+  //
+  // eBay sell/listing: drop setName from the seed query. Same reason we
+  // dropped it from the scan-miss search — "Kyurem EX 165/086 BW Black Star
+  // Promos" returned 0 matches on eBay because our set metadata (Black Bolt)
+  // doesn't match how sellers spell it (BW Black Star Promos, or just
+  // 2025 Pokemon Black Bolt). Name + number lets eBay's presetNameSearchQuery
+  // match to the correct pre-canned listing template every time.
+  const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(searchName + (number ? ' ' + number : ''))}`;
   const comcQ       = encodeURIComponent(searchName);
   const poshQ       = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''} ${gameTag}`);
   const fanaticsQ   = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${isPokemon ? ' pokemon' : ''}`);
@@ -4691,8 +4698,10 @@ function updateSellLinks(card) {
     }
   }
 
-  // Also keep eBay buy/comps link alive for the graded comps banner
-  const ebaySoldQ = encodeURIComponent(`${searchName}${number ? ' ' + number : ''}${setName ? ' ' + setName : ''} ${gameTag}`);
+  // Also keep eBay buy/comps link alive for the graded comps banner.
+  // Drop setName here too — sellers rarely spell the set the way our
+  // metadata does, and adding it drives result counts to 0.
+  const ebaySoldQ = encodeURIComponent(`${searchName}${number ? ' ' + number : ''} ${gameTag}`);
   const ebayBuyRaw = `https://www.ebay.com/sch/i.html?_nkw=${ebaySoldQ}&_sacat=${ebaycat}&LH_Sold=1&LH_Complete=1`;
   const slEbayBuy = document.getElementById('slEbayBuy');
   if (slEbayBuy) slEbayBuy.href = buildEbayUrl(ebayBuyRaw);
@@ -7180,6 +7189,19 @@ async function _loadScannedCardExact(pending) {
     return;
   }
   // New behavior (feature flag ON, default)
+  // Enrich pending.number from any name-matched card we did fetch — the OCR
+  // often reads only the visible portion (e.g. "165" instead of "165/086" on
+  // Special Illustration Rares). Grabbing the full number from PokemonTCG.io
+  // makes eBay/TCGplayer search 100% more precise.
+  try {
+    if (typeof cards !== 'undefined' && Array.isArray(cards) && cards.length > 0) {
+      const cn = pending?.number || '';
+      if (cn && !cn.includes('/')) {
+        const hit = cards.find(c => (c.number || '').split('/')[0] === cn);
+        if (hit && hit.number) pending = { ...pending, number: hit.number };
+      }
+    }
+  } catch(e) { /* enrichment is best-effort */ }
   _renderScanMissPanel(pending);
   _logScanMiss(pending);
 }
