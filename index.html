@@ -7318,11 +7318,29 @@ async function _loadScannedCardExact(pending) {
     // Try multiple query strategies in order, stop at first that returns results.
     // PokemonTCG.io query syntax: field:value — NO encodeURIComponent on the value itself.
     // The whole q= param gets encodeURIComponent once below.
-    const firstWord = cleanName.split(/\s+/)[0]; // e.g. "Lillie" from "Lillie's Clefairy GX"
+    //
+    // PokemonTCG.io reliably returns 500 on quoted multi-word names (e.g.
+    // name:"Mega Lucario EX") AND on `firstWord* number:N` when firstWord
+    // is a generic prefix like "Mega". Workaround: extract the "identifying"
+    // word (skip Mega/Dark/Radiant/Shining/etc.) and use IT as the wildcard,
+    // paired with the number when we have one. This is far more selective
+    // ("Lucario* number:179" returns exactly 1 card).
+    const words = cleanName.split(/\s+/).filter(Boolean);
+    const PREFIXES = new Set(['mega','dark','radiant','shining','team','light','ex','gx','v','vmax','vstar']);
+    // Pick the first "identifying" word: the first non-prefix word, else fall back to word[0]
+    const identifyingWord = words.find(w => !PREFIXES.has(w.toLowerCase())) || words[0] || '';
+    const firstWord = words[0] || '';
     const queries = [
-      `name:"${cleanName}"`,            // exact phrase (works for simple names)
-      `name:${firstWord}* number:${cleanNumber}`, // first-word wildcard + number filter
-      `name:${firstWord}*`,             // broad first-word wildcard, filter client-side
+      // Best signal: identifying-word wildcard + number filter — very selective
+      cleanNumber && identifyingWord ? `name:${identifyingWord}* number:${cleanNumber}` : '',
+      // Same but with first word (fallback if identifyingWord === firstWord)
+      cleanNumber && firstWord && firstWord !== identifyingWord ? `name:${firstWord}* number:${cleanNumber}` : '',
+      // Number-only when name queries fail — safe because we filter client-side
+      cleanNumber ? `number:${cleanNumber}` : '',
+      // Broad identifying-word wildcard (client-side filter picks best)
+      identifyingWord ? `name:${identifyingWord}*` : '',
+      // Original quoted-name query LAST (most likely to 500 on multi-word names)
+      `name:"${cleanName}"`,
     ].filter(q => q.trim());
 
     let cards = [];
@@ -7336,19 +7354,36 @@ async function _loadScannedCardExact(pending) {
       }
     }
 
-    // Pick the best match: prefer exact number match, then rarity+setName match.
+    // Pick the best match: prefer exact number+name match, then rarity+setName match.
     // We track HOW we matched so we can enforce a confidence threshold — a raw
     // cards[0] fallthrough with no number/rarity/set signal is almost always
     // wrong (e.g. "Charizard" returns 250 candidates from Base Set to today).
+    //
+    // IMPORTANT: when our fallback query was `number:N` alone, `cards` contains
+    // many DIFFERENT cards that share the number. `c.number === cleanNumber`
+    // would return the first one (usually wrong). So we also check that the
+    // card's name contains the identifying word from the scanned name.
+    const idWordLower = (identifyingWord || '').toLowerCase();
+    const nameMatches = (c) => {
+      if (!idWordLower) return true;
+      return (c.name || '').toLowerCase().includes(idWordLower);
+    };
     let match = null;
     let matchReason = null;
     if (cleanNumber) {
-      match = cards.find(c => c.number === cleanNumber);
-      if (match) matchReason = 'exact-number';
+      match = cards.find(c => c.number === cleanNumber && nameMatches(c));
+      if (match) matchReason = 'exact-number+name';
     }
     if (!match && cleanNumber) {
-      match = cards.find(c => c.number?.split('/')[0] === cleanNumber);
-      if (match) matchReason = 'number-before-slash';
+      match = cards.find(c => c.number?.split('/')[0] === cleanNumber && nameMatches(c));
+      if (match) matchReason = 'number-before-slash+name';
+    }
+    // Only fall through to number-only match (no name filter) if we STILL
+    // have nothing — preserves old behavior for name-first queries where
+    // name filtering is redundant.
+    if (!match && cleanNumber) {
+      match = cards.find(c => c.number === cleanNumber);
+      if (match) matchReason = 'exact-number-only';
     }
     if (!match && rarity && setName) {
       const rl = rarity.toLowerCase();

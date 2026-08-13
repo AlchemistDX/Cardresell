@@ -79,6 +79,13 @@ check('Scan-miss uses friendly "Live pricing unavailable"',  INDEX.includes('Liv
 check('Scan-miss has Add to Collection CTA',                 INDEX.includes('_scanMissAddToCollection()'));
 check('_scanMissAddToCollection function defined',           /function _scanMissAddToCollection\(\)/.test(INDEX));
 
+console.log('\n[Multi-word scan lookup fix (Mega Lucario EX bug) 2026-08-13]');
+check('Query strategy uses identifyingWord (skips prefixes)', INDEX.includes("const identifyingWord = words.find(w => !PREFIXES.has"));
+check('PREFIXES set skips Mega/Dark/Radiant/etc',            INDEX.includes("'mega','dark','radiant','shining','team','light','ex','gx','v','vmax','vstar'"));
+check('Number-only fallback query exists',                   INDEX.includes("cleanNumber ? `number:${cleanNumber}` : ''"));
+check('nameMatches guard prevents wrong-name number collision', INDEX.includes('const nameMatches = (c) =>'));
+check('New match reason exact-number+name',                  INDEX.includes("matchReason = 'exact-number+name'"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
