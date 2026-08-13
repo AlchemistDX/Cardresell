@@ -7,6 +7,12 @@
   <meta name="description" content="Search any Pokémon, Magic, Yu-Gi-Oh!, sports, or TCG card, get live market value, and instantly see which platform pays you the most after all 2026 fees." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Preconnect to card image CDNs so the first card render doesn't wait
+       on DNS + TLS handshake (~200ms savings on 4G). -->
+  <link rel="preconnect" href="https://images.pokemontcg.io" crossorigin />
+  <link rel="dns-prefetch" href="https://images.pokemontcg.io" />
+  <link rel="preconnect" href="https://api.pokemontcg.io" crossorigin />
+  <link rel="dns-prefetch" href="https://api.pokemontcg.io" />
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&family=DM+Mono:wght@400;500&display=swap" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
@@ -3843,12 +3849,31 @@ async function fetchAndApplySoldComps(forceRefresh) {
   try {
     const params = new URLSearchParams({ q, limit: '15' });
     if (grade) params.set('grade', grade);
-    const r = await fetch('/api/ebay-sold?' + params.toString());
+    // Cap the client-side wait at 10s (server has its own 8s cap). Without
+    // this, if the API endpoint stalls the status indicator sits on
+    // '⏳ Fetching eBay sold comps…' indefinitely and the card feels frozen.
+    const _clientController = new AbortController();
+    const _clientTimeoutId  = setTimeout(() => _clientController.abort(), 10000);
+    let r;
+    try {
+      r = await fetch('/api/ebay-sold?' + params.toString(), { signal: _clientController.signal });
+    } finally {
+      clearTimeout(_clientTimeoutId);
+    }
     if (!r.ok) throw new Error('API ' + r.status);
     const data = await r.json();
 
     // If card changed while fetching, abort
     if (_compsAbortCard !== cardKey) return;
+
+    // Cache the raw median so we can restore it when the user toggles back to Raw
+    // after viewing graded prices. Without this, going Raw → PSA → Raw shows the
+    // TCGplayer market number instead of the eBay median the user originally saw,
+    // which reads as "wrong price on Raw".
+    if (!grade && data && data.median != null) {
+      window._rawMedianCache = window._rawMedianCache || {};
+      window._rawMedianCache[cardKey] = data.median;
+    }
 
     if (!data.count || data.count === 0 || data.error) {
       const _num2 = card.number ? card.number.replace(/^0+/, '') : '';
@@ -4229,14 +4254,31 @@ function loadCardUI(card) {
     jpLinksPanel.style.display = 'none';
   }
 
-  // Image
-  const imgUrl = card.images?.large || card.images?.small;
-  if (imgUrl) {
-    cardImg.src = imgUrl;
+  // Image — progressive loading: show small (~30KB) immediately, then upgrade
+  // to large (~200KB) in the background. Users see the card in ~200ms on 4G
+  // instead of waiting 2s+ for the large image to download.
+  const smallUrl = card.images?.small || '';
+  const largeUrl = card.images?.large || '';
+  const primaryUrl = smallUrl || largeUrl; // small first if available
+  if (primaryUrl) {
+    // Give the browser a hint to prioritize this image
+    try { cardImg.fetchPriority = 'high'; cardImg.loading = 'eager'; cardImg.decoding = 'async'; } catch(e) {}
+    cardImg.src = primaryUrl;
     cardImg.onload = () => {
       cardImgPh.style.display = 'none';
       sportsCardPh.style.display = 'none';
       cardImgWrap.style.display = 'block';
+      // Upgrade to large in the background once small is showing
+      if (largeUrl && largeUrl !== primaryUrl) {
+        const upgrade = new Image();
+        upgrade.onload = () => {
+          // Only swap if this card is still on-screen (user hasn't navigated away)
+          if (selectedCard && (card.images?.large === largeUrl || cardImg.src.endsWith(smallUrl.split('/').pop() || ''))) {
+            cardImg.src = largeUrl;
+          }
+        };
+        upgrade.src = largeUrl;
+      }
     };
     cardImg.onerror = () => {
       cardImgWrap.style.display = 'none';
@@ -4469,11 +4511,37 @@ async function syncGradeToPrintSelect() {
     // got selected as "first raw", forcing SGC 10 price on the Raw toggle.
     const opts = Array.from(printSelect.options);
     const firstRaw = opts.find(o => !/^(psa|bgs|cgc|sgc|ace|tag)_/.test(o.value));
-    if (firstRaw) printSelect.value = firstRaw.value;
+    if (firstRaw) {
+      printSelect.value = firstRaw.value;
+      // Fire change event so any onchange listeners (updatePriceFromPrinting)
+      // are notified. Setting .value programmatically does NOT trigger change.
+      // Belt-and-suspenders: we also explicitly call updatePriceFromPrinting()
+      // at end of syncGradeToPrintSelect, but the dispatch also refreshes any
+      // other listeners that may exist (e.g. dashboard/roi mirrors).
+      try { printSelect.dispatchEvent(new Event('change', { bubbles: true })); } catch(e) {}
+    }
     if (banner) banner.style.display = 'none';
-    // Reset override field styling
+    // Reset override field styling AND value — otherwise a graded override
+    // typed earlier still wins in getEffectivePrice() and calc() keeps
+    // showing the graded profit against the raw price.
     const ovField = document.getElementById('priceOverride');
     if (ovField) { ovField.style.borderColor = ''; ovField.title = ''; ovField.value = ''; }
+    // Explicitly refresh the hero price BEFORE the trailing updatePriceFromPrinting()
+    // fires. Some layouts (mobile hero-first) read priceMain synchronously after
+    // this branch returns, before the tail call gets a chance to run.
+    updatePriceFromPrinting();
+    // Restore the eBay raw median we cached in fetchAndApplySoldComps so the
+    // Raw view matches what the user saw before they browsed graded prices.
+    // Without this, going Raw → PSA → Raw shows only the TCGplayer market number,
+    // which reads as "wrong price".
+    if (selectedCard && window._rawMedianCache) {
+      const cardKey = (selectedCard.name || '') + '|' + (selectedCard.setName || '') + '|' + (selectedCard.number || '') + '|' + (selectedCard.game || '');
+      const cachedMedian = window._rawMedianCache[cardKey];
+      if (cachedMedian != null && ovField && !ovField.value) {
+        ovField.value = cachedMedian.toFixed(2);
+        if (typeof calc === 'function') calc();
+      }
+    }
   } else {
     // Graded — auto-clear override so it doesn’t block the graded price
     const ovField = document.getElementById('priceOverride');

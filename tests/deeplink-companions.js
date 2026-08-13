@@ -103,6 +103,14 @@ check('PWCC search query includes card number',              INDEX.includes("${s
 check('JP EN-ref ebay/PC/sell all use jpRefNum',             INDEX.includes("const jpRefNum = card.number ? ' ' + card.number : '';"));
 check('Graded comps banner ebay query includes number',      INDEX.includes("${cardName}${cardNum} ${graderLabel} ${grade} pokemon card"));
 
+console.log('\n[Raw price restoration + faster card display 2026-08-13]');
+check('Raw median cached on eBay-sold fetch',                INDEX.includes('window._rawMedianCache = window._rawMedianCache || {}'));
+check('Raw click restores cached eBay median',               INDEX.includes('const cachedMedian = window._rawMedianCache[cardKey]'));
+check('Small image loads first, upgrades to large in bg',    INDEX.includes('progressive loading: show small'));
+check('Image gets fetchPriority=high + eager loading',       INDEX.includes("cardImg.fetchPriority = 'high'; cardImg.loading = 'eager'"));
+check('Preconnect to pokemontcg.io image CDN',               INDEX.includes('href="https://images.pokemontcg.io"'));
+check('Client-side timeout on ebay-sold fetch',              INDEX.includes("setTimeout(() => _clientController.abort(), 10000)"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
