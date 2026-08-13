@@ -7088,11 +7088,34 @@ async function _loadScannedCardExact(pending) {
       }
     }
 
-    // Pick the best match: prefer exact number match, then rarity match
-    let match = cleanNumber ? cards.find(c => c.number === cleanNumber) : null;
-    if (!match && cleanNumber) match = cards.find(c => c.number?.split('/')[0] === cleanNumber);
-    if (!match && rarity) match = cards.find(c => (c.rarity || '').toLowerCase() === rarity.toLowerCase());
-    if (!match) match = cards[0];
+    // Pick the best match: prefer exact number match, then rarity+setName match.
+    // We track HOW we matched so we can enforce a confidence threshold — a raw
+    // cards[0] fallthrough with no number/rarity/set signal is almost always
+    // wrong (e.g. "Charizard" returns 250 candidates from Base Set to today).
+    let match = null;
+    let matchReason = null;
+    if (cleanNumber) {
+      match = cards.find(c => c.number === cleanNumber);
+      if (match) matchReason = 'exact-number';
+    }
+    if (!match && cleanNumber) {
+      match = cards.find(c => c.number?.split('/')[0] === cleanNumber);
+      if (match) matchReason = 'number-before-slash';
+    }
+    if (!match && rarity && setName) {
+      const rl = rarity.toLowerCase();
+      const sl = setName.toLowerCase();
+      match = cards.find(c => (c.rarity || '').toLowerCase() === rl && (c.set?.name || '').toLowerCase().includes(sl));
+      if (match) matchReason = 'rarity+set';
+    }
+    // NOTE: intentionally NOT falling back to cards[0]. That silent-wrong-card
+    // path was the whole point of this fix. If we can't identify a confident
+    // match, we render the scan-miss panel below.
+
+    if (match && window._SCAN_MISS_V2 !== false) {
+      // Confident match — log which strategy won for observability
+      try { console.info('[scan] match via', matchReason, match.name, match.number); } catch(e) {}
+    }
 
     if (match) {
       const prices = match.tcgplayer?.prices || {};
@@ -7134,13 +7157,133 @@ async function _loadScannedCardExact(pending) {
     }
   } catch(e) {
     console.warn('[_loadScannedCardExact] error:', e);
-    /* fall through to autocomplete */
+    /* fall through to scan-miss panel */
   }
 
-  // Fallback: open the full card grid so user can pick from portrait results
-  if (si) si.value = name;
-  switchView('lookup');
-  openCatalog(name); // opens the portrait card grid for the scanned card name
+  // No confident match found. Render the scan-miss panel with affiliate
+  // search buttons instead of dumping the user into the full results grid.
+  // The old openCatalog() fallback is kept behind a feature flag for 7 days
+  // so we can rollback with one line if the new panel misbehaves.
+  if (window._SCAN_MISS_V2 === false) {
+    // Legacy fallback (feature flag OFF)
+    if (si) si.value = name;
+    switchView('lookup');
+    if (typeof openCatalog === 'function') openCatalog(name);
+    return;
+  }
+  // New behavior (feature flag ON, default)
+  _renderScanMissPanel(pending);
+  _logScanMiss(pending);
+}
+
+// Render a card-shaped "not found" panel for scans that PokemonTCG.io
+// couldn't confidently identify. Shows the scanned card info + affiliate
+// search buttons for eBay and TCGplayer + an "adjust name" affordance.
+// Injects into the lookup view above the search input, replacing any
+// previous scan-miss panel so repeated scans don't stack.
+function _renderScanMissPanel(pending) {
+  const { name, number, setName, rarity, imageUrl } = pending || {};
+  const displayName = name || 'Unknown card';
+  const displayNumber = number ? `#${number}` : '';
+  const displaySet = setName || '';
+  const displayRarity = rarity || '';
+
+  // Build affiliate-tagged search URLs. Reuse existing builders so we
+  // inherit EPN + Impact tracking without duplicating URL construction.
+  const ebayQ = encodeURIComponent([name, number, setName].filter(Boolean).join(' '));
+  const ebaySearchUrl = (typeof buildEbayUrl === 'function')
+    ? buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${ebayQ}&_sacat=183454&LH_Sold=1&LH_Complete=1`)
+    : `https://www.ebay.com/sch/i.html?_nkw=${ebayQ}`;
+  const tcgSearchUrl = (typeof buildTcgpUrl === 'function')
+    ? buildTcgpUrl(name || '', setName || '')
+    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent([name, setName].filter(Boolean).join(' '))}`;
+
+  // Remove any previous scan-miss panel
+  const prev = document.getElementById('scanMissPanel');
+  if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
+  // Insert into #lookupView, above the search input if possible
+  const host = document.getElementById('lookupView') || document.body;
+  const panel = document.createElement('div');
+  panel.id = 'scanMissPanel';
+  panel.setAttribute('role', 'region');
+  panel.setAttribute('aria-label', 'Card scanned but not found');
+  panel.style.cssText = 'max-width:520px;margin:1rem auto;padding:1.1rem 1.15rem;background:var(--surface,#111);border:1.5px solid var(--gold-border,#4a3a15);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.35)';
+
+  const esc = (typeof _esc === 'function') ? _esc : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+  const thumbHtml = imageUrl
+    ? `<img src="${esc(imageUrl)}" alt="Scanned card" style="width:72px;height:100px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#000" loading="lazy" decoding="async" />`
+    : `<div style="width:72px;height:100px;display:flex;align-items:center;justify-content:center;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:6px;flex-shrink:0;font-size:1.8rem">🃏</div>`;
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;font-weight:700;color:var(--gold,#f2c14e);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem">
+      <span>Scanned — not in database yet</span>
+    </div>
+    <div style="display:flex;gap:.85rem;align-items:flex-start;margin-bottom:.9rem">
+      ${thumbHtml}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:1rem;font-weight:800;color:var(--text,#fff);line-height:1.25;letter-spacing:-.01em">${esc(displayName)} ${esc(displayNumber)}</div>
+        ${displaySet ? `<div style="font-size:.78rem;color:var(--text-muted,#9a9a9a);margin-top:.2rem">${esc(displaySet)}</div>` : ''}
+        ${displayRarity ? `<div style="font-size:.72rem;color:var(--text-muted,#9a9a9a);margin-top:.15rem">${esc(displayRarity)}</div>` : ''}
+        <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.5rem;line-height:1.4">Live market data isn't available for this card yet. Check current sold prices on eBay or listings on TCGplayer.</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+      <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
+      <a href="${esc(tcgSearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search on TCGplayer →</a>
+      <button type="button" onclick="_scanMissAdjustName()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:transparent;color:var(--text,#fff);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.82rem;font-weight:600;cursor:pointer">Adjust name and search again</button>
+    </div>
+    <div style="text-align:center;margin-top:.7rem">
+      <button type="button" onclick="_scanMissDismiss()" style="background:none;border:none;color:rgba(255,255,255,.4);font-size:.72rem;cursor:pointer;padding:.3rem;text-decoration:underline">Dismiss</button>
+    </div>
+  `;
+
+  // Prepend into lookup view so it's at the top; falls back to top of body
+  if (host.firstChild) host.insertBefore(panel, host.firstChild);
+  else host.appendChild(panel);
+
+  // Scroll into view on mobile
+  try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
+}
+
+// User tapped "Adjust name and search again" — focus the search input with
+// the current scanned name pre-selected so a keystroke replaces it, and
+// dismiss the panel. Does NOT open the results grid.
+function _scanMissAdjustName() {
+  const si = document.getElementById('searchInput');
+  if (si) {
+    try { si.focus(); si.select(); } catch(e) {}
+  }
+  _scanMissDismiss();
+}
+
+function _scanMissDismiss() {
+  const p = document.getElementById('scanMissPanel');
+  if (p && p.parentNode) p.parentNode.removeChild(p);
+}
+
+// Fire-and-forget log of scan misses. Non-blocking, wrapped in try. Helps
+// us see WHICH cards keep missing (Chaos Rising, other new sets, OCR
+// misreads) so we can prioritize eBay Browse API integration for the
+// sets that need it most.
+function _logScanMiss(pending) {
+  try {
+    const payload = {
+      name:    pending?.name    || '',
+      number:  pending?.number  || '',
+      setName: pending?.setName || '',
+      rarity:  pending?.rarity  || '',
+      ua:      (navigator.userAgent || '').slice(0, 200),
+      at:      Date.now(),
+    };
+    fetch('/api/scan-miss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  } catch(e) { /* never let logging break the UI */ }
 }
 
 // ── Affiliate grading CTA helpers ──

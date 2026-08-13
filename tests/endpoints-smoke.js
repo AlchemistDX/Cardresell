@@ -13,6 +13,7 @@ const cases = [
   ['/api/tcg-price?q=charizard',         'GET',  [200, 400]],
   ['/api/pro-status',                    'GET',  [200, 401]],
   ['/api/sports',                        'GET',  [200, 400, 404]],
+  ['/api/scan-miss',                     'POST', [204, 400], { name: 'smoke-test', number: '0/0', setName: 'smoke', rarity: '' }],
 
   // Auth-required endpoints — should 401 without token
   ['/api/stripe-checkout',               'POST', [401],       {}],
