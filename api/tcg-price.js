@@ -32,11 +32,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  const name   = (req.query.name   || '').trim();
+  // Accept both ?name= (canonical) and ?q= (legacy shorthand)
+  const name   = (req.query.name || req.query.q || '').trim();
   const set    = (req.query.set    || '').trim();
   const number = (req.query.number || '').trim();
 
-  if (!name) return res.status(400).json({ error: 'name required' });
+  if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
   const cacheKey = `${name}|${set}|${number}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
@@ -52,7 +53,10 @@ export default async function handler(req, res) {
       from: 0,
       size: 10,
       filters: {
-        term: { productLineName: ['pokemon'], ...(set ? { setName: [set] } : {}) },
+        // Don't hard-filter on setName — TCGplayer uses prefixed names like
+        // "ME04: Chaos Rising" not "Chaos Rising". We rank by set match below
+        // to pick the right card instead of dropping results.
+        term: { productLineName: ['pokemon'] },
         range: {},
         match: {}
       },
@@ -87,16 +91,27 @@ export default async function handler(req, res) {
       return res.status(200).json({ market: null, low: null, mid: null, high: null, source: 'tcgplayer', count: 0 });
     }
 
-    // Find best match — prefer exact number match, then name match
-    let best = results[0];
-    if (number) {
-      const numMatch = results.find(r => {
-        const title = (r.productName || '').toLowerCase();
-        const num = number.replace(/^0+/, '');
-        return title.includes(`${num}/`) || title.includes(`- ${num}`) || title.includes(`#${num}`);
-      });
-      if (numMatch) best = numMatch;
-    }
+    // Score each result — prefer set match, then number match, then name match
+    const setLower = set.toLowerCase();
+    const nameLower = name.toLowerCase();
+    const numClean = number ? number.replace(/^0+/, '') : '';
+    const scored = results.map(r => {
+      const productName = (r.productName || '').toLowerCase();
+      const rSetName    = (r.setName || '').toLowerCase();
+      let score = 0;
+      // Set match — huge weight (prevents "Charizard + set=Chaos Rising" matching a random tin)
+      if (setLower && rSetName.includes(setLower)) score += 100;
+      // Number match
+      if (numClean && (productName.includes(`${numClean}/`) || productName.includes(`- ${numClean}`) || productName.includes(`#${numClean}`))) {
+        score += 50;
+      }
+      // Name is present (tiebreaker)
+      if (productName.startsWith(nameLower)) score += 10;
+      else if (productName.includes(nameLower)) score += 5;
+      return { r, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    let best = scored[0].r;
 
     const productId = best.productId ? Math.round(best.productId) : null;
     let market = best.marketPrice || null;
