@@ -10224,7 +10224,10 @@ function _showBackToBulkPill() {
     pill = document.createElement('button');
     pill.id = 'backToBulkPill';
     pill.onclick = resumeBulkScan;
-    pill.style.cssText = 'position:fixed;bottom:5.5rem;left:50%;transform:translateX(-50%);z-index:250;padding:.65rem 1.1rem;background:rgba(139,92,246,.95);color:#fff;border:none;border-radius:99px;font-size:.82rem;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;gap:.4rem';
+    // Corner-anchored (not middle-centered) so it doesn't overlap search
+    // dropdown results or scan-miss panel content. Bottom-right on mobile,
+    // stays out of the way of the primary content flow.
+    pill.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:250;padding:.55rem .9rem;background:rgba(139,92,246,.95);color:#fff;border:none;border-radius:99px;font-size:.78rem;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;gap:.35rem;max-width:calc(100vw - 2rem)';
     document.body.appendChild(pill);
   }
   const n = (window._bulkResults || []).length;
