@@ -134,6 +134,12 @@ check('Collection modal has grade chip element',                INDEX.includes("
 check('Grade chip populated when p.grader + p.grade present',   INDEX.includes("if (p.grader && p.grade != null && p.grade !== '')"));
 check('No-price entries show placeholder not $0.00',            INDEX.includes("valEl.textContent = 'Price not fetched'"));
 
+console.log('\n[Collection row grade indicator 2026-08-13]');
+check('Collection row detects saved grade',                    INDEX.includes("const _hasGrade = p.grader && p.grade != null && p.grade !== ''"));
+check('Collection row renders gold corner badge on thumbnail', INDEX.includes("linear-gradient(135deg,#f0b429,#d4af37)"));
+check('Collection row shows grade chip inline with card name', INDEX.includes("const cardNameHtml = _hasGrade"));
+check('Thumbnail wrapped in position:relative container',      INDEX.includes("position:relative;width:40px;height:56px"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

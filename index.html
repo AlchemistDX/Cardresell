@@ -6324,9 +6324,29 @@ function renderCollectionView() {
           })() : null;
           // Thumbnail: prefer p.img (single-card save path) then p.imageUrl (bulk-scan path).
           const thumb = p.img || p.imageUrl || '';
-          const thumbCell = thumb
-            ? `<img src="${esc2(thumb)}" loading="lazy" alt="" style="width:40px;height:56px;object-fit:cover;border-radius:6px;background:#111;border:1px solid #1f1f1f">`
+          const thumbImg = thumb
+            ? `<img src="${esc2(thumb)}" loading="lazy" alt="" style="width:40px;height:56px;object-fit:cover;border-radius:6px;background:#111;border:1px solid #1f1f1f;display:block">`
             : `<div style="width:40px;height:56px;border-radius:6px;background:#111;border:1px solid #1f1f1f;display:flex;align-items:center;justify-content:center;font-size:1.1rem;opacity:.5">🃏</div>`;
+          // Grade indicator: two visual cues so the user can tell graded rows
+          // apart from raw at a glance, especially when the same card is saved
+          // at multiple grades (e.g. Mega Lucario ex — PSA 10 vs raw).
+          //   1. Corner badge on the thumbnail: gold pill with grader + grade
+          //      (e.g. "PSA 10"). Positioned absolute so it doesn't disturb
+          //      the row's baseline alignment.
+          //   2. Prefix chip on the card name column, same text, so users on
+          //      a narrow screen see the grade without staring at the thumb.
+          const _graderNames = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
+          const _hasGrade = p.grader && p.grade != null && p.grade !== '';
+          const _gradeLabel = _hasGrade
+            ? `${_graderNames[String(p.grader).toLowerCase()] || String(p.grader).toUpperCase()} ${p.grade}`
+            : '';
+          const gradeBadge = _hasGrade
+            ? `<div title="Saved at ${esc2(_gradeLabel)}" style="position:absolute;top:-4px;right:-4px;padding:1px 4px;background:linear-gradient(135deg,#f0b429,#d4af37);color:#000;font-size:.55rem;font-weight:900;border-radius:4px;line-height:1.1;letter-spacing:.02em;box-shadow:0 1px 3px rgba(0,0,0,.6);border:1px solid #000;white-space:nowrap">${esc2(_gradeLabel)}</div>`
+            : '';
+          const thumbCell = `<div style="position:relative;width:40px;height:56px">${thumbImg}${gradeBadge}</div>`;
+          const cardNameHtml = _hasGrade
+            ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold);vertical-align:middle;white-space:nowrap">${esc2(_gradeLabel)}</span>${esc2(p.card)}`
+            : esc2(p.card);
           const ebayUrl = _entryEbayUrl(p);
           const sellCell = ebayUrl && ebayUrl !== '#'
             ? `<a href="${ebayUrl}" target="_blank" rel="noopener" title="Sell ${esc2(p.card)} on eBay" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:#e53935;color:#fff;border-radius:8px;font-size:.7rem;font-weight:700;text-decoration:none;white-space:nowrap">🛍 Sell</a>`
@@ -6337,7 +6357,7 @@ function renderCollectionView() {
           // stopPropagation so refresh/remove don't also fire the modal.
           return `<tr class="col-row" onclick="openCollectionCardDetail(${p.id})" style="cursor:pointer">
             <td>${thumbCell}</td>
-            <td><div class="ft-card" title="${esc2(p.card)}">${esc2(p.card)}</div></td>
+            <td><div class="ft-card" title="${esc2(p.card)}${_hasGrade ? ' — ' + esc2(_gradeLabel) : ''}">${cardNameHtml}</div></td>
             <td style="font-size:.72rem;color:var(--text-muted)">${esc2(p.set||'—')}</td>
             <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
             <td class="ft-mono" style="color:var(--gold)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
