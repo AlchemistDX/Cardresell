@@ -354,25 +354,7 @@ img{display:block;max-width:100%;height:auto}
 
 /* ─── MAIN LAYOUT ─── */
 .main{display:grid;grid-template-columns:320px 1fr;gap:1.5rem;align-items:start}
-@media(max-width:820px){
-  /* Mobile: flex column and reorder so quick price-checkers see payouts
-     BEFORE the Condition/Grade/Shipping/COGS/Advanced form (the "tweak"
-     section is moved below via order:3). display:contents on the nested
-     containers lets #cardBodyTop and #cardBodyExtras become direct flex
-     children of .main so they can be individually reordered. */
-  .main{display:flex;flex-direction:column;grid-template-columns:none;gap:.75rem}
-  .main > aside{display:contents}
-  .main > aside > .card-panel{display:contents}
-  .main > aside > .card-panel > .card-body{display:contents}
-  /* Order on mobile: hero (0) → price top (1) → payouts (2) → tweak fields (3) */
-  .main > aside > .card-panel > .card-hero{order:0}
-  #cardBodyTop{order:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.15rem}
-  .main > .results-area{order:2}
-  #cardBodyExtras{order:3;display:block;background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--radius-lg);padding:1rem 1.15rem}
-}
-@media(min-width:821px){
-  #cardBodyTop, #cardBodyExtras{display:block}
-}
+@media(max-width:820px){.main{grid-template-columns:1fr}}
 
 /* ─── CARD PANEL ─── */
 .card-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;box-shadow:var(--shadow-sm)}
@@ -1610,10 +1592,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
       <!-- Details form -->
       <div class="card-body">
-        <!-- Top section: market price + comps info. On mobile this stays
-             right below the card hero, ABOVE the results-area, so quick
-             price-checkers see prices immediately. -->
-        <div id="cardBodyTop">
 
         <!-- Market Price -->
         <div class="field-label">Market Value</div>
@@ -1680,13 +1658,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         </div>
 
         <div class="sep"></div>
-        </div><!-- /#cardBodyTop -->
-
-        <!-- Everything below this point is the "tweak your calculation" form.
-             On mobile it moves BELOW the platform payouts (via CSS order) so
-             users who just want to check prices don't have to scroll past
-             Condition/Shipping/COGS/Advanced first. -->
-        <div id="cardBodyExtras">
 
         <!-- Condition -->
         <div class="field-label">Condition</div>
@@ -1868,7 +1839,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           </div>
         </div>
 
-        </div><!-- /#cardBodyExtras -->
       </div><!-- /card-body -->
     </div><!-- /card-panel -->
   </aside>
@@ -7631,20 +7601,19 @@ function _renderScanMissPanel(pending) {
 
   panel.innerHTML = `
     <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;font-weight:700;color:var(--gold,#f2c14e);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem">
-      <span>Live pricing unavailable</span>
+      <span>Scanned — not in database yet</span>
     </div>
     <div style="margin-bottom:.9rem">
       <div style="font-size:1rem;font-weight:800;color:var(--text,#fff);line-height:1.25;letter-spacing:-.01em">${esc(displayName)} ${esc(displayNumber)}</div>
       ${displaySet ? `<div style="font-size:.78rem;color:var(--text-muted,#9a9a9a);margin-top:.2rem">${esc(displaySet)}</div>` : ''}
       ${displayRarity ? `<div style="font-size:.72rem;color:var(--text-muted,#9a9a9a);margin-top:.15rem">${esc(displayRarity)}</div>` : ''}
-      <div style="font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.4">This card loaded but we don't have live market prices yet — you can still track it in your Collection and check sold comps on eBay/TCGplayer below.</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.5rem;line-height:1.4">Live market data isn't available for this card yet. Check current sold prices on eBay or listings on TCGplayer.</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:.5rem">
-      <button type="button" onclick="_scanMissAddToCollection()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border:none;border-radius:10px;font-size:.88rem;font-weight:800;cursor:pointer">➕ Add to My Collection</button>
-      <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
+      <a href="${esc(ebaySearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:#e53935;color:#fff;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search sold on eBay →</a>
       <a href="${esc(ebaySellUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem 1rem;background:transparent;color:var(--gold,#f2c14e);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.78rem;font-weight:700;text-decoration:none">List on eBay →</a>
-      <a href="${esc(tcgSearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:transparent;color:var(--text,#fff);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.82rem;font-weight:600;text-decoration:none">Search on TCGplayer →</a>
-      <button type="button" onclick="_scanMissAdjustName()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:transparent;color:var(--text-muted,#9a9a9a);border:none;border-radius:10px;font-size:.78rem;font-weight:600;cursor:pointer;text-decoration:underline">Wrong card? Adjust name</button>
+      <a href="${esc(tcgSearchUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border-radius:10px;font-size:.88rem;font-weight:700;text-decoration:none">Search on TCGplayer →</a>
+      <button type="button" onclick="_scanMissAdjustName()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.65rem 1rem;background:transparent;color:var(--text,#fff);border:1px solid var(--gold-border,#4a3a15);border-radius:10px;font-size:.82rem;font-weight:600;cursor:pointer">Adjust name and search again</button>
     </div>
     <div style="text-align:center;margin-top:.7rem">
       <button type="button" onclick="_scanMissDismiss()" style="background:none;border:none;color:rgba(255,255,255,.4);font-size:.72rem;cursor:pointer;padding:.3rem;text-decoration:underline">Dismiss</button>
@@ -7671,16 +7640,6 @@ function _renderScanMissPanel(pending) {
     const target = cardHero || panel;
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e) {}
-}
-
-// User tapped "Add to My Collection" from the scan-miss notice. Delegates
-// to the main addCurrentCardToCollection() which uses selectedCard (already
-// populated with the synthetic card from _loadScannedCardExact).
-function _scanMissAddToCollection() {
-  if (typeof addCurrentCardToCollection === 'function') {
-    _scanMissDismiss();
-    addCurrentCardToCollection();
-  }
 }
 
 // User tapped "Adjust name and search again" — focus the search input with

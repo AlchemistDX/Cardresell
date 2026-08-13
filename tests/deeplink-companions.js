@@ -73,17 +73,6 @@ check('Scan-miss inserts AFTER cardHero',                    INDEX.includes('con
 check('Scan scrolls to big hero, not scan-miss panel',       INDEX.includes('const target = cardHero || panel'));
 check('Synthetic card scroll target uses cardHero',          INDEX.includes("const mainCard = document.getElementById('cardHero')"));
 
-console.log('\n[Mobile reorder + friendlier scan-miss 2026-08-13]');
-check('cardBodyTop wrapper exists',                          INDEX.includes('id="cardBodyTop"'));
-check('cardBodyExtras wrapper exists',                       INDEX.includes('id="cardBodyExtras"'));
-check('Mobile flex layout on .main <=820px',                 /max-width:820px[\s\S]{0,600}\.main\{display:flex/.test(INDEX));
-check('Mobile order: results-area order 2',                  /\.main\s*>\s*\.results-area\{order:2\}/.test(INDEX));
-check('Mobile order: cardBodyExtras order 3',                /#cardBodyExtras\{order:3/.test(INDEX));
-check('Scan-miss message softened (no "not in database")',   !INDEX.includes('Scanned — not in database yet'));
-check('Scan-miss uses friendly "Live pricing unavailable"',  INDEX.includes('Live pricing unavailable'));
-check('Scan-miss has Add to Collection CTA',                 INDEX.includes('_scanMissAddToCollection()'));
-check('_scanMissAddToCollection function defined',           /function _scanMissAddToCollection\(\)/.test(INDEX));
-
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
