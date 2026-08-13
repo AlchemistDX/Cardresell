@@ -54,6 +54,14 @@ check('Scan-miss fires doSearch to populate main view',      /doSearch\(name\)\.
 check('Scan-miss fallback thumbnail is NOT joker emoji',     !INDEX.includes('font-size:1.8rem">🃏'));
 check('Scan-miss fallback thumbnail uses "?" (not 🃏)',       INDEX.includes('font-weight:900">?</div>'));
 
+console.log('\n[TPL secondary source + synthetic card 2026-08-13]');
+check('Scan uses TPL as secondary source',                   INDEX.includes('SECONDARY SOURCE: TCGPriceLookup'));
+check('TPL fallback calls searchWithTPL(cleanName)',         /tplHits = await searchWithTPL\(cleanName/.test(INDEX));
+check('TPL match sets selectedCard + loadCardUI',            /tplCardToNormalized\(tplMatch/.test(INDEX));
+check('Synthetic card fallback exists',                      INDEX.includes('SYNTHETIC CARD FALLBACK'));
+check('Synthetic card sets _synthetic flag',                 /_synthetic:\s*true/.test(INDEX));
+check('Synthetic card populates main view before scan-miss', INDEX.includes("source: 'Scan (unmatched)'"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

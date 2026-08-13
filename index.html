@@ -7289,13 +7289,97 @@ async function _loadScannedCardExact(pending) {
       if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
+
+    // ---- SECONDARY SOURCE: TCGPriceLookup ----
+    // PokemonTCG.io often lags on newer sets (Scarlet & Violet-era). TPL
+    // covers those. Try TPL only when we have a key and PokemonTCG.io
+    // didn't produce a confident match.
+    if (window.tplApiKey) {
+      try {
+        const tplHits = await searchWithTPL(cleanName, 'pokemon');
+        if (tplHits && tplHits.length) {
+          // Same match strategy: exact number → partial number → rarity+set
+          const normalizeNum = n => (n || '').replace(/\s/g,'').split('/')[0].replace(/^0+/, '') || n;
+          let tplMatch = null;
+          let tplReason = null;
+          if (cleanNumber) {
+            const nt = normalizeNum(cleanNumber);
+            tplMatch = tplHits.find(c => normalizeNum(c.number) === nt);
+            if (tplMatch) tplReason = 'tpl-exact-number';
+          }
+          if (!tplMatch && rarity && setName) {
+            const rl = rarity.toLowerCase();
+            const sl = setName.toLowerCase();
+            tplMatch = tplHits.find(c => (c.rarity || '').toLowerCase() === rl && (c.set_name || c.set?.name || '').toLowerCase().includes(sl));
+            if (tplMatch) tplReason = 'tpl-rarity+set';
+          }
+          if (tplMatch) {
+            try { console.info('[scan] TPL match via', tplReason, tplMatch.name, tplMatch.number); } catch(e) {}
+            const card = tplCardToNormalized(tplMatch, 'pokemon', tplMatch.image_url || '');
+            selectedCard = card;
+            if (si) si.value = card.name;
+            dropList.classList.remove('open');
+            loadCardUI(card);
+            if (window._openGradeAfterScan) {
+              window._openGradeAfterScan = false;
+              setTimeout(() => { typeof openGradeScanGate === 'function' && openGradeScanGate(); }, 600);
+            }
+            const mainCard = document.getElementById('cardMain') || document.getElementById('cardPanel');
+            if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+        }
+      } catch(tplErr) {
+        console.warn('[_loadScannedCardExact] TPL fallback error:', tplErr);
+        /* continue to synthetic-card fallback */
+      }
+    }
   } catch(e) {
     console.warn('[_loadScannedCardExact] error:', e);
-    /* fall through to scan-miss panel */
+    /* fall through to synthetic-card + scan-miss panel */
   }
 
-  // No confident match found. Render the scan-miss panel with affiliate
-  // search buttons instead of dumping the user into the full results grid.
+  // ---- SYNTHETIC CARD FALLBACK ----
+  // Neither PokemonTCG.io nor TPL found a confident match, but we still have
+  // scan metadata (name, number, set, rarity, sometimes an image from OCR).
+  // Populate the main card view with this data so the user sees THEIR card
+  // in place of "No card selected". Price data is empty (they set Override).
+  // The scan-miss panel + auto-search still render above/below so they can
+  // fix a wrong name or pick a different printing.
+  try {
+    if (pending && (pending.name || pending.number)) {
+      // Reuse the image we resolved earlier for the scan-miss thumbnail
+      let synthImg = pending.imageUrl || '';
+      if (!synthImg && typeof cards !== 'undefined' && Array.isArray(cards) && cards.length) {
+        const cnClean = (pending.number || '').split('/')[0];
+        const preferred = (cnClean && cards.find(c => (c.number || '').split('/')[0] === cnClean)) || cards[0];
+        synthImg = preferred?.images?.small || preferred?.images?.large || '';
+      }
+      const synthCard = {
+        name:   pending.name || 'Scanned card',
+        game:   'pokemon',
+        images: { small: synthImg, large: synthImg },
+        setName: pending.setName || '',
+        number:  pending.number || '',
+        rarity:  pending.rarity || '',
+        priceVariants: [], // no price data — user can set Override
+        source: 'Scan (unmatched)',
+        updatedAt: '',
+        _synthetic: true, // flag so downstream code knows this is a scan echo
+      };
+      selectedCard = synthCard;
+      if (si) si.value = synthCard.name;
+      try { loadCardUI(synthCard); } catch(uiErr) { console.warn('[synth loadCardUI]', uiErr); }
+      const mainCard = document.getElementById('cardMain') || document.getElementById('cardPanel');
+      if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch(synthErr) {
+    console.warn('[_loadScannedCardExact] synthetic-card error:', synthErr);
+  }
+
+  // Still render the scan-miss panel with affiliate search buttons on top
+  // (and populate dropdown with candidates below via doSearch) so the user
+  // has an obvious path to sold-comps + a fix-the-name affordance.
   // The old openCatalog() fallback is kept behind a feature flag for 7 days
   // so we can rollback with one line if the new panel misbehaves.
   if (window._SCAN_MISS_V2 === false) {
