@@ -2116,7 +2116,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Anon sync banner — only visible when signed OUT and collection has entries -->
   <div id="anonSyncBanner" style="display:none;margin-bottom:1rem;padding:.7rem .9rem;background:linear-gradient(135deg,rgba(59,130,246,.10),rgba(59,130,246,.05));border:1px solid rgba(59,130,246,.35);border-radius:10px;align-items:center;gap:.6rem;flex-wrap:wrap">
     <span style="font-size:1.15rem">💾</span>
-    <span style="flex:1;min-width:180px;font-size:.78rem;color:var(--text);line-height:1.4">Your cards are saved to this browser only. <strong style="color:var(--gold)">Sign in to sync across devices</strong> and unlock 10 free ID scans.</span>
+    <span style="flex:1;min-width:180px;font-size:.78rem;color:var(--text);line-height:1.4">Your cards are saved to this browser only. <strong style="color:var(--gold)">Sign in + verify email</strong> to sync across devices and unlock <strong style="color:var(--gold)">10 free ID scans + 1 AI Grade</strong>.</span>
     <button onclick="triggerGoogleSignIn()" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:8px;font-size:.75rem;font-weight:800;cursor:pointer;white-space:nowrap">Sign in →</button>
   </div>
 
@@ -5880,7 +5880,7 @@ function addCurrentCardToCollection() {
   if (window._userSub || window.googleUser) {
     showToast('Fill in your purchase cost and tap Save to track this card 📦');
   } else {
-    showToast('Saving to this device — sign in later to sync across devices 💾');
+    showToast('Saving to this device — verify email later for 10 free ID scans + 1 AI Grade 🎁');
   }
 }
 

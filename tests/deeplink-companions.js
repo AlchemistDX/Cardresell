@@ -164,7 +164,7 @@ check('checkout_attempt event fires on grade pack',             INDEX.includes("
 console.log('\n[Anon-mode Collection + Turnstile 2026-08-14]');
 check('Collection wall forced hidden (display:none !important)', INDEX.includes("display:none !important"));
 check('Anon sync banner element present',                        INDEX.includes("id=\"anonSyncBanner\""));
-check('Anon banner CTA offers Google sign-in',                   INDEX.includes("Sign in to sync across devices"));
+check('Anon banner CTA offers Google sign-in',                   INDEX.includes("Sign in + verify email") && INDEX.includes("10 free ID scans + 1 AI Grade"));
 check('renderCollectionView no longer bails on signed-out',      !INDEX.includes("if (!signedIn) {\n    // Auth not resolved yet"));
 check('_updateCollectionSignInWall toggles banner not wall',     INDEX.includes("if (banner)  banner.style.display  = signedIn ? 'none' : 'flex'"));
 check('Turnstile script tag loaded',                             INDEX.includes("challenges.cloudflare.com/turnstile/v0/api.js"));
