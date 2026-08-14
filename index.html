@@ -2155,10 +2155,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
 
     <!-- Actions row -->
-    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem">
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
       <button onclick="openAddFlip('hold')" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.78rem;font-weight:800;cursor:pointer">+ Add Card</button>
       <button onclick="exportCollection()" style="padding:.42rem .85rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">⬇ Export CSV</button>
       <button onclick="refreshCollectionPrices()" id="colRefreshBtn" style="padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">↻ Refresh Prices</button>
+      <button onclick="clearCollection()" id="colClearBtn" title="Remove all cards from your Collection (irreversible)" style="padding:.42rem .85rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:#f87171;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">🗑 Clear</button>
       <span id="colLastUpdated" style="font-size:.65rem;color:var(--text-muted);margin-left:auto"></span>
     </div>
 
@@ -6413,6 +6414,43 @@ function exportGradingLog() {
 }
 
 // ── Export Collection as CSV ──
+// 2026-08-14: Clear the entire Collection (portfolio + flips + grading log)
+// with a two-step native confirm so users don't nuke their data by accident.
+// Works for signed-in AND anonymous users — getUserKey() returns the correct
+// scoped or unscoped keys automatically.
+function clearCollection() {
+  try {
+    const port = loadPortData();
+    const flips = (typeof loadFlipsData === 'function') ? loadFlipsData() : [];
+    const totalRows = (port ? port.length : 0) + (flips ? flips.length : 0);
+    if (!totalRows) {
+      showToast('Your Collection is already empty.', 'info');
+      return;
+    }
+    // Two-step confirm because this is irreversible.
+    const msg1 = 'Clear your entire Collection?\n\n' +
+      'This will permanently remove:\n' +
+      '  • ' + (port.length || 0) + ' portfolio card(s)\n' +
+      '  • ' + (flips.length || 0) + ' flip record(s)\n\n' +
+      'This cannot be undone.';
+    if (!confirm(msg1)) return;
+    if (!confirm('Really clear everything? This cannot be undone. Tap OK to erase, Cancel to keep your data.')) return;
+    // Clear the three user-scoped keys. localStorage.removeItem is safer than
+    // setItem('[]') because it also cleans up if the key was orphaned.
+    try { localStorage.removeItem(getUserKey('portfolio')); } catch(e) {}
+    try { localStorage.removeItem(getUserKey('flips')); } catch(e) {}
+    try { localStorage.removeItem(getUserKey('grading_log')); } catch(e) {}
+    // Re-render the Collection view so counts reset immediately.
+    try { if (typeof renderCollectionView === 'function') renderCollectionView(); } catch(e) {}
+    try { if (typeof renderFlipTable === 'function') renderFlipTable(); } catch(e) {}
+    showToast('Collection cleared — ' + totalRows + ' entr' + (totalRows === 1 ? 'y' : 'ies') + ' removed.', 'success');
+  } catch(e) {
+    console.error('[clearCollection] failed:', e);
+    showToast('Could not clear Collection. Try refreshing the page.', 'error');
+  }
+}
+window.clearCollection = clearCollection;
+
 function exportCollection() {
   const port = loadPortData();
   if (!port.length) { showToast('No cards in your collection to export.', 'info'); return; }
