@@ -2548,9 +2548,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.35rem">
       <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 List on eBay</a>
       <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">💰 List on TCGplayer</a>
+    </div>
+    <div style="font-size:.68rem;color:var(--muted);text-align:center;margin-bottom:.5rem;line-height:1.35">
+      💡 Tip: on eBay, click any sold listing → <strong>“Sell one like this”</strong> to auto-fill your listing
     </div>
 
     <!-- View full card: opens the Card Lookup view for this card and, if a grade
@@ -4386,11 +4389,13 @@ function loadCardUI(card) {
     jpLinksPanel.style.display = 'block';
     jpEbayLink.href = card._jpEbayUrl;
     jpPCLink.href   = card._jpPCUrl || '#';
-    // Companion sell-flow link — JP category (183454) so eBay routes correctly
+    // Companion sell link — route to a buyer's-eye JP search so users see
+    // active + sold comps for the exact card before listing (2026-08-14).
     if (jpEbaySellLink) {
       const jpNameForSell = card.name.replace(' (JP — use Override for JP price)', '').trim();
-      const jpNum = card.number ? ` ${card.number}` : '';
-      jpEbaySellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(jpNameForSell + jpNum + ' japanese pokemon')}`);
+      jpEbaySellLink.href = buildEbaySearchUrl(jpNameForSell, card.number, {
+        extra: 'japanese pokemon card', category: '183454'
+      });
     }
   } else if (isJPCard) {
     // EN ref card in JP tab — still show JP links for the card name
@@ -4400,7 +4405,10 @@ function loadCardUI(card) {
     jpEbayLink.href = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(rawName + jpRefNum + ' japanese pokemon card')}&_sacat=183454&LH_Sold=1&LH_Complete=1`);
     jpPCLink.href   = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(rawName + jpRefNum + ' japanese')}&type=prices`;
     if (jpEbaySellLink) {
-      jpEbaySellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(rawName + jpRefNum + ' japanese pokemon')}`);
+      // 2026-08-14: buyer's-eye JP search instead of sell wizard
+      jpEbaySellLink.href = buildEbaySearchUrl(rawName, jpRefNum, {
+        extra: 'japanese pokemon card', category: '183454'
+      });
     }
   } else {
     jpLinksPanel.style.display = 'none';
@@ -4464,11 +4472,12 @@ function loadCardUI(card) {
   cardMetaEl.textContent = metaParts.join(' · ');
   cardNameBlock.style.display = 'block';
 
-  // eBay Sell button — pre-fill with card name
+  // eBay Sell button — 2026-08-14: send to a searched view of THIS card
+  // (sold comps + active listings) rather than eBay's blank sell wizard, so
+  // sellers can price against real-time market before listing.
   const ebayListBtn = document.getElementById('ebayListBtn');
   if (ebayListBtn) {
-    const ebayQuery = encodeURIComponent(card.name + (card.setName ? ' ' + card.setName : ''));
-    ebayListBtn.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${ebayQuery}`);
+    ebayListBtn.href = buildEbaySearchUrl(card.name, card.number);
     ebayListBtn.style.display = 'flex';
   }
 
@@ -4802,9 +4811,12 @@ async function syncGradeToPrintSelect() {
         // the card pre-filled.
         const sellLink = document.getElementById('gradedSellLink');
         if (sellLink) {
-          const scNum = (selectedCard && selectedCard.number) ? ` ${selectedCard.number}` : '';
-          const sellQuery = encodeURIComponent(`${cardName2}${scNum} ${graderLabel2} ${grade}`.trim());
-          sellLink.href = buildEbayUrl(`https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${sellQuery}`);
+          // 2026-08-14: search view for graded copy so sellers see current
+          // market price for this exact grade before listing.
+          const graderGrade = `${graderLabel2} ${grade}`.trim();
+          sellLink.href = buildEbaySearchUrl(cardName2, selectedCard && selectedCard.number, {
+            graded: graderGrade
+          });
         }
 
         // TCGPriceLookup card page deep link
@@ -4831,6 +4843,40 @@ async function syncGradeToPrintSelect() {
 // in window.AFFILIATE, they start returning the tracked/commissionable URL.
 
 function _aff() { return (window.AFFILIATE || {}); }
+
+// Canonical eBay search-URL builder — every card-attached eBay link should
+// route through this so users land on a buyer's-eye search view (see what's
+// currently listed + recent sold comps) instead of eBay's Sell wizard. That
+// way "Sell on eBay" answers the real question the user has when they click:
+// "what price is this card actually moving at right now?"
+//
+// 2026-08-14: reviewer feedback — every card-associated eBay link should
+// deep-link into a searched view of THAT card, not the generic sell flow.
+//
+// @param cardName {string} — e.g. "Charizard ex"
+// @param number   {string} — e.g. "223/197" or "223" (optional)
+// @param opts     {object} — { sold: bool (default true), category: string,
+//                              extra: string (e.g. 'japanese pokemon card'),
+//                              graded: string (e.g. 'PSA 10') }
+function buildEbaySearchUrl(cardName, number, opts) {
+  opts = opts || {};
+  const parts = [];
+  if (cardName) parts.push(String(cardName).replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim());
+  if (number) {
+    // Strip leading zeros + any /total-cards suffix so "023/197" becomes "23"
+    const cleanNum = String(number).replace(/^0+/, '').replace(/\/.*$/, '').trim();
+    if (cleanNum) parts.push(cleanNum);
+  }
+  if (opts.graded) parts.push(opts.graded);
+  if (opts.extra) parts.push(opts.extra);
+  const query = encodeURIComponent(parts.filter(Boolean).join(' '));
+  const cat = opts.category || '212'; // 212 = Trading Card Games
+  // Sold-comps view by default (better for pricing decisions); pass sold:false
+  // for the rare case we want active listings only.
+  const soldFilter = opts.sold === false ? '' : '&LH_Sold=1&LH_Complete=1';
+  const raw = `https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=${cat}${soldFilter}&_sop=13`;
+  return (typeof buildEbayUrl === 'function') ? buildEbayUrl(raw) : raw;
+}
 
 // Builds an eBay URL with EPN campaign parameters appended.
 // Handles both search URLs and any other ebay.com URL.
@@ -5004,7 +5050,10 @@ function updateSellLinks(card) {
   // doesn't match how sellers spell it (BW Black Star Promos, or just
   // 2025 Pokemon Black Bolt). Name + number lets eBay's presetNameSearchQuery
   // match to the correct pre-canned listing template every time.
-  const ebaySellRaw = `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(searchName + (number ? ' ' + number : ''))}`;
+  // 2026-08-14: reviewer feedback — route the "Where to Sell" panel's eBay
+  // link to a buyer's-eye search view (sold comps for this exact card) rather
+  // than the generic sell wizard, so users can price competitively at a glance.
+  const ebaySellRaw = buildEbaySearchUrl(searchName, number);
   // All platform search queries now include the card number for precise
   // printing match (e.g. 'Mega Lucario EX 179/188'). Empty number is
   // silently omitted so behavior for graded/singles-only sites like PWCC
@@ -6723,14 +6772,14 @@ function openCollectionCardDetail(entryId) {
   const cardNameNoNum = String(p.card || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
   const sellQuery = [cardNameNoNum, num].filter(Boolean).join(' ');
 
-  // eBay: use the sell/listing flow (opens pre-canned listing template) so
-  // users can list immediately, not just view sold comps. This is what the
-  // "Where to Sell" panel on the card detail view uses — keeping them in sync
-  // so users see the same behavior everywhere.
-  const ebayRaw = sellQuery
-    ? `https://www.ebay.com/sell/listing?flow=startSell&presetNameSearchQuery=${encodeURIComponent(sellQuery)}`
-    : 'https://www.ebay.com/sell/listing?flow=startSell';
-  const ebayUrl = (typeof buildEbayUrl === 'function') ? buildEbayUrl(ebayRaw) : ebayRaw;
+  // eBay: 2026-08-14 reviewer feedback — route to a buyer's-eye search view
+  // of THIS card (recent sold comps) instead of the generic sell/listing
+  // wizard. Users clicking "Sell" from a saved card want to know what price
+  // that card is moving at RIGHT NOW so they can list competitively.
+  // buildEbaySearchUrl handles graded suffix + affiliate params.
+  const ebayUrl = buildEbaySearchUrl(cardNameNoNum, num, {
+    graded: (p.grade && p.grade !== 'raw' && p.grade !== 'Raw') ? p.grade : ''
+  });
   const sellBtn = document.getElementById('ccmSellBtn');
   if (sellBtn) sellBtn.href = ebayUrl;
 

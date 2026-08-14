@@ -41,9 +41,11 @@ check('updateSellLinks upgrades TCGplayer to product URL',  /buildTcgpSmart\(car
 
 console.log('\n[eBay companion sell links]');
 check('gradedSellLink element exists in HTML',              /id="gradedSellLink"/.test(INDEX));
-check('gradedSellLink JS wires sell/listing URL',           /gradedSellLink[\s\S]{0,300}sell\/listing\?flow=startSell/.test(INDEX));
+// 2026-08-14: sell links now route to buyer's-eye search view (sold comps)
+// so users can see market price + use eBay's native 'Sell one like this' flow.
+check('gradedSellLink JS wires eBay search URL',           /gradedSellLink[\s\S]{0,300}buildEbaySearchUrl/.test(INDEX));
 check('jpEbaySellLink element exists in HTML',              /id="jpEbaySellLink"/.test(INDEX));
-check('jpEbaySellLink JS sets URL for both JP branches',    (INDEX.match(/jpEbaySellLink\.href = buildEbayUrl/g) || []).length >= 2);
+check('jpEbaySellLink JS sets URL for both JP branches',    (INDEX.match(/jpEbaySellLink\.href = buildEbaySearchUrl/g) || []).length >= 2);
 check('Scan-miss panel has ebaySellUrl variable',           /const ebaySellUrl = /.test(INDEX));
 check('Scan-miss panel renders "List on eBay" button',      /List on eBay \u2192/.test(INDEX));
 check('Scan-miss sell URL uses sell/listing flow',          /sell\/listing\?flow=startSell&presetNameSearchQuery=\$\{ebayQ\}/.test(INDEX));
