@@ -180,6 +180,22 @@ check('API verifies against Cloudflare siteverify',              CLAIM_API.inclu
 check('API rejects on no_turnstile_token when configured',       CLAIM_API.includes("code: 'no_turnstile_token'"));
 check('API fails closed on Turnstile unreachable',               CLAIM_API.includes("turnstile_unreachable"));
 
+console.log('\n[Email signup verify flow 2026-08-14]');
+check('Auth modal has "Check your inbox" verify view',            INDEX.includes("id=\"authViewVerify\""));
+check('Verify view has target-email span',                        INDEX.includes("id=\"authVerifyEmail\""));
+check('Verify view has claim-bonus button',                       INDEX.includes("id=\"authVerifyCheckBtn\""));
+check('Verify view has resend button',                            INDEX.includes("id=\"authVerifyResendBtn\""));
+check('Verify view has Turnstile mount point',                    INDEX.includes("id=\"authVerifyTurnstile\""));
+check('showAuthView knows about verify view',                     INDEX.includes("verify: 'authViewVerify'"));
+check('doEmailSignUp sets _authJustSignedUp before create',       INDEX.includes("window._authJustSignedUp = true;\n    await window._fbEmailSignUp"));
+check('doEmailSignUp sends verification email',                   INDEX.includes("await window._fbSendVerification?.()"));
+check('doEmailSignUp switches to verify view',                    INDEX.includes("showAuthView('verify')"));
+check('onAuthStateChanged skips close during signup',             INDEX.includes("if (!window._authJustSignedUp) {\n          closeAuthModal();"));
+check('doAuthCheckVerified force-refreshes token',                INDEX.includes("user.getIdToken(true)"));
+check('doAuthCheckVerified sends turnstileToken to API',          INDEX.includes("body: JSON.stringify({ turnstileToken })"));
+check('doAuthResendVerification defined',                         INDEX.includes("async function doAuthResendVerification()"));
+check('_authBackToSignIn signs out + returns to signin',          INDEX.includes("async function _authBackToSignIn()"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

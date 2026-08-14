@@ -1059,8 +1059,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             loadSettingsScanCredits();
           }
         }).catch(() => {});
-        // Close auth modal if open
-        closeAuthModal();
+        // Close auth modal if open — UNLESS we're mid-signup and showing the
+        // "Check your inbox" view. Otherwise a fresh unverified signup silently
+        // closes the modal and looks like a blank/broken flow.
+        if (!window._authJustSignedUp) {
+          closeAuthModal();
+        }
         // Handle ?next= redirect from sign-in page
         const _nextParam = new URLSearchParams(location.search).get('next');
         if (_nextParam === 'flips' || _nextParam === 'collection') {
@@ -9740,6 +9744,29 @@ window.addEventListener('load', () => {
       <div class="auth-switch">Already have an account? <a onclick="showAuthView('signin')">Sign in</a></div>
     </div>
 
+    <!--
+      Post-signup "Check your inbox" view (2026-08-14 fix).
+      Previously: email signup succeeded silently — Firebase's onAuthStateChanged
+      fired, closeAuthModal() closed the whole modal, and the user was left on
+      the main app with no idea an unverified account had just been created
+      (looked like a "blank" failure). The signup bonus was ALSO gated behind
+      verification server-side, so users never got the 10 scans either.
+      Now: on successful createUser we (a) send the verification email,
+      (b) show this view, (c) set _authJustSignedUp so the auth-state handler
+      skips the auto-close and the user reads the instructions.
+    -->
+    <div id="authViewVerify" style="display:none">
+      <div style="text-align:center;font-size:2rem;margin-bottom:.5rem">📧</div>
+      <div class="auth-modal-title" style="text-align:center">Check your inbox</div>
+      <div class="auth-modal-sub" style="text-align:center">We sent a verification link to <strong id="authVerifyEmail" style="color:var(--text)">your email</strong>. Click it to unlock your 10 free ID scans + 1 AI Grade scan.</div>
+      <div id="authVerifySuccess" class="auth-success" style="display:none"></div>
+      <div id="authVerifyError"   class="auth-error"   style="display:none"></div>
+      <button class="auth-btn-primary" id="authVerifyCheckBtn" onclick="doAuthCheckVerified()">I’ve verified — claim bonus</button>
+      <div id="authVerifyTurnstile" style="margin-top:.65rem;min-height:0;display:flex;justify-content:center"></div>
+      <button class="auth-btn-secondary" id="authVerifyResendBtn" style="margin-top:.5rem;background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:.6rem 1rem;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;width:100%" onclick="doAuthResendVerification()">Resend verification email</button>
+      <div class="auth-switch" style="margin-top:.6rem"><a onclick="_authBackToSignIn()">← Use a different account</a></div>
+    </div>
+
     <!-- Forgot Password view -->
     <div id="authViewForgot" style="display:none">
       <div class="auth-modal-title">Reset password</div>
@@ -9772,9 +9799,13 @@ function closeAuthModal() {
   ['authSignInError','authSignUpError','authForgotError','authForgotSuccess'].forEach(id => { const el = document.getElementById(id); if (el) { el.style.display = 'none'; el.textContent = ''; } });
 }
 function showAuthView(view) {
-  ['authViewSignIn','authViewSignUp','authViewForgot'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-  const map = { signin: 'authViewSignIn', signup: 'authViewSignUp', forgot: 'authViewForgot' };
+  ['authViewSignIn','authViewSignUp','authViewForgot','authViewVerify'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  const map = { signin: 'authViewSignIn', signup: 'authViewSignUp', forgot: 'authViewForgot', verify: 'authViewVerify' };
   const t = document.getElementById(map[view]); if (t) t.style.display = '';
+  // When landing on the verify view, render the Turnstile widget so the
+  // token is ready by the time the user clicks "claim bonus". Safe no-op
+  // when Turnstile isn't configured (empty site-key meta).
+  if (view === 'verify') setTimeout(() => window._tsRenderInto?.('authVerifyTurnstile'), 0);
 }
 function _authError(elId, msg) { const el = document.getElementById(elId); if (!el) return; el.textContent = msg; el.style.display = ''; }
 function _authClearError(elId) { const el = document.getElementById(elId); if (el) { el.style.display = 'none'; el.textContent = ''; } }
@@ -9804,11 +9835,95 @@ async function doEmailSignUp() {
   const btn = document.getElementById('authSignUpBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Creating account...'; }
   try {
+    // Flag BEFORE creating the user so onAuthStateChanged doesn't auto-close
+    // the modal the moment Firebase notices we're signed in. We WANT the
+    // modal to stay open on the verify screen until they either verify or
+    // dismiss it manually.
+    window._authJustSignedUp = true;
     await window._fbEmailSignUp(email, pass);
+    // Fire the verification email. Non-fatal if it fails — they can use the
+    // "Resend verification email" button on the verify view.
+    try { await window._fbSendVerification?.(); } catch(e) { /* non-fatal */ }
+    // Populate + show the verify view.
+    const tgt = document.getElementById('authVerifyEmail');
+    if (tgt) tgt.textContent = email;
+    showAuthView('verify');
   } catch(e) {
+    // Signup itself failed — clear the flag so the modal behaves normally.
+    window._authJustSignedUp = false;
     _authError('authSignUpError', _fbErrMsg(e));
+  } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
   }
+}
+
+// Called from the verify view's "Resend" button.
+async function doAuthResendVerification() {
+  const btn = document.getElementById('authVerifyResendBtn');
+  const ok  = document.getElementById('authVerifySuccess');
+  const err = document.getElementById('authVerifyError');
+  if (ok)  { ok.style.display  = 'none'; ok.textContent  = ''; }
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await window._fbSendVerification?.();
+    if (ok) { ok.textContent = 'Verification email sent — check your inbox.'; ok.style.display = ''; }
+    if (btn) { btn.textContent = 'Email sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend verification email'; }, 5000); }
+  } catch(e) {
+    if (err) { err.textContent = _fbErrMsg(e); err.style.display = ''; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Resend verification email'; }
+  }
+}
+
+// Called from the verify view's "I've verified — claim bonus" button.
+// Refreshes the Firebase token so email_verified is up-to-date, then hits
+// the server to grant the signup bonus (server checks token.email_verified
+// plus per-user + per-email dedupe).
+async function doAuthCheckVerified() {
+  const btn = document.getElementById('authVerifyCheckBtn');
+  const err = document.getElementById('authVerifyError');
+  const ok  = document.getElementById('authVerifySuccess');
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  if (ok)  { ok.style.display  = 'none'; ok.textContent  = ''; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  try {
+    // Force-refresh the current user + ID token so Firebase picks up the
+    // recently-flipped emailVerified claim.
+    try { await window._fbReloadUser?.(); } catch(e) {}
+    const user = window._fbAuth?.currentUser;
+    if (!user) throw new Error('No signed-in user — please sign in again.');
+    if (!user.emailVerified) {
+      throw Object.assign(new Error("Not verified yet — click the link in your email, then try again."), { code: 'not_verified' });
+    }
+    const tok = await user.getIdToken(true);
+    const turnstileToken = window._tsGetToken?.('authVerifyTurnstile') || '';
+    const resp = await fetch('/api/verify-claim-firebase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ turnstileToken }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || 'Verification failed. Please retry.');
+    // Bonus granted (or already granted) — close the modal, migrate any anon
+    // data, refresh scan-credit UI.
+    window._authJustSignedUp = false;
+    if (ok) { ok.textContent = data.bonusGranted ? 'Bonus unlocked! Enjoy your 10 free ID scans.' : 'Verified.'; ok.style.display = ''; }
+    try { window._migrateAnonDataToUser?.(); } catch(e) {}
+    setTimeout(() => { closeAuthModal(); }, 900);
+  } catch(e) {
+    if (err) { err.textContent = (e && e.message) || 'Verification check failed.'; err.style.display = ''; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'I\u2019ve verified \u2014 claim bonus'; }
+    try { window._tsReset?.('authVerifyTurnstile'); } catch(e) {}
+  }
+}
+
+// Sign the user out and return them to the sign-in view (used by the
+// "Use a different account" link on the verify screen).
+async function _authBackToSignIn() {
+  try { await window._fbSignOut?.(); } catch(e) {}
+  window._authJustSignedUp = false;
+  showAuthView('signin');
 }
 async function doPasswordReset() {
   const email = document.getElementById('authForgotEmail')?.value?.trim();
