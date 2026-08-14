@@ -37,6 +37,47 @@ export default async function handler(req, res) {
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
   if (!idToken) return res.status(401).json({ error: 'Missing auth token' });
 
+  // ---- Cloudflare Turnstile bot check (2026-08-14) ---------------------
+  // Extra fraud layer for the signup-bonus grant. If TURNSTILE_SECRET_KEY
+  // is set in env, require a valid token from the /claim-scans button. If
+  // not set, we soft-skip (dev/local), so this is safe to deploy before
+  // the env var is populated — protection kicks in the moment you add the
+  // key in the Vercel dashboard.
+  const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+  if (turnstileSecret) {
+    const body = (req.body && typeof req.body === 'object') ? req.body : (() => { try { return JSON.parse(req.body || '{}'); } catch(e) { return {}; } })();
+    const tsToken = body.turnstileToken || req.headers['x-turnstile-token'];
+    if (!tsToken) {
+      return res.status(400).json({ error: 'Bot check failed', code: 'no_turnstile_token' });
+    }
+    try {
+      const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          secret: turnstileSecret,
+          response: String(tsToken),
+          // Best-effort remote IP (Vercel proxies via x-forwarded-for)
+          remoteip: (req.headers['x-forwarded-for'] || '').split(',')[0].trim(),
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+      if (!verifyJson.success) {
+        return res.status(400).json({
+          error: 'Bot check failed',
+          code: 'turnstile_rejected',
+          codes: verifyJson['error-codes'] || [],
+        });
+      }
+    } catch(e) {
+      // If Cloudflare itself is unreachable, fail closed — attackers could
+      // otherwise nullify Turnstile by DoS-ing challenges.cloudflare.com
+      // paths. Real users retry.
+      return res.status(503).json({ error: 'Bot check unavailable, try again', code: 'turnstile_unreachable' });
+    }
+  }
+  // ---------------------------------------------------------------------
+
   let tokenInfo;
   try {
     tokenInfo = await verifyTokenFlexible(idToken);

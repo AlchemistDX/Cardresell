@@ -161,6 +161,25 @@ check('checkout_attempt event fires on Pro monthly',            INDEX.includes("
 check('checkout_attempt event fires on Pro annual',             INDEX.includes("plan: 'pro_annual'"));
 check('checkout_attempt event fires on grade pack',             INDEX.includes("plan: 'grade_pack', tier"));
 
+console.log('\n[Anon-mode Collection + Turnstile 2026-08-14]');
+check('Collection wall forced hidden (display:none !important)', INDEX.includes("display:none !important"));
+check('Anon sync banner element present',                        INDEX.includes("id=\"anonSyncBanner\""));
+check('Anon banner CTA offers Google sign-in',                   INDEX.includes("Sign in to sync across devices"));
+check('renderCollectionView no longer bails on signed-out',      !INDEX.includes("if (!signedIn) {\n    // Auth not resolved yet"));
+check('_updateCollectionSignInWall toggles banner not wall',     INDEX.includes("if (banner)  banner.style.display  = signedIn ? 'none' : 'flex'"));
+check('Turnstile script tag loaded',                             INDEX.includes("challenges.cloudflare.com/turnstile/v0/api.js"));
+check('Turnstile site-key meta present',                         INDEX.includes("name=\"turnstile-site-key\""));
+check('_tsRenderInto helper defined',                            INDEX.includes("window._tsRenderInto = function _tsRenderInto"));
+check('_tsGetToken helper defined',                              INDEX.includes("window._tsGetToken = function _tsGetToken"));
+check('Turnstile div mounted in claim modal',                    INDEX.includes("id=\"verifyTurnstile\""));
+check('Claim POST sends turnstileToken',                         INDEX.includes("body: JSON.stringify({ turnstileToken })"));
+
+const CLAIM_API = fs.readFileSync(path.join(__dirname, '../api/verify-claim-firebase.js'), 'utf8');
+check('API reads TURNSTILE_SECRET_KEY',                          CLAIM_API.includes("process.env.TURNSTILE_SECRET_KEY"));
+check('API verifies against Cloudflare siteverify',              CLAIM_API.includes("challenges.cloudflare.com/turnstile/v0/siteverify"));
+check('API rejects on no_turnstile_token when configured',       CLAIM_API.includes("code: 'no_turnstile_token'"));
+check('API fails closed on Turnstile unreachable',               CLAIM_API.includes("turnstile_unreachable"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);

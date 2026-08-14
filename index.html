@@ -1094,12 +1094,80 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         try { document.getElementById('googleUserBtn').style.display = 'none'; } catch(e) {}
         // Drop the post-signin grace period — Firebase confirmed no user, show the button.
         try { window._resolveAuthGrace && window._resolveAuthGrace(); } catch(e) {}
-        try { document.getElementById('collectionSignInWall').style.display = ''; } catch(e) {}
+        // Anon users keep their local collection visible even on sign-out (wall stays off).
+        try { _updateCollectionSignInWall?.(); } catch(e) {}
         try { _updateFlipsSignInWall?.(); } catch(e) {}
         updateProUI?.();
         window._authInitialized = true;
       }
     });
+  </script>
+  <!--
+    Cloudflare Turnstile (2026-08-14) — invisible bot check on the free-scan
+    bonus claim button. Site key comes from `window._TURNSTILE_SITE_KEY`
+    which we set via /api/config on first load (so we can rotate without a
+    redeploy). If Turnstile isn't configured (no site key), the widget code
+    silently no-ops and the API-side check also soft-skips.
+  -->
+  <!--
+    Public Turnstile site key. Cloudflare site keys are safe to expose
+    client-side (that's their design). Replace with your real key when the
+    Cloudflare Turnstile site is provisioned; until then the widget stays
+    dark and _tsRenderInto silently no-ops.
+  -->
+  <meta name="turnstile-site-key" content="" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script>
+    // ---- Turnstile helpers (2026-08-14) --------------------------------
+    // These functions are safe no-ops when the site key is empty (no key
+    // in the meta tag) OR when the Turnstile script fails to load (adblock,
+    // firewall). The backend check in /api/verify-claim-firebase also
+    // soft-skips when TURNSTILE_SECRET_KEY isn't set, so the whole layer
+    // stays inert until you flip both env vars on.
+    (function() {
+      window._tsWidgets = window._tsWidgets || {};
+      function _tsSiteKey() {
+        const m = document.querySelector('meta[name="turnstile-site-key"]');
+        return (m && m.getAttribute('content') || '').trim();
+      }
+      window._tsSiteKey = _tsSiteKey;
+      window._tsRenderInto = function _tsRenderInto(elId) {
+        const key = _tsSiteKey();
+        if (!key) return; // Not configured yet — no widget rendered.
+        const el = document.getElementById(elId);
+        if (!el) return;
+        // If the Turnstile script hasn't loaded yet, poll briefly.
+        let tries = 0;
+        const attempt = () => {
+          if (window.turnstile && typeof window.turnstile.render === 'function') {
+            try {
+              const id = window.turnstile.render(el, { sitekey: key, size: 'flexible' });
+              window._tsWidgets[elId] = id;
+            } catch(e) { /* already rendered or bad key — ignore */ }
+            return;
+          }
+          if (++tries < 50) setTimeout(attempt, 200); // up to 10s
+        };
+        attempt();
+      };
+      window._tsGetToken = function _tsGetToken(elId) {
+        try {
+          const id = window._tsWidgets[elId];
+          if (id && window.turnstile && typeof window.turnstile.getResponse === 'function') {
+            return window.turnstile.getResponse(id) || '';
+          }
+        } catch(e) {}
+        return '';
+      };
+      window._tsReset = function _tsReset(elId) {
+        try {
+          const id = window._tsWidgets[elId];
+          if (id && window.turnstile && typeof window.turnstile.reset === 'function') {
+            window.turnstile.reset(id);
+          }
+        } catch(e) {}
+      };
+    })();
   </script>
   <!--
     Vercel Web Analytics (2026-08-13) — launch prep. Loaded via the official
@@ -2010,11 +2078,20 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 <div id="collectionView" class="flips-view" style="display:none">
 
   <!-- SIGN-IN WALL -->
-  <div id="collectionSignInWall" style="display:none;padding:2.5rem 1.5rem;text-align:center">
-    <div style="font-size:2.5rem;margin-bottom:.75rem">📦</div>
-    <div style="font-size:1.05rem;font-weight:800;color:var(--text);margin-bottom:.4rem">Track your collection</div>
-    <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Log every card you own, see total value,<br>and know what it's worth today.</div>
-    <a href="/signin?next=collection" style="padding:.7rem 1.6rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.88rem;font-weight:800;cursor:pointer;text-decoration:none;display:inline-block">Sign in with Google</a>
+  <!--
+    Collection sign-in wall (2026-08-14) — kept in DOM for legacy scripts that
+    still call _updateCollectionSignInWall(), but display is forced OFF now.
+    Anon users can save cards to browser localStorage; a persistent banner
+    (below) prompts them to sign in for cross-device sync. This flips the
+    psychology: sign-in is a benefit unlock, not a tollbooth.
+  -->
+  <div id="collectionSignInWall" style="display:none !important"></div>
+
+  <!-- Anon sync banner — only visible when signed OUT and collection has entries -->
+  <div id="anonSyncBanner" style="display:none;margin-bottom:1rem;padding:.7rem .9rem;background:linear-gradient(135deg,rgba(59,130,246,.10),rgba(59,130,246,.05));border:1px solid rgba(59,130,246,.35);border-radius:10px;align-items:center;gap:.6rem;flex-wrap:wrap">
+    <span style="font-size:1.15rem">💾</span>
+    <span style="flex:1;min-width:180px;font-size:.78rem;color:var(--text);line-height:1.4">Your cards are saved to this browser only. <strong style="color:var(--gold)">Sign in to sync across devices</strong> and unlock 10 free ID scans.</span>
+    <button onclick="triggerGoogleSignIn()" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:8px;font-size:.75rem;font-weight:800;cursor:pointer;white-space:nowrap">Sign in →</button>
   </div>
 
   <!-- CONTENT (signed-in) -->
@@ -6300,46 +6377,26 @@ async function exportSubscriberCSV() {
 // ══════════════════════════════════════════════════════════
 
 function _updateCollectionSignInWall() {
+  // 2026-08-14: anon users are now allowed to use the Collection view (data
+  // saved to unscoped localStorage keys; _migrateAnonDataToUser merges on
+  // sign-in). So the hard sign-in wall is gone; we always show content and
+  // instead toggle a soft sync banner when the user isn't signed in.
   const wall    = document.getElementById('collectionSignInWall');
   const content = document.getElementById('collectionContent');
-  // Accept BOTH signals — googleUser (set atomically by Firebase) OR _userSub.
-  // This matches getUserKey()'s check so wall visibility and data reads stay in sync.
+  const banner  = document.getElementById('anonSyncBanner');
   const signedIn = !!(window.googleUser && window.googleUser.sub) || !!window._userSub;
-  if (wall)    wall.style.display    = signedIn ? 'none' : '';
-  if (content) content.style.display = signedIn ? ''     : 'none';
+  if (wall)    wall.style.display    = 'none';
+  if (content) content.style.display = '';
+  if (banner)  banner.style.display  = signedIn ? 'none' : 'flex';
 }
 
 function renderCollectionView() {
   _updateCollectionSignInWall();
-  // Sign-in check: prefer googleUser (matches what loadPortData reads via getUserKey).
-  // If Firebase auth hasn't finished restoring yet, retry once it does — otherwise the
-  // Collection tab would silently render nothing while the Portfolio table (which has
-  // no wall check) fills in from the same localStorage key a moment later.
-  const signedIn = !!(window.googleUser && window.googleUser.sub) || !!window._userSub;
-  if (!signedIn) {
-    // Auth not resolved yet — schedule one retry after Firebase fires
-    if (!window._authInitialized && !window._collectionAuthRetry) {
-      window._collectionAuthRetry = true;
-      const retry = () => {
-        window._collectionAuthRetry = false;
-        const colView = document.getElementById('collectionView');
-        if (!colView) return;
-        const computed = window.getComputedStyle ? window.getComputedStyle(colView).display : colView.style.display;
-        if (computed !== 'none') renderCollectionView();
-      };
-      // Poll for auth resolution — up to 6s total
-      let elapsed = 0;
-      const iv = setInterval(() => {
-        elapsed += 200;
-        if (window.googleUser || window._authInitialized || elapsed >= 6000) {
-          clearInterval(iv);
-          retry();
-        }
-      }, 200);
-    }
-    return;
-  }
-
+  // 2026-08-14: anon users are allowed to render the Collection view. Their
+  // data lives in the unscoped `cardsell_portfolio` key (getUserKey falls
+  // back to it when window.googleUser is null), and _migrateAnonDataToUser
+  // silently merges those entries into the user-scoped key on first sign-in
+  // — so there's no data loss. This unblocks the top activation gate.
   const port = loadPortData(); // reuse existing portfolio data
 
   // ── Stats ──
@@ -7226,8 +7283,15 @@ async function _verifySendCode() {
               '<button id="verifyLinkDoneBtn" onclick="_verifyFirebaseLinkDone()" ' +
               'style="width:100%;padding:.75rem;background:var(--gold);color:#000;border:none;border-radius:8px;font-weight:800;font-size:.9rem;cursor:pointer">' +
               'I\u2019ve verified \u2014 claim bonus</button>' +
+              // Cloudflare Turnstile widget (2026-08-14). Renders invisibly for
+              // real users, blocks automation. Site key injected by _tsRenderInto
+              // right after the modal HTML mounts (needs the DOM present first).
+              '<div id="verifyTurnstile" style="margin-top:.65rem;min-height:0;display:flex;justify-content:center"></div>' +
               '<div id="verifyLinkErr" style="color:#f87171;font-size:.75rem;margin-top:.5rem;display:none"></div>' +
               '<button onclick="_verifyBackToEmail()" style="margin-top:.6rem;background:transparent;border:none;color:#888;font-size:.75rem;cursor:pointer;text-decoration:underline">Use a different email</button>';
+            // Mount the Turnstile widget once the DOM node exists. Grabs a
+            // fresh token that _verifyFirebaseLinkDone() then sends to the API.
+            setTimeout(() => _tsRenderInto('verifyTurnstile'), 0);
           }
         } else {
           err.textContent = 'Verification currently unavailable. Try again in a few minutes.';
@@ -7371,11 +7435,15 @@ async function _verifyFirebaseLinkDone() {
     return;
   }
 
+  // Pull the Turnstile response token if the widget rendered. If Turnstile
+  // isn't configured (no site key), _tsGetToken returns '' and the API-side
+  // check soft-skips too.
+  const turnstileToken = _tsGetToken('verifyTurnstile');
   try {
     const resp = await fetch('/api/verify-claim-firebase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ turnstileToken }),
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || !data.ok) {
