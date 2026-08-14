@@ -5853,8 +5853,13 @@ function addCurrentCardToCollection() {
   // sees they're saving a graded card (not a raw one) BEFORE hitting save.
   _syncFlipModalGradeBanner();
   modal.classList.add('open');
-  // Show a brief toast hint
-  showToast('Fill in your purchase cost and tap Save to track this card 📦');
+  // Show a brief toast hint. Anonymous users get a friendlier nudge so they
+  // understand their card IS being saved (locally) and sign-in is optional.
+  if (window._userSub || window.googleUser) {
+    showToast('Fill in your purchase cost and tap Save to track this card 📦');
+  } else {
+    showToast('Saving to this device — sign in later to sync + get 10 free scans 💾');
+  }
 }
 
 // Read the currently-selected grader pill + grade on the lookup page and
