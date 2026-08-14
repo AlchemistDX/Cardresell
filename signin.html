@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="manifest" href="/manifest.json" />
+  <!-- <link rel="manifest" href="/manifest.json" /> — disabled 2026-08-14 -->
   <meta name="theme-color" content="#0f172a" />
 
   <style>
@@ -633,6 +633,20 @@
       document.getElementById('verifyEmailTarget').textContent = email || 'your inbox';
       switchTab('verify');
     };
+
+    // 2026-08-14 fix: previously the 'Start over' link on the verify screen
+    // only called switchTab('signup') without resetting the button state.
+    // The 'Creating account...' loading label + disabled=true set by
+    // setLoading('btnSignUp', true, ...) was never rolled back, leaving
+    // the resubmit button permanently dead. Now we explicitly reset it and
+    // clear the _justSignedUp flag before switching views.
+    async function _startOverSignUp() {
+      try { window._justSignedUp = false; } catch(e) {}
+      try { await (window._fbAuth && window._fbAuth.signOut()); } catch(e) {}
+      setLoading('btnSignUp', false, 'Create Account');
+      clearErr('errSignUp');
+      switchTab('signup');
+    }
 
     async function resendVerification() {
       const btn = document.getElementById('btnResendVerify');

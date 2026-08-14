@@ -747,7 +747,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <meta name="twitter:image" content="https://www.cardresell.org/og-image.png" />
 
   <!-- PWA -->
-  <link rel="manifest" href="/manifest.json" />
+  <!-- <link rel="manifest" href="/manifest.json" /> — disabled 2026-08-14 until real manifest exists; SPA catch-all was serving HTML causing console errors -->
   <meta name="theme-color" content="#0f172a" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -5821,7 +5821,13 @@ function switchView(view) {
 let _modalMode = 'flip'; // 'flip' or 'hold'
 
 function addCurrentCardToCollection() {
-  if (!window._userSub) { triggerGoogleSignIn(); return; }
+  // 2026-08-14 fix: previously anonymous users were bounced straight to sign-in
+  // which lost their card-lookup context and made the button look broken.
+  // Now we let signed-out users save to the unscoped `cardsell_portfolio`
+  // key (getUserKey falls back to it when window.googleUser is null); on
+  // sign-in, _migrateAnonDataToUser() merges those entries into the user's
+  // scoped key so nothing is lost. The #anonSyncBanner reminds them to sign
+  // in later to unlock scan-credit features + cross-device sync.
   if (!selectedCard || !selectedCard.name) {
     alert('Search for a card first, then tap Add to My Collection.');
     return;
