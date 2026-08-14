@@ -1679,10 +1679,22 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div id="cardNameBlock" style="display:none">
           <div class="card-name" id="cardNameEl"></div>
           <div class="card-meta-row" id="cardMetaEl"></div>
-          <a id="ebayListBtn" href="#" target="_blank" rel="noopener" class="sell-btn" style="display:none">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            Sell on eBay
-          </a>
+          <!-- 2026-08-14: paired Sell buttons — eBay for sold-comps research +
+               'Sell one like this' flow, TCGplayer for direct product page
+               where the 'Sell Yours' CTA lives one tap away. -->
+          <div id="cardSellBtnRow" style="display:none;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.75rem">
+            <a id="ebayListBtn" href="#" target="_blank" rel="noopener" class="sell-btn" style="margin-top:0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              Sell on eBay
+            </a>
+            <a id="tcgpListBtn" href="#" target="_blank" rel="noopener" class="sell-btn" style="margin-top:0;background:#f0b429;color:#000">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M2 12h20"/></svg>
+              Sell on TCGplayer
+            </a>
+          </div>
+          <div id="cardSellTip" style="display:none;font-size:.68rem;color:var(--muted);text-align:center;margin-top:.4rem;line-height:1.35">
+            💡 On eBay tap any sold listing → <strong>“Sell one like this”</strong> · On TCGplayer tap <strong>“Sell Yours”</strong>
+          </div>
 
           <!-- Where to Sell / Buy platform links -->
           <div id="sellLinksBlock" class="sell-links" style="display:none">
@@ -4474,12 +4486,32 @@ function loadCardUI(card) {
 
   // eBay Sell button — 2026-08-14: send to a searched view of THIS card
   // (sold comps + active listings) rather than eBay's blank sell wizard, so
-  // sellers can price against real-time market before listing.
+  // sellers can price against real-time market before listing. Now paired
+  // with a TCGplayer Sell button in a 2-col grid (#cardSellBtnRow).
   const ebayListBtn = document.getElementById('ebayListBtn');
+  const tcgpListBtn = document.getElementById('tcgpListBtn');
+  const cardSellBtnRow = document.getElementById('cardSellBtnRow');
+  const cardSellTip = document.getElementById('cardSellTip');
   if (ebayListBtn) {
     ebayListBtn.href = buildEbaySearchUrl(card.name, card.number);
-    ebayListBtn.style.display = 'flex';
   }
+  if (tcgpListBtn) {
+    // Set a search-based URL immediately so the button never lands anywhere
+    // broken; then upgrade to the exact product page (where the 'Sell Yours'
+    // CTA is one tap away) if buildTcgpSmart can resolve a product ID.
+    tcgpListBtn.href = (typeof buildTcgpUrl === 'function')
+      ? buildTcgpUrl(card.name || '', card.setName || '', card.number || '')
+      : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(card.name || '')}&view=grid`;
+    if (typeof buildTcgpSmart === 'function') {
+      try {
+        Promise.resolve(buildTcgpSmart(card)).then(function(u) {
+          if (u && typeof u === 'string') tcgpListBtn.href = u;
+        }).catch(function(){});
+      } catch(e) {}
+    }
+  }
+  if (cardSellBtnRow) cardSellBtnRow.style.display = 'grid';
+  if (cardSellTip) cardSellTip.style.display = 'block';
 
   // Update platform sell/buy links (skip auto-recalc — loadCardUI handles calc below)
   updateSellLinks._skipRecalc = true;
@@ -4559,6 +4591,10 @@ function resetCardPanel() {
   cardNameBlock.style.display = 'none';
   const ebayListBtn = document.getElementById('ebayListBtn');
   if (ebayListBtn) ebayListBtn.style.display = 'none';
+  const cardSellBtnRow = document.getElementById('cardSellBtnRow');
+  if (cardSellBtnRow) cardSellBtnRow.style.display = 'none';
+  const cardSellTip = document.getElementById('cardSellTip');
+  if (cardSellTip) cardSellTip.style.display = 'none';
   const sellLinksBlock = document.getElementById('sellLinksBlock');
   if (sellLinksBlock) sellLinksBlock.style.display = 'none';
   window._platSellUrls = null; // Clear sell URLs so cards won't be clickable until a card is loaded
