@@ -1179,7 +1179,29 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     without adding an npm dep. `window.va` becomes available and we call it
     manually for the funnel events we care about (see va() helper below).
   -->
-  <script defer src="/_vercel/insights/script.js"></script>
+  <!-- Load Vercel Insights defensively: probe with a HEAD request first and
+       only inject the script tag if the endpoint returns real JS. When Web
+       Analytics isn't provisioned on the project, /_vercel/insights/script.js
+       falls through the SPA catch-all and returns HTML, which the browser
+       tries to parse as JS and throws a SyntaxError. This wrapper prevents
+       that noise (real analytics still works when properly enabled). -->
+  <script>
+    (function() {
+      try {
+        fetch('/_vercel/insights/script.js', { method: 'HEAD' })
+          .then(r => {
+            const ct = r.headers.get('content-type') || '';
+            if (r.ok && /javascript|ecmascript/i.test(ct)) {
+              const s = document.createElement('script');
+              s.defer = true;
+              s.src = '/_vercel/insights/script.js';
+              document.head.appendChild(s);
+            }
+          })
+          .catch(() => {});
+      } catch(e) {}
+    })();
+  </script>
   <script>
     // Safe wrapper: never throws if analytics is blocked (ad-blockers) or
     // hasn't loaded yet. All CardResell funnel events go through this.
