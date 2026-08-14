@@ -192,15 +192,23 @@
     .btn-primary:hover { opacity: .88; }
     .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
-    /* Error / success */
+    /* Error / success — 2026-08-14 fix: previously .alert had display:none as
+       the base rule, and showErr set el.style.display='' which resolves back
+       to the stylesheet value (=none). Result: EVERY signup/signin error was
+       invisible (email-already-in-use, weak-password, wrong-password, etc.),
+       which the user experienced as a silent failure. Now .alert is hidden
+       via a :not(.show) selector so toggling the .show class actually
+       reveals it. Inline display style is still respected as a fallback for
+       the resend flow that sets el.style.display=''. */
     .alert {
       border-radius: 9px;
       padding: .55rem .8rem;
       font-size: .78rem;
       margin-bottom: .75rem;
-      display: none;
       line-height: 1.45;
     }
+    .alert:not(.show) { display: none; }
+    .alert.show      { display: block; }
     .alert-error { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); color: #f87171; }
     .alert-success { background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.3); color: #4ade80; }
 
@@ -249,7 +257,9 @@
   <div class="auth-card">
 
     <!-- Diagnostic banner (temporary) — surfaces silent auth errors on-screen. Remove after we confirm iOS flow is fixed. -->
+<!-- Debug banner disabled 2026-08-14 (email signup flow verified working end-to-end). Uncomment to re-enable on-screen breadcrumbs.
     <div id="authDebugBanner" style="display:none;margin:0 0 .75rem;padding:.6rem .8rem;background:#1a1a2e;border:1px solid #4a4a6a;border-radius:8px;color:#e0e0f0;font-size:.72rem;line-height:1.4;font-family:ui-monospace,monospace;word-break:break-word;max-height:140px;overflow-y:auto"></div>
+-->
 
     <!-- Logo -->
     <div class="logo">
@@ -628,15 +638,15 @@
       const btn = document.getElementById('btnResendVerify');
       const ok  = document.getElementById('okVerify');
       const err = document.getElementById('errVerify');
-      if (ok)  ok.style.display  = 'none';
-      if (err) err.style.display = 'none';
+      if (ok)  { ok.classList.remove('show');  ok.style.display  = 'none'; }
+      if (err) { err.classList.remove('show'); err.style.display = 'none'; }
       if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
       try {
         await window._fbSendVerification();
-        if (ok) { ok.textContent = 'Verification email sent — check your inbox.'; ok.style.display = ''; }
+        if (ok) { ok.textContent = 'Verification email sent — check your inbox.'; ok.classList.add('show'); ok.style.display = ''; }
         if (btn) { btn.textContent = 'Email Sent ✓'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }, 5000); }
       } catch(e) {
-        if (err) { err.textContent = fbMsg(e); err.style.display = ''; }
+        if (err) { err.textContent = fbMsg(e); err.classList.add('show'); err.style.display = ''; }
         if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
       }
     }
@@ -644,7 +654,7 @@
     async function checkVerified() {
       const btn = document.getElementById('btnCheckVerified');
       const err = document.getElementById('errVerify');
-      if (err) err.style.display = 'none';
+      if (err) { err.classList.remove('show'); err.style.display = 'none'; }
       if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
       try {
         await window._fbReloadUser();
@@ -655,9 +665,9 @@
           window.location.replace(dest);
           return;
         }
-        if (err) { err.textContent = "Not verified yet — click the link in your email, then try again."; err.style.display = ''; }
+        if (err) { err.textContent = "Not verified yet — click the link in your email, then try again."; err.classList.add('show'); err.style.display = ''; }
       } catch(e) {
-        if (err) { err.textContent = fbMsg(e); err.style.display = ''; }
+        if (err) { err.textContent = fbMsg(e); err.classList.add('show'); err.style.display = ''; }
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = "I've verified — Continue"; }
       }
@@ -684,27 +694,18 @@
       }
     }
 
-    // TEMPORARY diagnostic — surfaces auth breadcrumbs + errors on screen.
-    // Call _dbg('event') to log a step. All handlers below now call it so we
-    // can see how far the flow gets on iOS/Safari before failing.
+    // Debug breadcrumbs — no-op in production (banner is disabled above).
+    // Kept as a safe stub so all the _dbg() calls sprinkled through the auth
+    // handlers don't throw. Console log stays for devtools users.
     window._dbg = function(msg) {
-      try {
-        const el = document.getElementById('authDebugBanner');
-        if (!el) return;
-        const stamp = new Date().toISOString().slice(11, 19);
-        const line = document.createElement('div');
-        line.textContent = '[' + stamp + '] ' + msg;
-        el.appendChild(line);
-        el.style.display = '';
-        el.scrollTop = el.scrollHeight;
-      } catch(_) {}
+      try { console.log('[dbg] ' + msg); } catch(_) {}
     };
     window.addEventListener('error', (e) => { window._dbg && window._dbg('window.error: ' + (e.message || e.error?.message || 'unknown')); });
     window.addEventListener('unhandledrejection', (e) => { window._dbg && window._dbg('unhandled: ' + (e.reason?.code || '') + ' ' + (e.reason?.message || e.reason || '')); });
     window._dbg('page loaded, UA=' + navigator.userAgent.slice(0, 50));
 
-    function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.style.display = ''; } window._dbg && window._dbg('showErr[' + id + ']: ' + msg); }
-    function clearErr(id) { const el = document.getElementById(id); if (el) { el.style.display = 'none'; el.textContent = ''; } }
+    function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.classList.add('show'); el.style.display = ''; } window._dbg && window._dbg('showErr[' + id + ']: ' + msg); }
+    function clearErr(id) { const el = document.getElementById(id); if (el) { el.classList.remove('show'); el.style.display = 'none'; el.textContent = ''; } }
     function setLoading(id, on, label) { const el = document.getElementById(id); if (el) { el.disabled = on; el.textContent = label; } }
     function fbMsg(e) {
       return ({

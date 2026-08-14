@@ -196,6 +196,15 @@ check('doAuthCheckVerified sends turnstileToken to API',          INDEX.includes
 check('doAuthResendVerification defined',                         INDEX.includes("async function doAuthResendVerification()"));
 check('_authBackToSignIn signs out + returns to signin',          INDEX.includes("async function _authBackToSignIn()"));
 
+const SIGNIN = fs.readFileSync(path.join(__dirname, '..', 'signin.html'), 'utf8');
+console.log('\n[signin.html alert visibility fix 2026-08-14]');
+check('signin.html .alert no longer has base display:none',      !/\.alert\s*\{[^}]*display:\s*none/.test(SIGNIN));
+check('signin.html has .alert:not(.show) hidden rule',            SIGNIN.includes(".alert:not(.show)"));
+check('signin.html has .alert.show visible rule',                 SIGNIN.includes(".alert.show"));
+check('signin.html showErr toggles .show class',                  SIGNIN.includes("el.classList.add('show')"));
+check('signin.html clearErr removes .show class',                 SIGNIN.includes("el.classList.remove('show')"));
+check('signin.html has email-already-in-use message',             SIGNIN.includes("An account with this email already exists"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
