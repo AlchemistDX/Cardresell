@@ -2587,7 +2587,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <script>
 // CardResell API Configuration (inlined — no separate file needed)
-window.CARDSELL_TPL_KEY = 'tcg_37ca6c972d0251c5372b395faa9f71a92a11096872d78e12';
+// TPL API key is NEVER shipped to the client. All TPL calls go through /api/tpl-proxy.
+window.CARDSELL_TPL_KEY = '__PROXIED__'; // sentinel — real key stays server-side
 window.CARDSELL_EPN_CAMPID = '5339158497';
 // Capture referral code from URL on page load
 (function() {
@@ -2733,10 +2734,11 @@ function saveOpenAiKey() {
         const gcInput = document.getElementById('googleClientIdInput');
         if (gcInput) gcInput.value = _SAVED_CLIENT_ID || '';
         const tplInput = document.getElementById('tplKeyInput');
-        // Always show masked — user must click eye to reveal
+        // TPL key is now server-side only. The UI is retained (display:none) for
+        // legacy element refs but never shows the real key.
         if (tplInput) {
           tplInput.type = 'password';
-          tplInput.value = window.tplApiKey || '';
+          tplInput.value = '';
         }
         const revealBtn = document.getElementById('tplRevealBtn');
         if (revealBtn) revealBtn.textContent = '\uD83D\uDC41';
@@ -2899,8 +2901,9 @@ async function injectPokemonImages(cards, gameSlug) {
 async function searchWithTPL(q, gameSlug) {
   if (!window.tplApiKey) return null;
   try {
-    const url = `https://api.tcgpricelookup.com/v1/cards/search?q=${encodeURIComponent(q)}&game=${gameSlug}&limit=100`;
-    const r = await fetch(url, { headers: { 'X-API-Key': window.tplApiKey } });
+    // Proxied server-side so the paid TPL key never ships to the browser.
+    const url = `/api/tpl-proxy?path=/v1/cards/search&q=${encodeURIComponent(q)}&game=${encodeURIComponent(gameSlug)}&limit=100`;
+    const r = await fetch(url);
     if (!r.ok) return null;
     const json = await r.json();
     return (json.data && json.data.length) ? json.data : null;
@@ -2977,8 +2980,8 @@ function tplCardToNormalized(c, gameSlug, fallbackImage) {
 async function fetchTPLCardById(id, gameSlug) {
   if (!window.tplApiKey || !id) return null;
   try {
-    const url = `https://api.tcgpricelookup.com/v1/cards/${encodeURIComponent(id)}`;
-    const r = await fetch(url, { headers: { 'X-API-Key': window.tplApiKey } });
+    const url = `/api/tpl-proxy?path=/v1/cards/${encodeURIComponent(id)}`;
+    const r = await fetch(url);
     if (!r.ok) { console.warn('TPL fetch by ID failed:', r.status); return null; }
     const json = await r.json();
     const c = json.data || json;
@@ -2995,8 +2998,8 @@ async function fetchTPLCardById(id, gameSlug) {
 async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
   if (!window.tplApiKey || !name) return null;
   try {
-    const url = `https://api.tcgpricelookup.com/v1/cards/search?q=${encodeURIComponent(name)}&game=${gameSlug || 'pokemon'}&limit=20`;
-    const r = await fetch(url, { headers: { 'X-API-Key': window.tplApiKey } });
+    const url = `/api/tpl-proxy?path=/v1/cards/search&q=${encodeURIComponent(name)}&game=${encodeURIComponent(gameSlug || 'pokemon')}&limit=20`;
+    const r = await fetch(url);
     if (!r.ok) return null;
     const json = await r.json();
     const cards = json.data || [];
