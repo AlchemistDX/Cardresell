@@ -230,12 +230,12 @@ GLARE + SLEEVE HANDLING: Reflective toploaders and holographic sleeves often cre
 Other low-quality photo signals: blur, cropped edges, dark shadow, upside-down. Set image_quality to "blurry", "cropped", "dark", or "rotated" accordingly.
 
 Extract for the best match:
-1. card_name: The Pokémon or character or player name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
+1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James"). If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア"), TRANSLATE to the English Pokémon name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
 2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
 3. set_name: The set / brand name (e.g. "Pokémon GO", "Crown Zenith", "Topps Chrome", "Panini Prizm") — VERIFY the set matches the card number range and art style. Do not guess a set.
 4. hp: HP number if Pokémon card (e.g. "280")
 5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols. Sports cards show a photo of a real athlete, a team logo/jersey, brand marks like Topps/Panini/Bowman/Upper Deck/Fleer/Donruss/Score/Select/Prizm/Optic/Mosaic/Chronicles, and often a copyright year.
-6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false.
+6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false. STRONG SIGNALS for is_japanese=true: any katakana on the name line (ラフレシア, リザードン), the word ポケモン or たね anywhere on the card, or JP-specific rarity markers (RR, SR, SAR, UR). If is_japanese=true, set_name should be the English name of the JP set (e.g. "Jungle" not 「ジャングル」, "151" not 「ポケモンカード151」).
 7. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare", or for sports: "Refractor", "Rookie", "Auto", "Numbered /99", "Base", etc.
 8. sport: ONLY for sports cards — one of "Baseball", "Basketball", "Football", "Hockey", "Soccer", "Other". Determine by team logo, jersey style, or ball visible.
 9. year: ONLY for sports cards — the copyright / season year printed on the card (e.g. "2023", "2011", "1997").
@@ -244,9 +244,10 @@ Extract for the best match:
 12. image_quality: "ok" | "glare_blocked" | "blurry" | "cropped" | "dark" | "rotated" — a single tag describing the photo. Use "ok" only when you can clearly see all key details.
 13. glare_regions: OPTIONAL array of strings when image_quality="glare_blocked". Elements: "card_number", "set_symbol", "card_name", "art", "hp".
 14. retake_hint: OPTIONAL 1-sentence advice for the user on how to retake the photo. Only include when image_quality != "ok".
+15. jp_name: OPTIONAL. If is_japanese=true, the raw Japanese card name as printed on the card (e.g. "ラフレシア", "リザードン"). Omit for English cards.
 
 Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"jp_name":"","rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -407,6 +408,7 @@ Respond ONLY with valid JSON, no explanation:
         hp:           cardInfo.hp          || cleanCandidates[0].hp          || '',
         card_type:    cardInfo.card_type   || cleanCandidates[0].card_type   || 'pokemon',
         is_japanese:  cardInfo.is_japanese === true || cleanCandidates[0].is_japanese === true,
+        jp_name:      cardInfo.jp_name     || cleanCandidates[0].jp_name     || '',
         rarity:       cardInfo.rarity      || cleanCandidates[0].rarity      || '',
         sport:        cardInfo.sport       || cleanCandidates[0].sport       || '',
         year:         cardInfo.year        || cleanCandidates[0].year        || '',
@@ -451,6 +453,7 @@ Respond ONLY with valid JSON, no explanation:
       hp:          cardInfo.hp          || '',
       card_type:   cardInfo.card_type   || 'pokemon',
       is_japanese: cardInfo.is_japanese === true,
+      jp_name:     cardInfo.jp_name     || '',
       rarity:      cardInfo.rarity      || '',
       sport:       cardInfo.sport       || '',
       year:        cardInfo.year        || '',

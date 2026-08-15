@@ -8187,11 +8187,17 @@ function cancelScan() {
 
     // Sports card path: switch to the Sports Cards tab, fill sp_* fields,
     // and auto-run doSportsSearchLive so the user lands on comp buttons.
-    // Non-sports falls through to PokemonTCG.io / TCGplayer exact-load below.
+    // Japanese scan path: PokemonTCG.io doesn't index most JP-only sets,
+    // so route directly to the pokemonjp comps card (eBay JP sold + PC).
+    // Non-sports non-JP falls through to PokemonTCG.io / TCGplayer exact-load.
     if (pending.cardType === 'sports') {
       try {
         _routeScannedSportsCard(pending);
       } catch(e) { console.warn('sports auto-fill failed', e); }
+    } else if (pending.isJapanese === true) {
+      try {
+        _loadScannedJPCard(pending);
+      } catch(e) { console.warn('JP auto-load failed', e); _loadScannedCardExact(pending); }
     } else {
       _loadScannedCardExact(pending);
     }
@@ -8249,6 +8255,54 @@ function _routeScannedSportsCard(pending) {
   }
 
   showToast('Sports card scanned — tap a comp source to see sold prices.', 'gold');
+}
+
+// 2026-08-15: route a Japanese scan straight to the pokemonjp comps card
+// (English name + "(Japanese)" tag + eBay JP sold + PriceCharting) instead
+// of trying PokemonTCG.io, which doesn't index most Japanese-only sets.
+function _loadScannedJPCard(pending) {
+  const englishBase = String(pending.name || '').replace(/\s*\(Japanese\)\s*$/i, '').trim();
+  const displayName = englishBase + ' (Japanese)';
+  const cardNumber  = pending.number || '';
+  const setName     = pending.setName || 'Japanese Set';
+  const rarity      = pending.rarity  || '';
+
+  // Build eBay JP + PriceCharting URLs the same way the JP search dropdown does.
+  const numTail = cardNumber ? (' ' + cardNumber) : '';
+  const ebayJPUrl = 'https://www.ebay.com/sch/i.html?_nkw='
+    + encodeURIComponent(englishBase + numTail + ' japanese pokemon card')
+    + '&_sacat=183454&LH_Sold=1&LH_Complete=1';
+  const pcUrl = 'https://www.pricecharting.com/search-products?q='
+    + encodeURIComponent(englishBase + ' japanese') + '&type=prices';
+
+  const jpCard = {
+    name: displayName,
+    game: 'pokemonjp',
+    images: { small: '', large: '' },
+    setName: setName,
+    number: cardNumber,
+    rarity: rarity,
+    priceVariants: [
+      { key: 'raw_nm', label: 'Raw NM (check eBay JP sold)', market: null, low: null, mid: null, high: null },
+      { key: 'psa9',   label: 'PSA 9 (check eBay JP sold)',  market: null, low: null, mid: null, high: null },
+      { key: 'psa10',  label: 'PSA 10 (check eBay JP sold)', market: null, low: null, mid: null, high: null },
+    ],
+    source: 'eBay JP Comps',
+    updatedAt: 'See eBay sold listings',
+    _jpEbayUrl: ebayJPUrl,
+    _jpPCUrl: pcUrl,
+  };
+
+  const si = document.getElementById('searchInput');
+  if (si) si.value = displayName;
+
+  try { selectedCard = jpCard; loadCardUI(jpCard); } catch(e) { console.warn('JP card load failed', e); }
+  // Auto-open eBay JP sold listings so the user immediately sees comps.
+  try {
+    if (typeof buildEbayUrl === 'function') window.open(buildEbayUrl(ebayJPUrl), '_blank');
+    else window.open(ebayJPUrl, '_blank');
+  } catch(e) {}
+  showToast('Japanese card \u2014 opened eBay JP sold comps.', 'gold');
 }
 
 // Fetch the exact scanned card from PokemonTCG.io by name + number and load it
@@ -8918,19 +8972,35 @@ async function processScanImage(input) {
       return;
     }
 
-    const cardName   = data.card_name   || '';
-    const cardNumber = data.card_number || '';
-    const setName    = data.set_name    || '';
-    const rarity     = data.rarity      || '';
-    const hp         = data.hp          || '';
+    const rawCardName = data.card_name   || '';
+    const cardNumber  = data.card_number || '';
+    const setName     = data.set_name    || '';
+    const rarity      = data.rarity      || '';
+    const hp          = data.hp          || '';
+    const isJapanese  = data.is_japanese === true;
+    const jpRawName   = (data.jp_name || '').trim();
 
-    if (!cardName) {
+    if (!rawCardName) {
       statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
 
+    // 2026-08-15: for JP scans, the Vision model returns the English name in
+    // card_name (e.g. "Vileplume") and the printed katakana in jp_name
+    // (e.g. "\u30e9\u30d5\u30ec\u30b7\u30a2"). Cataloging + search uses the English
+    // name plus a " (Japanese)" tag so eBay/TCGplayer/PokemonTCG.io queries
+    // return real listings instead of zero-result katakana searches.
+    const cardName = isJapanese
+      ? (rawCardName.replace(/\s*\(Japanese\)\s*$/i, '').trim() + ' (Japanese)')
+      : rawCardName;
+
     let detailLine = [setName, rarity, hp ? hp + ' HP' : ''].filter(Boolean).join(' \u00b7 ');
-    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>';
+    // Show the original katakana name in gray under the identified card so the
+    // user knows we didn't lose that info.
+    const jpSubline = (isJapanese && jpRawName && jpRawName !== rawCardName)
+      ? '<br><span style="font-size:.7rem;opacity:.55">' + esc(jpRawName) + '</span>'
+      : '';
+    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>' + jpSubline;
 
     // Result area now hosts: (optional) glare/quality hint, plus "Not my card"
     // refund link. Rendered as HTML so we can style + wire the click handler.
@@ -8965,7 +9035,7 @@ async function processScanImage(input) {
     // Silently load the card into the calculator in the background
     // so when the user closes the scan overlay it's already selected.
     // Do NOT auto-open catalog — let the user decide what to do next.
-    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp, cardType: data.card_type || 'pokemon', sport: data.sport || '', year: data.year || '' };
+    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp, cardType: data.card_type || 'pokemon', sport: data.sport || '', year: data.year || '', isJapanese, jpName: jpRawName };
     URL.revokeObjectURL(objectUrl);
 
     // Show success state — hide spinner, show View Card + Scan Another
