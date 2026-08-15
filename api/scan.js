@@ -84,6 +84,10 @@ export default async function handler(req, res) {
   // Track what was consumed so we can refund on downstream failure.
   let consumedFrom   = null; // 'id_paid_left' | 'paid_left' | 'free'
   let consumedAmount = 0;
+  // Every scan gets a short opaque id so the user can request a refund from the
+  // "not my card" button. We ONLY log successful identify responses so the id
+  // is never claimable if the credit was already refunded on the server side.
+  const scanId = _shortId();
   if (hasKV) {
     const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
@@ -217,6 +221,14 @@ Respond ONLY with valid JSON:
 
 BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
 
+GLARE + SLEEVE HANDLING: Reflective toploaders and holographic sleeves often create glare that blocks key details (card number, set symbol, or HP). If glare is blocking a critical detail:
+  - Set confidence to "low" and set image_quality to "glare_blocked"
+  - Populate glare_regions with which detail is blocked: "card_number", "set_symbol", "card_name", or "art"
+  - Still return your best-guess candidates from what IS visible, but DO NOT pretend to read details you can't see
+  - Suggest a retake angle in retake_hint (e.g. "Tilt the card 15° away from the light source and remove any reflective sleeve.")
+
+Other low-quality photo signals: blur, cropped edges, dark shadow, upside-down. Set image_quality to "blurry", "cropped", "dark", or "rotated" accordingly.
+
 Extract for the best match:
 1. card_name: The Pokémon or character or player name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
 2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
@@ -227,11 +239,14 @@ Extract for the best match:
 7. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare", or for sports: "Refractor", "Rookie", "Auto", "Numbered /99", "Base", etc.
 8. sport: ONLY for sports cards — one of "Baseball", "Basketball", "Football", "Hockey", "Soccer", "Other". Determine by team logo, jersey style, or ball visible.
 9. year: ONLY for sports cards — the copyright / season year printed on the card (e.g. "2023", "2011", "1997").
-10. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low".
+10. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low". If image_quality is anything other than "ok", confidence must be "low".
 11. candidates: OPTIONAL array of top 2–3 matches when confidence is medium or low. Each element: {card_name, card_number, set_name, hp, card_type, is_japanese, rarity, sport, year, confidence_pct}. Rank most likely first. If confidence is "high", omit or return an empty array.
+12. image_quality: "ok" | "glare_blocked" | "blurry" | "cropped" | "dark" | "rotated" — a single tag describing the photo. Use "ok" only when you can clearly see all key details.
+13. glare_regions: OPTIONAL array of strings when image_quality="glare_blocked". Elements: "card_number", "set_symbol", "card_name", "art", "hp".
+14. retake_hint: OPTIONAL 1-sentence advice for the user on how to retake the photo. Only include when image_quality != "ok".
 
 Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -382,6 +397,9 @@ Respond ONLY with valid JSON, no explanation:
         needsPicker:  true,
         confidence:   idConfNorm,
         candidates:   cleanCandidates,
+        image_quality: cardInfo.image_quality || 'ok',
+        glare_regions: Array.isArray(cardInfo.glare_regions) ? cardInfo.glare_regions : [],
+        retake_hint:   cardInfo.retake_hint || '',
         // Also include the top guess for UI convenience.
         card_name:    cardInfo.card_name   || cleanCandidates[0].card_name   || '',
         card_number:  cardInfo.card_number || cleanCandidates[0].card_number || '',
@@ -398,10 +416,35 @@ Respond ONLY with valid JSON, no explanation:
     // Real search — count it toward the public social-proof counter. Fire-and-forget.
     _incrSearchStats(kvUrl, kvToken);
 
+    // Log the successful scan so the client can later request a refund via
+    // POST /api/scan-refund { scan_id }. Server keeps the source-of-truth
+    // record of what was scanned + which credit bucket was consumed.
+    if (hasKV && consumedFrom) {
+      try {
+        const record = {
+          uid:            key,
+          consumed_from:  consumedFrom,
+          consumed_amount: consumedAmount,
+          card_name:      cardInfo.card_name   || '',
+          card_number:    cardInfo.card_number || '',
+          set_name:       cardInfo.set_name    || '',
+          confidence:     idConfNorm || 'high',
+          image_quality:  cardInfo.image_quality || 'ok',
+          created_at:     Date.now(),
+        };
+        // 1-hour TTL: refunds must happen within the same session
+        await setKVWithTTL(kvUrl, kvToken, `scan:${scanId}`, JSON.stringify(record), 3600);
+      } catch(e) { /* non-fatal */ }
+    }
+
     return res.status(200).json({
       success: true,
       mode:        'identify',
+      scan_id:     scanId,
       confidence:  idConfNorm || 'high',
+      image_quality: cardInfo.image_quality || 'ok',
+      glare_regions: Array.isArray(cardInfo.glare_regions) ? cardInfo.glare_regions : [],
+      retake_hint:   cardInfo.retake_hint || '',
       card_name:   cardInfo.card_name   || '',
       card_number: cardInfo.card_number || '',
       set_name:    cardInfo.set_name    || '',
@@ -458,6 +501,25 @@ async function incrKV(kvUrl, kvToken, key) {
       headers: { Authorization: `Bearer ${kvToken}` }
     });
   } catch(e) {}
+}
+
+// Upstash Redis SET with EX (TTL in seconds). Used for scan_id → record.
+async function setKVWithTTL(kvUrl, kvToken, key, value, ttlSeconds) {
+  try {
+    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(value))}?EX=${ttlSeconds}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+  } catch(e) {}
+}
+
+// Short opaque id — 24 chars, url-safe, enough entropy that guessing another
+// user's scan_id is not economical (~10^36 combinations).
+function _shortId() {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  for (let i = 0; i < 24; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
 }
 
 // ── Public search-counter increment (fire-and-forget). Powers the landing-page
