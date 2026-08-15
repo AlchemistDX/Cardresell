@@ -3178,6 +3178,23 @@ const SPORT_EMOJI = {
   Baseball: '⚾', Basketball: '🏀', Football: '🏈',
   Hockey: '🏒', Soccer: '⚽', Other: '🏆'
 };
+// Strip any emoji/pictograph before it can end up in a search URL. Also strips
+// zero-width joiners and variation selectors that can otherwise sneak into eBay
+// queries. Safe for all Latin text.
+function _stripEmoji(s) {
+  if (!s) return '';
+  try {
+    return String(s)
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}]/gu, '')
+      .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')  // flags
+      .replace(/[\u{FE00}-\u{FE0F}\u{200D}]/gu, '') // variation selectors + ZWJ
+      .replace(/\s+/g, ' ')
+      .trim();
+  } catch(_) {
+    // Fallback for engines without Unicode property escapes
+    return String(s).replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+  }
+}
 
 // ── Category pills ──
 function onGameSelectChange(game) {
@@ -4187,7 +4204,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
 }
 
 function openEbayComps() {
-  const player  = document.getElementById('sp_player').value.trim();
+  const player  = _stripEmoji(document.getElementById('sp_player').value).trim();
   const year    = document.getElementById('sp_year').value.trim();
   const brand   = document.getElementById('sp_brand').value.trim();
   const cardnum = document.getElementById('sp_cardnum').value.trim();
@@ -4260,9 +4277,17 @@ async function doSportsSearchLive(q) {
   const sport  = document.getElementById('sp_sport')?.value || 'Baseball';
   const year   = document.getElementById('sp_year')?.value?.trim() || '';
   const brand  = document.getElementById('sp_brand')?.value?.trim() || '';
+  const cardnum= document.getElementById('sp_cardnum')?.value?.trim() || '';
   const grade  = document.getElementById('sp_grade')?.value || 'Raw/Ungraded';
   const gradeLabel = grade !== 'Raw/Ungraded' ? grade : '';
-  const queryParts = [q, year, brand, gradeLabel, sport + ' card'].filter(Boolean);
+  // ALWAYS strip emoji from the free-text query — the sports card display uses
+  // "🏀 Player Name" which was leaking into eBay _nkw.
+  q = _stripEmoji(q);
+  // Build full-context query: player + year + brand + card# + grade + "sport card".
+  // Passing card# is critical for rookie/insert cards where "Ja Morant" alone
+  // returns 6,800+ results; "Ja Morant 2019 Panini Select 42 basketball card"
+  // returns the actual card.
+  const queryParts = [q, year, brand, cardnum, gradeLabel, sport + ' card'].filter(Boolean);
   const ebayQuery  = queryParts.join(' ');
   const ebayUrl    = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(ebayQuery)}&_sacat=212&LH_Sold=1&LH_Complete=1`;
 
@@ -4282,7 +4307,8 @@ async function doSportsSearchLive(q) {
   const gradeOpts = ['Raw/Ungraded','PSA 10','PSA 9','PSA 8','BGS 9.5','CGC 9.5'];
   gradeOpts.forEach((g, i) => {
     const gq = g !== 'Raw/Ungraded' ? g : '';
-    const gParts = [q, year, brand, gq, sport + ' card'].filter(Boolean);
+    // Include card# in per-grade queries too — same reason.
+    const gParts = [q, year, brand, cardnum, gq, sport + ' card'].filter(Boolean);
     const gUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(gParts.join(' '))}&_sacat=212&LH_Sold=1&LH_Complete=1`;
     const glabel = g === 'Raw/Ungraded' ? 'Raw / Ungraded' : g;
     html += `<div class="drop-item" data-sports-idx="ebay-grade-${i}" data-ebay-url="${esc(gUrl)}" data-grade-val="${esc(g)}" style="cursor:pointer">
@@ -4295,8 +4321,9 @@ async function doSportsSearchLive(q) {
     </div>`;
   });
 
-  // PriceCharting search link
-  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(q + ' ' + sport)}&type=prices`;
+  // PriceCharting search link — include year/brand for tighter matches.
+  const pcParts = [q, year, brand, sport].filter(Boolean);
+  const pcUrl = `https://www.pricecharting.com/search-products?q=${encodeURIComponent(pcParts.join(' '))}&type=prices`;
   html += `<div class="drop-item" data-sports-idx="pricecharting" data-pc-url="${esc(pcUrl)}" style="cursor:pointer">
     <div class="drop-thumb-ph" style="font-size:.95rem">📊</div>
     <div class="drop-info">
@@ -4307,7 +4334,7 @@ async function doSportsSearchLive(q) {
   </div>`;
 
   // 130point — aggregator of sports card sold sales across eBay + PWCC + Goldin + etc.
-  const p130Query = [q, year, brand, document.getElementById('sp_cardnum')?.value?.trim() || '', gradeLabel].filter(Boolean).join(' ');
+  const p130Query = [q, year, brand, cardnum, gradeLabel].filter(Boolean).join(' ');
   const p130Url   = `https://130point.com/sales/?search=${encodeURIComponent(p130Query)}&searchButton=&sortBy=date`;
   html += `<div class="drop-item" data-sports-idx="p130" data-p130-url="${esc(p130Url)}" style="cursor:pointer">
     <div class="drop-thumb-ph" style="font-size:.95rem">💰</div>
@@ -4318,8 +4345,9 @@ async function doSportsSearchLive(q) {
     <span style="font-size:.68rem;color:var(--text-muted)">130pt →</span>
   </div>`;
 
-  // PWCC Marketplace — major sports auction house / fixed-price listings
-  const pwccUrl = `https://www.pwccmarketplace.com/search?q=${encodeURIComponent([q, year, brand].filter(Boolean).join(' '))}`;
+  // PWCC Marketplace — major sports auction house / fixed-price listings.
+  // Include card# so a "Ja Morant 2019 Panini Select 42" search hits the exact print.
+  const pwccUrl = `https://www.pwccmarketplace.com/search?q=${encodeURIComponent([q, year, brand, cardnum].filter(Boolean).join(' '))}`;
   html += `<div class="drop-item" data-sports-idx="pwcc" data-pwcc-url="${esc(pwccUrl)}" style="cursor:pointer">
     <div class="drop-thumb-ph" style="font-size:.95rem">🏆</div>
     <div class="drop-info">
@@ -5089,14 +5117,16 @@ function _aff() { return (window.AFFILIATE || {}); }
 function buildEbaySearchUrl(cardName, number, opts) {
   opts = opts || {};
   const parts = [];
-  if (cardName) parts.push(String(cardName).replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim());
+  // Strip emoji from name FIRST so 🏀/⚾/etc never end up in the eBay _nkw param.
+  const cleanName = _stripEmoji(cardName || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
+  if (cleanName) parts.push(cleanName);
   if (number) {
     // Strip leading zeros + any /total-cards suffix so "023/197" becomes "23"
     const cleanNum = String(number).replace(/^0+/, '').replace(/\/.*$/, '').trim();
     if (cleanNum) parts.push(cleanNum);
   }
-  if (opts.graded) parts.push(opts.graded);
-  if (opts.extra) parts.push(opts.extra);
+  if (opts.graded) parts.push(_stripEmoji(opts.graded));
+  if (opts.extra) parts.push(_stripEmoji(opts.extra));
   const query = encodeURIComponent(parts.filter(Boolean).join(' '));
   const cat = opts.category || '212'; // 212 = Trading Card Games
   // Sold-comps view by default (better for pricing decisions); pass sold:false
@@ -5139,7 +5169,7 @@ function wrapTcgpAffiliate(targetUrl) {
 // We strip trailing /setsize ("179/188" → "179") so the query stays tight.
 function buildTcgpUrl(cardName, setName, cardNumber) {
   const num = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
-  const parts = [cardName || '', setName || '', num].filter(Boolean);
+  const parts = [_stripEmoji(cardName || ''), _stripEmoji(setName || ''), num].filter(Boolean);
   const q = encodeURIComponent(parts.join(' '));
   const base = `https://www.tcgplayer.com/search/all/product?q=${q}&view=grid`;
   return wrapTcgpAffiliate(base);
@@ -8113,11 +8143,13 @@ function _routeScannedSportsCard(pending) {
   }
 
   // Fire the sports search so comp buttons render immediately.
-  if (name && typeof doSportsSearchLive === 'function') {
-    // Also mirror the player name into the sports search input so the UI reflects it.
+  const cleanName = _stripEmoji(name || '');
+  if (cleanName && typeof doSportsSearchLive === 'function') {
+    // Mirror the player name into the sports search input — emoji-free so it
+    // never gets typed into eBay's _nkw.
     const ssi = document.getElementById('sportsSearchInput');
-    if (ssi) ssi.value = name;
-    setTimeout(() => { try { doSportsSearchLive(name); } catch(e) {} }, 100);
+    if (ssi) ssi.value = cleanName;
+    setTimeout(() => { try { doSportsSearchLive(cleanName); } catch(e) {} }, 100);
   }
 
   showToast('Sports card scanned — tap a comp source to see sold prices.', 'gold');
