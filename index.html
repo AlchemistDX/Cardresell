@@ -1800,7 +1800,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         </div>
 
         <!-- Printing -->
-        <div class="field-label" id="printingLabel" style="margin-top:.875rem">Printing / Variant</div>
+        <div class="field-label" id="printingLabel" style="margin-top:.875rem">Printing / Variant <span style="font-weight:400;color:var(--text-faint);font-size:.72rem">— raw prices; graded prices set below</span></div>
         <select id="printingSelect" onchange="updatePriceFromPrinting();calc()">
           <option value="">— select —</option>
         </select>
@@ -4561,8 +4561,14 @@ function loadCardUI(card) {
       printSelect.innerHTML = '<option value="">No price data</option>';
     }
   } else {
+    // Keep ALL variants in currentPrices (graded lookup still uses them via
+    // syncGradeToPrintSelect), but ONLY render raw/printing entries in the
+    // dropdown UI. Graded slabs live in the grade dropdown below the grader
+    // pills — mixing them here was confusing (PSA 7, CGC 8.5 next to
+    // Holofoil, Reverse Holo, etc.).
     variants.forEach(v => {
       currentPrices[v.key] = v;
+      if (isGradedVariant(v.key)) return; // hide graded from Printing/Variant dropdown
       const opt = document.createElement('option');
       opt.value = v.key;
       opt.textContent = v.market != null ? `${v.label} — $${v.market.toFixed(2)}` : v.label;
@@ -4689,6 +4695,7 @@ function rebuildPrintSelect(variants) {
   }
   variants.forEach(v => {
     currentPrices[v.key] = v;
+    if (isGradedVariant(v.key)) return; // hide graded from Printing/Variant dropdown; grader pill + grade dropdown drive graded pricing
     const opt = document.createElement('option');
     opt.value = v.key;
     opt.textContent = v.market != null ? `${v.label} — $${v.market.toFixed(2)}` : v.label;
@@ -4717,7 +4724,8 @@ async function syncGradeToPrintSelect() {
     // written) — otherwise 'sgc_10' passed the old !(psa|bgs|cgc) filter and
     // got selected as "first raw", forcing SGC 10 price on the Raw toggle.
     const opts = Array.from(printSelect.options);
-    const firstRaw = opts.find(o => !/^(psa|bgs|cgc|sgc|ace|tag)_/.test(o.value));
+    // Skip any hidden graded options we injected via ensureGradedOptionInSelect
+    const firstRaw = opts.find(o => !o.hidden && !/^(psa|bgs|cgc|sgc|ace|tag)_/.test(o.value));
     if (firstRaw) {
       printSelect.value = firstRaw.value;
       // Fire change event so any onchange listeners (updatePriceFromPrinting)
@@ -4756,13 +4764,32 @@ async function syncGradeToPrintSelect() {
 
     // Build the variant key (replace dots with underscores, e.g. 9.5 → 9_5)
     const targetKey = `${grader}_${grade}`.replace(/\./g, '_');
-    const opts = Array.from(printSelect.options);
-    const match = opts.find(o => o.value === targetKey);
-    const fallback = !match && opts.find(o => o.value.startsWith(grader + '_'));
-
-    if (match || fallback) {
+    // Graded variants no longer appear in the visible printSelect dropdown
+    // (see rebuildPrintSelect / initial variants.forEach). Ensure a hidden
+    // option exists in the DOM for the current graded key so
+    // printSelect.value=<gradedKey> sticks and updatePriceFromPrinting()
+    // reads from currentPrices[<gradedKey>] correctly.
+    function ensureGradedOptionInSelect(key, label) {
+      let opt = Array.from(printSelect.options).find(o => o.value === key);
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = label || key;
+        opt.dataset.gradedHidden = '1';
+        opt.hidden = true; // don't render in the dropdown UI
+        printSelect.appendChild(opt);
+      }
+      return opt;
+    }
+    const graded = currentPrices[targetKey];
+    const fallbackKey = !graded && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
+    const fallback = fallbackKey ? currentPrices[fallbackKey] : null;
+    if (graded || fallback) {
+      const useKey = graded ? targetKey : fallbackKey;
+      const useLabel = (graded || fallback).label;
+      ensureGradedOptionInSelect(useKey, useLabel);
       // Has graded data in API — use it
-      printSelect.value = (match || fallback).value;
+      printSelect.value = useKey;
       if (banner) banner.style.display = 'none';
     } else if (window.tplApiKey && (selectedCard?.tplId || selectedCard?.name)) {
       // No graded variant cached — fetch graded data from TPL
@@ -4796,19 +4823,31 @@ async function syncGradeToPrintSelect() {
       }
 
       if (gradedVariants && gradedVariants.length) {
-        // Merge into selectedCard and rebuild dropdown
+        // Merge into selectedCard. rebuildPrintSelect filters graded out of the
+        // visible dropdown but keeps them in currentPrices; we then inject a
+        // hidden option for the exact grader+grade key so printSelect.value can
+        // point at it and updatePriceFromPrinting reads the correct price row.
         selectedCard.priceVariants = [
           ...selectedCard.priceVariants.filter(v => !/^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key)),
           ...gradedVariants,
         ];
         rebuildPrintSelect(selectedCard.priceVariants);
-        // Try matching again
-        const opts2 = Array.from(printSelect.options);
         const targetKey2 = `${grader}_${grade}`.replace(/\./g, '_');
-        const match2    = opts2.find(o => o.value === targetKey2);
-        const fallback2 = !match2 && opts2.find(o => o.value.startsWith(grader + '_'));
-        if (match2 || fallback2) {
-          printSelect.value = (match2 || fallback2).value;
+        const g2 = currentPrices[targetKey2];
+        const fbKey2 = !g2 && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
+        const fb2 = fbKey2 ? currentPrices[fbKey2] : null;
+        if (g2 || fb2) {
+          const useKey2 = g2 ? targetKey2 : fbKey2;
+          const useLbl2 = (g2 || fb2).label;
+          if (!Array.from(printSelect.options).find(o => o.value === useKey2)) {
+            const opt = document.createElement('option');
+            opt.value = useKey2;
+            opt.textContent = useLbl2 || useKey2;
+            opt.dataset.gradedHidden = '1';
+            opt.hidden = true;
+            printSelect.appendChild(opt);
+          }
+          printSelect.value = useKey2;
           if (banner) banner.style.display = 'none';
           updatePriceFromPrinting();
           return;

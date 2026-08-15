@@ -207,6 +207,16 @@ check('signin.html showErr toggles .show class',                  SIGNIN.include
 check('signin.html clearErr removes .show class',                 SIGNIN.includes("el.classList.remove('show')"));
 check('signin.html has email-already-in-use message',             SIGNIN.includes("An account with this email already exists"));
 
+console.log('\n[Printing/Variant dropdown split 2026-08-15]');
+check('variants.forEach filters graded from dropdown UI',           INDEX.includes("if (isGradedVariant(v.key)) return; // hide graded from Printing/Variant dropdown"));
+check('ensureGradedOptionInSelect injects hidden graded option',    INDEX.includes("function ensureGradedOptionInSelect"));
+check('Hidden graded option marked with dataset.gradedHidden',      INDEX.includes("opt.dataset.gradedHidden = '1'"));
+check('Hidden graded option not shown in dropdown',                 INDEX.includes("opt.hidden = true; // don't render in the dropdown UI"));
+check('firstRaw skips hidden graded options on Raw switch',         INDEX.includes("opts.find(o => !o.hidden && !/^(psa|bgs|cgc|sgc|ace|tag)_/"));
+check('printingLabel notes raw prices only',                        INDEX.includes("raw prices; graded prices set below"));
+check('syncGradeToPrintSelect reads currentPrices not options',     INDEX.includes("const graded = currentPrices[targetKey];"));
+check('async TPL fallback injects hidden option for graded key',    INDEX.includes("if (!Array.from(printSelect.options).find(o => o.value === useKey2))"));
+
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
