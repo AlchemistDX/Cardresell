@@ -4495,6 +4495,11 @@ function loadCardUI(card) {
   const cardSellTip = document.getElementById('cardSellTip');
   if (ebayListBtn) {
     ebayListBtn.href = buildEbaySearchUrl(card.name, card.number);
+    // resetCardPanel() sets this to display:none. Clear the inline style so the
+    // button is visible again when the next card loads — without this fix, the
+    // Sell on eBay button disappears for every card after the first one you
+    // clear/return to (reported 2026-08-15 on MTG cards from bulk-scan flow).
+    ebayListBtn.style.display = '';
   }
   if (tcgpListBtn) {
     // Set a search-based URL immediately so the button never lands anywhere
@@ -10537,38 +10542,63 @@ async function _bulkFetchPokemonCards(q, timeoutMs) {
 // which broke Magic/Yu-Gi-Oh/Lorcana/JP-Pokemon results entirely (scan ID'd them
 // but price fetch returned 0 matches → "Price unavailable" + no thumbnail).
 async function _bulkFetchPriceMTG(cleanName, cleanNumber) {
-  try {
-    const q = cleanName + (cleanNumber ? ' ' + cleanNumber : '');
-    const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=desc`, { signal: AbortSignal.timeout(7000) });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const first = d?.data?.[0];
-    if (!first) return null;
-    const usd = parseFloat(first.prices?.usd) || parseFloat(first.prices?.usd_foil) || null;
-    return {
-      marketPrice: usd,
-      variant: usd ? 'usd' : null,
-      imageUrl: first.image_uris?.small || first.image_uris?.normal || first.card_faces?.[0]?.image_uris?.small || '',
-      tcgplayerUrl: first.purchase_uris?.tcgplayer || '',
-    };
-  } catch(e) { return null; }
+  // Scryfall search notes:
+  // — Collector numbers are un-zero-padded ("87" not "087") — always strip.
+  // — Query `name 087` returns 0 hits even when "87" would match; strip zeros.
+  // — Diacritics in the scanned name ("Lüm-Dûl's") may mis-match Scryfall's
+  //   ASCII stored forms; strip diacritics as a fallback query.
+  // Try progressively broader queries; take the highest-USD print.
+  const stripDiacritics = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const numShort = cleanNumber ? String(cleanNumber).replace(/^0+/, '') : '';
+  const queries = [
+    numShort ? `${cleanName} cn:${numShort}` : '',
+    `!"${cleanName}"`,      // exact-name match (unique per print)
+    cleanName,              // fuzzy name only
+    stripDiacritics(cleanName),
+  ].filter(Boolean);
+  for (const q of queries) {
+    try {
+      const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=desc`, { signal: AbortSignal.timeout(7000) });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const first = d?.data?.[0];
+      if (!first) continue;
+      const usd = parseFloat(first.prices?.usd) || parseFloat(first.prices?.usd_foil) || null;
+      return {
+        marketPrice: usd,
+        variant: usd ? 'usd' : null,
+        imageUrl: first.image_uris?.small || first.image_uris?.normal || first.card_faces?.[0]?.image_uris?.small || '',
+        tcgplayerUrl: first.purchase_uris?.tcgplayer || '',
+      };
+    } catch(e) { /* try next */ }
+  }
+  return null;
 }
 
 async function _bulkFetchPriceYGO(cleanName) {
-  try {
-    const r = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(cleanName)}&num=5&offset=0`, { signal: AbortSignal.timeout(7000) });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const first = d?.data?.[0];
-    if (!first) return null;
-    const p = parseFloat(first.card_prices?.[0]?.tcgplayer_price) || null;
-    return {
-      marketPrice: p,
-      variant: p ? 'tcgplayer' : null,
-      imageUrl: first.card_images?.[0]?.image_url_small || first.card_images?.[0]?.image_url || '',
-      tcgplayerUrl: '',
-    };
-  } catch(e) { return null; }
+  // YGOProDeck's fname is fuzzy on name substring. Try full name first, then
+  // fall back to first two words if the exact name misses (Yu-Gi-Oh names often
+  // have long subtitles "Blue-Eyes White Dragon" that the AI trims).
+  const tries = [cleanName];
+  const words = cleanName.split(/\s+/).filter(Boolean);
+  if (words.length > 2) tries.push(words.slice(0, 2).join(' '));
+  for (const q of tries) {
+    try {
+      const r = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=5&offset=0`, { signal: AbortSignal.timeout(7000) });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const first = d?.data?.[0];
+      if (!first) continue;
+      const p = parseFloat(first.card_prices?.[0]?.tcgplayer_price) || null;
+      return {
+        marketPrice: p,
+        variant: p ? 'tcgplayer' : null,
+        imageUrl: first.card_images?.[0]?.image_url_small || first.card_images?.[0]?.image_url || '',
+        tcgplayerUrl: '',
+      };
+    } catch(e) { /* try next */ }
+  }
+  return null;
 }
 
 async function _bulkFetchPriceLorcana(cleanName) {
@@ -11306,13 +11336,52 @@ async function bulkOpenCardInLookup(rowId) {
         isJapanese: r.isJapanese === true,
       });
     } else {
-      // Non-Pokemon: prefill the search input and trigger the tab's own search.
-      // Every search function (searchMagic/searchYugioh/searchLorcana/searchOnePiece)
-      // reads from #searchInput, so setting value + firing 'input' works for all.
+      // Non-Pokemon: prefill search, trigger the tab's own search, then wait
+      // for the dropdown to populate and auto-click the row that best matches
+      // the scanned set/number. Without this auto-pick, the user lands on
+      // the search dropdown with 3-10 variants and has to guess which one
+      // matches their scanned card (reported 2026-08-15).
       const si = document.getElementById('searchInput');
       if (si) {
         si.value = r.cardName || '';
         si.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // Poll for the dropdown to fill — search fns are async, and different
+        // TCG APIs take different amounts of time (Scryfall ~200-500ms, YGO ~1s,
+        // Lorcana can hit the huge in-memory cache and be instant).
+        const wantNum  = String(r.cardNumber || '').replace(/\/.*$/, '').trim().toLowerCase();
+        const wantSet  = String(r.setName    || '').trim().toLowerCase();
+        const wantName = String(r.cardName   || '').trim().toLowerCase();
+        const start = Date.now();
+        const poll = () => {
+          const items = document.querySelectorAll('#dropList .drop-item');
+          if (items.length === 0) {
+            if (Date.now() - start < 4000) return setTimeout(poll, 150);
+            return; // timeout — leave user on dropdown
+          }
+          // Score each row: exact number+name > name match > first row
+          let best = items[0];
+          let bestScore = -1;
+          items.forEach(el => {
+            const num  = String(el.dataset.number || '').replace(/\/.*$/, '').trim().toLowerCase();
+            const setAttr = String(el.dataset.set || '').trim().toLowerCase();
+            const name = String((el.querySelector('.drop-name') || {}).textContent || '').trim().toLowerCase();
+            // MTG/YGO/Lorcana rows don't set data-set/data-number — fall back to
+            // reading the visible meta line, which includes set name and number.
+            const meta = String((el.querySelector('.drop-meta') || {}).textContent || '').trim().toLowerCase();
+            let s = 0;
+            if (wantNum  && num  === wantNum)                s += 10;
+            if (wantNum  && !num && meta.includes(wantNum))  s += 6;
+            if (wantSet  && setAttr && setAttr.includes(wantSet)) s += 4;
+            if (wantSet  && setAttr && wantSet.includes(setAttr)) s += 3;
+            if (wantSet  && !setAttr && meta.includes(wantSet))   s += 3;
+            if (wantName && name === wantName)               s += 2;
+            if (wantName && name.includes(wantName))         s += 1;
+            if (s > bestScore) { bestScore = s; best = el; }
+          });
+          try { best.click(); } catch(e) {}
+        };
+        setTimeout(poll, 200);
       }
     }
   } catch(e) {

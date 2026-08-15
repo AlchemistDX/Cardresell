@@ -222,7 +222,11 @@ check('_bulkFetchPrice dispatches by cardType',                     INDEX.includ
 check('_bulkFetchPrice tries JP live-price endpoint first',         INDEX.includes("tcg-price?name=") && INDEX.includes("if (isJapanese)"));
 check('bulkOpenCardInLookup uses detected cardType not pokemon',    INDEX.includes("const targetGame = GAME_MAP[(r.cardType"));
 check('bulkOpenCardInLookup no longer force-sets pokemon',          !INDEX.includes("Bulk scanner always identifies Pokemon"));
-check('bulkOpenCardInLookup routes non-Pokemon to searchInput',     INDEX.includes("Non-Pokemon: prefill the search input"));
+check('bulkOpenCardInLookup routes non-Pokemon to searchInput',     INDEX.includes("Non-Pokemon: prefill search, trigger the tab"));
+check('bulkOpenCardInLookup auto-clicks best-match dropdown row',   INDEX.includes("auto-click the row that best matches"));
+check('MTG bulk price falls back to name-only + strips zero-pad',   INDEX.includes("un-zero-padded") && INDEX.includes("stripDiacritics"));
+check('YGO bulk price falls back to first two words',               INDEX.includes("first two words if the exact name misses"));
+check('ebayListBtn cleared from display:none when card loads',      INDEX.includes("resetCardPanel() sets this to display:none"));
 
 console.log('\n[Printing/Variant dropdown split 2026-08-15]');
 check('variants.forEach filters graded from dropdown UI',           INDEX.includes("if (isGradedVariant(v.key)) return; // hide graded from Printing/Variant dropdown"));
