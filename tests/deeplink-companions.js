@@ -207,6 +207,23 @@ check('signin.html showErr toggles .show class',                  SIGNIN.include
 check('signin.html clearErr removes .show class',                 SIGNIN.includes("el.classList.remove('show')"));
 check('signin.html has email-already-in-use message',             SIGNIN.includes("An account with this email already exists"));
 
+const SCAN = fs.readFileSync(path.join(__dirname, '..', 'api', 'scan.js'), 'utf8');
+console.log('\n[Bulk scan multi-TCG routing 2026-08-15]');
+check('scan.js prompt lists yugioh/lorcana/onepiece card types',   SCAN.includes('"yugioh"') && SCAN.includes('"lorcana"') && SCAN.includes('"onepiece"'));
+check('scan.js prompt asks for is_japanese flag',                   SCAN.includes('is_japanese:'));
+check('scan.js response returns card_type + is_japanese',           /is_japanese:\s+cardInfo\.is_japanese/.test(SCAN));
+check('Bulk row captures cardType from data.card_type',             INDEX.includes("result.cardType   = data.card_type"));
+check('Bulk row captures isJapanese from data.is_japanese',         INDEX.includes("result.isJapanese = data.is_japanese === true"));
+check('_bulkFetchPrice accepts cardType + isJapanese params',       INDEX.includes("function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese)"));
+check('_bulkFetchPriceMTG routes to Scryfall',                      INDEX.includes("api.scryfall.com/cards/search"));
+check('_bulkFetchPriceYGO routes to YGOProDeck',                    INDEX.includes("db.ygoprodeck.com/api/v7/cardinfo.php"));
+check('_bulkFetchPriceLorcana routes to lorcana-api',               INDEX.includes("api.lorcana-api.com/cards/fetch"));
+check('_bulkFetchPrice dispatches by cardType',                     INDEX.includes("if (type === 'mtg') return _bulkFetchPriceMTG"));
+check('_bulkFetchPrice tries JP live-price endpoint first',         INDEX.includes("tcg-price?name=") && INDEX.includes("if (isJapanese)"));
+check('bulkOpenCardInLookup uses detected cardType not pokemon',    INDEX.includes("const targetGame = GAME_MAP[(r.cardType"));
+check('bulkOpenCardInLookup no longer force-sets pokemon',          !INDEX.includes("Bulk scanner always identifies Pokemon"));
+check('bulkOpenCardInLookup routes non-Pokemon to searchInput',     INDEX.includes("Non-Pokemon: prefill the search input"));
+
 console.log('\n[Printing/Variant dropdown split 2026-08-15]');
 check('variants.forEach filters graded from dropdown UI',           INDEX.includes("if (isGradedVariant(v.key)) return; // hide graded from Printing/Variant dropdown"));
 check('ensureGradedOptionInSelect injects hidden graded option',    INDEX.includes("function ensureGradedOptionInSelect"));

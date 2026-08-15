@@ -10533,13 +10533,96 @@ async function _bulkFetchPokemonCards(q, timeoutMs) {
   }
 }
 
-async function _bulkFetchPrice(cardName, setName, cardNumber) {
-  if (!cardName) return null;
+// Route to the right DB per TCG. Bulk scanner used to always hit PokemonTCG.io,
+// which broke Magic/Yu-Gi-Oh/Lorcana/JP-Pokemon results entirely (scan ID'd them
+// but price fetch returned 0 matches → "Price unavailable" + no thumbnail).
+async function _bulkFetchPriceMTG(cleanName, cleanNumber) {
   try {
-    const cleanName = String(cardName).replace(/["\\]/g, '').trim();
-    if (!cleanName) return null;
-    const cleanNumber = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
+    const q = cleanName + (cleanNumber ? ' ' + cleanNumber : '');
+    const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=desc`, { signal: AbortSignal.timeout(7000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const first = d?.data?.[0];
+    if (!first) return null;
+    const usd = parseFloat(first.prices?.usd) || parseFloat(first.prices?.usd_foil) || null;
+    return {
+      marketPrice: usd,
+      variant: usd ? 'usd' : null,
+      imageUrl: first.image_uris?.small || first.image_uris?.normal || first.card_faces?.[0]?.image_uris?.small || '',
+      tcgplayerUrl: first.purchase_uris?.tcgplayer || '',
+    };
+  } catch(e) { return null; }
+}
 
+async function _bulkFetchPriceYGO(cleanName) {
+  try {
+    const r = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(cleanName)}&num=5&offset=0`, { signal: AbortSignal.timeout(7000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const first = d?.data?.[0];
+    if (!first) return null;
+    const p = parseFloat(first.card_prices?.[0]?.tcgplayer_price) || null;
+    return {
+      marketPrice: p,
+      variant: p ? 'tcgplayer' : null,
+      imageUrl: first.card_images?.[0]?.image_url_small || first.card_images?.[0]?.image_url || '',
+      tcgplayerUrl: '',
+    };
+  } catch(e) { return null; }
+}
+
+async function _bulkFetchPriceLorcana(cleanName) {
+  try {
+    const r = await fetch(`https://api.lorcana-api.com/cards/fetch?search=Name~${encodeURIComponent(cleanName)}`, { signal: AbortSignal.timeout(7000) });
+    if (!r.ok) return null;
+    const arr = await r.json();
+    const first = Array.isArray(arr) ? arr[0] : null;
+    if (!first) return null;
+    // Lorcana-api has no price field — return thumbnail only so the row shows an image.
+    return {
+      marketPrice: null,
+      variant: null,
+      imageUrl: first.Image || '',
+      tcgplayerUrl: '',
+    };
+  } catch(e) { return null; }
+}
+
+async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese) {
+  if (!cardName) return null;
+  const cleanName = String(cardName).replace(/["\\]/g, '').trim();
+  if (!cleanName) return null;
+  const cleanNumber = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
+  const type = (cardType || 'pokemon').toLowerCase();
+
+  // Route to the correct database. Falls back to Pokemon lookup for legacy
+  // rows without cardType, but also as a last-ditch recovery when a non-Pokemon
+  // DB returns nothing.
+  if (type === 'mtg') return _bulkFetchPriceMTG(cleanName, cleanNumber);
+  if (type === 'yugioh' || type === 'ygo') return _bulkFetchPriceYGO(cleanName);
+  if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName);
+  if (type === 'onepiece') return null; // No free API — leave price blank; user can enter manually.
+  if (type === 'sports') return null;   // Sports cards route through eBay only — no card DB.
+
+  // Pokemon path (default). If the scanner marked this as Japanese, try the
+  // /api/tcg-price live TCGplayer lookup FIRST — it queries TCGplayer directly
+  // and works for many JP-only sets that pokemontcg.io doesn't index. If that
+  // returns nothing, we still fall through to the pokemontcg.io name search
+  // because many JP cards share the English character name.
+  if (isJapanese) {
+    try {
+      const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}`, { signal: AbortSignal.timeout(7000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (d && d.market > 0) {
+          return { marketPrice: d.market, variant: 'tcgplayer_live', imageUrl: d.image || '', tcgplayerUrl: '' };
+        }
+      }
+    } catch(e) {}
+    // Fall through — many JP cards ALSO exist in English pokemontcg.io by name.
+  }
+
+  try {
     // Try three progressively broader queries. Bulk-scan cards that saved as
     // "$0 + no thumbnail" were mostly caused by a strict name+number query
     // returning zero matches (e.g. AI mis-read the number, or the card uses
@@ -10743,9 +10826,11 @@ async function _bulkScanOne(item, rowId, isRetry) {
         result.setName    = data.set_name    || '';
         result.cardNumber = data.card_number || '';
         result.rarity     = data.rarity      || '';
+        result.cardType   = data.card_type   || 'pokemon'; // 'pokemon'|'mtg'|'yugioh'|'lorcana'|'onepiece'|'sports'
+        result.isJapanese = data.is_japanese === true;
         result.condition  = 'NM';
 
-        const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber);
+        const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese);
         if (priceInfo) {
           result.marketPrice  = priceInfo.marketPrice;
           result.priceVariant = priceInfo.variant;
@@ -11192,32 +11277,43 @@ async function bulkOpenCardInLookup(rowId) {
 
   try { switchView('lookup'); } catch(e) {}
 
-  // Bulk scanner always identifies Pokemon — force game to pokemon.
-  // Do this BEFORE calling _loadScannedCardExact because game context affects card rendering.
+  // Route to the correct game tab based on what the scanner detected.
+  // OLD BUG: this hard-coded 'pokemon' for every card, so scanning a Magic /
+  // Yu-Gi-Oh / Lorcana card ID'd correctly but then landed in the Pokemon tab
+  // with an empty search result — which the user saw as "drops you right back
+  // into English pokemon".
+  const GAME_MAP = { pokemon: 'pokemon', mtg: 'mtg', yugioh: 'yugioh', lorcana: 'lorcana', onepiece: 'onepiece', sports: 'sports' };
+  const targetGame = GAME_MAP[(r.cardType || 'pokemon').toLowerCase()] || 'pokemon';
   try {
-    if (typeof onGameSelectChange === 'function' && activeGame !== 'pokemon') {
-      onGameSelectChange('pokemon');
+    if (typeof onGameSelectChange === 'function' && activeGame !== targetGame) {
+      onGameSelectChange(targetGame);
     }
   } catch(e) {}
 
   // Show the floating "Back to Bulk Scan" pill immediately (before await)
   _showBackToBulkPill();
 
-  // Use the exact same lookup path as single-card scan — this is what actually finds
-  // the correct card by name+number+set. The search input path is unreliable because
-  // "CardName #123" is not valid PokemonTCG.io query syntax.
+  // For non-Pokemon TCGs, _loadScannedCardExact hits PokemonTCG.io only and
+  // returns nothing. Use the game-specific search function so the dropdown
+  // populates with the correct DB (Scryfall / YGOProDeck / Lorcana / etc.).
   try {
-    if (typeof _loadScannedCardExact === 'function') {
+    if (targetGame === 'pokemon' && typeof _loadScannedCardExact === 'function') {
       await _loadScannedCardExact({
         name:    r.cardName    || '',
         number:  r.cardNumber  || '',
         setName: r.setName     || '',
         rarity:  r.rarity      || '',
+        isJapanese: r.isJapanese === true,
       });
     } else {
-      // Extremely defensive fallback — should never hit
+      // Non-Pokemon: prefill the search input and trigger the tab's own search.
+      // Every search function (searchMagic/searchYugioh/searchLorcana/searchOnePiece)
+      // reads from #searchInput, so setting value + firing 'input' works for all.
       const si = document.getElementById('searchInput');
-      if (si) { si.value = r.cardName || ''; si.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (si) {
+        si.value = r.cardName || '';
+        si.dispatchEvent(new Event('input', { bubbles: true }));
+      }
     }
   } catch(e) {
     console.warn('bulkOpenCardInLookup: exact load failed', e);

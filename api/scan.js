@@ -222,13 +222,14 @@ Extract for the best match:
 2. card_number: The card number (e.g. "079/078", "025/165")
 3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm") — VERIFY the set matches the card number range and art style. Do not guess a set.
 4. hp: HP number if Pokémon card (e.g. "280")
-5. card_type: "pokemon", "sports", or "mtg"
-6. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
-7. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low".
-8. candidates: OPTIONAL array of top 2–3 matches when confidence is medium or low. Each element: {card_name, card_number, set_name, hp, card_type, rarity, confidence_pct}. Rank most likely first. If confidence is "high", omit or return an empty array.
+5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols.
+6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false.
+7. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
+8. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low".
+9. candidates: OPTIONAL array of top 2–3 matches when confidence is medium or low. Each element: {card_name, card_number, set_name, hp, card_type, is_japanese, rarity, confidence_pct}. Rank most likely first. If confidence is "high", omit or return an empty array.
 
 Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"...","confidence":"high|medium|low","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","rarity":"...","confidence_pct":75}]}`;
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","confidence":"high|medium|low","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","confidence_pct":75}]}`;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -361,6 +362,7 @@ Respond ONLY with valid JSON, no explanation:
         set_name:       c.set_name       || '',
         hp:             c.hp             || '',
         card_type:      c.card_type      || 'pokemon',
+        is_japanese:    c.is_japanese === true,
         rarity:         c.rarity         || '',
         confidence_pct: (typeof c.confidence_pct === 'number' ? c.confidence_pct : null),
       }));
@@ -382,6 +384,7 @@ Respond ONLY with valid JSON, no explanation:
         set_name:     cardInfo.set_name    || cleanCandidates[0].set_name    || '',
         hp:           cardInfo.hp          || cleanCandidates[0].hp          || '',
         card_type:    cardInfo.card_type   || cleanCandidates[0].card_type   || 'pokemon',
+        is_japanese:  cardInfo.is_japanese === true || cleanCandidates[0].is_japanese === true,
         rarity:       cardInfo.rarity      || cleanCandidates[0].rarity      || '',
       });
     }
@@ -395,6 +398,7 @@ Respond ONLY with valid JSON, no explanation:
       set_name:    cardInfo.set_name    || '',
       hp:          cardInfo.hp          || '',
       card_type:   cardInfo.card_type   || 'pokemon',
+      is_japanese: cardInfo.is_japanese === true,
       rarity:      cardInfo.rarity      || '',
     });
 
