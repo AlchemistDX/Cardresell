@@ -218,18 +218,20 @@ Respond ONLY with valid JSON:
 BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
 
 Extract for the best match:
-1. card_name: The Pokémon or character name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
-2. card_number: The card number (e.g. "079/078", "025/165")
-3. set_name: The set name (e.g. "Pokémon GO", "Crown Zenith", "Prizm") — VERIFY the set matches the card number range and art style. Do not guess a set.
+1. card_name: The Pokémon or character or player name (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James")
+2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
+3. set_name: The set / brand name (e.g. "Pokémon GO", "Crown Zenith", "Topps Chrome", "Panini Prizm") — VERIFY the set matches the card number range and art style. Do not guess a set.
 4. hp: HP number if Pokémon card (e.g. "280")
-5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols.
+5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols. Sports cards show a photo of a real athlete, a team logo/jersey, brand marks like Topps/Panini/Bowman/Upper Deck/Fleer/Donruss/Score/Select/Prizm/Optic/Mosaic/Chronicles, and often a copyright year.
 6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false.
-7. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare"
-8. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low".
-9. candidates: OPTIONAL array of top 2–3 matches when confidence is medium or low. Each element: {card_name, card_number, set_name, hp, card_type, is_japanese, rarity, confidence_pct}. Rank most likely first. If confidence is "high", omit or return an empty array.
+7. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare", or for sports: "Refractor", "Rookie", "Auto", "Numbered /99", "Base", etc.
+8. sport: ONLY for sports cards — one of "Baseball", "Basketball", "Football", "Hockey", "Soccer", "Other". Determine by team logo, jersey style, or ball visible.
+9. year: ONLY for sports cards — the copyright / season year printed on the card (e.g. "2023", "2011", "1997").
+10. confidence: "high" | "medium" | "low" — be strict. "high" means you can clearly read the card number AND the set symbol AND the art matches. Any doubt → "medium" or "low".
+11. candidates: OPTIONAL array of top 2–3 matches when confidence is medium or low. Each element: {card_name, card_number, set_name, hp, card_type, is_japanese, rarity, sport, year, confidence_pct}. Rank most likely first. If confidence is "high", omit or return an empty array.
 
 Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","confidence":"high|medium|low","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","confidence_pct":75}]}`;
+{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -364,6 +366,8 @@ Respond ONLY with valid JSON, no explanation:
         card_type:      c.card_type      || 'pokemon',
         is_japanese:    c.is_japanese === true,
         rarity:         c.rarity         || '',
+        sport:          c.sport          || '',
+        year:           c.year           || '',
         confidence_pct: (typeof c.confidence_pct === 'number' ? c.confidence_pct : null),
       }));
 
@@ -386,6 +390,8 @@ Respond ONLY with valid JSON, no explanation:
         card_type:    cardInfo.card_type   || cleanCandidates[0].card_type   || 'pokemon',
         is_japanese:  cardInfo.is_japanese === true || cleanCandidates[0].is_japanese === true,
         rarity:       cardInfo.rarity      || cleanCandidates[0].rarity      || '',
+        sport:        cardInfo.sport       || cleanCandidates[0].sport       || '',
+        year:         cardInfo.year        || cleanCandidates[0].year        || '',
       });
     }
 
@@ -403,6 +409,8 @@ Respond ONLY with valid JSON, no explanation:
       card_type:   cardInfo.card_type   || 'pokemon',
       is_japanese: cardInfo.is_japanese === true,
       rarity:      cardInfo.rarity      || '',
+      sport:       cardInfo.sport       || '',
+      year:        cardInfo.year        || '',
     });
 
   } catch(err) {

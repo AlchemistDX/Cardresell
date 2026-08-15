@@ -4306,6 +4306,29 @@ async function doSportsSearchLive(q) {
     <span style="font-size:.68rem;color:var(--text-muted)">PC →</span>
   </div>`;
 
+  // 130point — aggregator of sports card sold sales across eBay + PWCC + Goldin + etc.
+  const p130Query = [q, year, brand, document.getElementById('sp_cardnum')?.value?.trim() || '', gradeLabel].filter(Boolean).join(' ');
+  const p130Url   = `https://130point.com/sales/?search=${encodeURIComponent(p130Query)}&searchButton=&sortBy=date`;
+  html += `<div class="drop-item" data-sports-idx="p130" data-p130-url="${esc(p130Url)}" style="cursor:pointer">
+    <div class="drop-thumb-ph" style="font-size:.95rem">💰</div>
+    <div class="drop-info">
+      <div class="drop-name">${esc(q)} on 130point</div>
+      <div class="drop-meta">Aggregated sold sales — eBay + PWCC + Goldin + more</div>
+    </div>
+    <span style="font-size:.68rem;color:var(--text-muted)">130pt →</span>
+  </div>`;
+
+  // PWCC Marketplace — major sports auction house / fixed-price listings
+  const pwccUrl = `https://www.pwccmarketplace.com/search?q=${encodeURIComponent([q, year, brand].filter(Boolean).join(' '))}`;
+  html += `<div class="drop-item" data-sports-idx="pwcc" data-pwcc-url="${esc(pwccUrl)}" style="cursor:pointer">
+    <div class="drop-thumb-ph" style="font-size:.95rem">🏆</div>
+    <div class="drop-info">
+      <div class="drop-name">${esc(q)} on PWCC Marketplace</div>
+      <div class="drop-meta">Auction house comps + fixed-price listings (graded)</div>
+    </div>
+    <span style="font-size:.68rem;color:var(--text-muted)">PWCC →</span>
+  </div>`;
+
   sdl.innerHTML = html;
   sdl.classList.add('open');
 
@@ -4320,6 +4343,16 @@ async function doSportsSearchLive(q) {
         loadSportsCardFromSearch(q);
       } else if (idx === 'pricecharting') {
         window.open(el.dataset.pcUrl, '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        loadSportsCardFromSearch(q);
+      } else if (idx === 'p130') {
+        window.open(el.dataset.p130Url, '_blank');
+        const spPlayer = document.getElementById('sp_player');
+        if (spPlayer && !spPlayer.value) spPlayer.value = q;
+        loadSportsCardFromSearch(q);
+      } else if (idx === 'pwcc') {
+        window.open(el.dataset.pwccUrl, '_blank');
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
@@ -8025,8 +8058,69 @@ function cancelScan() {
     const pending = window._pendingIdScanCard;
     window._pendingIdScanCard = null;
     switchView('lookup'); // make sure we're on the lookup tab
-    _loadScannedCardExact(pending);
+
+    // Sports card path: switch to the Sports Cards tab, fill sp_* fields,
+    // and auto-run doSportsSearchLive so the user lands on comp buttons.
+    // Non-sports falls through to PokemonTCG.io / TCGplayer exact-load below.
+    if (pending.cardType === 'sports') {
+      try {
+        _routeScannedSportsCard(pending);
+      } catch(e) { console.warn('sports auto-fill failed', e); }
+    } else {
+      _loadScannedCardExact(pending);
+    }
   }
+}
+
+// After an ID scan detects a sports card, populate the Sports Cards form fields
+// (player / year / brand / #) and auto-fire the search dropdown so the user gets
+// eBay-sold + PriceCharting + 130point + PWCC comp buttons ready to click.
+function _routeScannedSportsCard(pending) {
+  const { name, number, setName, rarity, sport, year } = pending;
+
+  // Switch the game selector to sports so the sports form UI is visible.
+  try {
+    const gs = document.getElementById('gameSelect');
+    if (gs && gs.value !== 'sports') gs.value = 'sports';
+    if (typeof onGameSelectChange === 'function') onGameSelectChange('sports');
+  } catch(e) {}
+
+  // Best-effort parse: if year wasn't returned, try to pull YYYY from set_name.
+  let parsedYear = (year || '').toString().trim();
+  if (!parsedYear && setName) {
+    const m = String(setName).match(/(19|20)\d{2}/);
+    if (m) parsedYear = m[0];
+  }
+
+  // Brand: if scan gave a set_name, use it; strip a leading year to keep just the brand.
+  let brand = (setName || '').toString().trim();
+  if (parsedYear) brand = brand.replace(new RegExp('^\\s*' + parsedYear + '\\s*'), '');
+
+  // Sport: fall back to Baseball if we couldn't infer.
+  const inferredSport = (sport || 'Baseball').toString().trim() || 'Baseball';
+
+  // Fill the form fields.
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  setVal('sp_player',  name || '');
+  setVal('sp_year',    parsedYear);
+  setVal('sp_brand',   brand);
+  setVal('sp_cardnum', number || '');
+
+  const spSport = document.getElementById('sp_sport');
+  if (spSport && inferredSport) {
+    const opt = Array.from(spSport.options).find(o => o.value.toLowerCase() === inferredSport.toLowerCase());
+    if (opt) spSport.value = opt.value;
+  }
+
+  // Fire the sports search so comp buttons render immediately.
+  if (name && typeof doSportsSearchLive === 'function') {
+    // Also mirror the player name into the sports search input so the UI reflects it.
+    const ssi = document.getElementById('sportsSearchInput');
+    if (ssi) ssi.value = name;
+    setTimeout(() => { try { doSportsSearchLive(name); } catch(e) {} }, 100);
+  }
+
+  showToast('Sports card scanned — tap a comp source to see sold prices.', 'gold');
 }
 
 // Fetch the exact scanned card from PokemonTCG.io by name + number and load it
@@ -8557,6 +8651,9 @@ async function _pickScanCandidate(idx) {
     setName: picked.set_name   || '',
     rarity:  picked.rarity     || '',
     hp:      picked.hp         || '',
+    cardType: picked.card_type || 'pokemon',
+    sport:    picked.sport     || '',
+    year:     picked.year      || '',
   };
   try { if (window._pendingScanObjectUrl) URL.revokeObjectURL(window._pendingScanObjectUrl); } catch(e) {}
   window._pendingScanCandidates = null;
@@ -8719,7 +8816,7 @@ async function processScanImage(input) {
     // Silently load the card into the calculator in the background
     // so when the user closes the scan overlay it's already selected.
     // Do NOT auto-open catalog — let the user decide what to do next.
-    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp };
+    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp, cardType: data.card_type || 'pokemon', sport: data.sport || '', year: data.year || '' };
     URL.revokeObjectURL(objectUrl);
 
     // Show success state — hide spinner, show View Card + Scan Another
@@ -11031,6 +11128,8 @@ async function _bulkScanOne(item, rowId, isRetry) {
         result.rarity     = data.rarity      || '';
         result.cardType   = data.card_type   || 'pokemon'; // 'pokemon'|'mtg'|'yugioh'|'lorcana'|'onepiece'|'sports'
         result.isJapanese = data.is_japanese === true;
+        result.sport      = data.sport       || ''; // sports cards only
+        result.year       = data.year        || ''; // sports cards only (e.g. '2011')
         result.condition  = 'NM';
 
         const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese);
@@ -11554,6 +11653,22 @@ async function bulkOpenCardInLookup(rowId) {
   // returns nothing. Use the game-specific search function so the dropdown
   // populates with the correct DB (Scryfall / YGOProDeck / Lorcana / etc.).
   try {
+    if (targetGame === 'sports') {
+      // Sports card: use the sports form auto-fill helper instead of the
+      // Pokemon-only #searchInput path. Fills sp_player/year/brand/#/sport
+      // and fires doSportsSearchLive so comp buttons render immediately.
+      _routeScannedSportsCard({
+        name:     r.cardName    || '',
+        number:   r.cardNumber  || '',
+        setName:  r.setName     || '',
+        rarity:   r.rarity      || '',
+        sport:    r.sport       || '',
+        year:     r.year        || '',
+      });
+      _showBackToBulkPill();
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
+      return;
+    }
     if (targetGame === 'pokemon' && typeof _loadScannedCardExact === 'function') {
       await _loadScannedCardExact({
         name:    r.cardName    || '',
