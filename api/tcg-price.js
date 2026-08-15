@@ -44,7 +44,12 @@ export default async function handler(req, res) {
   const kvToken = process.env.KV_REST_API_TOKEN;
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
-  if (cached) return res.status(200).json({ ...cached, cached: true });
+  if (cached) {
+    // Cache hit still counts as a search from the user's perspective — they typed
+    // a query and got a real price back. Increment counters (fire-and-forget).
+    _incrSearchStats(kvUrl, kvToken);
+    return res.status(200).json({ ...cached, cached: true });
+  }
 
   try {
     // Search TCGPlayer for the card
@@ -152,10 +157,30 @@ export default async function handler(req, res) {
     };
 
     await setCache(kvUrl, kvToken, cacheKey, data);
+    _incrSearchStats(kvUrl, kvToken);
     return res.status(200).json(data);
 
   } catch(e) {
     console.error('tcg-price error:', e.message);
     return res.status(500).json({ error: e.message });
   }
+}
+
+// ── Search-counter increment (fire-and-forget) ──
+// Powers the landing-page social-proof counter. We increment both a
+// lifetime total and a per-day bucket. Failures are swallowed — stats
+// are best-effort and should never break the actual price lookup.
+function _todayKey() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+function _incrSearchStats(kvUrl, kvToken) {
+  if (!kvUrl || !kvToken) return;
+  // Don't await — stats must not add latency to the user's price lookup.
+  fetch(`${kvUrl}/incr/${encodeURIComponent('stats:searches:total')}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${kvToken}` }
+  }).catch(() => {});
+  fetch(`${kvUrl}/incr/${encodeURIComponent('stats:searches:' + _todayKey())}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${kvToken}` }
+  }).catch(() => {});
 }

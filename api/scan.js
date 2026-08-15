@@ -389,6 +389,9 @@ Respond ONLY with valid JSON, no explanation:
       });
     }
 
+    // Real search — count it toward the public social-proof counter. Fire-and-forget.
+    _incrSearchStats(kvUrl, kvToken);
+
     return res.status(200).json({
       success: true,
       mode:        'identify',
@@ -447,6 +450,23 @@ async function incrKV(kvUrl, kvToken, key) {
       headers: { Authorization: `Bearer ${kvToken}` }
     });
   } catch(e) {}
+}
+
+// ── Public search-counter increment (fire-and-forget). Powers the landing-page
+// social-proof counter. Same key namespace as api/tcg-price.js so both endpoints
+// feed into a single lifetime total.
+function _todayKeyUTC() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+function _incrSearchStats(kvUrl, kvToken) {
+  if (!kvUrl || !kvToken) return;
+  fetch(`${kvUrl}/incr/${encodeURIComponent('stats:searches:total')}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${kvToken}` }
+  }).catch(() => {});
+  fetch(`${kvUrl}/incr/${encodeURIComponent('stats:searches:' + _todayKeyUTC())}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${kvToken}` }
+  }).catch(() => {});
 }
 
 async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {

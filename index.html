@@ -2017,7 +2017,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Social proof mini row -->
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <div style="padding:.35rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:99px;font-size:.67rem;color:#4ade80;font-weight:700">✓ 100% free to use</div>
-        <div style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold);font-weight:700">🔍 1,200+ cards searched today</div>
+        <div id="introTodayBadge" style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold);font-weight:700;display:none">🔍 <span id="introTodayCount">0</span> cards searched today</div>
         <div style="padding:.35rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;font-size:.67rem;color:var(--text-muted);font-weight:600">No account needed to search</div>
       </div>
     </div>
@@ -4337,26 +4337,56 @@ function loadSportsCardFromSearch(playerName) {
 });
 
 // ── Load card into UI (normalized format) ──
-// ── Social proof counter ──
+// ── Social proof counter (real numbers) ──
+// Backed by /api/stats → Upstash KV. Every successful /api/tcg-price and
+// /api/scan call increments the total server-side, so this counter reflects
+// actual searches, not a formula. The client also bumps a local session
+// counter so the number visibly ticks up while the user is on the page,
+// which feels alive without misleading anyone about the true total.
 (function() {
-  // Simulated seed: realistic base number that grows over time
-  // Seeds from app launch date (approx Jun 1 2026), grows ~50/day
-  const LAUNCH_TS = new Date('2026-06-01').getTime();
-  const daysSinceLaunch = Math.floor((Date.now() - LAUNCH_TS) / 86400000);
-  window._spBase = 1200 + (daysSinceLaunch * 48); // ~1200 at launch, +48/day
-  window._spSession = 0; // lookups this session
+  window._spBase    = null; // set from /api/stats on first fetch
+  window._spSession = 0;    // this browser session only (visual freshness)
+
+  function _formatCount() {
+    const base = window._spBase == null ? 0 : window._spBase;
+    return (base + window._spSession).toLocaleString();
+  }
 
   function _updateSocialProof() {
     const bar   = document.getElementById('socialProofBar');
     const count = document.getElementById('socialProofCount');
     const label = document.getElementById('socialProofLabel');
     if (!bar || !count || !label) return;
-    const total = window._spBase + window._spSession;
-    // Format number with commas
-    const fmt = total.toLocaleString();
-    count.textContent = fmt;
+    // Hide the badge entirely until we have a real number — no fake "0" flash.
+    if (window._spBase == null) { bar.style.display = 'none'; return; }
+    count.textContent = _formatCount();
     label.textContent = 'searches so far — find out the value of your card';
     bar.style.display = 'inline';
+  }
+
+  async function _fetchRealCount() {
+    try {
+      const r = await fetch('/api/stats');
+      if (!r.ok) return;
+      const d = await r.json();
+      if (typeof d.totalSearches === 'number' && d.totalSearches > 0) {
+        window._spBase = d.totalSearches;
+        _updateSocialProof();
+      }
+      // Also update the intro-state "cards searched today" badge with today's real count.
+      // Hide the badge entirely when the count is 0 so we never advertise a fake number.
+      const introBadge = document.getElementById('introTodayBadge');
+      const introCount = document.getElementById('introTodayCount');
+      if (introBadge && introCount) {
+        const today = typeof d.todaySearches === 'number' ? d.todaySearches : 0;
+        if (today > 0) {
+          introCount.textContent = today.toLocaleString();
+          introBadge.style.display = '';
+        } else {
+          introBadge.style.display = 'none';
+        }
+      }
+    } catch (e) { /* silent — counter is optional */ }
   }
 
   window._triggerSocialProof = function() {
@@ -4364,8 +4394,10 @@ function loadSportsCardFromSearch(playerName) {
     _updateSocialProof();
   };
 
-  // Show base count on load
-  setTimeout(_updateSocialProof, 800);
+  // First fetch shortly after page load; refresh every 60s so long-lived tabs
+  // stay in sync with the real total instead of drifting off session bumps.
+  setTimeout(_fetchRealCount, 800);
+  setInterval(_fetchRealCount, 60000);
 })();
 
 function loadCardUI(card) {
