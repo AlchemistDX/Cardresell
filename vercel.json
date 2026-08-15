@@ -6,6 +6,8 @@
     { "src": "signin.html", "use": "@vercel/static" },
     { "src": "terms.html", "use": "@vercel/static" },
     { "src": "privacy.html", "use": "@vercel/static" },
+    { "src": "about.html", "use": "@vercel/static" },
+    { "src": "contact.html", "use": "@vercel/static" },
     { "src": "config.js", "use": "@vercel/static" }
   ],
   "routes": [
@@ -14,6 +16,8 @@
     { "src": "/signin", "dest": "/signin.html" },
     { "src": "/terms", "dest": "/terms.html" },
     { "src": "/privacy", "dest": "/privacy.html" },
+    { "src": "/about", "dest": "/about.html" },
+    { "src": "/contact", "dest": "/contact.html" },
     { "src": "/_vercel/insights/(.*)", "continue": true },
     { "src": "/(.*\\.html)", "dest": "/$1" },
     { "src": "/(.*)", "dest": "/index.html", "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" } }

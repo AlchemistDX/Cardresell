@@ -1980,7 +1980,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div class="intro-state" style="text-align:left;padding:1.5rem 1.25rem">
       <!-- headline -->
       <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold)">maximum profit</span></div>
-      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, sports, or trading card — see exact fees &amp; payouts across every platform.</div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, Magic, Yu-Gi-Oh, Lorcana, or sports card — see exact fees &amp; payouts across every platform.</div>
 
       <!-- Feature bullets -->
       <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.25rem">
@@ -4113,7 +4113,7 @@ function openEbayComps() {
   const sport   = document.getElementById('sp_sport').value;
 
   const parts = [player, year, brand, cardnum, grade !== 'Raw/Ungraded' ? grade : ''].filter(Boolean);
-  if (!parts.length) { alert('Enter at least a player name first.'); return; }
+  if (!parts.length) { showToast('Enter at least a player name first.'); return; }
 
   const query = encodeURIComponent(parts.join(' '));
   window.open(buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=212&LH_Sold=1&LH_Complete=1`), '_blank');
@@ -5981,7 +5981,7 @@ function addCurrentCardToCollection() {
   // scoped key so nothing is lost. The #anonSyncBanner reminds them to sign
   // in later to unlock scan-credit features + cross-device sync.
   if (!selectedCard || !selectedCard.name) {
-    alert('Search for a card first, then tap Add to My Collection.');
+    showToast('Search for a card first, then tap Add to My Collection.');
     return;
   }
   // Pre-fill the hold modal with current card data
