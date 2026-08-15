@@ -4674,6 +4674,10 @@ function loadCardUI(card) {
   const tcgpListBtn = document.getElementById('tcgpListBtn');
   const cardSellBtnRow = document.getElementById('cardSellBtnRow');
   const cardSellTip = document.getElementById('cardSellTip');
+  // 2026-08-15: TCGplayer doesn't sell sports cards — sending sports users
+  // there returned unrelated Grand Archive results (see IMG_3717). For sports,
+  // hide TCGplayer button, widen eBay button to full width, and swap the tip.
+  const isSportsCard = card && card.game === 'sports';
   if (ebayListBtn) {
     ebayListBtn.href = buildEbaySearchUrl(card.name, card.number);
     // resetCardPanel() sets this to display:none. Clear the inline style so the
@@ -4683,22 +4687,37 @@ function loadCardUI(card) {
     ebayListBtn.style.display = '';
   }
   if (tcgpListBtn) {
-    // Set a search-based URL immediately so the button never lands anywhere
-    // broken; then upgrade to the exact product page (where the 'Sell Yours'
-    // CTA is one tap away) if buildTcgpSmart can resolve a product ID.
-    tcgpListBtn.href = (typeof buildTcgpUrl === 'function')
-      ? buildTcgpUrl(card.name || '', card.setName || '', card.number || '')
-      : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(card.name || '')}&view=grid`;
-    if (typeof buildTcgpSmart === 'function') {
-      try {
-        Promise.resolve(buildTcgpSmart(card)).then(function(u) {
-          if (u && typeof u === 'string') tcgpListBtn.href = u;
-        }).catch(function(){});
-      } catch(e) {}
+    if (isSportsCard) {
+      // Hide TCGplayer for sports — they don't have the inventory.
+      tcgpListBtn.style.display = 'none';
+    } else {
+      tcgpListBtn.style.display = '';
+      // Set a search-based URL immediately so the button never lands anywhere
+      // broken; then upgrade to the exact product page (where the 'Sell Yours'
+      // CTA is one tap away) if buildTcgpSmart can resolve a product ID.
+      tcgpListBtn.href = (typeof buildTcgpUrl === 'function')
+        ? buildTcgpUrl(card.name || '', card.setName || '', card.number || '')
+        : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(card.name || '')}&view=grid`;
+      if (typeof buildTcgpSmart === 'function') {
+        try {
+          Promise.resolve(buildTcgpSmart(card)).then(function(u) {
+            if (u && typeof u === 'string') tcgpListBtn.href = u;
+          }).catch(function(){});
+        } catch(e) {}
+      }
     }
   }
-  if (cardSellBtnRow) cardSellBtnRow.style.display = 'grid';
-  if (cardSellTip) cardSellTip.style.display = 'block';
+  if (cardSellBtnRow) {
+    cardSellBtnRow.style.display = 'grid';
+    // Widen eBay to full width when TCG is hidden for sports.
+    cardSellBtnRow.style.gridTemplateColumns = isSportsCard ? '1fr' : '1fr 1fr';
+  }
+  if (cardSellTip) {
+    cardSellTip.style.display = 'block';
+    cardSellTip.innerHTML = isSportsCard
+      ? '\ud83d\udca1 On eBay tap any sold listing \u2192 <strong>\u201cSell one like this\u201d</strong> to auto-fill your listing'
+      : '\ud83d\udca1 On eBay tap any sold listing \u2192 <strong>\u201cSell one like this\u201d</strong> \u00b7 On TCGplayer tap <strong>\u201cSell Yours\u201d</strong>';
+  }
 
   // Update platform sell/buy links (skip auto-recalc — loadCardUI handles calc below)
   updateSellLinks._skipRecalc = true;
@@ -5127,8 +5146,13 @@ function buildEbaySearchUrl(cardName, number, opts) {
   const cleanName = _stripEmoji(cardName || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
   if (cleanName) parts.push(cleanName);
   if (number) {
-    // Strip leading zeros + any /total-cards suffix so "023/197" becomes "23"
-    const cleanNum = String(number).replace(/^0+/, '').replace(/\/.*$/, '').trim();
+    // 2026-08-15 fix: keep the /total fraction. eBay listings title cards as
+    // "Kyurem ex 165/086" or "Gardevoir ex 233/091", so dropping the /total
+    // was cutting our sold-comps recall (see IMG_3703, IMG_3708). Still strip
+    // leading zeros on the numerator so "023/197" → "23/197".
+    const raw = String(number).trim();
+    const m = raw.match(/^0*(\d+)(\/\d+)?$/);
+    const cleanNum = m ? (m[1] + (m[2] || '')) : raw.replace(/^0+/, '');
     if (cleanNum) parts.push(cleanNum);
   }
   if (opts.graded) parts.push(_stripEmoji(opts.graded));
@@ -8151,6 +8175,15 @@ function cancelScan() {
     const pending = window._pendingIdScanCard;
     window._pendingIdScanCard = null;
     switchView('lookup'); // make sure we're on the lookup tab
+
+    // 2026-08-15 fix: clear ANY previous card panel state before routing to
+    // the new scan, otherwise the previous card's name/price/refund button
+    // stays visible under the new one (reproduced in IMG_3716: LeBron scan
+    // showed a stale Vileplume \u30e9\u30d5\u30ec\u30b7\u30a2 #045 panel below the sports card).
+    try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(e) {}
+    // Also clear the shared card selection so any downstream reads (like the
+    // add-to-collection button) don't grab the previous card.
+    try { selectedCard = null; } catch(e) {}
 
     // Sports card path: switch to the Sports Cards tab, fill sp_* fields,
     // and auto-run doSportsSearchLive so the user lands on comp buttons.
