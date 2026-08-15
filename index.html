@@ -11357,6 +11357,40 @@ function bulkAddAllToCollection() {
   openBulkCostSheet(successful);
 }
 
+function setBulkCostMode(mode){
+  // mode='pack' shows a single split-across-all input; mode='per' shows the
+  // classic per-card list. Default 'pack' since ripping packs is the far
+  // more common bulk-scan path.
+  window._bulkCostMode = mode;
+  const pack = document.getElementById('bulkPackCostPanel');
+  const list = document.getElementById('bulkCostList');
+  const btnPack = document.getElementById('bulkCostModePack');
+  const btnPer  = document.getElementById('bulkCostModePer');
+  if (pack) pack.style.display = mode === 'pack' ? 'block' : 'none';
+  if (list) list.style.display = mode === 'per'  ? 'block' : 'none';
+  if (btnPack && btnPer){
+    const on  = 'rgba(139,92,246,.85)', onc  = '#fff';
+    const off = 'transparent',           offc = 'rgba(255,255,255,.55)';
+    btnPack.style.background = mode === 'pack' ? on : off;
+    btnPack.style.color      = mode === 'pack' ? onc : offc;
+    btnPer.style.background  = mode === 'per'  ? on : off;
+    btnPer.style.color       = mode === 'per'  ? onc : offc;
+  }
+}
+function updateBulkPackCostHint(){
+  const total = parseFloat((document.getElementById('bulkPackCostInput')||{}).value) || 0;
+  const successful = (window._bulkResults || []).filter(r => r.success);
+  const n = successful.reduce((s,r) => s + (r.qty && r.qty > 1 ? r.qty : 1), 0);
+  const nSpan = document.getElementById('bulkPackCostN');
+  if (nSpan) nSpan.textContent = n;
+  const hint = document.getElementById('bulkPackCostHint');
+  if (hint && total > 0 && n > 0){
+    hint.innerHTML = `Split evenly across ${n} cards → <span style="color:rgba(139,92,246,.9);font-weight:700">$${(total/n).toFixed(2)}</span> each.`;
+  } else if (hint){
+    hint.innerHTML = `Split evenly across the <span id="bulkPackCostN">${n}</span> cards below.`;
+  }
+}
+
 function openBulkCostSheet(cards) {
   const list = document.getElementById('bulkCostList');
   if (!list) return;
@@ -11385,6 +11419,11 @@ function openBulkCostSheet(cards) {
     </div>`;
   }).join('');
   _bulkShowSection('costSheet');
+  // Reset to pack mode each open + refresh hint
+  const packInp = document.getElementById('bulkPackCostInput');
+  if (packInp) packInp.value = '';
+  setBulkCostMode('pack');
+  updateBulkPackCostHint();
 }
 
 function bulkSkipPricingAndSave() {
@@ -11395,10 +11434,23 @@ function bulkSkipPricingAndSave() {
 function confirmBulkCostSave() {
   const successful = window._bulkResults.filter(r => r.success);
   const costs = {};
-  successful.forEach((r, i) => {
-    const inp = document.getElementById('bulkCost_' + i);
-    costs[i] = inp ? (parseFloat(inp.value) || 0) : 0;
-  });
+  if (window._bulkCostMode === 'pack') {
+    // Pack/set total mode: split evenly across every card slot (respecting qty).
+    const total = parseFloat((document.getElementById('bulkPackCostInput')||{}).value) || 0;
+    const nSlots = successful.reduce((s,r) => s + (r.qty && r.qty > 1 ? r.qty : 1), 0);
+    const perSlot = nSlots > 0 ? (total / nSlots) : 0;
+    // _bulkSaveToCollection multiplies out qty internally, so the per-index cost
+    // should be perSlot × qty so each individual saved copy ends up at perSlot.
+    successful.forEach((r, i) => {
+      const qty = r.qty && r.qty > 1 ? r.qty : 1;
+      costs[i] = perSlot * qty;
+    });
+  } else {
+    successful.forEach((r, i) => {
+      const inp = document.getElementById('bulkCost_' + i);
+      costs[i] = inp ? (parseFloat(inp.value) || 0) : 0;
+    });
+  }
   _bulkSaveToCollection(successful, costs);
 }
 
@@ -11731,6 +11783,23 @@ function _esc(s) {
       <div style="padding:.75rem 1.25rem .6rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
         <div style="font-size:.85rem;font-weight:700;color:#fff">What did you pay?</div>
         <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.15rem">Optional — leave $0 to skip. Used for P&amp;L tracking.</div>
+        <!-- Cost mode toggle: pack/set total vs per-card -->
+        <div style="display:flex;gap:.35rem;margin-top:.65rem;background:#0a0a0a;padding:.25rem;border-radius:8px">
+          <button id="bulkCostModePack" onclick="setBulkCostMode('pack')" style="flex:1;padding:.42rem;background:rgba(139,92,246,.85);border:none;color:#fff;border-radius:6px;font-weight:700;font-size:.72rem;cursor:pointer">📦 Pack / Set cost</button>
+          <button id="bulkCostModePer"  onclick="setBulkCostMode('per')"  style="flex:1;padding:.42rem;background:transparent;border:none;color:rgba(255,255,255,.55);border-radius:6px;font-weight:700;font-size:.72rem;cursor:pointer">Per card</button>
+        </div>
+      </div>
+      <!-- Pack-cost mode: single total input, auto-split across cards -->
+      <div id="bulkPackCostPanel" style="padding:1rem 1.25rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
+        <label style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Total paid for pack / set</label>
+        <div style="display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden;margin-top:.4rem">
+          <span style="padding:0 .6rem;font-size:1rem;color:rgba(255,255,255,.5)">$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" id="bulkPackCostInput"
+            style="background:transparent;border:none;color:#fff;font-size:1rem;flex:1;padding:.6rem .3rem .6rem 0;outline:none;-moz-appearance:textfield"
+            inputmode="decimal"
+            oninput="updateBulkPackCostHint()">
+        </div>
+        <div id="bulkPackCostHint" style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.4rem">Split evenly across the <span id="bulkPackCostN">0</span> cards below.</div>
       </div>
       <div id="bulkCostList" style="flex:1;overflow-y:auto;padding:.5rem 1rem 1rem"></div>
       <div style="padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0">
