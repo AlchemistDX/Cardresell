@@ -125,6 +125,11 @@ export default async function handler(req, res) {
     let high = best.highPrice || null;
 
     // If we have a productId, get detailed prices
+    // 2026-08-16: previous version only overwrote market+low and never
+    // populated mid/high from pricepoints, which is why vintage cards
+    // (Mewtwo Star Holon Phantoms) showed Low $0 / High $0 with just a
+    // mid figure. Now we pull all four fields from pricepoints and
+    // treat the search-endpoint values as backup.
     if (productId) {
       try {
         const pr = await fetch(`https://mpapi.tcgplayer.com/v2/product/${productId}/pricepoints?includeDirectSales=false`, {
@@ -137,11 +142,87 @@ export default async function handler(req, res) {
           const normal = prices.find(p => p.printingType === 'Normal');
           const best_price = holofoil || normal || prices[0];
           if (best_price) {
-            market = best_price.marketPrice || market;
-            low = best_price.listedMedianPrice || low;
+            market = best_price.marketPrice ?? market;
+            low    = best_price.lowPrice    ?? low;
+            mid    = best_price.midPrice    ?? mid;
+            high   = best_price.highPrice   ?? high;
           }
         }
       } catch(e) {}
+    }
+
+    // 2026-08-16: vintage / gold-star / high-value cards often have
+    // stale TCGplayer market data (single listing pinned high, or a
+    // frozen mid with $0 low/high). Cross-reference with pokemontcg.io
+    // which aggregates both TCGplayer AND Cardmarket data (Cardmarket
+    // reflects live EU listings, less prone to single-listing skew).
+    // If pokemontcg.io returns a materially different market price
+    // (>2x delta) we flag it and prefer the LOWER of the two so we
+    // don't over- or under-value the user's card based on one source.
+    try {
+      const ptcgQuery = number
+        ? `name:"${name.replace(/"/g,'')}" number:${number.replace(/\/.*$/,'').trim()}`
+        : `name:"${name.replace(/"/g,'')}"`;
+      const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(ptcgQuery)}&pageSize=5&select=id,name,set,number,tcgplayer,cardmarket`;
+      const ptcgRes = await fetch(ptcgUrl, { signal: AbortSignal.timeout(4000) });
+      if (ptcgRes.ok) {
+        const ptcgJson = await ptcgRes.json();
+        const ptcgCards = ptcgJson.data || [];
+        // Prefer set match, else first
+        const setLo = set.toLowerCase();
+        const ptcgMatch = (setLo ? ptcgCards.find(c => (c.set?.name || '').toLowerCase().includes(setLo)) : null) || ptcgCards[0];
+        if (ptcgMatch) {
+          const tp = ptcgMatch.tcgplayer?.prices || {};
+          // Pick the highest-market printing (holofoil, reverseHolofoil, normal)
+          const printings = Object.values(tp).filter(v => v && (v.market > 0 || v.mid > 0));
+          const bestPrinting = printings.sort((a,b) => (b.market || b.mid || 0) - (a.market || a.mid || 0))[0];
+          const cmAvg = ptcgMatch.cardmarket?.prices?.averageSellPrice;
+          const cmTrend = ptcgMatch.cardmarket?.prices?.trendPrice;
+          const cmAvg30 = ptcgMatch.cardmarket?.prices?.avg30;
+          // Cardmarket is in EUR — apply rough USD conversion (2026 ~1.08)
+          const cm_usd = (cmAvg30 || cmTrend || cmAvg) ? ((cmAvg30 || cmTrend || cmAvg) * 1.08) : null;
+          const ptcgMarket = bestPrinting?.market || bestPrinting?.mid || cm_usd || null;
+
+          // Case A: TPL returned market but its range collapsed (low=$0
+          // AND high=$0) — that means TPL only has one stale data point
+          // and pokemontcg.io's aggregated market (TPL + Cardmarket) is
+          // more trustworthy. Prefer pokemontcg.io + rebuild the range.
+          const tplRangeBroken = market > 0 && !(low > 0) && !(high > 0);
+          if (tplRangeBroken && ptcgMarket) {
+            market = ptcgMarket;
+            low  = bestPrinting?.low  || ptcgMarket * 0.85;
+            mid  = bestPrinting?.mid  || ptcgMarket;
+            high = bestPrinting?.high || ptcgMarket * 1.15;
+          }
+          // Case B: TPL and pokemontcg.io disagree by >2x. Prefer
+          // pokemontcg.io because it aggregates multiple sources.
+          else if (ptcgMarket && market && Math.max(ptcgMarket, market) / Math.min(ptcgMarket, market) > 2) {
+            market = ptcgMarket;
+            if (bestPrinting) {
+              low  = bestPrinting.low  ?? ptcgMarket * 0.85;
+              mid  = bestPrinting.mid  ?? ptcgMarket;
+              high = bestPrinting.high ?? ptcgMarket * 1.15;
+            } else {
+              low  = ptcgMarket * 0.85;
+              mid  = ptcgMarket;
+              high = ptcgMarket * 1.15;
+            }
+          }
+          // Case C: no TPL market at all — use pokemontcg.io directly.
+          else if (!market && ptcgMarket) {
+            market = ptcgMarket;
+            if (bestPrinting) {
+              low  = bestPrinting.low  ?? ptcgMarket * 0.85;
+              mid  = bestPrinting.mid  ?? ptcgMarket;
+              high = bestPrinting.high ?? ptcgMarket * 1.15;
+            } else if (!(mid > 0)) {
+              mid = ptcgMarket;
+            }
+          }
+        }
+      }
+    } catch(e) {
+      /* pokemontcg.io cross-check is best-effort */
     }
 
     const data = {

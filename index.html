@@ -4882,12 +4882,17 @@ function updatePriceFromPrinting() {
   if (p.high != null) parts.push(`High $${(p.high * condMult).toFixed(2)}`);
   priceRange.textContent = parts.join(' · ');
 
-  const srcMap = { TCGPlayer: 'TCGPlayer market', Scryfall: 'Scryfall · Updated daily', YGOProDeck: 'YGOProDeck · TCGPlayer data', Manual: 'Manual entry', 'eBay JP Comps': 'eBay JP sold listings', 'TCGPlayer (EN)': 'TCGPlayer market (EN version)', TCGPriceLookup: 'TCGPriceLookup · Updated daily' };
+  const srcMap = { TCGPlayer: 'TCGPlayer market', Scryfall: 'Scryfall · Updated daily', YGOProDeck: 'YGOProDeck · TCGPlayer data', Manual: 'Manual entry', 'eBay JP Comps': 'eBay JP sold listings', 'TCGPlayer (EN)': 'TCGPlayer market (EN version)', TCGPriceLookup: 'TCGPriceLookup' };
   const srcLabel = srcMap[selectedCard?.source] || selectedCard?.source || '';
   const updatedAt = selectedCard?.updatedAt || '';
+  // 2026-08-16: prior version could render "TCGPriceLookup · Updated daily ·
+  // Updated daily" when both the label AND updatedAt contained 'daily'. We
+  // now strip any trailing 'Updated ...' from the label and only append
+  // updatedAt once here.
+  const cleanLabel = srcLabel.replace(/\s*·\s*Updated [^·]*$/i, '');
   priceSource.textContent = updatedAt && updatedAt !== 'Enter via override'
-    ? `${srcLabel} · Updated ${updatedAt}`
-    : srcLabel;
+    ? `${cleanLabel} · Updated ${updatedAt}`
+    : (srcLabel.match(/Updated/i) ? srcLabel : `${srcLabel} · Updated daily`);
 
   calc();
 }
