@@ -160,10 +160,20 @@ export default async function handler(req, res) {
     // (>2x delta) we flag it and prefer the LOWER of the two so we
     // don't over- or under-value the user's card based on one source.
     try {
-      const ptcgQuery = number
-        ? `name:"${name.replace(/"/g,'')}" number:${number.replace(/\/.*$/,'').trim()}`
-        : `name:"${name.replace(/"/g,'')}"`;
-      const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(ptcgQuery)}&pageSize=5&select=id,name,set,number,tcgplayer,cardmarket`;
+      // Use identifying word + number instead of the full quoted name.
+      // Full-name quoted queries fail for cards whose canonical
+      // pokemontcg.io name uses glyphs (Mewtwo ★ vs "Mewtwo Star"),
+      // GX/EX suffixes with different spacing, etc. Wildcard-first-word
+      // + number is much more forgiving and we filter client-side below.
+      const firstWord = (name.split(/\s+/)[0] || '').replace(/["\\]/g, '');
+      const cleanNum = number ? number.replace(/\/.*$/, '').trim() : '';
+      const ptcgQuery = cleanNum && firstWord
+        ? `name:${firstWord}* number:${cleanNum}`
+        : firstWord
+          ? `name:${firstWord}*`
+          : '';
+      if (!ptcgQuery) throw new Error('no ptcg query');
+      const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(ptcgQuery)}&pageSize=10&select=id,name,set,number,tcgplayer,cardmarket`;
       const ptcgRes = await fetch(ptcgUrl, { signal: AbortSignal.timeout(4000) });
       if (ptcgRes.ok) {
         const ptcgJson = await ptcgRes.json();
