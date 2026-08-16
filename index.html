@@ -557,6 +557,17 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .fee-total .fee-val{font-size:.72rem}
 
 .note-italic{font-size:.68rem;color:var(--text-faint);font-style:italic;border-left:2px solid var(--border);padding-left:.5rem;margin:.4rem .45rem}
+/* 2026-08-15: effort badge on each platform card. easy=green, medium=amber, hard=red.
+   Sits under the platform name so users see effort/liquidity BEFORE they compare payout. */
+.plat-effort{display:inline-flex;align-items:center;gap:.3rem;font-size:.62rem;font-weight:700;letter-spacing:.03em;padding:.18rem .45rem;border-radius:.28rem;margin:.15rem 0 .55rem .45rem;text-transform:none;line-height:1}
+.plat-effort .dot{width:.42rem;height:.42rem;border-radius:50%;display:inline-block}
+.plat-effort.eff-easy{background:rgba(34,197,94,.11);color:#4ade80;border:1px solid rgba(34,197,94,.28)}
+.plat-effort.eff-easy .dot{background:#4ade80}
+.plat-effort.eff-medium{background:rgba(251,191,36,.11);color:#fbbf24;border:1px solid rgba(251,191,36,.28)}
+.plat-effort.eff-medium .dot{background:#fbbf24}
+.plat-effort.eff-hard{background:rgba(248,113,113,.11);color:#f87171;border:1px solid rgba(248,113,113,.28)}
+.plat-effort.eff-hard .dot{background:#f87171}
+.plat-hassle{font-size:.66rem;color:var(--text-muted);padding-left:.45rem;margin:-.15rem .45rem .55rem 0;line-height:1.35}
 .note-warn{font-size:.68rem;color:var(--orange);background:var(--orange-bg);border-radius:var(--radius-sm);padding:.3rem .55rem;margin:.4rem .45rem}
 
 /* bar chart */
@@ -5554,13 +5565,31 @@ function esc(s) {
 
 /* ═══ FEE ENGINE (2026) ═══ */
 
+// effort: how much friction the seller faces on this platform.
+//   easy   = list, sells fast, buyer protection, familiar UX. eBay/TCGPlayer.
+//   medium = extra steps, longer time-to-sale, or narrower audience. Poshmark, Fanatics BuyNow.
+//   hard   = consignment holds, bulk-only workflows, or platform-specific onboarding. COMC, PWCC.
+// hassle: 1-line reality check shown under the note. Written for a card seller,
+// not a legal disclaimer — the goal is honest tradeoff, not scaring users away.
 const PLATFORMS = {
-  ebay:      { name: 'eBay',             color: '#e53238', emoji: '🛒', verified: 'Jun 2026' },
-  tcgplayer: { name: 'TCGPlayer',        color: '#0070f3', emoji: '🔵', verified: 'Jun 2026' },
-  poshmark:  { name: 'Poshmark',         color: '#c02b50', emoji: '👗', verified: 'Jun 2026' },
-  comc:      { name: 'COMC',             color: '#1a5276', emoji: '🃏', verified: 'Jun 2026' },
-  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026' },
-  pwcc:      { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026' }
+  ebay:      { name: 'eBay',             color: '#e53238', emoji: '🛒', verified: 'Jun 2026',
+    effort: 'easy',   effortLabel: 'Easy · sells in 1–7 days',
+    hassle: 'Highest fees but fastest liquidity + buyer protection. What most flippers use.' },
+  tcgplayer: { name: 'TCGPlayer',        color: '#0070f3', emoji: '🔵', verified: 'Jun 2026',
+    effort: 'easy',   effortLabel: 'Easy · you ship, they collect payment',
+    hassle: 'The TCG-singles hub — buyers already know how to search here.' },
+  poshmark:  { name: 'Poshmark',         color: '#c02b50', emoji: '👗', verified: 'Jun 2026',
+    effort: 'medium', effortLabel: 'Medium · clothing-first, thin card audience',
+    hassle: 'Fewer card buyers browsing — listings can sit for weeks.' },
+  comc:      { name: 'COMC',             color: '#1a5276', emoji: '🃏', verified: 'Jun 2026',
+    effort: 'hard',   effortLabel: 'Hard · ship-in service, weeks to list',
+    hassle: 'You mail cards to their warehouse first — not a same-day flip.' },
+  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026',
+    effort: 'medium', effortLabel: 'Medium · growing audience, sports-heavy',
+    hassle: 'Sports skew + auction cycle — great for graded slabs, slower for raw TCG.' },
+  pwcc:      { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026',
+    effort: 'hard',   effortLabel: 'Hard · consignment, 2–4 wk auction',
+    hassle: 'You consign, they auction. Payout comes weeks later — best for $75+ cards.' }
 };
 // Free tier: eBay + TCGPlayer. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
 const FREE_PLATFORMS = new Set(['ebay', 'tcgplayer']);
@@ -5796,10 +5825,24 @@ function calc() {
       ? `<div class="plat-sell-badge">Tap to sell here <span class="plat-sell-arrow">→</span></div>`
       : '';
 
+    // 2026-08-15: effort/hassle transparency — shown as a colored badge under
+    // the platform name + a 1-line reality-check note. This lets sellers see
+    // the tradeoff (fee % vs time-to-sale vs buyer protection) BEFORE they
+    // pick a platform by payout alone. Design principle: don't push, don't hide.
+    const effortCls  = 'eff-' + (info.effort || 'easy');
+    const effortText = info.effortLabel || '';
+    const effortHtml = effortText
+      ? `<div class="plat-effort ${effortCls}"><span class="dot"></span>${effortText}</div>`
+      : '';
+    const hassleHtml = info.hassle
+      ? `<div class="plat-hassle">${info.hassle}</div>`
+      : '';
+
     if (!r.eligible) {
       html += `<div class="${cls}" style="opacity:.4">
         <div class="plat-accent" style="background:${info.color}"></div>
         <div class="plat-hdr"><span class="plat-name">${info.emoji} ${info.name}</span>${badgeHtml}</div>
+        ${effortHtml}
         <div class="plat-payout" style="color:var(--text-faint)">—</div>
         <div class="plat-sub">${r.note}</div>
       </div>`;
@@ -5812,11 +5855,13 @@ function calc() {
         <span class="plat-name">${info.emoji} ${info.name}</span>
         ${badgeHtml}
       </div>
+      ${effortHtml}
       <div class="plat-payout ${r.netPayout >= 0 ? 'pos' : 'neg'}">${fmt(r.netPayout)}</div>
       ${sellBadge}
       ${itemCost > 0
         ? `<div class="plat-sub">Profit: <span style="color:${r.grossProfit>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(r.grossProfit)}</span> · <span style="${r.margin>=0?'color:var(--green)':'color:var(--red)'}">${r.margin.toFixed(1)}%</span></div>`
         : `<div class="plat-sub">After all fees &amp; shipping</div>`}
+      ${hassleHtml}
       ${r.note ? `<div class="note-italic">${r.note}</div>` : ''}
       <div class="fee-block">
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
@@ -5843,8 +5888,11 @@ function calc() {
     const blurRows = proOnlyResults.map(r => {
       const info = PLATFORMS[r.pid];
       const isBetter = r.netPayout > bestFreePayout;
+      // Mini effort dot so users see the tradeoff without needing to unlock.
+      const eColor = info.effort === 'easy' ? '#4ade80' : info.effort === 'medium' ? '#fbbf24' : '#f87171';
+      const eTag   = info.effort ? `<span title="${info.hassle || ''}" style="display:inline-flex;align-items:center;gap:.25rem;font-size:.62rem;font-weight:700;color:${eColor};text-transform:uppercase;letter-spacing:.03em"><span style="width:.35rem;height:.35rem;border-radius:50%;background:${eColor};display:inline-block"></span>${info.effort}</span>` : '';
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
-        <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">${info.emoji} ${info.name}</span>
+        <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">${info.emoji} ${info.name} ${eTag}</span>
         <span style="font-family:var(--mono);font-size:.88rem;font-weight:700;filter:blur(5px);user-select:none;color:${isBetter?'var(--green)':'var(--text)'}">${fmt(r.netPayout)}</span>
       </div>`;
     }).join('');
