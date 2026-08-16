@@ -3345,6 +3345,11 @@ async function doSearch(q) {
   if (!q) return;
   if (activeGame === 'sports') return;
 
+  // 2026-08-15: track the query that populated dropList so openCatalog can
+  // detect stale results from a previous search (e.g. user types Pidove but
+  // the old Latias ex drops are still cached in the list).
+  dropList.dataset.lastQuery = (q || '').toLowerCase().trim();
+  dropList.dataset.lastGame  = activeGame || '';
   dropList.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Searching…</div>';
   dropList.classList.add('open');
 
@@ -10692,14 +10697,21 @@ function openSearchModal() {
   grid.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
   modal.style.display = 'flex';
 
+  // 2026-08-15: clear stale drop rows so the fallback path below can't
+  // resurrect a previous search's results.
+  dropList.innerHTML = '';
+  delete dropList.dataset.lastQuery;
+
   // Fire fresh search; doSearch resolves after dropList is populated
   doSearch(q).then(items => {
     if (items && items.length) {
       _renderCatalogFromDrop(q, items);
     } else {
-      // Fallback: check dropList one more time (edge case)
+      // Fallback: check dropList one more time (edge case) but only
+      // accept rows that match the current query.
+      const dropQ = (dropList.dataset.lastQuery || '').toLowerCase();
       const fallback = dropList.querySelectorAll('.drop-item');
-      if (fallback.length) {
+      if (fallback.length && dropQ === q.toLowerCase()) {
         _renderCatalogFromDrop(q, fallback);
       } else {
         grid.innerHTML = '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
@@ -10710,8 +10722,15 @@ function openSearchModal() {
 
 function openCatalog(q) {
   if (q) searchInput.value = q;
+  const term = (q || searchInput.value.trim() || '').toLowerCase();
+  const cachedQ = (dropList.dataset.lastQuery || '').toLowerCase();
+  const cachedGame = dropList.dataset.lastGame || '';
   const existing = dropList.querySelectorAll('.drop-item');
-  if (existing.length) {
+  // 2026-08-15: only reuse dropList results when they belong to THIS query.
+  // Prevents cross-search contamination where typing "Pidove" shows stale
+  // "Latias ex" rows because dropList still holds the previous search.
+  const cacheValid = existing.length && cachedQ === term && cachedGame === activeGame;
+  if (cacheValid) {
     // Results already in dropList — render directly, no extra fetch
     const modal = document.getElementById('searchResultsModal');
     const title = document.getElementById('searchModalTitle');
@@ -10720,22 +10739,33 @@ function openCatalog(q) {
     if (title) title.textContent = `"${q || searchInput.value.trim()}"`;
     _renderCatalogFromDrop(q || searchInput.value.trim(), existing);
   } else {
-    const term = q || searchInput.value.trim();
-    if (!term) return;
+    const rawTerm = q || searchInput.value.trim();
+    if (!rawTerm) return;
     const modal = document.getElementById('searchResultsModal');
     const grid  = document.getElementById('searchModalGrid');
     const titleEl = document.getElementById('searchModalTitle');
     document.getElementById('searchModalCount').textContent = '';
     if (modal) modal.style.display = 'flex';
-    if (titleEl) titleEl.textContent = `"${term}"`;
+    if (titleEl) titleEl.textContent = `"${rawTerm}"`;
+    // 2026-08-15: clear stale rows immediately — don't paint old results
+    // through the loading state.
     if (grid) grid.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:#888;font-size:.88rem"><span class="spinner" style="border-color:rgba(255,255,255,.12);border-top-color:#4dd9ac"></span> Searching…</div>';
-    doSearch(term).then(items => {
+    // Also blank dropList so the fallback below can't reuse pre-search rows.
+    dropList.innerHTML = '';
+    delete dropList.dataset.lastQuery;
+    doSearch(rawTerm).then(items => {
       if (items && items.length) {
-        _renderCatalogFromDrop(term, items);
+        _renderCatalogFromDrop(rawTerm, items);
       } else {
+        // Only use dropList as fallback if doSearch itself just populated
+        // it (query match), otherwise no results.
+        const dropQ = (dropList.dataset.lastQuery || '').toLowerCase();
         const fallback = dropList.querySelectorAll('.drop-item');
-        if (fallback.length) _renderCatalogFromDrop(term, fallback);
-        else if (grid) grid.innerHTML = '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
+        if (fallback.length && dropQ === rawTerm.toLowerCase()) {
+          _renderCatalogFromDrop(rawTerm, fallback);
+        } else if (grid) {
+          grid.innerHTML = '<div style="padding:3rem;text-align:center;color:#666;font-size:.88rem">No results found</div>';
+        }
       }
     });
   }
@@ -11261,8 +11291,21 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     }
     if (!cards || !cards.length) return null;
 
-    // Score by set-name similarity: exact match first, then prefix, then any.
-    cards = cards.map(c => ({ c, score: _bulkSetMatchScore(c.set?.name, setName) }))
+    // 2026-08-15: score by (number match × 10) + set match. When "Mega Lucario EX"
+    // returns a regular #55, a full-art #113, and a secret rare #179 all from
+    // Ancient Origins, set-name matching alone can't pick the right one — the
+    // scanner-captured card number is the disambiguator. Weight number match
+    // heavily so a number hit beats any set match tie.
+    const targetNumRaw = String(cleanNumber || '').replace(/^0+/, '').toLowerCase();
+    function _numScore(cand) {
+      if (!targetNumRaw) return 0;
+      const cn = String(cand.number || '').replace(/^0+/, '').toLowerCase();
+      if (!cn) return 0;
+      if (cn === targetNumRaw) return 10;                // exact
+      if (cn.replace(/[a-z]/g,'') === targetNumRaw) return 8; // "179a" vs "179"
+      return 0;
+    }
+    cards = cards.map(c => ({ c, score: _numScore(c) + _bulkSetMatchScore(c.set?.name, setName) }))
                  .sort((x, y) => y.score - x.score);
     const best = cards[0].c;
     if (!best) return null;
@@ -11294,6 +11337,29 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
         bestMarket = val;
         bestVariant = key;
       }
+    }
+
+    // 2026-08-15: if pokemontcg.io returned the card but with no market price
+    // (common for some secret rares / illustration rares), fall through to
+    // /api/tcg-price live lookup. Same fallback path JP cards use.
+    if (bestMarket == null) {
+      try {
+        const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}`, { signal: AbortSignal.timeout(7000) });
+        if (r.ok) {
+          const d = await r.json();
+          if (d && d.market > 0) {
+            return {
+              marketPrice: d.market,
+              variant: 'tcgplayer_live',
+              imageUrl: best.images?.small || best.images?.large || d.image || null,
+              tcgplayerUrl: best.tcgplayer?.url || null,
+              matchedSet: best.set?.name || null,
+              matchedNumber: best.number || null,
+              prices: priceMap,
+            };
+          }
+        }
+      } catch(e) { /* best-effort fallback */ }
     }
 
     return {
