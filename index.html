@@ -10928,17 +10928,68 @@ function openBulkScan() {
     return;
   }
   // Reset state
-  window._bulkQueue      = [];
-  window._bulkResults    = [];
-  window._bulkMode       = null;
-  window._bulkProcessing = false;
-  window._bulkSaved      = false;
+  window._bulkQueue         = [];
+  window._bulkResults       = [];
+  window._bulkMode          = null;
+  window._bulkProcessing    = false;
+  window._bulkSaved         = false;
+  window._bulkStartPackCost = 0;
+
+  // Reset the up-front pack-cost input each time the modal opens.
+  const startCostEl = document.getElementById('bulkStartPackCost');
+  if (startCostEl) startCostEl.value = '';
+  const trackerEl = document.getElementById('bulkPackTracker');
+  if (trackerEl) trackerEl.style.display = 'none';
 
   // Show overlay in mode-picker state
   const ov = document.getElementById('bulkScanOverlay');
   ov.style.display = 'flex';
   _bulkShowSection('modePicker');
   document.getElementById('bulkScanSubtitle').textContent = '1 credit per card';
+}
+
+// Update the live "Pack Recovery" tracker shown above the results list.
+// Called after every card scan. Total value = sum of marketPrice across all
+// successful scans so far. If no pack cost was entered, the tracker stays hidden.
+function _bulkUpdatePackTracker() {
+  const cost = parseFloat(window._bulkStartPackCost) || 0;
+  const trackerEl = document.getElementById('bulkPackTracker');
+  if (!trackerEl) return;
+  if (cost <= 0) { trackerEl.style.display = 'none'; return; }
+  trackerEl.style.display = '';
+
+  const results = window._bulkResults || [];
+  const total = results.reduce((s, r) => {
+    const p = (r && r.success && typeof r.marketPrice === 'number') ? r.marketPrice : 0;
+    return s + (p > 0 ? p : 0);
+  }, 0);
+  const pct = Math.min(100, (total / cost) * 100);
+  const fmt = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
+
+  const amtEl  = document.getElementById('bulkPackTrackerAmt');
+  const goalEl = document.getElementById('bulkPackTrackerGoal');
+  const pctEl  = document.getElementById('bulkPackTrackerPct');
+  const barEl  = document.getElementById('bulkPackTrackerBar');
+  const stEl   = document.getElementById('bulkPackTrackerStatus');
+  if (amtEl)  amtEl.textContent  = fmt(total);
+  if (goalEl) goalEl.textContent = 'of ' + fmt(cost);
+  if (pctEl)  pctEl.textContent  = pct.toFixed(0) + '%';
+  if (barEl)  barEl.style.width  = Math.min(100, pct) + '%';
+
+  if (stEl) {
+    if (total >= cost && cost > 0) {
+      const profit = total - cost;
+      stEl.innerHTML = '<span style="color:#4ade80;font-weight:700">\u2713 Broke even</span>' +
+        (profit > 0 ? ' \u00b7 +' + fmt(profit) + ' profit so far' : '');
+      if (pctEl) pctEl.style.color = '#4ade80';
+      if (barEl) barEl.style.background = 'linear-gradient(90deg,#4ade80,#22c55e)';
+    } else {
+      const remaining = cost - total;
+      stEl.textContent = fmt(remaining) + ' to break even';
+      if (pctEl) pctEl.style.color = '#a78bfa';
+      if (barEl) barEl.style.background = 'linear-gradient(90deg,#a78bfa,#4ade80)';
+    }
+  }
 }
 
 function closeBulkScan() {
@@ -11284,6 +11335,7 @@ async function startBulkQueue() {
   document.getElementById('bulkResultsList').innerHTML = '';
   document.getElementById('bulkBottomBar').style.display = 'none';
   _bulkClearDupBanner();
+  try { _bulkUpdatePackTracker(); } catch(e) {}
 
   const total = queue.length;
 
@@ -11320,6 +11372,7 @@ async function startBulkQueue() {
 
     window._bulkResults.push(result);
     _bulkUpdateRow(rowId, result);
+    try { _bulkUpdatePackTracker(); } catch(e) {}
   }
 
   _bulkFinishQueue(total);
@@ -11519,6 +11572,7 @@ function bulkMergeDuplicates() {
   const successCount = window._bulkResults.filter(r => r.success).length;
   document.getElementById('bulkSummaryLine').textContent =
     successCount + ' card' + (successCount!==1?'s':'') + ' ready to add to Collection';
+  try { _bulkUpdatePackTracker(); } catch(e) {}
 }
 
 /* ── Row rendering ── */
@@ -11789,9 +11843,11 @@ function openBulkCostSheet(cards) {
     </div>`;
   }).join('');
   _bulkShowSection('costSheet');
-  // Reset to pack mode each open + refresh hint
+  // Reset to pack mode each open + refresh hint. If the user entered a pack
+  // cost up front on the mode picker, pre-fill it here so they don't retype.
   const packInp = document.getElementById('bulkPackCostInput');
-  if (packInp) packInp.value = '';
+  const startCost = parseFloat(window._bulkStartPackCost) || 0;
+  if (packInp) packInp.value = startCost > 0 ? startCost.toFixed(2) : '';
   setBulkCostMode('pack');
   updateBulkPackCostHint();
 }
@@ -12108,8 +12164,21 @@ function _esc(s) {
     </div>
 
     <!-- Mode picker (shown at start) -->
-    <div id="bulkModePicker" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:2.5rem 1.5rem;flex:1">
-      <div style="font-size:.85rem;color:rgba(255,255,255,.55);text-align:center;margin-bottom:.5rem">How do you want to scan?</div>
+    <div id="bulkModePicker" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:2rem 1.5rem;flex:1">
+      <!-- 2026-08-15: optional pack cost up front so users see a live
+           "$X of $Y recovered" pill as each card scans. Optional — blank
+           = no tracker shown. Persists to the end-of-scan cost sheet. -->
+      <div style="width:100%;max-width:320px;background:#131013;border:1.5px solid #2a1f3d;border-radius:14px;padding:.85rem 1rem">
+        <label for="bulkStartPackCost" style="display:block;font-size:.66rem;color:rgba(255,255,255,.55);font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.4rem">✨ What did you pay for this pack? <span style="color:rgba(255,255,255,.3);font-weight:600">(optional)</span></label>
+        <div style="display:flex;align-items:center;background:#0a0a0a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden">
+          <span style="padding:0 .55rem;font-size:.95rem;color:rgba(255,255,255,.55)">$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" id="bulkStartPackCost" inputmode="decimal"
+            style="background:transparent;border:none;color:#fff;font-size:.95rem;flex:1;padding:.55rem .3rem .55rem 0;outline:none;-moz-appearance:textfield"
+            oninput="window._bulkStartPackCost = parseFloat(this.value) || 0;">
+        </div>
+        <div style="font-size:.66rem;color:rgba(139,92,246,.75);margin-top:.4rem;line-height:1.4">See how close each scan gets you to breaking even.</div>
+      </div>
+      <div style="font-size:.85rem;color:rgba(255,255,255,.55);text-align:center;margin-bottom:.25rem">How do you want to scan?</div>
       <button onclick="startBulkCamera()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.6)'" onmouseout="this.style.borderColor='#2a2a2a'">
         <span style="font-size:1.5rem">📷</span>
         <div>
@@ -12147,6 +12216,22 @@ function _esc(s) {
         </div>
         <div style="height:4px;background:#1a1a1a;border-radius:99px;overflow:hidden">
           <div id="bulkProgressBar" style="height:100%;background:linear-gradient(90deg,rgba(139,92,246,1),rgba(167,139,250,1));border-radius:99px;width:0%;transition:width .3s ease"></div>
+        </div>
+        <!-- 2026-08-15: pack-cost recovery tracker — only shown when the user
+             entered a pack cost on the start screen. Updates after every scan. -->
+        <div id="bulkPackTracker" style="display:none;margin-top:.65rem;padding:.55rem .75rem;background:linear-gradient(90deg,rgba(139,92,246,.14),rgba(139,92,246,.04));border:1px solid rgba(139,92,246,.35);border-radius:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
+            <span style="font-size:.68rem;font-weight:800;color:rgba(167,139,250,.9);letter-spacing:.05em;text-transform:uppercase">Pack Recovery</span>
+            <span id="bulkPackTrackerPct" style="font-size:.72rem;font-weight:800;color:#a78bfa">0%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.35rem">
+            <span id="bulkPackTrackerAmt" style="font-family:var(--mono,ui-monospace);font-size:.92rem;font-weight:700;color:#fff">$0.00</span>
+            <span id="bulkPackTrackerGoal" style="font-size:.7rem;color:rgba(255,255,255,.5)">of $0.00</span>
+          </div>
+          <div style="height:5px;background:#0a0a0a;border-radius:99px;overflow:hidden">
+            <div id="bulkPackTrackerBar" style="height:100%;background:linear-gradient(90deg,#a78bfa,#4ade80);border-radius:99px;width:0%;transition:width .4s ease"></div>
+          </div>
+          <div id="bulkPackTrackerStatus" style="font-size:.66rem;color:rgba(255,255,255,.5);margin-top:.4rem;line-height:1.35">Scanning…</div>
         </div>
       </div>
       <!-- Results list -->
