@@ -1752,7 +1752,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div class="card-hero" id="cardHero">
         <div class="card-img-ph" id="cardImgPh">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="18" height="20" rx="2"/><path d="M8 7h8M8 12h5"/></svg>
-          <span>No card selected</span>
+          <span id="cardImgPhLabel">No card selected</span>
         </div>
         <div id="sportsCardPh" class="sports-card-ph" style="display:none">
           <svg width="56" height="56" viewBox="0 0 64 64" fill="none">
@@ -4656,6 +4656,10 @@ function loadCardUI(card) {
         sportsCardPh.style.display = 'flex';
         cardImgPh.style.display = 'none';
       } else {
+        // 2026-08-15: card IS loaded (name/meta populated below) but the
+        // image URL failed — don't say "No card selected", say the truth.
+        const _lab = document.getElementById('cardImgPhLabel');
+        if (_lab) _lab.textContent = 'Image unavailable';
         cardImgPh.style.display = 'flex';
         sportsCardPh.style.display = 'none';
       }
@@ -4671,6 +4675,11 @@ function loadCardUI(card) {
       sportsCardPh.style.display = 'flex';
       cardImgPh.style.display = 'none';
     } else {
+      // 2026-08-15: no image URL from the catalog for this card — same
+      // fix as onerror path above so we don't say "No card selected"
+      // while a card IS actually selected.
+      const _lab = document.getElementById('cardImgPhLabel');
+      if (_lab) _lab.textContent = 'Image unavailable';
       cardImgPh.style.display = 'flex';
       sportsCardPh.style.display = 'none';
     }
@@ -4815,6 +4824,9 @@ function resetCardPanel() {
   cardImg.src = '';
   cardImgWrap.style.display = 'none';
   cardImgPh.style.display = 'flex';
+  // 2026-08-15: reset placeholder label back to empty-state copy.
+  const _lab = document.getElementById('cardImgPhLabel');
+  if (_lab) _lab.textContent = 'No card selected';
   sportsCardPh.style.display = 'none';
   cardNameBlock.style.display = 'none';
   const ebayListBtn = document.getElementById('ebayListBtn');
@@ -8466,6 +8478,33 @@ async function _loadScannedCardExact(pending) {
         mid:    prices[key]?.mid    ?? null,
         high:   prices[key]?.high   ?? null,
       }));
+
+      // 2026-08-15: if pokemontcg.io returned this card but with no
+      // tcgplayer.prices (common for full-art / secret rares like Watchog
+      // Crown Zenith #096/086), fall back to /api/tcg-price live lookup
+      // so we still show a market value on the card panel.
+      const _anyPriced = priceVariants.some(v => (v.market != null && v.market > 0) || (v.mid != null && v.mid > 0));
+      if (!_anyPriced) {
+        try {
+          const _tplName = match.name || cleanName;
+          const _tplNum  = match.number || cleanNumber || '';
+          const _tplSet  = match.set?.name || setName || '';
+          const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(_tplName)}${_tplNum ? '&number=' + encodeURIComponent(_tplNum) : ''}${_tplSet ? '&set=' + encodeURIComponent(_tplSet) : ''}`, { signal: AbortSignal.timeout(7000) });
+          if (r.ok) {
+            const d = await r.json();
+            if (d && d.market > 0) {
+              priceVariants.push({
+                key: 'holofoil',
+                label: 'Holofoil',
+                market: d.market,
+                low:    d.low   ?? null,
+                mid:    d.mid   ?? d.market,
+                high:   d.high  ?? null,
+              });
+            }
+          }
+        } catch(e) { /* best-effort fallback */ }
+      }
       const card = {
         name:   match.name,
         game:   'pokemon',
