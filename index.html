@@ -4211,6 +4211,33 @@ function renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) {
   return parts.join('');
 }
 
+// ── Grade opportunity trigger ───────────────────────────────────
+// Silent by default. Only fires the pill when grading actually pencils out.
+// Keeps users from burning AI grade scan credits on losing bets.
+function renderGradeOpportunity(g) {
+  if (!g || g.recommendation === 'sell_raw') return '';
+
+  const isGreen = g.recommendation === 'worth_grading';
+  const bg  = isGreen ? 'rgba(34,197,94,.12)'  : 'rgba(245,158,11,.12)';
+  const bd  = isGreen ? 'rgba(34,197,94,.5)'   : 'rgba(245,158,11,.5)';
+  const clr = isGreen ? '#4ade80'              : '#fbbf24';
+  const icon = isGreen ? '⚡' : '📋';
+
+  const label = isGreen
+    ? `Worth grading · <strong>${g.targetGrade} est. $${Number(g.gradedEst).toFixed(0)}</strong> · <span style="color:${clr}">+$${Number(g.expectedProfit).toFixed(0)} profit (+${g.edgePct}%)</span>`
+    : `Borderline · <strong>${g.targetGrade} est. $${Number(g.gradedEst).toFixed(0)}</strong> · <span style="color:${clr}">+$${Number(g.expectedProfit).toFixed(0)}</span>`;
+
+  const tooltip = (g.reasoning || []).join(' — ');
+
+  return (
+    `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.4rem;padding:.4rem .55rem;background:${bg};border:1px solid ${bd};border-radius:8px;font-size:.78rem;line-height:1.4" title="${tooltip}">` +
+      `<span style="font-size:.95rem">${icon}</span>` +
+      `<span style="color:var(--text)">${label}</span>` +
+      ` <span style="opacity:.55;font-size:.68rem">· assumes ${g.targetGrade}, not guaranteed</span>` +
+    `</div>`
+  );
+}
+
 // Legacy renderer (kept for any callers still using it)
 function renderTrustLine(data) {
   const med = data.median;
@@ -4318,9 +4345,18 @@ async function fetchAndApplySoldComps(forceRefresh) {
   const ebayP = fetch('/api/ebay-sold?'  + ebayParams.toString(), { signal: _clientController.signal })
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
-  let tcg, ebay;
+  // Grade opportunity: only meaningful for raw scans (currentGraderPill = 'no').
+  // If user is already viewing a specific graded price, skip — no point
+  // recommending they grade a card that's already graded.
+  const _preFetchGrader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
+  const gradeOppP = (_preFetchGrader === 'no' && !grade)
+    ? fetch('/api/grade-opportunity?' + tcgParams.toString() + (card.game ? '&game=' + encodeURIComponent(card.game) : ''), { signal: _clientController.signal })
+        .then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
+
+  let tcg, ebay, gradeOpp;
   try {
-    [tcg, ebay] = await Promise.all([tcgP, ebayP]);
+    [tcg, ebay, gradeOpp] = await Promise.all([tcgP, ebayP, gradeOppP]);
   } finally {
     clearTimeout(_clientTimeoutId);
   }
@@ -4353,14 +4389,20 @@ async function fetchAndApplySoldComps(forceRefresh) {
     }
   }
 
+  // Stash grade opportunity for the scan-gate warning
+  window._lastGradeOpportunity = gradeOpp;
+  window._lastGradeOpportunityCard = cardKey;
+
   // Render composed price status (TCG line always, eBay overlay when available)
-  statusTxt.innerHTML = renderPriceStatus({ tcg, ebay, fallbackEbayUrl });
+  // + grade opportunity pill (silent if not worth grading)
+  statusTxt.innerHTML = renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) + renderGradeOpportunity(gradeOpp);
   statusEl.style.display = 'flex';
 
-  // If neither source resolved, show a graceful fallback link
+  // If neither source resolved, show a graceful fallback link (still keep grade pill if it fired)
   if (!tcg?.market && !(ebay?.count >= 2)) {
     statusTxt.innerHTML =
-      `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View sold comps on eBay →</a>`;
+      `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View sold comps on eBay →</a>` +
+      renderGradeOpportunity(gradeOpp);
   }
 }
 
@@ -9790,6 +9832,20 @@ function openGradeScanGate() {
     showToast('Sign in with Google first to use the grader');
     return;
   }
+
+  // Credit-saver warning: if the current card is silent-tier for grade
+  // opportunity, tell the user grading probably doesn't pencil out before
+  // they burn a credit.
+  const gOpp = window._lastGradeOpportunity;
+  if (gOpp && gOpp.recommendation === 'sell_raw' && gOpp.rawPrice != null) {
+    const rawStr = gOpp.rawPrice < 2 ? 'under $2' : `~$${Number(gOpp.rawPrice).toFixed(2)}`;
+    const est = gOpp.expectedProfit != null ? Number(gOpp.expectedProfit).toFixed(0) : '?';
+    const msg = est !== '?' && Number(est) < 0
+      ? `Heads up — this raw card is ${rawStr}. Even at PSA 10 the math shows about $${est} profit after grading fees. Grade anyway?`
+      : `Heads up — this raw card is ${rawStr}. Grading may not be profitable here. Grade anyway?`;
+    if (!confirm(msg)) return;
+  }
+
   const credits = (window._scanCredits || 0) + (window._freeScansLeft || 0);
   if (credits > 0) {
     // Has credits — show tier picker (Quick vs Deep)
