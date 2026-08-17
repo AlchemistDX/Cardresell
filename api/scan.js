@@ -1,5 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
+import { gradeWithXimilar } from './_ximilar_grade.js';
 // /api/scan — Ximilar-first card identification (GPT-5 fallback)
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
@@ -590,12 +591,73 @@ Respond ONLY with valid JSON, no explanation:
         return Math.max(1, Math.min(10, n));
       };
       const sg = cardInfo.subgrades || {};
-      const subgrades = {
+      let subgrades = {
         centering: clampSub(sg.centering),
         corners:   clampSub(sg.corners),
         edges:     clampSub(sg.edges),
         surface:   clampSub(sg.surface),
       };
+
+      // ── CV-grade overlay: replace GPT eyeball estimates with Ximilar's ──
+      // pixel-measured pillar scores. Ximilar's grader measures centering
+      // to the pixel, evaluates each corner/edge polygon independently, and
+      // detects surface defects with a purpose-built model. GPT-5's prose
+      // (grade_notes, centering description) is kept for the human-readable
+      // summary; the numeric sub-grades come from Ximilar.
+      //
+      // ── COST GATE ──
+      // Ximilar /card-grader/v2/grade = 100 credits ≈ $0.109 per call on the
+      // 100k plan. At $0.10/credit user pricing:
+      //   Quick Grade (1 credit) → -9% margin (LOSES money)
+      //   Deep Grade  (2 credits) → +46% margin
+      // So we only enable Ximilar grader for Deep Grade. Quick Grade keeps
+      // the GPT-5-only path (~$0.01 cost, 89% margin).
+      //
+      // The ENABLE_XIMILAR_GRADER env var is the master feature flag:
+      //   'off' | unset → GPT-5 only for all grade modes (safe default)
+      //   'deep_only'   → Ximilar CV pillars on Deep Grade only
+      //   'all'         → Ximilar CV pillars on Quick + Deep (WARNING: unprofitable Quick Grade)
+      const graderFlag = (process.env.ENABLE_XIMILAR_GRADER || 'off').toLowerCase();
+      const useXimilarGrader =
+        (graderFlag === 'deep_only' && isDeepGrade) ||
+        (graderFlag === 'all');
+
+      let cvSource = 'gpt';
+      let cvCentering = null;
+      let cvGrader   = null;
+      if (useXimilarGrader && ximilarToken && imageBase64) {
+        try {
+          const t0 = Date.now();
+          const imgs = backBase64 ? [imageBase64, backBase64] : [imageBase64];
+          const xg = await gradeWithXimilar(imgs, mimeType || 'image/jpeg', ximilarToken);
+          console.log('[scan] ximilar-grader took', Date.now() - t0, 'ms ok=', xg.ok, 'reason=', xg.reason);
+          if (xg.ok && xg.grades) {
+            const xs = {
+              centering: clampSub(xg.grades.centering),
+              corners:   clampSub(xg.grades.corners),
+              edges:     clampSub(xg.grades.edges),
+              surface:   clampSub(xg.grades.surface),
+            };
+            // Only overwrite each pillar if Ximilar returned a valid number.
+            subgrades = {
+              centering: xs.centering ?? subgrades.centering,
+              corners:   xs.corners   ?? subgrades.corners,
+              edges:     xs.edges     ?? subgrades.edges,
+              surface:   xs.surface   ?? subgrades.surface,
+            };
+            cvSource   = 'ximilar';
+            cvCentering = xg.cv?.centering || null;
+            cvGrader   = {
+              condition: xg.grades.condition,
+              final:     clampSub(xg.grades.final),
+              corners:   xg.cv?.corners || [],
+              edges:     xg.cv?.edges || [],
+            };
+          }
+        } catch(e) {
+          console.warn('[scan] ximilar-grader threw, keeping GPT sub-grades:', e?.message || e);
+        }
+      }
       // Compute a server-side confidence floor based on how many photos we actually had.
       // GPT can't over-claim: if it says "high" but we only had 2 photos, we downgrade to medium.
       const gptConf = (typeof cardInfo.confidence === 'string')
@@ -612,6 +674,21 @@ Respond ONLY with valid JSON, no explanation:
       let confidence = gptConfNorm || defaultConf;
       if (capOrder[confidence] > capOrder[photoCap]) confidence = photoCap;
 
+      // If Ximilar returned a pixel-measured centering string, expose it as
+      // the canonical `centering` field ("55/45 L/R, 52/48 T/B") so the UI
+      // shows the real measurement instead of GPT's eyeball estimate.
+      let centeringDisplay = cardInfo.centering || 'Unknown';
+      if (cvCentering?.leftRight || cvCentering?.topBottom) {
+        const lr = cvCentering.leftRight;
+        const tb = cvCentering.topBottom;
+        centeringDisplay = [lr && `${lr} L/R`, tb && `${tb} T/B`].filter(Boolean).join(', ');
+      }
+
+      // Photo-based confidence gets a bump when Ximilar CV grades are available.
+      if (cvSource === 'ximilar' && confidence !== 'high' && totalPhotos >= 2) {
+        confidence = 'medium';
+      }
+
       return res.status(200).json({
         success:       true,
         mode:          'grade',
@@ -619,7 +696,7 @@ Respond ONLY with valid JSON, no explanation:
         creditsUsed:   gradeCost,
         photoCount:    totalPhotos,
         card_name:     cardInfo.card_name     || '',
-        centering:     cardInfo.centering     || 'Unknown',
+        centering:     centeringDisplay,
         corners:       cardInfo.corners       || 'Unknown',
         edges:         cardInfo.edges         || 'Unknown',
         surface:       cardInfo.surface       || 'Unknown',
@@ -629,6 +706,8 @@ Respond ONLY with valid JSON, no explanation:
         worth_grading: cardInfo.worth_grading ?? false,
         subgrades,
         confidence,
+        cv_source:     cvSource,     // 'ximilar' or 'gpt'
+        cv_grader:     cvGrader,     // { condition, final, corners[], edges[] } when ximilar succeeded
       });
     }
 
