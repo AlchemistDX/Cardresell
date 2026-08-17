@@ -3,6 +3,7 @@
 // Packs: 5 scans $3.99 | 15 scans $9.99 | 40 scans $19.99
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { getUserTier, TIER_BENEFITS } from './_tier.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -59,6 +60,15 @@ export default async function handler(req, res) {
   const success = `${origin}/?grade_scan_paid=1&tier=${tier}&session_id={CHECKOUT_SESSION_ID}`;
   const cancel  = `${origin}/`;
 
+  // Look up user's subscription tier so we can auto-apply their top-up coupon.
+  // Pro → 10% off, Pro Max → 15% off, Ultimate → 25% off. Free → no coupon.
+  let couponId = null;
+  try {
+    const userTier   = await getUserTier(stripeKey, process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN, userSub, userEmail);
+    const tierPerks  = TIER_BENEFITS[userTier] || TIER_BENEFITS.free;
+    if (tierPerks.couponId) couponId = tierPerks.couponId;
+  } catch (e) { /* non-blocking — checkout still works, just no discount */ }
+
   try {
     const params = new URLSearchParams({
       mode: 'payment',
@@ -73,6 +83,10 @@ export default async function handler(req, res) {
       'metadata[tier]': tier,
       'metadata[credits]': String(creditsMap[tier]),
     });
+    // Apply tier-based top-up discount if applicable
+    if (couponId) {
+      params.append('discounts[0][coupon]', couponId);
+    }
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',

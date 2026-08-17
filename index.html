@@ -696,6 +696,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 /* --- PRO BADGE (visible only for paying Pro users) --- */
 .pro-badge{display:none;align-items:center;gap:.25rem;padding:.18rem .55rem;background:linear-gradient(135deg,#b8860b,#f5c518,#b8860b);color:#000;border-radius:99px;font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-shadow:0 1px 4px rgba(245,197,24,.35)}
 .pro-badge.visible{display:flex}
+.pro-badge.tier-pro_max{background:linear-gradient(135deg,#1e40af,#3b82f6,#60a5fa);color:#fff;box-shadow:0 1px 6px rgba(96,165,250,.45)}
+.pro-badge.tier-ultimate{background:linear-gradient(135deg,#7c2d12,#c47a00,#f59e0b,#c47a00);color:#000;box-shadow:0 1px 8px rgba(245,158,11,.5);animation:ultimateShimmer 3.5s ease-in-out infinite}
+@keyframes ultimateShimmer{0%,100%{filter:brightness(1)}50%{filter:brightness(1.12)}}
 /* --- GET PRO BUTTON (header, non-pro signed-in users) --- */
 .get-pro-btn{display:none;align-items:center;gap:.3rem;padding:.3rem .75rem;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;border-radius:99px;font-size:.72rem;font-weight:800;letter-spacing:.02em;white-space:nowrap;cursor:pointer;border:none;transition:filter .15s ease,transform .12s ease;box-shadow:0 1px 6px rgba(245,197,24,.4)}
 .get-pro-btn:hover{filter:brightness(1.08)}
@@ -716,26 +719,47 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 /* --- PRICING MODAL --- */
 .pricing-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
 .pricing-overlay.open{opacity:1;pointer-events:auto}
-.pricing-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.75rem 1.5rem;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.pricing-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.5rem 1.25rem;width:100%;max-width:780px;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
 .pricing-overlay.open .pricing-box{transform:translateY(0)}
 .pricing-header{text-align:center;margin-bottom:1.5rem}
 .pricing-title{font-size:1.2rem;font-weight:800;letter-spacing:-.025em;color:var(--text);margin-bottom:.3rem}
 .pricing-sub{font-size:.82rem;color:var(--text-muted);line-height:1.5}
-.pricing-cards{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.25rem}
-@media(max-width:420px){.pricing-cards{grid-template-columns:1fr}}
-.plan-card{border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:1.1rem;position:relative;transition:border-color .2s}
+.pricing-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1.1rem}
+@media(max-width:820px){.pricing-cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.pricing-cards{grid-template-columns:1fr}}
+
+/* Monthly/Annual pill toggle */
+.pricing-toggle{display:flex;justify-content:center;margin:0 auto 1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.25rem;width:fit-content;gap:.15rem}
+.pricing-toggle-btn{background:transparent;border:none;color:var(--text-muted);font-size:.75rem;font-weight:700;padding:.4rem .95rem;border-radius:99px;cursor:pointer;transition:all .15s;letter-spacing:.02em;position:relative}
+.pricing-toggle-btn.active{background:var(--gold);color:#000;box-shadow:0 1px 6px rgba(245,197,24,.35)}
+.pricing-toggle-savings{background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.55rem;font-weight:900;padding:.08rem .35rem;border-radius:99px;margin-left:.3rem;letter-spacing:.04em;vertical-align:middle}
+
+/* Tier-specific card treatments */
+.plan-card.tier-max{border-color:rgba(102,187,255,.5);background:linear-gradient(160deg,rgba(102,187,255,.06),transparent)}
+.plan-card.tier-max .plan-badge{background:linear-gradient(90deg,#3b82f6,#60a5fa);color:#fff}
+.plan-card.tier-ultimate{border-color:rgba(196,122,0,.55);background:linear-gradient(160deg,rgba(196,122,0,.10),rgba(196,122,0,.02))}
+.plan-card.tier-ultimate .plan-badge{background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000}
+.plan-btn.max-btn{background:linear-gradient(135deg,#2563eb,#60a5fa);color:#fff;box-shadow:0 2px 8px rgba(96,165,250,.35)}
+.plan-btn.max-btn:hover{filter:brightness(1.08)}
+.plan-btn.ultimate-btn{background:linear-gradient(135deg,#b8860b,#f59e0b);color:#000;box-shadow:0 2px 10px rgba(245,158,11,.45)}
+.plan-btn.ultimate-btn:hover{filter:brightness(1.08)}
+.plan-value{font-size:.62rem;color:#4ade80;font-weight:800;margin-bottom:.05rem;line-height:1.3;letter-spacing:.02em}
+.plan-value-sub{font-size:.6rem;color:rgba(255,255,255,.5);margin-bottom:.5rem;line-height:1.3}
+.plan-annual-note{display:none;font-size:.6rem;color:var(--gold);font-weight:700;margin-top:.15rem;line-height:1.2}
+.pricing-mode-annual .plan-annual-note{display:block}
+.plan-card{border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:.9rem .75rem;position:relative;transition:border-color .2s;display:flex;flex-direction:column}
 .plan-card.featured{border-color:var(--gold);background:linear-gradient(160deg,rgba(245,197,24,.06),transparent)}
 .plan-badge{position:absolute;top:-.65rem;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.6rem;font-weight:800;padding:.15rem .6rem;border-radius:99px;white-space:nowrap;letter-spacing:.05em}
 .plan-name{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.35rem}
-.plan-price{font-size:1.6rem;font-weight:800;color:var(--text);letter-spacing:-.03em;line-height:1}
+.plan-price{font-size:1.4rem;font-weight:800;color:var(--text);letter-spacing:-.03em;line-height:1}
 .plan-price sup{font-size:.85rem;vertical-align:super}
 .plan-price sub{font-size:.7rem;font-weight:500;color:var(--text-muted)}
-.plan-features{list-style:none;padding:0;margin:.85rem 0 1.1rem;display:flex;flex-direction:column;gap:.45rem}
-.plan-features li{font-size:.78rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:.4rem;line-height:1.4}
+.plan-features{list-style:none;padding:0;margin:.7rem 0 .9rem;display:flex;flex-direction:column;gap:.35rem;flex:1}
+.plan-features li{font-size:.7rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:.35rem;line-height:1.35}
 .plan-features li::before{content:"\2713";color:var(--gold);font-weight:700;flex-shrink:0;margin-top:.05rem}
 .plan-features li.faded::before{content:"\2013";color:var(--text-faint)}
 .plan-features li.faded{color:var(--text-faint)}
-.plan-btn{width:100%;padding:.6rem;border-radius:var(--radius-md);font-size:.82rem;font-weight:800;cursor:pointer;transition:all .15s ease;border:none}
+.plan-btn{width:100%;padding:.55rem .4rem;border-radius:var(--radius-md);font-size:.72rem;font-weight:800;cursor:pointer;transition:all .15s ease;border:none;line-height:1.2;margin-top:auto}
 .plan-btn.free-btn{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border)}
 .plan-btn.free-btn:hover{border-color:var(--text-muted)}
 .plan-btn.pro-btn{background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;box-shadow:0 2px 8px rgba(245,197,24,.35)}
@@ -2423,68 +2447,105 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
      PRICING / SHOP MODAL
      ============================================================ -->
 <div class="pricing-overlay" id="pricingOverlay" onclick="closePricingModal(event)">
-  <div class="pricing-box">
+  <div class="pricing-box" id="pricingBox">
     <div class="pricing-header">
-      <div class="pricing-title">&#11088; CardResell Pro</div>
-      <div class="pricing-sub">Full platform fee breakdown, unlimited flip tracking &amp; Estimated Grade Scans</div>
+      <div class="pricing-title">&#11088; Choose your plan</div>
+      <div class="pricing-sub">Cancel anytime &middot; All paid tiers include monthly scans + discounted top-ups</div>
     </div>
+
+    <!-- Monthly / Annual toggle -->
+    <div class="pricing-toggle" role="tablist">
+      <button type="button" class="pricing-toggle-btn active" id="pricingToggleMonthly" onclick="setPricingMode('monthly')">Monthly</button>
+      <button type="button" class="pricing-toggle-btn" id="pricingToggleAnnual" onclick="setPricingMode('annual')">Annual <span class="pricing-toggle-savings">SAVE 25%</span></button>
+    </div>
+
     <div class="pricing-cards">
-      <!-- FREE plan -->
+
+      <!-- FREE -->
       <div class="plan-card">
         <div class="plan-name">Free</div>
         <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
+        <div class="plan-value" style="visibility:hidden">.</div>
+        <div class="plan-value-sub" style="visibility:hidden">.</div>
         <ul class="plan-features">
           <li>Card price lookup (all games)</li>
-          <li>eBay &amp; TCGPlayer fee breakdown</li>
-          <li>Flip calculator + Deal Score</li>
+          <li>eBay + TCGPlayer fees</li>
+          <li>Flip calc + Deal Score</li>
           <li>5 flips tracked</li>
-          <li class="faded">Poshmark, COMC, Fanatics, PWCC fees</li>
-          <li class="faded">Unlimited flip &amp; portfolio tracking</li>
-          <li class="faded">10 AI Grade scans/mo included</li>
-          <li class="faded">20 ID scans/mo included</li>
-          <li class="faded">10% off top-up credit packs</li>
-          <li class="faded">Payout bar chart comparison</li>
+          <li class="faded">Monthly grade + ID scans</li>
+          <li class="faded">Top-up discounts</li>
+          <li class="faded">4 more platforms</li>
+          <li class="faded">Unlimited flip tracking</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
-      <!-- PRO MONTHLY plan -->
-      <div class="plan-card featured">
-        <div class="plan-badge">MONTHLY</div>
+
+      <!-- PRO -->
+      <div class="plan-card featured" data-tier="pro">
+        <div class="plan-badge">START HERE</div>
         <div class="plan-name">Pro</div>
-        <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
-        <div style="font-size:.7rem;color:#4ade80;font-weight:800;margin-bottom:.15rem;line-height:1.4">Worth ~$14/mo in credits + software</div>
-        <div style="font-size:.66rem;color:rgba(255,255,255,.5);margin-bottom:.55rem;line-height:1.4">Pays for itself in one flip</div>
+        <div class="plan-price"><sup>$</sup><span data-price-monthly="9" data-price-annual="89">9</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
+        <div class="plan-annual-note">Just $7.50/mo &middot; 3 months free</div>
+        <div class="plan-value">Worth ~$14/mo</div>
+        <div class="plan-value-sub">Pays for itself in one flip</div>
         <ul class="plan-features">
-          <li><strong>10 AI Grade scans/mo</strong> <span style="color:#4ade80;font-weight:700">— worth $9.99</span></li>
-          <li><strong>20 ID scans/mo</strong> <span style="color:#4ade80;font-weight:700">— worth $3.98</span></li>
-          <li><strong>10% off all top-up credit packs</strong></li>
-          <li><strong>6 platforms compared</strong> — adds Poshmark, COMC, Fanatics &amp; PWCC</li>
-          <li><strong>Payout bar chart</strong> — all platforms side-by-side</li>
-          <li><strong>Unlimited flip tracking</strong> + P&amp;L dashboard</li>
-          <li><strong>Deal Score</strong> on every card — Buy / Maybe / Pass</li>
-          <li><strong>Max Buy Price calculator</strong> — your bidding ceiling</li>
-          <li>PRO badge on account</li>
+          <li><strong>10 grade scans/mo</strong></li>
+          <li><strong>20 ID scans/mo</strong></li>
+          <li><strong>10% off</strong> top-up packs</li>
+          <li>6 platforms compared</li>
+          <li>Payout bar chart</li>
+          <li>Unlimited flip tracking</li>
+          <li>Deal Score + Max Buy</li>
+          <li>&#9889; Rapid Scan priority</li>
         </ul>
-        <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
-          <span id="pricingProBtnText">Get Pro &mdash; $9.99/mo</span>
+        <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startTierCheckout('pro')">
+          <span data-cta-monthly="Get Pro &mdash; $9.99/mo" data-cta-annual="Get Annual &mdash; $89.99/yr">Get Pro &mdash; $9.99/mo</span>
         </button>
       </div>
-      <!-- PRO ANNUAL plan -->
-      <div class="plan-card" style="border:1.5px solid rgba(196,122,0,.5);background:linear-gradient(135deg,rgba(196,122,0,.08),rgba(196,122,0,.03));position:relative">
-        <div class="plan-badge" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">BEST VALUE</div>
-        <div class="plan-name">Pro Annual</div>
-        <div class="plan-price" style="font-size:1.6rem"><sup>$</sup>89<span style="font-size:1rem">.99</span><sub>/yr</sub></div>
-        <div style="font-size:.68rem;color:#4ade80;font-weight:700;margin-bottom:.5rem">Save $30 vs monthly &mdash; that's 3 months free</div>
+
+      <!-- PRO MAX -->
+      <div class="plan-card tier-max" data-tier="pro_max">
+        <div class="plan-badge">POPULAR</div>
+        <div class="plan-name">Pro Max</div>
+        <div class="plan-price"><sup>$</sup><span data-price-monthly="19" data-price-annual="179">19</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
+        <div class="plan-annual-note">Just $15/mo &middot; 3 months free</div>
+        <div class="plan-value">Worth ~$35/mo</div>
+        <div class="plan-value-sub">For serious resellers</div>
         <ul class="plan-features">
-          <li><strong>Everything in Pro</strong> — all credits + all features</li>
-          <li><strong>Worth ~$168/yr</strong> in credits + software</li>
-          <li>Billed once per year · Cancel anytime</li>
-          <li style="color:var(--gold);font-weight:700">~$7.50/mo — less than a pack of cards</li>
+          <li><strong>25 grade scans/mo</strong></li>
+          <li><strong>50 ID scans/mo</strong></li>
+          <li><strong>15% off</strong> top-up packs</li>
+          <li>Everything in Pro</li>
+          <li>&#9889; Rapid Scan &mdash; higher priority</li>
+          <li>Priority support</li>
         </ul>
-        <button id="pricingAnnualBtn" class="plan-btn pro-btn" onclick="startAnnualCheckout()" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">
-          <span id="pricingAnnualBtnText">Get Annual &mdash; $89.99/yr</span>
+        <button id="pricingMaxBtn" class="plan-btn max-btn" onclick="startTierCheckout('pro_max')">
+          <span data-cta-monthly="Get Pro Max &mdash; $19.99/mo" data-cta-annual="Get Annual &mdash; $179.99/yr">Get Pro Max &mdash; $19.99/mo</span>
         </button>
       </div>
+
+      <!-- ULTIMATE -->
+      <div class="plan-card tier-ultimate" data-tier="ultimate">
+        <div class="plan-badge">&#9733; PREMIUM</div>
+        <div class="plan-name">Ultimate</div>
+        <div class="plan-price"><sup>$</sup><span data-price-monthly="39" data-price-annual="359">39</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
+        <div class="plan-annual-note">Just $30/mo &middot; 3 months free</div>
+        <div class="plan-value">Worth ~$90/mo</div>
+        <div class="plan-value-sub">Whale-tier value</div>
+        <ul class="plan-features">
+          <li><strong>60 grade scans/mo</strong></li>
+          <li><strong>150 ID scans/mo</strong></li>
+          <li><strong>25% off</strong> top-up packs</li>
+          <li>Everything in Pro Max</li>
+          <li>&#9889; Rapid Scan &mdash; top priority</li>
+          <li>&#128188; Bulk Grade tool <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
+          <li>&#9733; Ultimate badge</li>
+        </ul>
+        <button id="pricingUltimateBtn" class="plan-btn ultimate-btn" onclick="startTierCheckout('ultimate')">
+          <span data-cta-monthly="Get Ultimate &mdash; $39.99/mo" data-cta-annual="Get Annual &mdash; $359.99/yr">Get Ultimate &mdash; $39.99/mo</span>
+        </button>
+      </div>
+
     </div>
     <hr class="pricing-divider">
     <!-- Grade Scan credit packs -->
@@ -10686,6 +10747,7 @@ async function checkProStatus() {
     if (!r.ok) return;
     const d = await r.json();
     window._isPro = d.isPro === true;
+    window._userTier = d.tier || (d.isPro ? 'pro' : 'free');
     if (window._isPro) {
       const exportGLBtn = document.getElementById('exportGradingLogBtn');
       if (exportGLBtn) exportGLBtn.style.display = '';
@@ -10693,6 +10755,8 @@ async function checkProStatus() {
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
     window._idScanCredits = d.idPaidLeft || 0;
+    // Update tier-conditional UI (badge, etc.)
+    if (typeof updateTierUI === 'function') { try { updateTierUI(window._userTier); } catch(e) {} }
     // Refresh the ID Scan / AI Grade button badges now that we have fresh counts.
     // Without this the ID Scan button label stays credit-less on the home screen
     // even when the user has plenty of credits.
@@ -10832,13 +10896,26 @@ function updateScanBtnCredits() {
 function openPricingModal(source) {
   const overlay = document.getElementById('pricingOverlay');
   if (overlay) overlay.classList.add('open');
-
-  // If already Pro, update the button to reflect that
-  if (window._isPro) {
-    const btn = document.getElementById('pricingProBtn');
-    const txt = document.getElementById('pricingProBtnText');
-    if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.style.cursor = 'default'; }
-    if (txt) txt.textContent = '✓ Already Pro';
+  // Reset to Monthly view each open
+  setPricingMode('monthly');
+  // Disable the button for the user's current tier
+  const currentTier = window._userTier || (window._isPro ? 'pro' : 'free');
+  const tierBtnMap = { pro: 'pricingProBtn', pro_max: 'pricingMaxBtn', ultimate: 'pricingUltimateBtn' };
+  // Re-enable all first (in case tier changed)
+  Object.values(tierBtnMap).forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; }
+  });
+  const currentBtnId = tierBtnMap[currentTier];
+  if (currentBtnId) {
+    const btn = document.getElementById(currentBtnId);
+    if (btn) {
+      btn.disabled = true;
+      btn.style.opacity = '.55';
+      btn.style.cursor = 'default';
+      const span = btn.querySelector('span');
+      if (span) span.textContent = '✓ Current Plan';
+    }
   }
 }
 
@@ -10900,6 +10977,80 @@ async function startAnnualCheckout() {
   _stripeCheckout('/api/stripe-annual-checkout',
     { googleSub: window.googleUser.sub, email: window.googleUser.email },
     'pricingAnnualBtn', 'pricingAnnualBtnText', 'Get Annual — $89.99/yr');
+}
+
+// ── Update header badge + tier-conditional UI when tier changes ──
+function updateTierUI(tier) {
+  const badge = document.getElementById('proBadge');
+  if (!badge) return;
+  badge.classList.remove('tier-pro', 'tier-pro_max', 'tier-ultimate');
+  const label = badge.childNodes[badge.childNodes.length - 1]; // text node after SVG
+  if (tier === 'pro_max') {
+    badge.classList.add('tier-pro_max');
+    if (label && label.nodeType === Node.TEXT_NODE) label.textContent = ' PRO MAX';
+    badge.title = 'Pro Max — manage subscription & buy credits';
+  } else if (tier === 'ultimate') {
+    badge.classList.add('tier-ultimate');
+    if (label && label.nodeType === Node.TEXT_NODE) label.textContent = ' ULTIMATE';
+    badge.title = 'Ultimate — manage subscription & buy credits';
+  } else {
+    // pro or free
+    if (label && label.nodeType === Node.TEXT_NODE) label.textContent = ' PRO';
+    badge.title = 'Manage subscription & buy credits';
+  }
+}
+
+// ── Pricing modal: Monthly / Annual toggle ──
+function setPricingMode(mode) {
+  const box = document.getElementById('pricingBox');
+  if (!box) return;
+  const isAnnual = mode === 'annual';
+  box.classList.toggle('pricing-mode-annual', isAnnual);
+  document.getElementById('pricingToggleMonthly')?.classList.toggle('active', !isAnnual);
+  document.getElementById('pricingToggleAnnual')?.classList.toggle('active', isAnnual);
+  // Swap price digits
+  box.querySelectorAll('[data-price-monthly]').forEach(el => {
+    el.textContent = isAnnual ? el.dataset.priceAnnual : el.dataset.priceMonthly;
+  });
+  // Swap /mo vs /yr
+  box.querySelectorAll('[data-interval-monthly]').forEach(el => {
+    el.textContent = isAnnual ? el.dataset.intervalAnnual : el.dataset.intervalMonthly;
+  });
+  // Swap CTA labels
+  box.querySelectorAll('[data-cta-monthly]').forEach(el => {
+    el.innerHTML = isAnnual ? el.dataset.ctaAnnual : el.dataset.ctaMonthly;
+  });
+  window._pricingMode = mode;
+}
+
+// ── Unified tier checkout ──
+async function startTierCheckout(tier) {
+  await window._waitForAuth();
+  if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  const interval = window._pricingMode === 'annual' ? 'annual' : 'monthly';
+  window.trackEvent?.('checkout_attempt', { plan: `${tier}_${interval}` });
+  const btnMap = { pro: 'pricingProBtn', pro_max: 'pricingMaxBtn', ultimate: 'pricingUltimateBtn' };
+  const btnId = btnMap[tier];
+  const btn = btnId ? document.getElementById(btnId) : null;
+  const span = btn?.querySelector('span');
+  const originalHTML = span?.innerHTML;
+  if (btn) btn.disabled = true;
+  if (span) span.textContent = 'Loading…';
+  try {
+    const res = await fetch('/api/stripe-subscription-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier, interval, email: window.googleUser.email, userId: window.googleUser.sub })
+    });
+    const data = await res.json();
+    if (data.url) { window.location.href = data.url; return; }
+    throw new Error(data.error || 'Checkout failed');
+  } catch (e) {
+    console.error('Tier checkout error:', e);
+    showToast?.('Could not start checkout. Please try again.');
+    if (btn) btn.disabled = false;
+    if (span && originalHTML) span.innerHTML = originalHTML;
+  }
 }
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──

@@ -2,6 +2,7 @@
 // POST body: { tier: '10' | '40' | '80', email?, userId?, name? }
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { getUserTier, TIER_BENEFITS } from './_tier.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,6 +64,15 @@ export default async function handler(req, res) {
       'metadata[type]': 'id_scan',
       'metadata[tier]': tier,
     });
+
+    // Look up user's subscription tier so we can auto-apply their top-up coupon.
+    let couponId = null;
+    try {
+      const userTier  = await getUserTier(stripeKey, process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN, userSub, userEmail);
+      const tierPerks = TIER_BENEFITS[userTier] || TIER_BENEFITS.free;
+      if (tierPerks.couponId) couponId = tierPerks.couponId;
+    } catch (e) { /* non-blocking */ }
+    if (couponId) params.append('discounts[0][coupon]', couponId);
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
