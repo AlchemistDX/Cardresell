@@ -232,7 +232,7 @@ Other low-quality photo signals: blur, cropped edges, dark shadow, upside-down. 
 Extract for the best match:
 1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James"). If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア"), TRANSLATE to the English Pokémon name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
 2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
-3. set_name: The set / brand name (e.g. "Pokémon GO", "Crown Zenith", "Topps Chrome", "Panini Prizm") — VERIFY the set matches the card number range and art style. Do not guess a set.
+3. set_name: The exact printed set name or set code (e.g. "Pokémon GO", "Crown Zenith", "MEO4", "Topps Chrome", "Panini Prizm"). CRITICAL: You MUST return either a real set name / printed set code OR an empty string "". NEVER return editorial commentary like "Not an official set", "counterfeit", "custom card", "unknown", or "fake" — our database will look up the set from the card number if you don't know it. If you can't read the set symbol clearly, return "" and let the database resolve it.
 4. hp: HP number if Pokémon card (e.g. "280")
 5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols. Sports cards show a photo of a real athlete, a team logo/jersey, brand marks like Topps/Panini/Bowman/Upper Deck/Fleer/Donruss/Score/Select/Prizm/Optic/Mosaic/Chronicles, and often a copyright year.
 6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false. STRONG SIGNALS for is_japanese=true: any katakana on the name line (ラフレシア, リザードン), the word ポケモン or たね anywhere on the card, or JP-specific rarity markers (RR, SR, SAR, UR). If is_japanese=true, set_name should be the English name of the JP set (e.g. "Jungle" not 「ジャングル」, "151" not 「ポケモンカード151」).
@@ -319,6 +319,101 @@ Respond ONLY with valid JSON, no explanation:
     if (!cardInfo.card_name) {
       await refundCredits();
       return res.status(422).json({ error: 'Could not identify the card. Try a clearer photo with better lighting. Credits refunded.' });
+    }
+
+    // Sanitize set_name if the model returned editorial commentary
+    // instead of a real set ("Not an official set", "counterfeit", etc).
+    // Clear it and let the grounding pass below fill in the real set.
+    if (cardInfo.set_name) {
+      const s = String(cardInfo.set_name).toLowerCase();
+      const badPatterns = [
+        'not an official', 'not official', 'counterfeit', 'custom card',
+        'custom / fake', 'not a real', 'unknown set', 'no set', 'fake',
+        'unofficial', 'proxy', 'reprint (unofficial)'
+      ];
+      if (badPatterns.some(p => s.includes(p))) {
+        console.warn(`Model returned editorial set_name, clearing: "${cardInfo.set_name}"`);
+        cardInfo.set_name = '';
+      }
+    }
+    // Same sanitization for candidates — the picker UI shouldn't show garbage sets either.
+    if (Array.isArray(cardInfo.candidates)) {
+      const badPatterns = [
+        'not an official', 'not official', 'counterfeit', 'custom card',
+        'custom / fake', 'not a real', 'unknown set', 'no set', 'fake',
+        'unofficial', 'proxy'
+      ];
+      cardInfo.candidates.forEach(c => {
+        if (c && c.set_name) {
+          const s = String(c.set_name).toLowerCase();
+          if (badPatterns.some(p => s.includes(p))) c.set_name = '';
+        }
+      });
+    }
+
+    // ── 2026-08-16: pokemontcg.io grounding pass ──
+    // Vision models don't know sets released after their training cutoff
+    // and sometimes label real recent cards as "Not an official set /
+    // custom / counterfeit". Fix: after the model returns a name + number,
+    // look the card up in pokemontcg.io and OVERRIDE set_name/rarity from
+    // the authoritative source. Only runs for pokemon cards (skipped for
+    // sports/mtg/yugioh/lorcana/onepiece which use different data sources).
+    if (
+      !isGradeMode &&
+      (cardInfo.card_type || 'pokemon') === 'pokemon' &&
+      !cardInfo.is_japanese &&
+      cardInfo.card_name &&
+      cardInfo.card_number
+    ) {
+      try {
+        const rawName = String(cardInfo.card_name).trim();
+        const rawNum  = String(cardInfo.card_number).trim();
+        // Extract identifying token: first word of the name so glyph /
+        // suffix differences (Mega X EX vs Mega X ex, ★ vs Star) don't
+        // block the lookup. Wildcard on name + exact number is a very
+        // tight query in pokemontcg.io.
+        const firstWord = (rawName.split(/\s+/)[0] || '').replace(/["\\]/g, '');
+        const cleanNum  = rawNum.replace(/\/.*$/, '').trim(); // "100/086" → "100"
+        if (firstWord && cleanNum) {
+          const q = `name:${firstWord}* number:${cleanNum}`;
+          const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,hp,tcgplayer`;
+          const ptcgRes = await fetch(ptcgUrl, { signal: AbortSignal.timeout(4500) });
+          if (ptcgRes.ok) {
+            const j = await ptcgRes.json();
+            const cards = j.data || [];
+            // Prefer a match that shares the most words with the model's card_name.
+            const modelNameLower = rawName.toLowerCase();
+            const scored = cards.map(c => {
+              const cn = (c.name || '').toLowerCase();
+              const modelTokens = new Set(modelNameLower.split(/\W+/).filter(t => t.length >= 3));
+              let hit = 0;
+              for (const t of modelTokens) if (cn.includes(t)) hit++;
+              return { c, score: hit };
+            }).sort((a, b) => b.score - a.score);
+            const best = scored[0];
+            if (best && best.c && best.score >= 1) {
+              const gc = best.c;
+              // Override set_name unconditionally — pokemontcg.io knows sets
+              // the model doesn't, and its editorial commentary in set_name
+              // ("Not an official set") is exactly the bug we're fixing.
+              cardInfo.set_name = gc.set?.name || cardInfo.set_name || '';
+              // Fill in fields the model may have missed.
+              if (!cardInfo.rarity && gc.rarity) cardInfo.rarity = gc.rarity;
+              if (!cardInfo.hp && gc.hp)         cardInfo.hp     = String(gc.hp);
+              // Prefer the canonical name from the database (fixes
+              // capitalization / "EX" vs "ex" spacing issues).
+              if (gc.name) cardInfo.card_name = gc.name;
+              // Attach a grounded flag so the client can skip its own lookup.
+              cardInfo._grounded = true;
+              cardInfo._grounded_id = gc.id || null;
+            }
+          }
+        }
+      } catch(e) {
+        // Grounding is best-effort. If pokemontcg.io times out or 500s,
+        // fall through to the model's original set_name.
+        console.warn('pokemontcg.io grounding failed:', e?.message || e);
+      }
     }
 
     if (isGradeMode) {
