@@ -7101,13 +7101,41 @@ function openCollectionCardDetail(entryId) {
   window._ccmCurrentId = entryId;
 
   const imgUrl = p.img || p.imageUrl || '';
+  // 2026-08-17: badge scan photos with a subtle overlay so the user knows we
+  // don't have the canonical card art yet AND kick off a background re-fetch
+  // that auto-heals the entry (canonical image + market price) so the next
+  // open renders the proper art. Zero user action required.
+  const imgIsScan = imgUrl && (String(imgUrl).startsWith('data:') || String(imgUrl).startsWith('blob:'));
   const wrap = document.getElementById('ccmImgWrap');
   if (wrap) {
     if (imgUrl) {
-      wrap.innerHTML = `<img src="${imgUrl.replace(/"/g,'&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+      const overlay = imgIsScan
+        ? `<div style="position:absolute;bottom:0;left:0;right:0;padding:.25rem .4rem;background:linear-gradient(180deg,transparent,rgba(0,0,0,.7));color:#fde68a;font-size:.55rem;font-weight:700;text-align:center;letter-spacing:.02em">YOUR PHOTO · fetching card art…</div>`
+        : '';
+      wrap.style.position = 'relative';
+      wrap.innerHTML = `<img src="${imgUrl.replace(/"/g,'&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover">${overlay}`;
     } else {
       wrap.textContent = '🃏';
     }
+  }
+
+  // Auto-heal: if this entry is missing a canonical image or a market price,
+  // silently re-run the card-DB lookup in the background. If it recovers
+  // anything, re-open the modal so the user sees the fixed data. Debounced
+  // via a flag so rapid open/close doesn't spam the API.
+  const needsHeal = imgIsScan || !(p.currentValue != null && p.currentValue > 0);
+  if (needsHeal && !window._ccmHealing) {
+    window._ccmHealing = true;
+    (async () => {
+      try {
+        const changed = await _refetchCardMeta(entryId);
+        if (changed && window._ccmCurrentId === entryId) {
+          openCollectionCardDetail(entryId);
+          try { if (typeof renderCollectionView === 'function') renderCollectionView(); } catch(_) {}
+        }
+      } catch(_) {}
+      finally { window._ccmHealing = false; }
+    })();
   }
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   setEl('ccmName', p.card || 'Unknown card');
@@ -7281,17 +7309,120 @@ function _ccmViewFullCard() {
   }, 800);
 }
 
+// 2026-08-17: some collection entries save without a proper card image or
+// market price when the bulk-scan lookup misses (pokemontcg.io 5xx blip,
+// slabbed card OCR skew, brand-new SIR/full-art not on tcgplayer yet). Rather
+// than leaving the user staring at their own scan photo + "Price not fetched",
+// this helper re-runs the price/image lookup by name+number and patches the
+// stored entry. Safe to call multiple times — no-op if the entry already has
+// a canonical image + price.
+async function _refetchCardMeta(entryId) {
+  const port = loadPortData();
+  const p = port.find(x => x.id === entryId);
+  if (!p || !p.card) return false;
+  // Skip if we already have a canonical card image (not a data: URL / blob:
+  // scan photo) AND a positive market price. Nothing to fix.
+  const imgIsScan = !p.img || String(p.img).startsWith('data:') || String(p.img).startsWith('blob:');
+  const needsImg  = imgIsScan;
+  const needsPrice = !(p.currentValue != null && p.currentValue > 0);
+  if (!needsImg && !needsPrice) return false;
+
+  // Pull card number from either the persisted p.number or the "Set · #NUM"
+  // string that older entries used.
+  const numMatch = p.number || (p.set || '').match(/#\s*(\S+)/)?.[1] || '';
+  const cleanNum = String(numMatch).replace(/^0+/, '').split('/')[0].trim();
+  const cleanName = String(p.card || '').replace(/["\\]/g, '').trim();
+  if (!cleanName) return false;
+
+  let changed = false;
+  // Try pokemontcg.io first — gives us both image + tcgplayer prices in one call.
+  try {
+    const queries = [];
+    if (cleanNum) queries.push(`name:"${cleanName}" number:${cleanNum}`);
+    queries.push(`name:"${cleanName}"`);
+    let cards = null;
+    for (const q of queries) {
+      cards = await _bulkFetchPokemonCards(q, 7000);
+      if (cards && cards.length) break;
+    }
+    if (cards && cards.length) {
+      // Pick best by number match first, then rarity/set signal.
+      let best = cards.find(c => (c.number || '').split('/')[0] === cleanNum) || cards[0];
+      // Extract image
+      const imgUrl = best.images?.small || best.images?.large || '';
+      if (needsImg && imgUrl) {
+        p.img = imgUrl;
+        p.imageUrl = imgUrl;
+        changed = true;
+      }
+      // Extract best price
+      if (needsPrice) {
+        const prices = best.tcgplayer?.prices || {};
+        let bestMarket = null;
+        for (const key of Object.keys(prices)) {
+          const pp = prices[key];
+          const val = (typeof pp?.market === 'number') ? pp.market : (typeof pp?.mid === 'number' ? pp.mid : null);
+          if (val != null && (bestMarket == null || val > bestMarket)) bestMarket = val;
+        }
+        if (bestMarket != null && bestMarket > 0) {
+          p.currentValue = bestMarket;
+          p.lastRefreshed = new Date().toISOString();
+          changed = true;
+        }
+      }
+      if (!p.tcgplayerUrl && best.tcgplayer?.url) {
+        p.tcgplayerUrl = best.tcgplayer.url;
+        changed = true;
+      }
+    }
+  } catch(e) { /* fall through to /api/tcg-price */ }
+
+  // If still no price, try live TCGplayer via /api/tcg-price. Doesn't help
+  // with the image but recovers the market value for SIR / full-art / secret
+  // rares that pokemontcg.io indexes without prices.
+  if (needsPrice && !(p.currentValue != null && p.currentValue > 0)) {
+    try {
+      const setName = (p.set || '').replace(/\s*[·•]\s*#\S+.*$/, '').trim();
+      const url = `/api/tcg-price?name=${encodeURIComponent(cleanName)}` +
+        (cleanNum ? `&number=${encodeURIComponent(cleanNum)}` : '') +
+        (setName ? `&set=${encodeURIComponent(setName)}` : '');
+      const r = await fetch(url, { signal: AbortSignal.timeout(7000) });
+      if (r.ok) {
+        const d = await r.json();
+        if (d && typeof d.market === 'number' && d.market > 0) {
+          p.currentValue = d.market;
+          p.lastRefreshed = new Date().toISOString();
+          changed = true;
+        }
+        if (!p.tcgplayerUrl && d && d.url) { p.tcgplayerUrl = d.url; changed = true; }
+      }
+    } catch(_) {}
+  }
+
+  if (changed) {
+    savePortData(port);
+  }
+  return changed;
+}
+
 async function _ccmRefreshPrice() {
   if (!window._ccmCurrentId) return;
   const btn = document.getElementById('ccmRefreshBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Refreshing\u2026'; }
   try {
-    // Reuse the existing per-row refresher; it updates port data + re-renders.
+    // Try to fix any missing image / market price via the card DB first —
+    // this recovers entries that saved with the raw scan photo because the
+    // bulk-scan lookup transiently failed.
+    let metaChanged = false;
+    try { metaChanged = await _refetchCardMeta(window._ccmCurrentId); } catch(_) {}
+    // Also try the eBay-sold refresh for cards that already have a canonical
+    // image but a stale/missing price — keeps parity with the row refresh button.
     if (typeof refreshSingleCardPrice === 'function') {
       await refreshSingleCardPrice(window._ccmCurrentId);
     }
     // Reopen with fresh data.
     openCollectionCardDetail(window._ccmCurrentId);
+    if (metaChanged) showToast('Card image + price updated 🖼', 'success');
   } catch(e) {
     showToast('Could not refresh price', 'info');
   } finally {
@@ -10517,11 +10648,14 @@ function updateProUI() {
   if (manageSub) manageSub.style.display = window._isPro ? '' : 'none';
 
   if (window._isPro) {
-    // Signed in + Pro — show badge, hide shop btn & banner
+    // Signed in + Pro — show badge + banner off, but KEEP the Shop icon so
+    // Pro members can re-open the tier grid to see what other plans offer,
+    // manage their sub, or check add-ons. Previously we hid this entirely
+    // and Pro users had no in-app way back to the pricing view.
     proBadge?.classList.add('visible');
     getProBtn?.classList.remove('visible');
     promoBanner?.classList.remove('visible');
-    if (shopBtn) shopBtn.style.display = 'none'; // already Pro, no need
+    if (shopBtn) shopBtn.style.display = 'flex';
   } else {
     // Signed in but free — show Get Pro + banner + shop btn
     proBadge?.classList.remove('visible');
@@ -11681,6 +11815,7 @@ function closeBulkScan() {
   window._bulkQueue   = [];
   window._bulkResults = [];
   window._bulkSaved   = false;
+  window._bulkMode    = null; // stops Rapid Scan loop
   // Hide the floating "Back to Bulk Scan" pill — session is fully over
   try { if (typeof _hideBackToBulkPill === 'function') _hideBackToBulkPill(); } catch(e) {}
 }
@@ -11699,6 +11834,18 @@ function startBulkCamera() {
   document.getElementById('bulkCameraInput').click();
 }
 
+/* ── Rapid Scan mode: camera auto-re-opens after every successful capture so
+   the user can flip through a stack without tapping "Add Another" between
+   cards. The camera input's native capture UI stays on the stack from the
+   original user gesture; each subsequent .click() keeps working because we
+   fire it inside the input's own onchange handler (which counts as a user
+   gesture on iOS/Safari + Android Chrome). Tap "Done — Scan All" to break
+   the loop and start processing. ── */
+function startBulkRapid() {
+  window._bulkMode = 'rapid';
+  document.getElementById('bulkCameraInput').click();
+}
+
 function processBulkCameraCapture(input) {
   const file = input.files[0];
   if (!file) return;
@@ -11710,14 +11857,24 @@ function processBulkCameraCapture(input) {
   const credits = (window._idScanCredits || 0);
   const count   = window._bulkQueue.length;
 
+  const isRapid = window._bulkMode === 'rapid';
+
   // Show credit confirm screen
-  document.getElementById('bulkCreditConfirmIcon').textContent = '📷';
-  document.getElementById('bulkCreditConfirmMsg').innerHTML =
-    '<strong style="color:#fff">' + count + ' card' + (count>1?'s':'') + ' queued</strong><br>' +
-    'Tap "Add Another" to keep adding, or "Scan All" to process the queue.';
+  document.getElementById('bulkCreditConfirmIcon').textContent = isRapid ? '⚡' : '📷';
+  document.getElementById('bulkCreditConfirmMsg').innerHTML = isRapid
+    ? '<strong style="color:#fff">' + count + ' card' + (count>1?'s':'') + ' queued</strong><br>' +
+      'Camera reopens automatically — keep snapping. Tap <strong style="color:rgba(139,92,246,1)">Done</strong> when finished.'
+    : '<strong style="color:#fff">' + count + ' card' + (count>1?'s':'') + ' queued</strong><br>' +
+      'Tap "Add Another" to keep adding, or "Scan All" to process the queue.';
   document.getElementById('bulkCreditConfirmCredit').textContent =
     'Uses ' + count + ' credit' + (count>1?'s':'') + ' · You have ' + credits + ' available';
   _bulkShowSection('creditConfirm');
+
+  // Rename the primary CTA in Rapid mode so users know how to exit the loop.
+  const startBtn = document.getElementById('bulkConfirmStartBtn');
+  if (startBtn) {
+    startBtn.textContent = isRapid ? 'Done — Scan All ⚡' : 'Scan All';
+  }
 
   // Add an "Add Another" option dynamically
   const addBtn = document.getElementById('bulkConfirmStartBtn');
@@ -11730,6 +11887,22 @@ function processBulkCameraCapture(input) {
     addAnother.style.cssText = 'padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:99px;font-weight:600;font-size:.85rem;cursor:pointer';
     addAnother.onclick = function() { document.getElementById('bulkCameraInput').click(); };
     addBtn.parentNode.insertBefore(addAnother, addBtn);
+  }
+  // Rapid mode hides the manual "Add Another" button (auto-loop replaces it).
+  if (addAnother) addAnother.style.display = isRapid ? 'none' : '';
+
+  // Rapid mode: re-fire the camera input to keep the loop going. Delay long
+  // enough that iOS Safari has finished dismissing its native camera UI so
+  // .click() actually reopens it. If we chain too fast the second click is
+  // swallowed silently.
+  if (isRapid) {
+    setTimeout(() => {
+      // Bail out if the user cancelled or switched sections in the meantime.
+      if (window._bulkMode !== 'rapid') return;
+      const section = document.getElementById('bulkCreditConfirm');
+      if (!section || section.style.display === 'none') return;
+      try { document.getElementById('bulkCameraInput').click(); } catch(_) {}
+    }, 450);
   }
 }
 
@@ -11793,19 +11966,35 @@ function _bulkSetMatchScore(candidateSetName, targetSetName) {
 // don't produce false null returns (which is what caused bulk-scan cards
 // to save with $0 + no thumbnail).
 async function _bulkFetchPokemonCards(q, timeoutMs) {
+  // 2026-08-17: pokemontcg.io intermittently 500s on multi-word / quoted
+  // queries (e.g. `name:"Joltik" number:196` returned 500 during Rapid Scan
+  // testing and blanked the image + price). Retry once on 5xx with a short
+  // backoff — this recovers the vast majority of these transient failures
+  // and keeps the scanned card's proper image + market price instead of
+  // silently falling back to the user's raw photo.
   const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer`;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs || 7000);
-  try {
-    const resp = await fetch(url, { signal: ctrl.signal });
-    if (!resp || !resp.ok) return null;
-    const json = await resp.json();
-    return json.data || [];
-  } catch (e) {
-    return null;
-  } finally {
-    clearTimeout(t);
+  const attempt = async () => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs || 7000);
+    try {
+      const resp = await fetch(url, { signal: ctrl.signal });
+      if (!resp) return { ok: false, retriable: true };
+      if (!resp.ok) return { ok: false, retriable: resp.status >= 500 };
+      const json = await resp.json();
+      return { ok: true, data: json.data || [] };
+    } catch (e) {
+      // Aborts / network errors are retriable
+      return { ok: false, retriable: true };
+    } finally {
+      clearTimeout(t);
+    }
+  };
+  let r = await attempt();
+  if (!r.ok && r.retriable) {
+    await new Promise(res => setTimeout(res, 400));
+    r = await attempt();
   }
+  return r.ok ? r.data : null;
 }
 
 // Route to the right DB per TCG. Bulk scanner used to always hit PokemonTCG.io,
@@ -11910,9 +12099,16 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   // pokemontcg.io by ID — skips the fuzzy name+number search that was picking
   // base Crobat #93 (Common $0.23) over IR Crobat #093 (Illustration Rare $8-25).
   if (groundedId && typeof groundedId === 'string' && groundedId.includes('-')) {
+    // 2026-08-17: retry once on 5xx — pokemontcg.io direct-by-ID GETs also 500
+    // intermittently, same class of flake as the name-search endpoint.
+    let r = null;
+    try { r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(groundedId)}`, { signal: AbortSignal.timeout(7000) }); } catch(_) {}
+    if (r && !r.ok && r.status >= 500) {
+      await new Promise(res => setTimeout(res, 400));
+      try { r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(groundedId)}`, { signal: AbortSignal.timeout(7000) }); } catch(_) {}
+    }
     try {
-      const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(groundedId)}`, { signal: AbortSignal.timeout(7000) });
-      if (r.ok) {
+      if (r && r.ok) {
         const j = await r.json();
         const card = j?.data;
         if (card) {
@@ -12122,6 +12318,8 @@ async function startBulkQueue() {
   window._bulkProcessing = true;
   window._bulkResults    = [];
   window._bulkSaved      = false;
+  // Break the Rapid Scan auto-loop (if active) once processing starts.
+  window._bulkMode       = null;
 
   // Remove "Add Another" button if present
   const addAnother = document.getElementById('bulkAddAnotherBtn');
@@ -12984,6 +13182,13 @@ function _esc(s) {
         <div>
           <div>Camera — one by one</div>
           <div style="font-size:.72rem;color:rgba(255,255,255,.4);font-weight:400;margin-top:.15rem">Tap to capture each card</div>
+        </div>
+      </button>
+      <button onclick="startBulkRapid()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(139,92,246,.06));border:1.5px solid rgba(139,92,246,.55);border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s;position:relative" onmouseover="this.style.borderColor='rgba(139,92,246,1)'" onmouseout="this.style.borderColor='rgba(139,92,246,.55)'">
+        <span style="font-size:1.5rem">⚡</span>
+        <div style="flex:1">
+          <div>Rapid Scan <span style="padding:.05rem .35rem;margin-left:.3rem;background:rgba(139,92,246,.35);color:#fff;font-size:.55rem;font-weight:900;border-radius:4px;letter-spacing:.05em">NEW</span></div>
+          <div style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:400;margin-top:.15rem">Camera auto-reopens after each shot — keep scanning without tapping</div>
         </div>
       </button>
       <button onclick="startBulkUpload()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.6)'" onmouseout="this.style.borderColor='#2a2a2a'">
