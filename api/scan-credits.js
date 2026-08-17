@@ -1,5 +1,7 @@
+import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
+
 // /api/scan-credits — Scan credit management
-// GET  ?email=x&sub=y                           → returns { credits, isPro }  (public read-only)
+// GET  ?email=x&sub=y                           → returns { credits, isPro, tier }  (public read-only)
 // POST { action: 'verify_payment',   sessionId } → verify Stripe payment & grant credit  (auth required)
 // POST { action: 'verify_id_payment',sessionId } → verify Stripe ID-scan payment          (auth required)
 // POST { action: 'verify_grade_payment', sessionId } → verify grade scan payment          (auth required)
@@ -30,16 +32,20 @@ export default async function handler(req, res) {
     const googleSub = req.query?.sub   || '';
     if (!email) return res.status(400).json({ error: 'email required' });
 
-    const isPro = await checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email);
+    const tier         = await getUserTier(stripeKey, kvUrl, kvToken, googleSub, email);
+    const isPro        = isPaidTier(tier);
+    const tierBenefits = TIER_BENEFITS[tier] || TIER_BENEFITS.free;
 
     if (!hasKV) {
       // No KV: count credited Stripe sessions directly
       const paidCredits = await countStripeCredits(stripeKey, email, googleSub);
-      const freeCredits   = isPro ? 10 : 0; // can't track usage without KV, show as available
-      const idFreeCredits = isPro ? 20 : 0;
+      const freeCredits   = tierBenefits.gradeGrant;
+      const idFreeCredits = tierBenefits.idGrant;
       return res.status(200).json({
         credits: paidCredits + freeCredits,
         isPro,
+        tier,
+        topupDiscount: tierBenefits.topupDiscount,
         paidCredits,
         freeCredits,
         kvAvailable: false,
@@ -51,20 +57,22 @@ export default async function handler(req, res) {
     const idPaid    = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
     const stamp     = getMonthStamp();
     const proFree   = isPro
-      ? Math.max(0, 10 - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
+      ? Math.max(0, tierBenefits.gradeGrant - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
       : 0;
     const idProFree = isPro
-      ? Math.max(0, 20 - await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`))
+      ? Math.max(0, tierBenefits.idGrant - await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`))
       : 0;
     return res.status(200).json({
-      credits:      paid + proFree,
-      idCredits:    idPaid + idProFree,
+      credits:       paid + proFree,
+      idCredits:     idPaid + idProFree,
       isPro,
-      paidCredits:  paid,
-      freeCredits:  proFree,
+      tier,
+      topupDiscount: tierBenefits.topupDiscount,
+      paidCredits:   paid,
+      freeCredits:   proFree,
       idPaidCredits: idPaid,
       idFreeCredits: idProFree,
-      kvAvailable: true,
+      kvAvailable:   true,
     });
   }
 

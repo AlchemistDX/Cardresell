@@ -1,5 +1,7 @@
 // /api/stripe-webhook — Handle Stripe events
-// Handles: Pro subscription + per-scan payments
+// Handles: Pro/Pro Max/Ultimate subscriptions + per-scan payments
+
+import { priceIdToTier } from './_tier.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -74,7 +76,10 @@ export default async function handler(req, res) {
       } else if (obj.mode === 'subscription' || paymentType === 'pro_annual') {
         const subscriptionId = obj.subscription || obj.id;
         const plan = obj.metadata?.plan || 'pro_monthly';
-        await storeProUser(googleSub, email, subscriptionId, 'active', plan);
+        // Tier detection: prefer explicit metadata (set by new subscription
+        // checkout), otherwise fall back to 'pro' (legacy checkout endpoints).
+        const tier = obj.metadata?.tier || 'pro';
+        await storeProUser(googleSub, email, subscriptionId, 'active', plan, tier);
       }
     }
   }
@@ -85,7 +90,23 @@ export default async function handler(req, res) {
     const googleSub = obj.metadata?.google_sub || obj.subscription_details?.metadata?.google_sub || null;
     const email = obj.customer_email || obj.customer_details?.email || '';
     const subscriptionId = obj.subscription || obj.id;
-    if (googleSub) await storeProUser(googleSub, email, subscriptionId, 'active');
+    // Tier detection on invoice: prefer subscription metadata, then derive
+    // from price ID on the invoice line, else undefined (keeps existing tier).
+    const tier = obj.subscription_details?.metadata?.tier
+              || priceIdToTier(obj.lines?.data?.[0]?.price?.id)
+              || undefined;
+    if (googleSub) await storeProUser(googleSub, email, subscriptionId, 'active', undefined, tier);
+  }
+
+  // Subscription created or updated — tier can change on upgrade/downgrade
+  if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
+    const obj = event.data.object;
+    const googleSub = obj.metadata?.google_sub || null;
+    const priceId   = obj.items?.data?.[0]?.price?.id;
+    const tier      = obj.metadata?.tier || priceIdToTier(priceId) || undefined;
+    if (googleSub && obj.status === 'active') {
+      await storeProUser(googleSub, '', obj.id, 'active', undefined, tier);
+    }
   }
 
   // Subscription cancelled or payment failed
@@ -122,20 +143,41 @@ async function markEventProcessed(eventId, type) {
   }
 }
 
-async function storeProUser(googleSub, email, subscriptionId, status, plan = 'pro_monthly') {
+// Stores a subscription record in KV. Preserves existing fields on updates so
+// partial calls (e.g. invoice.payment_succeeded without email or tier) don't
+// blow away previously-set values.
+async function storeProUser(googleSub, email, subscriptionId, status, plan, tier) {
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
   if (kvUrl && kvToken) {
     try {
       const key = `pro:${googleSub}`;
-      const val = JSON.stringify({ email, subscriptionId, status, plan, updatedAt: new Date().toISOString() });
-      await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(val)}`, {
+
+      // Read existing record to preserve fields not passed in this call.
+      let existing = {};
+      try {
+        const g = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
+          headers: { Authorization: `Bearer ${kvToken}` },
+        });
+        const gd = await g.json();
+        if (gd.result) existing = JSON.parse(gd.result);
+      } catch (e) { /* ignore, treat as new */ }
+
+      const rec = {
+        email:          email          || existing.email          || '',
+        subscriptionId: subscriptionId || existing.subscriptionId || '',
+        status,
+        plan:           plan           || existing.plan           || 'pro_monthly',
+        tier:           tier           || existing.tier           || 'pro',
+        updatedAt:      new Date().toISOString(),
+      };
+      await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(JSON.stringify(rec))}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${kvToken}` },
       });
     } catch(e) { console.error('KV store error:', e); }
   } else {
-    console.log('PRO_USER:', JSON.stringify({ googleSub, email, subscriptionId, status }));
+    console.log('PRO_USER:', JSON.stringify({ googleSub, email, subscriptionId, status, plan, tier }));
   }
 }
 

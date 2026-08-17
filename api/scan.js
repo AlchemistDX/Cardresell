@@ -1,6 +1,7 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
+import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
 // /api/scan — Ximilar-first card identification (GPT-5 fallback)
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
@@ -91,14 +92,18 @@ export default async function handler(req, res) {
   // is never claimable if the credit was already refunded on the server side.
   const scanId = _shortId();
   if (hasKV) {
-    const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
+    const tier       = await getUserTier(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
+    const isPro      = isPaidTier(tier); // any paid tier gets monthly grants
+    const benefits   = TIER_BENEFITS[tier] || TIER_BENEFITS.free;
+    const gradeGrant = benefits.gradeGrant; // 0 / 10 / 25 / 60
+    const idGrant    = benefits.idGrant;    // 0 / 20 / 50 / 150
 
     if (isIdentifyMode) {
-      // ID scans: for Pro users, draw from monthly free bucket first (20/mo),
-      // then fall back to paid ID credits. Non-Pro users go straight to paid.
+      // ID scans: paid tiers draw from monthly free bucket first (grant), then
+      // fall back to paid ID credits. Non-paid users go straight to paid.
       const stamp      = getMonthStamp();
-      const idFreeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : 20;
-      const idFreeLeft = isPro ? Math.max(0, 20 - idFreeUsed) : 0;
+      const idFreeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : idGrant;
+      const idFreeLeft = isPro ? Math.max(0, idGrant - idFreeUsed) : 0;
       const idPaid     = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
 
       if (idFreeLeft <= 0 && idPaid <= 0) {
@@ -114,12 +119,12 @@ export default async function handler(req, res) {
         consumedAmount = 1;
       }
     } else {
-      // Graded scans: draw from Pro free bucket first, then paid_left.
+      // Graded scans: draw from tier's monthly grant bucket first, then paid_left.
       // Deep Grade costs 2 credits — must come from the SAME bucket (no mixing).
       const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
       const stamp    = getMonthStamp();
-      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : 10;
-      const freeLeft = isPro ? Math.max(0, 10 - freeUsed) : 0;
+      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : gradeGrant;
+      const freeLeft = isPro ? Math.max(0, gradeGrant - freeUsed) : 0;
 
       if (freeLeft < gradeCost && paid < gradeCost) {
         return res.status(402).json({

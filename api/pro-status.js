@@ -3,7 +3,8 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
 
-const FREE_SCANS_PER_MONTH = 10;
+const FREE_SCANS_PER_MONTH = 10; // legacy default — replaced by per-tier grants below
+const TIER_GRADE_GRANT = { free: 0, pro: 10, pro_max: 25, ultimate: 60 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -38,7 +39,7 @@ export default async function handler(req, res) {
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
-  let isPro = false, proStatus = 'none';
+  let isPro = false, proStatus = 'none', userTier = 'free';
 
   // 1. Check KV for Pro status
   if (kvUrl && kvToken) {
@@ -51,6 +52,8 @@ export default async function handler(req, res) {
         const record = JSON.parse(data.result);
         isPro      = record.status === 'active';
         proStatus  = record.status;
+        // Tier: new records include it explicitly; legacy records default to 'pro' when active.
+        if (isPro) userTier = record.tier || 'pro';
       }
     } catch(e) { console.error('KV pro check error:', e); }
   }
@@ -72,8 +75,23 @@ export default async function handler(req, res) {
           );
           if (subRes.ok) {
             const subData = await subRes.json();
-            isPro     = (subData.data?.length || 0) > 0;
+            const sub     = subData.data?.[0];
+            isPro     = !!sub;
             proStatus = isPro ? 'active' : 'none';
+            if (isPro) {
+              // Derive tier from subscription metadata / price ID.
+              const metaTier = sub.metadata?.tier;
+              const priceId  = sub.items?.data?.[0]?.price?.id;
+              const priceMap = {
+                [process.env.STRIPE_PRICE_ID]:               'pro',
+                [process.env.STRIPE_PRICE_ANNUAL_ID]:        'pro',
+                [process.env.STRIPE_PRICE_PRO_MAX_MONTHLY]:  'pro_max',
+                [process.env.STRIPE_PRICE_PRO_MAX_ANNUAL]:   'pro_max',
+                [process.env.STRIPE_PRICE_ULTIMATE_MONTHLY]: 'ultimate',
+                [process.env.STRIPE_PRICE_ULTIMATE_ANNUAL]:  'ultimate',
+              };
+              userTier = metaTier || priceMap[priceId] || 'pro';
+            }
           }
         }
       }
@@ -86,9 +104,10 @@ export default async function handler(req, res) {
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
     idPaidLeft    = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_paid_left`);
     if (isPro) {
-      const monthKey = `scans:${userSub}:free_used_${getMonthStamp()}`;
-      freeScansUsed = await getKVInt(kvUrl, kvToken, monthKey);
-      freeScansLeft = Math.max(0, FREE_SCANS_PER_MONTH - freeScansUsed);
+      const monthKey  = `scans:${userSub}:free_used_${getMonthStamp()}`;
+      const monthly   = TIER_GRADE_GRANT[userTier] || TIER_GRADE_GRANT.pro;
+      freeScansUsed   = await getKVInt(kvUrl, kvToken, monthKey);
+      freeScansLeft   = Math.max(0, monthly - freeScansUsed);
     }
 
     // 3b. Check KV email_verified:<uid> override — universal verify flow.
@@ -168,11 +187,12 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     isPro,
+    tier:   userTier,
     status: proStatus,
     email: userEmail,
     freeScansLeft,
     freeScansUsed,
-    freeScansTotal: FREE_SCANS_PER_MONTH,
+    freeScansTotal: TIER_GRADE_GRANT[userTier] || FREE_SCANS_PER_MONTH,
     paidScansLeft,
     idPaidLeft,
     idCredits: idPaidLeft,
