@@ -1,5 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
-// /api/scan — GPT-4o Vision card identification
+import { identifyWithXimilar } from './_ximilar.js';
+// /api/scan — Ximilar-first card identification (GPT-5 fallback)
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
 // Returns: { card_name, card_number, set_name, hp, card_type, rarity, success: true }
@@ -153,10 +154,93 @@ export default async function handler(req, res) {
     } catch(e) { console.error('Refund error:', e); }
   }
 
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKey    = process.env.OPENAI_API_KEY;
+  const ximilarToken = process.env.XIMILAR_API_TOKEN;
   if (!openaiKey) { await refundCredits(); return res.status(500).json({ error: 'Scanner not configured.' }); }
 
-  // ── 4. Call GPT-4o Vision ──
+  // ── 4a. Try Ximilar FIRST for identify mode ──
+  // Ximilar's purpose-built collectibles model returns in ~1s and covers
+  // Pokemon/MTG/YGO/Lorcana/OnePiece/Sports. GPT-5 was taking 30-60s per
+  // scan; Ximilar cuts that to ~1s with better accuracy on holos.
+  //
+  // Fallthrough conditions (chain to GPT-5):
+  //   - identify mode only (grade mode still uses GPT for centering/edges)
+  //   - Ximilar returns low_confidence, no_match, network error, http error
+  //   - No XIMILAR_API_TOKEN env var
+  if (isIdentifyMode && ximilarToken && imageBase64) {
+    // Detect "maybe sports" heuristically: user hasn't told us, and Ximilar's
+    // TCG endpoint would return no_match for real sports cards. Try TCG first;
+    // fall back to sport_id if the first attempt returns no_match/no_card.
+    const t0 = Date.now();
+    let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg');
+    if (!xim.ok && (xim.reason === 'no_match' || xim.reason === 'no_card_detected')) {
+      // Retry as sports card (cheap: still 10 credits, same as TCG)
+      const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport');
+      if (ximSport.ok) xim = ximSport;
+    }
+    const tMs = Date.now() - t0;
+    console.log('[scan] ximilar took', tMs, 'ms ok=', xim.ok, 'reason=', xim.reason, 'dist=', xim.cardInfo?._ximilar_dist);
+
+    if (xim.ok) {
+      const cardInfo = xim.cardInfo;
+      const idConfNorm = cardInfo.confidence || 'high';
+
+      // Multi-candidate picker path
+      if (xim.needsPicker && Array.isArray(xim.candidates) && xim.candidates.length >= 2) {
+        await refundCredits();
+        const cleanCandidates = xim.candidates.map(c => ({
+          card_name: c.card_name, card_number: c.card_number, set_name: c.set_name,
+          set_code: c.set_code || '', hp: c.hp || '', card_type: c.card_type || 'pokemon',
+          is_japanese: c.is_japanese === true, rarity: c.rarity || '',
+          sport: c.sport || '', year: c.year || '',
+          confidence_pct: c.confidence_pct || 50,
+          grounded_id: c._grounded_id || null,
+        }));
+        return res.status(200).json({
+          success: true, mode: 'identify', needsPicker: true,
+          confidence: 'medium', candidates: cleanCandidates,
+          image_quality: 'ok', glare_regions: [], retake_hint: '',
+          card_name: cardInfo.card_name, card_number: cardInfo.card_number,
+          set_name: cardInfo.set_name, set_code: cardInfo.set_code,
+          grounded: true, grounded_id: cardInfo._grounded_id,
+          hp: cardInfo.hp, card_type: cardInfo.card_type,
+          is_japanese: cardInfo.is_japanese, jp_name: cardInfo.jp_name,
+          rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year,
+          source: 'ximilar',
+        });
+      }
+
+      // Single confident answer — log + return, skip GPT entirely
+      _incrSearchStats(kvUrl, kvToken);
+      if (hasKV && consumedFrom) {
+        try {
+          const record = {
+            uid: key, consumed_from: consumedFrom, consumed_amount: consumedAmount,
+            card_name: cardInfo.card_name, card_number: cardInfo.card_number,
+            set_name: cardInfo.set_name, confidence: idConfNorm,
+            image_quality: 'ok', created_at: Date.now(), source: 'ximilar',
+          };
+          await setKVWithTTL(kvUrl, kvToken, `scan:${scanId}`, JSON.stringify(record), 3600);
+        } catch(e) { /* non-fatal */ }
+      }
+      return res.status(200).json({
+        success: true, mode: 'identify', scan_id: scanId,
+        confidence: idConfNorm, image_quality: 'ok',
+        glare_regions: [], retake_hint: '',
+        card_name: cardInfo.card_name, card_number: cardInfo.card_number,
+        set_name: cardInfo.set_name, set_code: cardInfo.set_code,
+        grounded: true, grounded_id: cardInfo._grounded_id,
+        hp: cardInfo.hp, card_type: cardInfo.card_type,
+        is_japanese: cardInfo.is_japanese, jp_name: cardInfo.jp_name,
+        rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year,
+        source: 'ximilar',
+      });
+    }
+    // else: fall through to GPT-5 vision (unchanged path below)
+    console.log('[scan] ximilar miss, falling back to GPT-5');
+  }
+
+  // ── 4. Call GPT-4o Vision (fallback) ──
   try {
     const mime   = mimeType || 'image/jpeg';
     const dataUrl = `data:${mime};base64,${imageBase64}`;
