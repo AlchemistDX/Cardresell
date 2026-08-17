@@ -1427,7 +1427,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 free Grader Credits/mo</strong>. ID Scanner Credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">10 Grader + 20 ID scans/mo</strong> &amp; 10% off top-ups. Paid credits never expire.</div>
   </div>
   <!-- ── VERIFIED EMAIL ── -->
   <div id="verifiedEmailSection" style="display:none;margin-top:.5rem">
@@ -2359,7 +2359,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div class="scan-gate-divider">or</div>
       <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt" style="margin-top:.1rem">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 10 scans/mo included</div>
+          <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 10 grade + 20 ID scans/mo</div>
           <div class="scan-gate-opt-desc">+ Full fee breakdown &amp; unlimited flip tracking</div>
         </div>
         <div class="scan-gate-opt-price">$9.99/mo</div>
@@ -2440,7 +2440,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li>5 flips tracked</li>
           <li class="faded">Poshmark, COMC, Fanatics, PWCC fees</li>
           <li class="faded">Unlimited flip &amp; portfolio tracking</li>
-          <li class="faded">AI Grading Estimate scans</li>
+          <li class="faded">10 AI Grade scans/mo included</li>
+          <li class="faded">20 ID scans/mo included</li>
+          <li class="faded">10% off top-up credit packs</li>
           <li class="faded">Payout bar chart comparison</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
@@ -2450,14 +2452,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-badge">MONTHLY</div>
         <div class="plan-name">Pro</div>
         <div class="plan-price"><sup>$</sup>9<span style="font-size:1rem">.99</span><sub>/mo</sub></div>
-        <div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-bottom:.6rem;line-height:1.4">Everything to run a serious resell operation</div>
+        <div style="font-size:.7rem;color:#4ade80;font-weight:800;margin-bottom:.15rem;line-height:1.4">Worth ~$14/mo in credits + software</div>
+        <div style="font-size:.66rem;color:rgba(255,255,255,.5);margin-bottom:.55rem;line-height:1.4">Pays for itself in one flip</div>
         <ul class="plan-features">
+          <li><strong>10 AI Grade scans/mo</strong> <span style="color:#4ade80;font-weight:700">— worth $9.99</span></li>
+          <li><strong>20 ID scans/mo</strong> <span style="color:#4ade80;font-weight:700">— worth $3.98</span></li>
+          <li><strong>10% off all top-up credit packs</strong></li>
           <li><strong>6 platforms compared</strong> — adds Poshmark, COMC, Fanatics &amp; PWCC</li>
-          <li><strong>Payout bar chart</strong> — see all platforms side-by-side at a glance</li>
+          <li><strong>Payout bar chart</strong> — all platforms side-by-side</li>
           <li><strong>Unlimited flip tracking</strong> + P&amp;L dashboard</li>
-          <li><strong>10 AI Grading Estimate scans/mo</strong> — corners, edges, centering, surface</li>
-          <li><strong>Deal Score on every card</strong> — Buy / Maybe / Pass verdict</li>
-          <li><strong>Max Buy Price calculator</strong> — know your ceiling before bidding</li>
+          <li><strong>Deal Score</strong> on every card — Buy / Maybe / Pass</li>
+          <li><strong>Max Buy Price calculator</strong> — your bidding ceiling</li>
           <li>PRO badge on account</li>
         </ul>
         <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startProCheckout()">
@@ -2471,10 +2476,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-price" style="font-size:1.6rem"><sup>$</sup>89<span style="font-size:1rem">.99</span><sub>/yr</sub></div>
         <div style="font-size:.68rem;color:#4ade80;font-weight:700;margin-bottom:.5rem">Save $30 vs monthly &mdash; that's 3 months free</div>
         <ul class="plan-features">
-          <li>Everything in Pro</li>
-          <li>Billed once per year</li>
-          <li>Cancel anytime</li>
-          <li style="color:var(--gold);font-weight:700">~$7.50/mo &mdash; less than a pack of cards</li>
+          <li><strong>Everything in Pro</strong> — all credits + all features</li>
+          <li><strong>Worth ~$168/yr</strong> in credits + software</li>
+          <li>Billed once per year · Cancel anytime</li>
+          <li style="color:var(--gold);font-weight:700">~$7.50/mo — less than a pack of cards</li>
         </ul>
         <button id="pricingAnnualBtn" class="plan-btn pro-btn" onclick="startAnnualCheckout()" style="background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000">
           <span id="pricingAnnualBtnText">Get Annual &mdash; $89.99/yr</span>

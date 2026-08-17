@@ -94,14 +94,25 @@ export default async function handler(req, res) {
     const isPro = await checkProStatus(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
 
     if (isIdentifyMode) {
-      // ID scans: draw from id_paid_left bucket
-      const idPaid = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-      if (idPaid <= 0) {
+      // ID scans: for Pro users, draw from monthly free bucket first (20/mo),
+      // then fall back to paid ID credits. Non-Pro users go straight to paid.
+      const stamp      = getMonthStamp();
+      const idFreeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : 20;
+      const idFreeLeft = isPro ? Math.max(0, 20 - idFreeUsed) : 0;
+      const idPaid     = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+
+      if (idFreeLeft <= 0 && idPaid <= 0) {
         return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
       }
-      await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
-      consumedFrom = 'id_paid_left';
-      consumedAmount = 1;
+      if (idFreeLeft > 0) {
+        await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+        consumedFrom = 'id_free';
+        consumedAmount = 1;
+      } else {
+        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
+        consumedFrom = 'id_paid_left';
+        consumedAmount = 1;
+      }
     } else {
       // Graded scans: draw from Pro free bucket first, then paid_left.
       // Deep Grade costs 2 credits — must come from the SAME bucket (no mixing).
@@ -141,7 +152,11 @@ export default async function handler(req, res) {
   async function refundCredits() {
     if (!hasKV || !consumedFrom || !consumedAmount) return;
     try {
-      if (consumedFrom === 'id_paid_left') {
+      if (consumedFrom === 'id_free') {
+        const stamp = getMonthStamp();
+        const cur   = await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
+        await setKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`, Math.max(0, cur - consumedAmount));
+      } else if (consumedFrom === 'id_paid_left') {
         const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
         await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, cur + consumedAmount);
       } else if (consumedFrom === 'paid_left') {

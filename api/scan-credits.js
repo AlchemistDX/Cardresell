@@ -35,7 +35,8 @@ export default async function handler(req, res) {
     if (!hasKV) {
       // No KV: count credited Stripe sessions directly
       const paidCredits = await countStripeCredits(stripeKey, email, googleSub);
-      const freeCredits = isPro ? 10 : 0; // can't track usage without KV, show as available
+      const freeCredits   = isPro ? 10 : 0; // can't track usage without KV, show as available
+      const idFreeCredits = isPro ? 20 : 0;
       return res.status(200).json({
         credits: paidCredits + freeCredits,
         isPro,
@@ -45,19 +46,24 @@ export default async function handler(req, res) {
       });
     }
 
-    const key     = googleSub || email;
-    const paid    = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
-    const idPaid  = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-    const stamp   = getMonthStamp();
-    const proFree = isPro
+    const key       = googleSub || email;
+    const paid      = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+    const idPaid    = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+    const stamp     = getMonthStamp();
+    const proFree   = isPro
       ? Math.max(0, 10 - await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`))
       : 0;
+    const idProFree = isPro
+      ? Math.max(0, 20 - await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`))
+      : 0;
     return res.status(200).json({
-      credits: paid + proFree,
-      idCredits: idPaid,
+      credits:      paid + proFree,
+      idCredits:    idPaid + idProFree,
       isPro,
-      paidCredits: paid,
-      freeCredits: proFree,
+      paidCredits:  paid,
+      freeCredits:  proFree,
+      idPaidCredits: idPaid,
+      idFreeCredits: idProFree,
       kvAvailable: true,
     });
   }
