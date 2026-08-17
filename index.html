@@ -1618,6 +1618,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
       <!-- Shown after success -->
       <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View Card Prices →</button>
+      <button id="scanWrongCardBtn" onclick="openWrongCardPicker()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.12);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">🔀 Wrong card? Fix for free</button>
       <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
       <!-- Shown after failure -->
       <button id="scanRetryBtn" onclick="retryIdScan()" style="display:none;padding:.65rem 1.5rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:12px;font-weight:800;font-size:.88rem;width:100%;cursor:pointer">📷 Try Again</button>
@@ -8240,23 +8241,125 @@ function _setScanBtns(state) {
   const viewBtn     = document.getElementById('scanViewCardBtn');
   const anotherBtn  = document.getElementById('scanAnotherBtn');
   const retryBtn    = document.getElementById('scanRetryBtn');
+  const wrongBtn    = document.getElementById('scanWrongCardBtn');
   if (!cancelBtn) return;
   if (state === 'scanning') {
     cancelBtn.style.display  = '';
     viewBtn.style.display    = 'none';
     anotherBtn.style.display = 'none';
     retryBtn.style.display   = 'none';
+    if (wrongBtn) wrongBtn.style.display = 'none';
   } else if (state === 'success') {
     cancelBtn.style.display  = 'none';
     viewBtn.style.display    = '';
     anotherBtn.style.display = '';
     retryBtn.style.display   = 'none';
+    // Only show "Wrong card?" when the reranker had ≥2 candidates to choose from
+    if (wrongBtn) {
+      const cands = window._lastScanCandidates || [];
+      wrongBtn.style.display = (cands.length >= 2) ? '' : 'none';
+    }
   } else if (state === 'error') {
     cancelBtn.style.display  = 'none';
     viewBtn.style.display    = 'none';
     anotherBtn.style.display = 'none';
     retryBtn.style.display   = '';
+    if (wrongBtn) wrongBtn.style.display = 'none';
   }
+}
+
+// ========================================================================
+// "Wrong card?" local picker — 2026-08-17
+// ------------------------------------------------------------------------
+// Zero-cost correction path. Reuses window._lastScanCandidates (populated
+// by the reranker) so the user can pick the correct printing from the
+// in-browser 20k-card index without re-running Ximilar. No API calls, no
+// credit spend. Only shows when the reranker had ≥2 candidates matching
+// name+number.
+// ========================================================================
+function openWrongCardPicker() {
+  const cands = window._lastScanCandidates || [];
+  if (cands.length < 2) {
+    showToast('No other matches for this card + number', 'gold');
+    return;
+  }
+  // Build overlay if missing
+  let ov = document.getElementById('wrongCardOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'wrongCardOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10002;display:flex;flex-direction:column;padding:1.25rem;overflow-y:auto;';
+    document.body.appendChild(ov);
+  }
+  const currentId = window._pendingIdScanCard?.groundedId || '';
+  const rows = cands.map((c, i) => {
+    const isCurrent = c.id === currentId;
+    return '<div onclick="pickCorrectCard(' + i + ')" style="display:flex;gap:.75rem;padding:.7rem;background:' + (isCurrent ? 'rgba(255,215,0,.12)' : 'rgba(255,255,255,.05)') + ';border:1px solid ' + (isCurrent ? 'var(--gold)' : 'rgba(255,255,255,.1)') + ';border-radius:12px;cursor:pointer;align-items:center;">' +
+      '<img src="' + esc(c.i || '') + '" style="width:64px;height:88px;object-fit:cover;border-radius:6px;background:#222" onerror="this.style.opacity=0" />' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:800;color:#fff;font-size:.95rem">' + esc(c.n || '') + '</div>' +
+        '<div style="font-size:.78rem;color:rgba(255,255,255,.7);margin-top:.15rem">' + esc(c.s || '') + ' · #' + esc(String(c.nu || '')) + (c.r ? ' · ' + esc(c.r) : '') + '</div>' +
+        (isCurrent ? '<div style="font-size:.7rem;color:var(--gold);margin-top:.2rem;font-weight:700">✓ Currently selected</div>' : '') +
+      '</div>' +
+      '<div style="color:rgba(255,255,255,.4);font-size:1.1rem">›</div>' +
+    '</div>';
+  }).join('');
+  ov.innerHTML =
+    '<div style="max-width:480px;margin:0 auto;width:100%">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">' +
+        '<div>' +
+          '<div style="font-size:1.15rem;font-weight:900;color:#fff">Pick the right card</div>' +
+          '<div style="font-size:.75rem;color:rgba(255,255,255,.6);margin-top:.2rem">' + cands.length + ' printing' + (cands.length===1?'':'s') + ' found · free to switch, no scan credit used</div>' +
+        '</div>' +
+        '<button onclick="closeWrongCardPicker()" style="background:rgba(255,255,255,.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:1.1rem;cursor:pointer">×</button>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:.6rem">' + rows + '</div>' +
+      '<div style="margin-top:1rem;font-size:.72rem;color:rgba(255,255,255,.4);text-align:center">Tap a card to correct the ID — doesn\'t re-scan or charge credits.</div>' +
+    '</div>';
+  ov.style.display = 'flex';
+}
+
+function closeWrongCardPicker() {
+  const ov = document.getElementById('wrongCardOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+function pickCorrectCard(idx) {
+  const cands = window._lastScanCandidates || [];
+  const c = cands[idx];
+  if (!c) return;
+  // Update the pending ID so "View Card Prices →" opens the right one
+  if (!window._pendingIdScanCard) window._pendingIdScanCard = {};
+  window._pendingIdScanCard.name       = c.n || window._pendingIdScanCard.name;
+  window._pendingIdScanCard.number     = c.nu || window._pendingIdScanCard.number;
+  window._pendingIdScanCard.setName    = c.s || window._pendingIdScanCard.setName;
+  window._pendingIdScanCard.setCode    = c.sc || '';
+  window._pendingIdScanCard.groundedId = c.id || '';
+  window._pendingIdScanCard.rarity     = c.r || window._pendingIdScanCard.rarity;
+  // Update the on-screen scan result line so the user sees the correction reflected
+  const statusEl = document.getElementById('scanStatus');
+  if (statusEl) {
+    const detail = [c.s || '', c.r || ''].filter(Boolean).join(' · ');
+    statusEl.innerHTML = '<span style="color:#4ade80">✓ ' + esc(c.n || '') + (c.nu ? ' #' + esc(String(c.nu)) : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + esc(detail) + '</span>';
+  }
+  // Swap the preview thumb so the user sees the corrected card art
+  const prev = document.getElementById('scanPreviewImg');
+  if (prev && c.i) { try { prev.src = c.i; } catch(_) {} }
+  // Log for training signal analysis
+  try {
+    console.log('[wrongcard] user corrected pick:', c.id, c.n, c.s);
+    fetch('/api/log-correction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chosen: c.id,
+        chosenSet: c.s,
+        candidates: cands.map(x => ({ id: x.id, set: x.s })),
+      })
+    }).catch(() => {});
+  } catch(_) {}
+  closeWrongCardPicker();
+  showToast('Fixed — view card to see the correct pricing', 'gold');
 }
 
 // Retry — re-trigger camera without closing overlay
@@ -9357,11 +9460,40 @@ async function processScanImage(input) {
             rerankedSetCode    = c.sc || '';
             rerankedNumber     = c.nu;
             rerankedRarity     = c.r || '';
+            window._lastScanCandidates = [c];
             console.log('[rerank] EXACT match:', c.id, c.n, c.s);
           } else if (candidates.length >= 2 && candidates.length <= 60) {
-            // Multiple printings — pHash-rerank to pick the visually-closest one
-            // Reuse the phash/dhash from the earlier fastpath attempt if available.
-            // If not, hash the raw file quickly.
+            // Always stash all matching candidates for the local "Wrong card?" picker.
+            // Free correction path — zero API calls, zero credit spend.
+            window._lastScanCandidates = candidates.slice();
+            // 2026-08-17: Ximilar-set trust pass BEFORE pHash rerank.
+            // Ximilar's collectibles model identifies set names way more reliably
+            // than pHash on a blurry phone photo. If Ximilar returned a set_name
+            // and exactly one candidate matches that set, trust it and skip pHash.
+            // Only pHash-tiebreak when Ximilar didn't give a set or its set doesn't
+            // uniquely match one candidate.
+            let ximilarSetResolved = false;
+            const normSet = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const ximilarSetNorm = normSet(setName);
+            if (ximilarSetNorm) {
+              const setMatches = candidates.filter(c => {
+                const cs = normSet(c.s);
+                return cs === ximilarSetNorm || cs.includes(ximilarSetNorm) || ximilarSetNorm.includes(cs);
+              });
+              if (setMatches.length === 1) {
+                const c = setMatches[0];
+                rerankedGroundedId = c.id;
+                rerankedImageSmall = c.i;
+                rerankedImageLarge = window.CardResellFastPath.deriveLargeUrl(c.i);
+                rerankedSetName    = c.s;
+                rerankedSetCode    = c.sc || '';
+                rerankedNumber     = c.nu;
+                rerankedRarity     = c.r || '';
+                console.log('[rerank] Ximilar-set trust:', c.id, c.n, c.s, '(matched "' + setName + '")');
+                ximilarSetResolved = true;
+              }
+            }
+            // pHash tiebreak — only runs when Ximilar-set trust didn't resolve
             let ph, dh;
             const fpRes = window._lastFastpathResult;
             if (fpRes && fpRes.ph && fpRes.dh) {
@@ -9380,7 +9512,7 @@ async function processScanImage(input) {
                 dh = window.CardResellFastPath.computeDHash(cnv);
               } catch(_) {}
             }
-            if (ph && dh) {
+            if (!ximilarSetResolved && ph && dh) {
               let best = null, bestD = 999;
               for (const c of candidates) {
                 const d = window.CardResellFastPath.hamming(ph, c.p) * 2 +
