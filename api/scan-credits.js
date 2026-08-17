@@ -168,7 +168,9 @@ export default async function handler(req, res) {
           const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
           return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
         }
-        const tierMap = { '10': 10, '50': 50, '100': 100 };
+        // New tiers: 10 / 40 / 80. Old tiers (50, 100) kept for any in-flight
+        // checkout sessions created before the 2026-08-17 price switch.
+        const tierMap = { '10': 10, '40': 40, '80': 80, '50': 50, '100': 100 };
         const qty = tierMap[session.metadata?.tier] || 10;
         await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
           method: 'POST',
@@ -205,7 +207,9 @@ export default async function handler(req, res) {
           const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
           return res.status(200).json({ success: true, alreadyCredited: true, credits: cur });
         }
-        const tierMap = { '5': 5, '20': 20, '50': 50 };
+        // New tiers: 5 / 15 / 40. Old tiers (20, 50) kept for any in-flight
+        // checkout sessions created before the 2026-08-17 price switch.
+        const tierMap = { '5': 5, '15': 15, '40': 40, '20': 20, '50': 50 };
         const qty = tierMap[session.metadata?.tier] || 5;
         await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
           method: 'POST',

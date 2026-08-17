@@ -1,6 +1,6 @@
 // /api/stripe-id-redirect — GET → 302 to Stripe checkout
 // Called via hidden form submit (iOS Safari compatible — no popup blocking)
-// ?tier=10|50|100&uid=xxx&email=yyy&name=zzz
+// ?tier=10|40|80&uid=xxx&email=yyy&name=zzz
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,8 +12,8 @@ export default async function handler(req, res) {
 
   const priceMap = {
     '10':  process.env.STRIPE_ID_SCAN_PRICE_10,
-    '50':  process.env.STRIPE_ID_SCAN_PRICE_50,
-    '100': process.env.STRIPE_ID_SCAN_PRICE_100,
+    '40':  process.env.STRIPE_ID_SCAN_PRICE_40,
+    '80':  process.env.STRIPE_ID_SCAN_PRICE_80,
   };
   const priceId = priceMap[String(tier)];
 

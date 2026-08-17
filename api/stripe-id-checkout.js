@@ -1,5 +1,5 @@
 // /api/stripe-id-checkout — One-time purchase of ID scan credits
-// POST body: { tier: '10' | '50' | '100', email?, userId?, name? }
+// POST body: { tier: '10' | '40' | '80', email?, userId?, name? }
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 
@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body    = req.body || {};
-  const tier    = String(body.tier || '10'); // '10', '50', '100'
+  const tier    = String(body.tier || '10'); // '10', '40', '80'
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
 
   let userEmail = body.email  || '';
@@ -35,13 +35,13 @@ export default async function handler(req, res) {
 
   const priceMap = {
     '10':  process.env.STRIPE_ID_SCAN_PRICE_10,
-    '50':  process.env.STRIPE_ID_SCAN_PRICE_50,
-    '100': process.env.STRIPE_ID_SCAN_PRICE_100,
+    '40':  process.env.STRIPE_ID_SCAN_PRICE_40,
+    '80':  process.env.STRIPE_ID_SCAN_PRICE_80,
   };
-  const labelMap = { '10': '10 ID Scans — $1', '50': '50 ID Scans — $5', '100': '100 ID Scans — $9' };
+  const labelMap = { '10': '10 ID Scans — $1.99', '40': '40 ID Scans — $6.99', '80': '80 ID Scans — $11.99' };
   const priceId  = priceMap[tier];
 
-  if (!priceId) return res.status(400).json({ error: 'Invalid tier. Choose 10, 50, or 100.' });
+  if (!priceId) return res.status(400).json({ error: 'Invalid tier. Choose 10, 40, or 80.' });
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) return res.status(503).json({ error: 'Payments not configured.' });

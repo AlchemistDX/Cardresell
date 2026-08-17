@@ -1,6 +1,6 @@
 // /api/stripe-grade-checkout — One-time purchase of Grade Scan credits
-// POST body: { tier: '5' | '20' | '50', email?, userId?, name? }
-// Packs: 5 scans $2.49 | 20 scans $7.99 | 50 scans $14.99
+// POST body: { tier: '5' | '15' | '40', email?, userId?, name? }
+// Packs: 5 scans $3.99 | 15 scans $9.99 | 40 scans $19.99
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body    = req.body || {};
-  const tier    = String(body.tier || '5'); // '5', '20', '50'
+  const tier    = String(body.tier || '5'); // '5', '15', '40'
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
 
   let userEmail = body.email  || '';
@@ -39,18 +39,18 @@ export default async function handler(req, res) {
 
   const priceMap = {
     '5':  process.env.STRIPE_GRADE_SCAN_PRICE_5,
-    '20': process.env.STRIPE_GRADE_SCAN_PRICE_20,
-    '50': process.env.STRIPE_GRADE_SCAN_PRICE_50,
+    '15': process.env.STRIPE_GRADE_SCAN_PRICE_15,
+    '40': process.env.STRIPE_GRADE_SCAN_PRICE_40,
   };
   const labelMap = {
-    '5':  '5 Grade Scans — $2.49',
-    '20': '20 Grade Scans — $7.99',
-    '50': '50 Grade Scans — $14.99',
+    '5':  '5 Grade Scans — $3.99',
+    '15': '15 Grade Scans — $9.99',
+    '40': '40 Grade Scans — $19.99',
   };
-  const creditsMap = { '5': 5, '20': 20, '50': 50 };
+  const creditsMap = { '5': 5, '15': 15, '40': 40 };
   const priceId = priceMap[tier];
 
-  if (!priceId) return res.status(400).json({ error: 'Invalid tier. Choose 5, 20, or 50.' });
+  if (!priceId) return res.status(400).json({ error: 'Invalid tier. Choose 5, 15, or 40.' });
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) return res.status(503).json({ error: 'Payments not configured.' });
