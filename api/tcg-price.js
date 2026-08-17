@@ -56,7 +56,10 @@ export default async function handler(req, res) {
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached) {
     _incrSearchStats(kvUrl, kvToken);
-    return res.status(200).json({ ...cached, cached: true });
+    const cacheAgeSec = cached.fetchedAt
+      ? Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 1000)
+      : 0;
+    return res.status(200).json({ ...cached, cached: true, cacheAgeSec });
   }
 
   // ── PRIMARY: tcgcsv.com catalog (deterministic; refreshed daily) ────────
@@ -81,6 +84,8 @@ export default async function handler(req, res) {
           cardName: r.product?.name ?? name,
           setName: r.product?.setName ?? set,
           url: r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null,
+          fetchedAt: new Date().toISOString(),
+          cacheAgeSec: 0,
         };
         await setCache(kvUrl, kvToken, cacheKey, data);
         _incrSearchStats(kvUrl, kvToken);
@@ -189,6 +194,8 @@ export default async function handler(req, res) {
       cardName: best.productName,
       setName: best.setName,
       url: productId ? `https://www.tcgplayer.com/product/${productId}` : null,
+      fetchedAt: new Date().toISOString(),
+      cacheAgeSec: 0,
     };
     await setCache(kvUrl, kvToken, cacheKey, data);
     _incrSearchStats(kvUrl, kvToken);

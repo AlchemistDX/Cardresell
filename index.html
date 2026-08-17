@@ -4128,7 +4128,90 @@ function attachDropHandlers(cardFactory) {
 // ── eBay sold comps: auto-fetch + populate override ──
 let _compsAbortCard = null; // track which card we're fetching for
 
-// ── Trust bundle: render confidence-scored comp line ──
+// ── Trust bundle: TCG primary + eBay overlay ─────────────────────────
+// Composes a two-row status readout:
+//   Row 1 (always shows if TCG resolved): TCGplayer market · range · updated
+//   Row 2 (only if eBay has ≥2 comps):    eBay sold count + median + confidence pill
+// eBay currently 403s a lot from datacenter IPs; TCG is our source of truth.
+function renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) {
+  const parts = [];
+
+  if (tcg && tcg.market != null && tcg.market > 0) {
+    const src = tcg.source === 'tcgplayer-live' ? 'TCGplayer Live' : 'TCGplayer';
+    const cacheAgeSec = tcg.cacheAgeSec || 0;
+    const ageStr = cacheAgeSec < 60
+      ? 'just now'
+      : cacheAgeSec < 3600
+        ? `${Math.round(cacheAgeSec / 60)} min ago`
+        : `${Math.round(cacheAgeSec / 3600)} hr ago`;
+    const rangeStr = (tcg.low != null && tcg.high != null && tcg.low !== tcg.high)
+      ? ` · range <strong style="color:var(--text)">$${Number(tcg.low).toFixed(2)}–$${Number(tcg.high).toFixed(2)}</strong>`
+      : '';
+    const tcgUrl = tcg.url ? `<a href="${tcg.url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${src} ↗</a>` : src;
+    parts.push(
+      `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .55rem;line-height:1.4">` +
+        `<span class="trust-pill" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.55);color:#4ade80;font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">Market price</span>` +
+        `<strong style="color:var(--gold)">$${Number(tcg.market).toFixed(2)}</strong>` +
+        ` · ${tcgUrl}` +
+        rangeStr +
+        ` <span style="opacity:.6;font-size:.68rem">· ${ageStr}</span>` +
+      `</div>`
+    );
+  }
+
+  // Row 2: eBay sold comps overlay (only when we actually got comps)
+  if (ebay && ebay.count >= 2 && ebay.median != null) {
+    const conf = ebay.confidence || 'insufficient';
+    const reasons = (ebay.confidenceReasons || []).join(' · ');
+    const outliersRemoved = ebay.outliersRemoved || 0;
+    const cacheAgeSec = ebay.cacheAgeSec || 0;
+    const pillMap = {
+      high:         { bg: 'rgba(34,197,94,.15)',  border: 'rgba(34,197,94,.55)',  color: '#4ade80', label: 'High' },
+      medium:       { bg: 'rgba(245,158,11,.15)', border: 'rgba(245,158,11,.55)', color: '#fbbf24', label: 'Medium' },
+      low:          { bg: 'rgba(239,68,68,.15)',  border: 'rgba(239,68,68,.55)',  color: '#f87171', label: 'Low' },
+      insufficient: { bg: 'rgba(148,163,184,.15)',border: 'rgba(148,163,184,.55)',color: '#94a3b8', label: 'Sparse' },
+    };
+    const pill = pillMap[conf] || pillMap.insufficient;
+    const ageStr = cacheAgeSec < 60
+      ? 'just now'
+      : cacheAgeSec < 3600
+        ? `${Math.round(cacheAgeSec / 60)} min ago`
+        : `${Math.round(cacheAgeSec / 3600)} hr ago`;
+    const rangeStr = (ebay.low != null && ebay.high != null && ebay.low !== ebay.high)
+      ? ` · range <strong style="color:var(--text)">$${Number(ebay.low).toFixed(2)}–$${Number(ebay.high).toFixed(2)}</strong>`
+      : '';
+    const outlierTip = outliersRemoved > 0
+      ? ` <span class="trust-info" title="${outliersRemoved} outlier${outliersRemoved === 1 ? '' : 's'} filtered from ${ebay.rawCount || ebay.count} raw comps. Prices outside 1.5× IQR or 30%–300% of median were removed.">ⓘ</span>`
+      : '';
+    const ebayUrl = ebay.searchUrl
+      ? `<a href="${ebay.searchUrl}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">eBay ↗</a>`
+      : 'eBay';
+    parts.push(
+      `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.3rem;font-size:.78rem;line-height:1.4">` +
+        `<span class="trust-pill" style="background:${pill.bg};border:1px solid ${pill.border};color:${pill.color};font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">${pill.label}</span>` +
+        `<strong style="color:var(--text)">${ebay.count} sold</strong>` +
+        ` · median <strong style="color:var(--text)">$${Number(ebay.median).toFixed(2)}</strong>` +
+        rangeStr +
+        ` · ${ebayUrl}` +
+        ` <span style="opacity:.55;font-size:.68rem">· ${ageStr}</span>` +
+        outlierTip +
+        (reasons ? `<span style="opacity:.6;font-size:.68rem;width:100%;margin-top:.15rem">${reasons}</span>` : '') +
+      `</div>`
+    );
+  } else if (fallbackEbayUrl) {
+    // Discreet eBay link when comps are unavailable. Neutral wording —
+    // don't read as "this card doesn't sell".
+    parts.push(
+      `<div style="margin-top:.3rem;font-size:.72rem">` +
+        `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:none;opacity:.75">View sold comps on eBay ↗</a>` +
+      `</div>`
+    );
+  }
+
+  return parts.join('');
+}
+
+// Legacy renderer (kept for any callers still using it)
 function renderTrustLine(data) {
   const med = data.median;
   const cnt = data.count;
@@ -4211,101 +4294,73 @@ async function fetchAndApplySoldComps(forceRefresh) {
   const gradeVal = selGradePill?.dataset?.val;
   const grade = (gradeVal && gradeVal !== 'no') ? gradeVal : '';
 
+  // Build fallback eBay URL regardless of what the API returns
+  const _num = card.number ? card.number.replace(/^0+/, '') : '';
+  const _fbQ = encodeURIComponent([card.name, card.setName, _num, grade].filter(Boolean).join(' '));
+  const _sacat = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
+  const fallbackEbayUrl = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${_fbQ}&_sacat=${_sacat}&LH_Sold=1&LH_Complete=1&_sop=12`);
+
+  // Fire TCG + eBay in parallel. TCG is source of truth, eBay is bonus.
+  const tcgParams = new URLSearchParams({ name: card.name });
+  if (card.setName) tcgParams.set('set', card.setName);
+  if (card.number)  tcgParams.set('number', card.number);
+  if (card.rarity)  tcgParams.set('rarity', card.rarity);
+
+  const ebayParams = new URLSearchParams({ q, limit: '15' });
+  if (grade) ebayParams.set('grade', grade);
+
+  const clientTimeoutMs = 10000;
+  const _clientController = new AbortController();
+  const _clientTimeoutId  = setTimeout(() => _clientController.abort(), clientTimeoutMs);
+
+  const tcgP  = fetch('/api/tcg-price?'  + tcgParams.toString(),  { signal: _clientController.signal })
+    .then(r => r.ok ? r.json() : null).catch(() => null);
+  const ebayP = fetch('/api/ebay-sold?'  + ebayParams.toString(), { signal: _clientController.signal })
+    .then(r => r.ok ? r.json() : null).catch(() => null);
+
+  let tcg, ebay;
   try {
-    const params = new URLSearchParams({ q, limit: '15' });
-    if (grade) params.set('grade', grade);
-    // Pass current TCG market price for cross-source sanity check
-    const _tcgPriceEl = document.getElementById('cardPriceDisplay');
-    const _tcgMarketVal = parseFloat(_tcgPriceEl?.dataset?.market || _tcgPriceEl?.textContent?.replace(/[^0-9.]/g,'')) || 0;
-    if (_tcgMarketVal > 0) params.set('tcgMarket', _tcgMarketVal.toFixed(2));
-    // Cap the client-side wait at 10s (server has its own 8s cap). Without
-    // this, if the API endpoint stalls the status indicator sits on
-    // '⏳ Fetching eBay sold comps…' indefinitely and the card feels frozen.
-    const _clientController = new AbortController();
-    const _clientTimeoutId  = setTimeout(() => _clientController.abort(), 10000);
-    let r;
-    try {
-      r = await fetch('/api/ebay-sold?' + params.toString(), { signal: _clientController.signal });
-    } finally {
-      clearTimeout(_clientTimeoutId);
-    }
-    if (!r.ok) throw new Error('API ' + r.status);
-    const data = await r.json();
+    [tcg, ebay] = await Promise.all([tcgP, ebayP]);
+  } finally {
+    clearTimeout(_clientTimeoutId);
+  }
 
-    // If card changed while fetching, abort
-    if (_compsAbortCard !== cardKey) return;
+  // If card changed while fetching, abort
+  if (_compsAbortCard !== cardKey) return;
 
-    // Cache the raw median so we can restore it when the user toggles back to Raw
-    // after viewing graded prices. Without this, going Raw → PSA → Raw shows the
-    // TCGplayer market number instead of the eBay median the user originally saw,
-    // which reads as "wrong price on Raw".
-    if (!grade && data && data.median != null) {
-      window._rawMedianCache = window._rawMedianCache || {};
-      window._rawMedianCache[cardKey] = data.median;
-    }
+  // Feed eBay tcgMarket after the fact if TCG resolved and eBay didn't get it
+  // (eBay endpoint already got the query; we're just retrieving results here).
 
-    if (!data.count || data.count === 0 || data.error) {
-      const _num2 = card.number ? card.number.replace(/^0+/, '') : '';
-      const fbQuery2 = encodeURIComponent([card.name, card.setName, _num2].filter(Boolean).join(' '));
-      const _sacat2 = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
-      const fbUrl2   = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery2}&_sacat=${_sacat2}&LH_Sold=1&LH_Complete=1&_sop=12`;
-      // eBay blocks server-side automated requests, so we can't always fetch
-      // sold-comp aggregates. Fall back to a direct link — keep the wording
-      // neutral so it doesn't read as "this card doesn't sell".
-      statusTxt.innerHTML =
-        `<a href="${buildEbayUrl(fbUrl2)}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">See sold comps on eBay →</a>`;
-      statusEl.style.display = 'flex';
-      return;
-    }
+  // Cache raw eBay median for Raw↔Graded toggle memory
+  if (!grade && ebay && ebay.median != null) {
+    window._rawMedianCache = window._rawMedianCache || {};
+    window._rawMedianCache[cardKey] = ebay.median;
+  }
 
-    const med = data.median;
-    const avg = data.avg;
-    const cnt = data.count;
-
-    // Auto-populate override with median if user hasn't typed one.
-    // Guard: only auto-populate when the current grader pill is Raw. If the
-    // user has already toggled to PSA/BGS/CGC/etc while this async fetch was
-    // in flight, setting the override would block the graded price display.
-    const ovField = document.getElementById('priceOverride');
-    const currentGraderPill = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
-    const gradedRequest     = !!grade; // this fetch was for a specific grade
-    const isRawContext      = currentGraderPill === 'no' && !gradedRequest;
-    if (ovField && isRawContext && (!ovField.value || forceRefresh)) {
-      ovField.value = med.toFixed(2);
+  // Populate priceOverride with best available price when user hasn't typed one
+  const ovField = document.getElementById('priceOverride');
+  const currentGraderPill = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
+  const gradedRequest     = !!grade;
+  const isRawContext      = currentGraderPill === 'no' && !gradedRequest;
+  if (ovField && isRawContext && (!ovField.value || forceRefresh)) {
+    // Prefer eBay median when we have real comps (≥2), otherwise TCG market
+    const bestPrice = (ebay && ebay.count >= 2 && ebay.median != null)
+      ? ebay.median
+      : (tcg && tcg.market != null ? tcg.market : null);
+    if (bestPrice != null) {
+      ovField.value = Number(bestPrice).toFixed(2);
       calc();
     }
+  }
 
-    statusTxt.innerHTML = renderTrustLine(data);
-    statusEl.style.display = 'flex';
+  // Render composed price status (TCG line always, eBay overlay when available)
+  statusTxt.innerHTML = renderPriceStatus({ tcg, ebay, fallbackEbayUrl });
+  statusEl.style.display = 'flex';
 
-  } catch(e) {
-    if (_compsAbortCard !== cardKey) return;
-    // Fallback: use TCGPlayer market price as reference, link to eBay sold
-    const _num3 = card.number ? card.number.replace(/^0+/, '') : '';
-    const fbQuery = encodeURIComponent([card.name, card.setName, _num3].filter(Boolean).join(' '));
-    const _sacat3 = (card.game === 'yugioh' || card.game === 'mtg') ? '183454' : '2536';
-    const fbUrlRaw = `https://www.ebay.com/sch/i.html?_nkw=${fbQuery}&_sacat=${_sacat3}&LH_Sold=1&LH_Complete=1&_sop=12`;
-    const fbUrl    = buildEbayUrl(fbUrlRaw);
-    // Try to get TCG market price from the price display
-    const tcgPriceEl = document.getElementById('cardPriceDisplay');
-    const tcgRaw = tcgPriceEl?.dataset?.market || tcgPriceEl?.textContent?.replace(/[^0-9.]/g,'');
-    const tcgPrice = parseFloat(tcgRaw);
-    if (tcgPrice > 0) {
-      // Auto-populate override with TCG market price as starting reference
-      const ovField = document.getElementById('priceOverride');
-      if (ovField && !ovField.value) {
-        ovField.value = tcgPrice.toFixed(2);
-        calc();
-      }
-      statusTxt.innerHTML =
-        `Using TCGPlayer market price · ` +
-        `<a href="${fbUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
-    } else {
-      statusTxt.innerHTML =
-        `<a href="${fbUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View eBay sold →</a>`;
-    }
-    statusEl.style.display = 'flex';
-    console.error('fetchAndApplySoldComps error:', e);
+  // If neither source resolved, show a graceful fallback link
+  if (!tcg?.market && !(ebay?.count >= 2)) {
+    statusTxt.innerHTML =
+      `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View sold comps on eBay →</a>`;
   }
 }
 
