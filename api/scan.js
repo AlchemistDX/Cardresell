@@ -270,7 +270,11 @@ Respond ONLY with valid JSON, no explanation:
       };
       if (isGpt5) {
         body.reasoning_effort = 'low';
-        body.max_completion_tokens = isDeepGrade ? 2500 : (isGradeMode ? 2000 : 1500);
+        // GPT-5 reasoning tokens count toward max_completion_tokens.
+        // Even at 'low' effort, reasoning can eat 500-1500 tokens before
+        // any visible output. Give a generous budget so real output isn't
+        // truncated / empty.
+        body.max_completion_tokens = isDeepGrade ? 5000 : (isGradeMode ? 4000 : 3000);
       } else {
         body.max_tokens = isDeepGrade ? 700 : (isGradeMode ? 500 : 300);
       }
@@ -284,38 +288,55 @@ Respond ONLY with valid JSON, no explanation:
       });
     }
 
-    let modelUsed = 'gpt-5';
-    let openaiRes = await callModel('gpt-5');
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text().catch(() => '');
-      console.warn('gpt-5 failed, falling back to gpt-4o:', openaiRes.status, errText.slice(0, 200));
-      modelUsed = 'gpt-4o';
-      openaiRes = await callModel('gpt-4o');
+    // Try gpt-5 first, then gpt-4o. Fall through on 3 conditions:
+    //   (1) HTTP error on the response
+    //   (2) empty message content (gpt-5 can burn all tokens on reasoning)
+    //   (3) JSON parse failure (model returned prose instead of JSON)
+    async function tryModel(modelId) {
+      const r = await callModel(modelId);
+      if (!r.ok) {
+        const errText = await r.text().catch(() => '');
+        return { ok: false, reason: 'http', status: r.status, errText: errText.slice(0, 300) };
+      }
+      const j = await r.json();
+      const content = j.choices?.[0]?.message?.content || '';
+      const finishReason = j.choices?.[0]?.finish_reason || '';
+      if (!content.trim()) {
+        return { ok: false, reason: 'empty', finish_reason: finishReason, usage: j.usage };
+      }
+      try {
+        const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        // Handle cases where model wrapped JSON in extra text: find first {...} block.
+        const jsonStart = cleaned.indexOf('{');
+        const jsonEnd = cleaned.lastIndexOf('}');
+        const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? cleaned.slice(jsonStart, jsonEnd + 1) : cleaned;
+        return { ok: true, cardInfo: JSON.parse(jsonStr), raw: content };
+      } catch(e) {
+        return { ok: false, reason: 'parse', raw: content.slice(0, 500) };
+      }
     }
 
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
-      console.error('OpenAI error (both models failed):', openaiRes.status, errText);
-      // Refund whatever credits we deducted (1 for quick / identify, 2 for deep grade)
+    let modelUsed = 'gpt-5';
+    let attempt = await tryModel('gpt-5');
+    if (!attempt.ok) {
+      console.warn('gpt-5 attempt failed, falling back to gpt-4o:', attempt.reason,
+                   attempt.reason === 'http' ? `${attempt.status} ${attempt.errText}` :
+                   attempt.reason === 'empty' ? `finish=${attempt.finish_reason} usage=${JSON.stringify(attempt.usage)}` :
+                   attempt.raw);
+      modelUsed = 'gpt-4o';
+      attempt = await tryModel('gpt-4o');
+    }
+
+    if (!attempt.ok) {
+      console.error('Both models failed:', attempt);
       await refundCredits();
+      if (attempt.reason === 'parse') {
+        return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo. Credits refunded.' });
+      }
       return res.status(502).json({ error: 'Scanner temporarily unavailable. Credits refunded.' });
     }
 
-    const openaiData = await openaiRes.json();
-    const content = openaiData.choices?.[0]?.message?.content || '';
-
-    // Parse the JSON response from GPT-4o
-    let cardInfo;
-    try {
-      // Strip markdown code blocks if present
-      const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      cardInfo = JSON.parse(cleaned);
-    } catch(e) {
-      console.error('GPT-4o parse error:', content);
-      // Refund on parse failure — user didn't get a valid grade.
-      await refundCredits();
-      return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo. Credits refunded.' });
-    }
+    const cardInfo = attempt.cardInfo;
 
     // If the model returned empty card_name but populated candidates,
     // promote the top candidate — some models zero out the top-level
