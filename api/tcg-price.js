@@ -48,7 +48,8 @@ export default async function handler(req, res) {
 
   if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
-  const cacheKey = `${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // Cache key includes 'v2' so the tcgcsv rewrite invalidates stale 'tcgplayer' entries
+  const cacheKey = `v2|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
