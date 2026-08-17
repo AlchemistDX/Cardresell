@@ -249,43 +249,52 @@ Extract for the best match:
 Respond ONLY with valid JSON, no explanation:
 {"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"jp_name":"","rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
 
-    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        max_tokens: isDeepGrade ? 700 : (isGradeMode ? 500 : 300),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: dataUrl, detail: 'high' }
-              },
-              // Include back image for grade mode if provided
-              ...(isGradeMode && backDataUrl ? [{
-                type: 'image_url',
-                image_url: { url: backDataUrl, detail: 'high' }
-              }] : []),
-              // Deep Grade: include whatever edge close-ups the user provided (2–4)
-              ...edgeImages.map(e => ({
-                type: 'image_url',
-                image_url: { url: e.dataUrl, detail: 'high' }
-              })),
-              { type: 'text', text: prompt }
-            ]
-          }
-        ]
-      })
-    });
+    // Build the vision content once so we can retry with a different model if needed.
+    const visionContent = [
+      { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+      ...(isGradeMode && backDataUrl ? [{ type: 'image_url', image_url: { url: backDataUrl, detail: 'high' } }] : []),
+      ...edgeImages.map(e => ({ type: 'image_url', image_url: { url: e.dataUrl, detail: 'high' } })),
+      { type: 'text', text: prompt }
+    ];
+
+    // 2026-08-16: try gpt-5 first (native multimodal, 84.2% MMMU vs
+    // gpt-4o's 72.2% — huge win on card ID / OCR-through-glare). If
+    // it errors (org tier not enabled, unknown-param rejection, etc.)
+    // fall back to gpt-4o so identify never hard-fails on a model change.
+    async function callModel(modelId) {
+      const isGpt5 = modelId.startsWith('gpt-5');
+      const body = {
+        model: modelId,
+        messages: [{ role: 'user', content: visionContent }],
+      };
+      if (isGpt5) {
+        body.reasoning_effort = 'low';
+        body.max_completion_tokens = isDeepGrade ? 2500 : (isGradeMode ? 2000 : 1500);
+      } else {
+        body.max_tokens = isDeepGrade ? 700 : (isGradeMode ? 500 : 300);
+      }
+      return fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    }
+
+    let modelUsed = 'gpt-5';
+    let openaiRes = await callModel('gpt-5');
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text().catch(() => '');
+      console.warn('gpt-5 failed, falling back to gpt-4o:', openaiRes.status, errText.slice(0, 200));
+      modelUsed = 'gpt-4o';
+      openaiRes = await callModel('gpt-4o');
+    }
 
     if (!openaiRes.ok) {
       const errText = await openaiRes.text();
-      console.error('OpenAI error:', openaiRes.status, errText);
+      console.error('OpenAI error (both models failed):', openaiRes.status, errText);
       // Refund whatever credits we deducted (1 for quick / identify, 2 for deep grade)
       await refundCredits();
       return res.status(502).json({ error: 'Scanner temporarily unavailable. Credits refunded.' });
