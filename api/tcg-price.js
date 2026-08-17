@@ -1,6 +1,14 @@
-// /api/tcg-price — Live TCGPlayer prices for any card including new sets
-// GET ?name=Charizard&set=Ascended+Heroes&number=294
-// Returns: { market, low, mid, high, source }
+// /api/tcg-price — Reliable TCGplayer prices for any card
+// GET ?name=Charizard&set=Base+Set&number=4&rarity=Holo+Rare
+// Returns: { market, low, mid, high, source, productId, url, cardName, setName }
+//
+// 2026-08-16 rewrite: routes tcgcsv.com FIRST (source of truth for TCGplayer
+// pricing — same underlying data, but as a static daily-refreshed catalog
+// so we can search deterministically instead of relying on TCGplayer's
+// flaky text-search endpoint). Falls back to TCGplayer live search only
+// when tcgcsv can't resolve the card (e.g. brand-new sets not yet indexed).
+
+import { resolveCardPrice } from './_tcgcsv.js';
 
 const CACHE_TTL_SEC = 30 * 60; // 30 min
 
@@ -46,26 +54,51 @@ export default async function handler(req, res) {
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached) {
-    // Cache hit still counts as a search from the user's perspective — they typed
-    // a query and got a real price back. Increment counters (fire-and-forget).
     _incrSearchStats(kvUrl, kvToken);
     return res.status(200).json({ ...cached, cached: true });
   }
 
+  // ── PRIMARY: tcgcsv.com catalog (deterministic; refreshed daily) ────────
   try {
-    // Search TCGPlayer for the card
+    if (set) {
+      const r = await resolveCardPrice({
+        kvUrl, kvToken,
+        setName: set,
+        cardName: name,
+        cardNumber: number,
+        rarity: rarity,
+      });
+      if (r.ok && r.market != null) {
+        const data = {
+          market: r.market,
+          low:    r.low  ?? (r.market * 0.85),
+          mid:    r.mid  ?? r.market,
+          high:   r.high ?? (r.market * 1.15),
+          source: 'tcgcsv',
+          variant: r.variant,
+          productId: r.product?.productId ?? null,
+          cardName: r.product?.name ?? name,
+          setName: r.product?.setName ?? set,
+          url: r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null,
+        };
+        await setCache(kvUrl, kvToken, cacheKey, data);
+        _incrSearchStats(kvUrl, kvToken);
+        return res.status(200).json(data);
+      }
+    }
+  } catch(e) {
+    console.error('tcgcsv resolve error:', e.message);
+  }
+
+  // ── FALLBACK: live TCGplayer search ─────────────────────────────────────
+  // Used when tcgcsv can't resolve (missing set, brand-new release,
+  // or ambiguous name). Same scoring logic as the previous version.
+  try {
     const searchBody = {
       algorithm: 'sales_synonym_v2',
       from: 0,
       size: 10,
-      filters: {
-        // Don't hard-filter on setName — TCGplayer uses prefixed names like
-        // "ME04: Chaos Rising" not "Chaos Rising". We rank by set match below
-        // to pick the right card instead of dropping results.
-        term: { productLineName: ['pokemon'] },
-        range: {},
-        match: {}
-      },
+      filters: { term: { productLineName: ['pokemon'] }, range: {}, match: {} },
       listingSearch: {
         filters: { term: {}, range: { quantity: { gte: 1 } }, exclude: { channelExclusion: 0 } },
         context: { cart: {} }
@@ -74,9 +107,7 @@ export default async function handler(req, res) {
       settings: { useFuzzySearch: true, didYouMean: {} },
       sort: {}
     };
-
     const searchUrl = `https://mp-search-api.tcgplayer.com/v1/search/request?q=${encodeURIComponent(name)}&productLineName=pokemon&page=0&pageSize=10&channel=0${set ? `&setName=${encodeURIComponent(set)}` : ''}`;
-
     const sr = await fetch(searchUrl, {
       method: 'POST',
       headers: {
@@ -87,27 +118,17 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify(searchBody)
     });
-
-    if (!sr.ok) throw new Error(`TCGPlayer search ${sr.status}`);
-
+    if (!sr.ok) throw new Error(`TCGplayer search ${sr.status}`);
     const sdata = await sr.json();
     const results = sdata?.results?.[0]?.results || [];
-
     if (results.length === 0) {
       return res.status(200).json({ market: null, low: null, mid: null, high: null, source: 'tcgplayer', count: 0 });
     }
 
-    // Score each result — prefer set match, then rarity match, then number match, then name match
     const setLower  = set.toLowerCase();
     const nameLower = name.toLowerCase();
     const rarityLo  = rarity.toLowerCase();
     const numClean  = number ? number.replace(/^0+/, '') : '';
-
-    // 2026-08-17: rarity keywords that mark this as a special printing.
-    // TCGPlayer product names encode variant in the number: base = plain number
-    // (e.g. "Ampharos - 029"), specials show the full-set-total form
-    // (e.g. "Ampharos (Illustration Rare) - 090/086"). We need to lift IR/SR/SIR
-    // matches when the scanner said this is one of those.
     const specialKeywords = ['illustration', 'special', 'secret', 'hyper', 'rainbow', 'ultra', 'full art', 'alt art', 'gold', 'shiny', 'v-max', 'vstar', 'v union', 'trainer gallery'];
     const isSpecial = specialKeywords.some(kw => rarityLo.includes(kw));
 
@@ -115,50 +136,31 @@ export default async function handler(req, res) {
       const productName = (r.productName || '').toLowerCase();
       const rSetName    = (r.setName || '').toLowerCase();
       let score = 0;
-      // Set match — huge weight (prevents "Charizard + set=Chaos Rising" matching a random tin)
       if (setLower && rSetName.includes(setLower)) score += 100;
-
-      // Rarity match — look for keyword in the productName. TCGPlayer encodes
-      // variant type either in the name ("Illustration Rare") or number
-      // ("090/086" = a special printing since printedTotal is smaller).
       if (isSpecial) {
-        // Boost products whose name contains a matching special keyword
         for (const kw of specialKeywords) {
           if (rarityLo.includes(kw) && productName.includes(kw)) { score += 80; break; }
         }
-        // Boost products whose number is in "NNN/NNN" form (special printing indicator)
         if (numClean && productName.includes(`${numClean}/`)) score += 60;
       } else if (rarityLo && (rarityLo === 'common' || rarityLo === 'uncommon' || rarityLo === 'rare')) {
-        // Non-special — penalize products whose name shouts special-printing keywords
         for (const kw of specialKeywords) {
           if (productName.includes(kw)) { score -= 40; break; }
         }
       }
-
-      // Number match
       if (numClean && (productName.includes(`${numClean}/`) || productName.includes(`- ${numClean}`) || productName.includes(`#${numClean}`))) {
         score += 50;
       }
-      // Name is present (tiebreaker)
       if (productName.startsWith(nameLower)) score += 10;
       else if (productName.includes(nameLower)) score += 5;
       return { r, score };
     });
     scored.sort((a, b) => b.score - a.score);
     let best = scored[0].r;
-
     const productId = best.productId ? Math.round(best.productId) : null;
     let market = best.marketPrice || null;
     let low = best.lowPrice || null;
     let mid = best.midPrice || null;
     let high = best.highPrice || null;
-
-    // If we have a productId, get detailed prices
-    // 2026-08-16: previous version only overwrote market+low and never
-    // populated mid/high from pricepoints, which is why vintage cards
-    // (Mewtwo Star Holon Phantoms) showed Low $0 / High $0 with just a
-    // mid figure. Now we pull all four fields from pricepoints and
-    // treat the search-endpoint values as backup.
     if (productId) {
       try {
         const pr = await fetch(`https://mpapi.tcgplayer.com/v2/product/${productId}/pricepoints?includeDirectSales=false`, {
@@ -166,7 +168,6 @@ export default async function handler(req, res) {
         });
         if (pr.ok) {
           const prices = await pr.json();
-          // Find holofoil or normal printing
           const holofoil = prices.find(p => p.printingType === 'Holofoil' || p.printingType === 'Foil');
           const normal = prices.find(p => p.printingType === 'Normal');
           const best_price = holofoil || normal || prices[0];
@@ -180,102 +181,14 @@ export default async function handler(req, res) {
       } catch(e) {}
     }
 
-    // 2026-08-16: vintage / gold-star / high-value cards often have
-    // stale TCGplayer market data (single listing pinned high, or a
-    // frozen mid with $0 low/high). Cross-reference with pokemontcg.io
-    // which aggregates both TCGplayer AND Cardmarket data (Cardmarket
-    // reflects live EU listings, less prone to single-listing skew).
-    // If pokemontcg.io returns a materially different market price
-    // (>2x delta) we flag it and prefer the LOWER of the two so we
-    // don't over- or under-value the user's card based on one source.
-    try {
-      // Use identifying word + number instead of the full quoted name.
-      // Full-name quoted queries fail for cards whose canonical
-      // pokemontcg.io name uses glyphs (Mewtwo ★ vs "Mewtwo Star"),
-      // GX/EX suffixes with different spacing, etc. Wildcard-first-word
-      // + number is much more forgiving and we filter client-side below.
-      const firstWord = (name.split(/\s+/)[0] || '').replace(/["\\]/g, '');
-      const cleanNum = number ? number.replace(/\/.*$/, '').trim() : '';
-      const ptcgQuery = cleanNum && firstWord
-        ? `name:${firstWord}* number:${cleanNum}`
-        : firstWord
-          ? `name:${firstWord}*`
-          : '';
-      if (!ptcgQuery) throw new Error('no ptcg query');
-      const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(ptcgQuery)}&pageSize=10&select=id,name,set,number,tcgplayer,cardmarket`;
-      const ptcgRes = await fetch(ptcgUrl, { signal: AbortSignal.timeout(4000) });
-      if (ptcgRes.ok) {
-        const ptcgJson = await ptcgRes.json();
-        const ptcgCards = ptcgJson.data || [];
-        // Prefer set match, else first
-        const setLo = set.toLowerCase();
-        const ptcgMatch = (setLo ? ptcgCards.find(c => (c.set?.name || '').toLowerCase().includes(setLo)) : null) || ptcgCards[0];
-        if (ptcgMatch) {
-          const tp = ptcgMatch.tcgplayer?.prices || {};
-          // Pick the highest-market printing (holofoil, reverseHolofoil, normal)
-          const printings = Object.values(tp).filter(v => v && (v.market > 0 || v.mid > 0));
-          const bestPrinting = printings.sort((a,b) => (b.market || b.mid || 0) - (a.market || a.mid || 0))[0];
-          const cmAvg = ptcgMatch.cardmarket?.prices?.averageSellPrice;
-          const cmTrend = ptcgMatch.cardmarket?.prices?.trendPrice;
-          const cmAvg30 = ptcgMatch.cardmarket?.prices?.avg30;
-          // Cardmarket is in EUR — apply rough USD conversion (2026 ~1.08)
-          const cm_usd = (cmAvg30 || cmTrend || cmAvg) ? ((cmAvg30 || cmTrend || cmAvg) * 1.08) : null;
-          const ptcgMarket = bestPrinting?.market || bestPrinting?.mid || cm_usd || null;
-
-          // Case A: TPL returned market but its range collapsed (low=$0
-          // AND high=$0) — that means TPL only has one stale data point
-          // and pokemontcg.io's aggregated market (TPL + Cardmarket) is
-          // more trustworthy. Prefer pokemontcg.io + rebuild the range.
-          const tplRangeBroken = market > 0 && !(low > 0) && !(high > 0);
-          if (tplRangeBroken && ptcgMarket) {
-            market = ptcgMarket;
-            low  = bestPrinting?.low  || ptcgMarket * 0.85;
-            mid  = bestPrinting?.mid  || ptcgMarket;
-            high = bestPrinting?.high || ptcgMarket * 1.15;
-          }
-          // Case B: TPL and pokemontcg.io disagree by >2x. Prefer
-          // pokemontcg.io because it aggregates multiple sources.
-          else if (ptcgMarket && market && Math.max(ptcgMarket, market) / Math.min(ptcgMarket, market) > 2) {
-            market = ptcgMarket;
-            if (bestPrinting) {
-              low  = bestPrinting.low  ?? ptcgMarket * 0.85;
-              mid  = bestPrinting.mid  ?? ptcgMarket;
-              high = bestPrinting.high ?? ptcgMarket * 1.15;
-            } else {
-              low  = ptcgMarket * 0.85;
-              mid  = ptcgMarket;
-              high = ptcgMarket * 1.15;
-            }
-          }
-          // Case C: no TPL market at all — use pokemontcg.io directly.
-          else if (!market && ptcgMarket) {
-            market = ptcgMarket;
-            if (bestPrinting) {
-              low  = bestPrinting.low  ?? ptcgMarket * 0.85;
-              mid  = bestPrinting.mid  ?? ptcgMarket;
-              high = bestPrinting.high ?? ptcgMarket * 1.15;
-            } else if (!(mid > 0)) {
-              mid = ptcgMarket;
-            }
-          }
-        }
-      }
-    } catch(e) {
-      /* pokemontcg.io cross-check is best-effort */
-    }
-
     const data = {
-      market,
-      low,
-      mid,
-      high,
-      source: 'tcgplayer',
+      market, low, mid, high,
+      source: 'tcgplayer-live',
       productId,
       cardName: best.productName,
       setName: best.setName,
       url: productId ? `https://www.tcgplayer.com/product/${productId}` : null,
     };
-
     await setCache(kvUrl, kvToken, cacheKey, data);
     _incrSearchStats(kvUrl, kvToken);
     return res.status(200).json(data);
@@ -286,17 +199,13 @@ export default async function handler(req, res) {
   }
 }
 
-// ── Search-counter increment (fire-and-forget) ──
-// Powers the landing-page social-proof counter. We increment both a
-// lifetime total and a per-day bucket. Failures are swallowed — stats
-// are best-effort and should never break the actual price lookup.
+// ── Search-counter increment (fire-and-forget) ──────────────────────────
 function _todayKey() {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
 }
 function _incrSearchStats(kvUrl, kvToken) {
   if (!kvUrl || !kvToken) return;
-  // Don't await — stats must not add latency to the user's price lookup.
   fetch(`${kvUrl}/incr/${encodeURIComponent('stats:searches:total')}`, {
     method: 'POST', headers: { Authorization: `Bearer ${kvToken}` }
   }).catch(() => {});
