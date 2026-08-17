@@ -1582,7 +1582,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="gradeEdgeRightInput"  accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'right')" />
   <!-- Bulk scan file inputs -->
   <input type="file" id="bulkUploadInput" accept="image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
-  <input type="file" id="bulkCameraInput" accept="image/*" capture="environment" style="display:none" onchange="processBulkCameraCapture(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- Preview image -->
@@ -11821,89 +11820,153 @@ function closeBulkScan() {
 }
 
 function _bulkShowSection(section) {
-  // section: 'modePicker' | 'creditConfirm' | 'processing' | 'costSheet'
+  // section: 'modePicker' | 'rapidCam' | 'creditConfirm' | 'processing' | 'costSheet'
   document.getElementById('bulkModePicker').style.display     = section === 'modePicker'    ? 'flex' : 'none';
+  const rapidEl = document.getElementById('bulkRapidCam');
+  if (rapidEl) rapidEl.style.display                           = section === 'rapidCam'      ? 'flex' : 'none';
   document.getElementById('bulkCreditConfirm').style.display  = section === 'creditConfirm' ? 'flex' : 'none';
   document.getElementById('bulkProcessing').style.display     = section === 'processing'    ? 'flex' : 'none';
   document.getElementById('bulkCostSheet').style.display      = section === 'costSheet'     ? 'flex' : 'none';
+  // Leaving rapidCam — stop the live camera to release the hardware.
+  if (section !== 'rapidCam' && window._bulkRapidStream) {
+    try { window._bulkRapidStream.getTracks().forEach(t => t.stop()); } catch(_) {}
+    window._bulkRapidStream = null;
+  }
 }
 
-/* ── Camera mode: user taps to capture one card at a time ── */
-function startBulkCamera() {
-  window._bulkMode = 'camera';
-  document.getElementById('bulkCameraInput').click();
-}
-
-/* ── Rapid Scan mode: camera auto-re-opens after every successful capture so
-   the user can flip through a stack without tapping "Add Another" between
-   cards. The camera input's native capture UI stays on the stack from the
-   original user gesture; each subsequent .click() keeps working because we
-   fire it inside the input's own onchange handler (which counts as a user
-   gesture on iOS/Safari + Android Chrome). Tap "Done — Scan All" to break
-   the loop and start processing. ── */
-function startBulkRapid() {
+/* ── Rapid Scan mode: opens a live camera feed via getUserMedia. Each shutter
+   tap grabs a still frame from the video element into a hidden canvas, no
+   native camera picker involved, no gesture chain to lose. Filmstrip shows
+   captured thumbs; Done routes into the normal credit-confirm → processing
+   pipeline. If the browser lacks getUserMedia or the user denies permission,
+   we send them to Upload photos instead. ── */
+async function startBulkRapid() {
   window._bulkMode = 'rapid';
-  document.getElementById('bulkCameraInput').click();
+  // Feature-detect — iOS Safari needs 11+, Android Chrome always has it.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Live camera not supported here — use Upload photos instead.');
+    window._bulkMode = null;
+    return;
+  }
+  // Reset queue for this rapid session
+  (window._bulkQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
+  window._bulkQueue = [];
+  _bulkRapidRenderStrip();
+  _bulkRapidUpdateCounter();
+  _bulkShowSection('rapidCam');
+
+  const video = document.getElementById('bulkRapidVideo');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1440 }
+      },
+      audio: false
+    });
+    window._bulkRapidStream = stream;
+    video.srcObject = stream;
+    await video.play().catch(()=>{});
+  } catch(err) {
+    console.warn('[rapid] getUserMedia failed', err);
+    showToast('⚠️ Camera permission needed for Rapid Scan.');
+    _bulkShowSection('modePicker');
+    window._bulkMode = null;
+  }
 }
 
-function processBulkCameraCapture(input) {
-  const file = input.files[0];
-  if (!file) return;
-  // Reset the input so the same file can be re-captured
-  input.value = '';
+function closeBulkRapid() {
+  // Discard the rapid session and return to mode picker.
+  (window._bulkQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
+  window._bulkQueue = [];
+  window._bulkMode  = null;
+  _bulkShowSection('modePicker');
+}
 
-  window._bulkQueue.push({ file, objectUrl: URL.createObjectURL(file) });
+function bulkRapidSnap() {
+  const video  = document.getElementById('bulkRapidVideo');
+  const canvas = document.getElementById('bulkRapidCanvas');
+  if (!video || !video.videoWidth) { showToast('Camera still loading…'); return; }
+
+  // Flash animation
+  const flash = document.getElementById('bulkRapidFlash');
+  if (flash) {
+    flash.style.opacity = '.85';
+    setTimeout(() => { flash.style.opacity = '0'; }, 120);
+  }
+
+  // Draw current frame full-res into the offscreen canvas
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  canvas.toBlob(blob => {
+    if (!blob) { showToast('Capture failed — try again'); return; }
+    const file = new File([blob], 'rapid_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+    const objectUrl = URL.createObjectURL(blob);
+    window._bulkQueue.push({ file, objectUrl });
+    _bulkRapidRenderStrip();
+    _bulkRapidUpdateCounter();
+  }, 'image/jpeg', 0.9);
+}
+
+function _bulkRapidUpdateCounter() {
+  const n = (window._bulkQueue || []).length;
+  const counter = document.getElementById('bulkRapidCounter');
+  if (counter) counter.textContent = n + ' queued';
+  const done = document.getElementById('bulkRapidDoneBtn');
+  if (done) {
+    done.disabled = n === 0;
+    done.style.opacity = n === 0 ? '.5' : '1';
+  }
+}
+
+function _bulkRapidRenderStrip() {
+  const strip = document.getElementById('bulkRapidStrip');
+  if (!strip) return;
+  const queue = window._bulkQueue || [];
+  strip.innerHTML = queue.slice(-8).map((q, i) => {
+    const idx = queue.length - Math.min(8, queue.length) + i;
+    return '<div style="position:relative;flex-shrink:0;width:44px;height:60px;border-radius:6px;overflow:hidden;border:1.5px solid rgba(139,92,246,.55);background:#111">' +
+           '<img src="' + q.objectUrl + '" style="width:100%;height:100%;object-fit:cover" />' +
+           '<button onclick="_bulkRapidRemove(' + idx + ')" style="position:absolute;top:-2px;right:-2px;width:18px;height:18px;padding:0;background:rgba(0,0,0,.85);border:1px solid #333;color:#fff;border-radius:50%;font-size:.65rem;font-weight:900;cursor:pointer;line-height:1">×</button>' +
+           '</div>';
+  }).join('');
+}
+
+function _bulkRapidRemove(idx) {
+  const queue = window._bulkQueue || [];
+  if (idx < 0 || idx >= queue.length) return;
+  try { URL.revokeObjectURL(queue[idx].objectUrl); } catch(_){}
+  queue.splice(idx, 1);
+  _bulkRapidRenderStrip();
+  _bulkRapidUpdateCounter();
+}
+
+function bulkRapidDone() {
+  const queue = window._bulkQueue || [];
+  if (!queue.length) { showToast('Snap at least one card first — no cards queued.'); return; }
 
   const credits = (window._idScanCredits || 0);
-  const count   = window._bulkQueue.length;
+  const count   = queue.length;
 
-  const isRapid = window._bulkMode === 'rapid';
-
-  // Show credit confirm screen
-  document.getElementById('bulkCreditConfirmIcon').textContent = isRapid ? '⚡' : '📷';
-  document.getElementById('bulkCreditConfirmMsg').innerHTML = isRapid
-    ? '<strong style="color:#fff">' + count + ' card' + (count>1?'s':'') + ' queued</strong><br>' +
-      'Camera reopens automatically — keep snapping. Tap <strong style="color:rgba(139,92,246,1)">Done</strong> when finished.'
-    : '<strong style="color:#fff">' + count + ' card' + (count>1?'s':'') + ' queued</strong><br>' +
-      'Tap "Add Another" to keep adding, or "Scan All" to process the queue.';
+  document.getElementById('bulkCreditConfirmIcon').textContent = '⚡';
+  document.getElementById('bulkCreditConfirmMsg').innerHTML =
+    '<strong style="color:#fff">' + count + ' card' + (count>1?'s':'') + ' captured</strong><br>' +
+    'Ready to identify + price the whole stack. Each card uses 1 credit.';
   document.getElementById('bulkCreditConfirmCredit').textContent =
     'Uses ' + count + ' credit' + (count>1?'s':'') + ' · You have ' + credits + ' available';
-  _bulkShowSection('creditConfirm');
 
-  // Rename the primary CTA in Rapid mode so users know how to exit the loop.
   const startBtn = document.getElementById('bulkConfirmStartBtn');
-  if (startBtn) {
-    startBtn.textContent = isRapid ? 'Done — Scan All ⚡' : 'Scan All';
-  }
+  if (startBtn) startBtn.textContent = 'Scan All ⚡';
 
-  // Add an "Add Another" option dynamically
-  const addBtn = document.getElementById('bulkConfirmStartBtn');
-  // Put "Add Another" button
-  let addAnother = document.getElementById('bulkAddAnotherBtn');
-  if (!addAnother) {
-    addAnother = document.createElement('button');
-    addAnother.id = 'bulkAddAnotherBtn';
-    addAnother.textContent = '+ Add Another';
-    addAnother.style.cssText = 'padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:99px;font-weight:600;font-size:.85rem;cursor:pointer';
-    addAnother.onclick = function() { document.getElementById('bulkCameraInput').click(); };
-    addBtn.parentNode.insertBefore(addAnother, addBtn);
-  }
-  // Rapid mode hides the manual "Add Another" button (auto-loop replaces it).
-  if (addAnother) addAnother.style.display = isRapid ? 'none' : '';
+  // Remove the manual "Add Another" button if a previous camera session left one behind.
+  const addAnother = document.getElementById('bulkAddAnotherBtn');
+  if (addAnother) addAnother.remove();
 
-  // Rapid mode: re-fire the camera input to keep the loop going. Delay long
-  // enough that iOS Safari has finished dismissing its native camera UI so
-  // .click() actually reopens it. If we chain too fast the second click is
-  // swallowed silently.
-  if (isRapid) {
-    setTimeout(() => {
-      // Bail out if the user cancelled or switched sections in the meantime.
-      if (window._bulkMode !== 'rapid') return;
-      const section = document.getElementById('bulkCreditConfirm');
-      if (!section || section.style.display === 'none') return;
-      try { document.getElementById('bulkCameraInput').click(); } catch(_) {}
-    }, 450);
-  }
+  _bulkShowSection('creditConfirm'); // this call also stops the live stream
 }
 
 /* ── Upload mode: multi-file picker ── */
@@ -13177,18 +13240,11 @@ function _esc(s) {
         <div style="font-size:.66rem;color:rgba(139,92,246,.75);margin-top:.4rem;line-height:1.4">See how close each scan gets you to breaking even.</div>
       </div>
       <div style="font-size:.85rem;color:rgba(255,255,255,.55);text-align:center;margin-bottom:.25rem">How do you want to scan?</div>
-      <button onclick="startBulkCamera()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.6)'" onmouseout="this.style.borderColor='#2a2a2a'">
-        <span style="font-size:1.5rem">📷</span>
-        <div>
-          <div>Camera — one by one</div>
-          <div style="font-size:.72rem;color:rgba(255,255,255,.4);font-weight:400;margin-top:.15rem">Tap to capture each card</div>
-        </div>
-      </button>
       <button onclick="startBulkRapid()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(139,92,246,.06));border:1.5px solid rgba(139,92,246,.55);border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s;position:relative" onmouseover="this.style.borderColor='rgba(139,92,246,1)'" onmouseout="this.style.borderColor='rgba(139,92,246,.55)'">
         <span style="font-size:1.5rem">⚡</span>
         <div style="flex:1">
-          <div>Rapid Scan <span style="padding:.05rem .35rem;margin-left:.3rem;background:rgba(139,92,246,.35);color:#fff;font-size:.55rem;font-weight:900;border-radius:4px;letter-spacing:.05em">NEW</span></div>
-          <div style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:400;margin-top:.15rem">Camera auto-reopens after each shot — keep scanning without tapping</div>
+          <div>Rapid Scan</div>
+          <div style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:400;margin-top:.15rem">Live camera — keep snapping cards, press Done when finished</div>
         </div>
       </button>
       <button onclick="startBulkUpload()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.6)'" onmouseout="this.style.borderColor='#2a2a2a'">
@@ -13198,6 +13254,31 @@ function _esc(s) {
           <div style="font-size:.72rem;color:rgba(255,255,255,.4);font-weight:400;margin-top:.15rem">Select multiple images from your library</div>
         </div>
       </button>
+    </div>
+
+    <!-- Rapid Scan live camera view -->
+    <div id="bulkRapidCam" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:#000;position:relative">
+      <video id="bulkRapidVideo" playsinline autoplay muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>
+      <canvas id="bulkRapidCanvas" style="display:none"></canvas>
+      <!-- Card-frame overlay -->
+      <div style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">
+        <div id="bulkRapidFrame" style="width:min(72vw,320px);aspect-ratio:2.5/3.5;border:2.5px dashed rgba(139,92,246,.75);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);transition:border-color .18s"></div>
+      </div>
+      <!-- Top bar: close + queue count -->
+      <div style="position:absolute;top:0;left:0;right:0;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);pointer-events:auto">
+        <button onclick="closeBulkRapid()" style="padding:.4rem .75rem;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer">✕ Cancel</button>
+        <div id="bulkRapidCounter" style="padding:.4rem .8rem;background:rgba(139,92,246,.85);color:#fff;border-radius:99px;font-size:.8rem;font-weight:800">0 queued</div>
+      </div>
+      <!-- Filmstrip of captured thumbs -->
+      <div id="bulkRapidStrip" style="position:absolute;top:60px;left:0;right:0;padding:.4rem .75rem;display:flex;gap:.35rem;overflow-x:auto;pointer-events:auto"></div>
+      <!-- Bottom bar: shutter + done -->
+      <div style="position:absolute;bottom:0;left:0;right:0;padding:1rem 1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);pointer-events:auto">
+        <div style="width:70px"></div>
+        <button id="bulkRapidShutter" onclick="bulkRapidSnap()" aria-label="Capture" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'"></button>
+        <button id="bulkRapidDoneBtn" onclick="bulkRapidDone()" style="width:70px;padding:.55rem .35rem;background:rgba(139,92,246,1);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.75rem;cursor:pointer;line-height:1.15;opacity:.5" disabled>Done ⚡</button>
+      </div>
+      <!-- Flash effect -->
+      <div id="bulkRapidFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>
     </div>
 
     <!-- Credit confirmation bar (shown before processing) -->
