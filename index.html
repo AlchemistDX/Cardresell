@@ -1344,18 +1344,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <span id="googleName" style="font-size:.75rem;font-weight:600;color:var(--text-muted);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
         <span id="verifiedBadge" title="Email verified" style="display:none;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#22c55e;color:#000;font-size:.62rem;font-weight:900;line-height:1;flex-shrink:0">✓</span>
       </span>
-      <span id="proBadge" class="pro-badge">
+      <button id="proBadge" class="pro-badge" onclick="openPricingModal('header_pro')" title="Manage subscription &amp; buy credits" style="cursor:pointer;border:none;font:inherit">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         PRO
-      </span>
+      </button>
     </div>
-    <button id="getProBtn" class="get-pro-btn" onclick="openPricingModal('header')" title="Upgrade to Pro">
+    <button id="getProBtn" class="get-pro-btn" onclick="openPricingModal('header_upgrade')" title="Upgrade &amp; buy scan credits">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      Get Pro
-    </button>
-    <button id="shopBtn" class="shop-header-btn" onclick="openPricingModal('shopbtn')" title="Plans &amp; Pricing">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-      Shop
+      Upgrade
     </button>
     <a id="googleSignInBtn" href="/signin" style="display:flex;padding:.45rem 1rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;text-decoration:none;align-items:center;gap:.3rem;box-shadow:0 2px 12px rgba(212,175,55,.35);-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;user-select:none">
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -10749,18 +10745,20 @@ async function checkProStatus() {
 }
 
 // ── Update all Pro-related UI elements ──
+// Header now uses a SINGLE context-aware button:
+//   Pro user  → clickable PRO badge (opens pricing modal to manage / buy credits)
+//   Everyone else → "Upgrade" button (opens same pricing modal)
+// The old standalone Shop button is gone — credit packs live inside the same modal.
 function updateProUI() {
   const proBadge   = document.getElementById('proBadge');
   const getProBtn  = document.getElementById('getProBtn');
-  const shopBtn    = document.getElementById('shopBtn');
   const promoBanner= document.getElementById('promoBanner');
 
   if (!window.googleUser) {
-    // Not signed in — hide per-user badges, keep Shop visible
+    // Not signed in — show Upgrade (leads to sign-in on checkout) + no PRO badge
     proBadge?.classList.remove('visible');
-    getProBtn?.classList.remove('visible');
+    getProBtn?.classList.add('visible');
     promoBanner?.classList.remove('visible');
-    if (shopBtn) shopBtn.style.display = 'flex';
     // Show sign-in nudge unless dismissed
     try {
       if (!sessionStorage.getItem('cs_nudge_dismissed')) {
@@ -10782,19 +10780,14 @@ function updateProUI() {
   if (manageSub) manageSub.style.display = window._isPro ? '' : 'none';
 
   if (window._isPro) {
-    // Signed in + Pro — show badge + banner off, but KEEP the Shop icon so
-    // Pro members can re-open the tier grid to see what other plans offer,
-    // manage their sub, or check add-ons. Previously we hid this entirely
-    // and Pro users had no in-app way back to the pricing view.
+    // Signed in + Pro — clickable PRO badge is the only header CTA.
     proBadge?.classList.add('visible');
     getProBtn?.classList.remove('visible');
     promoBanner?.classList.remove('visible');
-    if (shopBtn) shopBtn.style.display = 'flex';
   } else {
-    // Signed in but free — show Get Pro + banner + shop btn
+    // Signed in but free — Upgrade button + promo banner
     proBadge?.classList.remove('visible');
     getProBtn?.classList.add('visible');
-    if (shopBtn) shopBtn.style.display = 'none'; // Get Pro btn replaces it
     // Show banner unless dismissed this session
     const dismissed = sessionStorage.getItem('cs_banner_dismissed');
     if (!dismissed) {
