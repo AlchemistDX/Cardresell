@@ -10,10 +10,17 @@
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 
+// Fallback hardcoded price IDs (for tiers without env vars — mirrors legacy annual endpoint pattern)
+const PRICE_FALLBACK = {
+  pro:      { month: null, year: 'price_1TosPSFW2YZoedIZ5e0abG3y' }, // Pro annual $89.99/yr (legacy hardcoded)
+  pro_max:  { month: null, year: null },
+  ultimate: { month: null, year: null },
+};
+
 const TIER_PRICE_ENV = {
   pro: {
     month: 'STRIPE_PRICE_ID',            // legacy env var name for Pro monthly
-    year:  'STRIPE_PRICE_ANNUAL_ID',     // legacy env var name for Pro annual
+    year:  'STRIPE_PRICE_ANNUAL_ID',     // legacy env var name for Pro annual (fallback covers this)
   },
   pro_max: {
     month: 'STRIPE_PRICE_PRO_MAX_MONTHLY',
@@ -24,6 +31,14 @@ const TIER_PRICE_ENV = {
     year:  'STRIPE_PRICE_ULTIMATE_ANNUAL',
   },
 };
+
+// Normalize interval aliases: 'monthly'/'m' -> 'month', 'annual'/'yearly'/'yr'/'y' -> 'year'
+function normalizeInterval(raw) {
+  const v = String(raw || '').toLowerCase().trim();
+  if (['month', 'monthly', 'mo', 'm'].includes(v)) return 'month';
+  if (['year', 'yearly', 'annual', 'annually', 'yr', 'y'].includes(v)) return 'year';
+  return v;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -36,16 +51,17 @@ export default async function handler(req, res) {
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
 
   const tier     = String(body.tier || '').toLowerCase();
-  const interval = String(body.interval || 'month').toLowerCase();
+  const interval = normalizeInterval(body.interval);
 
   const priceEnv = TIER_PRICE_ENV[tier]?.[interval];
   if (!priceEnv) {
     return res.status(400).json({ error: `Unknown tier/interval combo: ${tier}/${interval}` });
   }
 
-  const priceId   = process.env[priceEnv];
+  const priceId   = process.env[priceEnv] || PRICE_FALLBACK[tier]?.[interval] || null;
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey || !priceId) {
+    console.error(`Missing price config: tier=${tier} interval=${interval} env=${priceEnv} envVal=${!!process.env[priceEnv]} fallback=${!!PRICE_FALLBACK[tier]?.[interval]}`);
     return res.status(503).json({ error: 'Payments not configured yet.' });
   }
 
