@@ -11856,12 +11856,13 @@ async function _bulkFetchPriceLorcana(cleanName) {
   } catch(e) { return null; }
 }
 
-async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese) {
+async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese, groundedId, rarity) {
   if (!cardName) return null;
   const cleanName = String(cardName).replace(/["\\]/g, '').trim();
   if (!cleanName) return null;
   const cleanNumber = cardNumber ? String(cardNumber).replace(/\/.*$/, '').trim() : '';
   const type = (cardType || 'pokemon').toLowerCase();
+  const cleanRarity = String(rarity || '').trim();
 
   // Route to the correct database. Falls back to Pokemon lookup for legacy
   // rows without cardType, but also as a last-ditch recovery when a non-Pokemon
@@ -11872,6 +11873,65 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   if (type === 'onepiece') return null; // No free API — leave price blank; user can enter manually.
   if (type === 'sports') return null;   // Sports cards route through eBay only — no card DB.
 
+  // 2026-08-17: grounded_id fast path. When Ximilar identifies the exact card
+  // (e.g. "sv3pt5-181" for Ampharos IR), fetch that specific card from
+  // pokemontcg.io by ID — skips the fuzzy name+number search that was picking
+  // base Crobat #93 (Common $0.23) over IR Crobat #093 (Illustration Rare $8-25).
+  if (groundedId && typeof groundedId === 'string' && groundedId.includes('-')) {
+    try {
+      const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(groundedId)}`, { signal: AbortSignal.timeout(7000) });
+      if (r.ok) {
+        const j = await r.json();
+        const card = j?.data;
+        if (card) {
+          const prices = card.tcgplayer?.prices || {};
+          const priceMap = {};
+          let bestMarket = null, bestVariant = null;
+          for (const variant of BULK_VARIANT_PRIORITY) {
+            const p = prices[variant]; if (!p) continue;
+            const market = typeof p.market === 'number' ? p.market : null;
+            const mid = typeof p.mid === 'number' ? p.mid : null;
+            const val = market != null ? market : mid;
+            if (val != null) priceMap[variant] = val;
+            if (val != null && (bestMarket == null || val > bestMarket)) { bestMarket = val; bestVariant = variant; }
+          }
+          for (const key of Object.keys(prices)) {
+            if (BULK_VARIANT_PRIORITY.includes(key)) continue;
+            const p = prices[key];
+            const market = typeof p?.market === 'number' ? p.market : null;
+            const mid = typeof p?.mid === 'number' ? p.mid : null;
+            const val = market != null ? market : mid;
+            if (val != null) priceMap[key] = val;
+            if (val != null && (bestMarket == null || val > bestMarket)) { bestMarket = val; bestVariant = key; }
+          }
+          // If pokemontcg.io returned this card but no market price, fall through to /api/tcg-price live lookup
+          if (bestMarket == null) {
+            try {
+              const r2 = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}`, { signal: AbortSignal.timeout(7000) });
+              if (r2.ok) {
+                const d = await r2.json();
+                if (d && d.market > 0) {
+                  return { marketPrice: d.market, variant: 'tcgplayer_live',
+                           imageUrl: card.images?.small || card.images?.large || d.image || null,
+                           tcgplayerUrl: card.tcgplayer?.url || null,
+                           matchedSet: card.set?.name || null, matchedNumber: card.number || null,
+                           prices: priceMap };
+                }
+              }
+            } catch(e) {}
+          }
+          return {
+            marketPrice: bestMarket, variant: bestVariant,
+            imageUrl: card.images?.small || card.images?.large || null,
+            tcgplayerUrl: card.tcgplayer?.url || null,
+            matchedSet: card.set?.name || null, matchedNumber: card.number || null,
+            prices: priceMap,
+          };
+        }
+      }
+    } catch(e) { /* fall through to fuzzy search */ }
+  }
+
   // Pokemon path (default). If the scanner marked this as Japanese, try the
   // /api/tcg-price live TCGplayer lookup FIRST — it queries TCGplayer directly
   // and works for many JP-only sets that pokemontcg.io doesn't index. If that
@@ -11879,7 +11939,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   // because many JP cards share the English character name.
   if (isJapanese) {
     try {
-      const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}`, { signal: AbortSignal.timeout(7000) });
+      const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${rarity ? '&rarity=' + encodeURIComponent(rarity) : ''}`, { signal: AbortSignal.timeout(7000) });
       if (r.ok) {
         const d = await r.json();
         if (d && d.market > 0) {
@@ -11912,7 +11972,13 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // Ancient Origins, set-name matching alone can't pick the right one — the
     // scanner-captured card number is the disambiguator. Weight number match
     // heavily so a number hit beats any set match tie.
+    //
+    // 2026-08-17: add rarity scoring × 15. When base Crobat #93 (Common, $0.23)
+    // and IR Crobat #093 (Illustration Rare, $8-25) both match name+number,
+    // the rarity from the scanner is the tie-breaker. Weight higher than number
+    // so rarity match ALWAYS wins when both cards are named + numbered identically.
     const targetNumRaw = String(cleanNumber || '').replace(/^0+/, '').toLowerCase();
+    const targetRarityLo = cleanRarity.toLowerCase();
     function _numScore(cand) {
       if (!targetNumRaw) return 0;
       const cn = String(cand.number || '').replace(/^0+/, '').toLowerCase();
@@ -11921,7 +11987,24 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
       if (cn.replace(/[a-z]/g,'') === targetNumRaw) return 8; // "179a" vs "179"
       return 0;
     }
-    cards = cards.map(c => ({ c, score: _numScore(c) + _bulkSetMatchScore(c.set?.name, setName) }))
+    function _rarityScore(cand) {
+      if (!targetRarityLo) return 0;
+      const cr = String(cand.rarity || '').toLowerCase();
+      if (!cr) return 0;
+      if (cr === targetRarityLo) return 15;                          // exact rarity match
+      // Fuzzy match for the alt-art / illustration rare / secret rare family
+      // — scanner might say "Illustration Rare" while pokemontcg.io says "Illustration Rare"
+      // (matches exact) OR "Special Illustration Rare" (partial). Both should score.
+      const targetKeywords = ['illustration', 'special', 'secret', 'hyper', 'rainbow', 'ultra', 'full art', 'alt art', 'gold', 'shiny'];
+      for (const kw of targetKeywords) {
+        if (targetRarityLo.includes(kw) && cr.includes(kw)) return 12;
+      }
+      // Both are "common/uncommon/rare" (base rarity) — scanner said base, DB says base
+      if ((targetRarityLo === 'common' || targetRarityLo === 'uncommon' || targetRarityLo === 'rare')
+          && (cr === 'common' || cr === 'uncommon' || cr === 'rare')) return 8;
+      return 0;
+    }
+    cards = cards.map(c => ({ c, score: _numScore(c) + _bulkSetMatchScore(c.set?.name, setName) + _rarityScore(c) }))
                  .sort((x, y) => y.score - x.score);
     const best = cards[0].c;
     if (!best) return null;
@@ -11960,7 +12043,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // /api/tcg-price live lookup. Same fallback path JP cards use.
     if (bestMarket == null) {
       try {
-        const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}`, { signal: AbortSignal.timeout(7000) });
+        const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${rarity ? '&rarity=' + encodeURIComponent(rarity) : ''}`, { signal: AbortSignal.timeout(7000) });
         if (r.ok) {
           const d = await r.json();
           if (d && d.market > 0) {
@@ -12136,9 +12219,10 @@ async function _bulkScanOne(item, rowId, isRetry) {
         result.isJapanese = data.is_japanese === true;
         result.sport      = data.sport       || ''; // sports cards only
         result.year       = data.year        || ''; // sports cards only (e.g. '2011')
+        result.groundedId = data.grounded_id || ''; // 2026-08-17: exact-card ID from Ximilar for price fast-path
         result.condition  = 'NM';
 
-        const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese);
+        const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese, result.groundedId, result.rarity);
         if (priceInfo) {
           result.marketPrice  = priceInfo.marketPrice;
           result.priceVariant = priceInfo.variant;
@@ -12366,7 +12450,9 @@ async function bulkEditCardName(rowId) {
 
   // Preserve cardType and isJapanese so re-priced MTG/YGO/Lorcana cards
   // don't silently fall back to the Pokemon lookup path.
-  const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese);
+  // Skip groundedId on re-price after edit — user changed the name so the
+  // originally-scanned ID may no longer be correct. Keep rarity as a hint.
+  const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese, '', result.rarity);
   if (priceInfo) {
     result.marketPrice  = priceInfo.marketPrice;
     result.priceVariant = priceInfo.variant;

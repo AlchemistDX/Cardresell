@@ -36,10 +36,11 @@ export default async function handler(req, res) {
   const name   = (req.query.name || req.query.q || '').trim();
   const set    = (req.query.set    || '').trim();
   const number = (req.query.number || '').trim();
+  const rarity = (req.query.rarity || '').trim();
 
   if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
-  const cacheKey = `${name}|${set}|${number}`.toLowerCase();
+  const cacheKey = `${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -96,16 +97,44 @@ export default async function handler(req, res) {
       return res.status(200).json({ market: null, low: null, mid: null, high: null, source: 'tcgplayer', count: 0 });
     }
 
-    // Score each result — prefer set match, then number match, then name match
-    const setLower = set.toLowerCase();
+    // Score each result — prefer set match, then rarity match, then number match, then name match
+    const setLower  = set.toLowerCase();
     const nameLower = name.toLowerCase();
-    const numClean = number ? number.replace(/^0+/, '') : '';
+    const rarityLo  = rarity.toLowerCase();
+    const numClean  = number ? number.replace(/^0+/, '') : '';
+
+    // 2026-08-17: rarity keywords that mark this as a special printing.
+    // TCGPlayer product names encode variant in the number: base = plain number
+    // (e.g. "Ampharos - 029"), specials show the full-set-total form
+    // (e.g. "Ampharos (Illustration Rare) - 090/086"). We need to lift IR/SR/SIR
+    // matches when the scanner said this is one of those.
+    const specialKeywords = ['illustration', 'special', 'secret', 'hyper', 'rainbow', 'ultra', 'full art', 'alt art', 'gold', 'shiny', 'v-max', 'vstar', 'v union', 'trainer gallery'];
+    const isSpecial = specialKeywords.some(kw => rarityLo.includes(kw));
+
     const scored = results.map(r => {
       const productName = (r.productName || '').toLowerCase();
       const rSetName    = (r.setName || '').toLowerCase();
       let score = 0;
       // Set match — huge weight (prevents "Charizard + set=Chaos Rising" matching a random tin)
       if (setLower && rSetName.includes(setLower)) score += 100;
+
+      // Rarity match — look for keyword in the productName. TCGPlayer encodes
+      // variant type either in the name ("Illustration Rare") or number
+      // ("090/086" = a special printing since printedTotal is smaller).
+      if (isSpecial) {
+        // Boost products whose name contains a matching special keyword
+        for (const kw of specialKeywords) {
+          if (rarityLo.includes(kw) && productName.includes(kw)) { score += 80; break; }
+        }
+        // Boost products whose number is in "NNN/NNN" form (special printing indicator)
+        if (numClean && productName.includes(`${numClean}/`)) score += 60;
+      } else if (rarityLo && (rarityLo === 'common' || rarityLo === 'uncommon' || rarityLo === 'rare')) {
+        // Non-special — penalize products whose name shouts special-printing keywords
+        for (const kw of specialKeywords) {
+          if (productName.includes(kw)) { score -= 40; break; }
+        }
+      }
+
       // Number match
       if (numClean && (productName.includes(`${numClean}/`) || productName.includes(`- ${numClean}`) || productName.includes(`#${numClean}`))) {
         score += 50;
