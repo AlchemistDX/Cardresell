@@ -9812,13 +9812,45 @@ async function submitGradeScan(deepGrade) {
       '</div>';
     };
 
+    // ── Slab warning ── If the AI detected the card is already inside a
+    // graded slab, show a friendly heads-up at the top. Also surface the
+    // grader + grade from the label so it's clear we saw it.
+    const slabWarn = data.slab_warning;
+    const slabInfo = data.slab_info;
+    const slabBanner = slabWarn
+      ? '<div style="margin:.15rem 0 .55rem;padding:.6rem .7rem;background:linear-gradient(135deg,rgba(251,146,60,.15),rgba(239,68,68,.12));border:1px solid rgba(251,146,60,.4);border-radius:10px;text-align:left">' +
+          '<div style="font-size:.78rem;font-weight:900;color:#fbbf24;margin-bottom:.18rem;letter-spacing:.01em">\uD83D\uDE0F ' + (slabWarn.title || 'Sneaky, sneaky.') + '</div>' +
+          '<div style="font-size:.7rem;color:rgba(255,255,255,.75);line-height:1.4">' + (slabWarn.message || 'This card looks slabbed \u2014 grading results will be skewed.') + '</div>' +
+          (slabInfo && (slabInfo.grader || slabInfo.grade)
+            ? '<div style="margin-top:.35rem;font-size:.7rem;color:rgba(255,255,255,.9);font-weight:700">Label reads: ' +
+                (slabInfo.grader ? '<span style="color:#fbbf24">' + slabInfo.grader + '</span>' : '') +
+                (slabInfo.grade  ? ' <span style="color:#4ade80">' + slabInfo.grade + '</span>' : '') +
+              '</div>'
+            : '') +
+        '</div>'
+      : '';
+
+    // ── CV-verified badge ── Deep Grade with Ximilar pixel-measured CV
+    // deserves a special badge so users understand why it's more accurate.
+    const cvBadge = data.cv_source === 'ximilar'
+      ? '<div style="margin:.15rem 0 .5rem;display:flex;align-items:center;gap:.35rem;font-size:.65rem;font-weight:800;color:#60a5fa;letter-spacing:.06em">' +
+          '<span style="width:6px;height:6px;background:#60a5fa;border-radius:99px;box-shadow:0 0 8px #60a5fa"></span>' +
+          'CV-VERIFIED \u00B7 PIXEL-MEASURED GRADING' +
+        '</div>'
+      : '';
+
     resultEl.innerHTML =
+      slabBanner +
+      cvBadge +
       '<div style="margin:.3rem 0 .5rem">' +
         scoreBar('Centering', data.centering, centeringTip, 'centering') +
         scoreBar('Corners',   data.corners,   cornerTip,   'corners')   +
         scoreBar('Edges',     data.edges,     edgeTip,     'edges')     +
         scoreBar('Surface',   data.surface,   surfaceTip,  'surface')   +
       '</div>' +
+      (data.grading_standard
+        ? '<div style="font-size:.62rem;color:rgba(255,255,255,.4);line-height:1.45;margin:-.15rem 0 .5rem;text-align:left;font-style:italic">' + data.grading_standard + '</div>'
+        : '') +
       (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + notes + '</div>' : '') +
       (worth
         ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.4rem">\u2713 Worth submitting for grading</div>' +

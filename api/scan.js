@@ -299,9 +299,12 @@ Evaluate and return:
 9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
 10. subgrades: object with numeric 1-10 sub-scores for each pillar: { "centering": 9.5, "corners": 8.5, "edges": 9, "surface": 9 }. Use half-steps (e.g. 8.5). Be strict — match the descriptors above.
 11. confidence: "high" | "medium" | "low" — how confident you are in this grade given the photo quality and angles you had to work with.
+12. is_slabbed: true if the card is inside a graded slab holder (CGC, PSA, BGS, SGC, TAG plastic case with label at the top showing a company logo and a grade number). Signals: rigid clear plastic outer shell with a printed label header, visible grade text like "GEM MINT 10" or "MINT 9", a serial/cert number, or a barcode. If slabbed, still grade the RAW card underneath as best you can, and add a note in grade_notes that the estimate will be skewed by the holder.
+13. slab_grader: If is_slabbed=true, the company name from the label ("PSA", "CGC", "BGS", "SGC", "TAG", or "Other"). Empty string otherwise.
+14. slab_grade: If is_slabbed=true, the grade number printed on the label (e.g. "10", "9.5", "8"). Empty string otherwise.
 
 Respond ONLY with valid JSON:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium"}`
+{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium","is_slabbed":false,"slab_grader":"","slab_grade":""}`
       : `You are a trading card expert. Look at this card image and identify it.
 
 BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
@@ -605,6 +608,20 @@ Respond ONLY with valid JSON, no explanation:
       // (grade_notes, centering description) is kept for the human-readable
       // summary; the numeric sub-grades come from Ximilar.
       //
+      // ── Slab detection ──
+      // If the card appears to be in a graded slab (CGC/PSA/BGS holder),
+      // the CV grader is trained on RAW cards and will give bad results
+      // (plastic glare, holder corners, label crop). We combine three signals:
+      //   1) GPT-5's own slab flag (from the grading prompt)
+      //   2) cardInfo._ximilar_graded (present if identify was run)
+      //   3) Ximilar grader's slab hint on the card object (populated below)
+      // If any signal fires, we STILL return the grade (user paid for it) but
+      // attach slab_warning so the UI can show a friendly "sneaky, sneaky".
+      let looksSlabbed =
+        !!(cardInfo?._ximilar_graded) ||
+        !!(cardInfo?.is_slabbed === true) ||
+        !!(cardInfo?.slabbed    === true);
+
       // ── COST GATE ──
       // Ximilar /card-grader/v2/grade = 100 credits ≈ $0.109 per call on the
       // 100k plan. At $0.10/credit user pricing:
@@ -631,6 +648,19 @@ Respond ONLY with valid JSON, no explanation:
           const imgs = backBase64 ? [imageBase64, backBase64] : [imageBase64];
           const xg = await gradeWithXimilar(imgs, mimeType || 'image/jpeg', ximilarToken);
           console.log('[scan] ximilar-grader took', Date.now() - t0, 'ms ok=', xg.ok, 'reason=', xg.reason);
+          // Ximilar's grader returns holder detection on the card object.
+          // Some responses expose it as record.card[0].holder or record.holder.
+          if (xg.raw?.records?.[0]) {
+            const rec0 = xg.raw.records[0];
+            const holder =
+              rec0.card?.[0]?.holder ||
+              rec0.holder ||
+              rec0.card?.[0]?.slab   ||
+              null;
+            if (holder && typeof holder === 'object' && (holder.present === true || holder.detected === true || holder.grade)) {
+              looksSlabbed = true;
+            }
+          }
           if (xg.ok && xg.grades) {
             const xs = {
               centering: clampSub(xg.grades.centering),
@@ -689,6 +719,17 @@ Respond ONLY with valid JSON, no explanation:
         confidence = 'medium';
       }
 
+      // Slab warning gets attached whenever we detected a slab, regardless
+      // of which grader (Ximilar or GPT) produced the numbers. It's the
+      // client's job to render it as a top-of-card banner.
+      const slabWarning = looksSlabbed
+        ? {
+            slabbed: true,
+            title: 'Sneaky, sneaky.',
+            message: 'This card looks like it\'s already in a graded slab. Grading results will be skewed by the plastic and label — trust the number on the slab, not this estimate.',
+          }
+        : null;
+
       return res.status(200).json({
         success:       true,
         mode:          'grade',
@@ -708,6 +749,22 @@ Respond ONLY with valid JSON, no explanation:
         confidence,
         cv_source:     cvSource,     // 'ximilar' or 'gpt'
         cv_grader:     cvGrader,     // { condition, final, corners[], edges[] } when ximilar succeeded
+        // Grading standard disclosure — Ximilar's model is trained "in
+        // accordance with grading standards like PSA, Beckett and CGC",
+        // outputs 1-10 with half-steps. It's an ESTIMATE — the final call
+        // is at the receiving grader's discretion.
+        grading_standard: cvSource === 'ximilar'
+          ? 'AI estimate trained on PSA / Beckett / CGC standards. 1-10 scale with half-steps. Final grade is at the grader\'s discretion.'
+          : 'AI visual estimate. Final grade is at the grader\'s discretion.',
+        slab_warning:  slabWarning,
+        // If it's a slab, echo back what GPT read off the label so the UI
+        // can say "CGC 10" instead of just "probably slabbed".
+        slab_info:     looksSlabbed
+          ? {
+              grader: cardInfo.slab_grader || '',
+              grade:  cardInfo.slab_grade  || '',
+            }
+          : null,
       });
     }
 
