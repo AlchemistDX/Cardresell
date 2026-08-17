@@ -734,6 +734,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pricing-toggle-btn.active{background:var(--gold);color:#000;box-shadow:0 1px 6px rgba(245,197,24,.35)}
 .pricing-toggle-savings{background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.55rem;font-weight:900;padding:.08rem .35rem;border-radius:99px;margin-left:.3rem;letter-spacing:.04em;vertical-align:middle}
 
+/* Trust bundle micro-styles */
+.trust-info{cursor:help;color:var(--text-faint);font-size:.7rem;text-decoration:none}
+.trust-info:hover{color:var(--gold)}
+
 /* Tier-specific card treatments */
 .plan-card.tier-max{border-color:rgba(102,187,255,.5);background:linear-gradient(160deg,rgba(102,187,255,.06),transparent)}
 .plan-card.tier-max .plan-badge{background:linear-gradient(90deg,#3b82f6,#60a5fa);color:#fff}
@@ -4124,6 +4128,56 @@ function attachDropHandlers(cardFactory) {
 // ── eBay sold comps: auto-fetch + populate override ──
 let _compsAbortCard = null; // track which card we're fetching for
 
+// ── Trust bundle: render confidence-scored comp line ──
+function renderTrustLine(data) {
+  const med = data.median;
+  const cnt = data.count;
+  const raw = data.rawCount || cnt;
+  const low = data.low, high = data.high;
+  const conf = data.confidence || 'insufficient';
+  const reasons = (data.confidenceReasons || []).join(' · ');
+  const outliersRemoved = data.outliersRemoved || 0;
+  const cacheAgeSec = data.cacheAgeSec || 0;
+
+  // Confidence pill colors
+  const pillMap = {
+    high:         { bg: 'rgba(34,197,94,.15)',  border: 'rgba(34,197,94,.55)',  color: '#4ade80', label: 'High confidence' },
+    medium:       { bg: 'rgba(245,158,11,.15)', border: 'rgba(245,158,11,.55)', color: '#fbbf24', label: 'Medium confidence' },
+    low:          { bg: 'rgba(239,68,68,.15)',  border: 'rgba(239,68,68,.55)',  color: '#f87171', label: 'Low confidence' },
+    insufficient: { bg: 'rgba(148,163,184,.15)',border: 'rgba(148,163,184,.55)',color: '#94a3b8', label: 'Insufficient data' },
+  };
+  const pill = pillMap[conf] || pillMap.insufficient;
+
+  const ageStr = cacheAgeSec < 60
+    ? 'just now'
+    : cacheAgeSec < 3600
+      ? `${Math.round(cacheAgeSec / 60)} min ago`
+      : `${Math.round(cacheAgeSec / 3600)} hr ago`;
+
+  const rangeStr = (low != null && high != null && low !== high)
+    ? ` · range <strong style="color:var(--text)">$${low.toFixed(2)}–$${high.toFixed(2)}</strong>`
+    : '';
+
+  const outlierTip = outliersRemoved > 0
+    ? ` <span class="trust-info" title="${outliersRemoved} outlier${outliersRemoved === 1 ? '' : 's'} filtered from ${raw} raw comps. Prices outside 1.5× IQR or hard 30%–300% guardrails were removed.">ⓘ</span>`
+    : '';
+
+  return (
+    `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .55rem;line-height:1.4">` +
+      `<span style="color:var(--text)">eBay sold</span>` +
+      ` · <strong style="color:var(--gold)">${cnt} comp${cnt === 1 ? '' : 's'}</strong>` +
+      ` · median <strong style="color:var(--text)">$${med.toFixed(2)}</strong>` +
+      rangeStr +
+    `</div>` +
+    `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.25rem;font-size:.72rem;color:var(--text-muted)">` +
+      `<span class="trust-pill" style="background:${pill.bg};border:1px solid ${pill.border};color:${pill.color};font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">${pill.label}</span>` +
+      `<span>Updated ${ageStr}</span>` +
+      (reasons ? `<span style="opacity:.75">· ${reasons}</span>` : '') +
+      outlierTip +
+    `</div>`
+  );
+}
+
 async function fetchAndApplySoldComps(forceRefresh) {
   if (!selectedCard) return;
 
@@ -4160,6 +4214,10 @@ async function fetchAndApplySoldComps(forceRefresh) {
   try {
     const params = new URLSearchParams({ q, limit: '15' });
     if (grade) params.set('grade', grade);
+    // Pass current TCG market price for cross-source sanity check
+    const _tcgPriceEl = document.getElementById('cardPriceDisplay');
+    const _tcgMarketVal = parseFloat(_tcgPriceEl?.dataset?.market || _tcgPriceEl?.textContent?.replace(/[^0-9.]/g,'')) || 0;
+    if (_tcgMarketVal > 0) params.set('tcgMarket', _tcgMarketVal.toFixed(2));
     // Cap the client-side wait at 10s (server has its own 8s cap). Without
     // this, if the API endpoint stalls the status indicator sits on
     // '⏳ Fetching eBay sold comps…' indefinitely and the card feels frozen.
@@ -4217,11 +4275,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
       calc();
     }
 
-    statusTxt.innerHTML =
-      `<span style="color:var(--text)">eBay sold</span>` +
-      ` · <strong style="color:var(--gold)">${cnt} sales</strong>` +
-      ` · median <strong style="color:var(--text)">$${med.toFixed(2)}</strong>` +
-      ` · avg $${avg.toFixed(2)}`;
+    statusTxt.innerHTML = renderTrustLine(data);
     statusEl.style.display = 'flex';
 
   } catch(e) {
@@ -7035,6 +7089,8 @@ function renderCollectionView() {
 }
 
 // ── Fetch best eBay median price for a single portfolio entry ──
+// The server now returns a trimmed, sanity-filtered median directly — no need
+// to re-compute client-side. Falls back to null if confidence is insufficient.
 async function _fetchEbayPriceForEntry(p) {
   // Build query: card name + card number (stripped from set field like "Charizard · #4")
   const numMatch = (p.set || '').match(/#(\S+)/);
@@ -7044,13 +7100,9 @@ async function _fetchEbayPriceForEntry(p) {
   const res      = await fetch('/api/ebay-sold?q=' + encodeURIComponent(query));
   if (!res.ok) return null;
   const data     = await res.json();
-  if (!data.items || !data.items.length) return null;
-  const prices   = data.items
-    .map(i => parseFloat(i.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.['__value__'] || i.price || 0))
-    .filter(x => x > 0).sort((a, b) => a - b);
-  if (!prices.length) return null;
-  const mid = Math.floor(prices.length / 2);
-  return prices.length % 2 === 0 ? (prices[mid-1] + prices[mid]) / 2 : prices[mid];
+  // Skip insufficient-data comps for portfolio refresh (would poison portfolio totals)
+  if (!data.median || data.confidence === 'insufficient') return null;
+  return data.median;
 }
 
 async function refreshCollectionPrices() {
