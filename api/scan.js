@@ -232,7 +232,8 @@ Other low-quality photo signals: blur, cropped edges, dark shadow, upside-down. 
 Extract for the best match:
 1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James"). If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア"), TRANSLATE to the English Pokémon name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
 2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
-3. set_name: The exact printed set name or set code (e.g. "Pokémon GO", "Crown Zenith", "MEO4", "Topps Chrome", "Panini Prizm"). CRITICAL: You MUST return either a real set name / printed set code OR an empty string "". NEVER return editorial commentary like "Not an official set", "counterfeit", "custom card", "unknown", or "fake" — our database will look up the set from the card number if you don't know it. If you can't read the set symbol clearly, return "" and let the database resolve it.
+3. set_name: The exact printed set name (e.g. "Pokémon GO", "Crown Zenith", "Topps Chrome", "Panini Prizm"). CRITICAL: You MUST return either a real set name OR an empty string "". NEVER return editorial commentary like "Not an official set", "counterfeit", "custom card", "unknown", or "fake" — our database will look up the set from the card number if you don't know it. If you can't read the set symbol clearly, return "".
+3b. set_code: The 2-4 character SET CODE printed in the BOTTOM-LEFT or BOTTOM-RIGHT of Pokémon cards, right next to or above the card number (e.g. "SVI", "MEW", "ME04", "CRZ", "PGO", "151", "SV1", "OBF"). This code is HIGHLY reliable and lets us look up the exact set even when set_name is unknown. Read the exact printed characters. If not visible or unreadable, return "".
 4. hp: HP number if Pokémon card (e.g. "280")
 5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols. Sports cards show a photo of a real athlete, a team logo/jersey, brand marks like Topps/Panini/Bowman/Upper Deck/Fleer/Donruss/Score/Select/Prizm/Optic/Mosaic/Chronicles, and often a copyright year.
 6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false. STRONG SIGNALS for is_japanese=true: any katakana on the name line (ラフレシア, リザードン), the word ポケモン or たね anywhere on the card, or JP-specific rarity markers (RR, SR, SAR, UR). If is_japanese=true, set_name should be the English name of the JP set (e.g. "Jungle" not 「ジャングル」, "151" not 「ポケモンカード151」).
@@ -247,7 +248,7 @@ Extract for the best match:
 15. jp_name: OPTIONAL. If is_japanese=true, the raw Japanese card name as printed on the card (e.g. "ラフレシア", "リザードン"). Omit for English cards.
 
 Respond ONLY with valid JSON, no explanation:
-{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"jp_name":"","rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
+{"card_name":"...","card_number":"...","set_name":"...","set_code":"...","hp":"...","card_type":"...","is_japanese":false,"jp_name":"","rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","set_code":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
 
     // Build the vision content once so we can retry with a different model if needed.
     const visionContent = [
@@ -368,46 +369,89 @@ Respond ONLY with valid JSON, no explanation:
       try {
         const rawName = String(cardInfo.card_name).trim();
         const rawNum  = String(cardInfo.card_number).trim();
-        // Extract identifying token: first word of the name so glyph /
-        // suffix differences (Mega X EX vs Mega X ex, ★ vs Star) don't
-        // block the lookup. Wildcard on name + exact number is a very
-        // tight query in pokemontcg.io.
-        const firstWord = (rawName.split(/\s+/)[0] || '').replace(/["\\]/g, '');
+        const rawSet  = String(cardInfo.set_name || '').trim();
+        const rawSetCode = String(cardInfo.set_code || '').trim().replace(/[^A-Za-z0-9]/g, '');
         const cleanNum  = rawNum.replace(/\/.*$/, '').trim(); // "100/086" → "100"
-        if (firstWord && cleanNum) {
-          const q = `name:${firstWord}* number:${cleanNum}`;
-          const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,hp,tcgplayer`;
-          const ptcgRes = await fetch(ptcgUrl, { signal: AbortSignal.timeout(4500) });
-          if (ptcgRes.ok) {
-            const j = await ptcgRes.json();
-            const cards = j.data || [];
-            // Prefer a match that shares the most words with the model's card_name.
-            const modelNameLower = rawName.toLowerCase();
-            const scored = cards.map(c => {
-              const cn = (c.name || '').toLowerCase();
-              const modelTokens = new Set(modelNameLower.split(/\W+/).filter(t => t.length >= 3));
-              let hit = 0;
-              for (const t of modelTokens) if (cn.includes(t)) hit++;
-              return { c, score: hit };
-            }).sort((a, b) => b.score - a.score);
-            const best = scored[0];
-            if (best && best.c && best.score >= 1) {
-              const gc = best.c;
-              // Override set_name unconditionally — pokemontcg.io knows sets
-              // the model doesn't, and its editorial commentary in set_name
-              // ("Not an official set") is exactly the bug we're fixing.
-              cardInfo.set_name = gc.set?.name || cardInfo.set_name || '';
-              // Fill in fields the model may have missed.
-              if (!cardInfo.rarity && gc.rarity) cardInfo.rarity = gc.rarity;
-              if (!cardInfo.hp && gc.hp)         cardInfo.hp     = String(gc.hp);
-              // Prefer the canonical name from the database (fixes
-              // capitalization / "EX" vs "ex" spacing issues).
-              if (gc.name) cardInfo.card_name = gc.name;
-              // Attach a grounded flag so the client can skip its own lookup.
-              cardInfo._grounded = true;
-              cardInfo._grounded_id = gc.id || null;
-            }
+        const cleanName = rawName.replace(/["\\]/g, '').trim();
+
+        // Build a series of pokemontcg.io queries from most specific to
+        // least specific. We stop at the first that returns a match with
+        // matching CARD NUMBER (server-side re-check to defeat fuzzy
+        // wildcards) so we never override with a completely different card.
+        const queries = [];
+        // 0. Best signal: printed set code + number — unambiguous, no name needed.
+        //    pokemontcg.io indexes set.ptcgoCode (SVI, MEW, etc.) and set.id.
+        //    Try both fields since some sets use ptcgoCode, others use id.
+        if (rawSetCode && cleanNum) {
+          queries.push(`set.ptcgoCode:${rawSetCode} number:${cleanNum}`);
+          queries.push(`set.id:${rawSetCode.toLowerCase()} number:${cleanNum}`);
+        }
+        if (cleanName && cleanNum) {
+          // 1. Exact quoted name + number
+          queries.push(`name:"${cleanName}" number:${cleanNum}`);
+          // 2. Some cards store name without "ex"/"EX" or with ★ glyph.
+          //    Strip common suffixes and retry.
+          const nameNoSuffix = cleanName
+            .replace(/\s+(ex|EX|VMAX|VSTAR|V|GX|Star|\u2605)$/i, '')
+            .trim();
+          if (nameNoSuffix && nameNoSuffix !== cleanName) {
+            queries.push(`name:"${nameNoSuffix}" number:${cleanNum}`);
           }
+          // 3. Last identifier word only, e.g. "Mega Greninja ex" → "Greninja".
+          const words = cleanName.split(/\s+/).filter(w => w && !/^(mega|ex|EX|VMAX|VSTAR|V|GX|Star|\u2605)$/i.test(w));
+          const identifier = words[words.length - 1] || words[0];
+          if (identifier && identifier !== cleanName && !queries.some(q => q.includes(`"${identifier}"`))) {
+            queries.push(`name:"${identifier}" number:${cleanNum}`);
+          }
+        }
+
+        let best = null;
+        for (const q of queries) {
+          try {
+            const ptcgUrl = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=15&select=id,name,set,number,rarity,hp`;
+            const ptcgRes = await fetch(ptcgUrl, { signal: AbortSignal.timeout(4500) });
+            if (!ptcgRes.ok) continue;
+            const j = await ptcgRes.json();
+            const cards = (j.data || []).filter(c => {
+              // HARD requirement: card number must match. pokemontcg.io
+              // sometimes returns fuzzy matches; we need an exact number match.
+              if (!c.number) return false;
+              const cnNum = String(c.number).replace(/^0+/, '');
+              const wantNum = cleanNum.replace(/^0+/, '');
+              return cnNum === wantNum;
+            });
+            if (cards.length === 0) continue;
+
+            // If we have >1 hit for the same card number, prefer the one
+            // whose set name shares tokens with what the model reported
+            // (helps with the Mega Evolution / new-set case where the
+            // model may have gotten close but not exact).
+            const modelSetLo = rawSet.toLowerCase();
+            let ranked = cards;
+            if (modelSetLo && cards.length > 1) {
+              ranked = cards.map(c => {
+                const setLo = (c.set?.name || '').toLowerCase();
+                const setTokens = new Set(modelSetLo.split(/\W+/).filter(t => t.length >= 3));
+                let hit = 0;
+                for (const t of setTokens) if (setLo.includes(t)) hit++;
+                return { c, score: hit };
+              }).sort((a,b) => b.score - a.score).map(x => x.c);
+            }
+            // Also prefer newer sets when tied (releaseDate desc)
+            best = ranked[0];
+            if (best) break;
+          } catch(_) { /* try next query */ }
+        }
+
+        if (best) {
+          cardInfo.set_name = best.set?.name || cardInfo.set_name || '';
+          if (!cardInfo.rarity && best.rarity) cardInfo.rarity = best.rarity;
+          if (!cardInfo.hp && best.hp)         cardInfo.hp     = String(best.hp);
+          if (best.name) cardInfo.card_name = best.name;
+          if (best.number) cardInfo.card_number = String(best.number);
+          cardInfo._grounded = true;
+          cardInfo._grounded_id = best.id || null;
+          cardInfo._grounded_set_code = best.set?.ptcgoCode || best.set?.id || '';
         }
       } catch(e) {
         // Grounding is best-effort. If pokemontcg.io times out or 500s,
@@ -509,6 +553,9 @@ Respond ONLY with valid JSON, no explanation:
         card_name:    cardInfo.card_name   || cleanCandidates[0].card_name   || '',
         card_number:  cardInfo.card_number || cleanCandidates[0].card_number || '',
         set_name:     cardInfo.set_name    || cleanCandidates[0].set_name    || '',
+        set_code:     cardInfo.set_code    || cleanCandidates[0].set_code    || '',
+        grounded:     cardInfo._grounded === true,
+        grounded_id:  cardInfo._grounded_id || null,
         hp:           cardInfo.hp          || cleanCandidates[0].hp          || '',
         card_type:    cardInfo.card_type   || cleanCandidates[0].card_type   || 'pokemon',
         is_japanese:  cardInfo.is_japanese === true || cleanCandidates[0].is_japanese === true,
@@ -554,6 +601,9 @@ Respond ONLY with valid JSON, no explanation:
       card_name:   cardInfo.card_name   || '',
       card_number: cardInfo.card_number || '',
       set_name:    cardInfo.set_name    || '',
+      set_code:    cardInfo.set_code    || '',
+      grounded:    cardInfo._grounded === true,
+      grounded_id: cardInfo._grounded_id || null,
       hp:          cardInfo.hp          || '',
       card_type:   cardInfo.card_type   || 'pokemon',
       is_japanese: cardInfo.is_japanese === true,

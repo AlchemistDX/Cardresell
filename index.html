@@ -4686,7 +4686,10 @@ function loadCardUI(card) {
   }
 
   // Name & meta
-  cardNameEl.textContent = card.name;
+  // 2026-08-16: strip emoji from the DISPLAY name too (was stripped for URLs
+  // only). Sports cards prepend sport emojis like 🏀/⚾ that shouldn't appear
+  // in the card panel title.
+  cardNameEl.textContent = (typeof _stripEmoji === 'function' ? _stripEmoji(card.name || '') : (card.name || '')).trim();
   const metaParts = [card.setName, card.number ? `#${card.number}` : '', card.rarity].filter(Boolean);
   cardMetaEl.textContent = metaParts.join(' · ');
   cardNameBlock.style.display = 'block';
@@ -8377,9 +8380,48 @@ function _loadScannedJPCard(pending) {
 
 // Fetch the exact scanned card from PokemonTCG.io by name + number and load it
 async function _loadScannedCardExact(pending) {
-  const { name, number, setName, rarity } = pending;
+  const { name, number, setName, rarity, groundedId } = pending;
   const si = document.getElementById('searchInput');
   if (si) si.value = name;
+
+  // 2026-08-16 FAST PATH: if the server-side scan endpoint already resolved
+  // this card in pokemontcg.io via set_code + number, hit /v2/cards/<id>
+  // directly — no fuzzy matching, no risk of picking the wrong card.
+  if (groundedId) {
+    try {
+      const res = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(groundedId)}`);
+      if (res.ok) {
+        const j = await res.json();
+        const c = j.data;
+        if (c) {
+          const prices = c.tcgplayer?.prices || {};
+          const priceKeys = Object.keys(prices);
+          const priceVariants = priceKeys.map(key => ({
+            key,
+            label: (typeof formatVariantName === 'function' ? formatVariantName(key) : key),
+            market: prices[key]?.market ?? null,
+            low:    prices[key]?.low ?? null,
+            mid:    prices[key]?.mid ?? null,
+            high:   prices[key]?.high ?? null,
+          }));
+          const card = {
+            name: c.name,
+            game: 'pokemon',
+            images: { small: c.images?.small || '', large: c.images?.large || '' },
+            setName: c.set?.name || '',
+            number: c.number || '',
+            rarity: c.rarity || '',
+            priceVariants,
+            source: 'TCGPlayer',
+            updatedAt: c.tcgplayer?.updatedAt || '',
+            _grounded: true,
+          };
+          try { selectedCard = card; } catch(_) {}
+          if (typeof loadCardUI === 'function') { loadCardUI(card); return; }
+        }
+      }
+    } catch(e) { console.warn('[grounded-id fast path] failed, falling back:', e); }
+  }
 
   try {
     // Strategy: search by name only (wildcard), then filter client-side by number.
@@ -9132,7 +9174,11 @@ async function processScanImage(input) {
     // Silently load the card into the calculator in the background
     // so when the user closes the scan overlay it's already selected.
     // Do NOT auto-open catalog — let the user decide what to do next.
-    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, rarity, hp, cardType: data.card_type || 'pokemon', sport: data.sport || '', year: data.year || '', isJapanese, jpName: jpRawName };
+    // 2026-08-16: pass through the server-side grounded_id so the client
+    // can shortcut its own pokemontcg.io fuzzy search and load the exact
+    // card the server already resolved. Prevents "scan Greninja, load
+    // Charizard" downstream mismatches when set/number are ambiguous.
+    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, setCode: data.set_code || '', groundedId: data.grounded_id || '', rarity, hp, cardType: data.card_type || 'pokemon', sport: data.sport || '', year: data.year || '', isJapanese, jpName: jpRawName };
     URL.revokeObjectURL(objectUrl);
 
     // Show success state — hide spinner, show View Card + Scan Another
