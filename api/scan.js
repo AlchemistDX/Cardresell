@@ -230,7 +230,7 @@ GLARE + SLEEVE HANDLING: Reflective toploaders and holographic sleeves often cre
 Other low-quality photo signals: blur, cropped edges, dark shadow, upside-down. Set image_quality to "blurry", "cropped", "dark", or "rotated" accordingly.
 
 Extract for the best match:
-1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "LeBron James"). If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア"), TRANSLATE to the English Pokémon name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
+1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "Ampharos", "LeBron James"). CRITICAL: This field must ALWAYS be populated when ANY name is visible on the card, even if you're uncertain about the exact set. The name is the most-visible part of every card and near-impossible to misread — do NOT leave this blank just because set/number are uncertain. Only leave it blank if the card is truly unrecognizable (upside down, torn, or completely blurred). If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア"), TRANSLATE to the English Pokémon name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
 2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
 3. set_name: The exact printed set name (e.g. "Pokémon GO", "Crown Zenith", "Topps Chrome", "Panini Prizm"). CRITICAL: You MUST return either a real set name OR an empty string "". NEVER return editorial commentary like "Not an official set", "counterfeit", "custom card", "unknown", or "fake" — our database will look up the set from the card number if you don't know it. If you can't read the set symbol clearly, return "".
 3b. set_code: The 2-4 character SET CODE printed in the BOTTOM-LEFT or BOTTOM-RIGHT of Pokémon cards, right next to or above the card number (e.g. "SVI", "MEW", "ME04", "CRZ", "PGO", "151", "SV1", "OBF"). This code is HIGHLY reliable and lets us look up the exact set even when set_name is unknown. Read the exact printed characters. If not visible or unreadable, return "".
@@ -315,6 +315,23 @@ Respond ONLY with valid JSON, no explanation:
       // Refund on parse failure — user didn't get a valid grade.
       await refundCredits();
       return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo. Credits refunded.' });
+    }
+
+    // If the model returned empty card_name but populated candidates,
+    // promote the top candidate — some models zero out the top-level
+    // fields when they want to defer to the candidates array.
+    if (!cardInfo.card_name && Array.isArray(cardInfo.candidates) && cardInfo.candidates[0]?.card_name) {
+      const c0 = cardInfo.candidates[0];
+      cardInfo.card_name   = c0.card_name   || cardInfo.card_name;
+      cardInfo.card_number = c0.card_number || cardInfo.card_number;
+      cardInfo.set_name    = c0.set_name    || cardInfo.set_name;
+      cardInfo.set_code    = c0.set_code    || cardInfo.set_code;
+      cardInfo.hp          = c0.hp          || cardInfo.hp;
+      cardInfo.card_type   = c0.card_type   || cardInfo.card_type;
+      cardInfo.is_japanese = c0.is_japanese === true || cardInfo.is_japanese === true;
+      cardInfo.rarity      = c0.rarity      || cardInfo.rarity;
+      cardInfo.sport       = c0.sport       || cardInfo.sport;
+      cardInfo.year        = c0.year        || cardInfo.year;
     }
 
     if (!cardInfo.card_name) {
