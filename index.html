@@ -9056,6 +9056,64 @@ async function processScanImage(input) {
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
 
+  // ── FAST PATH: try client-side pHash against 20k-card index ──
+  // ~200-500ms end-to-end for a match, no /api/scan credit spent.
+  // Only fires for well-framed non-holo cards; otherwise falls through.
+  try {
+    if (window.CardResellFastPath && typeof window.CardResellFastPath.scanFile === 'function') {
+      statusEl.textContent = 'Matching against catalog\u2026';
+      const fp = await window.CardResellFastPath.scanFile(file);
+      window._lastFastpathResult = fp; // reused by LLM-shortlist rerank
+      if (fp && fp.hit && fp.card) {
+        const c = fp.card;
+        console.log(`[scan] fastpath HIT (${fp.totalMs}ms, dist=${fp.distance}): ${c.card_name} ${c.set_name} #${c.card_number}`);
+
+        // Preload hires image so "View Card" opens instantly.
+        try { const pre = new Image(); pre.src = c.image_large; } catch(_) {}
+
+        // Also warm the pokemontcg.io detail endpoint so _loadScannedCardExact
+        // hits browser cache when the user taps View Card.
+        try { fetch('https://api.pokemontcg.io/v2/cards/' + encodeURIComponent(c.id)).catch(()=>{}); } catch(_) {}
+
+        // Swap the preview thumb to the CLEAN catalog small image so the user
+        // sees the correctly-identified card art, not their phone photo.
+        try { prevImg.src = c.image_small; } catch(_) {}
+
+        // Paint success state exactly like the LLM path does.
+        const detailLine = [c.set_name, c.rarity].filter(Boolean).join(' \u00b7 ');
+        statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + c.card_name +
+          (c.card_number ? ' #' + c.card_number : '') + '</span>' +
+          '<br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>' +
+          '<br><span style="font-size:.65rem;opacity:.45">Matched instantly \u2022 no credit used</span>';
+        resultEl.innerHTML = '';
+        showScanGradeCTA(c.card_name, '', null);
+        window._scanTargetNumber = c.card_number;
+        window._scanTargetName   = c.card_name;
+        window._scanTargetGrader = '';
+        window._scanTargetGrade  = null;
+        window._pendingScanBannerCard = c.card_name;
+        window._pendingIdScanCard = {
+          name: c.card_name, number: c.card_number, setName: c.set_name,
+          setCode: c.set_code, groundedId: c.id, rarity: c.rarity, hp: '',
+          cardType: 'pokemon', sport: '', year: '', isJapanese: false, jpName: '',
+        };
+        URL.revokeObjectURL(objectUrl);
+        const spinnerFp = document.getElementById('scanSpinner');
+        if (spinnerFp) spinnerFp.style.display = 'none';
+        const badgeFp = document.getElementById('scanSuccessBadge');
+        if (badgeFp) badgeFp.style.display = 'flex';
+        _setScanBtns('success');
+        return;
+      } else if (fp) {
+        console.log(`[scan] fastpath MISS (${fp.totalMs}ms, ${fp.reason}) — using LLM`);
+      }
+    }
+  } catch(fpErr) {
+    console.warn('[scan] fastpath error, falling back to LLM:', fpErr);
+  }
+
+  statusEl.textContent = 'Identifying card\u2026';
+
   // Compress image before sending — resize to max 1000px to stay under payload limits
   const imageBase64 = await compressImage(file, 1000);
   const idToken = window._googleIdToken || '';
@@ -9124,6 +9182,110 @@ async function processScanImage(input) {
       return;
     }
 
+    // ── LLM-shortlist rerank ──
+    // LLM read the card name + number. Use that to narrow the 20k-card index
+    // to ~5-30 candidates matching name+number, then rerank via pHash to pick
+    // the exact printing/variant. This is what saves holo illustration rares:
+    // pHash can't find them in 20k but easily distinguishes among 5.
+    let rerankedGroundedId = data.grounded_id || '';
+    let rerankedImageSmall = '';
+    let rerankedImageLarge = '';
+    let rerankedSetName    = '';
+    let rerankedSetCode    = '';
+    let rerankedNumber     = '';
+    let rerankedRarity     = '';
+    try {
+      if (window.CardResellFastPath && rawCardName && !isJapanese && data.card_type !== 'sports') {
+        const rerankStart = performance.now();
+        // Load index (usually already cached from the fastpath attempt above)
+        const idxAll = await window.CardResellFastPath.loadCardIndex().catch(() => null);
+        if (idxAll && Array.isArray(idxAll)) {
+          // Normalize LLM name: lowercase, alphanumeric only
+          const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const llmName = norm(rawCardName);
+          const llmNumClean = (cardNumber || '').replace(/\/.*$/, '').trim();
+          const candidates = idxAll.filter(c => {
+            // Name must be a substring match either direction (handles "Ampharos" vs "Ampharos ex")
+            const cn = norm(c.n);
+            if (!cn.includes(llmName) && !llmName.includes(cn)) return false;
+            // If we have a number, must match (strip leading zeros both sides)
+            if (llmNumClean) {
+              const a = String(c.nu).replace(/^0+/, '');
+              const b = llmNumClean.replace(/^0+/, '');
+              if (a !== b) return false;
+            }
+            return true;
+          });
+          console.log('[rerank]', candidates.length, 'candidates match name="' + rawCardName + '" num="' + llmNumClean + '"');
+          if (candidates.length === 1) {
+            // Unambiguous — use it directly, no need to pHash
+            const c = candidates[0];
+            rerankedGroundedId = c.id;
+            rerankedImageSmall = c.i;
+            rerankedImageLarge = window.CardResellFastPath.deriveLargeUrl(c.i);
+            rerankedSetName    = c.s;
+            rerankedSetCode    = c.sc || '';
+            rerankedNumber     = c.nu;
+            rerankedRarity     = c.r || '';
+            console.log('[rerank] EXACT match:', c.id, c.n, c.s);
+          } else if (candidates.length >= 2 && candidates.length <= 60) {
+            // Multiple printings — pHash-rerank to pick the visually-closest one
+            // Reuse the phash/dhash from the earlier fastpath attempt if available.
+            // If not, hash the raw file quickly.
+            let ph, dh;
+            const fpRes = window._lastFastpathResult;
+            if (fpRes && fpRes.ph && fpRes.dh) {
+              ph = fpRes.ph; dh = fpRes.dh;
+            } else {
+              // Rehash from the raw file — same crop pipeline
+              try {
+                const img = new Image();
+                const urlR = URL.createObjectURL(file);
+                await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = urlR; });
+                URL.revokeObjectURL(urlR);
+                const cnv = document.createElement('canvas');
+                cnv.width = img.naturalWidth; cnv.height = img.naturalHeight;
+                cnv.getContext('2d').drawImage(img, 0, 0);
+                ph = window.CardResellFastPath.computePHash(cnv);
+                dh = window.CardResellFastPath.computeDHash(cnv);
+              } catch(_) {}
+            }
+            if (ph && dh) {
+              let best = null, bestD = 999;
+              for (const c of candidates) {
+                const d = window.CardResellFastPath.hamming(ph, c.p) * 2 +
+                          window.CardResellFastPath.hamming(dh, c.d);
+                if (d < bestD) { bestD = d; best = c; }
+              }
+              if (best) {
+                rerankedGroundedId = best.id;
+                rerankedImageSmall = best.i;
+                rerankedImageLarge = window.CardResellFastPath.deriveLargeUrl(best.i);
+                rerankedSetName    = best.s;
+                rerankedSetCode    = best.sc || '';
+                rerankedNumber     = best.nu;
+                rerankedRarity     = best.r || '';
+                console.log('[rerank] pHash pick (dist=' + bestD + '):', best.id, best.n, best.s);
+              }
+            }
+          } else if (candidates.length > 60) {
+            console.log('[rerank] too many candidates (' + candidates.length + '), skipping');
+          }
+        }
+        console.log('[rerank] took', (performance.now() - rerankStart).toFixed(0), 'ms');
+      }
+    } catch(rerankErr) {
+      console.warn('[rerank] error, using LLM result as-is:', rerankErr);
+    }
+
+    // Preload the reranked hires image so "View Card" opens instantly.
+    if (rerankedImageLarge) {
+      try { const pre2 = new Image(); pre2.src = rerankedImageLarge; } catch(_) {}
+      try { fetch('https://api.pokemontcg.io/v2/cards/' + encodeURIComponent(rerankedGroundedId)).catch(()=>{}); } catch(_) {}
+      // Swap the preview thumb to the clean catalog small so the user sees the right art immediately.
+      try { prevImg.src = rerankedImageSmall; } catch(_) {}
+    }
+
     // 2026-08-15: for JP scans, the Vision model returns the English name in
     // card_name (e.g. "Vileplume") and the printed katakana in jp_name
     // (e.g. "\u30e9\u30d5\u30ec\u30b7\u30a2"). Cataloging + search uses the English
@@ -9133,13 +9295,16 @@ async function processScanImage(input) {
       ? (rawCardName.replace(/\s*\(Japanese\)\s*$/i, '').trim() + ' (Japanese)')
       : rawCardName;
 
-    let detailLine = [setName, rarity, hp ? hp + ' HP' : ''].filter(Boolean).join(' \u00b7 ');
+    const displaySetName = rerankedSetName || setName;
+    const displayRarity  = rerankedRarity  || rarity;
+    const displayNumber  = rerankedNumber  || cardNumber;
+    let detailLine = [displaySetName, displayRarity, hp ? hp + ' HP' : ''].filter(Boolean).join(' \u00b7 ');
     // Show the original katakana name in gray under the identified card so the
     // user knows we didn't lose that info.
     const jpSubline = (isJapanese && jpRawName && jpRawName !== rawCardName)
       ? '<br><span style="font-size:.7rem;opacity:.55">' + esc(jpRawName) + '</span>'
       : '';
-    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (cardNumber ? ' #' + cardNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>' + jpSubline;
+    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (displayNumber ? ' #' + displayNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>' + jpSubline;
 
     // Result area now hosts: (optional) glare/quality hint, plus "Not my card"
     // refund link. Rendered as HTML so we can style + wire the click handler.
@@ -9178,7 +9343,20 @@ async function processScanImage(input) {
     // can shortcut its own pokemontcg.io fuzzy search and load the exact
     // card the server already resolved. Prevents "scan Greninja, load
     // Charizard" downstream mismatches when set/number are ambiguous.
-    window._pendingIdScanCard = { name: cardName, number: cardNumber, setName, setCode: data.set_code || '', groundedId: data.grounded_id || '', rarity, hp, cardType: data.card_type || 'pokemon', sport: data.sport || '', year: data.year || '', isJapanese, jpName: jpRawName };
+    // Prefer reranked values (pHash-verified match) over the raw LLM output.
+    // The LLM often reads the name right but picks a wrong set; rerank fixes that.
+    window._pendingIdScanCard = {
+      name:       cardName,
+      number:     rerankedNumber   || cardNumber,
+      setName:    rerankedSetName  || setName,
+      setCode:    rerankedSetCode  || data.set_code || '',
+      groundedId: rerankedGroundedId || data.grounded_id || '',
+      rarity:     rerankedRarity   || rarity,
+      hp,
+      cardType: data.card_type || 'pokemon',
+      sport: data.sport || '', year: data.year || '',
+      isJapanese, jpName: jpRawName,
+    };
     URL.revokeObjectURL(objectUrl);
 
     // Show success state — hide spinner, show View Card + Scan Another
@@ -9763,6 +9941,354 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     statusEl.textContent = 'Could not read card. Try a clearer, well-lit photo.';
   }
 }
+
+
+// ── SCANNER FAST-PATH (client-side pHash) — added 2026-08-16 ──
+// See /card-index.json (20k card fingerprints, ~4MB gzip-cached at edge).
+// Hit rate targets ~30% of scans (non-holo raw cards); rest fall through
+// to /api/scan LLM. Preloads hires image for instant View Card.
+// Client-side card scanner fast-path.
+// Runs entirely in the browser: image → card crop → pHash → nearest neighbor
+// against a 20,392-card index (~4MB, loaded once & CDN-cached).
+//
+// Return values:
+//   { hit: true,  card: {...}, distance: N, source: 'phash' }   ← use immediately
+//   { hit: false, reason: '...' }                                ← fall back to /api/scan
+//
+// Distance threshold: 12 Hamming bits out of 64 (both pHash + dHash combined = 128 bits).
+// pHash+dHash ≤ 12 empirically matches only the exact card (verified on non-holo test set).
+// Holo cards score > 20 due to shimmer; those fall through to LLM scan.
+
+(function() {
+  'use strict';
+
+  let _cardIndex = null;
+  let _indexLoading = null;
+
+  async function loadCardIndex() {
+    if (_cardIndex) return _cardIndex;
+    if (_indexLoading) return _indexLoading;
+    _indexLoading = (async () => {
+      const t0 = performance.now();
+      const r = await fetch('/card-index.json');
+      if (!r.ok) throw new Error('Index fetch failed: ' + r.status);
+      const idx = await r.json();
+      console.log(`[fastpath] Loaded ${idx.length} cards in ${(performance.now()-t0).toFixed(0)}ms`);
+      _cardIndex = idx;
+      return idx;
+    })();
+    return _indexLoading;
+  }
+
+  // ── Card detection: find bounding box of high-gradient region ──
+  // For a phone photo of a card on any background, the card edges create the
+  // strongest gradient. Compute a simple gradient map, find bounding box of
+  // top-percentile pixels.
+  function detectCardBounds(imgData, w, h) {
+    // Downsample to 256px max for speed
+    const scale = 256 / Math.max(w, h);
+    const dw = Math.floor(w * scale);
+    const dh = Math.floor(h * scale);
+
+    // Grayscale + downsample nearest-neighbor
+    const gray = new Uint8Array(dw * dh);
+    for (let y = 0; y < dh; y++) {
+      const sy = Math.floor(y / scale);
+      for (let x = 0; x < dw; x++) {
+        const sx = Math.floor(x / scale);
+        const idx = (sy * w + sx) * 4;
+        // luminance
+        gray[y*dw + x] = (imgData[idx]*0.299 + imgData[idx+1]*0.587 + imgData[idx+2]*0.114) | 0;
+      }
+    }
+
+    // Gradient (Sobel-lite: |dx| + |dy|)
+    const grad = new Uint8Array(dw * dh);
+    for (let y = 1; y < dh-1; y++) {
+      for (let x = 1; x < dw-1; x++) {
+        const i = y*dw + x;
+        const dx = Math.abs(gray[i+1] - gray[i-1]);
+        const dy = Math.abs(gray[i+dw] - gray[i-dw]);
+        grad[i] = Math.min(255, dx + dy);
+      }
+    }
+
+    // Threshold at 40, find bounding box of edge pixels
+    let minX = dw, maxX = 0, minY = dh, maxY = 0, edgeCount = 0;
+    const xs = [], ys = [];
+    for (let y = 0; y < dh; y++) {
+      for (let x = 0; x < dw; x++) {
+        if (grad[y*dw + x] > 40) {
+          xs.push(x); ys.push(y);
+          edgeCount++;
+        }
+      }
+    }
+    if (edgeCount < 100) return null;
+
+    // Use 3rd-97th percentile bounds to reject outliers (glare specks, hand edge)
+    xs.sort((a,b) => a - b);
+    ys.sort((a,b) => a - b);
+    const p3 = Math.floor(xs.length * 0.03);
+    const p97 = Math.floor(xs.length * 0.97);
+    minX = xs[p3]; maxX = xs[p97];
+    minY = ys[p3]; maxY = ys[p97];
+
+    // Scale back to original
+    const margin = 4;
+    return {
+      x: Math.max(0, Math.floor(minX / scale) - margin),
+      y: Math.max(0, Math.floor(minY / scale) - margin),
+      w: Math.min(w, Math.ceil((maxX - minX) / scale) + 2*margin),
+      h: Math.min(h, Math.ceil((maxY - minY) / scale) + 2*margin),
+    };
+  }
+
+  // ── DCT-II (1D) ──
+  function dct1d(vec) {
+    const N = vec.length;
+    const out = new Array(N);
+    const factor = Math.PI / N;
+    for (let k = 0; k < N; k++) {
+      let sum = 0;
+      const kf = k * factor;
+      for (let n = 0; n < N; n++) sum += vec[n] * Math.cos((n + 0.5) * kf);
+      out[k] = sum;
+    }
+    return out;
+  }
+
+  // ── pHash (matches Python imagehash.phash, hash_size=8) ──
+  // Input: canvas with any-size RGBA image. Resize to 32x32 grayscale, DCT,
+  // take top-left 8x8, threshold vs median.
+  function computePHash(canvas) {
+    const N = 32;
+    // Downsample to 32x32 grayscale via a temp canvas
+    const tmp = document.createElement('canvas');
+    tmp.width = N; tmp.height = N;
+    const ctx = tmp.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, N, N);
+    const px = ctx.getImageData(0, 0, N, N).data;
+    const mat = [];
+    for (let i = 0; i < N; i++) {
+      const row = new Array(N);
+      for (let j = 0; j < N; j++) {
+        const p = (i*N + j) * 4;
+        row[j] = px[p]*0.299 + px[p+1]*0.587 + px[p+2]*0.114;
+      }
+      mat.push(row);
+    }
+    // DCT rows
+    const rowT = mat.map(r => dct1d(r));
+    // DCT cols
+    const dct = Array.from({length: N}, () => new Array(N));
+    for (let c = 0; c < N; c++) {
+      const col = rowT.map(r => r[c]);
+      const dc = dct1d(col);
+      for (let r = 0; r < N; r++) dct[r][c] = dc[r];
+    }
+    // Top-left 8x8
+    const low = [];
+    for (let i = 0; i < 8; i++)
+      for (let j = 0; j < 8; j++)
+        low.push(dct[i][j]);
+    // Median (including DC — matches Python imagehash)
+    const sorted = low.slice().sort((a,b) => a - b);
+    const median = (sorted[31] + sorted[32]) / 2;
+    // Bits → hex
+    let hex = '';
+    let nibble = 0, bits = 0;
+    for (const v of low) {
+      nibble = (nibble << 1) | (v > median ? 1 : 0);
+      bits++;
+      if (bits === 4) {
+        hex += nibble.toString(16);
+        nibble = 0; bits = 0;
+      }
+    }
+    return hex;
+  }
+
+  // ── dHash (gradient-based) ──
+  // Downsample to 9x8, difference along rows → 64 bits
+  function computeDHash(canvas) {
+    const tmp = document.createElement('canvas');
+    tmp.width = 9; tmp.height = 8;
+    const ctx = tmp.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, 9, 8);
+    const px = ctx.getImageData(0, 0, 9, 8).data;
+    let hex = '';
+    let nibble = 0, bits = 0;
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) {
+        const a = (y*9 + x) * 4;
+        const b = (y*9 + x + 1) * 4;
+        const va = px[a]*0.299 + px[a+1]*0.587 + px[a+2]*0.114;
+        const vb = px[b]*0.299 + px[b+1]*0.587 + px[b+2]*0.114;
+        nibble = (nibble << 1) | (vb > va ? 1 : 0);
+        bits++;
+        if (bits === 4) {
+          hex += nibble.toString(16);
+          nibble = 0; bits = 0;
+        }
+      }
+    }
+    return hex;
+  }
+
+  // Hamming distance between two hex strings of equal length
+  function hamming(a, b) {
+    if (a.length !== b.length) return 999;
+    let d = 0;
+    for (let i = 0; i < a.length; i++) {
+      let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+      // popcount 4 bits
+      x = x - ((x >> 1) & 0x5);
+      x = (x & 0x3) + ((x >> 2) & 0x3);
+      d += x;
+    }
+    return d;
+  }
+
+  // Derive large-image URL from the small URL stored in the index.
+  // pokemontcg.io: /{set}/{num}.png -> /{set}/{num}_hires.png
+  // scrydex:      /pokemon/{id}/small -> /pokemon/{id}/large
+  function deriveLargeUrl(smallUrl) {
+    if (!smallUrl) return '';
+    if (smallUrl.includes('scrydex.com')) return smallUrl.replace(/\/small$/, '/large');
+    if (smallUrl.includes('pokemontcg.io')) return smallUrl.replace(/\.png$/, '_hires.png');
+    return smallUrl;
+  }
+
+  // Enrich a raw index record for use by the app UI: adds thumb + hires + a
+  // display-friendly copy of the compact keys.
+  function enrichCard(rec) {
+    if (!rec) return null;
+    return {
+      id:          rec.id,
+      card_name:   rec.n,
+      set_name:    rec.s,
+      set_id:      rec.si,
+      set_code:    rec.sc || '',
+      card_number: rec.nu,
+      rarity:      rec.r || '',
+      phash:       rec.p,
+      dhash:       rec.d,
+      image_small: rec.i,   // 245x342 - use as thumb for instant paint
+      image_large: deriveLargeUrl(rec.i), // hires - use in detail modal
+    };
+  }
+
+  // Main entry: given a File (from input), returns { hit, card, distance } or { hit: false }
+  async function scanFile(file) {
+    const t0 = performance.now();
+    // Load index in parallel with image decoding
+    const indexPromise = loadCardIndex().catch(e => {
+      console.warn('[fastpath] Index load failed:', e);
+      return null;
+    });
+
+    // Decode image to canvas
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    await new Promise((res, rej) => {
+      img.onload = res;
+      img.onerror = rej;
+      img.src = url;
+    });
+    URL.revokeObjectURL(url);
+
+    // Detect card bounds
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    let bounds = detectCardBounds(imgData, canvas.width, canvas.height);
+    if (!bounds) {
+      // Fallback: use whole image
+      bounds = { x: 0, y: 0, w: canvas.width, h: canvas.height };
+    }
+
+    // Crop to card
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = bounds.w;
+    cropCanvas.height = bounds.h;
+    cropCanvas.getContext('2d').drawImage(canvas, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
+
+    // Compute hashes
+    const t1 = performance.now();
+    const ph = computePHash(cropCanvas);
+    const dh = computeDHash(cropCanvas);
+    console.log(`[fastpath] hashes computed in ${(performance.now()-t1).toFixed(0)}ms  pHash=${ph} dHash=${dh}`);
+
+    // Wait for index
+    const idx = await indexPromise;
+    if (!idx) {
+      return { hit: false, reason: 'index unavailable', ph, dh, cropCanvas };
+    }
+
+    // Nearest neighbor
+    const t2 = performance.now();
+    let bestDist = 999, bestCard = null;
+    let secondDist = 999;
+    for (const c of idx) {
+      const d = hamming(ph, c.p) * 2 + hamming(dh, c.d);
+      if (d < bestDist) {
+        secondDist = bestDist;
+        bestDist = d;
+        bestCard = c;
+      } else if (d < secondDist) {
+        secondDist = d;
+      }
+    }
+    console.log(`[fastpath] NN over ${idx.length} in ${(performance.now()-t2).toFixed(0)}ms — best=${bestDist} 2nd=${secondDist} → ${bestCard?.n} / ${bestCard?.s}`);
+
+    // Confidence: distance ≤ 12 AND gap to second best ≥ 6 → high confidence
+    const CONFIDENCE_MAX = 12;
+    const GAP_MIN = 6;
+    const totalMs = (performance.now() - t0).toFixed(0);
+    if (bestDist <= CONFIDENCE_MAX && (secondDist - bestDist) >= GAP_MIN) {
+      console.log(`[fastpath] HIT in ${totalMs}ms`);
+      return {
+        hit: true,
+        card: enrichCard(bestCard),
+        distance: bestDist,
+        secondDistance: secondDist,
+        totalMs,
+        source: 'phash',
+      };
+    }
+
+    console.log(`[fastpath] MISS (best=${bestDist}, gap=${secondDist-bestDist}) — falling through to LLM`);
+    return {
+      hit: false,
+      reason: `best=${bestDist} gap=${secondDist-bestDist}`,
+      bestGuess: enrichCard(bestCard),
+      bestDist,
+      ph, dh,
+      cropCanvas,
+      totalMs,
+    };
+  }
+
+  // Expose
+  window.CardResellFastPath = {
+    scanFile,
+    loadCardIndex,
+    computePHash,
+    computeDHash,
+    hamming,
+    enrichCard,
+    deriveLargeUrl,
+  };
+})();
 
 // Restore Google session on page load
 // Session restore handled by Firebase onAuthStateChanged

@@ -9,11 +9,13 @@
     { "src": "about.html", "use": "@vercel/static" },
     { "src": "contact.html", "use": "@vercel/static" },
     { "src": "manifest.json", "use": "@vercel/static" },
-    { "src": "config.js", "use": "@vercel/static" }
+    { "src": "config.js", "use": "@vercel/static" },
+    { "src": "card-index.json", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
     { "src": "/config.js", "dest": "/config.js" },
+    { "src": "/card-index.json", "dest": "/card-index.json", "headers": { "Cache-Control": "public, max-age=86400, immutable" } },
     { "src": "/signin", "dest": "/signin.html" },
     { "src": "/terms", "dest": "/terms.html" },
     { "src": "/privacy", "dest": "/privacy.html" },
