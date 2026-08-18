@@ -433,6 +433,20 @@ Respond ONLY with valid JSON:
 
 BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
 
+═══ ANTI-HALLUCINATION RULES ═══ (violations = wrong answer, worse than empty)
+• NEVER invent a card name. If you cannot read the printed name clearly, return card_name="" and image_quality="glare_blocked"/"blurry"/"cropped". A blank field is FAR better than a plausible-sounding wrong guess.
+• NEVER invent a set code. Set codes have strict formats:
+    – Pokémon: 2–4 uppercase letters/digits like SVI, MEW, PGO, 151, OBF, SV1, SV3PT5.
+    – Yu-Gi-Oh: 3–4 letters + hyphen + region + 3 digits like PHRA-EN012, CORE-EN080, LOB-EN001, MP24-EN123.
+    – MTG: 3-letter code like MH3, LCI, WOE, MOM.
+    – One Piece: OP01–OP12, ST01–ST25, EB01, PRB01.
+    – Lorcana: 3-letter code like TFC, ROF, INK, URR.
+  If you cannot read a set code matching one of these formats, return set_code="". Do NOT invent 9-digit numeric IDs, do NOT make up codes like "COG-EN082" that don't exist.
+• For Yu-Gi-Oh cards specifically: card names are printed in a clean font at the top. If you cannot read the name letter-for-letter, return card_name="" — do NOT combine words to invent names like "Skyfire of the Sacred Beast", "Blitzclique - Breakaway", "Distrust Paranoia", or "Elfnotes: Quatrain of Succession". Made-up names are the #1 failure mode; refusing to guess is the correct behavior.
+• If you're returning candidates[], EACH candidate name must also be a real card you're actually confident exists. Do not fill the array with made-up alternatives.
+• confidence="high" requires: readable name + readable card number + a set code matching the formats above. If any of those three is unreadable, confidence must be "medium" or "low".
+• When confidence is "low" AND you cannot read the name, prefer empty card_name over any guess.
+
 GLARE + SLEEVE HANDLING: Reflective toploaders and holographic sleeves often create glare that blocks key details (card number, set symbol, or HP). If glare is blocking a critical detail:
   - Set confidence to "low" and set image_quality to "glare_blocked"
   - Populate glare_regions with which detail is blocked: "card_number", "set_symbol", "card_name", or "art"
@@ -442,10 +456,16 @@ GLARE + SLEEVE HANDLING: Reflective toploaders and holographic sleeves often cre
 Other low-quality photo signals: blur, cropped edges, dark shadow, upside-down. Set image_quality to "blurry", "cropped", "dark", or "rotated" accordingly.
 
 Extract for the best match:
-1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "Ampharos", "LeBron James"). CRITICAL: This field must ALWAYS be populated when ANY name is visible on the card, even if you're uncertain about the exact set. The name is the most-visible part of every card and near-impossible to misread — do NOT leave this blank just because set/number are uncertain. Only leave it blank if the card is truly unrecognizable (upside down, torn, or completely blurred). If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア"), TRANSLATE to the English Pokémon name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
+1. card_name: The Pokémon or character or player name IN ENGLISH (e.g. "Mewtwo VSTAR", "Charizard ex", "Ampharos", "LeBron James"). Populate ONLY when you can clearly read the printed name letter-for-letter. If the name area is blurry, glared, cropped, cut off, or otherwise unreadable, return "" — do NOT guess plausible-sounding combinations of words. If the card is Japanese and only shows katakana/hiragana (e.g. "ラフレシア") AND you can clearly read the katakana, TRANSLATE to the English name ("Vileplume") and put that in card_name. Never return raw Japanese text in card_name.
 2. card_number: The card number (e.g. "079/078", "025/165", or for sports the printed # like "175" or "RA-LJ")
 3. set_name: The exact printed set name (e.g. "Pokémon GO", "Crown Zenith", "Topps Chrome", "Panini Prizm"). CRITICAL: You MUST return either a real set name OR an empty string "". NEVER return editorial commentary like "Not an official set", "counterfeit", "custom card", "unknown", or "fake" — our database will look up the set from the card number if you don't know it. If you can't read the set symbol clearly, return "".
-3b. set_code: The 2-4 character SET CODE printed in the BOTTOM-LEFT or BOTTOM-RIGHT of Pokémon cards, right next to or above the card number (e.g. "SVI", "MEW", "ME04", "CRZ", "PGO", "151", "SV1", "OBF"). This code is HIGHLY reliable and lets us look up the exact set even when set_name is unknown. Read the exact printed characters. If not visible or unreadable, return "".
+3b. set_code: The SET CODE printed on the card. Format depends on TCG:
+    – Pokémon: 2–4 uppercase chars in BOTTOM-LEFT/RIGHT near the card number (e.g. "SVI", "MEW", "PGO", "151", "SV1", "OBF").
+    – Yu-Gi-Oh: Left/right of the artwork or bottom-left, format "XXX(X)-EN###" or region equivalent ("PHRA-EN012", "CORE-EN080").
+    – MTG: 3-letter code in bottom-left near the set symbol.
+    – One Piece: "OP##", "ST##" format near collector number.
+    – Lorcana: 3-letter code near collector number.
+  MUST match one of these formats. If unreadable OR you cannot match a real format, return "". NEVER invent 9-digit numeric IDs or make up codes.
 4. hp: HP number if Pokémon card (e.g. "280")
 5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols. Sports cards show a photo of a real athlete, a team logo/jersey, brand marks like Topps/Panini/Bowman/Upper Deck/Fleer/Donruss/Score/Select/Prizm/Optic/Mosaic/Chronicles, and often a copyright year.
 6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false. STRONG SIGNALS for is_japanese=true: any katakana on the name line (ラフレシア, リザードン), the word ポケモン or たね anywhere on the card, or JP-specific rarity markers (RR, SR, SAR, UR). If is_japanese=true, set_name should be the English name of the JP set (e.g. "Jungle" not 「ジャングル」, "151" not 「ポケモンカード151」).
@@ -481,12 +501,15 @@ Respond ONLY with valid JSON, no explanation:
         messages: [{ role: 'user', content: visionContent }],
       };
       if (isGpt5) {
-        body.reasoning_effort = 'low';
+        // Identify mode uses 'medium' reasoning — the tighter anti-hallucination
+        // rules need real reasoning budget to decide "can I actually read this?"
+        // vs. "is this a plausible guess?". Grade mode stays at 'low' because the
+        // grading prompt is more mechanical (measure ratios, apply thresholds).
+        body.reasoning_effort = isGradeMode ? 'low' : 'medium';
         // GPT-5 reasoning tokens count toward max_completion_tokens.
-        // Even at 'low' effort, reasoning can eat 500-1500 tokens before
-        // any visible output. Give a generous budget so real output isn't
-        // truncated / empty.
-        body.max_completion_tokens = isDeepGrade ? 5000 : (isGradeMode ? 4000 : 3000);
+        // Medium reasoning can eat 2000-4000 tokens before visible output.
+        // Give a generous budget so real output isn't truncated / empty.
+        body.max_completion_tokens = isDeepGrade ? 5000 : (isGradeMode ? 4000 : 5000);
       } else {
         body.max_tokens = isDeepGrade ? 700 : (isGradeMode ? 500 : 300);
       }
@@ -586,6 +609,54 @@ Respond ONLY with valid JSON, no explanation:
         console.warn(`Model returned editorial set_name, clearing: "${cardInfo.set_name}"`);
         cardInfo.set_name = '';
       }
+    }
+
+    // ── SET-CODE FORMAT VALIDATION ──
+    // Vision models sometimes invent set codes when they can't read the real
+    // one (e.g. 9-digit numeric IDs like "101305049", or made-up codes like
+    // "COG-EN082" for Yu-Gi-Oh where COG isn't a real set). Validate against
+    // known formats per TCG and clear invalid ones. Better to have no set_code
+    // than a wrong one (which would poison the grounding lookup).
+    const validateSetCode = (code, cardType) => {
+      if (!code || typeof code !== 'string') return '';
+      const c = code.trim().toUpperCase();
+      if (!c) return '';
+      // Reject pure numeric IDs longer than 3 chars — e.g. "101305049" invented.
+      // Note: Pokémon "151" and "165" ARE real set codes so we allow 3-char digits.
+      if (/^\d+$/.test(c) && c.length > 3) return '';
+      // Reject anything too long to be a real set code.
+      if (c.length > 12) return '';
+      const t = (cardType || 'pokemon').toLowerCase();
+      if (t === 'yugioh') {
+        // Real YGO codes: 3-5 letters + hyphen + region (EN/DE/FR/IT/PT/SP/JP/KR/TC/AE) + 3 digits
+        // OR promo codes like MP24-EN123, RA02-EN050, YGLD-ENA01.
+        return /^[A-Z0-9]{2,6}-(EN|DE|FR|IT|PT|SP|JP|KR|TC|AE)[A-Z0-9]{2,4}$/.test(c) ? c : '';
+      }
+      if (t === 'pokemon') {
+        // 2–5 uppercase alphanumeric, no hyphens. SVI, MEW, PGO, 151, SV3PT5.
+        return /^[A-Z0-9]{2,6}$/.test(c) ? c : '';
+      }
+      if (t === 'mtg') {
+        return /^[A-Z0-9]{3}$/.test(c) ? c : '';
+      }
+      if (t === 'onepiece') {
+        return /^(OP|ST|EB|PRB)\d{2}$/.test(c) ? c : '';
+      }
+      if (t === 'lorcana') {
+        return /^[A-Z]{3}$/.test(c) ? c : '';
+      }
+      // Sports and other — loose validation, just no pure numerics.
+      return /^[A-Z0-9-]{2,10}$/.test(c) ? c : '';
+    };
+    const beforeCode = cardInfo.set_code;
+    cardInfo.set_code = validateSetCode(cardInfo.set_code, cardInfo.card_type);
+    if (beforeCode && !cardInfo.set_code) {
+      console.warn(`[scan] rejected invalid set_code "${beforeCode}" for ${cardInfo.card_type}`);
+    }
+    if (Array.isArray(cardInfo.candidates)) {
+      cardInfo.candidates.forEach(c => {
+        if (c) c.set_code = validateSetCode(c.set_code, c.card_type || cardInfo.card_type);
+      });
     }
     // Same sanitization for candidates — the picker UI shouldn't show garbage sets either.
     if (Array.isArray(cardInfo.candidates)) {
@@ -707,6 +778,49 @@ Respond ONLY with valid JSON, no explanation:
         // Grounding is best-effort. If pokemontcg.io times out or 500s,
         // fall through to the model's original set_name.
         console.warn('pokemontcg.io grounding failed:', e?.message || e);
+      }
+    }
+
+    // ── Yu-Gi-Oh grounding pass (YGOProDeck) ──
+    // YGOProDeck is a free unauth'd API with the full YGO card database.
+    // If we have a set_code that survived validation (format XXX-EN###),
+    // look up the exact card and OVERRIDE card_name from ground truth.
+    // This kills "Skyfire of the Sacred Beast" / "Distrust Paranoia" style
+    // hallucinations where the model invents plausible names.
+    //
+    // Endpoint: /api/v7/cardsetsinfo.php?setcode=PHRA-EN012
+    // Returns: {id, name, set_name, set_code, set_rarity, set_price}
+    if (
+      !isGradeMode &&
+      cardInfo.card_type === 'yugioh' &&
+      cardInfo.set_code &&
+      /^[A-Z0-9]{2,6}-(EN|DE|FR|IT|PT|SP|JP|KR|TC|AE)[A-Z0-9]{2,4}$/.test(cardInfo.set_code)
+    ) {
+      try {
+        const ac = new AbortController();
+        const tt = setTimeout(() => ac.abort(), 4000);
+        const r = await fetch(
+          `https://db.ygoprodeck.com/api/v7/cardsetsinfo.php?setcode=${encodeURIComponent(cardInfo.set_code)}`,
+          { signal: ac.signal }
+        ).catch(() => null);
+        clearTimeout(tt);
+        if (r && r.ok) {
+          const j = await r.json().catch(() => null);
+          if (j && j.name && j.set_name) {
+            const before = { name: cardInfo.card_name, set: cardInfo.set_name };
+            // OVERRIDE with ground truth
+            cardInfo.card_name = j.name;
+            cardInfo.set_name = j.set_name;
+            cardInfo.rarity = j.set_rarity || cardInfo.rarity;
+            cardInfo.grounded = true;
+            cardInfo.grounded_id = String(j.id);
+            console.log(`[scan] YGO grounded: "${before.name}" → "${cardInfo.card_name}" (${cardInfo.set_code})`);
+          } else {
+            console.log(`[scan] YGO grounding: no match for "${cardInfo.set_code}"`);
+          }
+        }
+      } catch(e) {
+        console.warn('YGO grounding failed:', e?.message || e);
       }
     }
 
