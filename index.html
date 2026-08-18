@@ -4214,28 +4214,136 @@ function renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) {
 // ── Grade opportunity trigger ───────────────────────────────────
 // Silent by default. Only fires the pill when grading actually pencils out.
 // Keeps users from burning AI grade scan credits on losing bets.
+// 2026-08-18: Cross-TCG auto-switch after AI vision scan.
+// The vision API returns card_type in {pokemon, mtg, yugioh, lorcana,
+// onepiece, sports}. If the scanned card belongs to a different TCG than
+// what's currently selected in the game picker, silently switch so
+// pricing + image lookups actually work. Silent on sports/other because
+// those live in different UI panels.
+function _mapCardTypeToGame(cardType, isJapanese) {
+  const t = (cardType || '').toLowerCase();
+  if (t === 'pokemon') return isJapanese ? 'pokemonjp' : 'pokemon';
+  if (t === 'mtg' || t === 'yugioh' || t === 'lorcana' || t === 'onepiece') return t;
+  return null; // sports/unknown -> don't auto-switch
+}
+function _gameLabel(g) {
+  return ({
+    pokemon:   'Pok\u00e9mon EN',
+    pokemonjp: 'Pok\u00e9mon JP',
+    mtg:       'Magic: The Gathering',
+    yugioh:    'Yu-Gi-Oh!',
+    lorcana:   'Disney Lorcana',
+    onepiece:  'One Piece',
+  })[g] || g;
+}
+function maybeAutoSwitchGameFromScan(cardType, isJapanese) {
+  const detected = _mapCardTypeToGame(cardType, isJapanese);
+  if (!detected) return false;
+  // activeGame is the module-scope variable set by onGameSelectChange.
+  if (typeof activeGame === 'undefined' || activeGame === detected) return false;
+  // Sports / other panels have their own UX flow — don't swap out from under them.
+  if (activeGame === 'sports' || activeGame === 'other') {
+    // Actually DO swap in this case: user was in Sports but scanned Pok\u00e9mon.
+    // Falls through.
+  }
+  const prev = activeGame;
+  if (typeof onGameSelectChange === 'function') {
+    onGameSelectChange(detected);
+  } else {
+    activeGame = detected;
+    const sel = document.getElementById('gameSelect');
+    if (sel) sel.value = detected;
+  }
+  try { window.trackEvent && window.trackEvent('cross_tcg_auto_switch', { from: prev, to: detected }); } catch(e) {}
+  try {
+    if (typeof showToast === 'function') {
+      showToast('Detected ' + _gameLabel(detected) + ' \u2014 switched from ' + _gameLabel(prev), 'gold');
+    }
+  } catch(e) {}
+  return true;
+}
+
 function renderGradeOpportunity(g) {
   if (!g || g.recommendation === 'sell_raw') return '';
 
   const isGreen = g.recommendation === 'worth_grading';
-  const bg  = isGreen ? 'rgba(34,197,94,.12)'  : 'rgba(245,158,11,.12)';
-  const bd  = isGreen ? 'rgba(34,197,94,.5)'   : 'rgba(245,158,11,.5)';
-  const clr = isGreen ? '#4ade80'              : '#fbbf24';
-  const icon = isGreen ? '⚡' : '📋';
+  const tooltip = (g.reasoning || []).join(' — ').replace(/"/g, '&quot;');
 
-  const label = isGreen
-    ? `Worth grading · <strong>${g.targetGrade} est. $${Number(g.gradedEst).toFixed(0)}</strong> · <span style="color:${clr}">+$${Number(g.expectedProfit).toFixed(0)} profit (+${g.edgePct}%)</span>`
-    : `Borderline · <strong>${g.targetGrade} est. $${Number(g.gradedEst).toFixed(0)}</strong> · <span style="color:${clr}">+$${Number(g.expectedProfit).toFixed(0)}</span>`;
+  // 2026-08-18: Signed-in users see the compact pill (they know what it means
+  // and don't need the CTA). Cold ad traffic (signed-out) sees the loud
+  // callout with sign-in CTA — the one moment that converts a first-time
+  // visitor is realizing their card is worth grading.
+  const isSignedIn = !!(window.googleUser || window._googleIdToken);
 
-  const tooltip = (g.reasoning || []).join(' — ');
+  // ---- Compact pill (signed-in daily users) ----
+  if (isSignedIn) {
+    const bg  = isGreen ? 'rgba(34,197,94,.12)'  : 'rgba(245,158,11,.12)';
+    const bd  = isGreen ? 'rgba(34,197,94,.5)'   : 'rgba(245,158,11,.5)';
+    const clr = isGreen ? '#4ade80'              : '#fbbf24';
+    const icon = isGreen ? '⚡' : '📋';
+    const label = isGreen
+      ? `Worth grading · <strong>${g.targetGrade} est. $${Number(g.gradedEst).toFixed(0)}</strong> · <span style="color:${clr}">+$${Number(g.expectedProfit).toFixed(0)} profit (+${g.edgePct}%)</span>`
+      : `Borderline · <strong>${g.targetGrade} est. $${Number(g.gradedEst).toFixed(0)}</strong> · <span style="color:${clr}">+$${Number(g.expectedProfit).toFixed(0)}</span>`;
+    return (
+      `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.4rem;padding:.4rem .55rem;background:${bg};border:1px solid ${bd};border-radius:8px;font-size:.78rem;line-height:1.4" title="${tooltip}">` +
+        `<span style="font-size:.95rem">${icon}</span>` +
+        `<span style="color:var(--text)">${label}</span>` +
+        ` <span style="opacity:.55;font-size:.68rem">· assumes ${g.targetGrade}, not guaranteed</span>` +
+      `</div>`
+    );
+  }
+
+  // ---- Loud callout (signed-out / cold ad traffic) ----
+  const gradedEst    = Number(g.gradedEst).toFixed(0);
+  const profit       = Number(g.expectedProfit).toFixed(0);
+  const rawPrice     = Number(g.rawPrice || 0).toFixed(0);
+  const gradingCost  = Number(g.gradingCost || 0).toFixed(0);
+  const badgeText    = isGreen ? 'GRADE OPP' : 'MAYBE';
+  const badgeBg      = isGreen ? '#22c55e' : '#f59e0b';
+  const badgeColor   = isGreen ? '#00110a' : '#1a0f00';
+  const accentColor  = isGreen ? '#4ade80' : '#fbbf24';
+  const headerText   = isGreen ? 'Worth grading' : 'Borderline grade';
+  const gradientBg   = isGreen
+    ? 'linear-gradient(135deg, rgba(34,197,94,.16), rgba(34,197,94,.06))'
+    : 'linear-gradient(135deg, rgba(245,158,11,.16), rgba(245,158,11,.06))';
+  const borderClr    = isGreen ? 'rgba(34,197,94,.45)' : 'rgba(245,158,11,.45)';
+  const headline     = isGreen
+    ? `This card could be worth $${gradedEst} graded`
+    : `Grading this card might pay off`;
+  const subExplain   = isGreen
+    ? `Raw $${rawPrice} → ${g.targetGrade} comp $${gradedEst}. Strong grade candidate at this raw price.`
+    : `Raw $${rawPrice} → ${g.targetGrade} comp $${gradedEst}. Numbers are on the edge — grade only if condition is excellent.`;
 
   return (
-    `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.4rem;padding:.4rem .55rem;background:${bg};border:1px solid ${bd};border-radius:8px;font-size:.78rem;line-height:1.4" title="${tooltip}">` +
-      `<span style="font-size:.95rem">${icon}</span>` +
-      `<span style="color:var(--text)">${label}</span>` +
-      ` <span style="opacity:.55;font-size:.68rem">· assumes ${g.targetGrade}, not guaranteed</span>` +
+    `<div style="margin-top:.6rem;padding:.85rem;background:${gradientBg};border:1.5px solid ${borderClr};border-radius:12px;position:relative;overflow:hidden" title="${tooltip}">` +
+      `<div style="display:flex;align-items:center;gap:.4rem;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${accentColor}">` +
+        `<span style="padding:.1rem .35rem;background:${badgeBg};color:${badgeColor};border-radius:5px;font-size:.6rem;font-weight:900;letter-spacing:.06em">${badgeText}</span>` +
+        `<span>${headerText}</span>` +
+      `</div>` +
+      `<div style="font-size:1.05rem;font-weight:800;line-height:1.25;margin-top:.35rem;color:var(--text)">${headline}</div>` +
+      `<div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:.4rem;margin-top:.35rem">` +
+        `<span style="font-size:1.25rem;font-weight:800;color:${accentColor};line-height:1">+$${profit}</span>` +
+        `<span style="font-size:.72rem;color:var(--text-muted);line-height:1.3">est. profit after $${gradingCost} grading + eBay fees (${g.edgePct}% edge)</span>` +
+      `</div>` +
+      `<div style="font-size:.72rem;color:var(--text-muted);margin-top:.5rem;line-height:1.45">${subExplain}</div>` +
+      `<div style="font-size:.62rem;color:var(--text-muted);opacity:.7;margin-top:.2rem">Estimate assumes a ${g.targetGrade}; actual grade not guaranteed.</div>` +
+      `<button onclick="event.stopPropagation();typeof handleGradeCalloutCta==='function'&&handleGradeCalloutCta();" style="display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;margin-top:.7rem;padding:.65rem .9rem;background:${badgeBg};color:${badgeColor};border:none;border-radius:9px;font-weight:800;font-size:.85rem;cursor:pointer;font-family:inherit">Grade this card — Sign in for 1 free scan →</button>` +
+      `<div style="text-align:center;font-size:.6rem;color:var(--text-muted);opacity:.7;margin-top:.35rem">No card required · Never expires</div>` +
     `</div>`
   );
+}
+
+// Called by the signed-out grade opportunity callout CTA.
+// Triggers the existing Google sign-in prompt if the Google widget is
+// available; otherwise falls back to opening the pricing modal.
+function handleGradeCalloutCta() {
+  try { window.trackEvent && window.trackEvent('grade_callout_cta_click'); } catch(e) {}
+  const gbtn = document.getElementById('googleSignInBtn');
+  if (gbtn && typeof gbtn.click === 'function') {
+    gbtn.click();
+    return;
+  }
+  if (typeof openPricingModal === 'function') openPricingModal('grade_callout_cta');
 }
 
 // Legacy renderer (kept for any callers still using it)
@@ -8697,6 +8805,16 @@ function cancelScan() {
       try {
         _loadScannedJPCard(pending);
       } catch(e) { console.warn('JP auto-load failed', e); _loadScannedCardExact(pending); }
+    } else if (pending.cardType && pending.cardType !== 'pokemon') {
+      // 2026-08-18: Cross-TCG scan — non-Pokémon (Lorcana/MTG/YGO/OnePiece).
+      // _loadScannedCardExact hard-codes pokemontcg.io + pokemon TPL slug,
+      // so we can't route through it. maybeAutoSwitchGameFromScan already
+      // flipped activeGame in the scan flow; here we populate the search
+      // input with the scanned name+number and fire the game's own search
+      // pipeline so the user lands on the right card with real prices.
+      try {
+        _loadScannedNonPokemonCard(pending);
+      } catch(e) { console.warn('non-pokemon auto-load failed', e); _loadScannedCardExact(pending); }
     } else {
       _loadScannedCardExact(pending);
     }
@@ -8759,6 +8877,47 @@ function _routeScannedSportsCard(pending) {
 // 2026-08-15: route a Japanese scan straight to the pokemonjp comps card
 // (English name + "(Japanese)" tag + eBay JP sold + PriceCharting) instead
 // of trying PokemonTCG.io, which doesn't index most Japanese-only sets.
+// 2026-08-18: Load a scanned Lorcana/MTG/Yu-Gi-Oh!/One Piece card after
+// maybeAutoSwitchGameFromScan flipped activeGame to the correct TCG.
+// Strategy: populate the search input with the scanned card name, fire
+// the game's autocomplete (doSearch dispatches by activeGame), and rely
+// on the existing _scanTargetNumber / _scanTargetName auto-select logic
+// (renderDrops in index.html ~line 4065) to pick the correct printing
+// out of the dropdown so the user lands on a real card with real prices.
+function _loadScannedNonPokemonCard(pending) {
+  const name   = String(pending.name || '').trim();
+  const number = String(pending.number || '').trim();
+  if (!name) {
+    // No name — fall back to _loadScannedCardExact so the synthetic-card
+    // fallback surface still fires.
+    _loadScannedCardExact(pending);
+    return;
+  }
+
+  // Set the auto-select breadcrumbs so renderDrops picks the exact match.
+  window._scanTargetNumber = number;
+  window._scanTargetName   = name;
+
+  const si = document.getElementById('searchInput');
+  if (si) {
+    si.value = name;
+    si.focus();
+  }
+
+  // Fire the game-appropriate search (searchLorcana / searchMTG / etc).
+  if (typeof doSearch === 'function') {
+    doSearch(name).catch(err => {
+      console.warn('[_loadScannedNonPokemonCard] doSearch failed', err);
+    });
+  }
+
+  // Scroll to the card area so the user sees the dropdown fill in.
+  try {
+    const heroEl = document.getElementById('cardHero');
+    if (heroEl) heroEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e) {}
+}
+
 function _loadScannedJPCard(pending) {
   const englishBase = String(pending.name || '').replace(/\s*\(Japanese\)\s*$/i, '').trim();
   const displayName = englishBase + ' (Japanese)';
@@ -9404,6 +9563,11 @@ async function _pickScanCandidate(idx) {
     sport:    picked.sport     || '',
     year:     picked.year      || '',
   };
+  // Cross-TCG auto-switch: if user was on Pokemon but picked a Lorcana
+  // candidate (etc.), silently swap the game selector before rendering.
+  try {
+    maybeAutoSwitchGameFromScan(picked.card_type, picked.is_japanese === true);
+  } catch(e) { console.warn('[cross-tcg] picker auto-switch failed', e); }
   try { if (window._pendingScanObjectUrl) URL.revokeObjectURL(window._pendingScanObjectUrl); } catch(e) {}
   window._pendingScanCandidates = null;
   window._pendingScanObjectUrl  = null;
@@ -9610,6 +9774,16 @@ async function processScanImage(input) {
       statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
       return;
     }
+
+    // 2026-08-18: Cross-TCG auto-switch.
+    // If the scanned card belongs to a different TCG than what the user has
+    // selected in the game picker, silently switch to the correct game so
+    // the pricing pipeline can actually price it. Silent switch + toast so
+    // the user isn't confused when the game selector changes on them.
+    // Silent on sports (sports uses a different UI path).
+    try {
+      maybeAutoSwitchGameFromScan(data.card_type, isJapanese);
+    } catch(e) { console.warn('[cross-tcg] auto-switch failed', e); }
 
     // ── LLM-shortlist rerank ──
     // LLM read the card name + number. Use that to narrow the 20k-card index
