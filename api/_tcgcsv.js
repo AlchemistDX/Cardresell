@@ -243,6 +243,13 @@ export function rarityScore(candRarity, targetRarity) {
 
 // ── Pick best product for (name, number, rarity) ──────────────
 // Name is REQUIRED to match. Number and rarity refine but never override name.
+// Strip only the TRAILING " - N/M" collector-number suffix used by Pokemon
+// (e.g. "Ampharos - 090/086"). Do NOT strip subtitles that are part of the
+// card name (Lorcana "Elsa - Snow Queen", One Piece "Portgas.D.Ace - Fire").
+function stripCollectorSuffix(name) {
+  return String(name || '').replace(/\s+-\s+\d+[a-z]?\/\d+[a-z]?\s*(\([^)]*\))?\s*$/i, '').trim();
+}
+
 export function pickProduct(products, targetName, targetNumber, targetRarity) {
   if (!products || !products.length) return null;
   const nameLo = String(targetName || '').toLowerCase().trim();
@@ -254,26 +261,52 @@ export function pickProduct(products, targetName, targetNumber, targetRarity) {
 
   const scored = products.map(p => {
     let nameScore = 0;
-    const pName = String(p.name || '').toLowerCase();
+    const pNameRaw = String(p.name || '');
+    const pCleanRaw = String(p.cleanName || '');
+    const pName = pNameRaw.toLowerCase();
+    const pClean = pCleanRaw.toLowerCase();
     const pNum = normalizeNumber(p.number);
-    // TCGPlayer names look like "Ampharos - 090/086" or "Mewtwo ex - 150/165"
-    const namePart = pName.split(' - ')[0].trim();
-    const nameParenStripped = namePart.replace(/\s*\([^)]*\)/g, '').trim(); // strip "(Alternate Art Secret)"
-    const partTokens = nameParenStripped.split(/[\s\-\/]+/).filter(t => t.length > 0);
+
+    // Build candidate strings to match against:
+    //   1. Full name (Lorcana "Elsa - Snow Queen" stays intact)
+    //   2. Name with Pokemon collector-number suffix stripped ("Ampharos - 090/086" → "Ampharos")
+    //   3. Name with parentheticals stripped ("(Alternate Art Secret)", "(Enchanted)", "(Parallel)")
+    //   4. cleanName (tcgcsv-normalized, punctuation-free)
+    const nameCollectorStripped = stripCollectorSuffix(pName);
+    const nameParenStripped = nameCollectorStripped.replace(/\s*\([^)]*\)/g, '').trim();
+
+    const candidates = [
+      pName,
+      nameCollectorStripped,
+      nameParenStripped,
+      pClean,
+    ].filter(Boolean);
 
     if (!nameLo) {
       nameScore = 0;
-    } else if (namePart === nameLo || nameParenStripped === nameLo) {
-      nameScore = 100;
     } else {
-      // Every target token must appear as a token in the product name-part.
-      // This prevents "Mewtwo" matching "Mewtwo ex" and vice-versa.
-      const allTokensPresent = targetTokens.every(t => partTokens.includes(t));
-      const sameLength      = targetTokens.length === partTokens.length;
-      if (allTokensPresent && sameLength) nameScore = 95;   // superset
-      else if (allTokensPresent)          nameScore = 60;   // partial (e.g. target is "Mewtwo", product is "Mewtwo ex")
-      else if (partTokens.includes(targetHead) && targetTokens.length === 1) nameScore = 55;
-      else nameScore = 0;
+      // Exact match against any candidate
+      const exactMatch = candidates.some(c => c === nameLo);
+      if (exactMatch) {
+        nameScore = 100;
+      } else {
+        // Token-based scoring against the strongest candidate (paren-stripped)
+        const partTokens = nameParenStripped.split(/[\s\-\/]+/).filter(t => t.length > 0);
+        // Also token-check against cleanName tokens (handles "Monkey.D.Luffy" → ["monkey","d","luffy"])
+        const cleanTokens = pClean.split(/[\s\-\/\.]+/).filter(t => t.length > 0);
+        const targetCleanTokens = nameLo.split(/[\s\-\/\.]+/).filter(t => t.length > 0);
+
+        const allInName  = targetTokens.every(t => partTokens.includes(t));
+        const allInClean = targetCleanTokens.every(t => cleanTokens.includes(t));
+
+        const sameLenName  = targetTokens.length === partTokens.length;
+        const sameLenClean = targetCleanTokens.length === cleanTokens.length;
+
+        if ((allInName && sameLenName) || (allInClean && sameLenClean)) nameScore = 95;      // full superset match
+        else if (allInName || allInClean)                                nameScore = 60;      // partial — target subset of product
+        else if (partTokens.includes(targetHead) && targetTokens.length === 1) nameScore = 55;
+        else nameScore = 0;
+      }
     }
 
     // If name score is 0, reject outright (returned as -1 so we can filter).
@@ -284,14 +317,31 @@ export function pickProduct(products, targetName, targetNumber, targetRarity) {
     if (numTarget && pNum === numTarget) score += 70;
     // Rarity match
     score += rarityScore(p.rarity, targetRarity) * 0.6; // up to 60
-    return { p, score };
+
+    // Prefer base printings over variants when scoring is close.
+    // Base cards score higher; "(Enchanted)", "(Cold Foil)", "(Parallel)",
+    // "(Alternate Art)", "(Puzzle Insert)", "(Serial Numbered)", numeric
+    // suffixes like "(007)" and "(OP12-020)" all get penalized so the plain
+    // base printing ranks first when scoring is close.
+    if (/\((enchanted|cold foil|parallel|alternate art|puzzle|iconic|epic|serial|serialized|foil)/i.test(pNameRaw)) {
+      score -= 20;
+    }
+    // Also penalize product-code-only parentheticals like "(007)", "(OP12-020)"
+    if (/\([A-Z0-9\-]{2,}\)\s*$/.test(pNameRaw)) {
+      score -= 10;
+    }
+
+    return { p, score, hasPrice: false };
   }).filter(x => x.score > 0);
 
   if (!scored.length) return null;
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0];
   // Require both a decent name match AND either a number or rarity signal.
-  if (best.score < 70) return null;
+  // Lowered from 70 to 60 because non-Pokemon TCGs often lack the rarity
+  // signal in bulk-scan (AI can't reliably read Lorcana's Uncommon/Rare/etc).
+  // Compensated by the parenthetical penalty above to filter out variants.
+  if (best.score < 60) return null;
   return best.p;
 }
 
@@ -379,9 +429,12 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
     .sort((a, b) => (b.groupId || 0) - (a.groupId || 0))
     .slice(0, scanLimit);
 
+  // Instead of stopping at the FIRST group with a match, collect ALL matches
+  // across all scanned groups, then pick the one with the highest live market
+  // price. This prevents falling into a promo/serialized/no-price variant when
+  // a priced base printing exists in a different set.
   const batchSize = 8;
-  let bestMatch = null;
-  let bestGroupId = null;
+  const allMatches = []; // { product, groupId }
   for (let i = 0; i < sortedGroups.length; i += batchSize) {
     const batch = sortedGroups.slice(i, i + batchSize);
     const results = await Promise.allSettled(
@@ -390,19 +443,42 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
     for (const r of results) {
       if (r.status !== 'fulfilled') continue;
       const product = pickProduct(r.value.products, cardName, cardNumber, rarity);
-      if (product) {
-        bestMatch = product;
-        bestGroupId = r.value.groupId;
-        break;
-      }
+      if (product) allMatches.push({ product, groupId: r.value.groupId });
     }
-    if (bestMatch) break;
+    // Early exit: once we have >=5 candidates, we probably have enough to pick a good one.
+    if (allMatches.length >= 5) break;
   }
 
-  if (!bestMatch) return { ok: false, reason: 'no_product_match', categoryId: cat };
+  if (!allMatches.length) return { ok: false, reason: 'no_product_match', categoryId: cat };
 
-  const prices = await getPrices(kvUrl, kvToken, bestGroupId, cat);
-  const priceMap = prices[bestMatch.productId] || null;
+  // Fetch prices for each candidate's group in parallel, pick highest-market card.
+  const uniqueGroupIds = [...new Set(allMatches.map(m => m.groupId))];
+  const priceMapsByGroup = {};
+  await Promise.allSettled(uniqueGroupIds.map(gid =>
+    getPrices(kvUrl, kvToken, gid, cat).then(prices => { priceMapsByGroup[gid] = prices; })
+  ));
+
+  let bestMatch = null;
+  let bestGroupId = null;
+  let bestPrice = -1;
+  for (const { product, groupId } of allMatches) {
+    const priceMap = priceMapsByGroup[groupId]?.[product.productId] || null;
+    const bp = bestPriceForProduct(priceMap);
+    const marketVal = bp?.market ?? 0;
+    if (marketVal > bestPrice) {
+      bestPrice = marketVal;
+      bestMatch = product;
+      bestGroupId = groupId;
+    }
+  }
+
+  // Fallback: if nothing had a price, at least return the first structural match.
+  if (!bestMatch) {
+    bestMatch = allMatches[0].product;
+    bestGroupId = allMatches[0].groupId;
+  }
+
+  const priceMap = priceMapsByGroup[bestGroupId]?.[bestMatch.productId] || null;
   const best = bestPriceForProduct(priceMap);
 
   return {

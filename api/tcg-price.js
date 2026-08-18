@@ -90,7 +90,15 @@ export default async function handler(req, res) {
         rarity: rarity,
         // Cap scan to stay under Vercel 10s timeout. Lorcana/OP catalogs are
         // small enough to scan 40; larger TCGs limited to 25.
-        maxGroupsToScan: (categoryId === 71 || categoryId === 68) ? 40 : 25,
+        // Lorcana (71): only ~20 groups total — scan all.
+        // One Piece (68): ~85 groups — scan all.
+        // Pokemon JP (85): ~455 groups — scan 60 newest (older sets are niche).
+        // Others (fallback): 40.
+        maxGroupsToScan:
+          categoryId === 71 ? 30 :
+          categoryId === 68 ? 100 :
+          categoryId === 85 ? 60 :
+          40,
       });
     }
 
