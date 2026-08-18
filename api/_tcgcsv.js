@@ -4,18 +4,22 @@
 // sets. tcgcsv.com mirrors the TCGPlayer catalog + live prices reliably and
 // cheaply. This module resolves a card's precise TCGPlayer product + price.
 //
-// Data model (categoryId=3 = Pokemon):
-//   GET /tcgplayer/3/groups                         → all 217 Pokemon sets
-//   GET /tcgplayer/3/{groupId}/products             → all cards in a set
-//   GET /tcgplayer/3/{groupId}/prices               → live prices for all products in a set
+// 2026-08-18: generalized to accept categoryId so Lorcana, One Piece, MTG,
+// YuGiOh, and Pokemon Japan share the same resolver. Backwards-compatible:
+// omitting categoryId defaults to Pokemon (3).
 //
-// Each product carries extendedData with clean {Number, Rarity}. Prices split
-// by subTypeName: Normal | Holofoil | Reverse Holofoil.
+// TCGPlayer category IDs:
+//   1  = Magic
+//   2  = YuGiOh
+//   3  = Pokemon
+//   68 = One Piece Card Game
+//   71 = Lorcana TCG
+//   85 = Pokemon Japan
 //
-// Cache strategy (Upstash KV):
-//   tcgcsv:groups            → 24h TTL
-//   tcgcsv:products:{gid}    → 6h TTL
-//   tcgcsv:prices:{gid}      → 30min TTL (prices move fast)
+// Cache strategy (Upstash KV) — namespaced by categoryId so games don't collide:
+//   tcgcsv:{catId}:groups            → 24h TTL
+//   tcgcsv:{catId}:products:{gid}    → 6h TTL
+//   tcgcsv:{catId}:prices:{gid}      → 30min TTL
 
 const CACHE_TTL = {
   groups:   86400,   // 1 day
@@ -23,8 +27,24 @@ const CACHE_TTL = {
   prices:    1800,   // 30 min
 };
 
-const BASE = 'https://tcgcsv.com/tcgplayer/3';
+const DEFAULT_CATEGORY = 3;
+const BASE_ROOT = 'https://tcgcsv.com/tcgplayer';
 const UA = { 'User-Agent': 'Mozilla/5.0 (cardresell.org)' };
+
+export function gameToCategoryId(game) {
+  const g = String(game || '').toLowerCase();
+  if (g === 'mtg' || g === 'magic') return 1;
+  if (g === 'yugioh' || g === 'ygo' || g === 'yu-gi-oh') return 2;
+  if (g === 'pokemon' || g === '' || g === 'pkm') return 3;
+  if (g === 'onepiece' || g === 'one_piece' || g === 'one piece') return 68;
+  if (g === 'lorcana' || g === 'disney lorcana' || g === 'disney_lorcana') return 71;
+  if (g === 'pokemonjp' || g === 'pokemon_jp' || g === 'pokemon japan') return 85;
+  return 3;
+}
+
+function baseFor(categoryId) {
+  return `${BASE_ROOT}/${categoryId || DEFAULT_CATEGORY}`;
+}
 
 // ── KV helpers ────────────────────────────────────────────────
 async function kvGet(kvUrl, kvToken, key) {
@@ -51,11 +71,14 @@ async function kvSet(kvUrl, kvToken, key, value, ttl) {
 }
 
 // ── tcgcsv fetchers with cache ────────────────────────────────
-export async function getGroups(kvUrl, kvToken) {
-  const cached = await kvGet(kvUrl, kvToken, 'tcgcsv:groups');
+// categoryId is optional; defaults to Pokemon for backwards-compat.
+export async function getGroups(kvUrl, kvToken, categoryId) {
+  const cat = categoryId || DEFAULT_CATEGORY;
+  const key = `tcgcsv:${cat}:groups`;
+  const cached = await kvGet(kvUrl, kvToken, key);
   if (cached) return cached;
-  const r = await fetch(`${BASE}/groups`, { headers: UA, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) throw new Error(`tcgcsv groups ${r.status}`);
+  const r = await fetch(`${baseFor(cat)}/groups`, { headers: UA, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`tcgcsv groups cat=${cat} ${r.status}`);
   const j = await r.json();
   const groups = (j.results || []).map(g => ({
     groupId: g.groupId,
@@ -63,16 +86,17 @@ export async function getGroups(kvUrl, kvToken) {
     abbreviation: g.abbreviation || '',
     publishedOn: g.publishedOn,
   }));
-  await kvSet(kvUrl, kvToken, 'tcgcsv:groups', groups, CACHE_TTL.groups);
+  await kvSet(kvUrl, kvToken, key, groups, CACHE_TTL.groups);
   return groups;
 }
 
-export async function getProducts(kvUrl, kvToken, groupId) {
-  const key = `tcgcsv:products:${groupId}`;
+export async function getProducts(kvUrl, kvToken, groupId, categoryId) {
+  const cat = categoryId || DEFAULT_CATEGORY;
+  const key = `tcgcsv:${cat}:products:${groupId}`;
   const cached = await kvGet(kvUrl, kvToken, key);
   if (cached) return cached;
-  const r = await fetch(`${BASE}/${groupId}/products`, { headers: UA, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) throw new Error(`tcgcsv products ${groupId} ${r.status}`);
+  const r = await fetch(`${baseFor(cat)}/${groupId}/products`, { headers: UA, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`tcgcsv products ${groupId} cat=${cat} ${r.status}`);
   const j = await r.json();
   // Slim down to what we need + reduce cache size
   const products = (j.results || []).map(p => {
@@ -91,12 +115,13 @@ export async function getProducts(kvUrl, kvToken, groupId) {
   return products;
 }
 
-export async function getPrices(kvUrl, kvToken, groupId) {
-  const key = `tcgcsv:prices:${groupId}`;
+export async function getPrices(kvUrl, kvToken, groupId, categoryId) {
+  const cat = categoryId || DEFAULT_CATEGORY;
+  const key = `tcgcsv:${cat}:prices:${groupId}`;
   const cached = await kvGet(kvUrl, kvToken, key);
   if (cached) return cached;
-  const r = await fetch(`${BASE}/${groupId}/prices`, { headers: UA, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) throw new Error(`tcgcsv prices ${groupId} ${r.status}`);
+  const r = await fetch(`${baseFor(cat)}/${groupId}/prices`, { headers: UA, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`tcgcsv prices ${groupId} cat=${cat} ${r.status}`);
   const j = await r.json();
   // Group by productId → { [subType]: {market, low, mid, high} }
   const byProduct = {};
@@ -139,9 +164,9 @@ export function normalizeSetName(s) {
 //   4. Substring match                                  → 400 + length bonus
 //   5. "TG" number → prefer Trainer Gallery group      → +200
 //   6. Prefer OLDER groupId when normalized ties       (Base Set 1999 beats SM Base Set)
-export async function resolveGroupId(kvUrl, kvToken, userSetName, cardNumber) {
+export async function resolveGroupId(kvUrl, kvToken, userSetName, cardNumber, categoryId) {
   if (!userSetName) return null;
-  const groups = await getGroups(kvUrl, kvToken);
+  const groups = await getGroups(kvUrl, kvToken, categoryId);
   const targetRaw = String(userSetName).toLowerCase().trim();
   const target = normalizeSetName(userSetName);
   if (!target) return null;
@@ -275,7 +300,11 @@ export function bestPriceForProduct(priceMap) {
   if (!priceMap) return { market: null, variant: null };
   // Prefer Holofoil > Normal > Reverse Holofoil (holofoil is typically the
   // primary printing for modern rare/IR/SIR; normal for older sets/commons)
-  const order = ['Holofoil', 'Normal', 'Reverse Holofoil', '1st Edition Holofoil', '1st Edition Normal', 'Unlimited Holofoil'];
+  const order = [
+    'Holofoil', 'Normal', 'Reverse Holofoil',
+    '1st Edition Holofoil', '1st Edition Normal', 'Unlimited Holofoil',
+    'Foil', 'Cold Foil', 'Rainbow Foil',
+  ];
   for (const v of order) {
     const p = priceMap[v];
     if (p && (p.market > 0 || p.mid > 0)) {
@@ -303,23 +332,25 @@ export function bestPriceForProduct(priceMap) {
 }
 
 // ── Public: resolve a card to a full price object ─────────────
-export async function resolveCardPrice({ kvUrl, kvToken, setName, cardName, cardNumber, rarity }) {
-  const groupId = await resolveGroupId(kvUrl, kvToken, setName, cardNumber);
-  if (!groupId) return { ok: false, reason: 'no_group_match', setName };
+export async function resolveCardPrice({ kvUrl, kvToken, setName, cardName, cardNumber, rarity, categoryId, game }) {
+  const cat = categoryId || gameToCategoryId(game);
+  const groupId = await resolveGroupId(kvUrl, kvToken, setName, cardNumber, cat);
+  if (!groupId) return { ok: false, reason: 'no_group_match', setName, categoryId: cat };
 
   const [products, prices] = await Promise.all([
-    getProducts(kvUrl, kvToken, groupId),
-    getPrices(kvUrl, kvToken, groupId),
+    getProducts(kvUrl, kvToken, groupId, cat),
+    getPrices(kvUrl, kvToken, groupId, cat),
   ]);
 
   const product = pickProduct(products, cardName, cardNumber, rarity);
-  if (!product) return { ok: false, reason: 'no_product_match', groupId };
+  if (!product) return { ok: false, reason: 'no_product_match', groupId, categoryId: cat };
 
   const priceMap = prices[product.productId] || null;
   const best = bestPriceForProduct(priceMap);
 
   return {
     ok: true,
+    categoryId: cat,
     groupId,
     product,
     market: best.market,
@@ -330,5 +361,62 @@ export async function resolveCardPrice({ kvUrl, kvToken, setName, cardName, card
     allVariants: best.allVariants,
     tcgplayerUrl: product.url || (product.productId ? `https://www.tcgplayer.com/product/${product.productId}` : null),
     imageUrl: product.imageUrl || null,
+  };
+}
+
+// ── Public: name-only resolver (no set required) ──────────────
+// Scans recent groups in the category. Used for bulk-scan when the AI
+// returns a card name but no set. Batched Promise.allSettled + cap.
+export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, rarity, categoryId, game, maxGroupsToScan }) {
+  const cat = categoryId || gameToCategoryId(game);
+  if (!cardName) return { ok: false, reason: 'no_name', categoryId: cat };
+
+  const groups = await getGroups(kvUrl, kvToken, cat);
+  if (!groups?.length) return { ok: false, reason: 'no_groups', categoryId: cat };
+
+  const scanLimit = maxGroupsToScan || 40;
+  const sortedGroups = [...groups]
+    .sort((a, b) => (b.groupId || 0) - (a.groupId || 0))
+    .slice(0, scanLimit);
+
+  const batchSize = 8;
+  let bestMatch = null;
+  let bestGroupId = null;
+  for (let i = 0; i < sortedGroups.length; i += batchSize) {
+    const batch = sortedGroups.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(g => getProducts(kvUrl, kvToken, g.groupId, cat).then(products => ({ groupId: g.groupId, products })))
+    );
+    for (const r of results) {
+      if (r.status !== 'fulfilled') continue;
+      const product = pickProduct(r.value.products, cardName, cardNumber, rarity);
+      if (product) {
+        bestMatch = product;
+        bestGroupId = r.value.groupId;
+        break;
+      }
+    }
+    if (bestMatch) break;
+  }
+
+  if (!bestMatch) return { ok: false, reason: 'no_product_match', categoryId: cat };
+
+  const prices = await getPrices(kvUrl, kvToken, bestGroupId, cat);
+  const priceMap = prices[bestMatch.productId] || null;
+  const best = bestPriceForProduct(priceMap);
+
+  return {
+    ok: true,
+    categoryId: cat,
+    groupId: bestGroupId,
+    product: bestMatch,
+    market: best.market,
+    low: best.low,
+    mid: best.mid,
+    high: best.high,
+    variant: best.variant,
+    allVariants: best.allVariants,
+    tcgplayerUrl: bestMatch.url || (bestMatch.productId ? `https://www.tcgplayer.com/product/${bestMatch.productId}` : null),
+    imageUrl: bestMatch.imageUrl || null,
   };
 }

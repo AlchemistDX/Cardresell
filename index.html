@@ -12769,14 +12769,38 @@ async function _bulkFetchPriceYGO(cleanName) {
   return null;
 }
 
-async function _bulkFetchPriceLorcana(cleanName) {
+// 2026-08-18: shared tcgcsv helper for non-Pokemon-EN bulk-scan price lookups.
+// Used by Lorcana, One Piece, and Pokemon JP. Skipped for MTG (Scryfall
+// is faster/richer) and YGO (existing YGOprodeck path works well).
+async function _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, game, setName, rarity) {
+  try {
+    const params = new URLSearchParams({ name: cleanName, game });
+    if (cleanNumber) params.set('number', cleanNumber);
+    if (setName)     params.set('set', setName);
+    if (rarity)      params.set('rarity', rarity);
+    const r = await fetch(`/api/tcg-price?${params.toString()}`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j.market == null) return null;
+    return {
+      marketPrice: j.market,
+      variant: j.variant || null,
+      imageUrl: j.imageUrl || '',
+      tcgplayerUrl: j.url || '',
+    };
+  } catch(e) { return null; }
+}
+
+async function _bulkFetchPriceLorcana(cleanName, cleanNumber, setName, rarity) {
+  // Try tcgcsv first for real pricing; fall back to lorcana-api for image-only.
+  const priced = await _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, 'lorcana', setName, rarity);
+  if (priced) return priced;
   try {
     const r = await fetch(`https://api.lorcana-api.com/cards/fetch?search=Name~${encodeURIComponent(cleanName)}`, { signal: AbortSignal.timeout(7000) });
     if (!r.ok) return null;
     const arr = await r.json();
     const first = Array.isArray(arr) ? arr[0] : null;
     if (!first) return null;
-    // Lorcana-api has no price field — return thumbnail only so the row shows an image.
     return {
       marketPrice: null,
       variant: null,
@@ -12784,6 +12808,14 @@ async function _bulkFetchPriceLorcana(cleanName) {
       tcgplayerUrl: '',
     };
   } catch(e) { return null; }
+}
+
+async function _bulkFetchPriceOnePiece(cleanName, cleanNumber, setName, rarity) {
+  return _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, 'onepiece', setName, rarity);
+}
+
+async function _bulkFetchPricePokemonJP(cleanName, cleanNumber, setName, rarity) {
+  return _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, 'pokemonjp', setName, rarity);
 }
 
 async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese, groundedId, rarity) {
@@ -12799,9 +12831,15 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   // DB returns nothing.
   if (type === 'mtg') return _bulkFetchPriceMTG(cleanName, cleanNumber);
   if (type === 'yugioh' || type === 'ygo') return _bulkFetchPriceYGO(cleanName);
-  if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName);
-  if (type === 'onepiece') return null; // No free API — leave price blank; user can enter manually.
+  if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName, cleanNumber, setName, cleanRarity);
+  if (type === 'onepiece') return _bulkFetchPriceOnePiece(cleanName, cleanNumber, setName, cleanRarity);
   if (type === 'sports') return null;   // Sports cards route through eBay only — no card DB.
+  // Pokemon Japan (isJapanese=true) goes through tcgcsv catalog 85 first.
+  if (isJapanese) {
+    const jp = await _bulkFetchPricePokemonJP(cleanName, cleanNumber, setName, cleanRarity);
+    if (jp) return jp;
+    // If PokemonJP misses, fall through to the standard Pokemon path below.
+  }
 
   // 2026-08-17: grounded_id fast path. When Ximilar identifies the exact card
   // (e.g. "sv3pt5-181" for Ampharos IR), fetch that specific card from

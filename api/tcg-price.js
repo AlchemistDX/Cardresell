@@ -8,7 +8,7 @@
 // flaky text-search endpoint). Falls back to TCGplayer live search only
 // when tcgcsv can't resolve the card (e.g. brand-new sets not yet indexed).
 
-import { resolveCardPrice } from './_tcgcsv.js';
+import { resolveCardPrice, resolveCardByName, gameToCategoryId } from './_tcgcsv.js';
 
 const CACHE_TTL_SEC = 30 * 60; // 30 min
 
@@ -45,11 +45,13 @@ export default async function handler(req, res) {
   const set    = (req.query.set    || '').trim();
   const number = (req.query.number || '').trim();
   const rarity = (req.query.rarity || '').trim();
+  const game   = (req.query.game   || 'pokemon').trim().toLowerCase();
+  const categoryId = gameToCategoryId(game);
 
   if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
-  // Cache key includes 'v2' so the tcgcsv rewrite invalidates stale 'tcgplayer' entries
-  const cacheKey = `v2|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // Cache key bumped v2→v3 to namespace by game (Lorcana "Belle" ≠ Pokemon "Belle")
+  const cacheKey = `v3|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -63,37 +65,70 @@ export default async function handler(req, res) {
   }
 
   // ── PRIMARY: tcgcsv.com catalog (deterministic; refreshed daily) ────────
+  // Two paths:
+  //   1. set provided → fast set-scoped resolve
+  //   2. no set + non-MTG → name-only scan (used for bulk-scan Lorcana/OP/PokemonJP
+  //      where the AI can't reliably read the set)
   try {
+    let r = null;
     if (set) {
-      const r = await resolveCardPrice({
-        kvUrl, kvToken,
+      r = await resolveCardPrice({
+        kvUrl, kvToken, categoryId, game,
         setName: set,
         cardName: name,
         cardNumber: number,
         rarity: rarity,
       });
-      if (r.ok && r.market != null) {
-        const data = {
-          market: r.market,
-          low:    r.low  ?? (r.market * 0.85),
-          mid:    r.mid  ?? r.market,
-          high:   r.high ?? (r.market * 1.15),
-          source: 'tcgcsv',
-          variant: r.variant,
-          productId: r.product?.productId ?? null,
-          cardName: r.product?.name ?? name,
-          setName: r.product?.setName ?? set,
-          url: r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null,
-          fetchedAt: new Date().toISOString(),
-          cacheAgeSec: 0,
-        };
-        await setCache(kvUrl, kvToken, cacheKey, data);
-        _incrSearchStats(kvUrl, kvToken);
-        return res.status(200).json(data);
-      }
+    }
+    // Name-only fallback if set-scoped resolve missed or no set given.
+    // Skip for MTG — too many sets (2000+); Scryfall handles MTG.
+    if ((!r || !r.ok || r.market == null) && !set && categoryId !== 1) {
+      r = await resolveCardByName({
+        kvUrl, kvToken, categoryId, game,
+        cardName: name,
+        cardNumber: number,
+        rarity: rarity,
+        // Cap scan to stay under Vercel 10s timeout. Lorcana/OP catalogs are
+        // small enough to scan 40; larger TCGs limited to 25.
+        maxGroupsToScan: (categoryId === 71 || categoryId === 68) ? 40 : 25,
+      });
+    }
+
+    if (r && r.ok && r.market != null) {
+      const data = {
+        market: r.market,
+        low:    r.low  ?? (r.market * 0.85),
+        mid:    r.mid  ?? r.market,
+        high:   r.high ?? (r.market * 1.15),
+        source: 'tcgcsv',
+        game,
+        categoryId: r.categoryId ?? categoryId,
+        variant: r.variant,
+        productId: r.product?.productId ?? null,
+        cardName: r.product?.name ?? name,
+        setName: r.product?.setName ?? set,
+        imageUrl: r.imageUrl || null,
+        url: r.tcgplayerUrl || (r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null),
+        fetchedAt: new Date().toISOString(),
+        cacheAgeSec: 0,
+      };
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      _incrSearchStats(kvUrl, kvToken);
+      return res.status(200).json(data);
     }
   } catch(e) {
     console.error('tcgcsv resolve error:', e.message);
+  }
+
+  // Non-Pokemon: skip TCGplayer live-search fallback (it's Pokemon-tuned).
+  // Return null cleanly so frontend shows "set price manually".
+  if (categoryId !== 3) {
+    _incrSearchStats(kvUrl, kvToken);
+    return res.status(200).json({
+      market: null, low: null, mid: null, high: null,
+      source: 'tcgcsv', game, categoryId,
+      reason: 'no_match',
+    });
   }
 
   // ── FALLBACK: live TCGplayer search ─────────────────────────────────────
