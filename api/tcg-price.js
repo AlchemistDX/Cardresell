@@ -63,40 +63,75 @@ export default async function handler(req, res) {
   }
 
   // ── PRIMARY: tcgcsv.com catalog (deterministic; refreshed daily) ────────
+  // Two paths:
+  //   1. If set is provided → resolve group first, then find product (fast, precise)
+  //   2. If no set → name-only scan across recent groups (slower, needed for
+  //      Lorcana/OnePiece bulk scans where the AI often can't read the set)
   try {
+    let r = null;
     if (set) {
-      const r = await resolveCardPrice({
-        kvUrl, kvToken,
+      r = await resolveCardPrice({
+        kvUrl, kvToken, categoryId,
         setName: set,
         cardName: name,
         cardNumber: number,
         rarity: rarity,
       });
-      if (r.ok && r.market != null) {
-        const data = {
-          market: r.market,
-          low:    r.low  ?? (r.market * 0.85),
-          mid:    r.mid  ?? r.market,
-          high:   r.high ?? (r.market * 1.15),
-          source: 'tcgcsv',
-          variant: r.variant,
-          productId: r.product?.productId ?? null,
-          cardName: r.product?.name ?? name,
-          setName: r.product?.setName ?? set,
-          url: r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null,
-          fetchedAt: new Date().toISOString(),
-          cacheAgeSec: 0,
-        };
-        await setCache(kvUrl, kvToken, cacheKey, data);
-        _incrSearchStats(kvUrl, kvToken);
-        return res.status(200).json(data);
-      }
+    }
+    // Name-only fallback if set-scoped resolve missed or no set given.
+    // Skip for MTG — too many sets (2000+) to scan, and Scryfall on the
+    // frontend already handles this well.
+    if ((!r || !r.ok || r.market == null) && !set && game !== 'mtg') {
+      r = await resolveCardByName({
+        kvUrl, kvToken, categoryId,
+        cardName: name,
+        cardNumber: number,
+        rarity: rarity,
+        // Lorcana + OnePiece have small catalogs — scan more groups; larger
+        // TCGs cap at 40 to stay under the Vercel function timeout.
+        maxGroupsToScan: (categoryId === 71 || categoryId === 68) ? 100 : 40,
+      });
+    }
+
+    if (r && r.ok && r.market != null) {
+      const data = {
+        market: r.market,
+        low:    r.low  ?? (r.market * 0.85),
+        mid:    r.mid  ?? r.market,
+        high:   r.high ?? (r.market * 1.15),
+        source: 'tcgcsv',
+        game,
+        categoryId: r.categoryId,
+        variant: r.variant,
+        productId: r.product?.productId ?? null,
+        cardName: r.product?.name ?? name,
+        setName: r.product?.setName ?? set,
+        imageUrl: r.imageUrl || null,
+        url: r.tcgplayerUrl || (r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null),
+        fetchedAt: new Date().toISOString(),
+        cacheAgeSec: 0,
+      };
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      _incrSearchStats(kvUrl, kvToken);
+      return res.status(200).json(data);
     }
   } catch(e) {
     console.error('tcgcsv resolve error:', e.message);
   }
 
-  // ── FALLBACK: live TCGplayer search ─────────────────────────────────────
+  // ── Non-Pokemon: no live-search fallback (TCGplayer's search API is per-
+  //     productLine and we'd need per-game routing). Return null cleanly so
+  //     the frontend shows "set price manually" instead of hanging.
+  if (game !== 'pokemon' && game !== 'pkm') {
+    _incrSearchStats(kvUrl, kvToken);
+    return res.status(200).json({
+      market: null, low: null, mid: null, high: null,
+      source: 'tcgcsv', game, categoryId,
+      reason: 'no_match',
+    });
+  }
+
+  // ── FALLBACK: live TCGplayer search (Pokemon only) ─────────────────────
   // Used when tcgcsv can't resolve (missing set, brand-new release,
   // or ambiguous name). Same scoring logic as the previous version.
   try {

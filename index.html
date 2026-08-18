@@ -4471,6 +4471,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
   if (card.setName) tcgParams.set('set', card.setName);
   if (card.number)  tcgParams.set('number', card.number);
   if (card.rarity)  tcgParams.set('rarity', card.rarity);
+  // Route to the right TCGplayer catalog (Lorcana=71, OnePiece=68, MTG=1,
+  // YGO=2, PokemonJP=85). Omit for Pokemon-EN (backend default).
+  if (card.game && card.game !== 'pokemon') tcgParams.set('game', card.game);
 
   const ebayParams = new URLSearchParams({ q, limit: '15' });
   if (grade) ebayParams.set('grade', grade);
@@ -12769,14 +12772,47 @@ async function _bulkFetchPriceYGO(cleanName) {
   return null;
 }
 
-async function _bulkFetchPriceLorcana(cleanName) {
+// 2026-08-18: Lorcana + OnePiece + PokemonJP now flow through /api/tcg-price
+// (backed by tcgcsv.com). Same source as Pokemon/TCGplayer prices so bulk-scan
+// shows real market values instead of "set price manually". lorcana-api.com
+// is kept as a last-ditch fallback for image thumbnails only.
+async function _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, game, setName, rarity) {
   try {
-    const r = await fetch(`https://api.lorcana-api.com/cards/fetch?search=Name~${encodeURIComponent(cleanName)}`, { signal: AbortSignal.timeout(7000) });
+    const params = new URLSearchParams({ name: cleanName, game });
+    if (cleanNumber) params.set('number', cleanNumber);
+    if (setName)     params.set('set',    setName);
+    if (rarity)      params.set('rarity', rarity);
+    // Name-only scans across many groups can take a few seconds cold; give it 10s.
+    const r = await fetch(`/api/tcg-price?${params.toString()}`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.market == null) {
+      // Return null price but keep image if we got one — helps the bulk row show art.
+      if (d.imageUrl) return { marketPrice: null, variant: null, imageUrl: d.imageUrl, tcgplayerUrl: d.url || '' };
+      return null;
+    }
+    return {
+      marketPrice: d.market,
+      variant: d.variant || null,
+      imageUrl: d.imageUrl || '',
+      tcgplayerUrl: d.url || '',
+    };
+  } catch(e) { return null; }
+}
+
+async function _bulkFetchPriceLorcana(cleanName, cleanNumber, setName, rarity) {
+  // Primary: tcgcsv via /api/tcg-price (real TCGplayer market prices)
+  const priced = await _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, 'lorcana', setName, rarity);
+  if (priced && priced.marketPrice != null) return priced;
+  // If tcgcsv missed but we got an image, use it. Otherwise fall through to
+  // lorcana-api.com for thumbnail only (no price).
+  if (priced && priced.imageUrl) return priced;
+  try {
+    const r = await fetch(`https://api.lorcana-api.com/cards/fetch?search=Name~${encodeURIComponent(cleanName)}`, { signal: AbortSignal.timeout(5000) });
     if (!r.ok) return null;
     const arr = await r.json();
     const first = Array.isArray(arr) ? arr[0] : null;
     if (!first) return null;
-    // Lorcana-api has no price field — return thumbnail only so the row shows an image.
     return {
       marketPrice: null,
       variant: null,
@@ -12784,6 +12820,18 @@ async function _bulkFetchPriceLorcana(cleanName) {
       tcgplayerUrl: '',
     };
   } catch(e) { return null; }
+}
+
+async function _bulkFetchPriceOnePiece(cleanName, cleanNumber, setName, rarity) {
+  // One Piece has no free public card DB — tcgcsv is the only source.
+  return _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, 'onepiece', setName, rarity);
+}
+
+async function _bulkFetchPricePokemonJP(cleanName, cleanNumber, setName, rarity) {
+  // Pokemon Japan — route to tcgcsv categoryId 85. Japanese card names on the
+  // scan side may come back romanized or in kanji; try as-is and hope tcgcsv
+  // has enough variant naming to match. Silent fallback to null when it doesn't.
+  return _bulkFetchPriceViaTcgCsv(cleanName, cleanNumber, 'pokemonjp', setName, rarity);
 }
 
 async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese, groundedId, rarity) {
@@ -12799,8 +12847,11 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   // DB returns nothing.
   if (type === 'mtg') return _bulkFetchPriceMTG(cleanName, cleanNumber);
   if (type === 'yugioh' || type === 'ygo') return _bulkFetchPriceYGO(cleanName);
-  if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName);
-  if (type === 'onepiece') return null; // No free API — leave price blank; user can enter manually.
+  if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName, cleanNumber, setName, cleanRarity);
+  if (type === 'onepiece' || type === 'one_piece') return _bulkFetchPriceOnePiece(cleanName, cleanNumber, setName, cleanRarity);
+  if (type === 'pokemonjp' || type === 'pokemon_jp' || (type === 'pokemon' && isJapanese)) {
+    return _bulkFetchPricePokemonJP(cleanName, cleanNumber, setName, cleanRarity);
+  }
   if (type === 'sports') return null;   // Sports cards route through eBay only — no card DB.
 
   // 2026-08-17: grounded_id fast path. When Ximilar identifies the exact card
