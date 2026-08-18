@@ -2717,10 +2717,41 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 window.CARDSELL_TPL_KEY = '__PROXIED__'; // sentinel — real key stays server-side
 window.CARDSELL_EPN_CAMPID = '5339158497';
 // Capture referral code from URL on page load
+// 2026-08-18: BUGFIX — the sign-in redirect chain (/ → /signin → email
+// verify link → /?verified=1) drops the ?ref=<code> query param. Result:
+// zero referrals had ever been claimed in prod (ref_count:* was empty).
+// Fix: persist the ref code to localStorage when a user lands on /?ref=X,
+// then read from storage as fallback in checkProStatus() so the claim
+// still fires after the full auth round-trip.
 (function() {
   const p = new URLSearchParams(window.location.search);
   const ref = p.get('ref');
-  if (ref) window._pendingRefCode = ref.slice(0, 16);
+  if (ref) {
+    const clean = ref.slice(0, 16);
+    window._pendingRefCode = clean;
+    try {
+      // 30-day TTL. If user clicks ref link but doesn't sign up for weeks,
+      // still credit the referrer.
+      const payload = { code: clean, ts: Date.now() };
+      localStorage.setItem('_pendingRefCode', JSON.stringify(payload));
+    } catch(e) {}
+  } else {
+    // No ref in URL — restore from localStorage if we saved one earlier.
+    // This is what fires after the /signin redirect chain drops the query.
+    try {
+      const raw = localStorage.getItem('_pendingRefCode');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const ageMs = Date.now() - (parsed.ts || 0);
+        // Discard after 30 days
+        if (parsed.code && ageMs < 30 * 24 * 60 * 60 * 1000) {
+          window._pendingRefCode = String(parsed.code).slice(0, 16);
+        } else {
+          localStorage.removeItem('_pendingRefCode');
+        }
+      }
+    } catch(e) {}
+  }
   // If arriving from the Firebase verification link (?verified=1), strip the
   // param so it doesn't stick in the URL bar, and set a flag so the auth-init
   // handler knows to reload the user token and claim the bonus.
@@ -11123,8 +11154,13 @@ async function checkProStatus() {
     } else if (d.refRewarded) {
       setTimeout(() => showToast('🎉 Referral bonus! You and your friend both got 5 free ID scans.', 5000), 1200);
     }
-    // Clear pending ref so it only fires once
+    // Clear pending ref so it only fires once.
+    // 2026-08-18: also clear localStorage — previously only wiped window state,
+    // so a subsequent page reload would re-attempt the claim (harmless because
+    // server-side ref_claimed:<sub>=1 prevents double-credit, but wastes a KV
+    // read on every load and confuses debugging).
     window._pendingRefCode = null;
+    try { localStorage.removeItem('_pendingRefCode'); } catch(e) {}
   } catch(e) { /* non-blocking */ }
   updateProUI();
   updateScanBtnCredits();
