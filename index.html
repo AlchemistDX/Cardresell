@@ -10597,11 +10597,80 @@ async function submitGradeScan(deepGrade) {
         '</div>'
       : '';
 
+    // ── Visual centering meter ──
+    // Shows a horizontal bar with the PSA threshold zones (10/9/8/7/6) as
+    // colored bands and a marker line at the measured worst-axis ratio.
+    // Way more intuitive than a plain "55/45" string — users see instantly
+    // where their card lands on the PSA scale.
+    const buildCenteringMeter = () => {
+      const lrStr = data.centering_lr || '';
+      const tbStr = data.centering_tb || '';
+      const parsePair = (s) => {
+        const m = String(s || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+        if (!m) return null;
+        const a = parseInt(m[1]), b = parseInt(m[2]);
+        return isFinite(a) && isFinite(b) && (a + b > 0) ? Math.max(a, b) : null;
+      };
+      const lrWorst = parsePair(lrStr);
+      const tbWorst = parsePair(tbStr);
+      if (lrWorst == null && tbWorst == null) return '';
+      // Zones: 50 (perfect) → 55 (PSA 10) → 60 (PSA 9) → 65 (PSA 8) → 70 (PSA 7) → 80 (PSA 5)
+      // Meter range 50–80 spans 30 units. Pixel width mapped to 0–100%.
+      const meterMin = 50, meterMax = 80;
+      const pctOf = v => Math.max(0, Math.min(100, ((v - meterMin) / (meterMax - meterMin)) * 100));
+      const axisRow = (label, worst, otherHalf) => {
+        if (worst == null) return '';
+        const markerPct = pctOf(worst);
+        const ratioStr = worst + '/' + (100 - worst);
+        const gradeAt = worst <= 55.5 ? 10 : worst <= 60.5 ? 9 : worst <= 65.5 ? 8 : worst <= 70.5 ? 7 : worst <= 75.5 ? 6 : 5;
+        const markCol = gradeAt >= 9 ? '#4ade80' : gradeAt >= 7 ? '#facc15' : '#fb923c';
+        return '<div style="margin-bottom:.4rem">' +
+          '<div style="display:flex;justify-content:space-between;font-size:.62rem;color:rgba(255,255,255,.55);margin-bottom:.2rem;letter-spacing:.04em">' +
+            '<span>' + label + '</span>' +
+            '<span style="color:' + markCol + ';font-weight:800">' + ratioStr + ' \u2192 PSA ' + gradeAt + ' zone</span>' +
+          '</div>' +
+          '<div style="position:relative;height:14px;border-radius:4px;overflow:hidden;background:linear-gradient(to right,' +
+            'rgba(74,222,128,.55) 0%,' +      // 50 (perfect)
+            'rgba(74,222,128,.55) 16.6%,' +    // 55 (PSA 10 threshold)
+            'rgba(250,204,21,.55) 16.6%,' +    // switch to PSA 9
+            'rgba(250,204,21,.55) 33.3%,' +    // 60 (PSA 9 threshold)
+            'rgba(251,146,60,.55) 33.3%,' +    // switch to PSA 8
+            'rgba(251,146,60,.55) 50%,' +      // 65 (PSA 8 threshold)
+            'rgba(248,113,113,.5) 50%,' +      // switch to PSA 7
+            'rgba(248,113,113,.5) 66.6%,' +    // 70 (PSA 7 threshold)
+            'rgba(153,27,27,.55) 66.6%,' +     // PSA 6-
+            'rgba(153,27,27,.55) 100%)">' +
+            // Threshold tick marks + labels
+            '<div style="position:absolute;left:16.6%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.25)"></div>' +
+            '<div style="position:absolute;left:33.3%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.25)"></div>' +
+            '<div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.25)"></div>' +
+            '<div style="position:absolute;left:66.6%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.25)"></div>' +
+            // Marker for measured ratio
+            '<div style="position:absolute;left:' + markerPct + '%;top:-2px;bottom:-2px;width:3px;background:#fff;border-radius:2px;box-shadow:0 0 4px rgba(0,0,0,.6);transform:translateX(-1.5px)"></div>' +
+          '</div>' +
+        '</div>';
+      };
+      return '<div style="margin:.15rem 0 .55rem;padding:.6rem .7rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.5);margin-bottom:.4rem">' +
+          '<span>MEASURED CENTERING</span>' +
+          '<span style="color:rgba(255,255,255,.4);font-weight:600;letter-spacing:.02em;text-transform:none">worst axis rules</span>' +
+        '</div>' +
+        axisRow('L / R', lrWorst) +
+        axisRow('T / B', tbWorst) +
+        // Legend under meter
+        '<div style="display:flex;justify-content:space-between;font-size:.55rem;color:rgba(255,255,255,.4);margin-top:.35rem;letter-spacing:.02em">' +
+          '<span>50/50</span><span>55/45<br><span style="color:#4ade80">PSA 10</span></span><span>60/40<br><span style="color:#facc15">PSA 9</span></span><span>65/35<br><span style="color:#fb923c">PSA 8</span></span><span>70/30<br><span style="color:#f87171">PSA 7</span></span><span>80/20</span>' +
+        '</div>' +
+      '</div>';
+    };
+    const centeringMeter = buildCenteringMeter();
+
     resultEl.innerHTML =
       slabBanner +
       cvBadge +
       distBlock +
       limitingBlock +
+      centeringMeter +
       '<div style="margin:.3rem 0 .5rem">' +
         // Prefer explicit L/R + T/B ratios when the new backend returns them.
         scoreBar('Centering',

@@ -73,6 +73,54 @@ export default async function handler(req, res) {
         edgeCount,
       });
     }
+
+    // ── PHOTO QC GATE ──
+    // Reject if the user uploaded the same photo multiple times (gaming the
+    // photo-count requirement). We hash the first 4KB of each base64 payload
+    // — near-identical uploads will collide, distinct photos won't.
+    // Also reject if any photo is suspiciously small (< 4KB) which usually
+    // means a thumbnail or corrupted upload.
+    const photoSlots = [
+      { name: 'front',        b64: imageBase64 },
+      { name: 'back',         b64: backBase64 },
+      { name: 'top edge',     b64: topEdgeBase64 },
+      { name: 'bottom edge',  b64: bottomEdgeBase64 },
+      { name: 'left edge',    b64: leftEdgeBase64 },
+      { name: 'right edge',   b64: rightEdgeBase64 },
+    ].filter(p => p.b64);
+
+    const seen = new Map(); // signature → first slot name
+    const dupePairs = [];
+    for (const p of photoSlots) {
+      // Use a middle-slice signature (not just prefix) to avoid header
+      // collisions when the client re-encodes. 512 chars from the middle is
+      // plenty to distinguish real photos while staying fast.
+      const s = p.b64.length;
+      const sig = s < 1024 ? p.b64 : p.b64.substring(Math.floor(s / 2) - 256, Math.floor(s / 2) + 256);
+      if (seen.has(sig)) {
+        dupePairs.push([seen.get(sig), p.name]);
+      } else {
+        seen.set(sig, p.name);
+      }
+    }
+    if (dupePairs.length > 0) {
+      return res.status(400).json({
+        error: `Deep Grade needs distinct photos of each side/edge. Detected duplicate uploads: ${dupePairs.map(pair => `${pair[0]} = ${pair[1]}`).join(', ')}. Retake each photo showing that specific side of the card.`,
+        code: 'DUPLICATE_PHOTOS',
+        duplicates: dupePairs,
+      });
+    }
+
+    // Reject any photo that's smaller than ~8KB — real phone photos of a card
+    // are 100KB+. Anything smaller is a thumbnail, screenshot, or icon.
+    const tinyPhotos = photoSlots.filter(p => p.b64.length < 8000);
+    if (tinyPhotos.length > 0) {
+      return res.status(400).json({
+        error: `Some photos are too small to grade accurately: ${tinyPhotos.map(p => p.name).join(', ')}. Please upload full-resolution phone photos, not thumbnails.`,
+        code: 'PHOTOS_TOO_SMALL',
+        tooSmall: tinyPhotos.map(p => p.name),
+      });
+    }
   } else if (isGradeMode) {
     // Quick Grade: front + back required.
     if (!imageBase64 || !backBase64) {
@@ -337,12 +385,21 @@ PSA 9 allows exactly ONE minor flaw across all four pillars. Two or more minor f
 Example: very slight whitening on 1 corner AND 60/40 centering = PSA 8 (two flaws), not PSA 9.
 
 ═══ HOW TO GRADE (in this order) ═══
-1. Measure centering on BOTH axes front. Determine the CENTERING CEILING using thresholds above (worst axis rules).
+1. Measure centering on BOTH axes front. Determine the CENTERING CEILING using thresholds above (worst axis rules). If a back photo is present, ALSO measure back centering and populate centering_back — do not leave it empty.
 2. Inspect all 4 corners. Note any whitening "visible to naked eye" vs "only under magnification."
 3. Inspect all 4 edges (use dedicated edge close-ups if provided).
 4. Inspect front surface for scratches, print lines, gloss breaks, stains.
 5. Apply the one-flaw rule: count minor flaws across all 4 pillars. Overall grade is the LOWER of (centering ceiling) and (grade allowed by flaw count).
 6. Eye appeal judgment: for borderline cards (e.g. 9 vs 10), consider overall eye appeal. Note if defects are in focal areas (center of card, subject's face).
+
+═══ WRITING QUALITY RULES ═══
+• limiting_factor MUST name a specific pillar (centering / corners / edges / surface / eye appeal) AND a specific defect. Vague statements like "minor issues" or "multiple factors" are forbidden.
+• limiting_factor MUST reconcile with psa_estimate: if psa_estimate is at the centering ceiling, say "Card meets all PSA {N} criteria and no defects prevent a higher grade."; otherwise name the exact defect blocking the next grade up.
+• If a photo IS provided for a side (front, back, or an edge), do NOT write "cannot be assessed from provided photos." Grade what you can see. Only use that language for pillars where NO photo shows that side.
+• Do NOT hedge in corners_desc / edges_desc / surface_desc when clear photos are available — commit to a description.
+• psa_distribution's TOP bucket MUST equal psa_estimate. If you're 90% sure it's a PSA 9, the top bucket is grade=9 with pct=90.
+• flaw_count must match the actual defects described. Zero flaws → PSA 10 candidate. One flaw → PSA 9 candidate. Two flaws → PSA 8 candidate.
+• Never mention "AI", "model", "vision system", or "algorithm" in any field. Write like a professional human grader.
 
 Evaluate and return:
 1. card_name: The card name
@@ -362,7 +419,7 @@ Evaluate and return:
 15. eye_appeal_notes: 1 sentence on eye appeal.
 16. worth_grading: true only if psa_estimate >= 9 AND the card has meaningful value raw. Grading fees + shipping typically require a PSA 9 outcome to break even on modern cards.
 17. confidence: "high" | "medium" | "low" — how confident you are given photo quality, angles, holder glare, and edge visibility.
-18. confidence_drivers: Array of strings explaining what limits your confidence. Options: "holder_glare", "limited_edge_visibility", "blurry_photo", "single_photo_only", "back_not_visible", "low_resolution", "reflective_sleeve", "none".
+18. confidence_drivers: Array of strings explaining what limits your confidence. Options: "holder_glare", "limited_edge_visibility", "blurry_photo", "single_photo_only", "back_not_visible", "low_resolution", "reflective_sleeve", "finger_covering_card", "none". Return ["none"] if photos are all clear and you have HIGH confidence — do NOT invent drivers just to seem cautious.
 19. is_slabbed: true if the card is inside a graded slab (CGC, PSA, BGS, SGC, TAG). Signals: rigid clear plastic outer shell with printed label header, visible grade text like "GEM MINT 10", serial/cert number, or barcode. If slabbed, add "holder_glare" to confidence_drivers and note the estimate will be skewed. Recommend a raw re-scan in limiting_factor.
 20. slab_grader: If is_slabbed=true, the company ("PSA", "CGC", "BGS", "SGC", "TAG", or "Other"). Empty string otherwise.
 21. slab_grade: If is_slabbed=true, the printed grade (e.g. "10", "9.5", "8"). Empty string otherwise.
@@ -869,6 +926,9 @@ Respond ONLY with valid JSON, no explanation:
         : null;
 
       // Normalize psa_distribution: array of top 3 buckets summing to ~100.
+      // ENFORCE: top bucket grade must equal psa_estimate (model sometimes
+      // returns a distribution whose top bucket disagrees with its own
+      // point estimate — that's incoherent and confusing to users).
       let distArray = [];
       const distObj = cardInfo.psa_distribution;
       if (distObj && typeof distObj === 'object') {
@@ -893,6 +953,16 @@ Respond ONLY with valid JSON, no explanation:
           if (psaEstimate < 10) distArray.push({ grade: psaEstimate + 1, pct: 20 });
           if (psaEstimate > 1)  distArray.push({ grade: psaEstimate - 1, pct: 25 });
         }
+      }
+      // ── COHERENCE ENFORCEMENT ──
+      // If the model's top bucket disagrees with psa_estimate (or if the server
+      // just downgraded psa_estimate via the centering ceiling), rebuild the
+      // distribution around the corrected psa_estimate. This keeps the UI's
+      // "Most likely PSA X" and the top bar of the distribution in agreement.
+      if (psaEstimate != null && distArray.length > 0 && distArray[0].grade !== psaEstimate) {
+        // Preserve the model's uncertainty spread but shift the peak.
+        const shift = psaEstimate - distArray[0].grade;
+        distArray = distArray.map(x => ({ grade: Math.max(1, Math.min(10, x.grade + shift)), pct: x.pct }));
       }
 
       // Confidence drivers — array of strings the UI can render as chips.
