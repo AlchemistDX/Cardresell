@@ -93,23 +93,82 @@ async function verifyFirebaseToken(idToken) {
 }
 
 // Also support old Google tokeninfo as fallback (for existing Google users mid-migration)
+//
+// 2026-08-18: CRITICAL FIX. The old fallback returned info.sub (Google's OAuth
+// `sub`) as `uid`, which does NOT match the Firebase UID we store all user data
+// against. That silently corrupted per-user KV lookups on any request where
+// Firebase JWKS fetch had a transient failure — the same user would appear
+// under two different UIDs (Firebase `fzU...` vs Google numeric `10490...`),
+// causing tier and credit records to look "missing" on that request.
+//
+// New behavior:
+//   1. Try Firebase JWKS verify normally (fast path, ~95% of traffic).
+//   2. If that fails, try the Google tokeninfo fallback — but ONLY use it to
+//      confirm the token is valid. Never return info.sub as uid.
+//   3. Instead, look up the Firebase UID by email via KV mapping
+//      (uid_by_email:{lowercase_email}). This mapping is written on every
+//      successful Firebase verify below, so it's always populated for any
+//      user who has ever signed in successfully.
+//   4. If no UID mapping exists (brand-new user + Firebase completely down),
+//      throw — don't silently fabricate a fake identity.
 async function verifyTokenFlexible(idToken) {
   // Try Firebase first
   try {
-    return await verifyFirebaseToken(idToken);
+    const result = await verifyFirebaseToken(idToken);
+    // Best-effort: cache the email→uid mapping for the tokeninfo fallback.
+    // 30-day TTL; refreshed on every request.
+    if (result.email && result.uid) {
+      const kvUrl   = process.env.KV_REST_API_URL;
+      const kvToken = process.env.KV_REST_API_TOKEN;
+      if (kvUrl && kvToken) {
+        const emailLo = result.email.toLowerCase().trim();
+        // Fire-and-forget — don't block the request on this write.
+        fetch(`${kvUrl}/setex/${encodeURIComponent(`uid_by_email:${emailLo}`)}/2592000/${encodeURIComponent(result.uid)}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${kvToken}` },
+        }).catch(() => {});
+      }
+    }
+    return result;
   } catch(fbErr) {
-    // Fallback: Google tokeninfo (covers legacy Google-only tokens during migration)
+    // Fallback: Google tokeninfo (covers legacy Google-only tokens during migration
+    // AND transient Firebase JWKS fetch failures).
     try {
       const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
       if (!r.ok) throw new Error('Google tokeninfo failed');
       const info = await r.json();
       if (info.aud !== GOOGLE_OAUTH_CLIENT_ID && info.aud !== FIREBASE_PROJECT_ID)
         throw new Error('Wrong audience');
+
+      const email = (info.email || '').toLowerCase().trim();
+      if (!email) throw new Error('Google tokeninfo missing email; cannot map to Firebase UID');
+
+      // Look up the Firebase UID by email so we NEVER return the Google sub.
+      // This is the fix for the cross-device tier-mismatch bug.
+      const kvUrl   = process.env.KV_REST_API_URL;
+      const kvToken = process.env.KV_REST_API_TOKEN;
+      let firebaseUid = null;
+      if (kvUrl && kvToken) {
+        try {
+          const lookup = await fetch(`${kvUrl}/get/${encodeURIComponent(`uid_by_email:${email}`)}`, {
+            headers: { Authorization: `Bearer ${kvToken}` },
+          });
+          const ld = await lookup.json();
+          firebaseUid = ld.result || null;
+        } catch(kvErr) { /* fall through */ }
+      }
+
+      if (!firebaseUid) {
+        // No Firebase-UID mapping means this user has never successfully signed
+        // in via Firebase on this deployment. We refuse to return the Google sub
+        // because it would create split-UID data. Bounce them to re-auth.
+        throw new Error('Firebase UID unknown for this email; please sign in again');
+      }
+
       return {
-        uid:   info.sub,
+        uid:   firebaseUid,
         email: info.email || '',
         name:  info.name  || '',
-        // Google tokeninfo: email_verified is string 'true'/'false'
         emailVerified: info.email_verified === true || info.email_verified === 'true',
         provider: 'google.com',
       };

@@ -58,8 +58,18 @@ export default async function handler(req, res) {
     } catch(e) { console.error('KV pro check error:', e); }
   }
 
-  // 2. Fallback: check Stripe directly by email
-  if (!isPro && process.env.STRIPE_SECRET_KEY && userEmail) {
+  // 2. Fallback: check Stripe directly by email (only when KV missed).
+  //
+  // 2026-08-18: This path used to unconditionally overwrite `userTier` with
+  // the Stripe price-derived tier, which caused a real bug: users on higher
+  // grandfathered tiers (or god-mode grants) whose Stripe price didn't match
+  // the current tier map would silently downgrade on any request where KV
+  // path 1 didn't populate `isPro`. Now:
+  //   - Only sets tier from Stripe when KV genuinely has no record.
+  //   - Writes a `pro:{uid}` record back into KV so subsequent calls hit
+  //     path 1 and stay consistent across devices.
+  const kvHadRecord = (proStatus !== 'none');
+  if (!isPro && !kvHadRecord && process.env.STRIPE_SECRET_KEY && userEmail) {
     try {
       const custRes = await fetch(
         `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(userEmail)}'&limit=1`,
@@ -91,6 +101,28 @@ export default async function handler(req, res) {
                 [process.env.STRIPE_PRICE_ULTIMATE_ANNUAL]:  'ultimate',
               };
               userTier = metaTier || priceMap[priceId] || 'pro';
+
+              // Self-heal: write the pro:{uid} record so future calls hit KV
+              // path 1 directly — keeps tier consistent across devices.
+              if (kvUrl && kvToken) {
+                const record = {
+                  email: userEmail,
+                  subscriptionId: sub.id,
+                  status: 'active',
+                  plan: metaTier ? `${metaTier}_${sub.items?.data?.[0]?.price?.recurring?.interval || 'monthly'}` : 'pro_monthly',
+                  tier: userTier,
+                  updatedAt: new Date().toISOString(),
+                  note: 'auto-healed from Stripe fallback',
+                };
+                fetch(`${kvUrl}/set/${encodeURIComponent(`pro:${userSub}`)}`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${kvToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(JSON.stringify(record)),
+                }).catch(() => {});
+              }
             }
           }
         }
