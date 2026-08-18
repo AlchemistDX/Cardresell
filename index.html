@@ -8494,7 +8494,7 @@ function openScanner() {
   document.getElementById('scanFileInput').click();
 }
 
-function viewGradedCard(cardName, psaGrade) {
+function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   // Close the scan overlay and any CTAs
   const ov = document.getElementById('scanOverlay');
   if (ov) ov.style.display = 'none';
@@ -8508,6 +8508,29 @@ function viewGradedCard(cardName, psaGrade) {
 
   const cleanName = (cardName || '').trim();
   if (!cleanName) return;
+
+  // 2026-08-18: Cross-link to correct TCG game.
+  // The gameSelect may still be on "Pokemon EN" from the user's last
+  // search, but the scanned card could be YGO/MTG/Lorcana/OP/sports.
+  // Map the scan's card_type → gameSelect value so search hits the
+  // right database instead of returning "Image unavailable".
+  const typeToGame = {
+    pokemon:  isJapanese ? 'pokemonjp' : 'pokemon',
+    yugioh:   'yugioh',
+    mtg:      'mtg',
+    lorcana:  'lorcana',
+    onepiece: 'onepiece',
+    sports:   'sports',
+    other:    'other',
+  };
+  const targetGame = typeToGame[(cardType || 'pokemon').toLowerCase()] || 'pokemon';
+  const gameSel = document.getElementById('gameSelect');
+  if (gameSel && gameSel.value !== targetGame) {
+    gameSel.value = targetGame;
+    if (typeof onGameSelectChange === 'function') {
+      try { onGameSelectChange(targetGame); } catch(_) {}
+    }
+  }
 
   // Search for the card, then auto-apply PSA + grade
   const searchInput = document.getElementById('searchInput');
@@ -8524,7 +8547,13 @@ function viewGradedCard(cardName, psaGrade) {
 
   // After dropdown populates, click the best match; if none appears, fall
   // back to using the search results directly with the requested PSA grade.
+  // psaGrade === 0 means "View Card" (raw view, don't apply PSA grade).
   const applyGrade = () => {
+    if (!psaGrade || psaGrade === 0) {
+      const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
+      if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     const gradedToggle = document.getElementById('gradedToggle');
     if (gradedToggle && !gradedToggle.classList.contains('active')) {
       try { gradedToggle.click(); } catch(e) {}
@@ -10721,7 +10750,19 @@ async function submitGradeScan(deepGrade) {
     // Add "View graded price" tap button into the result
     const psaGrade = psa >= 10 ? 10 : psa >= 9 ? 9 : psa >= 8 ? 8 : psa >= 7 ? 7 : psa >= 6 ? 6 : psa >= 5 ? 5 : 1;
     const gradeColor2 = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
-    resultEl.innerHTML += `<button onclick="viewGradedCard('${(data.card_name||'').replace(/'/g,"\'")}', ${psaGrade})" style="margin-top:.65rem;width:100%;padding:.6rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">📊 View PSA ${psaGrade} price →</button>`;
+    // 2026-08-18: Pass card_type + is_japanese so "View card" cross-links
+    // to the correct TCG database (YGO grade result no longer goes to
+    // Pokemon search returning "Image unavailable").
+    const _ct = String(data.card_type || 'pokemon').replace(/'/g,"\\'");
+    const _jp = data.is_japanese === true ? 'true' : 'false';
+    const _cn = (data.card_name||'').replace(/'/g,"\\'");
+    resultEl.innerHTML +=
+      `<button onclick="viewGradedCard('${_cn}', ${psaGrade}, '${_ct}', ${_jp})" ` +
+      `style="margin-top:.65rem;width:100%;padding:.6rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">` +
+      `📊 View PSA ${psaGrade} price →</button>` +
+      `<button onclick="viewGradedCard('${_cn}', 0, '${_ct}', ${_jp})" ` +
+      `style="margin-top:.4rem;width:100%;padding:.55rem 1rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.15);border-radius:10px;font-weight:700;font-size:.84rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.35rem">` +
+      `🔍 View Card →</button>`;
 
     window._pendingScanBannerCard = data.card_name;
 
