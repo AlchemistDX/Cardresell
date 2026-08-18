@@ -291,40 +291,87 @@ export default async function handler(req, res) {
 DEEP GRADE MODE — You have ${orderedImages.length} photos including ${edgeImages.length} dedicated edge close-up${edgeImages.length === 1 ? '' : 's'}. This is a professional-tier inspection. Be MORE precise on the per-pillar sub-grades because you can actually see corner and edge detail. Use the edge close-ups to catch flaws that would be invisible in a whole-card shot.${edgeImages.length < 4 ? ` (Note: fewer than 4 edge shots — use "medium" confidence unless the shots you have are very clear.)` : ''}` : '';
 
     const prompt = isGradeMode
-      ? `You are a strict, professional trading card grader trained to PSA standards. You are analyzing ${imageDescription}.${deepGradeInstructions}
+      ? `You are a strict, professional trading card grader trained to PSA's OFFICIAL published standards. You are analyzing ${imageDescription}.${deepGradeInstructions}
 
-BEFORE grading, understand this critical reality:
-- PSA 10 (Gem Mint) is EXTREMELY rare — fewer than 5% of submitted cards receive it
-- PSA 9 is already excellent — most well-kept cards land at PSA 8 or below
-- Any visible flaw — even minor corner wear, off-centering, a single scratch — drops the grade significantly
-- Be STRICT and REALISTIC. It is better to underestimate than overestimate
-- If the image quality is poor or you cannot clearly see the card, say so in grade_notes and give a conservative grade
+BEFORE grading, understand these realities:
+- PSA 10 (Gem Mint) is rare (~5% of submissions) but NOT impossible. Do not artificially demote a card that meets the published thresholds.
+- Be STRICT but ACCURATE. Under-grading a card that meets PSA 10 criteria is just as wrong as over-grading a damaged one.
+- Use the OFFICIAL PSA centering thresholds below. Do NOT invent stricter thresholds. 55/45 front is the PSA 10 threshold — not a defect.
+- Modern cards are graded MORE strictly than vintage (pre-1980). Vintage tolerates print defects, factory miscuts, and wax staining that would sink a modern card.
+- If the image quality is poor or you cannot clearly see the card, lower confidence and say so in grade_notes.
 
-Grading scale:
-- PSA 10: Perfectly centered (50/50 to 55/45), zero corner wear, zero edge chips, zero surface scratches under any light
-- PSA 9: Near perfect, possibly one tiny flaw barely visible
-- PSA 8: Light corner wear OR slight off-centering OR minor surface issue
-- PSA 7: Noticeable corner wear AND/OR moderate centering issues
-- PSA 6 or below: Clear visible damage, heavy wear, major centering issues
+═══ OFFICIAL PSA CENTERING THRESHOLDS (memorize these) ═══
+FRONT centering (worst axis rules — check BOTH L/R and T/B):
+  • PSA 10: 55/45 or better on BOTH axes
+  • PSA 9:  60/40 or better on BOTH axes
+  • PSA 8:  65/35 or better on BOTH axes
+  • PSA 7:  70/30 or better
+  • PSA 6:  75/25 or better
+BACK centering is SIGNIFICANTLY more lenient:
+  • PSA 10 back: 75/25 or better
+  • PSA 9 back:  90/10 or better
+  • PSA 8 back:  90/10 or better
+Critical: 55/45 front IS the PSA 10 threshold. Never call 55/45 "moderate off-center" or use it to cap the grade below 10.
+
+═══ OFFICIAL PSA CORNER STANDARDS ═══
+  • PSA 10: "Four perfectly sharp corners" (no whitening, no softening, no fraying under magnification)
+  • PSA 9:  ONE minor flaw total across corners/edges/surface/centering (most commonly very slight corner wear on 1 corner)
+  • PSA 8:  "Slightest fraying at one or two corners" OR moderate defects in one other pillar
+  • PSA 7:  Fuzzy corners, one or more corners with visible wear to the naked eye
+  • PSA 6:  Obvious wear at multiple corners
+
+═══ OFFICIAL PSA EDGE STANDARDS ═══
+  • PSA 10: Smooth edges, no chipping, no roughness even under loupe
+  • PSA 9:  Very slight edge wear on one edge at most
+  • PSA 8:  Minor rough edges or one small chip
+  • PSA 7:  Visible chipping or roughness on multiple edges
+
+═══ OFFICIAL PSA SURFACE STANDARDS ═══
+  • PSA 10: No scratches, no print lines that impair eye appeal, no gloss breaks, no stains. A "slight printing imperfection" is allowed on a 10 ONLY if it does not impair overall appeal.
+  • PSA 9:  One tiny print line or a barely-visible scratch
+  • PSA 8:  Light surface scratches or a visible print line
+  • PSA 7:  Multiple scratches or a noticeable print defect
+
+═══ ONE-FLAW RULE FOR PSA 9 ═══
+PSA 9 allows exactly ONE minor flaw across all four pillars. Two or more minor flaws = PSA 8, not PSA 9.
+Example: very slight whitening on 1 corner AND 60/40 centering = PSA 8 (two flaws), not PSA 9.
+
+═══ HOW TO GRADE (in this order) ═══
+1. Measure centering on BOTH axes front. Determine the CENTERING CEILING using thresholds above (worst axis rules).
+2. Inspect all 4 corners. Note any whitening "visible to naked eye" vs "only under magnification."
+3. Inspect all 4 edges (use dedicated edge close-ups if provided).
+4. Inspect front surface for scratches, print lines, gloss breaks, stains.
+5. Apply the one-flaw rule: count minor flaws across all 4 pillars. Overall grade is the LOWER of (centering ceiling) and (grade allowed by flaw count).
+6. Eye appeal judgment: for borderline cards (e.g. 9 vs 10), consider overall eye appeal. Note if defects are in focal areas (center of card, subject's face).
 
 Evaluate and return:
 1. card_name: The card name
-2. centering: Estimate left/right and top/bottom as percentage (e.g. "60/40 L/R, 55/45 T/B")
-3. corners: Describe all 4 corners specifically — any whitening, bends, fraying ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
-4. edges: Describe all 4 edges — chips, roughness, nicks ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
-5. surface: Front surface — scratches, print lines, holo damage, stains ("Mint", "Near Mint", "Light Wear", "Moderate Wear", "Heavy Wear")
-6. psa_estimate: A realistic integer grade 1-10. DO NOT default to 10. Be strict.
-7. grade_label: ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Good", "Poor")
-8. grade_notes: 1-2 sentences on the SPECIFIC flaws observed (or why it earns a high grade if truly flawless)
-9. worth_grading: true only if psa_estimate >= 8 AND the card has meaningful value raw
-10. subgrades: object with numeric 1-10 sub-scores for each pillar: { "centering": 9.5, "corners": 8.5, "edges": 9, "surface": 9 }. Use half-steps (e.g. 8.5). Be strict — match the descriptors above.
-11. confidence: "high" | "medium" | "low" — how confident you are in this grade given the photo quality and angles you had to work with.
-12. is_slabbed: true if the card is inside a graded slab holder (CGC, PSA, BGS, SGC, TAG plastic case with label at the top showing a company logo and a grade number). Signals: rigid clear plastic outer shell with a printed label header, visible grade text like "GEM MINT 10" or "MINT 9", a serial/cert number, or a barcode. If slabbed, still grade the RAW card underneath as best you can, and add a note in grade_notes that the estimate will be skewed by the holder.
-13. slab_grader: If is_slabbed=true, the company name from the label ("PSA", "CGC", "BGS", "SGC", "TAG", or "Other"). Empty string otherwise.
-14. slab_grade: If is_slabbed=true, the grade number printed on the label (e.g. "10", "9.5", "8"). Empty string otherwise.
+2. centering_lr: Left/right ratio as "NN/NN" ONLY, e.g. "55/45". No units, no extra text.
+3. centering_tb: Top/bottom ratio as "NN/NN" ONLY, e.g. "52/48". No units, no extra text.
+4. centering_back: OPTIONAL. If the back is visible, worst-axis back ratio "NN/NN". Otherwise empty string.
+5. centering_ceiling: Integer 1-10. The MAX PSA grade allowed by front centering alone using the official thresholds above.
+6. corners_desc: Plain-language PSA-native description. Use phrases like: "four perfectly sharp corners", "very slight whitening on 1 corner (visible only under magnification)", "slight fraying at 2 corners visible to naked eye", "obvious wear at 3+ corners". Never use fake sub-scores.
+7. edges_desc: PSA-native description of all 4 edges. Note if edges cannot be fully assessed from provided photos.
+8. surface_desc: PSA-native description of the front surface. Explicitly call out print lines, scratches, gloss breaks, holder glare.
+9. flaw_count: Integer 0-4. Count of PILLARS with any visible flaw (centering worse than 55/45 counts as 1, any visible corner wear counts as 1, etc.).
+10. psa_estimate: Integer 1-10. Single most-likely PSA grade. This is the LOWER of centering_ceiling and (grade allowed by flaw_count using the one-flaw rule).
+11. psa_distribution: Object with probability weights for the top 3 grades, summing to ~100. Example: {"10": 15, "9": 60, "8": 25}. Base this on how borderline the defects are and photo confidence. If highly confident in a single grade, weight it heavily (e.g. 90/8/2).
+12. limiting_factor: 1-sentence explanation of why this grade and not the next one up. Example: "Centering qualifies for PSA 10; very slight whitening on 1 top corner is the primary reason this projects as a 9 rather than a 10."
+13. grade_label: ("Gem Mint", "Mint", "Near Mint-Mint", "Near Mint", "Excellent-Mint", "Excellent", "Very Good", "Good", "Poor")
+14. eye_appeal: "Strong" | "Average" | "Weak" — overall visual impression. Note in eye_appeal_notes if defects are in focal areas (center of card art, subject's face) which hurt eye appeal more than defects in blank border areas.
+15. eye_appeal_notes: 1 sentence on eye appeal.
+16. worth_grading: true only if psa_estimate >= 9 AND the card has meaningful value raw. Grading fees + shipping typically require a PSA 9 outcome to break even on modern cards.
+17. confidence: "high" | "medium" | "low" — how confident you are given photo quality, angles, holder glare, and edge visibility.
+18. confidence_drivers: Array of strings explaining what limits your confidence. Options: "holder_glare", "limited_edge_visibility", "blurry_photo", "single_photo_only", "back_not_visible", "low_resolution", "reflective_sleeve", "none".
+19. is_slabbed: true if the card is inside a graded slab (CGC, PSA, BGS, SGC, TAG). Signals: rigid clear plastic outer shell with printed label header, visible grade text like "GEM MINT 10", serial/cert number, or barcode. If slabbed, add "holder_glare" to confidence_drivers and note the estimate will be skewed. Recommend a raw re-scan in limiting_factor.
+20. slab_grader: If is_slabbed=true, the company ("PSA", "CGC", "BGS", "SGC", "TAG", or "Other"). Empty string otherwise.
+21. slab_grade: If is_slabbed=true, the printed grade (e.g. "10", "9.5", "8"). Empty string otherwise.
+22. is_vintage: true if the card is pre-1980 (older Topps sports, WOTC-era Pokémon Base Set through Neo). Apply lenient vintage standards if true.
+
+DO NOT emit numeric sub-grades like 8.5/10. PSA does not publish numeric sub-grades. Report PSA-native language only.
 
 Respond ONLY with valid JSON:
-{"card_name":"...","centering":"...","corners":"...","edges":"...","surface":"...","psa_estimate":8,"grade_label":"...","grade_notes":"...","worth_grading":false,"subgrades":{"centering":9,"corners":8.5,"edges":9,"surface":9},"confidence":"medium","is_slabbed":false,"slab_grader":"","slab_grade":""}`
+{"card_name":"...","centering_lr":"55/45","centering_tb":"52/48","centering_back":"","centering_ceiling":10,"corners_desc":"...","edges_desc":"...","surface_desc":"...","flaw_count":1,"psa_estimate":9,"psa_distribution":{"10":15,"9":60,"8":25},"limiting_factor":"...","grade_label":"Mint","eye_appeal":"Strong","eye_appeal_notes":"...","worth_grading":true,"confidence":"medium","confidence_drivers":["limited_edge_visibility"],"is_slabbed":false,"slab_grader":"","slab_grade":"","is_vintage":false}`
       : `You are a trading card expert. Look at this card image and identify it.
 
 BE HONEST about uncertainty. If the card art, number, or set name isn't perfectly clear (blurry photo, glare, similar-looking cards from different sets, unclear card number), you MUST return your top 2–3 candidate matches with a confidence score for each, INSTEAD of guessing one wrong answer. Only return a single answer when you are highly confident it's correct.
@@ -613,9 +660,65 @@ Respond ONLY with valid JSON, no explanation:
         if (!isFinite(n)) return null;
         return Math.max(1, Math.min(10, n));
       };
+
+      // ── OFFICIAL PSA CENTERING CEILING (server-side safety net) ────────
+      // The model is now prompted with the correct thresholds, but we also
+      // enforce them server-side in case the model makes an arithmetic
+      // mistake or ignores the prompt. "NN/NN" → worse pct of the pair.
+      const parseRatio = (s) => {
+        if (!s || typeof s !== 'string') return null;
+        const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+        if (!m) return null;
+        const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+        if (!isFinite(a) || !isFinite(b) || a + b === 0) return null;
+        return Math.max(a, b) / (a + b); // 0.5..1.0 — higher means MORE off-center
+      };
+      const centeringCeilingFromRatio = (worstRatio) => {
+        if (worstRatio == null) return null;
+        // OFFICIAL PSA front-centering thresholds:
+        //   PSA 10: 55/45 or better → worstRatio <= 0.55
+        //   PSA 9:  60/40 or better → worstRatio <= 0.60
+        //   PSA 8:  65/35 or better → worstRatio <= 0.65
+        //   PSA 7:  70/30 or better → worstRatio <= 0.70
+        //   PSA 6:  75/25 or better → worstRatio <= 0.75
+        //   PSA 5:  80/20 or better → worstRatio <= 0.80
+        // Small tolerance for measurement noise.
+        const t = 0.005;
+        if (worstRatio <= 0.55 + t) return 10;
+        if (worstRatio <= 0.60 + t) return 9;
+        if (worstRatio <= 0.65 + t) return 8;
+        if (worstRatio <= 0.70 + t) return 7;
+        if (worstRatio <= 0.75 + t) return 6;
+        if (worstRatio <= 0.80 + t) return 5;
+        return 4;
+      };
+
+      // Read the new response fields (with legacy fallback so a mid-deploy
+      // window doesn't break output).
+      const centeringLR = cardInfo.centering_lr || (typeof cardInfo.centering === 'string' ? (cardInfo.centering.match(/(\d{1,2}\/\d{1,2})\s*L\/R/i)?.[1] || '') : '');
+      const centeringTB = cardInfo.centering_tb || (typeof cardInfo.centering === 'string' ? (cardInfo.centering.match(/(\d{1,2}\/\d{1,2})\s*T\/B/i)?.[1] || '') : '');
+      const centeringBack = cardInfo.centering_back || '';
+
+      const rLR = parseRatio(centeringLR);
+      const rTB = parseRatio(centeringTB);
+      const worstFront = (rLR != null && rTB != null) ? Math.max(rLR, rTB) : (rLR ?? rTB);
+      const computedCeiling = centeringCeilingFromRatio(worstFront);
+      const modelCeiling = clampSub(cardInfo.centering_ceiling);
+      // Trust the server computation over the model's self-reported ceiling.
+      const centeringCeiling = computedCeiling ?? (modelCeiling != null ? Math.round(modelCeiling) : null);
+
+      // Enforce the centering ceiling on the reported PSA estimate.
+      let psaEstimate = clampSub(cardInfo.psa_estimate);
+      if (psaEstimate != null) psaEstimate = Math.round(psaEstimate);
+      if (centeringCeiling != null && psaEstimate != null && psaEstimate > centeringCeiling) {
+        psaEstimate = centeringCeiling;
+      }
+
+      // Legacy subgrades object — keep populated for older frontend paths.
+      // Centering sub-score derived from the ceiling (10 → 10, 9 → 9, etc.).
       const sg = cardInfo.subgrades || {};
       let subgrades = {
-        centering: clampSub(sg.centering),
+        centering: centeringCeiling ?? clampSub(sg.centering),
         corners:   clampSub(sg.corners),
         edges:     clampSub(sg.edges),
         surface:   clampSub(sg.surface),
@@ -727,11 +830,26 @@ Respond ONLY with valid JSON, no explanation:
       // If Ximilar returned a pixel-measured centering string, expose it as
       // the canonical `centering` field ("55/45 L/R, 52/48 T/B") so the UI
       // shows the real measurement instead of GPT's eyeball estimate.
-      let centeringDisplay = cardInfo.centering || 'Unknown';
+      // Also re-compute the ceiling from Ximilar's more accurate numbers.
+      let centeringDisplay =
+        (centeringLR || centeringTB)
+          ? [centeringLR && `${centeringLR} L/R`, centeringTB && `${centeringTB} T/B`].filter(Boolean).join(', ')
+          : (cardInfo.centering || 'Unknown');
+      let finalCenteringCeiling = centeringCeiling;
       if (cvCentering?.leftRight || cvCentering?.topBottom) {
         const lr = cvCentering.leftRight;
         const tb = cvCentering.topBottom;
         centeringDisplay = [lr && `${lr} L/R`, tb && `${tb} T/B`].filter(Boolean).join(', ');
+        // Re-run the ceiling calc with Ximilar's pixel-measured numbers.
+        const rLRx = parseRatio(lr);
+        const rTBx = parseRatio(tb);
+        const worstX = (rLRx != null && rTBx != null) ? Math.max(rLRx, rTBx) : (rLRx ?? rTBx);
+        const cvCeil = centeringCeilingFromRatio(worstX);
+        if (cvCeil != null) {
+          finalCenteringCeiling = cvCeil;
+          subgrades.centering = cvCeil;
+          if (psaEstimate != null && psaEstimate > cvCeil) psaEstimate = cvCeil;
+        }
       }
 
       // Photo-based confidence gets a bump when Ximilar CV grades are available.
@@ -750,6 +868,44 @@ Respond ONLY with valid JSON, no explanation:
           }
         : null;
 
+      // Normalize psa_distribution: array of top 3 buckets summing to ~100.
+      let distArray = [];
+      const distObj = cardInfo.psa_distribution;
+      if (distObj && typeof distObj === 'object') {
+        const entries = Object.entries(distObj)
+          .map(([g, p]) => ({ grade: parseInt(g, 10), pct: parseFloat(p) }))
+          .filter(x => isFinite(x.grade) && isFinite(x.pct) && x.pct > 0)
+          .sort((a, b) => b.pct - a.pct)
+          .slice(0, 3);
+        const total = entries.reduce((s, x) => s + x.pct, 0);
+        if (total > 0) {
+          distArray = entries.map(x => ({ grade: x.grade, pct: Math.round((x.pct / total) * 100) }));
+        }
+      }
+      // If distribution missing, synthesize a conservative one around psaEstimate.
+      if (distArray.length === 0 && psaEstimate != null) {
+        if (confidence === 'high') {
+          distArray = [{ grade: psaEstimate, pct: 80 }];
+          if (psaEstimate < 10) distArray.push({ grade: psaEstimate + 1, pct: 10 });
+          if (psaEstimate > 1)  distArray.push({ grade: psaEstimate - 1, pct: 10 });
+        } else {
+          distArray = [{ grade: psaEstimate, pct: 55 }];
+          if (psaEstimate < 10) distArray.push({ grade: psaEstimate + 1, pct: 20 });
+          if (psaEstimate > 1)  distArray.push({ grade: psaEstimate - 1, pct: 25 });
+        }
+      }
+
+      // Confidence drivers — array of strings the UI can render as chips.
+      let confidenceDrivers = Array.isArray(cardInfo.confidence_drivers)
+        ? cardInfo.confidence_drivers.filter(x => typeof x === 'string' && x.length)
+        : [];
+      // Auto-inject drivers we know about server-side.
+      if (looksSlabbed && !confidenceDrivers.includes('holder_glare')) confidenceDrivers.push('holder_glare');
+      if (totalPhotos < 2 && !confidenceDrivers.includes('single_photo_only')) confidenceDrivers.push('single_photo_only');
+      if (!backDataUrl && !confidenceDrivers.includes('back_not_visible')) confidenceDrivers.push('back_not_visible');
+      if (edgeImages.length < 4 && isDeepGrade && !confidenceDrivers.includes('limited_edge_visibility')) confidenceDrivers.push('limited_edge_visibility');
+      if (confidenceDrivers.length === 0) confidenceDrivers = ['none'];
+
       return res.status(200).json({
         success:       true,
         mode:          'grade',
@@ -757,25 +913,58 @@ Respond ONLY with valid JSON, no explanation:
         creditsUsed:   gradeCost,
         photoCount:    totalPhotos,
         card_name:     cardInfo.card_name     || '',
-        centering:     centeringDisplay,
-        corners:       cardInfo.corners       || 'Unknown',
-        edges:         cardInfo.edges         || 'Unknown',
-        surface:       cardInfo.surface       || 'Unknown',
-        psa_estimate:  cardInfo.psa_estimate  ?? null,
-        grade_label:   cardInfo.grade_label   || '',
-        grade_notes:   cardInfo.grade_notes   || '',
-        worth_grading: cardInfo.worth_grading ?? false,
+
+        // Centering — measured ratios + official PSA thresholds
+        centering:            centeringDisplay,
+        centering_lr:         centeringLR || '',
+        centering_tb:         centeringTB || '',
+        centering_back:       centeringBack || '',
+        centering_ceiling:    finalCenteringCeiling ?? centeringCeiling ?? null,
+        centering_thresholds: {
+          psa10: '55/45 or better',
+          psa9:  '60/40 or better',
+          psa8:  '65/35 or better',
+          psa7:  '70/30 or better',
+          back_note: 'Back centering is significantly more lenient (75/25 for PSA 10)',
+        },
+
+        // PSA-native descriptions (no fake sub-scores)
+        corners_desc: cardInfo.corners_desc || cardInfo.corners || 'Unknown',
+        edges_desc:   cardInfo.edges_desc   || cardInfo.edges   || 'Unknown',
+        surface_desc: cardInfo.surface_desc || cardInfo.surface || 'Unknown',
+
+        // Legacy fields for older UI — mirror the new *_desc values
+        corners: cardInfo.corners_desc || cardInfo.corners || 'Unknown',
+        edges:   cardInfo.edges_desc   || cardInfo.edges   || 'Unknown',
+        surface: cardInfo.surface_desc || cardInfo.surface || 'Unknown',
+
+        // Overall grade prediction
+        psa_estimate:      psaEstimate ?? cardInfo.psa_estimate ?? null,
+        psa_distribution:  distArray,
+        limiting_factor:   cardInfo.limiting_factor || '',
+        grade_label:       cardInfo.grade_label   || '',
+        grade_notes:       cardInfo.grade_notes   || cardInfo.limiting_factor || '',
+
+        // Eye appeal (new PSA-aligned judgment layer)
+        eye_appeal:        cardInfo.eye_appeal || 'Average',
+        eye_appeal_notes:  cardInfo.eye_appeal_notes || '',
+
+        flaw_count:      clampSub(cardInfo.flaw_count) ?? null,
+        worth_grading:   cardInfo.worth_grading ?? false,
+        is_vintage:      cardInfo.is_vintage === true,
+
+        // Legacy subgrades kept for backward-compat with the current UI.
+        // Centering here = the ceiling grade (not a fake sub-score).
         subgrades,
+
         confidence,
+        confidence_drivers: confidenceDrivers,
         cv_source:     cvSource,     // 'ximilar' or 'gpt'
         cv_grader:     cvGrader,     // { condition, final, corners[], edges[] } when ximilar succeeded
-        // Grading standard disclosure — Ximilar's model is trained "in
-        // accordance with grading standards like PSA, Beckett and CGC",
-        // outputs 1-10 with half-steps. It's an ESTIMATE — the final call
-        // is at the receiving grader's discretion.
+        // Grading standard disclosure — aligned to OFFICIAL PSA thresholds now.
         grading_standard: cvSource === 'ximilar'
-          ? 'AI estimate trained on PSA / Beckett / CGC standards. 1-10 scale with half-steps. Final grade is at the grader\'s discretion.'
-          : 'AI visual estimate. Final grade is at the grader\'s discretion.',
+          ? 'AI estimate using OFFICIAL PSA thresholds with pixel-measured centering. Final grade is at PSA\'s discretion.'
+          : 'AI estimate using OFFICIAL PSA thresholds (55/45 = PSA 10, 60/40 = PSA 9, 65/35 = PSA 8). Final grade is at PSA\'s discretion.',
         slab_warning:  slabWarning,
         // If it's a slab, echo back what GPT read off the label so the UI
         // can say "CGC 10" instead of just "probably slabbed".

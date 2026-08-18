@@ -10387,16 +10387,19 @@ async function submitGradeScan(deepGrade) {
     const label = data.grade_label || '';
     const notes = data.grade_notes || '';
     const worth = data.worth_grading;
+    const limitingFactor = data.limiting_factor || '';
+    const psaDist = Array.isArray(data.psa_distribution) ? data.psa_distribution : [];
 
     const gradeColor = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
 
-    // Confidence range: show PSA low–high range + confidence label
-    const psaLow  = Math.max(1, psa - 1);
-    const psaHigh = Math.min(10, psa + (psa >= 9 ? 1 : 0));
+    // Confidence label
     const confidenceLabel = data.confidence
       ? (data.confidence === 'high' ? 'High confidence' : data.confidence === 'low' ? 'Low confidence' : 'Moderate confidence')
       : (psa >= 8 ? 'High confidence' : psa >= 6 ? 'Moderate confidence' : 'Low confidence');
-    const rangeStr = psaLow === psaHigh ? 'PSA ' + psaLow : 'PSA ' + psaLow + '\u2013' + psaHigh + ' likely';
+    // Single most-likely grade — no 3-grade spread. If backend gave us a
+    // probability distribution, use the top bucket. Otherwise show psa_estimate.
+    const primaryGrade = psaDist.length > 0 ? psaDist[0].grade : psa;
+    const rangeStr = 'Most likely PSA ' + primaryGrade;
 
     const isDeep    = data.deepGrade === true;
     const photoCount= data.photoCount || (isDeep ? 6 : 2);
@@ -10428,15 +10431,27 @@ async function submitGradeScan(deepGrade) {
     };
     const barCol = pct => pct >= 80 ? '#4ade80' : pct >= 60 ? '#facc15' : pct >= 40 ? '#fb923c' : '#f87171';
 
-    // Plain-English tips per category
+    // Plain-English tips per category — aligned to OFFICIAL PSA thresholds.
+    // OFFICIAL: PSA 10 = 55/45, PSA 9 = 60/40, PSA 8 = 65/35, PSA 7 = 70/30.
+    // The previous logic was inverted (called 55/45 "moderate off-center").
     const centeringTip = v => {
       if (!v) return '';
       const nums = (v.match(/(\d+)\/(\d+)/g) || []).map(n => { const [a,b]=n.split('/').map(Number); return Math.max(a,b); });
       const worst = nums.length ? Math.max(...nums) : 50;
-      if (worst <= 52) return 'Nearly perfect — PSA 10 territory';
-      if (worst <= 55) return 'Slight shift, still strong — PSA 9–10 possible';
-      if (worst <= 60) return 'Moderate off-center — likely caps at PSA 8';
-      if (worst <= 65) return 'Noticeably off-center — PSA 7 or lower';
+      // Prefer backend's centering_ceiling when available (server-computed).
+      if (data.centering_ceiling != null) {
+        if (data.centering_ceiling >= 10) return 'Qualifies for PSA 10 centering (55/45 or better)';
+        if (data.centering_ceiling === 9)  return 'Qualifies for PSA 9 centering (60/40 or better) — caps at PSA 9';
+        if (data.centering_ceiling === 8)  return 'Qualifies for PSA 8 centering (65/35 or better) — caps at PSA 8';
+        if (data.centering_ceiling === 7)  return 'PSA 7 centering (70/30 or better) — caps at PSA 7';
+        if (data.centering_ceiling === 6)  return 'PSA 6 centering (75/25 or better) — caps at PSA 6';
+        return 'Heavy centering issue — caps at PSA ' + data.centering_ceiling;
+      }
+      // Fallback when ceiling isn't returned (legacy path).
+      if (worst <= 55) return 'Qualifies for PSA 10 centering (55/45 or better)';
+      if (worst <= 60) return 'Qualifies for PSA 9 centering (60/40 or better) — caps at PSA 9';
+      if (worst <= 65) return 'Qualifies for PSA 8 centering (65/35 or better) — caps at PSA 8';
+      if (worst <= 70) return 'PSA 7 centering (70/30 or better) — caps at PSA 7';
       return 'Heavily off-center — major grade deduction';
     };
     const cornerTip = v => {
@@ -10476,17 +10491,20 @@ async function submitGradeScan(deepGrade) {
     const numericCol = n => n >= 9 ? '#4ade80' : n >= 7 ? '#facc15' : n >= 5 ? '#fb923c' : '#f87171';
 
     const scoreBar = (label, val, tipFn, subKey) => {
-      // Prefer numeric sub-grade if present (Deep Grade); fall back to text (Quick Grade)
+      // PSA does NOT publish numeric sub-grades. We use the ceiling grade
+      // (integer) internally for bar width, but the user-visible label is the
+      // PSA-native description (val) — e.g. "four perfectly sharp corners".
       const numeric = subKey && typeof sg[subKey] === 'number' ? sg[subKey] : null;
       const pct = numeric != null ? numericPct(numeric) : gradeScore(val);
       const col = numeric != null ? numericCol(numeric) : barCol(pct);
       const tip = tipFn ? tipFn(val) : '';
-      const rightSide = numeric != null
-        ? '<span style="color:' + col + ';font-weight:800">' + numeric + '/10</span> <span style="font-size:.62rem;color:rgba(255,255,255,.4);margin-left:.3rem">' + (val || '') + '</span>'
-        : '<span style="color:' + col + ';font-weight:700">' + (val || '\u2014') + '</span>';
+      // For Centering, show the measured ratio as the right-hand label.
+      // For Corners/Edges/Surface, show the PSA-native description.
+      // Never show a fake "8.5/10" sub-score.
+      const rightSide = '<span style="color:' + col + ';font-weight:700;font-size:.72rem;text-align:right;max-width:60%">' + (val || '\u2014') + '</span>';
       return '<div style="margin-bottom:.55rem">' +
-        '<div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:.18rem">' +
-          '<span style="color:rgba(255,255,255,.45)">' + label + '</span>' +
+        '<div style="display:flex;justify-content:space-between;gap:.5rem;font-size:.7rem;margin-bottom:.18rem">' +
+          '<span style="color:rgba(255,255,255,.45);flex-shrink:0">' + label + '</span>' +
           rightSide +
         '</div>' +
         '<div style="height:5px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;margin-bottom:.2rem">' +
@@ -10523,15 +10541,80 @@ async function submitGradeScan(deepGrade) {
         '</div>'
       : '';
 
+    // ── PSA probability distribution block (replaces the 3-grade spread) ──
+    // Shows something like: 60% PSA 9 / 25% PSA 8 / 15% PSA 10
+    const distBlock = psaDist.length > 0
+      ? '<div style="margin:.15rem 0 .55rem;padding:.55rem .65rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">' +
+          '<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.5);margin-bottom:.35rem">PROBABILITY DISTRIBUTION</div>' +
+          '<div style="display:flex;gap:.35rem;align-items:stretch;height:26px">' +
+            psaDist.map((d, i) => {
+              const col = d.grade >= 9 ? '#4ade80' : d.grade >= 7 ? '#facc15' : d.grade >= 5 ? '#fb923c' : '#f87171';
+              const flex = Math.max(0.4, d.pct / 100);
+              return '<div style="flex:' + flex + ';display:flex;flex-direction:column;align-items:center;justify-content:center;background:' + col + (i === 0 ? '' : '80') + ';border-radius:5px;min-width:38px">' +
+                       '<div style="font-size:.7rem;font-weight:900;color:#000;line-height:1">PSA ' + d.grade + '</div>' +
+                       '<div style="font-size:.6rem;font-weight:700;color:rgba(0,0,0,.7);line-height:1;margin-top:.1rem">' + d.pct + '%</div>' +
+                     '</div>';
+            }).join('') +
+          '</div>' +
+        '</div>'
+      : '';
+
+    // ── Limiting factor block — explains why THIS grade and not the next one up ──
+    const limitingBlock = limitingFactor
+      ? '<div style="margin:.15rem 0 .55rem;padding:.55rem .65rem;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:10px">' +
+          '<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:#7ea8e8;margin-bottom:.2rem">LIMITING FACTOR</div>' +
+          '<div style="font-size:.75rem;color:rgba(255,255,255,.85);line-height:1.5">' + limitingFactor + '</div>' +
+        '</div>'
+      : '';
+
+    // ── Eye appeal block (PSA discretion layer) ──
+    const eyeAppeal = data.eye_appeal || '';
+    const eyeAppealNotes = data.eye_appeal_notes || '';
+    const eyeAppealCol = eyeAppeal === 'Strong' ? '#4ade80' : eyeAppeal === 'Weak' ? '#f87171' : '#facc15';
+    const eyeAppealBlock = eyeAppeal
+      ? '<div style="margin:.15rem 0 .55rem;padding:.5rem .65rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;display:flex;align-items:center;gap:.5rem">' +
+          '<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.5);flex-shrink:0">EYE APPEAL</div>' +
+          '<div style="font-size:.78rem;font-weight:900;color:' + eyeAppealCol + '">' + eyeAppeal + '</div>' +
+          (eyeAppealNotes ? '<div style="font-size:.68rem;color:rgba(255,255,255,.55);line-height:1.4;flex:1">' + eyeAppealNotes + '</div>' : '') +
+        '</div>'
+      : '';
+
+    // ── Confidence drivers (why we're not fully confident) ──
+    const cdrivers = Array.isArray(data.confidence_drivers) ? data.confidence_drivers.filter(x => x !== 'none') : [];
+    const driverLabel = k => ({
+      holder_glare: 'holder glare',
+      limited_edge_visibility: 'limited edge visibility',
+      blurry_photo: 'blurry photo',
+      single_photo_only: 'single photo only',
+      back_not_visible: 'back not visible',
+      low_resolution: 'low resolution',
+      reflective_sleeve: 'reflective sleeve',
+    }[k] || k.replace(/_/g, ' '));
+    const driversBlock = cdrivers.length > 0
+      ? '<div style="margin:.15rem 0 .55rem;font-size:.65rem;color:rgba(255,255,255,.5);line-height:1.5">' +
+          '<strong style="color:rgba(255,255,255,.7);font-weight:800;letter-spacing:.03em">Confidence reduced by:</strong> ' +
+          cdrivers.map(driverLabel).join(', ') +
+        '</div>'
+      : '';
+
     resultEl.innerHTML =
       slabBanner +
       cvBadge +
+      distBlock +
+      limitingBlock +
       '<div style="margin:.3rem 0 .5rem">' +
-        scoreBar('Centering', data.centering, centeringTip, 'centering') +
-        scoreBar('Corners',   data.corners,   cornerTip,   'corners')   +
-        scoreBar('Edges',     data.edges,     edgeTip,     'edges')     +
-        scoreBar('Surface',   data.surface,   surfaceTip,  'surface')   +
+        // Prefer explicit L/R + T/B ratios when the new backend returns them.
+        scoreBar('Centering',
+          (data.centering_lr || data.centering_tb)
+            ? [data.centering_lr && ('L/R ' + data.centering_lr), data.centering_tb && ('T/B ' + data.centering_tb)].filter(Boolean).join(' \u00B7 ')
+            : data.centering,
+          centeringTip, 'centering') +
+        scoreBar('Corners',   data.corners_desc || data.corners, cornerTip,   'corners')   +
+        scoreBar('Edges',     data.edges_desc   || data.edges,   edgeTip,     'edges')     +
+        scoreBar('Surface',   data.surface_desc || data.surface, surfaceTip,  'surface')   +
       '</div>' +
+      eyeAppealBlock +
+      driversBlock +
       (data.grading_standard
         ? '<div style="font-size:.62rem;color:rgba(255,255,255,.4);line-height:1.45;margin:-.15rem 0 .5rem;text-align:left;font-style:italic">' + data.grading_standard + '</div>'
         : '') +
