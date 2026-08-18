@@ -4808,14 +4808,30 @@ function loadCardUI(card) {
   // Image — progressive loading: show small (~30KB) immediately, then upgrade
   // to large (~200KB) in the background. Users see the card in ~200ms on 4G
   // instead of waiting 2s+ for the large image to download.
+  //
+  // 2026-08-18: BUGFIX — stale-image race across game switches.
+  // Symptom: user searches a Pokémon card, then switches to Disney Lorcana and
+  // searches a new card. Metadata updates correctly but the old Pokémon image
+  // stays visible. Root cause: (1) cardImg.src was never cleared before the
+  // next card began loading, so if the new card had a slow/missing image the
+  // old one stayed on screen; and (2) the async upgrade closure captured
+  // `card` and would swap in a stale largeUrl if it resolved after a game
+  // switch. Fix: bump _imgGen on every load and gate all async writes on it;
+  // explicitly blank the image before setting the new src so nothing stale
+  // ever survives a game switch.
   const smallUrl = card.images?.small || '';
   const largeUrl = card.images?.large || '';
   const primaryUrl = smallUrl || largeUrl; // small first if available
+  const _myImgGen = (window._imgGen = (window._imgGen || 0) + 1);
+  // Blank first — never let the previous card's image bleed through to a new card
+  cardImg.src = '';
+  cardImgWrap.style.display = 'none';
   if (primaryUrl) {
     // Give the browser a hint to prioritize this image
     try { cardImg.fetchPriority = 'high'; cardImg.loading = 'eager'; cardImg.decoding = 'async'; } catch(e) {}
     cardImg.src = primaryUrl;
     cardImg.onload = () => {
+      if (_myImgGen !== window._imgGen) return; // stale — a newer card is loading
       cardImgPh.style.display = 'none';
       sportsCardPh.style.display = 'none';
       cardImgWrap.style.display = 'block';
@@ -4823,10 +4839,8 @@ function loadCardUI(card) {
       if (largeUrl && largeUrl !== primaryUrl) {
         const upgrade = new Image();
         upgrade.onload = () => {
-          // Only swap if this card is still on-screen (user hasn't navigated away)
-          if (selectedCard && (card.images?.large === largeUrl || cardImg.src.endsWith(smallUrl.split('/').pop() || ''))) {
-            cardImg.src = largeUrl;
-          }
+          if (_myImgGen !== window._imgGen) return; // stale — user moved on
+          cardImg.src = largeUrl;
         };
         upgrade.src = largeUrl;
       }
@@ -9346,9 +9360,11 @@ async function _pickScanCandidate(idx) {
     });
     const d = await r.json().catch(() => ({}));
     if (r.status === 402) {
+      // 2026-08-18: BUGFIX — legacy scan-gate modal shows stale pricing
+      // ("$1 credits" + Pro-only, no Pro Max / Ultimate). Route straight to
+      // the current 4-tier pricing modal instead.
       cancelScan();
-      _setScanGateMode('identify');
-      document.getElementById('scanGateOverlay').classList.add('open');
+      openPricingModal('id_scan_402');
       return;
     }
     if (!r.ok || !d.ok) {
@@ -9553,11 +9569,12 @@ async function processScanImage(input) {
     }
 
     if (response.status === 402) {
+      // 2026-08-18: BUGFIX — route to the current 4-tier pricing modal
+      // instead of the legacy scan-gate (stale $1-credit + Pro-only copy).
       const spinner4 = document.getElementById('scanSpinner');
       if (spinner4) spinner4.style.display = 'none';
       cancelScan();
-      _setScanGateMode('identify');
-      document.getElementById('scanGateOverlay').classList.add('open');
+      openPricingModal('id_scan_402');
       return;
     }
 
@@ -9852,9 +9869,10 @@ function openGradeScanGate() {
     openGradeTierPicker();
     return;
   }
-  // No credits — show the gate with pack options
-  _setScanGateMode('grade');
-  document.getElementById('scanGateOverlay').classList.add('open');
+  // No credits — route to the current 4-tier pricing modal.
+  // 2026-08-18: BUGFIX — replaced legacy scanGateOverlay which showed stale
+  // "$9.99 Pro-only" copy without Pro Max / Ultimate tiers.
+  openPricingModal('grade_scan_gate');
 }
 
 // ── Grade tier picker (Quick vs Deep) ──
@@ -10146,7 +10164,13 @@ async function submitGradeScan(deepGrade) {
       resultEl.innerHTML = '<button onclick="cancelScan();setTimeout(()=>document.getElementById(\'googleSignInBtn\')?.click(),100)" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.55rem 1.4rem;font-weight:700;font-size:.88rem;cursor:pointer">Sign in with Google</button>';
       return;
     }
-    if (response.status === 402) { cancelScan(); _setScanGateMode('grade'); document.getElementById('scanGateOverlay').classList.add('open'); return; }
+    if (response.status === 402) {
+      // 2026-08-18: BUGFIX — route to current 4-tier pricing modal instead
+      // of the legacy grade scan-gate (still shows old $9.99-Pro-only copy).
+      cancelScan();
+      openPricingModal('grade_scan_402');
+      return;
+    }
     if (!response.ok) {
       let errMsg = 'Could not grade card. Try clearer photos.';
       try { const e = await response.json(); errMsg = e.error || errMsg; } catch(e) {}
