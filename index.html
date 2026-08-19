@@ -2567,6 +2567,56 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     </div>
 
+    <!-- 2026-08-19: Six-angle reference. Users kept asking "but what should
+         each of the 6 photos actually look like?" — so we show one reference
+         thumbnail per angle, using the same demo card across all six so the
+         viewer can mentally rotate it. All lazy-loaded (~166 KB total). -->
+    <div style="margin-top:1rem;padding-top:.9rem;border-top:1px solid rgba(255,255,255,.08)">
+      <div style="color:var(--gold);font-weight:800;font-size:.85rem;text-align:center;margin-bottom:.15rem">The 6 photos Deep Grade needs</div>
+      <div style="color:rgba(255,255,255,.6);font-size:.7rem;text-align:center;line-height:1.4;margin-bottom:.75rem">Front, back, and each of the four edges close-up. Here's what each should look like:</div>
+      <style>
+        .pt-angle-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:.45rem; }
+        .pt-angle { position:relative; border-radius:8px; overflow:hidden; background:#000; outline:1px solid rgba(255,255,255,.08); }
+        .pt-angle img { display:block; width:100%; height:auto; aspect-ratio:1/1; object-fit:cover; }
+        .pt-angle .pt-angle-label { position:absolute; left:0; right:0; bottom:0; padding:.28rem .35rem; background:linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0)); color:#fff; font-size:.62rem; font-weight:700; text-align:center; letter-spacing:.02em; }
+        .pt-angle .pt-angle-num { position:absolute; top:.3rem; left:.3rem; width:1.15rem; height:1.15rem; border-radius:50%; background:var(--gold); color:#000; font-size:.65rem; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+        @media (max-width:380px) { .pt-angle-grid { grid-template-columns:repeat(2, 1fr); } }
+      </style>
+      <div class="pt-angle-grid">
+        <figure class="pt-angle" style="margin:0">
+          <img loading="lazy" src="/photo-tips/photo_tips_angle_1_front.webp" alt="Reference: card front, centered and filling frame">
+          <span class="pt-angle-num">1</span>
+          <div class="pt-angle-label">Front</div>
+        </figure>
+        <figure class="pt-angle" style="margin:0">
+          <img loading="lazy" src="/photo-tips/photo_tips_angle_2_back.webp" alt="Reference: card back, centered and filling frame">
+          <span class="pt-angle-num">2</span>
+          <div class="pt-angle-label">Back</div>
+        </figure>
+        <figure class="pt-angle" style="margin:0">
+          <img loading="lazy" src="/photo-tips/photo_tips_angle_3_top_edge.webp" alt="Reference: top edge of card in sharp macro focus">
+          <span class="pt-angle-num">3</span>
+          <div class="pt-angle-label">Top edge</div>
+        </figure>
+        <figure class="pt-angle" style="margin:0">
+          <img loading="lazy" src="/photo-tips/photo_tips_angle_4_bottom_edge.webp" alt="Reference: bottom edge of card in sharp macro focus">
+          <span class="pt-angle-num">4</span>
+          <div class="pt-angle-label">Bottom edge</div>
+        </figure>
+        <figure class="pt-angle" style="margin:0">
+          <img loading="lazy" src="/photo-tips/photo_tips_angle_5_left_edge.webp" alt="Reference: left edge of card in sharp macro focus">
+          <span class="pt-angle-num">5</span>
+          <div class="pt-angle-label">Left edge</div>
+        </figure>
+        <figure class="pt-angle" style="margin:0">
+          <img loading="lazy" src="/photo-tips/photo_tips_angle_6_right_edge.webp" alt="Reference: right edge of card in sharp macro focus">
+          <span class="pt-angle-num">6</span>
+          <div class="pt-angle-label">Right edge</div>
+        </figure>
+      </div>
+      <div style="color:rgba(255,255,255,.5);font-size:.65rem;text-align:center;line-height:1.4;margin-top:.55rem">Quick Grade only needs #1 &amp; #2. Deep Grade uses all 6 for corner + edge inspection.</div>
+    </div>
+
     <!-- Primary CTA -->
     <button onclick="acknowledgePhotoTipsAndContinue()" id="photoTipsContinueBtn" style="margin-top:1rem;width:100%;padding:.8rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.95rem;cursor:pointer">
       Got it — start scanning
