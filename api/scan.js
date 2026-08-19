@@ -152,6 +152,175 @@ async function groundYugiohCardInfo(cardInfo) {
     console.log(`[scan] YGO grounding: no match for "${cardInfo.card_name}" set_code="${cardInfo.set_code || ''}" number="${cardInfo.card_number || ''}"`);
   }
 }
+// ── Scryfall grounding (MTG) — added 2026-08-19 ──
+// Free API, 10 req/sec, no key. Mutates cardInfo in place.
+// Called on both Ximilar happy path AND fallback path so every MTG scan gets
+// canonical name, set_code, set_name, collector_number, image, and prices.
+//
+// Tiers, most specific first:
+//   Tier 1: /cards/<set>/<number>          (perfect precision if Ximilar gave both)
+//   Tier 2: /cards/named?exact=<name>&set=<set>
+//   Tier 3: /cards/named?exact=<name>
+//   Tier 4: /cards/named?fuzzy=<name>
+async function groundMagicCardInfo(cardInfo) {
+  if (!cardInfo || (cardInfo.card_type !== 'mtg' && cardInfo.card_type !== 'magic')) return;
+
+  const cleanName = String(cardInfo.card_name || '').trim();
+  const rawSet    = String(cardInfo.set_code || '').trim().toLowerCase();
+  const setCode   = /^[a-z0-9]{3,6}$/.test(rawSet) ? rawSet : '';
+  const rawNum    = String(cardInfo.card_number || '').trim();
+  // Scryfall collector numbers are digits, sometimes with a suffix like '10a' or '★'
+  const collNum   = rawNum.replace(/[^A-Za-z0-9\-\/]/g, '').replace(/\/.*$/, '');
+
+  const fetchScry = async (url) => {
+    try {
+      const ac = new AbortController();
+      const tt = setTimeout(() => ac.abort(), 4000);
+      const r  = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
+      clearTimeout(tt);
+      if (!r || !r.ok) return null;
+      return await r.json().catch(() => null);
+    } catch (_) { return null; }
+  };
+
+  let hit = null;
+  let source = '';
+
+  // Tier 1: set + collector number
+  if (!hit && setCode && collNum) {
+    const j = await fetchScry(`https://api.scryfall.com/cards/${encodeURIComponent(setCode)}/${encodeURIComponent(collNum)}`);
+    if (j && j.name) { hit = j; source = 'set_number'; }
+  }
+  // Tier 2: exact name + set
+  if (!hit && cleanName && setCode) {
+    const j = await fetchScry(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}&set=${encodeURIComponent(setCode)}`);
+    if (j && j.name) { hit = j; source = 'exact_set'; }
+  }
+  // Tier 3: exact name only
+  if (!hit && cleanName) {
+    const j = await fetchScry(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}`);
+    if (j && j.name) { hit = j; source = 'exact'; }
+  }
+  // Tier 4: fuzzy name
+  if (!hit && cleanName) {
+    const j = await fetchScry(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cleanName)}`);
+    if (j && j.name) { hit = j; source = 'fuzzy'; }
+  }
+
+  if (!hit) {
+    if (cleanName) console.log(`[scan] MTG grounding: no Scryfall match for "${cleanName}" set="${setCode}" num="${collNum}"`);
+    return;
+  }
+
+  const before = { name: cardInfo.card_name, set: cardInfo.set_name };
+  const imgFront = hit.image_uris?.normal || hit.card_faces?.[0]?.image_uris?.normal || null;
+  const imgSmall = hit.image_uris?.small  || hit.card_faces?.[0]?.image_uris?.small  || null;
+  cardInfo.card_name    = hit.name || cardInfo.card_name;
+  cardInfo.set_code     = (hit.set || cardInfo.set_code || '').toUpperCase();
+  cardInfo.set_name     = hit.set_name || cardInfo.set_name;
+  cardInfo.card_number  = hit.collector_number || cardInfo.card_number;
+  if (hit.rarity && !cardInfo.rarity) cardInfo.rarity = hit.rarity;
+  if (imgFront) cardInfo.image_url   = imgFront;
+  if (imgSmall) cardInfo.image_small = imgSmall;
+
+  // Prices (bundled for free) — stash for /api/tcg-price fallback path.
+  const p = hit.prices || {};
+  cardInfo._scryfall_prices = {
+    usd:      parseFloat(p.usd)      || null,
+    usd_foil: parseFloat(p.usd_foil) || null,
+    usd_etched: parseFloat(p.usd_etched) || null,
+    eur:      parseFloat(p.eur)      || null,
+    eur_foil: parseFloat(p.eur_foil) || null,
+    tix:      parseFloat(p.tix)      || null,
+  };
+
+  cardInfo.grounded = true;
+  cardInfo.grounded_id = hit.id ? String(hit.id) : cardInfo.grounded_id || null;
+  cardInfo._mtg_grounded_by = source;
+  if ((source === 'set_number' || source === 'exact_set') && cardInfo.confidence === 'low') {
+    cardInfo.confidence = 'high';
+  }
+  console.log(`[scan] MTG grounded (${source}): "${before.name}" \u2192 "${cardInfo.card_name}" set=${cardInfo.set_code} img=${!!imgFront} usd=${cardInfo._scryfall_prices.usd}`);
+}
+
+// ── Lorcana grounding (lorcana-api.com) — added 2026-08-19 ──
+// Free API, 100 req/day, no key. Mutates cardInfo in place.
+//
+// Tiers:
+//   Tier 1: search by exact Name + Set_ID
+//   Tier 2: search by exact Name
+//   Tier 3: fuzzy name (contains)
+async function groundLorcanaCardInfo(cardInfo) {
+  if (!cardInfo || cardInfo.card_type !== 'lorcana') return;
+
+  const cleanName = String(cardInfo.card_name || '').trim();
+  if (!cleanName) return;
+  const rawSet = String(cardInfo.set_code || cardInfo.set_name || '').trim();
+
+  const fetchLor = async (url) => {
+    try {
+      const ac = new AbortController();
+      const tt = setTimeout(() => ac.abort(), 4000);
+      const r  = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
+      clearTimeout(tt);
+      if (!r || !r.ok) return null;
+      return await r.json().catch(() => null);
+    } catch (_) { return null; }
+  };
+
+  let hits = null;
+  let source = '';
+
+  // Tier 1: exact name + set
+  if (rawSet) {
+    const url = `https://api.lorcana-api.com/cards/fetch?search=Name%3D${encodeURIComponent(cleanName)}%3BSet_ID%3D${encodeURIComponent(rawSet)}`;
+    const j = await fetchLor(url);
+    if (Array.isArray(j) && j.length) { hits = j; source = 'exact_set'; }
+  }
+  // Tier 2: exact name only
+  if (!hits) {
+    const url = `https://api.lorcana-api.com/cards/fetch?search=Name%3D${encodeURIComponent(cleanName)}`;
+    const j = await fetchLor(url);
+    if (Array.isArray(j) && j.length) { hits = j; source = 'exact'; }
+  }
+  // Tier 3: fuzzy (Name~)
+  if (!hits) {
+    const url = `https://api.lorcana-api.com/cards/fetch?search=Name~${encodeURIComponent(cleanName)}`;
+    const j = await fetchLor(url);
+    if (Array.isArray(j) && j.length) { hits = j; source = 'fuzzy'; }
+  }
+
+  if (!hits || !hits.length) {
+    console.log(`[scan] Lorcana grounding: no match for "${cleanName}" set="${rawSet}"`);
+    return;
+  }
+
+  const card = hits[0];
+  const before = { name: cardInfo.card_name, set: cardInfo.set_name };
+  cardInfo.card_name   = card.Name        || cardInfo.card_name;
+  cardInfo.set_code    = card.Set_ID      || cardInfo.set_code;
+  cardInfo.set_name    = card.Set_Name    || cardInfo.set_name;
+  cardInfo.card_number = card.Card_Num    || cardInfo.card_number;
+  if (card.Rarity && !cardInfo.rarity) cardInfo.rarity = card.Rarity;
+  if (card.Image)    cardInfo.image_url = card.Image;
+  if (card.Image)    cardInfo.image_small = card.Image;
+
+  cardInfo.grounded = true;
+  cardInfo.grounded_id = card.Unique_ID || card.Card_Num || cardInfo.grounded_id || null;
+  cardInfo._lorcana_grounded_by = source;
+  if (source === 'exact_set' && cardInfo.confidence === 'low') cardInfo.confidence = 'high';
+  console.log(`[scan] Lorcana grounded (${source}): "${before.name}" \u2192 "${cardInfo.card_name}" set=${cardInfo.set_code} img=${!!card.Image}`);
+}
+
+// Dispatcher — call the right per-game grounder
+async function groundCardInfoByGame(cardInfo) {
+  if (!cardInfo) return;
+  const t = cardInfo.card_type;
+  if (t === 'yugioh')                  return groundYugiohCardInfo(cardInfo);
+  if (t === 'mtg' || t === 'magic')    return groundMagicCardInfo(cardInfo);
+  if (t === 'lorcana')                 return groundLorcanaCardInfo(cardInfo);
+}
+
 // /api/scan — Ximilar-first card identification (GPT-5 fallback)
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
@@ -521,15 +690,13 @@ export default async function handler(req, res) {
       //   - card_number returned as Konami passcode (101305031) not printed set code
       //   - set_code/set_name frequently "UNKNOWN"
       // YGOProDeck grounding (passcode → set_code → name → fuzzy) fixes all of these.
-      if (cardInfo.card_type === 'yugioh') {
-        await groundYugiohCardInfo(cardInfo);
-      }
+      // 2026-08-19: now dispatches to per-game grounder (yugioh/mtg/lorcana).
+      // Pokemon has its own grounding via pokemontcg.io later in the flow.
+      await groundCardInfoByGame(cardInfo);
       // Also ground candidates (if any) for the picker path
       if (Array.isArray(xim.candidates)) {
         for (const c of xim.candidates) {
-          if (c && c.card_type === 'yugioh') {
-            await groundYugiohCardInfo(c);
-          }
+          await groundCardInfoByGame(c);
         }
       }
 
@@ -1225,8 +1392,8 @@ Respond ONLY with valid JSON, no explanation:
     //   at top of file 2026-08-19 so it runs on BOTH the Ximilar happy path AND
     //   this GPT-fallback path. Also added Tier 0 (numeric passcode) which resolves
     //   Ximilar's card_number (e.g. 101305031) directly via YGOProDeck ?id=<passcode>.
-    if (!isGradeMode && cardInfo.card_type === 'yugioh') {
-      await groundYugiohCardInfo(cardInfo);
+    if (!isGradeMode) {
+      await groundCardInfoByGame(cardInfo);
     }
 
     if (isGradeMode) {

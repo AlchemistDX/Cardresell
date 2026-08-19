@@ -128,9 +128,41 @@ export default async function handler(req, res) {
     console.error('tcgcsv resolve error:', e.message);
   }
 
-  // Non-Pokemon: skip TCGplayer live-search fallback (it's Pokemon-tuned).
-  // Return null cleanly so frontend shows "set price manually".
+  // ── FREE-API FALLBACKS: Scryfall (MTG) / lorcana-api / YGOProDeck ─────
+  // 2026-08-19: when tcgcsv misses on non-Pokemon, hit the game-native free API
+  // so users get *some* price instead of an empty state.
   if (categoryId !== 3) {
+    try {
+      let fb = null;
+      if (categoryId === 1) {
+        fb = await priceFromScryfall({ name, set, number });
+      } else if (categoryId === 71) {
+        fb = await priceFromLorcanaApi({ name, set });
+      } else if (categoryId === 2) {
+        fb = await priceFromYgoprodeck({ name, number });
+      }
+      if (fb && fb.market != null) {
+        const data = {
+          market: fb.market,
+          low:  fb.low  ?? (fb.market * 0.85),
+          mid:  fb.mid  ?? fb.market,
+          high: fb.high ?? (fb.market * 1.15),
+          source: fb.source,
+          game, categoryId,
+          cardName: fb.cardName || name,
+          setName:  fb.setName  || set,
+          imageUrl: fb.imageUrl || null,
+          url:      fb.url      || null,
+          fetchedAt: new Date().toISOString(),
+          cacheAgeSec: 0,
+        };
+        await setCache(kvUrl, kvToken, cacheKey, data);
+        _incrSearchStats(kvUrl, kvToken);
+        return res.status(200).json(data);
+      }
+    } catch(e) {
+      console.error('free-api fallback error:', e.message);
+    }
     _incrSearchStats(kvUrl, kvToken);
     return res.status(200).json({
       market: null, low: null, mid: null, high: null,
@@ -248,6 +280,116 @@ export default async function handler(req, res) {
     console.error('tcg-price error:', e.message);
     return res.status(500).json({ error: e.message });
   }
+}
+
+// ── Free-API price fallbacks (2026-08-19) ───────────────────────────────
+async function _timedFetch(url, ms = 4000) {
+  try {
+    const ac = new AbortController();
+    const tt = setTimeout(() => ac.abort(), ms);
+    const r = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
+    clearTimeout(tt);
+    if (!r || !r.ok) return null;
+    return await r.json().catch(() => null);
+  } catch(_) { return null; }
+}
+
+async function priceFromScryfall({ name, set, number }) {
+  if (!name) return null;
+  const setLc = String(set || '').trim().toLowerCase();
+  const setCode = /^[a-z0-9]{3,6}$/.test(setLc) ? setLc : '';
+  const num = String(number || '').replace(/[^A-Za-z0-9\-]/g, '').replace(/\/.*$/, '');
+
+  let j = null;
+  if (setCode && num)  j = await _timedFetch(`https://api.scryfall.com/cards/${encodeURIComponent(setCode)}/${encodeURIComponent(num)}`);
+  if (!j && setCode)   j = await _timedFetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&set=${encodeURIComponent(setCode)}`);
+  if (!j)              j = await _timedFetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+  if (!j)              j = await _timedFetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
+  if (!j || !j.prices) return null;
+
+  const usd     = parseFloat(j.prices.usd)      || null;
+  const usdFoil = parseFloat(j.prices.usd_foil) || null;
+  const market  = usd || usdFoil || null;
+  if (market == null) return null;
+  const img = j.image_uris?.normal || j.card_faces?.[0]?.image_uris?.normal || null;
+  return {
+    market, low: null, mid: null, high: null,
+    source: 'scryfall',
+    cardName: j.name,
+    setName:  j.set_name,
+    imageUrl: img,
+    url:      j.purchase_uris?.tcgplayer || j.scryfall_uri || null,
+  };
+}
+
+async function priceFromLorcanaApi({ name, set }) {
+  if (!name) return null;
+  const setId = String(set || '').trim();
+  let list = null;
+  if (setId) {
+    list = await _timedFetch(`https://api.lorcana-api.com/cards/fetch?search=Name%3D${encodeURIComponent(name)}%3BSet_ID%3D${encodeURIComponent(setId)}`);
+  }
+  if (!list || !list.length) {
+    list = await _timedFetch(`https://api.lorcana-api.com/cards/fetch?search=Name%3D${encodeURIComponent(name)}`);
+  }
+  if (!list || !list.length) {
+    list = await _timedFetch(`https://api.lorcana-api.com/cards/fetch?search=Name~${encodeURIComponent(name)}`);
+  }
+  if (!list || !list.length) return null;
+  const c = list[0];
+  // lorcana-api returns Price + Price_Foil (in USD) on the /Prices endpoint,
+  // but /fetch also embeds Price on many cards. Try both.
+  let market = parseFloat(c.Price) || parseFloat(c.Price_Foil) || null;
+  if (market == null && c.Unique_ID) {
+    const p = await _timedFetch(`https://api.lorcana-api.com/prices/${encodeURIComponent(c.Unique_ID)}`);
+    if (p) market = parseFloat(p.Price) || parseFloat(p.Price_Foil) || null;
+  }
+  if (market == null) return null;
+  return {
+    market, low: null, mid: null, high: null,
+    source: 'lorcana-api',
+    cardName: c.Name,
+    setName:  c.Set_Name,
+    imageUrl: c.Image || null,
+    url:      null,
+  };
+}
+
+async function priceFromYgoprodeck({ name, number }) {
+  const rawNum = String(number || '').trim();
+  const passcode = /^\d{5,10}$/.test(rawNum) ? rawNum : '';
+  let card = null;
+
+  if (passcode) {
+    const j = await _timedFetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${encodeURIComponent(passcode)}`);
+    card = j?.data?.[0] || null;
+  }
+  if (!card && name) {
+    const j = await _timedFetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(name)}`)
+           || await _timedFetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(name)}&num=5&offset=0`);
+    card = j?.data?.[0] || null;
+  }
+  if (!card) return null;
+
+  const p = card.card_prices?.[0] || {};
+  const tcg = parseFloat(p.tcgplayer_price) || null;
+  const eb  = parseFloat(p.ebay_price)      || null;
+  const cm  = parseFloat(p.cardmarket_price) || null;
+  const az  = parseFloat(p.amazon_price)    || null;
+  const market = tcg || eb || cm || az || null;
+  if (market == null) return null;
+
+  return {
+    market,
+    low:  Math.min(...[tcg, eb, cm, az].filter(v => v != null)) || null,
+    high: Math.max(...[tcg, eb, cm, az].filter(v => v != null)) || null,
+    mid:  market,
+    source: 'ygoprodeck',
+    cardName: card.name,
+    setName:  card.card_sets?.[0]?.set_name || '',
+    imageUrl: card.card_images?.[0]?.image_url || null,
+    url:      null,
+  };
 }
 
 // ── Search-counter increment (fire-and-forget) ──────────────────────────
