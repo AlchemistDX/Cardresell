@@ -2415,35 +2415,129 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div>
 
 <!-- ============================================================
-     GRADE TIER PICKER — Quick vs Deep
+     GRADE TIER PICKER — Deep (recommended) vs Quick
+     Rebuilt 2026-08-18: Deep-first, clearer copy, links to photo
+     tips instead of cramming a one-line hint at the bottom.
      ============================================================ -->
 <div class="scan-gate-overlay" id="gradeTierOverlay" onclick="closeGradeTier(event)">
-  <div class="scan-gate-box" style="max-width:420px">
+  <div class="scan-gate-box" style="max-width:440px">
     <div class="scan-gate-icon">🏅</div>
-    <div class="scan-gate-title">Choose grading depth</div>
-    <div class="scan-gate-sub" style="line-height:1.45">The better the photos, the more accurate your grade estimate. Pick a tier below — you can retake any shot before submitting.</div>
-    <div style="display:flex;flex-direction:column;gap:.65rem;margin-top:.85rem">
-      <div id="tierQuickBtn" class="scan-gate-pack" onclick="startQuickGrade()" style="cursor:pointer;text-align:left">
+    <div class="scan-gate-title">How do you want it graded?</div>
+    <div class="scan-gate-sub" style="line-height:1.45">Grade estimates are only as good as the photos. Deep Grade sees corners and edges — the two things that most often bust a Quick estimate.</div>
+    <div style="display:flex;flex-direction:column;gap:.6rem;margin-top:.9rem">
+      <!-- DEEP GRADE — primary, shown first, bigger -->
+      <div id="tierDeepBtn" class="scan-gate-pack best" onclick="startDeepGrade()" style="cursor:pointer;text-align:left;padding:.9rem .95rem;position:relative">
+        <div class="scan-gate-pack-badge">RECOMMENDED</div>
         <div class="scan-gate-pack-left">
-          <div class="scan-gate-pack-name">⚡ Quick Grade</div>
-          <div class="scan-gate-pack-desc" style="line-height:1.45">2 photos — front + back<br><span style="color:rgba(255,255,255,.55)">Best for: fast estimates · raw cards you already know are clean</span></div>
-        </div>
-        <div class="scan-gate-pack-price">1 credit</div>
-      </div>
-      <div id="tierDeepBtn" class="scan-gate-pack best" onclick="startDeepGrade()" style="cursor:pointer;text-align:left">
-        <div class="scan-gate-pack-badge">MOST ACCURATE</div>
-        <div class="scan-gate-pack-left">
-          <div class="scan-gate-pack-name">🔍 Deep Grade</div>
-          <div class="scan-gate-pack-desc" style="line-height:1.45">4–6 photos — front, back + 2–4 edges<br><span style="color:rgba(255,255,255,.55)">Best for: cards you might submit to PSA/BGS · catches corner/edge flaws Quick misses</span></div>
+          <div class="scan-gate-pack-name" style="font-size:1.02rem">🔍 Deep Grade</div>
+          <div class="scan-gate-pack-desc" style="line-height:1.5;margin-top:.25rem">
+            <span style="color:#fff;font-weight:600">4–6 photos · front, back + 2–4 edges</span>
+            <br><span style="color:rgba(255,255,255,.7);font-size:.72rem">Measures centering · inspects each corner · sees edge dings Quick misses · CV-verified pillars</span>
+            <br><span style="color:var(--gold);font-size:.68rem;font-weight:700;letter-spacing:.02em;margin-top:.15rem;display:inline-block">Use before submitting to PSA / BGS / CGC</span>
+          </div>
         </div>
         <div class="scan-gate-pack-price">2 credits</div>
       </div>
+      <!-- QUICK GRADE — secondary, smaller -->
+      <div id="tierQuickBtn" class="scan-gate-pack" onclick="startQuickGrade()" style="cursor:pointer;text-align:left;opacity:.88">
+        <div class="scan-gate-pack-left">
+          <div class="scan-gate-pack-name" style="font-size:.92rem">⚡ Quick Grade</div>
+          <div class="scan-gate-pack-desc" style="line-height:1.45;margin-top:.2rem">
+            <span style="color:rgba(255,255,255,.85)">2 photos · front + back only</span>
+            <br><span style="color:rgba(255,255,255,.5);font-size:.7rem">Fast look for raw cards you already know are clean — skips corner + edge inspection</span>
+          </div>
+        </div>
+        <div class="scan-gate-pack-price" style="font-size:.85rem">1 credit</div>
+      </div>
     </div>
-    <div style="margin-top:.75rem;padding:.6rem .7rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.25);border-radius:8px;font-size:.72rem;color:var(--text);line-height:1.55;text-align:left">
-      <strong style="color:var(--gold)">Photo tips:</strong> Bright, even lighting. Fill the frame with the card. On holo cards, tilt slightly to kill glare.
-    </div>
-    <div id="gradeTierCreditLine" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.7rem;text-align:center"></div>
+    <!-- Photo tips CTA — opens the full guide -->
+    <button onclick="openPhotoTipsModal('grade')" style="margin-top:.85rem;width:100%;padding:.6rem .8rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.28);border-radius:8px;color:var(--gold);font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">
+      📸 See what a good grading photo looks like
+    </button>
+    <div id="gradeTierCreditLine" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.65rem;text-align:center"></div>
     <button class="scan-gate-cancel" onclick="closeGradeTier()">Cancel</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     PHOTO TIPS MODAL — Do's and Don'ts for grading photos
+     Shown automatically on first-ever Deep Grade, and reopenable
+     from a "?" link in the tier picker or edge-capture UI.
+     ============================================================ -->
+<div class="scan-gate-overlay" id="photoTipsOverlay" onclick="closePhotoTipsModal(event)">
+  <div class="scan-gate-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
+    <div class="scan-gate-icon">📸</div>
+    <div class="scan-gate-title">How to take a great grading photo</div>
+    <div class="scan-gate-sub" style="line-height:1.5">Follow these and your grade estimate will match a real grader within 1 point far more often. The AI only sees what your camera shows it.</div>
+
+    <!-- Golden Rules — the 5 things that matter most -->
+    <div style="margin-top:.9rem;text-align:left;display:flex;flex-direction:column;gap:.55rem">
+      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
+        <span style="font-size:1.1rem;line-height:1">✅</span>
+        <div style="flex:1">
+          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Remove sleeves and toploaders</div>
+          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Plastic reflects. Bare card only — you can put it back after the scan.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
+        <span style="font-size:1.1rem;line-height:1">✅</span>
+        <div style="flex:1">
+          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Bright, even, indirect light</div>
+          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Near a window during the day is ideal. Avoid single overhead bulbs — they create hot spots and shadows.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
+        <span style="font-size:1.1rem;line-height:1">✅</span>
+        <div style="flex:1">
+          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Fill the frame with the card</div>
+          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Card should touch every edge of the frame. Hold the phone parallel to the card, not tilted.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
+        <span style="font-size:1.1rem;line-height:1">✅</span>
+        <div style="flex:1">
+          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Holo cards — tilt to kill glare</div>
+          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">If a rainbow band cuts across the card, tilt 10–15° until the shine breaks up. Text should be readable everywhere.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
+        <span style="font-size:1.1rem;line-height:1">✅</span>
+        <div style="flex:1">
+          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Edges — shoot them individually</div>
+          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Rotate the card so ONE edge faces the camera and fills the frame. Look for nicks, chalking, or whitening.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Don'ts -->
+    <div style="margin-top:.8rem;text-align:left;display:flex;flex-direction:column;gap:.5rem">
+      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
+        <span style="font-size:.95rem;line-height:1">❌</span>
+        <span><strong style="color:#fca5a5">Don't</strong> shoot through a sleeve, toploader, or slab</span>
+      </div>
+      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
+        <span style="font-size:.95rem;line-height:1">❌</span>
+        <span><strong style="color:#fca5a5">Don't</strong> use flash — it blows out the surface and hides scratches</span>
+      </div>
+      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
+        <span style="font-size:.95rem;line-height:1">❌</span>
+        <span><strong style="color:#fca5a5">Don't</strong> cover corners or edges with fingers</span>
+      </div>
+      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
+        <span style="font-size:.95rem;line-height:1">❌</span>
+        <span><strong style="color:#fca5a5">Don't</strong> shoot on a busy background — use a plain surface</span>
+      </div>
+    </div>
+
+    <!-- Primary CTA -->
+    <button onclick="acknowledgePhotoTipsAndContinue()" id="photoTipsContinueBtn" style="margin-top:1rem;width:100%;padding:.8rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.95rem;cursor:pointer">
+      Got it — start scanning
+    </button>
+    <label style="display:flex;align-items:center;gap:.5rem;margin-top:.7rem;font-size:.72rem;color:rgba(255,255,255,.6);cursor:pointer;justify-content:center">
+      <input type="checkbox" id="photoTipsAutoShow" style="accent-color:var(--gold);cursor:pointer">
+      <span>Show these tips before every Deep Grade</span>
+    </label>
+    <button class="scan-gate-cancel" onclick="closePhotoTipsModal()">Close</button>
   </div>
 </div>
 
@@ -10228,18 +10322,94 @@ function closeGradeTier(evt) {
   document.getElementById('gradeTierOverlay').classList.remove('open');
 }
 
-function startQuickGrade() {
+// ── Photo Tips modal ─────────────────────────────────────────
+// LocalStorage keys:
+//   cr_photoTips_seen           — user has seen the tips at least once
+//   cr_photoTips_alwaysShow     — user opted into seeing tips every Deep Grade
+// Pending-action tracking so the modal can chain into the correct scan flow.
+window._photoTipsPending = null; // 'quick' | 'deep' | null
+
+function _photoTipsSeen()      { try { return localStorage.getItem('cr_photoTips_seen') === '1'; } catch(_) { return false; } }
+function _photoTipsAlways()    { try { return localStorage.getItem('cr_photoTips_alwaysShow') === '1'; } catch(_) { return false; } }
+function _markPhotoTipsSeen()  { try { localStorage.setItem('cr_photoTips_seen', '1'); } catch(_) {} }
+function _setPhotoTipsAlways(v){ try { v ? localStorage.setItem('cr_photoTips_alwaysShow', '1') : localStorage.removeItem('cr_photoTips_alwaysShow'); } catch(_) {} }
+
+// Show the tips modal. Pass a pending action ('quick'|'deep') to chain into
+// the scan flow when the user taps "Got it — start scanning".
+function openPhotoTipsModal(pending) {
+  window._photoTipsPending = pending === 'quick' || pending === 'deep' ? pending : null;
+  // Sync "always show" checkbox with saved pref
+  const cb = document.getElementById('photoTipsAutoShow');
+  if (cb) cb.checked = _photoTipsAlways();
+  // Adjust CTA copy based on pending action
+  const btn = document.getElementById('photoTipsContinueBtn');
+  if (btn) {
+    if (window._photoTipsPending === 'deep')  btn.textContent = 'Got it — start Deep Grade';
+    else if (window._photoTipsPending === 'quick') btn.textContent = 'Got it — start Quick Grade';
+    else                                       btn.textContent = 'Got it — thanks';
+  }
+  const ov = document.getElementById('photoTipsOverlay');
+  if (ov) ov.classList.add('open');
+}
+
+function closePhotoTipsModal(evt) {
+  if (evt && evt.target !== document.getElementById('photoTipsOverlay')) return;
+  const ov = document.getElementById('photoTipsOverlay');
+  if (ov) ov.classList.remove('open');
+  // Persist the "always show" preference on close too (in case user didn't tap Got it)
+  const cb = document.getElementById('photoTipsAutoShow');
+  if (cb) _setPhotoTipsAlways(!!cb.checked);
+  window._photoTipsPending = null;
+}
+
+// User acknowledged tips → mark seen, save preference, and chain into the
+// pending scan flow if one was set.
+function acknowledgePhotoTipsAndContinue() {
+  _markPhotoTipsSeen();
+  const cb = document.getElementById('photoTipsAutoShow');
+  if (cb) _setPhotoTipsAlways(!!cb.checked);
+  const ov = document.getElementById('photoTipsOverlay');
+  if (ov) ov.classList.remove('open');
+  const p = window._photoTipsPending;
+  window._photoTipsPending = null;
+  if (p === 'deep')  return _launchDeepGrade();
+  if (p === 'quick') return _launchQuickGrade();
+}
+
+// Internal launchers — bypass the tips gate.
+function _launchQuickGrade() {
   window._gradeIsDeep = false;
   window._gradeEdges = {}; // no edges for quick
-  document.getElementById('gradeTierOverlay').classList.remove('open');
+  const overlay = document.getElementById('gradeTierOverlay');
+  if (overlay) overlay.classList.remove('open');
   document.getElementById('gradeFileInput').click();
 }
 
-function startDeepGrade() {
+function _launchDeepGrade() {
   window._gradeIsDeep = true;
   window._gradeEdges = {}; // reset edge collection
-  document.getElementById('gradeTierOverlay').classList.remove('open');
+  const overlay = document.getElementById('gradeTierOverlay');
+  if (overlay) overlay.classList.remove('open');
   document.getElementById('gradeFileInput').click();
+}
+
+// Public entry points from the tier picker.
+// Deep Grade: gate on first-ever use OR when the user opted into "always show".
+// Quick Grade: no gate (fast path — it's the low-friction tier).
+function startQuickGrade() {
+  _launchQuickGrade();
+}
+
+function startDeepGrade() {
+  const forceShow = !_photoTipsSeen() || _photoTipsAlways();
+  if (forceShow) {
+    // Close tier picker first so the tips modal isn't stacked underneath
+    const overlay = document.getElementById('gradeTierOverlay');
+    if (overlay) overlay.classList.remove('open');
+    openPhotoTipsModal('deep');
+    return;
+  }
+  _launchDeepGrade();
 }
 
 function _setScanGateMode(mode) {
@@ -10350,7 +10520,8 @@ function showDeepGradeEdgeUI() {
   statusEl.innerHTML =
     '<span style="color:#4ade80">\u2713 Front + back captured</span> <span style="font-size:.7rem;color:var(--gold)">(Step 2 of 3)</span>' +
     '<br><span style="font-size:.85rem;color:#fff;font-weight:700;margin-top:.35rem;display:inline-block">Add edge photos — pick <strong>at least 2</strong>, up to 4</span>' +
-    '<br><span style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.45">Hold the card so the light hits one edge at a time. Fill the frame with just that edge — don\'t worry about the whole card.</span>';
+    '<br><span style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.45">Hold the card so the light hits one edge at a time. Fill the frame with just that edge — don\'t worry about the whole card.</span>' +
+    '<br><a href="#" onclick="event.preventDefault();openPhotoTipsModal(null);return false;" style="display:inline-block;margin-top:.4rem;font-size:.7rem;color:var(--gold);text-decoration:underline;font-weight:600">📸 Show photo tips</a>';
 
   const edgeBtn = (key, label, emoji, tip) => {
     const done = !!(edges[key] || edges[key.toLowerCase()]);
