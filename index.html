@@ -2891,6 +2891,66 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
 </div>
 
+<!-- ── Mark as Sold modal (2026-08-19) ──
+     Opened by tapping the "🎉 Sold" button on any Collection row.
+     Records a flip entry (buy price carried from the collection row,
+     sell price captured here) and removes the card from Collection.
+     Kept intentionally minimal — the goal is one-tap logging, not
+     another full-blown form. Buy price is editable in case the user
+     wants to correct it before recording the sale. -->
+<div class="modal-overlay" id="markSoldModal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:9999">
+  <div class="modal-box" style="max-width:380px;padding:1.1rem;text-align:left">
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem">
+      <div style="font-size:1.4rem">🎉</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:900;font-size:1.05rem;line-height:1.15">Mark as sold</div>
+        <div id="msName" style="font-size:.75rem;color:var(--text-muted);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+      </div>
+    </div>
+
+    <div id="msMktHint" style="display:none;font-size:.7rem;color:var(--text-muted);margin-bottom:.55rem;padding:.4rem .55rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.22);border-radius:8px">
+      Current market: <strong id="msMktVal" style="color:var(--gold)">—</strong>
+      <button type="button" onclick="_msUseMarket()" style="float:right;background:transparent;border:none;color:var(--gold);font-size:.7rem;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Use this</button>
+    </div>
+
+    <label style="display:block;font-size:.7rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.3rem">Sold for</label>
+    <div style="display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden;margin-bottom:.75rem">
+      <span style="padding:0 .55rem;font-size:1rem;color:rgba(255,255,255,.55)">$</span>
+      <input type="number" min="0" step="0.01" placeholder="0.00" id="msSellPrice" inputmode="decimal"
+        style="background:transparent;border:none;color:#fff;font-size:1.05rem;flex:1;padding:.6rem .3rem .6rem 0;outline:none;-moz-appearance:textfield">
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <div>
+        <label style="display:block;font-size:.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem">Bought for</label>
+        <div style="display:flex;align-items:center;background:#0f0f0f;border:1px solid #232323;border-radius:8px;overflow:hidden">
+          <span style="padding:0 .5rem;font-size:.9rem;color:rgba(255,255,255,.5)">$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" id="msBuyPrice" inputmode="decimal"
+            style="background:transparent;border:none;color:#fff;font-size:.9rem;flex:1;padding:.5rem .25rem .5rem 0;outline:none;-moz-appearance:textfield">
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem">Platform</label>
+        <select id="msPlatform" style="width:100%;background:#0f0f0f;border:1px solid #232323;border-radius:8px;padding:.5rem;color:#fff;font-size:.9rem;font-weight:600;outline:none">
+          <option>eBay</option>
+          <option>TCGplayer</option>
+          <option>Whatnot</option>
+          <option>Facebook</option>
+          <option>Local</option>
+          <option>Other</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="msProfitPreview" style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;text-align:center;padding:.5rem;background:#0a0a0a;border-radius:8px;border:1px dashed #1f1f1f">Enter a sold price to see profit</div>
+
+    <div style="display:flex;gap:.5rem">
+      <button type="button" onclick="document.getElementById('markSoldModal').classList.remove('open')" style="flex:1;padding:.7rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.85rem;font-weight:700;cursor:pointer">Cancel</button>
+      <button type="button" id="msConfirmBtn" onclick="confirmMarkSold()" style="flex:2;padding:.7rem;background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#fff;border-radius:10px;font-size:.9rem;font-weight:800;cursor:pointer">🎉 Log the flip</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /wrap -->
 
 <script>
@@ -7501,10 +7561,14 @@ function renderCollectionView() {
           const cardNameHtml = _hasGrade
             ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold);vertical-align:middle;white-space:nowrap">${esc2(_gradeLabel)}</span>${esc2(p.card)}`
             : esc2(p.card);
-          const ebayUrl = _entryEbayUrl(p);
-          const sellCell = ebayUrl && ebayUrl !== '#'
-            ? `<a href="${ebayUrl}" target="_blank" rel="noopener" title="Sell ${esc2(p.card)} on eBay" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:#e53935;color:#fff;border-radius:8px;font-size:.7rem;font-weight:700;text-decoration:none;white-space:nowrap">🛍 Sell</a>`
-            : '';
+          // 2026-08-19: The row button used to open eBay for marketplace
+          // research. That duplicated the card-tap detail popup (which
+          // still has all the outbound platform links), and "Sell" as an
+          // outbound made users think the app listed FOR them. Now it's
+          // "Sold" — a one-tap action that logs the sale to the Flips tab
+          // and moves the card out of Collection. The full card-tap popup
+          // is unchanged and still offers eBay/TCGplayer/PWCC/COMC links.
+          const sellCell = `<button type="button" onclick="event.stopPropagation();openMarkSoldModal(${p.id})" title="Log sale of ${esc2(p.card)} and move to Flips" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:8px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">🎉 Sold</button>`;
           // The whole row (except the action buttons) is a tap target that
           // opens the card-detail modal — addresses "lack of at least a link
           // to the card saved in your collection". Buttons inside the row
@@ -7976,6 +8040,165 @@ function deletePortEntry(entryId) {
   savePortData(next);
   renderCollectionView();
   if (typeof showToast === 'function') showToast('Card removed from collection');
+}
+
+/* =========================================================
+   MARK AS SOLD (2026-08-19)
+   The row-level "🎉 Sold" button on the Collection tab opens the
+   markSoldModal. On confirm we push a flip entry (buyPrice from
+   the collection row, sellPrice captured in the modal, platform +
+   date + profit computed), remove the card from Collection, and
+   re-render both views. Free plan flip cap (5) is enforced so this
+   button behaves the same as the manual "+ Log a Flip" path.
+
+   Data shape written to flips localStorage (matches saveFlipEntry):
+     { id, card, set, buyPrice, sellPrice, profit, platform, date }
+   ========================================================= */
+window._markSoldEntryId = null; // the p.id we're marking as sold
+
+function openMarkSoldModal(entryId) {
+  const port = loadPortData();
+  const p = port.find(x => x.id === entryId);
+  if (!p) {
+    if (typeof showToast === 'function') showToast('Card not found in collection');
+    return;
+  }
+  window._markSoldEntryId = entryId;
+
+  // Header — name + set line so the user is sure they're logging the right card.
+  const nameEl = document.getElementById('msName');
+  if (nameEl) {
+    const setStr = p.set || '';
+    nameEl.textContent = p.card + (setStr ? ' · ' + setStr : '');
+  }
+
+  // Buy price prefilled from the row; user can edit if they got a better deal
+  // than what was originally logged (e.g. a top-off in a trade).
+  const buyEl = document.getElementById('msBuyPrice');
+  if (buyEl) buyEl.value = (p.buyPrice || 0) > 0 ? Number(p.buyPrice).toFixed(2) : '';
+
+  // Sell price starts blank so the user is forced to enter what they actually
+  // sold it for — auto-filling with market would bias data.
+  const sellEl = document.getElementById('msSellPrice');
+  if (sellEl) { sellEl.value = ''; setTimeout(() => sellEl.focus(), 50); }
+
+  // Show a "current market: $X, use this" hint so the user can one-tap fill
+  // sell price with the market value if that's what they actually sold at.
+  const mkt = (typeof p.currentValue === 'number' && p.currentValue > 0) ? p.currentValue : null;
+  const hint = document.getElementById('msMktHint');
+  const mktVal = document.getElementById('msMktVal');
+  if (hint && mktVal) {
+    if (mkt) {
+      hint.style.display = 'block';
+      mktVal.textContent = '$' + mkt.toFixed(2);
+    } else {
+      hint.style.display = 'none';
+    }
+  }
+
+  // Reset profit preview
+  const prev = document.getElementById('msProfitPreview');
+  if (prev) prev.innerHTML = 'Enter a sold price to see profit';
+
+  document.getElementById('markSoldModal').classList.add('open');
+
+  // Wire live profit preview — rebind each open so we don't stack listeners.
+  const recompute = () => {
+    const sell = parseFloat((document.getElementById('msSellPrice')||{}).value) || 0;
+    const buy  = parseFloat((document.getElementById('msBuyPrice')||{}).value) || 0;
+    const pv   = document.getElementById('msProfitPreview');
+    if (!pv) return;
+    if (sell <= 0) { pv.innerHTML = 'Enter a sold price to see profit'; pv.style.color = 'var(--text-muted)'; return; }
+    const profit = sell - buy;
+    const color  = profit >= 0 ? '#4ade80' : '#f87171';
+    const sign   = profit >= 0 ? '+' : '−';
+    const pct    = buy > 0 ? Math.abs(profit / buy * 100) : 0;
+    pv.innerHTML = `<span style="color:${color};font-weight:800">${sign}$${Math.abs(profit).toFixed(2)}</span>` +
+      (buy > 0 ? `<span style="color:${color};opacity:.75;margin-left:.35rem;font-weight:700">(${sign}${pct.toFixed(1)}%)</span>` : '') +
+      `<span style="display:block;font-size:.65rem;color:var(--text-muted);margin-top:.15rem;font-weight:400">${profit >= 0 ? 'Profit' : 'Loss'} on this flip</span>`;
+  };
+  ['msSellPrice','msBuyPrice'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.oninput = recompute;
+  });
+}
+
+// One-tap fill from the "current market" hint.
+function _msUseMarket() {
+  const mktText = (document.getElementById('msMktVal')||{}).textContent || '';
+  const v = parseFloat(mktText.replace(/[^0-9.]/g, '')) || 0;
+  const sellEl = document.getElementById('msSellPrice');
+  if (sellEl && v > 0) { sellEl.value = v.toFixed(2); sellEl.dispatchEvent(new Event('input')); }
+}
+
+function confirmMarkSold() {
+  const entryId = window._markSoldEntryId;
+  if (!entryId) return;
+  const port = loadPortData();
+  const p = port.find(x => x.id === entryId);
+  if (!p) {
+    if (typeof showToast === 'function') showToast('Card not found — refresh the page');
+    document.getElementById('markSoldModal').classList.remove('open');
+    return;
+  }
+
+  const sellPrice = parseFloat((document.getElementById('msSellPrice')||{}).value) || 0;
+  const buyPrice  = parseFloat((document.getElementById('msBuyPrice')||{}).value)  || 0;
+  const platform  = (document.getElementById('msPlatform')||{}).value || 'eBay';
+
+  if (sellPrice <= 0) {
+    if (typeof showToast === 'function') showToast('Enter a sold price first');
+    const sellEl = document.getElementById('msSellPrice');
+    if (sellEl) sellEl.focus();
+    return;
+  }
+
+  // Free-plan cap — 5 flips max, matches saveFlipEntry:6956.
+  const flips = loadFlipsData();
+  if (!window._isPro && flips.length >= 5) {
+    document.getElementById('markSoldModal').classList.remove('open');
+    setTimeout(() => { if (typeof openPricingModal === 'function') openPricingModal('flips_cap'); }, 200);
+    return;
+  }
+
+  const profit = sellPrice - buyPrice;
+  const date   = new Date().toISOString().slice(0,10);
+  flips.push({
+    id: Date.now(),
+    card: p.card,
+    set: p.set || '',
+    buyPrice,
+    sellPrice,
+    profit,
+    platform,
+    date,
+    source: 'collection_sold' // trace where this flip came from for future analytics
+  });
+  saveFlipsData(flips);
+
+  // Remove from Collection.
+  savePortData(port.filter(x => x.id !== entryId));
+
+  // Close modal + toast.
+  document.getElementById('markSoldModal').classList.remove('open');
+  window._markSoldEntryId = null;
+
+  if (typeof showToast === 'function') {
+    const sign = profit >= 0 ? '+' : '−';
+    const emoji = profit >= 0 ? '🎉' : '📉';
+    showToast(`${emoji} Logged ${sign}$${Math.abs(profit).toFixed(2)} flip — moved to Flips tab`, profit >= 0 ? 'gold' : undefined);
+  }
+
+  // Re-render both views so the change is immediately visible.
+  if (typeof renderFlipsView === 'function') renderFlipsView();
+  if (typeof _maybeRerenderCollection === 'function') _maybeRerenderCollection(true);
+
+  // 1-flip-from-cap warning, same nudge as saveFlipEntry.
+  if (!window._isPro && flips.length === 4) {
+    setTimeout(() => {
+      if (typeof showToast === 'function') showToast('1 flip slot left on the free plan — Pro unlocks unlimited tracking 📊', 'gold');
+    }, 700);
+  }
 }
 
 // ── Also re-render collection if active when port data changes ──
