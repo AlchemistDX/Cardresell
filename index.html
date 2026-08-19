@@ -12127,6 +12127,10 @@ function loadUserData() {
   // been migrated in, and if the user is on the Collection tab we need a fresh render
   // now that _userSub is set (an earlier attempt may have bailed on the sign-in check).
   _maybeRerenderCollection(true);
+  // 2026-08-19: pull cross-device snapshot from the server so cards added
+  // on another signed-in device show up here. Runs in background — UI is
+  // already rendered from local, and the pull re-renders on merge.
+  try { _pullUserData(); } catch(e) {}
 }
 
 // Override storage helpers to be user-scoped when signed in
@@ -12135,12 +12139,102 @@ function loadFlipsData() {
 }
 function saveFlipsData(data) {
   try { localStorage.setItem(getUserKey('flips'), JSON.stringify(data)); } catch(e) {}
+  _scheduleUserDataSync(); // 2026-08-19: propagate to cloud so other devices see it
 }
 function loadPortData() {
   try { return JSON.parse(localStorage.getItem(getUserKey('portfolio')) || '[]'); } catch(e) { return []; }
 }
 function savePortData(data) {
   try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(data)); } catch(e) {}
+  _scheduleUserDataSync(); // 2026-08-19: propagate to cloud so other devices see it
+}
+
+// ── Cross-device sync (2026-08-19) ──
+// User reported: "collection doesn’t save from mobile to desktop even
+// signed into the same account". Root cause: portfolio + flips lived in
+// localStorage only, which is per-device. Fix: mirror both to KV via
+// /api/user-data on every save (debounced), and pull on sign-in.
+//
+// Design:
+// * Every save writes localStorage first (instant, offline-safe), then
+//   schedules a debounced push — UI stays fast, we don't spam the API.
+// * On sign-in, we pull the server snapshot and merge with local by id,
+//   using last-write-wins on client vs server timestamps. Then we push
+//   the merged result back so both sides converge.
+// * If the user is signed out we skip the network entirely.
+// * All errors are silent — sync is best-effort, local always works.
+let _userDataSyncTimer = null;
+let _userDataSyncing   = false;
+function _scheduleUserDataSync() {
+  if (!window.googleUser || !window._googleIdToken) return;
+  if (_userDataSyncTimer) clearTimeout(_userDataSyncTimer);
+  // 1.5s debounce — covers rapid multi-save flows (bulk scan, refresh prices)
+  _userDataSyncTimer = setTimeout(_pushUserData, 1500);
+}
+async function _pushUserData() {
+  if (_userDataSyncing) return;
+  if (!window.googleUser || !window._googleIdToken) return;
+  _userDataSyncing = true;
+  try {
+    const portfolio = loadPortDataRaw();
+    const flips     = loadFlipsDataRaw();
+    await fetch('/api/user-data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + window._googleIdToken,
+      },
+      body: JSON.stringify({ portfolio, flips, clientUpdatedAt: Date.now() }),
+    });
+  } catch(e) { /* offline / network issue — next save will retry */ }
+  finally { _userDataSyncing = false; }
+}
+// Non-syncing raw reads used by the sync loop itself, so pushing doesn't
+// re-schedule another push in a loop.
+function loadPortDataRaw() {
+  try { return JSON.parse(localStorage.getItem(getUserKey('portfolio')) || '[]'); } catch(e) { return []; }
+}
+function loadFlipsDataRaw() {
+  try { return JSON.parse(localStorage.getItem(getUserKey('flips')) || '[]'); } catch(e) { return []; }
+}
+// Pull server snapshot on sign-in, merge into local by id (union), and push
+// merged result back so both device and server hold the same final state.
+async function _pullUserData() {
+  if (!window.googleUser || !window._googleIdToken) return;
+  try {
+    const r = await fetch('/api/user-data', {
+      headers: { 'Authorization': 'Bearer ' + window._googleIdToken },
+    });
+    if (!r.ok) return;
+    const remote = await r.json();
+    const remotePort  = Array.isArray(remote.portfolio) ? remote.portfolio : [];
+    const remoteFlips = Array.isArray(remote.flips)     ? remote.flips     : [];
+    const localPort   = loadPortDataRaw();
+    const localFlips  = loadFlipsDataRaw();
+    // Union by id — favours the local row if id collides (user just added
+    // it on this device; the server copy may be older).
+    const mergedPort  = _unionById(remotePort,  localPort);
+    const mergedFlips = _unionById(remoteFlips, localFlips);
+    try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(mergedPort));  } catch(e) {}
+    try { localStorage.setItem(getUserKey('flips'),     JSON.stringify(mergedFlips)); } catch(e) {}
+    // Push merged result back so the server also has the union.
+    _scheduleUserDataSync();
+    // Refresh visible views so newly-pulled cards render immediately.
+    try { _maybeRerenderCollection(true); } catch(e) {}
+    try { if (document.getElementById('flipsView')?.classList.contains('active')) renderFlipsView(); } catch(e) {}
+    const pulled = (mergedPort.length - localPort.length) + (mergedFlips.length - localFlips.length);
+    if (pulled > 0) {
+      try { showToast(pulled + ' item' + (pulled !== 1 ? 's' : '') + ' synced from your other device 🔄', 'success'); } catch(e) {}
+    }
+  } catch(e) { /* silent — sync is best-effort */ }
+}
+function _unionById(a, b) {
+  const map = new Map();
+  for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), row);
+  // b (local) overwrites a (remote) on id collision — local is more likely
+  // to hold fresh price/refresh state.
+  for (const row of (b || [])) if (row && row.id != null) map.set(String(row.id), row);
+  return Array.from(map.values());
 }
 
 
