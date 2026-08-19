@@ -14073,16 +14073,21 @@ function bulkAddAllToCollection() {
 }
 
 function setBulkCostMode(mode){
-  // mode='pack' shows a single split-across-all input; mode='per' shows the
-  // classic per-card list. Default 'pack' since ripping packs is the far
-  // more common bulk-scan path.
+  // mode='pack' shows a single split-across-all input AND the card list below
+  // with a live per-card split preview (read-only). mode='per' shows the
+  // classic editable per-card list. Default 'pack' since ripping packs is the
+  // far more common bulk-scan path.
+  //
+  // 2026-08-19: In pack mode we now render the card list too (read-only) so
+  // users can SEE the total divide evenly — previously the list was hidden
+  // and users worried each card was being saved at the full pack cost.
   window._bulkCostMode = mode;
   const pack = document.getElementById('bulkPackCostPanel');
   const list = document.getElementById('bulkCostList');
   const btnPack = document.getElementById('bulkCostModePack');
   const btnPer  = document.getElementById('bulkCostModePer');
   if (pack) pack.style.display = mode === 'pack' ? 'block' : 'none';
-  if (list) list.style.display = mode === 'per'  ? 'block' : 'none';
+  if (list) list.style.display = 'block'; // list is visible in BOTH modes now
   if (btnPack && btnPer){
     const on  = 'rgba(139,92,246,.85)', onc  = '#fff';
     const off = 'transparent',           offc = 'rgba(255,255,255,.55)';
@@ -14091,7 +14096,24 @@ function setBulkCostMode(mode){
     btnPer.style.background  = mode === 'per'  ? on : off;
     btnPer.style.color       = mode === 'per'  ? onc : offc;
   }
+  // Toggle each row between read-only split-preview (pack) and editable input (per)
+  _bulkToggleRowMode(mode);
+  // Refresh the split values whenever we enter pack mode
+  if (mode === 'pack') updateBulkPackCostHint();
 }
+
+// Show/hide the per-row cost input vs the read-only "split preview" tag.
+// Every row in openBulkCostSheet renders both; this function flips which is
+// visible based on the current cost mode.
+function _bulkToggleRowMode(mode){
+  document.querySelectorAll('.bulk-cost-row').forEach(row => {
+    const inp = row.querySelector('.bulk-cost-input-wrap');
+    const tag = row.querySelector('.bulk-cost-split-tag');
+    if (inp) inp.style.display = mode === 'per'  ? 'flex' : 'none';
+    if (tag) tag.style.display = mode === 'pack' ? 'flex' : 'none';
+  });
+}
+
 function updateBulkPackCostHint(){
   const total = parseFloat((document.getElementById('bulkPackCostInput')||{}).value) || 0;
   const successful = (window._bulkResults || []).filter(r => r.success);
@@ -14099,11 +14121,27 @@ function updateBulkPackCostHint(){
   const nSpan = document.getElementById('bulkPackCostN');
   if (nSpan) nSpan.textContent = n;
   const hint = document.getElementById('bulkPackCostHint');
+  const perSlot = (total > 0 && n > 0) ? (total / n) : 0;
   if (hint && total > 0 && n > 0){
-    hint.innerHTML = `Split evenly across ${n} cards → <span style="color:rgba(139,92,246,.9);font-weight:700">$${(total/n).toFixed(2)}</span> each.`;
+    hint.innerHTML = `$${total.toFixed(2)} ÷ ${n} cards = <span style="color:rgba(139,92,246,.95);font-weight:800">$${perSlot.toFixed(2)}</span> each. Preview below ↓`;
   } else if (hint){
     hint.innerHTML = `Split evenly across the <span id="bulkPackCostN">${n}</span> cards below.`;
   }
+  // Live-update every row's split preview tag as the user types.
+  successful.forEach((r, i) => {
+    const tag = document.getElementById('bulkCostSplit_' + i);
+    if (!tag) return;
+    const qty = r.qty && r.qty > 1 ? r.qty : 1;
+    const rowTotal = perSlot * qty;
+    if (perSlot > 0) {
+      // Show "$12.50" for qty=1; "$37.50 (3×$12.50)" for qty=3.
+      tag.innerHTML = qty > 1
+        ? `<span style="color:#fff;font-weight:800">$${rowTotal.toFixed(2)}</span><span style="color:rgba(255,255,255,.4);font-size:.62rem;margin-left:.25rem">(${qty}×$${perSlot.toFixed(2)})</span>`
+        : `<span style="color:#fff;font-weight:800">$${rowTotal.toFixed(2)}</span>`;
+    } else {
+      tag.innerHTML = `<span style="color:rgba(255,255,255,.35);font-weight:600">$0.00</span>`;
+    }
+  });
 }
 
 function openBulkCostSheet(cards) {
@@ -14116,14 +14154,22 @@ function openBulkCostSheet(cards) {
     const qtyStr = r.qty && r.qty > 1 ? ` ×${r.qty}` : '';
     const sub  = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
     const val  = r.marketPrice ? r.marketPrice.toFixed(2) : '';
-    return `<div style="display:flex;align-items:center;gap:.65rem;padding:.55rem .25rem;border-bottom:1px solid #1a1a1a">
+    // Each row has BOTH:
+    //   • .bulk-cost-split-tag  — read-only "$12.50" pill, shown in pack mode
+    //   • .bulk-cost-input-wrap — editable input,          shown in per-card mode
+    // setBulkCostMode() toggles which is visible; updateBulkPackCostHint()
+    // updates the split-tag text live as the user types the pack total.
+    return `<div class="bulk-cost-row" style="display:flex;align-items:center;gap:.65rem;padding:.55rem .25rem;border-bottom:1px solid #1a1a1a">
       ${thumb}
       <div style="flex:1;min-width:0">
         <div style="font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(name)}${qtyStr}</div>
         <div style="font-size:.67rem;color:rgba(255,255,255,.4);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(sub||'—')}</div>
         ${val ? `<div style="font-size:.67rem;color:rgba(212,175,55,.6);margin-top:.1rem">Market ~$${val}</div>` : ''}
       </div>
-      <div style="display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden;flex-shrink:0;width:78px">
+      <div id="bulkCostSplit_${i}" class="bulk-cost-split-tag" style="display:flex;align-items:center;justify-content:flex-end;background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.35);border-radius:8px;flex-shrink:0;min-width:78px;padding:.36rem .5rem;font-size:.78rem">
+        <span style="color:rgba(255,255,255,.35);font-weight:600">$0.00</span>
+      </div>
+      <div class="bulk-cost-input-wrap" style="display:none;align-items:center;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden;flex-shrink:0;width:78px">
         <span style="padding:0 .3rem;font-size:.8rem;color:rgba(255,255,255,.35)">$</span>
         <input type="number" min="0" step="0.01" placeholder="0.00"
           id="bulkCost_${i}"
