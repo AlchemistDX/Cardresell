@@ -2891,6 +2891,58 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   </div>
 </div>
 
+<!-- ── Flip Detail modal (2026-08-19) ──
+     Opened by tapping any row in the Flip Log. Mirrors the shape of the
+     Collection detail modal, but the numbers are BOUGHT / SOLD / PROFIT
+     / ROI — the sale is already booked, this is a receipt view. Outbound
+     search links (eBay sold, TCGplayer) are kept so users can research
+     the next flip of the same card. -->
+<div class="modal-overlay" id="flipDetailModal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:9999">
+  <div class="modal-box" style="max-width:400px;padding:1.1rem;text-align:left">
+    <div style="display:flex;align-items:flex-start;gap:.9rem;margin-bottom:.9rem">
+      <div id="fdmImgWrap" style="width:96px;height:134px;flex:0 0 96px;border-radius:10px;background:#111;border:1px solid #1f1f1f;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:2rem;color:#555">🃏</div>
+      <div style="flex:1;min-width:0">
+        <div id="fdmName" style="font-weight:900;font-size:1.05rem;line-height:1.15;margin-bottom:.15rem;word-break:break-word">—</div>
+        <div id="fdmSet" style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">—</div>
+        <div id="fdmGradeChip" style="display:none;margin-bottom:.35rem"><span id="fdmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold);letter-spacing:.02em"></span></div>
+        <div id="fdmProfit" style="font-size:1.3rem;font-weight:800;line-height:1.1">+$0.00</div>
+        <div id="fdmRoi" style="font-size:.72rem;margin-top:.15rem;font-weight:700">—</div>
+      </div>
+    </div>
+
+    <!-- Deal breakdown — the three numbers a flipper actually cares about. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem;margin-bottom:.75rem">
+      <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
+        <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Bought</div>
+        <div id="fdmBought" style="font-size:.95rem;font-weight:800;color:#fff">$0.00</div>
+      </div>
+      <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
+        <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Sold</div>
+        <div id="fdmSold" style="font-size:.95rem;font-weight:800;color:var(--gold)">$0.00</div>
+      </div>
+      <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
+        <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Platform</div>
+        <div id="fdmPlatform" style="font-size:.8rem;font-weight:700;color:#fff">—</div>
+      </div>
+    </div>
+    <div id="fdmDate" style="font-size:.7rem;color:var(--text-muted);text-align:center;margin-bottom:.75rem">—</div>
+
+    <!-- Research links — helpful when the user wants to flip the same card
+         again and needs to check what current comps look like. Kept as
+         secondary CTAs (not the big red "List" style) because this card is
+         already sold; these are informational. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.5rem">
+      <a id="fdmEbayBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.55rem;background:rgba(229,57,53,.12);color:#f87171;border:1px solid rgba(229,57,53,.35);border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none">🔎 eBay sold comps</a>
+      <a id="fdmTcgBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.55rem;background:rgba(240,180,41,.12);color:#f0b429;border:1px solid rgba(240,180,41,.35);border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none">💰 TCGplayer</a>
+    </div>
+
+    <div style="display:flex;gap:.4rem">
+      <button type="button" onclick="document.getElementById('flipDetailModal').classList.remove('open')" style="flex:1;padding:.6rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.8rem;font-weight:700;cursor:pointer">Close</button>
+      <button id="fdmDeleteBtn" type="button" onclick="_fdmDeleteFlip()" style="padding:.6rem 1rem;background:transparent;border:1px solid #4a1a1a;border-radius:10px;color:#f87171;font-size:.8rem;font-weight:700;cursor:pointer">Delete flip</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Mark as Sold modal (2026-08-19) ──
      Opened by tapping the "🎉 Sold" button on any Collection row.
      Records a flip entry (buy price carried from the collection row,
@@ -7270,6 +7322,85 @@ function deleteFlip(id) {
   saveFlipsData(flips);
   renderFlipsView();
 }
+
+// ── Flip Detail modal (2026-08-19) ──
+// Tapping a row in the Flip Log opens this. The Collection detail modal
+// looks up its data from loadPortData(), which won't have this card
+// anymore (it was sold), so we need our own read path from flips.
+window._fdmCurrentId = null;
+function openFlipDetail(flipId) {
+  const flips = loadFlipsData();
+  const f = flips.find(x => x.id === flipId);
+  if (!f) return;
+  window._fdmCurrentId = flipId;
+
+  const graderNames = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
+  const b = Number(f.buyPrice) || 0;
+  const s = Number(f.sellPrice) || 0;
+  const pr = Number(f.profit) || (s - b);
+  const roi = b > 0 ? (pr / b) * 100 : 0;
+  const roiColor = pr >= 0 ? '#4ade80' : '#f87171';
+
+  // Image — same fallback ladder as the Collection modal.
+  const wrap = document.getElementById('fdmImgWrap');
+  const imgUrl = f.img || f.imageUrl || '';
+  if (wrap) {
+    if (imgUrl) {
+      wrap.innerHTML = `<img src="${String(imgUrl).replace(/"/g,'&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover">`;
+    } else {
+      wrap.textContent = '🃏';
+    }
+  }
+
+  const setEl = (id, val, css) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = val;
+    if (css) Object.assign(el.style, css);
+  };
+  setEl('fdmName',   f.card || 'Unknown card');
+  setEl('fdmSet',    f.set || '—');
+  setEl('fdmBought', `$${b.toFixed(2)}`);
+  setEl('fdmSold',   `$${s.toFixed(2)}`);
+  setEl('fdmPlatform', f.platform || '—');
+  setEl('fdmDate',   f.date ? `Sold ${f.date}` : '—');
+  setEl('fdmProfit', `${pr >= 0 ? '+' : '−'}$${Math.abs(pr).toFixed(2)}`, { color: roiColor });
+  setEl('fdmRoi',    `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI`,        { color: roiColor });
+
+  // Grade chip — only shown when the flip was of a graded card.
+  const chipWrap = document.getElementById('fdmGradeChip');
+  const chipText = document.getElementById('fdmGradeChipText');
+  if (chipWrap && chipText) {
+    if (f.grader && f.grade != null && f.grade !== '') {
+      const gLabel = graderNames[String(f.grader).toLowerCase()] || String(f.grader).toUpperCase();
+      chipText.textContent = `🏅 ${gLabel} ${f.grade}`;
+      chipWrap.style.display = '';
+    } else {
+      chipWrap.style.display = 'none';
+    }
+  }
+
+  // Research links — build search queries from card + number so the user
+  // can quickly check current comps if they want to flip the same card again.
+  const numMatch = (f.set || '').match(/#(\S+)/);
+  const cardNum = numMatch ? numMatch[1] : (f.number || '');
+  const q = [f.card, cardNum].filter(Boolean).join(' ');
+  const ebayBtn = document.getElementById('fdmEbayBtn');
+  const tcgBtn  = document.getElementById('fdmTcgBtn');
+  if (ebayBtn) ebayBtn.href = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&_sop=13&LH_Sold=1&LH_Complete=1`;
+  if (tcgBtn)  tcgBtn.href  = `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(q)}&view=grid`;
+
+  document.getElementById('flipDetailModal').classList.add('open');
+}
+
+function _fdmDeleteFlip() {
+  const id = window._fdmCurrentId;
+  if (!id) return;
+  if (!confirm('Delete this flip? This can\u2019t be undone.')) return;
+  deleteFlip(id);
+  document.getElementById('flipDetailModal').classList.remove('open');
+  window._fdmCurrentId = null;
+}
 function deletePort(id) {
   const port = loadPortData().filter(p => p.id !== id);
   savePortData(port);
@@ -8367,7 +8498,9 @@ function renderFlipsView() {
         // Date shown as small caption under the card name so we don't need
         // a dedicated column (saves horizontal space for the thumbnail).
         const dateCaption = f.date ? `<div style="font-size:.62rem;color:var(--text-faint);font-weight:400;margin-top:.1rem">Sold ${esc(f.date)}</div>` : '';
-        return `<tr class="col-row">
+        // Whole row is tap-to-open (mirrors Collection). Delete button
+         // stops propagation so it doesn't also open the detail modal.
+        return `<tr class="col-row" onclick="openFlipDetail(${f.id})" style="cursor:pointer">
           <td>${thumbCell}</td>
           <td><div class="ft-card" title="${esc(f.card)}${_hasGrade ? ' — ' + esc(_gradeLabel) : ''}">${cardNameHtml}</div>${dateCaption}</td>
           <td style="font-size:.72rem;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.set||'—')}</td>
@@ -8376,7 +8509,7 @@ function renderFlipsView() {
           <td class="ft-mono" style="color:${roiColor};font-weight:700">${pr>=0?'+':''}$${Math.abs(pr).toFixed(2)}</td>
           <td style="font-size:.72rem;color:${roiColor};font-weight:700">${roi>=0?'+':''}${roi.toFixed(1)}%</td>
           <td style="font-size:.72rem">${esc(f.platform || '—')}</td>
-          <td><button class="ft-delete" onclick="deleteFlip(${f.id})" title="Delete flip">✕</button></td>
+          <td onclick="event.stopPropagation()"><button class="ft-delete" onclick="deleteFlip(${f.id})" title="Delete flip">✕</button></td>
         </tr>`;
       }).join('') +
     '</tbody></table></div>';
