@@ -11609,6 +11609,14 @@ async function submitGradeScan(deepGrade) {
     // Store estimated grade for portfolio auto-tag
     window._lastScanEstGrade = psa;
     window._lastScanCardName = data.card_name;
+    // Stash grade data + front photo for the Share button (used before the
+    // Deep Grade state reset at the bottom of this function).
+    try {
+      const frontImg = window._gradeFrontBase64
+        ? ('data:image/jpeg;base64,' + window._gradeFrontBase64)
+        : '';
+      window._lastGradeShareData = { data: { ...data }, image: frontImg };
+    } catch(e) { window._lastGradeShareData = null; }
 
     // Add "View graded price" tap button into the result
     const psaGrade = psa >= 10 ? 10 : psa >= 9 ? 9 : psa >= 8 ? 8 : psa >= 7 ? 7 : psa >= 6 ? 6 : psa >= 5 ? 5 : 1;
@@ -11625,7 +11633,10 @@ async function submitGradeScan(deepGrade) {
       `📊 View PSA ${psaGrade} price →</button>` +
       `<button onclick="viewGradedCard('${_cn}', 0, '${_ct}', ${_jp})" ` +
       `style="margin-top:.4rem;width:100%;padding:.55rem 1rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.15);border-radius:10px;font-weight:700;font-size:.84rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.35rem">` +
-      `🔍 View Card →</button>`;
+      `🔍 View Card →</button>` +
+      `<button id="shareGradeBtn" onclick="shareGrade(this)" ` +
+      `style="margin-top:.4rem;width:100%;padding:.55rem 1rem;background:linear-gradient(135deg,rgba(96,165,250,.18),rgba(139,92,246,.18));color:#93c5fd;border:1px solid rgba(96,165,250,.35);border-radius:10px;font-weight:700;font-size:.84rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.35rem">` +
+      `🔗 Share this grade</button>`;
 
     window._pendingScanBannerCard = data.card_name;
 
@@ -11654,6 +11665,60 @@ async function submitGradeScan(deepGrade) {
   } catch(err) {
     console.error('Grade error:', err);
     statusEl.textContent = err.message || 'Could not grade the card. Try clearer photos.';
+  }
+}
+
+// ─── Share grade ─────────────────────────────────────────────────────
+// Posts the current grade result to /api/grade-share, gets back a public
+// URL, copies it to the clipboard, and (on mobile) triggers the native
+// share sheet. Falls back gracefully if either fails.
+async function shareGrade(btn) {
+  const stash = window._lastGradeShareData;
+  if (!stash || !stash.data) {
+    if (btn) { btn.textContent = 'Nothing to share yet'; setTimeout(() => { btn.innerHTML = '🔗 Share this grade'; }, 1500); }
+    return;
+  }
+  const originalHTML = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Creating link…'; }
+  try {
+    const res = await fetch('/api/grade-share', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(window._googleIdToken ? { 'Authorization': 'Bearer ' + window._googleIdToken } : {}),
+      },
+      body: JSON.stringify({ data: stash.data, image: stash.image || '' }),
+    });
+    if (!res.ok) throw new Error('share_failed_' + res.status);
+    const { url } = await res.json();
+    if (!url) throw new Error('no_url');
+
+    // Try native share sheet first (mobile) — falls back to clipboard.
+    const shareData = {
+      title: (stash.data.card_name || 'Card grade') + ' — PSA ' + (stash.data.psa_estimate || '?'),
+      text: 'Check out my card grade — analyzed by CardResell AI',
+      url,
+    };
+    let shared = false;
+    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+      try { await navigator.share(shareData); shared = true; } catch(e) { /* user cancelled — treat as no-op, still copy */ }
+    }
+    // Always copy to clipboard so desktop users have it too.
+    try {
+      await navigator.clipboard.writeText(url);
+      if (btn) btn.innerHTML = shared ? '✓ Shared' : '✓ Link copied';
+    } catch(e) {
+      // Fallback: show URL in a prompt if clipboard blocked.
+      if (btn) btn.innerHTML = '✓ Link ready';
+      window.prompt('Copy this link:', url);
+    }
+    setTimeout(() => { if (btn) { btn.innerHTML = originalHTML || '🔗 Share this grade'; btn.disabled = false; } }, 2200);
+  } catch(err) {
+    console.error('shareGrade error', err);
+    if (btn) {
+      btn.innerHTML = '✗ Share failed';
+      setTimeout(() => { btn.innerHTML = originalHTML || '🔗 Share this grade'; btn.disabled = false; }, 1800);
+    }
   }
 }
 
