@@ -232,10 +232,21 @@ export default async function handler(req, res) {
   // Pokemon/MTG/YGO/Lorcana/OnePiece/Sports. GPT-5 was taking 30-60s per
   // scan; Ximilar cuts that to ~1s with better accuracy on holos.
   //
-  // Fallthrough conditions (chain to GPT-5):
-  //   - identify mode only (grade mode still uses GPT for centering/edges)
-  //   - Ximilar returns low_confidence, no_match, network error, http error
-  //   - No XIMILAR_API_TOKEN env var
+  // 2026-08-19 policy: Ximilar is the SOLE source of truth for card ID.
+  //   - If Ximilar identifies the card → return its answer.
+  //   - If Ximilar says no_match / no_card_detected / low_confidence →
+  //     return a clean "couldn't identify" response, refund the credit,
+  //     and let the client show the scan-miss panel. Do NOT fall through
+  //     to GPT vision for ID (GPT hallucinates card names on fakes,
+  //     off-frame shots, and cards outside Ximilar's DB).
+  //   - GPT is used as a fallback ONLY for hard Ximilar errors (network,
+  //     http 5xx, missing token, parse) so a Ximilar outage doesn't
+  //     brick the scanner.
+  //
+  // Grade mode is unchanged — Deep Grade still uses Ximilar CV grader,
+  // Quick Grade still uses GPT for centering/edges/surface.
+  const XIMILAR_MISS_REASONS   = new Set(['no_match', 'no_card_detected', 'low_confidence', 'no_records']);
+  const XIMILAR_HARD_ERR_REASONS = new Set(['network', 'http', 'parse', 'missing_input']);
   if (isIdentifyMode && ximilarToken && imageBase64) {
     // Detect "maybe sports" heuristically: user hasn't told us, and Ximilar's
     // TCG endpoint would return no_match for real sports cards. Try TCG first;
@@ -246,9 +257,43 @@ export default async function handler(req, res) {
       // Retry as sports card (cheap: still 10 credits, same as TCG)
       const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport');
       if (ximSport.ok) xim = ximSport;
+      else if (ximSport.reason) xim = ximSport; // keep the most recent reason for logging
     }
     const tMs = Date.now() - t0;
     console.log('[scan] ximilar took', tMs, 'ms ok=', xim.ok, 'reason=', xim.reason, 'dist=', xim.cardInfo?._ximilar_dist);
+
+    // Ximilar returned a definitive "we don't know this card" — do NOT
+    // fall through to GPT. Refund the credit and tell the client.
+    if (!xim.ok && XIMILAR_MISS_REASONS.has(xim.reason)) {
+      console.log('[scan] ximilar miss (' + xim.reason + ') — returning unidentified, NOT falling to GPT');
+      await refundCredits();
+      return res.status(200).json({
+        success: true,
+        mode: 'identify',
+        scan_id: scanId,
+        identified: false,
+        confidence: 'low',
+        image_quality: 'ok',
+        glare_regions: [],
+        retake_hint: 'We couldn\u2019t identify this card. It may be a custom/proxy card, out-of-focus, or a very new release. Try a sharper photo with the full card visible.',
+        card_name: '',
+        card_number: '',
+        set_name: '',
+        set_code: '',
+        grounded: false,
+        grounded_id: null,
+        hp: '',
+        card_type: '',
+        is_japanese: false,
+        jp_name: '',
+        rarity: '',
+        sport: '',
+        year: '',
+        source: 'ximilar',
+        ximilar_reason: xim.reason,
+        ximilar_distance: xim.distance || null,
+      });
+    }
 
     if (xim.ok) {
       const cardInfo = xim.cardInfo;

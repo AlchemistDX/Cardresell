@@ -10622,8 +10622,28 @@ async function processScanImage(input) {
     const isJapanese  = data.is_japanese === true;
     const jpRawName   = (data.jp_name || '').trim();
 
-    if (!rawCardName) {
-      statusEl.textContent = 'Could not identify the card. Try a clearer photo or better lighting.';
+    if (!rawCardName || data.identified === false) {
+      // 2026-08-19: Ximilar didn't recognize the card and we no longer
+      // fall through to GPT vision (which used to hallucinate names).
+      // Show a proper "unidentified" state with a hint, refund badge,
+      // and "Not my card" button so the user knows we tried and failed
+      // honestly — not that we returned a wrong answer.
+      const hint = data.retake_hint || 'We couldn\u2019t identify this card. Try a sharper photo with the full card visible, no glare, on a plain background.';
+      statusEl.innerHTML = '<span style="color:#fbbf24">\u26a0 Card not recognized</span>' +
+        '<br><span style="font-size:.78rem;opacity:.75">' + esc(hint) + '</span>';
+      resultEl.innerHTML = '<div style="font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.4rem">Your ID credit was refunded automatically.</div>' +
+        '<div style="display:flex;gap:.5rem;margin-top:.7rem;justify-content:center;flex-wrap:wrap">' +
+          '<button onclick="cancelScan();openScanner()" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:.5rem 1.1rem;font-weight:700;font-size:.85rem;cursor:pointer">Try again</button>' +
+          '<button onclick="cancelScan();document.getElementById(\'cardSearchInput\')?.focus()" style="background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;padding:.5rem 1.1rem;font-weight:600;font-size:.85rem;cursor:pointer">Search by name</button>' +
+        '</div>';
+      // Suppress the graded upsell and hide the success badge on unidentified scans.
+      showScanGradeCTA('', '', null, { suppressed: true });
+      const spinnerX = document.getElementById('scanSpinner');
+      if (spinnerX) spinnerX.style.display = 'none';
+      const badgeX = document.getElementById('scanSuccessBadge');
+      if (badgeX) badgeX.style.display = 'none';
+      _setScanBtns('error');
+      URL.revokeObjectURL(objectUrl);
       return;
     }
 
