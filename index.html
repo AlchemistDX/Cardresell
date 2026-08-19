@@ -9654,6 +9654,41 @@ function _loadScannedNonPokemonCard(pending) {
     return;
   }
 
+  // 2026-08-19: Kill any stale scanMissPanel from an earlier failed scan.
+  // The panel was written by _renderScanMissPanel and only removes itself
+  // when the same function runs again — non-Pokemon paths don't hit it,
+  // so a pre-fix Pokemon-mis-tagged scan miss panel would persist below
+  // the correctly-loaded YGO card. Nuke it here.
+  try {
+    const stale = document.getElementById('scanMissPanel');
+    if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+  } catch(e) {}
+
+  // 2026-08-19: For YGO scans where the server already grounded via
+  // YGOProDeck (passcode/set_code/name/fuzzy), the server returned
+  // pending.imageUrl. Load the card directly so the detail panel shows
+  // the correct image immediately, without waiting for the search-drop
+  // auto-select to click a result (which sometimes doesn't fire when
+  // scan_target_number is a Konami passcode that doesn't match the
+  // set_code in the dropdown items).
+  if (pending.cardType === 'yugioh' && pending.imageUrl) {
+    const ygoCard = {
+      name:    name,
+      game:    'yugioh',
+      images:  { small: pending.imageUrl, large: pending.imageUrl },
+      setName: pending.setName || '',
+      number:  pending.setCode || number,
+      rarity:  pending.rarity || '',
+      priceVariants: [{ key: 'manual', label: 'Manual', market: null, low: null, mid: null, high: null }],
+      source:  'YGOProDeck',
+      updatedAt: 'Grounded via scan',
+    };
+    try {
+      selectedCard = ygoCard;
+      if (typeof loadCardUI === 'function') loadCardUI(ygoCard);
+    } catch(e) { console.warn('[_loadScannedNonPokemonCard] loadCardUI failed', e); }
+  }
+
   // Set the auto-select breadcrumbs so renderDrops picks the exact match.
   window._scanTargetNumber = number;
   window._scanTargetName   = name;
@@ -9665,6 +9700,8 @@ function _loadScannedNonPokemonCard(pending) {
   }
 
   // Fire the game-appropriate search (searchLorcana / searchMTG / etc).
+  // The search click will REPLACE the pre-loaded card above with the
+  // fully-priced version (real priceVariants from YGOProDeck).
   if (typeof doSearch === 'function') {
     doSearch(name).catch(err => {
       console.warn('[_loadScannedNonPokemonCard] doSearch failed', err);
@@ -10934,6 +10971,11 @@ async function processScanImage(input) {
       cardType: data.card_type || 'pokemon',
       sport: data.sport || '', year: data.year || '',
       isJapanese, jpName: jpRawName,
+      // 2026-08-19: forward the YGO-grounded image URL so the YGO post-scan
+      // loader can render the card image immediately, without waiting for
+      // the search dropdown auto-select to pick a result whose set_code
+      // matches the passcode we passed in.
+      imageUrl: data.image_url || rerankedImageLarge || rerankedImageSmall || '',
     };
     URL.revokeObjectURL(objectUrl);
 
