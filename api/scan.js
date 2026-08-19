@@ -402,6 +402,32 @@ camera and the card:
 • Never write "Card meets all PSA 10 criteria" unless you also emit
   psa_estimate=10. Those two must always agree.
 
+═══ PSA 10 CALIBRATION (do not swing to the other extreme) ═══
+Being brutally honest ≠ defaulting to 8. PSA 10 is rare but real —
+approximately 5–10% of modern submissions grade a 10, higher on
+popular pack-fresh chase cards. A raw card that passes ALL of the
+following SHOULD be a PSA 10 candidate:
+  • 55/45 or better on BOTH axes
+  • four perfectly sharp corners under close inspection
+  • smooth edges with no chipping / whitening / roughness
+  • no visible surface scratches, print lines, or gloss breaks
+  • confidence_drivers=["none"]
+When those conditions are met, the correct output is psa_estimate=10
+with a probability distribution like {10: 55–75, 9: 20–35, 8: 5–10}.
+Refusing to name a real PSA 10 candidate because "PSA 10 is rare" is
+JUST AS DISHONEST as overgrading a slabbed card — you cost the user
+a real payday.
+
+USE THE FULL RANGE of psa_distribution to express certainty:
+  • Textbook clean pack-fresh raw with clear photos: {10: 65, 9: 30, 8: 5}
+  • Looks 10 but one axis is 56/44: {10: 40, 9: 50, 8: 10}
+  • One faint corner flaw under magnification: {9: 65, 10: 15, 8: 20}
+  • Multiple minor flaws: {8: 55, 9: 25, 7: 20}
+  • Through plastic: {8: 40, 7: 35, 9: 15, 6: 10} — spread is honest
+The percentages ARE the answer — they let the user weigh a $25 grading
+fee against a 65% shot at PSA 10. Don't round to (100, 0, 0) OR to
+(33, 33, 34). Pick numbers that reflect what the photos actually show.
+
 ═══ OFFICIAL PSA CENTERING THRESHOLDS (memorize these) ═══
 FRONT centering (worst axis rules — check BOTH L/R and T/B):
   • PSA 10: 55/45 or better on BOTH axes
