@@ -548,6 +548,11 @@ Extract for the best match:
   MUST match one of these formats. If unreadable OR you cannot match a real format, return "". NEVER invent 9-digit numeric IDs or make up codes.
 4. hp: HP number if Pokémon card (e.g. "280")
 5. card_type: One of "pokemon", "mtg", "yugioh", "lorcana", "onepiece", or "sports". Look at the frame/back/logo to decide — Magic cards have a mana cost circle in the top right; Yu-Gi-Oh cards have a diamond attribute icon and level stars; Lorcana cards have an ink cost in the top left and Disney characters; One Piece cards have a colored border with cost in a circle; Pokémon cards show HP and energy symbols. Sports cards show a photo of a real athlete, a team logo/jersey, brand marks like Topps/Panini/Bowman/Upper Deck/Fleer/Donruss/Score/Select/Prizm/Optic/Mosaic/Chronicles, and often a copyright year.
+
+HARD RULES for card_type — apply these BEFORE any other reasoning:
+  – If the card shows the words "TRAP CARD", "SPELL CARD", or "MONSTER" (usually top of the artwork or below the name), OR a diamond-shaped attribute icon in the top-right (DARK, LIGHT, EARTH, WATER, FIRE, WIND, DIVINE), OR the exact text "[Yu-Gi-Oh!]" or "Konami" in the copyright line → card_type MUST be "yugioh". Do not classify as pokemon just because the art contains a monster.
+  – If the card shows HP in the top-right (e.g. "280 HP") AND energy-type symbols → "pokemon".
+  – If none of those signals are visible clearly, but the card looks like an unofficial custom card or proxy → return your best guess for card_type, set confidence="low", card_name="", set_name="", set_code="", card_number="". Do NOT invent a Pokémon name for a card that has no Pokémon signals.
 6. is_japanese: true if the card text is primarily Japanese (hiragana/katakana/kanji) OR the card number uses JP set codes like "SV5K", "s10a", "sv4a". Otherwise false. STRONG SIGNALS for is_japanese=true: any katakana on the name line (ラフレシア, リザードン), the word ポケモン or たね anywhere on the card, or JP-specific rarity markers (RR, SR, SAR, UR). If is_japanese=true, set_name should be the English name of the JP set (e.g. "Jungle" not 「ジャングル」, "151" not 「ポケモンカード151」).
 7. rarity: e.g. "Rainbow Rare", "Secret Rare", "Holo Rare", or for sports: "Refractor", "Rookie", "Auto", "Numbered /99", "Base", etc.
 8. sport: ONLY for sports cards — one of "Baseball", "Basketball", "Football", "Hockey", "Soccer", "Other". Determine by team logo, jersey style, or ball visible.
@@ -776,12 +781,30 @@ Respond ONLY with valid JSON, no explanation:
     cardInfo.card_number = validateCardNumber(cardInfo.card_number, cardInfo.card_type);
     if (beforeNum && !cardInfo.card_number) {
       console.warn(`[scan] rejected invalid card_number "${beforeNum}" for ${cardInfo.card_type}`);
-      // If card_number was garbage, the whole ID is suspect. For YGO where
-      // grounding depends on set_code, also blank the set_code so the client
-      // shows an unmatched scan panel instead of a confident wrong card.
-      if ((cardInfo.card_type || '').toLowerCase() === 'yugioh') {
-        cardInfo.set_code = '';
-      }
+      // 2026-08-19: If card_number was garbage the whole ID is suspect.
+      // Previously we only blanked set_code for YGO; now we treat ANY
+      // TCG the same. Rationale: a 9-digit hallucinated "card_number"
+      // (like 101305071 on a fake YGO card scanned in Pokémon mode)
+      // means the model didn't actually read the card — it made
+      // something up. Blank set_code and downgrade to low confidence
+      // so the client renders the unmatched scan panel instead of a
+      // confident wrong result with a Get-It-Graded upsell.
+      cardInfo.set_code = '';
+      cardInfo.set_name = '';
+      cardInfo.confidence = 'low';
+    }
+
+    // 2026-08-19: Sanitize editorial junk strings in top-level ID (we
+    // already did this for candidates below). GPT sometimes returns
+    // literal 'Unknown', 'UNKNOWN', 'N/A', 'Fake', etc. in set_name /
+    // rarity when it doesn't know — those propagate to the client and
+    // render as "Unknown set · UNKNOWN". Blank them.
+    const _junkStrings = /^(unknown|n\/?a|none|null|fake|proxy|custom|counterfeit|unofficial)$/i;
+    if (cardInfo.set_name && _junkStrings.test(String(cardInfo.set_name).trim())) {
+      cardInfo.set_name = '';
+    }
+    if (cardInfo.rarity && _junkStrings.test(String(cardInfo.rarity).trim())) {
+      cardInfo.rarity = '';
     }
     if (Array.isArray(cardInfo.candidates)) {
       cardInfo.candidates.forEach(c => {

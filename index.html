@@ -10415,9 +10415,19 @@ async function _pickScanCandidate(idx) {
   window._pendingScanObjectUrl  = null;
 }
 
-function showScanGradeCTA(cardName, grader, grade) {
+function showScanGradeCTA(cardName, grader, grade, opts) {
   const cta = document.getElementById('scanGradeCTA');
   if (!cta) return;
+  // 2026-08-19: Never upsell a $-costing grade for a card we couldn't
+  // confidently identify. If the caller passes opts.suppressed=true (or
+  // omits both name and grader/grade signals), hide the CTA instead of
+  // showing a generic "Get it officially graded" upsell that would
+  // confuse the user on an unmatched scan.
+  opts = opts || {};
+  if (opts.suppressed === true || (!cardName && !grader && !grade)) {
+    cta.classList.remove('show');
+    return;
+  }
   const links = _affiliateLinks();
   // Update headline based on whether we detected a grader already
   const headline = document.getElementById('scanGradeCTAHeadline');
@@ -10778,7 +10788,24 @@ async function processScanImage(input) {
     const jpSubline = (isJapanese && jpRawName && jpRawName !== rawCardName)
       ? '<br><span style="font-size:.7rem;opacity:.55">' + esc(jpRawName) + '</span>'
       : '';
-    statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (displayNumber ? ' #' + displayNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>' + jpSubline;
+    // 2026-08-19: If the ID is unreliable (low confidence, or missing
+    // both set + card number, or blank card name), show an amber warning
+    // header instead of the confident green checkmark. Prevents the
+    // "\u2713 Power Patron Shadows of the End Times · Unknown set" flow that
+    // reads as "we identified it" when we didn't.
+    const _scanConfidence  = (data.confidence || '').toString().toLowerCase();
+    const _hasSetSignal    = !!(displaySetName && !/^(unknown|n\/a|none)$/i.test(displaySetName));
+    const _hasNumberSignal = !!(displayNumber && String(displayNumber).length <= 12);
+    const _idIsReliable    = _scanConfidence !== 'low' && cardName && (_hasSetSignal || _hasNumberSignal);
+    if (_idIsReliable) {
+      statusEl.innerHTML = '<span style="color:#4ade80">\u2713 ' + cardName + (displayNumber ? ' #' + displayNumber : '') + '</span><br><span style="font-size:.8rem;opacity:.7">' + detailLine + '</span>' + jpSubline;
+    } else {
+      const _shownName = cardName || 'Card not recognized';
+      const _detailAmber = displaySetName ? esc(displaySetName) : 'No confident match — try a clearer photo';
+      statusEl.innerHTML = '<span style="color:#fbbf24">\u26a0 Low-confidence scan</span><br>' +
+        '<span style="font-size:.85rem;opacity:.85">' + esc(_shownName) + '</span>' +
+        '<br><span style="font-size:.75rem;opacity:.65">' + _detailAmber + '</span>' + jpSubline;
+    }
 
     // Result area now hosts: (optional) glare/quality hint, plus "Not my card"
     // refund link. Rendered as HTML so we can style + wire the click handler.
@@ -10802,7 +10829,14 @@ async function processScanImage(input) {
     const refundBtn = document.getElementById('scanRefundBtn');
     if (refundBtn) refundBtn.addEventListener('click', () => _requestScanRefund(refundBtn));
 
-    showScanGradeCTA(cardName, '', null);
+    // 2026-08-19: Suppress the Get-It-Graded upsell when the ID is
+    // unreliable — same reliability check the header uses. Prevents
+    // the confusing "Unknown set — Get it officially graded!" flow.
+    if (_idIsReliable) {
+      showScanGradeCTA(cardName, '', null);
+    } else {
+      showScanGradeCTA('', '', null, { suppressed: true });
+    }
 
     window._scanTargetNumber = cardNumber;
     window._scanTargetName   = cardName;
