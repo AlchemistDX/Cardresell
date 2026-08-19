@@ -10972,12 +10972,12 @@ async function submitGradeScan(deepGrade) {
       (notes ? '<div style="font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:.5rem;padding:.4rem .55rem;background:rgba(255,255,255,.05);border-radius:8px;text-align:left"><strong style="color:rgba(255,255,255,.8)">Grader notes: </strong>' + notes + '</div>' : '') +
       (worth
         ? '<div style="font-size:.74rem;color:#4ade80;font-weight:700;margin-bottom:.4rem">\u2713 Worth submitting for grading</div>' +
-          // PSA referral CTA
+          // PSA submission CTA (no false promo — we don't have a PSA discount code)
           '<div style="margin:.35rem 0 .3rem;padding:.55rem .65rem;background:rgba(26,58,110,.25);border:1px solid rgba(42,82,152,.4);border-radius:10px">' +
-            '<div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;color:#7ea8e8;margin-bottom:.2rem">🏆 NEW TO PSA?</div>' +
-            '<div style="font-size:.75rem;font-weight:700;color:#fff;margin-bottom:.15rem">Get $25 off your first grading order</div>' +
+            '<div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;color:#7ea8e8;margin-bottom:.2rem">🏆 READY TO SUBMIT?</div>' +
+            '<div style="font-size:.75rem;font-weight:700;color:#fff;margin-bottom:.15rem">Send it to PSA for the real grade</div>' +
             '<a href="' + (window.CARDSELL_AFFIL_PSA || 'https://www.psacard.com/submit') + '" target="_blank" rel="noopener" ' +
-              'style="font-size:.7rem;font-weight:700;color:#7ea8e8;text-decoration:none">Submit to PSA →</a>' +
+              'style="font-size:.7rem;font-weight:700;color:#7ea8e8;text-decoration:none">Start a PSA submission →</a>' +
           '</div>' +
           // BCW supplies CTA
           (window.CARDSELL_AFFIL_BCW
