@@ -4295,7 +4295,14 @@ async function searchYugioh(q) {
     }).join('');
     attachDropHandlers(i => {
       const entry = window._searchCards[i];
-      return tplCardToNormalized(entry._tpl, 'yugioh', '');
+      // 2026-08-19: TPL frequently returns empty image_url for YGO cards.
+      // If we just came from an ID scan, we already grounded the exact
+      // image via YGOProDeck server-side and stashed it on
+      // window._scanTargetImageUrl. Pass it as the fallback image so the
+      // detail panel doesn't collapse to "Image unavailable" after the
+      // auto-select click overwrites the pre-loaded grounded card.
+      const fallbackImg = window._scanTargetImageUrl || '';
+      return tplCardToNormalized(entry._tpl, 'yugioh', fallbackImg);
     });
     return;
   }
@@ -9671,7 +9678,18 @@ function _loadScannedNonPokemonCard(pending) {
   // auto-select to click a result (which sometimes doesn't fire when
   // scan_target_number is a Konami passcode that doesn't match the
   // set_code in the dropdown items).
+  //
+  // Also stash the grounded image on a global so the TPL happy-path
+  // cardFactory (which normally passes '' as fallbackImage for YGO)
+  // can pick it up when TPL returns empty image_url — otherwise the
+  // subsequent auto-select click overwrites our grounded card with a
+  // TPL card whose images.small is '', and the detail panel drops to
+  // "Image unavailable".
   if (pending.cardType === 'yugioh' && pending.imageUrl) {
+    window._scanTargetImageUrl = pending.imageUrl;
+    // Clear it once the search completes so it doesn't leak into an
+    // unrelated manual search later.
+    setTimeout(() => { window._scanTargetImageUrl = null; }, 8000);
     const ygoCard = {
       name:    name,
       game:    'yugioh',
