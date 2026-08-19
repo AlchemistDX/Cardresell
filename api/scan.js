@@ -1052,6 +1052,16 @@ Respond ONLY with valid JSON, no explanation:
       // the canonical `centering` field ("55/45 L/R, 52/48 T/B") so the UI
       // shows the real measurement instead of GPT's eyeball estimate.
       // Also re-compute the ceiling from Ximilar's more accurate numbers.
+      //
+      // CRITICAL: When Ximilar overrides, we must sync centering_lr /
+      // centering_tb (the wire fields the UI reads for its meter) so the
+      // meter bars, zone labels, ceiling caption, and psa_estimate all
+      // reflect the SAME numbers. Previously the display string got updated
+      // but the wire fields stayed as GPT's eyeball estimate — the UI would
+      // render a meter showing 55/45 with a caption saying "caps at PSA 6",
+      // which was mathematically impossible and shattered user trust.
+      let finalCenteringLR = centeringLR;
+      let finalCenteringTB = centeringTB;
       let centeringDisplay =
         (centeringLR || centeringTB)
           ? [centeringLR && `${centeringLR} L/R`, centeringTB && `${centeringTB} T/B`].filter(Boolean).join(', ')
@@ -1061,6 +1071,9 @@ Respond ONLY with valid JSON, no explanation:
         const lr = cvCentering.leftRight;
         const tb = cvCentering.topBottom;
         centeringDisplay = [lr && `${lr} L/R`, tb && `${tb} T/B`].filter(Boolean).join(', ');
+        // Sync wire fields so meter + caption stay in sync.
+        if (lr) finalCenteringLR = lr;
+        if (tb) finalCenteringTB = tb;
         // Re-run the ceiling calc with Ximilar's pixel-measured numbers.
         const rLRx = parseRatio(lr);
         const rTBx = parseRatio(tb);
@@ -1070,6 +1083,31 @@ Respond ONLY with valid JSON, no explanation:
           finalCenteringCeiling = cvCeil;
           subgrades.centering = cvCeil;
           if (psaEstimate != null && psaEstimate > cvCeil) psaEstimate = cvCeil;
+        }
+      }
+
+      // ── FINAL COHERENCE PASS ──
+      // Regardless of which source produced the ratios, the ceiling MUST
+      // match what the ratios say. This catches the case where the model
+      // returned inconsistent fields (e.g. centering_lr="55/45" but
+      // centering_ceiling=6). Recompute from the numbers we're about to
+      // display and let the numbers win.
+      {
+        const rLRf = parseRatio(finalCenteringLR);
+        const rTBf = parseRatio(finalCenteringTB);
+        const worstF = (rLRf != null && rTBf != null) ? Math.max(rLRf, rTBf) : (rLRf ?? rTBf);
+        const truCeil = centeringCeilingFromRatio(worstF);
+        if (truCeil != null) {
+          if (truCeil !== finalCenteringCeiling) {
+            console.warn('[scan] centering ceiling desync corrected:', {
+              had: finalCenteringCeiling, computed: truCeil,
+              lr: finalCenteringLR, tb: finalCenteringTB,
+            });
+          }
+          finalCenteringCeiling = truCeil;
+          subgrades.centering = truCeil;
+          // psa_estimate can only be as high as the centering ceiling.
+          if (psaEstimate != null && psaEstimate > truCeil) psaEstimate = truCeil;
         }
       }
 
@@ -1129,6 +1167,53 @@ Respond ONLY with valid JSON, no explanation:
         distArray = distArray.map(x => ({ grade: Math.max(1, Math.min(10, x.grade + shift)), pct: x.pct }));
       }
 
+      // ── LIMITING FACTOR PROSE RECONCILIATION ──
+      // The model writes limiting_factor as free text, but sometimes it
+      // contradicts the (server-corrected) numbers we're about to show —
+      // e.g. it says "caps at PSA 6" while the measured centering is 55/45.
+      // Detect that mismatch and replace with a deterministic sentence
+      // derived from the actual measured numbers. Better to say something
+      // boring-but-true than something confidently wrong.
+      let reconciledLimitingFactor = cardInfo.limiting_factor || '';
+      {
+        const lf = String(reconciledLimitingFactor).toLowerCase();
+        // Look for a grade number the prose is claiming, in patterns like
+        //   "caps at PSA 6" / "psa 6 centering" / "projects as a 7" / "a psa 8"
+        const claim = lf.match(/caps at psa\s*(\d{1,2})/i)
+                   || lf.match(/psa\s*(\d{1,2})\s*centering/i)
+                   || lf.match(/projects?\s+as\s+(?:a\s+)?psa\s*(\d{1,2})/i)
+                   || lf.match(/\ba\s+psa\s*(\d{1,2})\b/i);
+        const claimedGrade = claim ? parseInt(claim[1], 10) : null;
+        const worstAxis = (() => {
+          const a = parseRatio(finalCenteringLR);
+          const b = parseRatio(finalCenteringTB);
+          return (a != null && b != null) ? Math.max(a, b) : (a ?? b);
+        })();
+        const truCeil = centeringCeilingFromRatio(worstAxis);
+        // Prose is lying if:
+        //  • It names a grade that's LOWER than what the numbers support, OR
+        //  • It contradicts our final psa_estimate by more than 1 grade.
+        const proseIsLying =
+          (claimedGrade != null && truCeil != null && claimedGrade < truCeil) ||
+          (claimedGrade != null && psaEstimate != null && Math.abs(claimedGrade - psaEstimate) >= 2);
+        if (proseIsLying) {
+          console.warn('[scan] limiting_factor prose contradicts measured centering — rewriting:', {
+            model_said: reconciledLimitingFactor,
+            claimed_grade: claimedGrade,
+            measured_ceiling: truCeil,
+            psa_estimate: psaEstimate,
+            lr: finalCenteringLR, tb: finalCenteringTB,
+          });
+          if (psaEstimate === 10) {
+            reconciledLimitingFactor = `Measured centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) qualifies for PSA 10. Corners, edges, and surface show no observable defects in the photos provided.`;
+          } else if (psaEstimate != null && truCeil != null && psaEstimate === truCeil) {
+            reconciledLimitingFactor = `Measured centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) caps the front-centering grade at PSA ${truCeil}. The next grade up would require tighter centering.`;
+          } else if (psaEstimate != null) {
+            reconciledLimitingFactor = `Measured centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) allows up to PSA ${truCeil ?? psaEstimate}. Final estimate is PSA ${psaEstimate} — review the pillar notes for the specific defect blocking a higher grade.`;
+          }
+        }
+      }
+
       // Confidence drivers — array of strings the UI can render as chips.
       let confidenceDrivers = Array.isArray(cardInfo.confidence_drivers)
         ? cardInfo.confidence_drivers.filter(x => typeof x === 'string' && x.length)
@@ -1150,8 +1235,8 @@ Respond ONLY with valid JSON, no explanation:
 
         // Centering — measured ratios + official PSA thresholds
         centering:            centeringDisplay,
-        centering_lr:         centeringLR || '',
-        centering_tb:         centeringTB || '',
+        centering_lr:         finalCenteringLR || '',
+        centering_tb:         finalCenteringTB || '',
         centering_back:       centeringBack || '',
         centering_ceiling:    finalCenteringCeiling ?? centeringCeiling ?? null,
         centering_thresholds: {
@@ -1175,9 +1260,9 @@ Respond ONLY with valid JSON, no explanation:
         // Overall grade prediction
         psa_estimate:      psaEstimate ?? cardInfo.psa_estimate ?? null,
         psa_distribution:  distArray,
-        limiting_factor:   cardInfo.limiting_factor || '',
+        limiting_factor:   reconciledLimitingFactor,
         grade_label:       cardInfo.grade_label   || '',
-        grade_notes:       cardInfo.grade_notes   || cardInfo.limiting_factor || '',
+        grade_notes:       cardInfo.grade_notes   || reconciledLimitingFactor || '',
 
         // Eye appeal (new PSA-aligned judgment layer)
         eye_appeal:        cardInfo.eye_appeal || 'Average',
