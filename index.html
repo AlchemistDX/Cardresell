@@ -4599,10 +4599,18 @@ async function fetchAndApplySoldComps(forceRefresh) {
   const fallbackEbayUrl = buildEbayUrl(`https://www.ebay.com/sch/i.html?_nkw=${_fbQ}&_sacat=${_sacat}&LH_Sold=1&LH_Complete=1&_sop=12`);
 
   // Fire TCG + eBay in parallel. TCG is source of truth, eBay is bonus.
+  //
+  // 2026-08-19: FIX — was previously missing &game=, so every single-card
+  // scan comps fetch was hitting the Pokemon catalog regardless of what the
+  // user actually scanned. Magic and Lorcana pricing were coming back empty
+  // because their card names don't exist in the Pokemon TCG database.
+  // card.game is populated by the scanner (see typeToGame at line 8649)
+  // and takes values: pokemon, pokemonjp, mtg, yugioh, lorcana, onepiece.
   const tcgParams = new URLSearchParams({ name: card.name });
   if (card.setName) tcgParams.set('set', card.setName);
   if (card.number)  tcgParams.set('number', card.number);
   if (card.rarity)  tcgParams.set('rarity', card.rarity);
+  if (card.game)    tcgParams.set('game', card.game);
 
   const ebayParams = new URLSearchParams({ q, limit: '15' });
   if (grade) ebayParams.set('grade', grade);
