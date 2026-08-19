@@ -219,6 +219,39 @@ export function normalizeNumber(n) {
   return s.replace(/^0+/, '').toLowerCase();
 }
 
+// 2026-08-19: YGO card numbers are SET-EN### (e.g. "LOB-EN001", "LOB-001",
+// "MP24-EN123"). Return the normalized canonical form for comparison.
+// Handles: strips locale (EN/DE/FR/SP/IT/PT/JP/KR/EU/AE/TC/SC), strips
+// leading zeros in the numeric part, keeps set prefix. Returns lowercase.
+export function normalizeYgoNumber(n) {
+  if (!n) return '';
+  const s = String(n).trim().toUpperCase();
+  const m = s.match(/^([A-Z0-9]{2,6})-(?:EN|DE|FR|SP|IT|PT|JP|KR|EU|AE|TC|SC)?0*(\d+)$/i);
+  if (m) return (m[1] + '-' + m[2]).toLowerCase();
+  // Fallback: pull all alphanumeric, strip locale, strip leading zeros in tail
+  const m2 = s.match(/^([A-Z0-9]{2,6})[\-\s]*(?:EN|DE|FR|SP|IT|PT|JP|KR|EU|AE|TC|SC)?0*(\d+)$/i);
+  if (m2) return (m2[1] + '-' + m2[2]).toLowerCase();
+  return s.toLowerCase();
+}
+
+// 2026-08-19: YGO group-name signals for penalizing promo/tournament/prize
+// printings when a base-set printing exists. TCGcsv uses group names like
+// "Yu-Gi-Oh Championship Series Prize Cards", "Ultimate Tournament Pack 1",
+// "Mega-Tins 2024", "OTS Tournament Pack", "Ghosts From the Past", etc.
+const YGO_PROMO_GROUP_PATTERNS = [
+  /championship series/i, /world championship/i, /prize card/i, /ycs/i, /wcs/i,
+  /tournament pack/i, /ots/i, /astral pack/i, /premium pack/i,
+  /mega[- ]?tin/i, /mega tin/i, /tin \d/i,
+  /promo/i, /giveaway/i, /jump/i, /shonen/i,
+  /gold series/i, /gold pack/i, /ghosts from the past/i, /battle pack/i,
+  /speed duel/i, /rush duel/i, /duel devastator/i,
+  /special edition/i, /deluxe edition/i, /movie pack/i,
+];
+export function isYgoPromoGroup(groupName) {
+  const s = String(groupName || '');
+  return YGO_PROMO_GROUP_PATTERNS.some(re => re.test(s));
+}
+
 // ── Rarity family match ───────────────────────────────────────
 const SPECIAL_RARITY_KEYWORDS = [
   'illustration', 'special', 'secret', 'hyper', 'rainbow', 'gold', 'shiny',
@@ -250,10 +283,19 @@ function stripCollectorSuffix(name) {
   return String(name || '').replace(/\s+-\s+\d+[a-z]?\/\d+[a-z]?\s*(\([^)]*\))?\s*$/i, '').trim();
 }
 
-export function pickProduct(products, targetName, targetNumber, targetRarity) {
+// 2026-08-19: added optional `game` param so YGO can apply stricter rules:
+//   - exact card-name match only (no substring — "Dark Magician" must not
+//     match "Dark Magician of Chaos")
+//   - set-number must match when provided (LOB-001 must resolve to LOB-001,
+//     not YCS 2025 Prize Card)
+//   - promo/YCS/tin groups are penalized in resolveCardByName below
+export function pickProduct(products, targetName, targetNumber, targetRarity, game) {
   if (!products || !products.length) return null;
   const nameLo = String(targetName || '').toLowerCase().trim();
-  const numTarget = normalizeNumber(targetNumber);
+  const isYgo = String(game || '').toLowerCase() === 'yugioh';
+  const numTarget = isYgo
+    ? normalizeYgoNumber(targetNumber)
+    : normalizeNumber(targetNumber);
 
   // Tokenize target name: "Mewtwo ex" → ["mewtwo", "ex"]
   const targetTokens = nameLo.split(/[\s\-\/]+/).filter(t => t.length > 0);
@@ -265,7 +307,7 @@ export function pickProduct(products, targetName, targetNumber, targetRarity) {
     const pCleanRaw = String(p.cleanName || '');
     const pName = pNameRaw.toLowerCase();
     const pClean = pCleanRaw.toLowerCase();
-    const pNum = normalizeNumber(p.number);
+    const pNum = isYgo ? normalizeYgoNumber(p.number) : normalizeNumber(p.number);
 
     // Build candidate strings to match against:
     //   1. Full name (Lorcana "Elsa - Snow Queen" stays intact)
@@ -289,6 +331,13 @@ export function pickProduct(products, targetName, targetNumber, targetRarity) {
       const exactMatch = candidates.some(c => c === nameLo);
       if (exactMatch) {
         nameScore = 100;
+      } else if (isYgo) {
+        // 2026-08-19: YGO card names are canonical and short. Substring
+        // matches almost always yield the wrong card ("Dark Magician" vs
+        // "Dark Magician of Chaos" / "of Destruction" / "the Dragon Knight").
+        // Require EXACT match against one of the candidates for YGO —
+        // token-supersets and partial matches are rejected.
+        nameScore = 0;
       } else {
         // Token-based scoring against the strongest candidate (paren-stripped)
         const partTokens = nameParenStripped.split(/[\s\-\/]+/).filter(t => t.length > 0);
@@ -315,6 +364,11 @@ export function pickProduct(products, targetName, targetNumber, targetRarity) {
     let score = nameScore;
     // Number match — strong signal but never enough alone.
     if (numTarget && pNum === numTarget) score += 70;
+    // 2026-08-19: YGO — when we have a target number, REJECT products
+    // whose number doesn't match. YGO reprints exist across many sets
+    // (LOB-001, DPRP-EN006, SDK-001 all can be "Blue-Eyes White Dragon")
+    // and the caller told us which one it is. Don't guess.
+    if (isYgo && numTarget && pNum && pNum !== numTarget) return { p, score: -1 };
     // Rarity match
     score += rarityScore(p.rarity, targetRarity) * 0.6; // up to 60
 
@@ -392,7 +446,7 @@ export async function resolveCardPrice({ kvUrl, kvToken, setName, cardName, card
     getPrices(kvUrl, kvToken, groupId, cat),
   ]);
 
-  const product = pickProduct(products, cardName, cardNumber, rarity);
+  const product = pickProduct(products, cardName, cardNumber, rarity, game);
   if (!product) return { ok: false, reason: 'no_product_match', groupId, categoryId: cat };
 
   const priceMap = prices[product.productId] || null;
@@ -425,6 +479,7 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
   if (!groups?.length) return { ok: false, reason: 'no_groups', categoryId: cat };
 
   const scanLimit = maxGroupsToScan || 40;
+  const isYgo = String(game || '').toLowerCase() === 'yugioh' || cat === 2;
   const sortedGroups = [...groups]
     .sort((a, b) => (b.groupId || 0) - (a.groupId || 0))
     .slice(0, scanLimit);
@@ -442,8 +497,12 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
     );
     for (const r of results) {
       if (r.status !== 'fulfilled') continue;
-      const product = pickProduct(r.value.products, cardName, cardNumber, rarity);
-      if (product) allMatches.push({ product, groupId: r.value.groupId });
+      const product = pickProduct(r.value.products, cardName, cardNumber, rarity, game);
+      if (product) {
+        // 2026-08-19: attach group name so YGO promo penalty can look it up
+        const groupMeta = groups.find(g => g.groupId === r.value.groupId);
+        allMatches.push({ product, groupId: r.value.groupId, groupName: groupMeta?.name || '' });
+      }
     }
     // Early exit: once we have >=5 candidates, we probably have enough to pick a good one.
     if (allMatches.length >= 5) break;
@@ -458,15 +517,39 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
     getPrices(kvUrl, kvToken, gid, cat).then(prices => { priceMapsByGroup[gid] = prices; })
   ));
 
+  // 2026-08-19: YGO ranking is DIFFERENT than Pokemon.
+  //   Pokemon: pick highest-market variant (holo/special > base).
+  //   YGO:     pick BASE-set printing over promo/YCS/tin. Highest
+  //            market on YGO usually means YCS prize card ($5000+) or
+  //            Mega-Tin promo, not the actual card in the user's hand.
+  //            We use a composite score = market_price - promo_penalty
+  //            so a $50 base printing beats a $5000 tournament prize.
   let bestMatch = null;
   let bestGroupId = null;
-  let bestPrice = -1;
-  for (const { product, groupId } of allMatches) {
+  let bestScore = -Infinity;
+  for (const { product, groupId, groupName } of allMatches) {
     const priceMap = priceMapsByGroup[groupId]?.[product.productId] || null;
     const bp = bestPriceForProduct(priceMap);
     const marketVal = bp?.market ?? 0;
-    if (marketVal > bestPrice) {
-      bestPrice = marketVal;
+
+    let composite = marketVal;
+    if (isYgo) {
+      // Heavy penalty for prize/YCS/WCS (usually $100-$5000+ collectibles).
+      // Moderate penalty for tins/OTS/tournament packs.
+      // The goal: unless the user's card IS a prize card (they'd know), the
+      // base-set printing wins.
+      if (isYgoPromoGroup(groupName)) {
+        // Heavier hit for prize/WCS/YCS cards specifically
+        if (/prize card|championship series|world championship|wcs|ycs/i.test(groupName)) {
+          composite = marketVal - 10000;
+        } else {
+          composite = marketVal - 500;
+        }
+      }
+    }
+
+    if (composite > bestScore) {
+      bestScore = composite;
       bestMatch = product;
       bestGroupId = groupId;
     }
