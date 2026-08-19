@@ -13082,6 +13082,9 @@ window.addEventListener('load', () => {
     <div class="cat-chip" id="chipRarity" onclick="toggleCatalogChip('rarity')">Rarity <span id="chipRarityVal"></span>&#9660;</div>
     <div class="cat-chip" id="chipNumber" onclick="toggleCatalogChip('number')"># <span id="chipNumberVal"></span>&#9660;</div>
     <div class="cat-chip" id="chipPrice" onclick="cyclePriceSort()">Price <span id="chipPriceVal">&#8597;</span></div>
+    <div class="cat-chip" id="chipView" onclick="toggleCatalogView()" style="margin-left:auto;padding:.3rem .55rem;display:flex;align-items:center;gap:.25rem" title="Toggle list / grid view">
+      <span id="chipViewIcon" style="font-size:.95rem;line-height:1">&#9638;</span>
+    </div>
   </div>
   <!-- Chip dropdown (shared) -->
   <div id="catalogChipDrop" style="display:none;position:absolute;top:0;left:0;right:0;background:#111;border-bottom:1px solid #333;z-index:9000;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
@@ -13431,6 +13434,11 @@ function _openSearchResultsModal(q) { openSearchModal(); }
 window._catAllRows  = [];   // [{idx, name, setLine, subLine, price, img, priceNum, rarity}]
 window._catFilter   = { set: '', rarity: '' };
 window._catPriceDir = 0;    // 0=none 1=asc -1=desc
+// View mode for search results: 'grid' (big card tiles, IMG_3855 style)
+// or 'list' (dense row, IMG_3854 style). Default grid for collector feel.
+window._catViewMode = (function(){ try { return localStorage.getItem('cr_catViewMode') || 'grid'; } catch(e) { return 'grid'; } })();
+// Sync chip icon to loaded mode on next tick (element may not exist yet at parse time).
+setTimeout(() => { const _ic = document.getElementById('chipViewIcon'); if (_ic) _ic.innerHTML = window._catViewMode === 'grid' ? '&#9638;' : '&#9776;'; }, 0);
 
 function _storeCatalogRows(items) {
   window._catAllRows = Array.from(items).map(item => {
@@ -13476,7 +13484,50 @@ function _applyFilters() {
   const count = document.getElementById('searchModalCount');
   count.textContent = rows.length + ' card' + (rows.length === 1 ? '' : 's');
   grid.innerHTML = '';
-  rows.forEach(r => grid.appendChild(_makeCatalogRow(r)));
+  const mode = window._catViewMode || 'grid';
+  if (mode === 'grid') {
+    // 2-column card-tile grid — IMG_3855 style. Big art, name + set + price
+    // stacked underneath. Better for collectors who ID cards by art.
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+    grid.style.gap = '.65rem';
+    grid.style.padding = '.7rem .7rem 5rem';
+    rows.forEach(r => grid.appendChild(_makeCatalogGridCell(r)));
+  } else {
+    // Tight row list — IMG_3854 style. Denser, better for price scanning.
+    grid.style.display = 'block';
+    grid.style.gridTemplateColumns = '';
+    grid.style.gap = '';
+    grid.style.padding = '0 0 5rem';
+    rows.forEach(r => grid.appendChild(_makeCatalogRow(r)));
+  }
+}
+
+// Grid tile renderer — big card art (5/7 aspect), name + set + price under.
+// Used when window._catViewMode === 'grid' (default). See _makeCatalogRow
+// for the tight-list variant.
+function _makeCatalogGridCell(r) {
+  const cell = document.createElement('div');
+  cell.dataset.idx = r.idx;
+  cell.style.cssText = 'background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:.6rem;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s,border-color .15s;display:flex;flex-direction:column';
+  cell.innerHTML = `
+    <div style="aspect-ratio:5/7;width:100%;background:#1a1a1a;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:.55rem;position:relative">
+      ${r.img
+        ? `<img src="${r.img}" loading="lazy" style="width:100%;height:100%;object-fit:contain" onerror="this.style.display='none'">`
+        : '<span style="font-size:2rem;opacity:.25">&#x1F0CF;</span>'}
+    </div>
+    <div style="font-size:.86rem;font-weight:700;color:#fff;line-height:1.25;margin-bottom:.15rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.15em">${r.name}</div>
+    <div style="font-size:.7rem;color:#888;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.setLine}</div>
+    ${r.subLine ? `<div style="font-size:.66rem;color:#555;line-height:1.3;margin-top:.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.subLine}</div>` : ''}
+    <div style="font-size:.95rem;font-weight:800;color:#4dd9ac;margin-top:.4rem">${r.price || '<span style=\"color:#444;font-size:.75rem;font-weight:600\">&mdash;</span>'}</div>`;
+  cell.addEventListener('click', () => {
+    const orig = dropList.querySelector(`[data-idx="${r.idx}"]`);
+    if (orig) orig.click();
+    closeSearchModal();
+  });
+  cell.addEventListener('touchstart', () => { cell.style.background = '#151515'; cell.style.borderColor = 'rgba(77,217,172,.25)'; }, { passive: true });
+  cell.addEventListener('touchend',   () => { cell.style.background = '#0d0d0d'; cell.style.borderColor = 'rgba(255,255,255,.06)'; }, { passive: true });
+  return cell;
 }
 
 function _makeCatalogRow(r) {
@@ -13551,6 +13602,18 @@ function selectCatalogFilter(type, value) {
   }
   document.getElementById('catalogChipDrop').style.display = 'none';
   document.getElementById('catalogChipDrop').dataset.open = '';
+  _applyFilters();
+}
+
+// Toggle between grid (big card tiles) and list (dense row) view.
+// Preference persists to localStorage so it sticks across sessions.
+function toggleCatalogView() {
+  const cur = window._catViewMode || 'grid';
+  const next = cur === 'grid' ? 'list' : 'grid';
+  window._catViewMode = next;
+  try { localStorage.setItem('cr_catViewMode', next); } catch(e) {}
+  const icon = document.getElementById('chipViewIcon');
+  if (icon) icon.innerHTML = next === 'grid' ? '&#9638;' : '&#9776;';
   _applyFilters();
 }
 
