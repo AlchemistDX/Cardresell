@@ -568,6 +568,14 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-effort.eff-hard{background:rgba(248,113,113,.11);color:#f87171;border:1px solid rgba(248,113,113,.28)}
 .plat-effort.eff-hard .dot{background:#f87171}
 .plat-hassle{font-size:.66rem;color:var(--text-muted);padding-left:.45rem;margin:-.15rem .45rem .55rem 0;line-height:1.35}
+/* Rules of Sale panel — shown per platform card. workflow + payout on top,
+   pill row of red-flag warnings below. Uses amber→red so ship-in / consignment /
+   audience-required cards read as "pay attention" without screaming. */
+.plat-rules{margin:.35rem .45rem .5rem;padding:.4rem .5rem;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.18);border-radius:.5rem}
+.plat-rule-line{font-size:.66rem;color:var(--text-muted);line-height:1.35;margin-bottom:.15rem}
+.plat-rule-line:last-child{margin-bottom:0}
+.plat-flags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem}
+.plat-flag{display:inline-flex;align-items:center;font-size:.6rem;font-weight:700;padding:.18rem .4rem;border-radius:.35rem;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.3);line-height:1.15;letter-spacing:.01em;white-space:nowrap}
 .note-warn{font-size:.68rem;color:var(--orange);background:var(--orange-bg);border-radius:var(--radius-sm);padding:.3rem .55rem;margin:.4rem .45rem}
 
 /* bar chart */
@@ -6226,31 +6234,57 @@ function esc(s) {
 
 /* ═══ FEE ENGINE (2026) ═══ */
 
-// effort: how much friction the seller faces on this platform.
-//   easy   = list, sells fast, buyer protection, familiar UX. eBay/TCGPlayer.
-//   medium = extra steps, longer time-to-sale, or narrower audience. Poshmark, Fanatics BuyNow.
-//   hard   = consignment holds, bulk-only workflows, or platform-specific onboarding. COMC, PWCC.
-// hassle: 1-line reality check shown under the note. Written for a card seller,
-// not a legal disclaimer — the goal is honest tradeoff, not scaring users away.
+// Difficulty & Rules of Sale (2026-08-19 deep-dive):
+// After user pushback ("Fanatics is more than just sports skew — you have to
+// physically ship the card in, that's a big deal"), we now expose the real
+// friction on every platform via four fields, not one Easy/Medium/Hard chip:
+//
+//   effort       tier badge (easy | medium | hard) — headline only
+//   workflow    'list'         you list, you ship the card to the buyer yourself
+//                'shipIn'       you mail cards TO the platform first, then they list
+//                'consignment' you sign the card over; they auction and remit weeks later
+//                'liveAuction' you need an audience/livestream to actually clear cards
+//   payoutTime   plain-english time-to-cash after the card sells
+//   redFlags     array of the 1–4 things a first-time seller genuinely gets
+//                burned by — rendered as pill warnings on the platform card.
+//
+// The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
+// downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
 const PLATFORMS = {
-  ebay:      { name: 'eBay',             color: '#e53238', emoji: '🛒', verified: 'Jun 2026',
+  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Jun 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
-    hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.' },
-  tcgplayer: { name: 'TCGPlayer',        color: '#0070f3', emoji: '🔵', verified: 'Jun 2026',
+    workflow: 'list', payoutTime: '2–5 days after buyer clears',
+    hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
+    redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible'] },
+  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Jun 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
-    hassle: 'TCG-singles hub with built-in buyers. TCGplayer handles customer service so it’s less back-and-forth than eBay.' },
-  poshmark:  { name: 'Poshmark',         color: '#c02b50', emoji: '👗', verified: 'Jun 2026',
+    workflow: 'list', payoutTime: 'Payouts twice a month',
+    hassle: 'TCG-singles hub with built-in buyers. TCGplayer handles customer service so it’s less back-and-forth than eBay.',
+    redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
+  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Jun 2026',
     effort: 'medium', effortLabel: 'Medium · clothing-first, thin card audience',
-    hassle: 'Fewer card buyers browsing — listings can sit for weeks.' },
-  comc:      { name: 'COMC',             color: '#1a5276', emoji: '🃏', verified: 'Jun 2026',
+    workflow: 'list', payoutTime: '3–5 days after buyer confirms',
+    hassle: 'Fewer card buyers browsing — listings can sit for weeks.',
+    redFlags: ['👗 Clothing-first — tiny card audience', '📬 You ship the card yourself', '⏳ Listings often sit for weeks'] },
+  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Jun 2026',
     effort: 'hard',   effortLabel: 'Hard · ship-in service, weeks to list',
-    hassle: 'You mail cards to their warehouse first — not a same-day flip.' },
+    workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
+    hassle: 'You mail cards to their warehouse first — not a same-day flip.',
+    redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale'] },
   fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026',
-    effort: 'medium', effortLabel: 'Medium · growing audience, sports-heavy',
-    hassle: 'Sports skew + auction cycle — great for graded slabs, slower for raw TCG.' },
+    // 2026-08-19: user feedback — old label undersold the real friction.
+    // Fanatics Collect requires you to physically ship the card in to their
+    // vault before it can be listed via Buy Now / Weekly Auction. That's
+    // a big flag; it's not just "medium because sports-heavy".
+    effort: 'hard',   effortLabel: 'Hard · ship-in to Fanatics vault first',
+    workflow: 'shipIn', payoutTime: '1–4 weeks after sale settles',
+    hassle: 'You mail the card to Fanatics’ vault BEFORE it can list. Sports-heavy audience, weekly auction + Buy Now cycle.',
+    redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted'] },
   pwcc:      { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026',
     effort: 'hard',   effortLabel: 'Hard · consignment, 2–4 wk auction',
-    hassle: 'You consign, they auction. Payout comes weeks later — best for $75+ cards.' }
+    workflow: 'consignment', payoutTime: '4–8 weeks after auction settles',
+    hassle: 'You consign, they auction. Payout comes weeks later — best for $75+ cards.',
+    redFlags: ['📦 Ship-in + consignment required', '🔨 Auction only — no fixed Buy Now', '⏳ 4–8 wk payout after sale clears', '💵 Best only for $75+ cards — low-value cards net near zero'] }
 };
 // Free tier: eBay + TCGPlayer. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
 const FREE_PLATFORMS = new Set(['ebay', 'tcgplayer']);
@@ -6498,6 +6532,24 @@ function calc() {
     const hassleHtml = info.hassle
       ? `<div class="plat-hassle">${info.hassle}</div>`
       : '';
+    // 2026-08-19: Rules of Sale panel — payout time + red-flag pills for
+    // ship-in, consignment, live-auction, and other things that a seller
+    // needs to know BEFORE picking this platform.
+    const workflowLabelMap = {
+      list:        '🛠️ Workflow: List &amp; ship yourself',
+      shipIn:      '📦 Workflow: Ship-in required (they hold the card)',
+      consignment: '🤝 Workflow: Consignment (they auction it for you)',
+      liveAuction: '🎥 Workflow: Live auction / audience required'
+    };
+    const workflowText = info.workflow ? (workflowLabelMap[info.workflow] || '') : '';
+    const payoutText   = info.payoutTime ? `💰 Payout: ${esc(info.payoutTime)}` : '';
+    const redFlagsHtml = Array.isArray(info.redFlags) && info.redFlags.length
+      ? `<div class="plat-rules">
+           ${workflowText ? `<div class="plat-rule-line">${workflowText}</div>` : ''}
+           ${payoutText   ? `<div class="plat-rule-line">${payoutText}</div>` : ''}
+           <div class="plat-flags">${info.redFlags.map(f => `<span class="plat-flag">${esc(f)}</span>`).join('')}</div>
+         </div>`
+      : '';
 
     if (!r.eligible) {
       html += `<div class="${cls}" style="opacity:.4">
@@ -6523,6 +6575,7 @@ function calc() {
         ? `<div class="plat-sub">Profit: <span style="color:${r.grossProfit>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(r.grossProfit)}</span> · <span style="${r.margin>=0?'color:var(--green)':'color:var(--red)'}">${r.margin.toFixed(1)}%</span></div>`
         : `<div class="plat-sub">After all fees &amp; shipping</div>`}
       ${hassleHtml}
+      ${redFlagsHtml}
       ${r.note ? `<div class="note-italic">${r.note}</div>` : ''}
       <div class="fee-block">
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
@@ -7338,7 +7391,10 @@ function openFlipDetail(flipId) {
   const b = Number(f.buyPrice) || 0;
   const s = Number(f.sellPrice) || 0;
   const pr = Number(f.profit) || (s - b);
-  const roi = b > 0 ? (pr / b) * 100 : 0;
+  // When there's no cost basis, ROI is undefined — don't render a
+  // misleading "+0.0%". Show “— no cost basis” instead.
+  const hasCost = b > 0;
+  const roi = hasCost ? (pr / b) * 100 : 0;
   const roiColor = pr >= 0 ? '#4ade80' : '#f87171';
 
   // Image — same fallback ladder as the Collection modal.
@@ -7365,7 +7421,11 @@ function openFlipDetail(flipId) {
   setEl('fdmPlatform', f.platform || '—');
   setEl('fdmDate',   f.date ? `Sold ${f.date}` : '—');
   setEl('fdmProfit', `${pr >= 0 ? '+' : '−'}$${Math.abs(pr).toFixed(2)}`, { color: roiColor });
-  setEl('fdmRoi',    `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI`,        { color: roiColor });
+  setEl(
+    'fdmRoi',
+    hasCost ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : 'ROI — no cost basis',
+    { color: hasCost ? roiColor : 'var(--text-muted)' }
+  );
 
   // Grade chip — only shown when the flip was of a graded card.
   const chipWrap = document.getElementById('fdmGradeChip');
@@ -8474,7 +8534,10 @@ function renderFlipsView() {
       '</tr></thead><tbody>' +
       sorted.map(f => {
         const b = num(f.buyPrice), s = num(f.sellPrice), pr = num(f.profit);
-        const roi = b > 0 ? (pr / b) * 100 : 0;
+        // No cost basis → ROI is undefined; render "—" instead of a
+        // misleading "+0.0%". (E.g. cards added at $0 as gifts/finds.)
+        const hasCost = b > 0;
+        const roi = hasCost ? (pr / b) * 100 : 0;
         const roiColor = pr >= 0 ? '#4ade80' : '#f87171';
         // Thumbnail — mirror the Collection cell: 40x56, card-back placeholder
         // if no image was captured (e.g. legacy flips logged before this
@@ -8507,7 +8570,7 @@ function renderFlipsView() {
           <td class="ft-mono">$${b.toFixed(2)}</td>
           <td class="ft-mono" style="color:var(--gold)">$${s.toFixed(2)}</td>
           <td class="ft-mono" style="color:${roiColor};font-weight:700">${pr>=0?'+':''}$${Math.abs(pr).toFixed(2)}</td>
-          <td style="font-size:.72rem;color:${roiColor};font-weight:700">${roi>=0?'+':''}${roi.toFixed(1)}%</td>
+          <td style="font-size:.72rem;color:${hasCost?roiColor:'var(--text-faint)'};font-weight:700">${hasCost?`${roi>=0?'+':''}${roi.toFixed(1)}%`:'—'}</td>
           <td style="font-size:.72rem">${esc(f.platform || '—')}</td>
           <td onclick="event.stopPropagation()"><button class="ft-delete" onclick="deleteFlip(${f.id})" title="Delete flip">✕</button></td>
         </tr>`;
