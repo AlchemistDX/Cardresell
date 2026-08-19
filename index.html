@@ -2470,63 +2470,101 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div class="scan-gate-title">How to take a great grading photo</div>
     <div class="scan-gate-sub" style="line-height:1.5">Follow these and your grade estimate will match a real grader within 1 point far more often. The AI only sees what your camera shows it.</div>
 
-    <!-- Golden Rules — the 5 things that matter most -->
-    <div style="margin-top:.9rem;text-align:left;display:flex;flex-direction:column;gap:.55rem">
-      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
-        <span style="font-size:1.1rem;line-height:1">✅</span>
-        <div style="flex:1">
-          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Remove sleeves and toploaders</div>
-          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Plastic reflects. Bare card only — you can put it back after the scan.</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
-        <span style="font-size:1.1rem;line-height:1">✅</span>
-        <div style="flex:1">
-          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Bright, even, indirect light</div>
-          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Near a window during the day is ideal. Avoid single overhead bulbs — they create hot spots and shadows.</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
-        <span style="font-size:1.1rem;line-height:1">✅</span>
-        <div style="flex:1">
-          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Fill the frame with the card</div>
-          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Card should touch every edge of the frame. Hold the phone parallel to the card, not tilted.</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
-        <span style="font-size:1.1rem;line-height:1">✅</span>
-        <div style="flex:1">
-          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Holo cards — tilt to kill glare</div>
-          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">If a rainbow band cuts across the card, tilt 10–15° until the shine breaks up. Text should be readable everywhere.</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:.65rem;align-items:flex-start;padding:.55rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:8px">
-        <span style="font-size:1.1rem;line-height:1">✅</span>
-        <div style="flex:1">
-          <div style="color:#4ade80;font-weight:700;font-size:.82rem">Edges — shoot them individually</div>
-          <div style="color:rgba(255,255,255,.75);font-size:.72rem;line-height:1.45;margin-top:.15rem">Rotate the card so ONE edge faces the camera and fills the frame. Look for nicks, chalking, or whitening.</div>
-        </div>
-      </div>
-    </div>
+    <!-- Golden Rules with real DO/DON'T demo photos.
+         Images are lazy-loaded — they don't hit the network until the
+         modal opens, so the main app flow stays fast. -->
+    <style>
+      .pt-rule { display:flex; flex-direction:column; gap:.4rem; padding:.6rem .65rem; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:10px; }
+      .pt-rule-caption { display:flex; gap:.55rem; align-items:flex-start; }
+      .pt-rule-caption .pt-emoji { font-size:1.05rem; line-height:1.15; }
+      .pt-rule-caption .pt-title { color:#4ade80; font-weight:700; font-size:.82rem; }
+      .pt-rule-caption .pt-sub { color:rgba(255,255,255,.72); font-size:.7rem; line-height:1.4; margin-top:.12rem; }
+      .pt-pair { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+      .pt-pair figure { margin:0; position:relative; border-radius:8px; overflow:hidden; }
+      .pt-pair figure img { display:block; width:100%; height:auto; aspect-ratio:1/1; object-fit:cover; }
+      .pt-pair figure figcaption { position:absolute; top:.35rem; left:.35rem; padding:.15rem .4rem; border-radius:5px; font-size:.62rem; font-weight:800; letter-spacing:.05em; }
+      .pt-pair .pt-do figcaption   { background:rgba(74,222,128,.9); color:#052e16; }
+      .pt-pair .pt-dont figcaption { background:rgba(239,68,68,.9); color:#fff; }
+      .pt-pair .pt-do   { outline:1.5px solid rgba(74,222,128,.35); }
+      .pt-pair .pt-dont { outline:1.5px solid rgba(239,68,68,.35); }
+    </style>
+    <div style="margin-top:.9rem;text-align:left;display:flex;flex-direction:column;gap:.6rem">
 
-    <!-- Don'ts -->
-    <div style="margin-top:.8rem;text-align:left;display:flex;flex-direction:column;gap:.5rem">
-      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
-        <span style="font-size:.95rem;line-height:1">❌</span>
-        <span><strong style="color:#fca5a5">Don't</strong> shoot through a sleeve, toploader, or slab</span>
+      <!-- Rule 1 -->
+      <div class="pt-rule">
+        <div class="pt-pair">
+          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_1_bright_even_light.webp" alt="Good example: bright even light on a card"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_1_glare_shadow.webp" alt="Bad example: glare hotspot and finger shadow on a card"><figcaption>DON'T</figcaption></figure>
+        </div>
+        <div class="pt-rule-caption">
+          <span class="pt-emoji">💡</span>
+          <div style="flex:1">
+            <div class="pt-title">Bright, even, indirect light</div>
+            <div class="pt-sub">Near a window during the day is ideal. Kill glare hotspots and finger shadows.</div>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
-        <span style="font-size:.95rem;line-height:1">❌</span>
-        <span><strong style="color:#fca5a5">Don't</strong> use flash — it blows out the surface and hides scratches</span>
+
+      <!-- Rule 2 -->
+      <div class="pt-rule">
+        <div class="pt-pair">
+          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_2_raw_card.webp" alt="Good example: raw card outside any sleeve or holder"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_2_through_plastic.webp" alt="Bad example: card inside a plastic sleeve and toploader"><figcaption>DON'T</figcaption></figure>
+        </div>
+        <div class="pt-rule-caption">
+          <span class="pt-emoji">📤</span>
+          <div style="flex:1">
+            <div class="pt-title">Remove sleeves, toploaders, and slabs</div>
+            <div class="pt-sub">Plastic reflects light and hides flaws. Take the bare card out — you can put it back after.</div>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
-        <span style="font-size:.95rem;line-height:1">❌</span>
-        <span><strong style="color:#fca5a5">Don't</strong> cover corners or edges with fingers</span>
+
+      <!-- Rule 3 -->
+      <div class="pt-rule">
+        <div class="pt-pair">
+          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_3_fills_frame.webp" alt="Good example: card fills the frame and is aligned straight"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_3_tilted_small.webp" alt="Bad example: card tilted and too small in the frame"><figcaption>DON'T</figcaption></figure>
+        </div>
+        <div class="pt-rule-caption">
+          <span class="pt-emoji">🎯</span>
+          <div style="flex:1">
+            <div class="pt-title">Fill the frame, aligned straight</div>
+            <div class="pt-sub">Card edges close to the photo edges, held parallel — not tilted.</div>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;gap:.55rem;align-items:center;padding:.5rem .6rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.22);border-radius:8px;font-size:.74rem;color:rgba(255,255,255,.82);line-height:1.4">
-        <span style="font-size:.95rem;line-height:1">❌</span>
-        <span><strong style="color:#fca5a5">Don't</strong> shoot on a busy background — use a plain surface</span>
+
+      <!-- Rule 4 -->
+      <div class="pt-rule">
+        <div class="pt-pair">
+          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_4_plain_background.webp" alt="Good example: card on a plain dark background"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_4_busy_background.webp" alt="Bad example: card on a cluttered desk with mug, keyboard, and papers"><figcaption>DON'T</figcaption></figure>
+        </div>
+        <div class="pt-rule-caption">
+          <span class="pt-emoji">🧼</span>
+          <div style="flex:1">
+            <div class="pt-title">Plain, uniform background</div>
+            <div class="pt-sub">Solid dark surface. No clutter, no wood grain, no fabric.</div>
+          </div>
+        </div>
       </div>
+
+      <!-- Rule 5 -->
+      <div class="pt-rule">
+        <div class="pt-pair">
+          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_5_sharp_focus.webp" alt="Good example: tack-sharp card photo with fine detail"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_5_blurry.webp" alt="Bad example: blurry out-of-focus card photo"><figcaption>DON'T</figcaption></figure>
+        </div>
+        <div class="pt-rule-caption">
+          <span class="pt-emoji">🔍</span>
+          <div style="flex:1">
+            <div class="pt-title">Tack-sharp focus, no motion blur</div>
+            <div class="pt-sub">Tap to focus, hold steady, count "one" before releasing. Blurry photos hide the flaws that decide the grade.</div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Primary CTA -->
@@ -10401,9 +10439,13 @@ function startQuickGrade() {
 }
 
 function startDeepGrade() {
-  const forceShow = !_photoTipsSeen() || _photoTipsAlways();
-  if (forceShow) {
-    // Close tier picker first so the tips modal isn't stacked underneath
+  // 2026-08-19: Removed forced first-time photo-tips gate. Users found it
+  // paternalistic. Tips are still one tap away via:
+  //   • The "📸 Photo tips" button on the tier picker itself
+  //   • The "📸 Show photo tips" link on the edge-capture screen
+  //   • The "Show these tips before every Deep Grade" opt-in checkbox
+  //     (respected below — users who WANT the reminder every time still get it)
+  if (_photoTipsAlways()) {
     const overlay = document.getElementById('gradeTierOverlay');
     if (overlay) overlay.classList.remove('open');
     openPhotoTipsModal('deep');
