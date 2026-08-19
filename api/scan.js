@@ -658,6 +658,56 @@ Respond ONLY with valid JSON, no explanation:
         if (c) c.set_code = validateSetCode(c.set_code, c.card_type || cardInfo.card_type);
       });
     }
+
+    // 2026-08-18: Validate card_number too — the "#101305049" hallucination
+    // from the YGO Baybarron report was the model inventing a 9-digit ID and
+    // stuffing it in card_number (not set_code, which is what validateSetCode
+    // caught). Real card_numbers per TCG:
+    //   pokemon: 1-4 digits, sometimes with "/total" or "TG01", "SV31"
+    //   yugioh:  <SET>-<REG><NUM> like PHRA-EN012, OR plain 8-digit passcode
+    //            (real YGO card passcodes are exactly 8 digits like 12571621)
+    //   mtg:     1-4 digits
+    //   lorcana: N/total or plain number
+    //   onepiece: <SET>-###
+    const validateCardNumber = (num, cardType) => {
+      if (!num || typeof num !== 'string') return '';
+      const n = num.trim().toUpperCase();
+      if (!n) return '';
+      // Universal: reject 5-12 digit numbers that aren't YGO passcodes (real
+      // YGO passcodes are exactly 8 digits; anything else all-numeric with 5-12
+      // chars is likely hallucinated).
+      if (/^\d+$/.test(n)) {
+        const t = (cardType || '').toLowerCase();
+        if (t === 'yugioh') {
+          // Accept 8-digit YGO passcodes only. Anything else (5, 6, 7, 9+ digits) is fake.
+          if (n.length === 8) return num;
+          if (n.length <= 4) return num; // short position numbers OK
+          return '';
+        }
+        // Non-YGO: purely numeric > 4 digits is suspicious. Real card_numbers
+        // are 1-4 digit set positions, or contain a slash / letters.
+        if (n.length > 4) return '';
+      }
+      // Reject anything absurdly long.
+      if (n.length > 20) return '';
+      return num;
+    };
+    const beforeNum = cardInfo.card_number;
+    cardInfo.card_number = validateCardNumber(cardInfo.card_number, cardInfo.card_type);
+    if (beforeNum && !cardInfo.card_number) {
+      console.warn(`[scan] rejected invalid card_number "${beforeNum}" for ${cardInfo.card_type}`);
+      // If card_number was garbage, the whole ID is suspect. For YGO where
+      // grounding depends on set_code, also blank the set_code so the client
+      // shows an unmatched scan panel instead of a confident wrong card.
+      if ((cardInfo.card_type || '').toLowerCase() === 'yugioh') {
+        cardInfo.set_code = '';
+      }
+    }
+    if (Array.isArray(cardInfo.candidates)) {
+      cardInfo.candidates.forEach(c => {
+        if (c) c.card_number = validateCardNumber(c.card_number, c.card_type || cardInfo.card_type);
+      });
+    }
     // Same sanitization for candidates — the picker UI shouldn't show garbage sets either.
     if (Array.isArray(cardInfo.candidates)) {
       const badPatterns = [

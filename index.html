@@ -9105,7 +9105,12 @@ async function _loadScannedCardExact(pending) {
 
     let cards = [];
     for (const q of queries) {
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
+      // 2026-08-18: bump pageSize 20 → 60 so newer sets on page-2 of common
+      // Pokemon names (like Metang me4-94 Chaos Rising IR) aren't cut off.
+      // pokemontcg.io returns Metang in 27 printings — page 1 of 20 stops at
+      // Vivid Voltage, missing Chaos Rising entirely. That truncation was the
+      // root cause of the wrong-set match reported 2026-08-18.
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=60&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
@@ -9128,23 +9133,67 @@ async function _loadScannedCardExact(pending) {
       if (!idWordLower) return true;
       return (c.name || '').toLowerCase().includes(idWordLower);
     };
+    // 2026-08-18: strip leading zeros for comparison. pokemontcg.io stores
+    // numbers as "94", not "094", so `"094" === "94"` was always failing when
+    // the OCR read the printed "094/086" format.
+    const stripZeros = (s) => String(s || '').replace(/^0+/, '') || '0';
+    const numEq = (a, b) => stripZeros(a) === stripZeros(b);
+    // 2026-08-18: rarity + set matching is STRONGER than loose number-only.
+    // When we have both signals from the scan, prefer them over a same-number
+    // wrong-set match (the exact bug from the Metang 094/086 report).
     let match = null;
     let matchReason = null;
-    if (cleanNumber) {
-      match = cards.find(c => c.number === cleanNumber && nameMatches(c));
-      if (match) matchReason = 'exact-number+name';
+    // 1. Grounded by rarity + set + number — highest confidence
+    if (rarity && setName && cleanNumber) {
+      const rl = rarity.toLowerCase();
+      const sl = setName.toLowerCase();
+      match = cards.find(c =>
+        (c.rarity || '').toLowerCase() === rl &&
+        (c.set?.name || '').toLowerCase().includes(sl) &&
+        (numEq(c.number, cleanNumber) || numEq((c.number || '').split('/')[0], cleanNumber)) &&
+        nameMatches(c)
+      );
+      if (match) matchReason = 'rarity+set+number+name';
+    }
+    // 2. Rarity + set (any number)
+    if (!match && rarity && setName) {
+      const rl = rarity.toLowerCase();
+      const sl = setName.toLowerCase();
+      match = cards.find(c =>
+        (c.rarity || '').toLowerCase() === rl &&
+        (c.set?.name || '').toLowerCase().includes(sl) &&
+        nameMatches(c)
+      );
+      if (match) matchReason = 'rarity+set+name';
+    }
+    // 3. Set + number + name (rarity might mismatch on legacy OCR)
+    if (!match && setName && cleanNumber) {
+      const sl = setName.toLowerCase();
+      match = cards.find(c =>
+        (c.set?.name || '').toLowerCase().includes(sl) &&
+        (numEq(c.number, cleanNumber) || numEq((c.number || '').split('/')[0], cleanNumber)) &&
+        nameMatches(c)
+      );
+      if (match) matchReason = 'set+number+name';
+    }
+    // 4. Number + name — legacy path with leading-zero fix
+    if (!match && cleanNumber) {
+      match = cards.find(c => numEq(c.number, cleanNumber) && nameMatches(c));
+      if (match) matchReason = 'number+name';
     }
     if (!match && cleanNumber) {
-      match = cards.find(c => c.number?.split('/')[0] === cleanNumber && nameMatches(c));
+      match = cards.find(c => numEq((c.number || '').split('/')[0], cleanNumber) && nameMatches(c));
       if (match) matchReason = 'number-before-slash+name';
     }
-    // Only fall through to number-only match (no name filter) if we STILL
-    // have nothing — preserves old behavior for name-first queries where
-    // name filtering is redundant.
+    // 5. Only fall through to number-only match (no name filter) if we STILL
+    // have nothing.
     if (!match && cleanNumber) {
-      match = cards.find(c => c.number === cleanNumber);
-      if (match) matchReason = 'exact-number-only';
+      match = cards.find(c => numEq(c.number, cleanNumber));
+      if (match) matchReason = 'number-only';
     }
+    // 6. Rarity + set with no number (weakest — e.g. "Illustration Rare" in
+    // "Chaos Rising" — only usable when there's exactly ONE such card of the
+    // scanned name).
     if (!match && rarity && setName) {
       const rl = rarity.toLowerCase();
       const sl = setName.toLowerCase();
@@ -9287,8 +9336,29 @@ async function _loadScannedCardExact(pending) {
       // Reuse the image we resolved earlier for the scan-miss thumbnail
       let synthImg = pending.imageUrl || '';
       if (!synthImg && typeof cards !== 'undefined' && Array.isArray(cards) && cards.length) {
+        // 2026-08-18: match with leading-zero normalization + prefer
+        // rarity/set-matching card as thumbnail, so an unmatched scan still
+        // shows the RIGHT printing's art (not the oldest-set same-number).
         const cnClean = (pending.number || '').split('/')[0];
-        const preferred = (cnClean && cards.find(c => (c.number || '').split('/')[0] === cnClean)) || cards[0];
+        const cnStripped = String(cnClean || '').replace(/^0+/, '') || cnClean;
+        const rl = (pending.rarity || '').toLowerCase();
+        const sl = (pending.setName || '').toLowerCase();
+        const numMatches = (c) => {
+          const cn = String(c.number || '').split('/')[0].replace(/^0+/, '');
+          return cn === cnStripped;
+        };
+        let preferred = null;
+        // Best: number + rarity + set
+        if (cnClean && rl && sl) preferred = cards.find(c => numMatches(c) && (c.rarity || '').toLowerCase() === rl && (c.set?.name || '').toLowerCase().includes(sl));
+        // Next: number + rarity
+        if (!preferred && cnClean && rl) preferred = cards.find(c => numMatches(c) && (c.rarity || '').toLowerCase() === rl);
+        // Next: number + set
+        if (!preferred && cnClean && sl) preferred = cards.find(c => numMatches(c) && (c.set?.name || '').toLowerCase().includes(sl));
+        // Next: number only
+        if (!preferred && cnClean) preferred = cards.find(c => numMatches(c));
+        // Last: rarity + set (no number)
+        if (!preferred && rl && sl) preferred = cards.find(c => (c.rarity || '').toLowerCase() === rl && (c.set?.name || '').toLowerCase().includes(sl));
+        preferred = preferred || cards[0];
         synthImg = preferred?.images?.small || preferred?.images?.large || '';
       }
       const synthCard = {
@@ -9345,9 +9415,21 @@ async function _loadScannedCardExact(pending) {
       // confidently pick THE right one, an Audino search returns real Audino
       // images — close enough for a visual anchor).
       if (!pending.imageUrl) {
+        // 2026-08-18: same leading-zero + rarity/set preference as above
         const cnClean = (pending?.number || '').split('/')[0];
-        // Prefer a candidate whose number matches (partial), otherwise cards[0]
-        const preferred = (cnClean && cards.find(c => (c.number || '').split('/')[0] === cnClean)) || cards[0];
+        const cnStripped = String(cnClean || '').replace(/^0+/, '') || cnClean;
+        const rl = (pending?.rarity || '').toLowerCase();
+        const sl = (pending?.setName || '').toLowerCase();
+        const numMatches = (c) => {
+          const cn = String(c.number || '').split('/')[0].replace(/^0+/, '');
+          return cn === cnStripped;
+        };
+        let preferred = null;
+        if (cnClean && rl && sl) preferred = cards.find(c => numMatches(c) && (c.rarity || '').toLowerCase() === rl && (c.set?.name || '').toLowerCase().includes(sl));
+        if (!preferred && cnClean && rl) preferred = cards.find(c => numMatches(c) && (c.rarity || '').toLowerCase() === rl);
+        if (!preferred && cnClean && sl) preferred = cards.find(c => numMatches(c) && (c.set?.name || '').toLowerCase().includes(sl));
+        if (!preferred && cnClean) preferred = cards.find(c => numMatches(c));
+        preferred = preferred || cards[0];
         const img = preferred?.images?.small || preferred?.images?.large;
         if (img) pending = { ...pending, imageUrl: img };
       }
@@ -13941,6 +14023,11 @@ async function bulkOpenCardInLookup(rowId) {
         setName: r.setName     || '',
         rarity:  r.rarity      || '',
         isJapanese: r.isJapanese === true,
+        // 2026-08-18: pass through the grounded_id from bulk scan so the fast
+        // path fetches the exact pokemontcg.io card (e.g. me4-94 Chaos Rising
+        // Metang IR) instead of falling to fuzzy search that grabs the older
+        // same-number card (sm7-94 Celestial Storm Metang Uncommon).
+        groundedId: r.groundedId || '',
       });
     } else {
       // Non-Pokemon: prefill search, trigger the tab's own search, then wait
