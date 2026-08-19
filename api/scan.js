@@ -299,6 +299,60 @@ export default async function handler(req, res) {
       const cardInfo = xim.cardInfo;
       const idConfNorm = cardInfo.confidence || 'high';
 
+      // 2026-08-19: Ximilar's Subcategory tag occasionally mislabels a card's
+      // TCG (e.g. tagged a real Yu-Gi-Oh "Invoked Baybarron / CORE-EN031" as
+      // Pokemon, which cascaded into wrong pricing + a bogus cross-TCG game
+      // switch on the client). Reconcile using the OCR'd card_number Ximilar
+      // itself returned — card_number formats are unambiguous across TCGs.
+      //   yugioh:   3-5 letters + hyphen + region (EN/DE/FR/IT/PT/SP/JP/KR/TC/AE) + 3-4 alnum
+      //             (e.g. LOB-EN001, CORE-EN031, MP24-EN123, RA02-EN050)
+      //   onepiece: OP##-### / ST##-### / EB##-###
+      //   lorcana:  \d+/\d+ with 3-letter set code somewhere (not detectable from number alone)
+      // Pokemon and MTG use short numeric card_numbers, so we can't disambiguate
+      // *into* those from the number alone — but we CAN detect that a card_number
+      // matching YGO/OP format means the Subcategory tag is wrong.
+      const reconcileTypeFromNumber = (info) => {
+        const num = String(info.card_number || '').trim().toUpperCase();
+        if (!num) return info.card_type;
+        // Strong YGO signal: <SET>-<REGION><###> where region is a real 2-letter locale
+        if (/^[A-Z0-9]{2,6}-(EN|DE|FR|IT|PT|SP|JP|KR|TC|AE|EU)[A-Z0-9]{2,4}$/.test(num)) {
+          return 'yugioh';
+        }
+        // Strong One Piece signal: OP01-001, ST05-012, EB01-042, PRB01-##
+        if (/^(OP|ST|EB|PRB)\d{2}-\d{2,3}$/.test(num)) {
+          return 'onepiece';
+        }
+        return info.card_type;
+      };
+      const reconciledType = reconcileTypeFromNumber(cardInfo);
+      if (reconciledType && reconciledType !== cardInfo.card_type) {
+        console.warn(`[scan] reconciled card_type: ${cardInfo.card_type} \u2192 ${reconciledType} based on card_number "${cardInfo.card_number}"`);
+        cardInfo.card_type = reconciledType;
+        // If the number was clearly YGO, the Pokemon Subcategory tag was wrong;
+        // set_name / set_code that Ximilar returned came from its Pokemon DB
+        // and are almost certainly nonsense in this case. Blank them so the
+        // downstream YGO grounding step below can populate the right values.
+        if (reconciledType === 'yugioh' || reconciledType === 'onepiece') {
+          cardInfo.set_name = '';
+          cardInfo.set_code = '';
+          cardInfo.rarity   = '';
+          cardInfo.is_japanese = false; // Ximilar's alphabet tag was for pokemon path
+        }
+        // Reconcile candidates too — same logic
+        if (Array.isArray(xim.candidates)) {
+          xim.candidates.forEach(c => {
+            if (!c) return;
+            const t = reconcileTypeFromNumber(c);
+            if (t && t !== c.card_type) {
+              c.card_type = t;
+              if (t === 'yugioh' || t === 'onepiece') {
+                c.set_name = ''; c.set_code = ''; c.rarity = '';
+              }
+            }
+          });
+        }
+      }
+
       // Multi-candidate picker path
       if (xim.needsPicker && Array.isArray(xim.candidates) && xim.candidates.length >= 2) {
         await refundCredits();

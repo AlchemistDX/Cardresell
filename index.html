@@ -4574,20 +4574,63 @@ function maybeAutoSwitchGameFromScan(cardType, isJapanese) {
   if (!detected) return false;
   // activeGame is the module-scope variable set by onGameSelectChange.
   if (typeof activeGame === 'undefined' || activeGame === detected) return false;
-  // Sports / other panels have their own UX flow — don't swap out from under them.
-  if (activeGame === 'sports' || activeGame === 'other') {
-    // Actually DO swap in this case: user was in Sports but scanned Pok\u00e9mon.
-    // Falls through.
-  }
   const prev = activeGame;
-  if (typeof onGameSelectChange === 'function') {
-    onGameSelectChange(detected);
-  } else {
-    activeGame = detected;
-    const sel = document.getElementById('gameSelect');
-    if (sel) sel.value = detected;
+
+  // 2026-08-19: Do NOT silently swap the user's chosen game. Ximilar occasionally
+  // mis-tags a card's TCG (e.g. tagged real YGO "Invoked Baybarron / CORE-EN031"
+  // as Pokemon), and auto-switching under a user who explicitly picked YGO is
+  // both confusing and wrong. Server-side reconciliation from card_number handles
+  // the unambiguous cases (YGO/OnePiece formats); for the ambiguous rest we ASK.
+  //
+  // Exception: if the user was in Sports/Other (generic panels with no set list)
+  // and we detected a real TCG, swap silently — there's no user intent to override.
+  const isGenericPrev = prev === 'sports' || prev === 'other';
+  const doSwitch = () => {
+    if (typeof onGameSelectChange === 'function') {
+      onGameSelectChange(detected);
+    } else {
+      activeGame = detected;
+      const sel = document.getElementById('gameSelect');
+      if (sel) sel.value = detected;
+    }
+    try { window.trackEvent && window.trackEvent('cross_tcg_auto_switch', { from: prev, to: detected, confirmed: !isGenericPrev }); } catch(e) {}
+  };
+
+  if (isGenericPrev) {
+    doSwitch();
+    try {
+      if (typeof showToast === 'function') {
+        showToast('Detected ' + _gameLabel(detected) + ' \u2014 switched from ' + _gameLabel(prev), 'gold');
+      }
+    } catch(e) {}
+    return true;
   }
-  try { window.trackEvent && window.trackEvent('cross_tcg_auto_switch', { from: prev, to: detected }); } catch(e) {}
+
+  // User explicitly chose a game. Confirm before switching.
+  try {
+    const msg = 'This looks like a ' + _gameLabel(detected) + ' card, but you\u2019re in ' + _gameLabel(prev) + ' mode. Switch to ' + _gameLabel(detected) + '?';
+    // Use native confirm as a lightweight prompt — non-blocking modal would be nicer
+    // but we don't have one wired up here. confirm() at least respects the user.
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const ok = window.confirm(msg);
+      if (ok) {
+        doSwitch();
+        return true;
+      } else {
+        // Stay in user's chosen game. Show a hint so they know the scan may be
+        // wrong.
+        try {
+          if (typeof showToast === 'function') {
+            showToast('Kept ' + _gameLabel(prev) + '. Rescan or search by name if the ID looks off.', 'gold');
+          }
+        } catch(e) {}
+        try { window.trackEvent && window.trackEvent('cross_tcg_auto_switch_declined', { from: prev, to: detected }); } catch(e) {}
+        return false;
+      }
+    }
+  } catch(e) {}
+  // Fallback if confirm() unavailable: keep old silent-switch behavior
+  doSwitch();
   try {
     if (typeof showToast === 'function') {
       showToast('Detected ' + _gameLabel(detected) + ' \u2014 switched from ' + _gameLabel(prev), 'gold');
