@@ -8172,7 +8172,14 @@ function confirmMarkSold() {
     profit,
     platform,
     date,
-    source: 'collection_sold' // trace where this flip came from for future analytics
+    // 2026-08-19: carry the image + grade metadata from the portfolio row
+    // into the flip so the Flip Log can render a proper card row (thumb +
+    // name + set + prices) instead of a text-only table.
+    img:      p.img || p.imageUrl || '',
+    grader:   p.grader || '',
+    grade:    (p.grade != null ? p.grade : ''),
+    number:   p.number || '',
+    source:   'collection_sold' // trace where this flip came from for future analytics
   });
   saveFlipsData(flips);
 
@@ -8316,20 +8323,61 @@ function renderFlipsView() {
         </div></div>`;
     flipWrap.innerHTML = _emptyFlipHTML;
   } else {
+    // 2026-08-19: Flip Log rebuilt to mirror the Collection row layout —
+    // thumbnail + card name + set on the left, Bought → Sold + ±$ + ROI %
+    // on the right. Previous text-only table left users with no visual
+    // anchor for what card they'd sold or how much they'd made.
     const sorted = [...flips].sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-    flipWrap.innerHTML = '<div class="flip-table-wrap"><table class="flip-table"><thead><tr><th>Date</th><th>Card</th><th>Set</th><th>Bought</th><th>Sold</th><th>Profit</th><th>Platform</th><th></th></tr></thead><tbody>' +
+    const _graderNames = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
+    flipWrap.innerHTML =
+      '<div class="flip-table-wrap"><table class="flip-table flip-table-v2"><thead><tr>' +
+        '<th style="width:56px"></th>' +   // thumbnail column
+        '<th>Card</th>' +
+        '<th>Set</th>' +
+        '<th class="ft-mono-head">Bought</th>' +
+        '<th class="ft-mono-head">Sold</th>' +
+        '<th class="ft-mono-head">Profit</th>' +
+        '<th class="ft-mono-head">ROI</th>' +
+        '<th>Platform</th>' +
+        '<th style="width:32px"></th>' +
+      '</tr></thead><tbody>' +
       sorted.map(f => {
         const b = num(f.buyPrice), s = num(f.sellPrice), pr = num(f.profit);
-        return `<tr>
-        <td class="ft-mono">${esc(f.date || '—')}</td>
-        <td><div class="ft-card" title="${esc(f.card)}">${esc(f.card)}</div></td>
-        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.72rem">${esc(f.set||'—')}</td>
-        <td class="ft-mono">$${b.toFixed(2)}</td>
-        <td class="ft-mono">$${s.toFixed(2)}</td>
-        <td><span class="ft-profit ${pr >= 0 ? 'pos' : 'neg'}">${pr >= 0 ? '+' : ''}$${Math.abs(pr).toFixed(2)}</span></td>
-        <td style="font-size:.72rem">${esc(f.platform || '')}</td>
-        <td><button class="ft-delete" onclick="deleteFlip(${f.id})" title="Delete">✕</button></td>
-      </tr>`;
+        const roi = b > 0 ? (pr / b) * 100 : 0;
+        const roiColor = pr >= 0 ? '#4ade80' : '#f87171';
+        // Thumbnail — mirror the Collection cell: 40x56, card-back placeholder
+        // if no image was captured (e.g. legacy flips logged before this
+        // migration, or manual "+ Log a Flip" without a portfolio row).
+        const thumb = f.img || f.imageUrl || '';
+        const thumbImg = thumb
+          ? `<img src="${esc(thumb)}" loading="lazy" alt="" style="width:40px;height:56px;object-fit:cover;border-radius:6px;background:#111;border:1px solid #1f1f1f;display:block">`
+          : `<div style="width:40px;height:56px;border-radius:6px;background:#111;border:1px solid #1f1f1f;display:flex;align-items:center;justify-content:center;font-size:1.1rem;opacity:.5">🃏</div>`;
+        // Grade badge on the thumb (only if this flip was of a graded card).
+        const _hasGrade = f.grader && f.grade != null && f.grade !== '';
+        const _gradeLabel = _hasGrade
+          ? `${_graderNames[String(f.grader).toLowerCase()] || String(f.grader).toUpperCase()} ${f.grade}`
+          : '';
+        const gradeBadge = _hasGrade
+          ? `<div title="Sold at ${esc(_gradeLabel)}" style="position:absolute;top:-4px;right:-4px;padding:1px 4px;background:linear-gradient(135deg,#f0b429,#d4af37);color:#000;font-size:.55rem;font-weight:900;border-radius:4px;line-height:1.1;letter-spacing:.02em;box-shadow:0 1px 3px rgba(0,0,0,.6);border:1px solid #000;white-space:nowrap">${esc(_gradeLabel)}</div>`
+          : '';
+        const thumbCell = `<div style="position:relative;width:40px;height:56px">${thumbImg}${gradeBadge}</div>`;
+        const cardNameHtml = _hasGrade
+          ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold);vertical-align:middle;white-space:nowrap">${esc(_gradeLabel)}</span>${esc(f.card)}`
+          : esc(f.card);
+        // Date shown as small caption under the card name so we don't need
+        // a dedicated column (saves horizontal space for the thumbnail).
+        const dateCaption = f.date ? `<div style="font-size:.62rem;color:var(--text-faint);font-weight:400;margin-top:.1rem">Sold ${esc(f.date)}</div>` : '';
+        return `<tr class="col-row">
+          <td>${thumbCell}</td>
+          <td><div class="ft-card" title="${esc(f.card)}${_hasGrade ? ' — ' + esc(_gradeLabel) : ''}">${cardNameHtml}</div>${dateCaption}</td>
+          <td style="font-size:.72rem;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.set||'—')}</td>
+          <td class="ft-mono">$${b.toFixed(2)}</td>
+          <td class="ft-mono" style="color:var(--gold)">$${s.toFixed(2)}</td>
+          <td class="ft-mono" style="color:${roiColor};font-weight:700">${pr>=0?'+':''}$${Math.abs(pr).toFixed(2)}</td>
+          <td style="font-size:.72rem;color:${roiColor};font-weight:700">${roi>=0?'+':''}${roi.toFixed(1)}%</td>
+          <td style="font-size:.72rem">${esc(f.platform || '—')}</td>
+          <td><button class="ft-delete" onclick="deleteFlip(${f.id})" title="Delete flip">✕</button></td>
+        </tr>`;
       }).join('') +
     '</tbody></table></div>';
   }
