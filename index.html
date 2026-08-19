@@ -9658,6 +9658,23 @@ async function _loadScannedCardExact(pending) {
             }
           }
         } catch(e) { /* best-effort fallback */ }
+
+        // 2026-08-19: if /api/tcg-price also missed AND we still have no live
+        // price BUT the bulk row already resolved one, use it. This covers
+        // the exact case from the video (Mega Greninja Chaos Rising #22
+        // showing $1.27 Tcgplayer_live in the bulk row, then "LIVE PRICING
+        // UNAVAILABLE" after tap because the same fallback missed twice).
+        const _stillMissing = !priceVariants.some(v => (v.market != null && v.market > 0) || (v.mid != null && v.mid > 0));
+        if (_stillMissing && pending && pending.marketPrice != null && Number(pending.marketPrice) > 0) {
+          priceVariants.push({
+            key: 'holofoil',
+            label: 'Holofoil',
+            market: Number(pending.marketPrice),
+            low:    null,
+            mid:    Number(pending.marketPrice),
+            high:   null,
+          });
+        }
       }
       const card = {
         name:   match.name,
@@ -9746,7 +9763,10 @@ async function _loadScannedCardExact(pending) {
   // fix a wrong name or pick a different printing.
   try {
     if (pending && (pending.name || pending.number)) {
-      // Reuse the image we resolved earlier for the scan-miss thumbnail
+      // Reuse the image we resolved earlier for the scan-miss thumbnail.
+      // 2026-08-19: also accept pending.imageDataUrl (base64 thumbnail of the
+      // user's scanned photo) as a final fallback so we NEVER show "Image
+      // unavailable" when the bulk row already had a picture.
       let synthImg = pending.imageUrl || '';
       if (!synthImg && typeof cards !== 'undefined' && Array.isArray(cards) && cards.length) {
         // 2026-08-18: match with leading-zero normalization + prefer
@@ -9774,6 +9794,29 @@ async function _loadScannedCardExact(pending) {
         preferred = preferred || cards[0];
         synthImg = preferred?.images?.small || preferred?.images?.large || '';
       }
+      // 2026-08-19: last-resort fallback — use the user's scanned photo as
+      // the card image. Not the ideal art (it's their photo, not the DB
+      // print), but massively better than "Image unavailable" — they scanned
+      // it, they know what it looks like, and the price panel below can
+      // still show live data from the bulk row.
+      if (!synthImg && pending.imageDataUrl) synthImg = pending.imageDataUrl;
+
+      // 2026-08-19: reuse the marketPrice from the bulk row so the detail
+      // view doesn't say "LIVE PRICING UNAVAILABLE" when the bulk scanner
+      // already got a live price (via /api/tcg-price fallback). Synthesize a
+      // single-variant price entry that loadCardUI + the price panel
+      // rendering path already understand.
+      const synthPriceVariants = [];
+      if (pending.marketPrice != null && Number(pending.marketPrice) > 0) {
+        synthPriceVariants.push({
+          key: 'holofoil',
+          label: 'Holofoil',
+          market: Number(pending.marketPrice),
+          low:    null,
+          mid:    Number(pending.marketPrice),
+          high:   null,
+        });
+      }
       const synthCard = {
         name:   pending.name || 'Scanned card',
         game:   'pokemon',
@@ -9781,8 +9824,8 @@ async function _loadScannedCardExact(pending) {
         setName: pending.setName || '',
         number:  pending.number || '',
         rarity:  pending.rarity || '',
-        priceVariants: [], // no price data — user can set Override
-        source: 'Scan (unmatched)',
+        priceVariants: synthPriceVariants,
+        source: synthPriceVariants.length ? (pending.priceSource || 'TCGPlayer') : 'Scan (unmatched)',
         updatedAt: '',
         _synthetic: true, // flag so downstream code knows this is a scan echo
       };
@@ -14568,6 +14611,16 @@ async function bulkOpenCardInLookup(rowId) {
         // Metang IR) instead of falling to fuzzy search that grabs the older
         // same-number card (sm7-94 Celestial Storm Metang Uncommon).
         groundedId: r.groundedId || '',
+        // 2026-08-19: pass through the image + price we already resolved for
+        // the bulk row. When pokemontcg.io misses (rare / new set / OCR mismatch),
+        // the detail view fell to synthetic-card w/ empty image + empty price
+        // even though the bulk row was showing both. Wire them through so the
+        // detail view can reuse them as a fallback.
+        imageUrl:      r.imageUrl     || '',
+        imageDataUrl:  r.imageDataUrl || '', // base64 thumb of the scanned photo
+        marketPrice:   (r.marketPrice != null ? r.marketPrice : null),
+        priceSource:   r.priceSource  || '', // e.g. 'Tcgplayer_live'
+        tcgplayerUrl:  r.tcgplayerUrl || '',
       });
     } else {
       // Non-Pokemon: prefill search, trigger the tab's own search, then wait
