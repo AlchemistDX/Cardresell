@@ -341,12 +341,66 @@ DEEP GRADE MODE — You have ${orderedImages.length} photos including ${edgeImag
     const prompt = isGradeMode
       ? `You are a strict, professional trading card grader trained to PSA's OFFICIAL published standards. You are analyzing ${imageDescription}.${deepGradeInstructions}
 
+═══ WHY THIS MATTERS ═══
+The user is a reseller or collector deciding whether to spend $25–$100 in
+grading fees + shipping + weeks of turnaround on this specific card,
+based on YOUR estimate. If you overgrade, they lose real money — grading
+fees on a card that comes back a 7 instead of a 9 is a $50–$400 hit per
+card. If you undergrade, they miss a real PSA 10 payday. Either error
+costs them money. They do not want to be flattered. They want the truth.
+
+Brutal honesty > polite hedging. If you cannot see the corners because
+of holder glare, say so and CAP the grade — do NOT hand out a Gem Mint
+verdict on a card whose corners you cannot inspect. If the photos are
+blurry, sleeved, glared, or otherwise compromised, your confidence MUST
+be "low" and your psa_estimate MUST reflect the WORST-case reasonable
+interpretation of what you can see, not the best-case.
+
 BEFORE grading, understand these realities:
-- PSA 10 (Gem Mint) is rare (~5% of submissions) but NOT impossible. Do not artificially demote a card that meets the published thresholds.
-- Be STRICT but ACCURATE. Under-grading a card that meets PSA 10 criteria is just as wrong as over-grading a damaged one.
+- PSA 10 (Gem Mint) is rare (~5–10% of modern submissions) but NOT impossible. Do not artificially demote a card that meets the published thresholds AND you can fully inspect.
+- Be STRICT but ACCURATE. Under-grading a card that meets PSA 10 criteria under clear photos is just as wrong as over-grading a damaged one.
 - Use the OFFICIAL PSA centering thresholds below. Do NOT invent stricter thresholds. 55/45 front is the PSA 10 threshold — not a defect.
 - Modern cards are graded MORE strictly than vintage (pre-1980). Vintage tolerates print defects, factory miscuts, and wax staining that would sink a modern card.
-- If the image quality is poor or you cannot clearly see the card, lower confidence and say so in grade_notes.
+- If the image quality is poor or you cannot clearly see the card, lower confidence AND lower the grade — do not just add a note.
+
+═══ THROUGH-PLASTIC PENALTY (mandatory) ═══
+If the card is in a sleeve, toploader, top-loader, one-touch, magnetic
+holder, screwdown, semi-rigid, penny sleeve, or graded slab (CGC/PSA/
+BGS/SGC/TAG) — in other words, if you can see plastic between the
+camera and the card:
+  • confidence MUST be "low" (never "medium", never "high")
+  • "holder_glare" OR "reflective_sleeve" MUST appear in confidence_drivers
+  • psa_estimate is CAPPED at 8 unless the card is in a fresh raw pack pull
+    quality state clearly visible through the plastic AND you can rule out
+    corner whitening / edge chipping / surface scratches
+  • If it's a SLAB (rigid case with printed label): psa_estimate reflects
+    what YOU can see raw — do NOT trust the printed grade on the label;
+    it's not what the user is asking about
+  • limiting_factor MUST start with "Card is scanned through [sleeve/
+    holder/slab] — " and explain what you cannot verify
+  • grade_label CANNOT be "Gem Mint" through plastic — use "Near Mint" or
+    lower and let the user re-scan raw for a real estimate
+  • worth_grading MUST be false when scanned through plastic (the user
+    should raw-scan first before spending grading fees)
+
+═══ HONESTY RULES (mandatory) ═══
+• If confidence is "low", psa_distribution MUST spread across at least 3
+  grades with no bucket > 55%. High-confidence-looking distributions
+  (80/15/5) on low-confidence scans are dishonest.
+• If confidence_drivers contains ANY entry other than ["none"], you MAY
+  NOT return psa_estimate=10. A card you cannot fully inspect is not a
+  Gem Mint candidate.
+• If confidence_drivers is non-empty, eye_appeal cannot be "Strong" —
+  eye appeal requires being able to see the card cleanly.
+• If you notice ANY visible defect (whitening, chipping, scratches,
+  print lines, off-centering worse than 55/45), it MUST be named
+  specifically in the relevant *_desc field AND counted in flaw_count.
+  Do not soften language ("very slight" is fine; "basically none" is not).
+• worth_grading = true ONLY when you would personally bet $30 that this
+  card comes back a PSA 9 or 10 from a real grader. If you have ANY
+  meaningful doubt, worth_grading = false.
+• Never write "Card meets all PSA 10 criteria" unless you also emit
+  psa_estimate=10. Those two must always agree.
 
 ═══ OFFICIAL PSA CENTERING THRESHOLDS (memorize these) ═══
 FRONT centering (worst axis rules — check BOTH L/R and T/B):
@@ -1165,6 +1219,75 @@ Respond ONLY with valid JSON, no explanation:
         // Preserve the model's uncertainty spread but shift the peak.
         const shift = psaEstimate - distArray[0].grade;
         distArray = distArray.map(x => ({ grade: Math.max(1, Math.min(10, x.grade + shift)), pct: x.pct }));
+      }
+
+      // ── THROUGH-PLASTIC HONESTY ENFORCEMENT ──
+      // No matter what the model says, if we detected a slab/sleeve/holder,
+      // hard-cap the outputs to reflect that we're grading through plastic.
+      // The user cannot make a money decision on a grade estimate through a
+      // reflective surface — they need to re-scan raw.
+      const throughPlastic = looksSlabbed;
+      if (throughPlastic) {
+        // Force confidence down.
+        confidence = 'low';
+        // Force worth_grading to false — through plastic is not actionable.
+        cardInfo.worth_grading = false;
+        // Cap psa_estimate at 8 (Excellent-Mint) — anything higher is
+        // dishonest when we can't see the card cleanly.
+        if (psaEstimate != null && psaEstimate > 8) {
+          console.warn('[scan] through-plastic cap applied to psa_estimate:', {
+            was: psaEstimate, capped: 8,
+          });
+          psaEstimate = 8;
+        }
+        // Force grade_label consistency with the cap.
+        if (psaEstimate != null && psaEstimate < 10 && cardInfo.grade_label === 'Gem Mint') {
+          cardInfo.grade_label = psaEstimate >= 9 ? 'Mint' : 'Near Mint-Mint';
+        }
+        // Force eye_appeal down — you can't call eye appeal Strong when the
+        // card is behind reflective plastic.
+        if (cardInfo.eye_appeal === 'Strong') cardInfo.eye_appeal = 'Average';
+        // Make sure the distribution reflects the uncertainty. If the top
+        // bucket is > 55%, flatten it — low-confidence scans should show
+        // spread, not false conviction.
+        if (distArray.length > 0 && distArray[0].pct > 55) {
+          const top = distArray[0];
+          const rest = distArray.slice(1);
+          const totalRest = rest.reduce((s, x) => s + x.pct, 0) || 1;
+          top.pct = 50;
+          const remain = 50;
+          rest.forEach(x => { x.pct = Math.round((x.pct / totalRest) * remain); });
+        }
+      }
+
+      // ── CONFIDENCE-VS-GRADE HONESTY ENFORCEMENT ──
+      // A card with impediments cannot be a PSA 10. If drivers are
+      // non-empty AND non-['none'], cap psa_estimate at 9.
+      const hasRealDrivers = Array.isArray(cardInfo.confidence_drivers)
+        && cardInfo.confidence_drivers.some(d => d && d !== 'none');
+      if (hasRealDrivers && psaEstimate === 10) {
+        console.warn('[scan] impediments present but psa_estimate=10 — capping at 9');
+        psaEstimate = 9;
+      }
+      // worth_grading backstop: if final psa_estimate < 9 or confidence is
+      // low, worth_grading must be false. Grading fees on a PSA 8 modern
+      // card are net-negative under any realistic scenario.
+      if (cardInfo.worth_grading === true) {
+        if (psaEstimate == null || psaEstimate < 9 || confidence === 'low') {
+          console.warn('[scan] worth_grading=true but grade/confidence too low — forcing false:', {
+            psaEstimate, confidence,
+          });
+          cardInfo.worth_grading = false;
+        }
+      }
+
+      // Low confidence + narrow distribution is dishonest. Spread it out.
+      if (confidence === 'low' && distArray.length > 0 && distArray[0].pct > 55) {
+        const top = distArray[0];
+        const rest = distArray.slice(1);
+        const totalRest = rest.reduce((s, x) => s + x.pct, 0) || 1;
+        top.pct = 50;
+        rest.forEach(x => { x.pct = Math.round((x.pct / totalRest) * 50); });
       }
 
       // ── LIMITING FACTOR PROSE RECONCILIATION ──
