@@ -472,6 +472,18 @@ export default async function handler(req, res) {
         if (/^(OP|ST|EB|PRB)\d{2}-\d{2,3}$/.test(num)) {
           return 'onepiece';
         }
+        // Strong YGO signal: purely-numeric 5\u201310 digit card_number is a
+        // Konami passcode. No other TCG uses this format:
+        //   Pokemon uses "057" / "057/162" / "SWSH123" / "TG12"
+        //   MTG uses "147a" / "212" (short) + always in a printed set with letters
+        //   Lorcana uses "1/204"
+        //   Sports uses year+brand+number strings
+        // 2026-08-19: This fires when Ximilar mis-tags subcategory=Pokemon on a
+        // YGO card but still returns the passcode (e.g. Invoked Baybarron =>
+        // '101305031'). YGOProDeck accepts both 8- and 9-digit passcodes.
+        if (/^\d{5,10}$/.test(num)) {
+          return 'yugioh';
+        }
         return info.card_type;
       };
       const reconciledType = reconcileTypeFromNumber(cardInfo);
