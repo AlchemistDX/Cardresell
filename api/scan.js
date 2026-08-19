@@ -2,6 +2,156 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
+
+// ── YGOProDeck grounding (extracted helper) ──
+// Mutates cardInfo in place. Returns nothing.
+// Called on BOTH the Ximilar-happy path AND the GPT-vision fallback path so
+// every YGO ID is enriched with canonical name, set, rarity, image, and
+// authoritative YGOProDeck id.
+//
+// Four tiers, most specific first:
+//   Tier 0 (NEW 2026-08-19): numeric card_number → ?id=<passcode>
+//     Konami passcodes (8-9 digits) uniquely identify a card. Ximilar returns
+//     these as card_number for YGO cards (e.g. Invoked Baybarron scan returned
+//     101305031 as card_number, and YGOProDeck ?id=101305031 resolves it
+//     correctly even though Ximilar had the name as "Invoked Babalon" and
+//     set_code as "UNKNOWN").
+//   Tier 1: printed set_code (PHRA-EN012, CORI-EN031) → cardsetsinfo.php
+//   Tier 2: exact name → cardinfo.php?name=<name>
+//   Tier 3: fuzzy name → cardinfo.php?fname=<name>
+async function groundYugiohCardInfo(cardInfo) {
+  if (!cardInfo || cardInfo.card_type !== 'yugioh') return;
+  let ygoHit = null;
+  const setCodeStrict = cardInfo.set_code &&
+    /^[A-Z0-9]{2,6}-(EN|DE|FR|IT|PT|SP|JP|KR|TC|AE)[A-Z0-9]{2,4}$/.test(cardInfo.set_code);
+
+  // Tier 0: numeric passcode lookup (Ximilar's card_number is often the passcode)
+  const rawNum = String(cardInfo.card_number || '').trim();
+  const isPurelyNumeric = /^\d{5,10}$/.test(rawNum);
+  if (isPurelyNumeric) {
+    try {
+      const ac = new AbortController();
+      const tt = setTimeout(() => ac.abort(), 4000);
+      const r = await fetch(
+        `https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${encodeURIComponent(rawNum)}`,
+        { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }
+      ).catch(() => null);
+      clearTimeout(tt);
+      if (r && r.ok) {
+        const j = await r.json().catch(() => null);
+        const card = j?.data?.[0];
+        if (card && card.name) {
+          const printing = (card.card_sets || [])[0] || {};
+          ygoHit = {
+            source: 'passcode',
+            id: card.id,
+            name: card.name,
+            set_name: printing.set_name || '',
+            set_code: printing.set_code || '',
+            set_rarity: printing.set_rarity || '',
+            image_url: card.card_images?.[0]?.image_url || null,
+            image_small: card.card_images?.[0]?.image_url_small || null,
+            tcgplayer_price: parseFloat(card.card_prices?.[0]?.tcgplayer_price) || null,
+            type: card.type || '', archetype: card.archetype || '',
+          };
+        }
+      }
+    } catch (e) { console.warn('YGO passcode grounding failed:', e?.message || e); }
+  }
+
+  // Tier 1: set_code lookup
+  if (!ygoHit && setCodeStrict) {
+    try {
+      const ac = new AbortController();
+      const tt = setTimeout(() => ac.abort(), 4000);
+      const r = await fetch(
+        `https://db.ygoprodeck.com/api/v7/cardsetsinfo.php?setcode=${encodeURIComponent(cardInfo.set_code)}`,
+        { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }
+      ).catch(() => null);
+      clearTimeout(tt);
+      if (r && r.ok) {
+        const j = await r.json().catch(() => null);
+        if (j && j.name && j.set_name) {
+          ygoHit = {
+            source: 'set_code',
+            id: j.id, name: j.name, set_name: j.set_name,
+            set_code: j.set_code || cardInfo.set_code,
+            set_rarity: j.set_rarity,
+          };
+        }
+      }
+    } catch (e) { console.warn('YGO set_code grounding failed:', e?.message || e); }
+  }
+
+  // Tier 2 & 3: name lookup (also runs after Tier 0/1 to fill image_url,
+  // since cardsetsinfo.php doesn't include images)
+  const nameForLookup = ygoHit?.name || cardInfo.card_name;
+  const needsImage = !ygoHit?.image_url;
+  if (nameForLookup && needsImage) {
+    try {
+      const ac = new AbortController();
+      const tt = setTimeout(() => ac.abort(), 4000);
+      const exactUrl = `https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(nameForLookup)}`;
+      let r = await fetch(exactUrl, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
+      let j = (r && r.ok) ? await r.json().catch(() => null) : null;
+      if (!j?.data?.length && !ygoHit) {
+        const fuzzyUrl = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(nameForLookup)}&num=5&offset=0`;
+        r = await fetch(fuzzyUrl, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
+        j = (r && r.ok) ? await r.json().catch(() => null) : null;
+      }
+      clearTimeout(tt);
+      if (j?.data?.length) {
+        let card = ygoHit?.name
+          ? j.data.find(c => c.name === ygoHit.name) || j.data[0]
+          : j.data[0];
+        let printing = null;
+        if (card.card_sets && card.card_sets.length) {
+          if (cardInfo.set_code) {
+            printing = card.card_sets.find(s =>
+              String(s.set_code || '').toUpperCase() === String(cardInfo.set_code).toUpperCase()
+            );
+          }
+          printing = printing || card.card_sets[0];
+        }
+        if (!ygoHit) ygoHit = { source: 'name' };
+        ygoHit.id       = ygoHit.id       || card.id;
+        ygoHit.name     = ygoHit.name     || card.name;
+        ygoHit.set_name = ygoHit.set_name || printing?.set_name || '';
+        ygoHit.set_code = ygoHit.set_code || printing?.set_code || cardInfo.set_code || '';
+        ygoHit.set_rarity = ygoHit.set_rarity || printing?.set_rarity || '';
+        ygoHit.image_url  = ygoHit.image_url || card.card_images?.[0]?.image_url || null;
+        ygoHit.image_small= ygoHit.image_small || card.card_images?.[0]?.image_url_small || null;
+        ygoHit.tcgplayer_price = ygoHit.tcgplayer_price != null ? ygoHit.tcgplayer_price : (parseFloat(card.card_prices?.[0]?.tcgplayer_price) || null);
+        ygoHit.type       = ygoHit.type       || card.type || '';
+        ygoHit.archetype  = ygoHit.archetype  || card.archetype || '';
+      }
+    } catch (e) {
+      console.warn('YGO name grounding failed:', e?.message || e);
+    }
+  }
+
+  // Apply the override
+  if (ygoHit) {
+    const before = { name: cardInfo.card_name, set: cardInfo.set_name };
+    if (ygoHit.name)        cardInfo.card_name = ygoHit.name;
+    if (ygoHit.set_name)    cardInfo.set_name  = ygoHit.set_name;
+    if (ygoHit.set_code)    cardInfo.set_code  = ygoHit.set_code;
+    if (ygoHit.set_rarity && !cardInfo.rarity) cardInfo.rarity = ygoHit.set_rarity;
+    if (ygoHit.image_url)   cardInfo.image_url = ygoHit.image_url;
+    if (ygoHit.image_small) cardInfo.image_small = ygoHit.image_small;
+    if (ygoHit.tcgplayer_price != null) cardInfo._ygoprodeck_tcgplayer_price = ygoHit.tcgplayer_price;
+    cardInfo.grounded = true;
+    cardInfo.grounded_id = ygoHit.id ? String(ygoHit.id) : null;
+    cardInfo._ygo_grounded_by = ygoHit.source;
+    // Restore confidence — grounding via passcode/set_code is high-confidence
+    if ((ygoHit.source === 'passcode' || ygoHit.source === 'set_code') && cardInfo.confidence === 'low') {
+      cardInfo.confidence = 'high';
+    }
+    console.log(`[scan] YGO grounded (${ygoHit.source}): "${before.name}" → "${cardInfo.card_name}" set=${cardInfo.set_name} img=${!!ygoHit.image_url}`);
+  } else if (cardInfo.card_name) {
+    console.log(`[scan] YGO grounding: no match for "${cardInfo.card_name}" set_code="${cardInfo.set_code || ''}" number="${cardInfo.card_number || ''}"`);
+  }
+}
 // /api/scan — Ximilar-first card identification (GPT-5 fallback)
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
@@ -353,6 +503,24 @@ export default async function handler(req, res) {
         }
       }
 
+      // 2026-08-19: Run YGO grounding on Ximilar happy path (was previously only
+      // hit on GPT fallback). Ximilar's YGO data is often incomplete/wrong:
+      //   - card_name occasionally misspelled ("Invoked Babalon" vs "Baybarron")
+      //   - card_number returned as Konami passcode (101305031) not printed set code
+      //   - set_code/set_name frequently "UNKNOWN"
+      // YGOProDeck grounding (passcode → set_code → name → fuzzy) fixes all of these.
+      if (cardInfo.card_type === 'yugioh') {
+        await groundYugiohCardInfo(cardInfo);
+      }
+      // Also ground candidates (if any) for the picker path
+      if (Array.isArray(xim.candidates)) {
+        for (const c of xim.candidates) {
+          if (c && c.card_type === 'yugioh') {
+            await groundYugiohCardInfo(c);
+          }
+        }
+      }
+
       // Multi-candidate picker path
       if (xim.needsPicker && Array.isArray(xim.candidates) && xim.candidates.length >= 2) {
         await refundCredits();
@@ -370,11 +538,14 @@ export default async function handler(req, res) {
           image_quality: 'ok', glare_regions: [], retake_hint: '',
           card_name: cardInfo.card_name, card_number: cardInfo.card_number,
           set_name: cardInfo.set_name, set_code: cardInfo.set_code,
-          grounded: true, grounded_id: cardInfo._grounded_id,
+          grounded: true, grounded_id: cardInfo.grounded_id || cardInfo._grounded_id,
           hp: cardInfo.hp, card_type: cardInfo.card_type,
           is_japanese: cardInfo.is_japanese, jp_name: cardInfo.jp_name,
           rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year,
+          image_url: cardInfo.image_url || null,
+          image_small: cardInfo.image_small || null,
           source: 'ximilar',
+          ygo_grounded_by: cardInfo._ygo_grounded_by || null,
         });
       }
 
@@ -391,17 +562,22 @@ export default async function handler(req, res) {
           await setKVWithTTL(kvUrl, kvToken, `scan:${scanId}`, JSON.stringify(record), 3600);
         } catch(e) { /* non-fatal */ }
       }
+      // Recompute confidence norm in case grounding restored it from 'low' → 'high'
+      const finalConfNorm = cardInfo.confidence || idConfNorm;
       return res.status(200).json({
         success: true, mode: 'identify', scan_id: scanId,
-        confidence: idConfNorm, image_quality: 'ok',
+        confidence: finalConfNorm, image_quality: 'ok',
         glare_regions: [], retake_hint: '',
         card_name: cardInfo.card_name, card_number: cardInfo.card_number,
         set_name: cardInfo.set_name, set_code: cardInfo.set_code,
-        grounded: true, grounded_id: cardInfo._grounded_id,
+        grounded: true, grounded_id: cardInfo.grounded_id || cardInfo._grounded_id,
         hp: cardInfo.hp, card_type: cardInfo.card_type,
         is_japanese: cardInfo.is_japanese, jp_name: cardInfo.jp_name,
         rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year,
+        image_url: cardInfo.image_url || null,
+        image_small: cardInfo.image_small || null,
         source: 'ximilar',
+        ygo_grounded_by: cardInfo._ygo_grounded_by || null,
       });
     }
     // else: fall through to GPT-5 vision (unchanged path below)
@@ -1033,129 +1209,12 @@ Respond ONLY with valid JSON, no explanation:
       }
     }
 
-    // ── Yu-Gi-Oh grounding pass (YGOProDeck) ──
-    // YGOProDeck is a free unauth'd API with the full YGO card database.
-    // 2026-08-19: Ximilar is now the sole ID source (GPT fallback killed),
-    // so this pass runs on every Ximilar YGO ID to enrich with:
-    //   - canonical card_name (defeats OCR misreads)
-    //   - set_name / rarity / card_images URL (fills the missing image gap)
-    //   - grounded_id (YGOProDeck internal id, useful for future price feeds)
-    //
-    // Three tiers of grounding, most specific first:
-    //   Tier 1: exact set_code (e.g. "PHRA-EN012") -> cardsetsinfo.php
-    //   Tier 2: exact card name -> cardinfo.php?name=<name>
-    //   Tier 3: fuzzy card name -> cardinfo.php?fname=<name> (best-1 pick)
-    //
-    // Endpoints:
-    //   /api/v7/cardsetsinfo.php?setcode=PHRA-EN012
-    //     -> {id, name, set_name, set_code, set_rarity, set_price}
-    //   /api/v7/cardinfo.php?name=<exact>
-    //     -> {data: [{id, name, type, race, archetype, card_sets:[...],
-    //                 card_images:[{image_url, image_url_small, ...}],
-    //                 card_prices:[{tcgplayer_price, ebay_price, ...}]}]}
+    // ── Yu-Gi-Oh grounding pass (YGOProDeck) — extracted to groundYugiohCardInfo()
+    //   at top of file 2026-08-19 so it runs on BOTH the Ximilar happy path AND
+    //   this GPT-fallback path. Also added Tier 0 (numeric passcode) which resolves
+    //   Ximilar's card_number (e.g. 101305031) directly via YGOProDeck ?id=<passcode>.
     if (!isGradeMode && cardInfo.card_type === 'yugioh') {
-      let ygoHit = null;
-      const setCodeStrict = cardInfo.set_code &&
-        /^[A-Z0-9]{2,6}-(EN|DE|FR|IT|PT|SP|JP|KR|TC|AE)[A-Z0-9]{2,4}$/.test(cardInfo.set_code);
-
-      // Tier 1: set_code lookup (most reliable)
-      if (setCodeStrict) {
-        try {
-          const ac = new AbortController();
-          const tt = setTimeout(() => ac.abort(), 4000);
-          const r = await fetch(
-            `https://db.ygoprodeck.com/api/v7/cardsetsinfo.php?setcode=${encodeURIComponent(cardInfo.set_code)}`,
-            { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }
-          ).catch(() => null);
-          clearTimeout(tt);
-          if (r && r.ok) {
-            const j = await r.json().catch(() => null);
-            if (j && j.name && j.set_name) {
-              ygoHit = {
-                source: 'set_code',
-                id: j.id,
-                name: j.name,
-                set_name: j.set_name,
-                set_code: j.set_code || cardInfo.set_code,
-                set_rarity: j.set_rarity,
-              };
-            }
-          }
-        } catch (e) { console.warn('YGO set_code grounding failed:', e?.message || e); }
-      }
-
-      // Tier 2 & 3: name-based lookup (for image + full info, even if Tier 1 hit)
-      // We ALSO run this after a Tier 1 hit because cardsetsinfo.php doesn't
-      // include card_images. If Tier 1 gave us a canonical name, use it for
-      // the exact-name query; otherwise use Ximilar's card_name.
-      const nameForLookup = ygoHit?.name || cardInfo.card_name;
-      if (nameForLookup) {
-        try {
-          const ac = new AbortController();
-          const tt = setTimeout(() => ac.abort(), 4000);
-          // Exact name first (returns 1 card + full data)
-          const exactUrl = `https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(nameForLookup)}`;
-          let r = await fetch(exactUrl, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
-          let j = (r && r.ok) ? await r.json().catch(() => null) : null;
-          // Fallback to fuzzy if exact miss
-          if (!j?.data?.length && !ygoHit) {
-            const fuzzyUrl = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(nameForLookup)}&num=5&offset=0`;
-            r = await fetch(fuzzyUrl, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
-            j = (r && r.ok) ? await r.json().catch(() => null) : null;
-          }
-          clearTimeout(tt);
-
-          if (j?.data?.length) {
-            // If we had a Tier 1 hit, only accept a card row matching that name
-            let card = ygoHit?.name
-              ? j.data.find(c => c.name === ygoHit.name) || j.data[0]
-              : j.data[0];
-
-            // Pick the printing matching the set_code we have, else first printing
-            let printing = null;
-            if (card.card_sets && card.card_sets.length) {
-              if (cardInfo.set_code) {
-                printing = card.card_sets.find(s =>
-                  String(s.set_code || '').toUpperCase() === String(cardInfo.set_code).toUpperCase()
-                );
-              }
-              printing = printing || card.card_sets[0];
-            }
-
-            if (!ygoHit) ygoHit = { source: 'name' };
-            ygoHit.id       = ygoHit.id       || card.id;
-            ygoHit.name     = ygoHit.name     || card.name;
-            ygoHit.set_name = ygoHit.set_name || printing?.set_name || '';
-            ygoHit.set_code = ygoHit.set_code || printing?.set_code || cardInfo.set_code || '';
-            ygoHit.set_rarity = ygoHit.set_rarity || printing?.set_rarity || '';
-            ygoHit.image_url  = card.card_images?.[0]?.image_url || null;
-            ygoHit.image_small= card.card_images?.[0]?.image_url_small || null;
-            ygoHit.tcgplayer_price = parseFloat(card.card_prices?.[0]?.tcgplayer_price) || null;
-            ygoHit.type       = card.type || '';
-            ygoHit.archetype  = card.archetype || '';
-          }
-        } catch (e) {
-          console.warn('YGO name grounding failed:', e?.message || e);
-        }
-      }
-
-      // Apply the ground-truth override
-      if (ygoHit) {
-        const before = { name: cardInfo.card_name, set: cardInfo.set_name };
-        if (ygoHit.name)       cardInfo.card_name = ygoHit.name;
-        if (ygoHit.set_name)   cardInfo.set_name  = ygoHit.set_name;
-        if (ygoHit.set_code)   cardInfo.set_code  = ygoHit.set_code;
-        if (ygoHit.set_rarity && !cardInfo.rarity) cardInfo.rarity = ygoHit.set_rarity;
-        if (ygoHit.image_url)  cardInfo.image_url = ygoHit.image_url;
-        if (ygoHit.image_small) cardInfo.image_small = ygoHit.image_small;
-        if (ygoHit.tcgplayer_price != null) cardInfo._ygoprodeck_tcgplayer_price = ygoHit.tcgplayer_price;
-        cardInfo.grounded = true;
-        cardInfo.grounded_id = ygoHit.id ? String(ygoHit.id) : null;
-        cardInfo._ygo_grounded_by = ygoHit.source;
-        console.log(`[scan] YGO grounded (${ygoHit.source}): "${before.name}" → "${cardInfo.card_name}" set=${cardInfo.set_name} img=${!!ygoHit.image_url}`);
-      } else if (cardInfo.card_name) {
-        console.log(`[scan] YGO grounding: no match for "${cardInfo.card_name}" set_code="${cardInfo.set_code || ''}"`);
-      }
+      await groundYugiohCardInfo(cardInfo);
     }
 
     if (isGradeMode) {
