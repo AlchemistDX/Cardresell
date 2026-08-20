@@ -102,12 +102,29 @@ export default async function handler(req, res) {
       });
     }
 
-    if (r && r.ok && r.market != null) {
+    // 2026-08-19: Guard against TCGplayer's $99,999 "no data" sentinel.
+    // TCGplayer uses 99999 as a placeholder when a product has no active
+    // listings / market data yet (common for brand-new sets before pricing
+    // stabilizes). Passing it through as if it were a real market price
+    // makes the app look broken — caught in bulk-scan test 2026-08-19
+    // where a One Piece Luffy card showed "$99,999.00" as the market price.
+    if (r && r.ok && r.market != null && !_isSentinelPrice(r.market)) {
+      // 2026-08-19: Low-lister guard. TCGcsv's "market" field is the most
+      // recent sale price, which can be distorted by a single ultra-low
+      // lister ($0.01) even when the actual market range is much higher.
+      // If market is dramatically below mid (< 25% of mid), prefer mid —
+      // it's the median and is more representative of what the card sells
+      // for. Caught in bulk-scan test 2026-08-19 where Lorcana Elsa
+      // showed "$0.07" as market while mid was $0.15 and high was $2.29.
+      let displayMarket = r.market;
+      if (r.mid != null && r.mid > 0 && r.market < r.mid * 0.25) {
+        displayMarket = r.mid;
+      }
       const data = {
-        market: r.market,
-        low:    r.low  ?? (r.market * 0.85),
-        mid:    r.mid  ?? r.market,
-        high:   r.high ?? (r.market * 1.15),
+        market: displayMarket,
+        low:    r.low  ?? (displayMarket * 0.85),
+        mid:    r.mid  ?? displayMarket,
+        high:   r.high ?? (displayMarket * 1.15),
         source: 'tcgcsv',
         game,
         categoryId: r.categoryId ?? categoryId,
@@ -253,10 +270,16 @@ export default async function handler(req, res) {
           const normal = prices.find(p => p.printingType === 'Normal');
           const best_price = holofoil || normal || prices[0];
           if (best_price) {
-            market = best_price.marketPrice ?? market;
-            low    = best_price.lowPrice    ?? low;
-            mid    = best_price.midPrice    ?? mid;
-            high   = best_price.highPrice   ?? high;
+            // 2026-08-19: filter sentinels here too — mpapi returns 99999
+            // for products TCGplayer indexes but hasn't priced.
+            const bpm = best_price.marketPrice;
+            const bpl = best_price.lowPrice;
+            const bpi = best_price.midPrice;
+            const bph = best_price.highPrice;
+            if (bpm != null && !_isSentinelPrice(bpm)) market = bpm;
+            if (bpl != null && !_isSentinelPrice(bpl)) low    = bpl;
+            if (bpi != null && !_isSentinelPrice(bpi)) mid    = bpi;
+            if (bph != null && !_isSentinelPrice(bph)) high   = bph;
           }
         }
       } catch(e) {}
@@ -282,7 +305,17 @@ export default async function handler(req, res) {
   }
 }
 
-// ── Free-API price fallbacks (2026-08-19) ───────────────────────────────
+// 2026-08-19: TCGplayer uses these sentinel values to mean "no data".
+// Any of them appearing in a price field should be treated as null.
+const _PRICE_SENTINELS = new Set([99999, 999999, 99999.99]);
+function _isSentinelPrice(n) {
+  if (n == null) return false;
+  const v = Number(n);
+  if (!Number.isFinite(v)) return false;
+  return _PRICE_SENTINELS.has(v) || v >= 99999;
+}
+
+// ── Free-API price fallbacks (2026-08-19) ─────────────────────────────────
 async function _timedFetch(url, ms = 4000) {
   try {
     const ac = new AbortController();

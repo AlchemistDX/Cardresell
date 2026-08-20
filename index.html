@@ -10228,6 +10228,43 @@ async function _loadScannedCardExact(pending) {
           mid:    Number(pending.marketPrice),
           high:   null,
         });
+      } else {
+        // 2026-08-19 (post bulk-scan test): last-ditch price fetch — when
+        // PokemonTCG.io misses AND the bulk row didn't pass a marketPrice
+        // through (e.g. Mega Greninja ex from Chaos Rising: brand-new set,
+        // not yet indexed by pokemontcg.io, and the bulk row's price fetch
+        // returned late or was skipped), hit /api/tcg-price directly with
+        // the scanned metadata. This is the same endpoint the bulk row uses
+        // so if TCGcsv has the card we'll get a price here too.
+        try {
+          const params = new URLSearchParams({
+            name: pending.name || '',
+            game: 'pokemon',
+          });
+          if (pending.number)  params.set('number', pending.number);
+          if (pending.setName) params.set('set', pending.setName);
+          const pRes = await fetch(`/api/tcg-price?${params.toString()}`, {
+            headers: { 'x-cardresell-source': 'synth-fallback' },
+          });
+          if (pRes.ok) {
+            const pJson = await pRes.json();
+            if (pJson && pJson.market != null && Number(pJson.market) > 0) {
+              synthPriceVariants.push({
+                key: 'holofoil',
+                label: pJson.variant === 'foil' ? 'Foil' : (pJson.variant || 'Market'),
+                market: Number(pJson.market),
+                low:    pJson.low  != null ? Number(pJson.low)  : null,
+                mid:    pJson.mid  != null ? Number(pJson.mid)  : Number(pJson.market),
+                high:   pJson.high != null ? Number(pJson.high) : null,
+              });
+              // Also promote the tcgcsv image + url if we didn't have one
+              if (!synthImg && pJson.imageUrl) synthImg = pJson.imageUrl;
+              if (!pending.tcgplayerUrl && pJson.url) pending = { ...pending, tcgplayerUrl: pJson.url };
+            }
+          }
+        } catch(pxErr) {
+          console.warn('[_loadScannedCardExact] synth price fetch failed:', pxErr);
+        }
       }
       const synthCard = {
         name:   pending.name || 'Scanned card',
