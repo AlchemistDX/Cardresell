@@ -126,9 +126,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  const name  = (req.query.name  || req.query.q || '').trim();
-  const grade = (req.query.grade || '').trim();
-  const game  = (req.query.game  || 'pokemon').trim().toLowerCase();
+  const name   = (req.query.name   || req.query.q || '').trim();
+  const grade  = (req.query.grade  || '').trim();
+  const game   = (req.query.game   || 'pokemon').trim().toLowerCase();
+  const number = (req.query.number || '').trim();
+  const setStr = (req.query.set    || '').trim();
   if (!name) return res.status(400).json({ error: 'name required' });
 
   const token = process.env.PRICECHARTING_API_TOKEN;
@@ -147,7 +149,7 @@ export default async function handler(req, res) {
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
-  const cacheKey = `v1|${game}|${name}|${grade}`.toLowerCase();
+  const cacheKey = `v2|${game}|${name}|${setStr}|${number}|${grade}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -155,17 +157,26 @@ export default async function handler(req, res) {
     return res.status(200).json({ ...cached, cached: true, cacheAgeSec });
   }
 
-  // Build query — PriceCharting fuzzy-matches, so we send name + game hint.
-  // "Charizard base set" works better than "Charizard" alone.
+  // Build query — PriceCharting fuzzy-matches, so we send name + set + number
+  // + game hint. Card number is CRITICAL for sports ("Michael Jordan" alone
+  // matches Funko POPs) and for TCGs with reprints across sets.
   const gameHint =
     game === 'pokemon'   ? 'pokemon' :
     game === 'mtg' || game === 'magic' ? 'magic' :
     game === 'yugioh'    ? 'yugioh' :
     game === 'lorcana'   ? 'lorcana' :
     game === 'onepiece'  ? 'one piece' :
-    game === 'sports'    ? '' : // sports queries usually include year/brand already
+    game === 'sports'    ? '' : // sports queries include year/brand already
     '';
-  const q = gameHint ? `${name} ${gameHint}` : name;
+
+  // For sports, the caller (frontend) usually passes name = "MJ 1986 Fleer"
+  // already — don't re-append the year. For TCGs, set + number give PC the
+  // extra signal it needs to pick the right printing.
+  const qParts = [name];
+  if (setStr && !name.toLowerCase().includes(setStr.toLowerCase())) qParts.push(setStr);
+  if (number) qParts.push(String(number).replace(/^#/, ''));
+  if (gameHint && !name.toLowerCase().includes(gameHint)) qParts.push(gameHint);
+  const q = qParts.join(' ');
   const url = `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
 
   try {

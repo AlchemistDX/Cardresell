@@ -4473,7 +4473,7 @@ let _compsAbortCard = null; // track which card we're fetching for
 //   Row 1 (always shows if TCG resolved): TCGplayer market · range · updated
 //   Row 2 (only if eBay has ≥2 comps):    eBay sold count + median + confidence pill
 // eBay currently 403s a lot from datacenter IPs; TCG is our source of truth.
-function renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) {
+function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
   const parts = [];
 
   if (tcg && tcg.market != null && tcg.market > 0) {
@@ -4499,7 +4499,35 @@ function renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) {
     );
   }
 
-  // Row 2: eBay sold comps overlay (only when we actually got comps)
+  // Row 2: PriceCharting guide value — the reliable graded-price source.
+  // Renders only when PC returned a real price for the requested grade.
+  // 2026-08-19: eBay is 100% 403'd from Vercel IPs; PC is the primary source.
+  if (pc && pc.median != null && pc.source === 'pricecharting') {
+    const conf = pc.confidence || 'medium';
+    const pillMap = {
+      high:   { bg: 'rgba(34,197,94,.15)',  border: 'rgba(34,197,94,.55)',  color: '#4ade80', label: 'High' },
+      medium: { bg: 'rgba(245,158,11,.15)', border: 'rgba(245,158,11,.55)', color: '#fbbf24', label: 'Medium' },
+      low:    { bg: 'rgba(239,68,68,.15)',  border: 'rgba(239,68,68,.55)',  color: '#f87171', label: 'Low' },
+    };
+    const pill = pillMap[conf] || pillMap.medium;
+    const pcUrl = pc.url
+      ? `<a href="${pc.url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">PriceCharting ↗</a>`
+      : 'PriceCharting';
+    const matched = pc.productName
+      ? ` <span style="opacity:.6;font-size:.68rem">· ${pc.productName}</span>`
+      : '';
+    parts.push(
+      `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.3rem;font-size:.78rem;line-height:1.4">` +
+        `<span class="trust-pill" style="background:${pill.bg};border:1px solid ${pill.border};color:${pill.color};font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">${pill.label}</span>` +
+        `<span style="opacity:.85">Guide value</span>` +
+        ` <strong style="color:var(--gold)">$${Number(pc.median).toFixed(2)}</strong>` +
+        ` · ${pcUrl}` +
+        matched +
+      `</div>`
+    );
+  }
+
+  // Row 3: eBay sold comps overlay (only when we actually got comps)
   if (ebay && ebay.count >= 2 && ebay.median != null) {
     const conf = ebay.confidence || 'insufficient';
     const reasons = (ebay.confidenceReasons || []).join(' · ');
@@ -4538,9 +4566,10 @@ function renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) {
         (reasons ? `<span style="opacity:.6;font-size:.68rem;width:100%;margin-top:.15rem">${reasons}</span>` : '') +
       `</div>`
     );
-  } else if (fallbackEbayUrl) {
-    // Discreet eBay link when comps are unavailable. Neutral wording —
-    // don't read as "this card doesn't sell".
+  } else if (fallbackEbayUrl && !(pc && pc.median != null)) {
+    // Discreet eBay link when neither eBay comps nor PC price are available.
+    // If PC returned a price, we don't need the fallback — the user already
+    // has a reliable number above.
     parts.push(
       `<div style="margin-top:.3rem;font-size:.72rem">` +
         `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:none;opacity:.75">View sold comps on eBay ↗</a>` +
@@ -4835,13 +4864,28 @@ async function fetchAndApplySoldComps(forceRefresh) {
   const ebayParams = new URLSearchParams({ q, limit: '15' });
   if (grade) ebayParams.set('grade', grade);
 
+  // 2026-08-19: PriceCharting fetch — reliable graded/raw guide value.
+  // Runs in parallel with TCG + eBay. PC replaces the fallback "View sold
+  // comps on eBay ↗" link the moment it returns a real number, and its
+  // price is what feeds the priceOverride when the user hasn't typed one.
+  // Query construction: name + set + number gives PC the best fuzzy-match
+  // signal. Card number is critical for sports cards where "Michael Jordan"
+  // alone can match a Funko POP.
+  const pcParams = new URLSearchParams({ name: card.name });
+  if (card.number)  pcParams.set('number', card.number);
+  if (card.setName) pcParams.set('set', card.setName);
+  if (card.game)    pcParams.set('game', card.game);
+  if (grade)        pcParams.set('grade', grade);
+
   const clientTimeoutMs = 10000;
   const _clientController = new AbortController();
   const _clientTimeoutId  = setTimeout(() => _clientController.abort(), clientTimeoutMs);
 
-  const tcgP  = fetch('/api/tcg-price?'  + tcgParams.toString(),  { signal: _clientController.signal })
+  const tcgP  = fetch('/api/tcg-price?'      + tcgParams.toString(),  { signal: _clientController.signal })
     .then(r => r.ok ? r.json() : null).catch(() => null);
-  const ebayP = fetch('/api/ebay-sold?'  + ebayParams.toString(), { signal: _clientController.signal })
+  const ebayP = fetch('/api/ebay-sold?'      + ebayParams.toString(), { signal: _clientController.signal })
+    .then(r => r.ok ? r.json() : null).catch(() => null);
+  const pcP   = fetch('/api/pricecharting?'  + pcParams.toString(),   { signal: _clientController.signal })
     .then(r => r.ok ? r.json() : null).catch(() => null);
 
   // Grade opportunity: only meaningful for raw scans (currentGraderPill = 'no').
@@ -4853,9 +4897,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
         .then(r => r.ok ? r.json() : null).catch(() => null)
     : Promise.resolve(null);
 
-  let tcg, ebay, gradeOpp;
+  let tcg, ebay, pc, gradeOpp;
   try {
-    [tcg, ebay, gradeOpp] = await Promise.all([tcgP, ebayP, gradeOppP]);
+    [tcg, ebay, pc, gradeOpp] = await Promise.all([tcgP, ebayP, pcP, gradeOppP]);
   } finally {
     clearTimeout(_clientTimeoutId);
   }
@@ -4872,16 +4916,37 @@ async function fetchAndApplySoldComps(forceRefresh) {
     window._rawMedianCache[cardKey] = ebay.median;
   }
 
-  // Populate priceOverride with best available price when user hasn't typed one
+  // Populate priceOverride with best available price when user hasn't typed one.
+  // 2026-08-19: Priority reordered because eBay is unreliable (403s) and PC is
+  // now our primary graded/guide source.
+  //   For a GRADED request (grade param set):
+  //     PC (has this grade tier) > eBay comps (≥2) > TCG market
+  //   For a RAW request:
+  //     eBay comps (≥2) > PC (raw/loose) > TCG market
+  //   TCG stays as the always-there floor for raw — it's live market data.
   const ovField = document.getElementById('priceOverride');
   const currentGraderPill = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const gradedRequest     = !!grade;
   const isRawContext      = currentGraderPill === 'no' && !gradedRequest;
-  if (ovField && isRawContext && (!ovField.value || forceRefresh)) {
-    // Prefer eBay median when we have real comps (≥2), otherwise TCG market
-    const bestPrice = (ebay && ebay.count >= 2 && ebay.median != null)
-      ? ebay.median
-      : (tcg && tcg.market != null ? tcg.market : null);
+  if (ovField && (isRawContext || gradedRequest) && (!ovField.value || forceRefresh)) {
+    let bestPrice = null;
+    if (gradedRequest) {
+      if (pc && pc.median != null && pc.source === 'pricecharting') {
+        bestPrice = pc.median;
+      } else if (ebay && ebay.count >= 2 && ebay.median != null) {
+        bestPrice = ebay.median;
+      }
+    } else {
+      // Raw context — eBay comps are usually the tightest signal when they exist,
+      // then PC's guide value, then TCG market.
+      if (ebay && ebay.count >= 2 && ebay.median != null) {
+        bestPrice = ebay.median;
+      } else if (pc && pc.median != null && pc.source === 'pricecharting') {
+        bestPrice = pc.median;
+      } else if (tcg && tcg.market != null) {
+        bestPrice = tcg.market;
+      }
+    }
     if (bestPrice != null) {
       ovField.value = Number(bestPrice).toFixed(2);
       calc();
@@ -4892,13 +4957,18 @@ async function fetchAndApplySoldComps(forceRefresh) {
   window._lastGradeOpportunity = gradeOpp;
   window._lastGradeOpportunityCard = cardKey;
 
-  // Render composed price status (TCG line always, eBay overlay when available)
+  // Render composed price status (TCG line always, PC + eBay overlays when available)
   // + grade opportunity pill (silent if not worth grading)
-  statusTxt.innerHTML = renderPriceStatus({ tcg, ebay, fallbackEbayUrl }) + renderGradeOpportunity(gradeOpp);
+  statusTxt.innerHTML = renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) + renderGradeOpportunity(gradeOpp);
   statusEl.style.display = 'flex';
 
-  // If neither source resolved, show a graceful fallback link (still keep grade pill if it fired)
-  if (!tcg?.market && !(ebay?.count >= 2)) {
+  // If NO source resolved anything usable, show a graceful fallback link.
+  // (PC counts as "resolved" when median is present and source is pricecharting;
+  // an "unconfigured" or "insufficient" PC response is treated as no data.)
+  const pcHasPrice   = pc && pc.median != null && pc.source === 'pricecharting';
+  const ebayHasComps = ebay && ebay.count >= 2 && ebay.median != null;
+  const tcgHasMarket = tcg && tcg.market != null && tcg.market > 0;
+  if (!tcgHasMarket && !ebayHasComps && !pcHasPrice) {
     statusTxt.innerHTML =
       `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View sold comps on eBay →</a>` +
       renderGradeOpportunity(gradeOpp);
