@@ -50,8 +50,10 @@ export default async function handler(req, res) {
 
   if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
-  // Cache key bumped v2→v3 to namespace by game (Lorcana "Belle" ≠ Pokemon "Belle")
-  const cacheKey = `v3|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // Cache key bumped v3→v4 (2026-08-19) to invalidate cached $99,999 sentinel
+  // entries + cached market-below-mid low-lister prices from the previous
+  // pre-guard code path. Same namespacing rules as v3.
+  const cacheKey = `v4|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
