@@ -3555,12 +3555,15 @@ function _persistLastIdentified(pending) {
 function _persistLastLoadedCard(card) {
   if (!card) return;
   try {
-    // Save the minimum shape needed to re-load: name, number/id, game, image, prices.
+    // pokemontcg.io cards have card.set as an object; unwrap it.
+    const setName = (card.set && typeof card.set === 'object' && card.set.name)
+      ? card.set.name
+      : (typeof card.set === 'string' ? card.set : (card.setName || card.set_name || ''));
     const snapshot = {
       name:     card.name || '',
       number:   card.number || card.card_number || '',
-      setName:  card.set || card.setName || card.set_name || '',
-      setCode:  card.setCode || card.set_code || '',
+      setName:  setName,
+      setCode:  card.setCode || card.set_code || (card.set && card.set.id) || '',
       id:       card.id || card.groundedId || '',
       game:     card.game || activeGame || 'pokemon',
       images:   card.images || null,
@@ -3569,8 +3572,10 @@ function _persistLastLoadedCard(card) {
       _fullCard: card,       // stash the whole thing for exact re-render
       _savedAt: Date.now(),
     };
-    localStorage.setItem(_CR_LAST_CARD_KEY, JSON.stringify(snapshot));
-  } catch(e) { /* ignore */ }
+    const json = JSON.stringify(snapshot);
+    localStorage.setItem(_CR_LAST_CARD_KEY, json);
+    console.log('[persistLastCard] saved', snapshot.name, snapshot.number, '(' + json.length + 'B)');
+  } catch(e) { console.warn('[persistLastCard] failed:', e); }
 }
 
 function _clearLastLoadedCard() {
@@ -3580,17 +3585,25 @@ function _clearLastLoadedCard() {
   } catch(e) {}
 }
 
+// Set to true while restore is running so other code paths know not to
+// clobber the just-restored card (defense in depth).
+window._crRestoreInFlight = false;
+
 function _restoreLastLoadedCard() {
   try {
     const raw = localStorage.getItem(_CR_LAST_CARD_KEY);
+    console.log('[restoreLastCard] key=' + _CR_LAST_CARD_KEY + ' raw=' + (raw ? (raw.length + 'B') : 'null'));
     if (!raw) return false;
     const snap = JSON.parse(raw);
-    if (!snap || !snap.name) return false;
+    if (!snap || !snap.name) { console.log('[restoreLastCard] no name in snap'); return false; }
     // Only auto-restore cards saved in the last 7 days.
     if (snap._savedAt && (Date.now() - snap._savedAt) > 7*24*3600*1000) {
       _clearLastLoadedCard();
       return false;
     }
+    console.log('[restoreLastCard] restoring', snap.name, snap.number, 'game=' + snap.game);
+    window._crRestoreInFlight = true;
+
     // Also restore ident snapshot if present so Deep Grade View Card works
     // for the restored card on the very first tap after refresh.
     try {
@@ -3604,25 +3617,62 @@ function _restoreLastLoadedCard() {
       }
     } catch(_) {}
 
-    // Switch to Card Lookup view and align game selector.
-    try { if (snap.game && snap.game !== activeGame && typeof switchGame === 'function') switchGame(snap.game); } catch(_) {}
+    // Switch game selector FIRST (this internally calls resetCardPanel()),
+    // THEN load the card. If we already match the active game, skip the
+    // switchGame call entirely so we don't reset our own panel.
+    try {
+      if (snap.game && snap.game !== activeGame && typeof switchGame === 'function') {
+        switchGame(snap.game);
+      }
+    } catch(_) {}
     try { if (typeof switchView === 'function') switchView('lookup'); } catch(_) {}
 
     // Fast path: if we saved the full card object, re-hydrate directly.
-    if (snap._fullCard && typeof loadCardUI === 'function') {
-      try { selectedCard = snap._fullCard; loadCardUI(snap._fullCard); return true; } catch(_) {}
-    }
-    // Fallback: use exact-load routers if available.
-    if (snap.name && typeof _loadScannedCardExact === 'function') {
-      const pending = {
-        name: snap.name, number: snap.number, setName: snap.setName,
-        setCode: snap.setCode, groundedId: snap.id, rarity: snap.rarity,
-        hp: snap.hp, cardType: snap.game === 'sports' ? 'sports' : (snap.game || 'pokemon'),
-        isJapanese: snap.game === 'pokemonjp',
-      };
-      try { _loadScannedCardExact(pending); return true; } catch(_) {}
-    }
-  } catch(e) { console.warn('[_restoreLastLoadedCard] failed', e); }
+    const doHydrate = () => {
+      if (snap._fullCard && typeof loadCardUI === 'function') {
+        try {
+          selectedCard = snap._fullCard;
+          loadCardUI(snap._fullCard);
+          console.log('[restoreLastCard] hydrated via _fullCard');
+          window._crRestoreInFlight = false;
+          return true;
+        } catch(e) { console.warn('[restoreLastCard] _fullCard hydrate failed', e); }
+      }
+      // Fallback: use exact-load routers if available.
+      if (snap.name && typeof _loadScannedCardExact === 'function') {
+        const pending = {
+          name: snap.name, number: snap.number, setName: snap.setName,
+          setCode: snap.setCode, groundedId: snap.id, rarity: snap.rarity,
+          hp: snap.hp, cardType: snap.game === 'sports' ? 'sports' : (snap.game || 'pokemon'),
+          isJapanese: snap.game === 'pokemonjp',
+        };
+        try {
+          _loadScannedCardExact(pending);
+          console.log('[restoreLastCard] hydrated via _loadScannedCardExact');
+          window._crRestoreInFlight = false;
+          return true;
+        } catch(e) { console.warn('[restoreLastCard] exact-load fallback failed', e); }
+      }
+      window._crRestoreInFlight = false;
+      return false;
+    };
+
+    // Hydrate now, and again after a beat in case switchGame or other
+    // init code resets the panel just after we do.
+    const ok = doHydrate();
+    setTimeout(() => {
+      // If something reset the panel (e.g. auth handler ran resetCardPanel),
+      // re-hydrate. Detect reset by checking the placeholder label.
+      const lab = document.getElementById('cardImgPhLabel');
+      const ph  = document.getElementById('cardImgPh');
+      const phVisible = ph && getComputedStyle(ph).display !== 'none';
+      if (phVisible || (lab && /No card selected/i.test(lab.textContent || ''))) {
+        console.log('[restoreLastCard] panel was cleared after restore; re-hydrating');
+        doHydrate();
+      }
+    }, 1200);
+    return ok;
+  } catch(e) { console.warn('[_restoreLastLoadedCard] failed', e); window._crRestoreInFlight = false; }
   return false;
 }
 
