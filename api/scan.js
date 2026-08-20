@@ -1824,6 +1824,18 @@ Respond ONLY with valid JSON, no explanation:
         photoCount:    totalPhotos,
         card_name:     cardInfo.card_name     || '',
 
+        // 2026-08-20: expose the full identify context we already computed.
+        // Client uses these to load the EXACT card panel after View Card /
+        // View PSA X price without re-running Ximilar (no extra credit, no
+        // extra API call, no fuzzy pokemontcg.io lookup).
+        card_number:   cardInfo.card_number   || '',
+        set_name:      cardInfo.set_name      || '',
+        set_code:      cardInfo.set_code      || '',
+        grounded_id:   cardInfo.grounded_id   || '',
+        rarity:        cardInfo.rarity        || '',
+        card_type:     cardInfo.card_type     || 'pokemon',
+        is_japanese:   cardInfo.is_japanese === true,
+
         // Centering — measured ratios + official PSA thresholds
         centering:            centeringDisplay,
         centering_lr:         finalCenteringLR || '',

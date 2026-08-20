@@ -9543,6 +9543,124 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
     (pcLink ? `<div style="margin-top:.3rem">${pcLink}</div>` : '');
 }
 
+// 2026-08-20: Historically we tried to re-identify via /api/scan on the
+// stashed front photo, but the grade endpoint now returns the identify
+// context directly — no re-scan needed. Keeping this helper as a
+// last-resort escape hatch in case _deepGradeIdent is ever missing.
+async function _reidentifyAndLoadGraded(frontBase64, psaGrade) {
+  const idToken = window._googleIdToken || '';
+  const statusHost = document.getElementById('cardPriceStatus') || document.getElementById('lookupView');
+  // Visible progress — avoids the "tapped View Card but nothing happened" gap
+  try {
+    const el = document.getElementById('cardPrimary') || document.getElementById('cardPricePanel');
+    if (el) {
+      const busy = document.createElement('div');
+      busy.id = '_reidBusy';
+      busy.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:20;border-radius:14px;font-weight:800;font-size:.85rem;color:var(--gold)';
+      busy.innerHTML = '<span class="spinner" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem"></span>Loading card\u2026';
+      const host = el;
+      if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      const prev = document.getElementById('_reidBusy'); if (prev) prev.remove();
+      host.appendChild(busy);
+    }
+  } catch(_){}
+
+  const cleanup = () => {
+    try { const b = document.getElementById('_reidBusy'); if (b) b.remove(); } catch(_){}
+  };
+
+  try {
+    const response = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+      body: JSON.stringify({
+        imageBase64: frontBase64,
+        mimeType: 'image/jpeg',
+        mode: 'identify',
+        email: window.googleUser?.email || window._userEmail || '',
+        googleSub: window.googleUser?.sub || window._googleSub || '',
+        // Free re-ID after a paid grade — the server already debited /api/scan
+        // for the Deep Grade; charging again for the same photo would be silly.
+        skipDebit: true,
+      })
+    });
+    if (!response.ok) throw new Error('/api/scan status ' + response.status);
+    const data = await response.json();
+    console.log('[_reidentifyAndLoadGraded] Ximilar returned', data);
+
+    const cardName    = data.card_name || data.name || '';
+    const setName     = data.set_name || data.setName || '';
+    const cardNumber  = data.card_number || data.number || '';
+    const setCode     = data.set_code || '';
+    const groundedId  = data.grounded_id || '';
+    const rarity      = data.rarity || '';
+    const cardType    = data.card_type || 'pokemon';
+    const isJapanese  = data.is_japanese === true;
+
+    if (!cardName) throw new Error('Ximilar returned no card name');
+
+    // Refresh identify context so downstream Deep Grade share, etc. still work.
+    const pending = {
+      name: cardName, number: cardNumber, setName, setCode, groundedId,
+      rarity, cardType, isJapanese,
+      sport: data.sport || '', year: data.year || '',
+    };
+    try { window._pendingIdScanCard = pending; window._lastIdentifiedCard = pending; } catch(_){}
+
+    // Switch to lookup view + populate search box so the URL looks right.
+    if (typeof switchView === 'function') switchView('lookup');
+    try { const si = document.getElementById('searchInput'); if (si) si.value = cardName; } catch(_){}
+
+    // Route to the exact-load pipeline based on card type.
+    try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(_){}
+    try { selectedCard = null; } catch(_){}
+
+    if (cardType === 'sports') {
+      await _routeScannedSportsCard(pending);
+    } else if (isJapanese === true) {
+      try { await _loadScannedJPCard(pending); }
+      catch(e) { await _loadScannedCardExact(pending); }
+    } else if (cardType && cardType !== 'pokemon') {
+      try { await _loadScannedNonPokemonCard(pending); }
+      catch(e) { await _loadScannedCardExact(pending); }
+    } else {
+      await _loadScannedCardExact(pending);
+    }
+
+    cleanup();
+
+    // Apply the PSA grade pill after the card panel is populated.
+    const psaGradeNum = Number(psaGrade) || 0;
+    if (psaGradeNum) {
+      setTimeout(() => {
+        try {
+          const gradedToggle = document.getElementById('gradedToggle');
+          if (gradedToggle && !gradedToggle.classList.contains('active')) gradedToggle.click();
+          const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
+          if (psaPill && typeof setPill === 'function') {
+            setPill(psaPill, 'gradedPills');
+            if (typeof toggleGrade === 'function') toggleGrade();
+          }
+          setTimeout(() => {
+            const gs = document.getElementById('gradeSelect');
+            if (gs) {
+              gs.value = String(psaGradeNum);
+              gs.dispatchEvent(new Event('change'));
+              if (typeof calc === 'function') calc();
+            }
+            const rEl = document.getElementById('sellSection') || document.getElementById('platformCards');
+            if (rEl) rEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 300);
+        } catch(e) { console.warn('[_reidentifyAndLoadGraded] applyGrade failed', e); }
+      }, 700);
+    }
+  } catch(e) {
+    cleanup();
+    console.warn('[_reidentifyAndLoadGraded] failed:', e);
+    throw e;
+  }
+}
+
 function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   // Close the scan overlay and any CTAs
   const ov = document.getElementById('scanOverlay');
@@ -9559,6 +9677,78 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   if (!cleanName) return;
 
   try { console.log('[viewGradedCard] START', { cleanName, psaGrade, cardType, isJapanese, _pending: window._pendingIdScanCard, _lastIdent: window._lastIdentifiedCard }); } catch(_){}
+
+  // 2026-08-20 FIX (v4): The grade endpoint now returns the full identify
+  // context (card_number, set_name, set_code, grounded_id, rarity,
+  // card_type, is_japanese) that Ximilar already resolved server-side.
+  // We stash it as window._deepGradeIdent when Deep Grade completes. Use
+  // it here to route straight through the exact-load pipeline — no
+  // re-scan, no credit spend, no fuzzy pokemontcg.io lookup.
+  const dg = window._deepGradeIdent;
+  if (dg && dg.name) {
+    try { console.log('[viewGradedCard] using _deepGradeIdent for exact load', dg); } catch(_){}
+    const pending = {
+      name:       dg.name       || cleanName,
+      number:     dg.number     || '',
+      setName:    dg.setName    || '',
+      setCode:    dg.setCode    || '',
+      groundedId: dg.groundedId || '',
+      rarity:     dg.rarity     || '',
+      cardType:   dg.cardType   || cardType || 'pokemon',
+      isJapanese: (dg.isJapanese === true) || (isJapanese === true),
+      sport:      '',
+      year:       '',
+    };
+    // Refresh ambient identify state so downstream flows (share, grade
+    // history, etc.) still see the right card.
+    try { window._pendingIdScanCard = pending; window._lastIdentifiedCard = pending; } catch(_){}
+
+    // Route to exact-load pipeline, then apply the PSA grade pill.
+    try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(_){}
+    try { selectedCard = null; } catch(_){}
+    try {
+      const si = document.getElementById('searchInput'); if (si) si.value = pending.name;
+    } catch(_){}
+
+    try {
+      if (pending.cardType === 'sports') {
+        _routeScannedSportsCard(pending);
+      } else if (pending.isJapanese === true) {
+        try { _loadScannedJPCard(pending); }
+        catch(e) { _loadScannedCardExact(pending); }
+      } else if (pending.cardType && pending.cardType !== 'pokemon') {
+        try { _loadScannedNonPokemonCard(pending); }
+        catch(e) { _loadScannedCardExact(pending); }
+      } else {
+        _loadScannedCardExact(pending);
+      }
+
+      // Apply the PSA grade pill after routing.
+      const psaN = Number(psaGrade) || 0;
+      if (psaN) {
+        setTimeout(() => {
+          try {
+            const gt = document.getElementById('gradedToggle');
+            if (gt && !gt.classList.contains('active')) gt.click();
+            const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
+            if (psaPill && typeof setPill === 'function') {
+              setPill(psaPill, 'gradedPills');
+              if (typeof toggleGrade === 'function') toggleGrade();
+            }
+            setTimeout(() => {
+              const gs = document.getElementById('gradeSelect');
+              if (gs) { gs.value = String(psaN); gs.dispatchEvent(new Event('change')); if (typeof calc === 'function') calc(); }
+              const rEl = document.getElementById('sellSection') || document.getElementById('platformCards');
+              if (rEl) rEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+          } catch(e) { console.warn('[viewGradedCard] applyGrade failed', e); }
+        }, 1200);
+      }
+      return;
+    } catch(e) {
+      console.warn('[viewGradedCard] _deepGradeIdent exact-load failed, falling through:', e);
+    }
+  }
 
   // 2026-08-20 FIX: The old path here just typed the card name into the
   // search box and hoped the first dropdown match was the correct printing.
@@ -11166,6 +11356,11 @@ async function processScanImage(input) {
   const imageBase64 = await compressImage(file, 1000);
   const idToken = window._googleIdToken || '';
 
+  // 2026-08-20: stash the front-of-card image so View Card / View PSA X price
+  // after Deep Grade can re-identify via Ximilar (SOLE source of ID truth)
+  // and load the exact card by grounded_id — no pokemontcg.io fuzzy matching.
+  try { window._lastScanFrontBase64 = imageBase64; } catch(_){}
+
   try {
     const response = await fetch('/api/scan', {
       method: 'POST',
@@ -11966,6 +12161,23 @@ async function submitGradeScan(deepGrade) {
 
     const isDeep    = data.deepGrade === true;
     const photoCount= data.photoCount || (isDeep ? 6 : 2);
+
+    // 2026-08-20: stash the full identify context returned by the grade
+    // endpoint. viewGradedCard() uses this to load the EXACT card panel
+    // (no re-scan, no fuzzy pokemontcg.io lookup, no credit spend).
+    try {
+      window._deepGradeIdent = {
+        name:        data.card_name    || '',
+        number:      data.card_number  || '',
+        setName:     data.set_name     || '',
+        setCode:     data.set_code     || '',
+        groundedId:  data.grounded_id  || '',
+        rarity:      data.rarity       || '',
+        cardType:    data.card_type    || 'pokemon',
+        isJapanese:  data.is_japanese === true,
+      };
+      console.log('[grade] stashed _deepGradeIdent', window._deepGradeIdent);
+    } catch(_){}
     const creditsUsed = data.creditsUsed || (isDeep ? 2 : 1);
     const tierBadge = isDeep
       ? '<span style="font-size:.65rem;font-weight:800;padding:.15rem .5rem;border-radius:99px;background:linear-gradient(135deg,var(--gold),#f59e0b);color:#000;margin-right:.35rem;letter-spacing:.04em;vertical-align:middle">\uD83D\uDD0D DEEP GRADE · ' + photoCount + ' photos</span>'
