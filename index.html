@@ -12402,7 +12402,7 @@ async function shareGrade(btn) {
     // Try native share sheet first (mobile) — falls back to clipboard.
     // Text is dynamic-per-grade so shares feel personal instead of automated:
     //  PSA 9-10  → flex
-    //  PSA 7-8   → curiosity / "what would you grade this?"
+    //  PSA 7-8   → curiosity / second opinion
     //  PSA 1-6   → self-deprecating
     //  no grade  → generic teaser
     const _cardName = stash.data.card_name || 'my card';
@@ -12413,13 +12413,13 @@ async function shareGrade(btn) {
     } else if (_psa >= 9) {
       const flex = [
         `🔥 My ${_cardName} just came back PSA ${_psa} from CardResell AI. Grade yours free:`,
-        `PSA ${_psa} on my ${_cardName} 💯 CardResell AI called it — what would you grade it?`,
+        `PSA ${_psa} on my ${_cardName} 💯 CardResell AI called it. Grade yours free:`,
         `Just graded my ${_cardName} on CardResell AI → PSA ${_psa}. Try it on yours:`,
       ];
       _shareText = flex[Math.floor(Math.random() * flex.length)];
     } else if (_psa >= 7) {
       const mid = [
-        `Got a PSA ${_psa} on my ${_cardName} from CardResell AI — what would you grade it?`,
+        `Got a PSA ${_psa} on my ${_cardName} from CardResell AI. Grade yours:`,
         `CardResell AI graded my ${_cardName} at PSA ${_psa}. Second opinion?`,
         `PSA ${_psa} on my ${_cardName} per CardResell AI — fair? Try yours:`,
       ];
