@@ -1430,14 +1430,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startGradeScanCheckout('5')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div>5 scans</div><div style="color:var(--gold);font-weight:800">$3.99</div>
+          <div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem;font-weight:600">$0.80 / scan</div>
         </button>
         <button onclick="startGradeScanCheckout('15')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
           <div>15 scans</div><div style="color:var(--gold);font-weight:800">$9.99</div>
+          <div style="font-size:.58rem;color:#4ade80;margin-top:.1rem;font-weight:700">$0.67 / scan · SAVE 16%</div>
         </button>
         <button onclick="startGradeScanCheckout('40')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
           <div>40 scans</div><div style="color:var(--gold);font-weight:800">$19.99</div>
+          <div style="font-size:.58rem;color:#4ade80;margin-top:.1rem;font-weight:700">$0.50 / scan · SAVE 37%</div>
         </button>
       </div>
     </div>
@@ -1451,14 +1454,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1.99</div>
+          <div style="font-size:.58rem;color:var(--text-muted);margin-top:.1rem;font-weight:600">$0.20 / scan</div>
         </button>
         <button onclick="startIdScanCheckout('40')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
           <div>40 scans</div><div style="color:var(--gold);font-weight:800">$6.99</div>
+          <div style="font-size:.58rem;color:#4ade80;margin-top:.1rem;font-weight:700">$0.17 / scan · SAVE 12%</div>
         </button>
         <button onclick="startIdScanCheckout('80')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
           <div>80 scans</div><div style="color:var(--gold);font-weight:800">$11.99</div>
+          <div style="font-size:.58rem;color:#4ade80;margin-top:.1rem;font-weight:700">$0.15 / scan · SAVE 25%</div>
         </button>
       </div>
     </div>
@@ -2651,6 +2657,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div class="pricing-toggle" role="tablist">
       <button type="button" class="pricing-toggle-btn active" id="pricingToggleMonthly" onclick="setPricingMode('monthly')">Monthly</button>
       <button type="button" class="pricing-toggle-btn" id="pricingToggleAnnual" onclick="setPricingMode('annual')">Annual <span class="pricing-toggle-savings">SAVE 25%</span></button>
+    </div>
+
+    <!-- 2026-08-20: Annual-mode value banner — shown only when Annual is active. -->
+    <div id="pricingAnnualBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;color:#fde68a;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600">
+      🎁 <strong style="color:var(--gold)">Best value:</strong> pay yearly, get <strong>3 months free</strong> on every tier · same scans, same features, one payment.
     </div>
 
     <div class="pricing-cards">
@@ -9273,6 +9284,13 @@ async function _verifyConfirmCode() {
     if (modal) modal.remove();
     _updateVerifyBanner?.();
     try { await checkProStatus?.(); } catch(e) {}
+    // 2026-08-20: instrument signup bonus grant — top-of-funnel event.
+    try {
+      window.trackEvent && window.trackEvent('signup_bonus', {
+        granted: !!data.bonusGranted,
+        reason:  data.bonusReason || '',
+      });
+    } catch(e) {}
     if (data.bonusGranted) {
       showToast('\u2713 Verified — 10 ID scans + 1 AI Grade unlocked', 'gold');
     } else {
@@ -9280,7 +9298,9 @@ async function _verifyConfirmCode() {
         ? 'This email was already used for a bonus on another account'
         : (data.bonusReason === 'already-granted-to-user'
             ? 'Bonus already claimed on this account'
-            : 'Email verified');
+            : (data.bonusReason === 'ip-throttle'
+                ? 'Sign-up bonus limit reached on your network today'
+                : 'Email verified'));
       showToast('\u2713 ' + reason, 'gold');
     }
   } catch(e) {
@@ -11447,6 +11467,16 @@ async function processScanImage(input) {
     const isJapanese  = data.is_japanese === true;
     const jpRawName   = (data.jp_name || '').trim();
 
+    // 2026-08-20: instrument ID scan completion for the funnel.
+    try {
+      window.trackEvent && window.trackEvent('id_scan_completed', {
+        identified:   !!rawCardName && data.identified !== false,
+        card_type:    data.card_type || '',
+        source:       data.source || '',
+        tier:         window._userTier || 'free',
+      });
+    } catch(e) {}
+
     if (!rawCardName || data.identified === false) {
       // 2026-08-19: Ximilar didn't recognize the card and we no longer
       // fall through to GPT vision (which used to hallucinate names).
@@ -12174,6 +12204,22 @@ async function submitGradeScan(deepGrade) {
     const limitingFactor = data.limiting_factor || '';
     const psaDist = Array.isArray(data.psa_distribution) ? data.psa_distribution : [];
 
+    // 2026-08-20: instrument grade completion for the funnel.
+    // This is the highest-intent moment in the app — user just paid attention
+    // to a real result. Every downstream event (view card, share, upgrade) is
+    // measured against this baseline.
+    try {
+      window.trackEvent && window.trackEvent('grade_completed', {
+        deep:         data.deepGrade === true,
+        psa:          Number(psa) || 0,
+        confidence:   data.confidence || '',
+        card_type:    data.card_type || '',
+        worth_grading: !!worth,
+        credits_used: data.creditsUsed || 0,
+        tier:         window._userTier || 'free',
+      });
+    } catch(e) {}
+
     const gradeColor = psa >= 9 ? '#4ade80' : psa >= 7 ? '#facc15' : psa >= 5 ? '#fb923c' : '#f87171';
 
     // Confidence label
@@ -12513,6 +12559,70 @@ async function submitGradeScan(deepGrade) {
       );
 
     showScanGradeCTA(data.card_name, '', psa);
+
+    // 2026-08-20: post-grade trigger prompt — the highest-intent moment.
+    // Rules:
+    //  • Free user on Quick Grade with a high result (≥8) → push Deep Grade upgrade.
+    //  • Free user low on grade credits (≤1 left) → push credit pack / Pro.
+    //  • Pro user on Quick Grade with a high result → push Deep Grade (Pro Max).
+    // Runs after a short delay so the user reads the result first.
+    try {
+      setTimeout(() => {
+        try {
+          const tier          = window._userTier || 'free';
+          const gradeCreds    = Number(window._scanCredits || 0);
+          const isDeepResult  = data.deepGrade === true;
+          const psaNum        = Number(psa) || 0;
+          const highGrade     = psaNum >= 8;
+          let trigger = null;
+          let msg     = '';
+          let cta     = 'See plans';
+          let src     = '';
+          if (tier === 'free' && !isDeepResult && highGrade) {
+            trigger = 'quick_grade_high_free';
+            msg = `PSA ${psaNum}+ estimate on a Quick Grade. A Deep Grade uses 6 photos for a much tighter estimate — recommended before you submit.`;
+            cta = 'Upgrade for Deep Grade';
+            src = 'post_grade_quick_high_free';
+          } else if (tier === 'free' && gradeCreds <= 1) {
+            trigger = 'low_grade_credits_free';
+            msg = gradeCreds === 0
+              ? 'You\u2019re out of grade credits. Grab a pack or unlock unlimited on Pro.'
+              : 'Only 1 grade credit left. Pro unlocks unlimited grades.';
+            cta = 'Get more grades';
+            src = 'post_grade_low_credits_free';
+          } else if (tier === 'pro' && !isDeepResult && highGrade) {
+            trigger = 'quick_grade_high_pro';
+            msg = `PSA ${psaNum}+ on Quick Grade. Pro Max unlocks unlimited Deep Grades (6-photo) for the tightest estimate before you submit.`;
+            cta = 'Upgrade to Pro Max';
+            src = 'post_grade_quick_high_pro';
+          }
+          if (!trigger) return;
+          window.trackEvent && window.trackEvent('post_grade_prompt_shown', { trigger, psa: psaNum, tier });
+          // Slot it under the grade result CTA panel — if that panel isn't
+          // showing (unidentified), abort silently.
+          const sgCta = document.getElementById('scanGradeCTA');
+          if (!sgCta || !sgCta.classList.contains('show')) return;
+          // Idempotent — replace any previous nudge.
+          let nudge = document.getElementById('postGradeNudge');
+          if (nudge) nudge.remove();
+          nudge = document.createElement('div');
+          nudge.id = 'postGradeNudge';
+          nudge.style.cssText = 'margin-top:.6rem;padding:.7rem .85rem;background:linear-gradient(135deg,rgba(196,122,0,.14),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.35);border-radius:10px;display:flex;flex-direction:column;gap:.5rem;text-align:left';
+          nudge.innerHTML =
+            '<div style="font-size:.72rem;color:rgba(255,255,255,.85);line-height:1.4">' +
+              msg.replace(/[<>]/g, c => c === '<' ? '&lt;' : '&gt;') +
+            '</div>' +
+            '<button type="button" style="align-self:flex-start;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.4rem 1rem;font-weight:800;font-size:.75rem;cursor:pointer">' +
+              cta.replace(/[<>]/g, c => c === '<' ? '&lt;' : '&gt;') +
+            '</button>';
+          nudge.querySelector('button').addEventListener('click', () => {
+            try { window.trackEvent && window.trackEvent('post_grade_prompt_click', { trigger, psa: psaNum, tier }); } catch(e) {}
+            if (typeof openPricingModal === 'function') openPricingModal(src);
+          });
+          sgCta.appendChild(nudge);
+        } catch(inner) { console.warn('[post-grade nudge]', inner); }
+      }, 1200);
+    } catch(e) { /* nudge is optional */ }
 
     // Store grade info so card auto-selects to correct grader/grade
     window._pendingGradeResult = { cardName: data.card_name, psa };
@@ -13697,6 +13807,16 @@ function updateScanBtnCredits() {
 function openPricingModal(source) {
   const overlay = document.getElementById('pricingOverlay');
   if (overlay) overlay.classList.add('open');
+  // 2026-08-20: instrument every pricing-modal open with its trigger source.
+  // This is the primary conversion-funnel event — we track WHICH prompt got
+  // the user to see pricing (grade_result_cta, id_scan_402, flips_cap, etc.).
+  try {
+    window.trackEvent && window.trackEvent('pricing_modal_open', {
+      source: source || 'unknown',
+      current_tier: window._userTier || (window._isPro ? 'pro' : 'free'),
+      signed_in: !!(window._user && window._user.uid),
+    });
+  } catch(e) {}
   // Reset to Monthly view each open
   setPricingMode('monthly');
   // Disable the button for the user's current tier
@@ -13809,6 +13929,9 @@ function setPricingMode(mode) {
   box.classList.toggle('pricing-mode-annual', isAnnual);
   document.getElementById('pricingToggleMonthly')?.classList.toggle('active', !isAnnual);
   document.getElementById('pricingToggleAnnual')?.classList.toggle('active', isAnnual);
+  // 2026-08-20: show/hide the annual value banner.
+  const banner = document.getElementById('pricingAnnualBanner');
+  if (banner) banner.style.display = isAnnual ? 'block' : 'none';
   // Swap price digits
   box.querySelectorAll('[data-price-monthly]').forEach(el => {
     el.textContent = isAnnual ? el.dataset.priceAnnual : el.dataset.priceMonthly;
@@ -13821,6 +13944,11 @@ function setPricingMode(mode) {
   box.querySelectorAll('[data-cta-monthly]').forEach(el => {
     el.innerHTML = isAnnual ? el.dataset.ctaAnnual : el.dataset.ctaMonthly;
   });
+  // 2026-08-20: instrument mode toggle so we can measure Monthly vs Annual
+  // interest and pair it with checkout_attempt for a conversion rate.
+  if (window._pricingMode !== mode) {
+    try { window.trackEvent && window.trackEvent('pricing_mode_toggle', { mode }); } catch(e) {}
+  }
   window._pricingMode = mode;
 }
 
