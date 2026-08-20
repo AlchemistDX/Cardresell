@@ -763,6 +763,28 @@ export default async function handler(req, res) {
     console.log('[scan] ximilar miss, falling back to GPT-5');
   }
 
+  // ── 3.5. GRADE MODE: also call Ximilar to identify the card ──
+  // Grade mode uses GPT vision for the GRADE (centering, corners, edges,
+  // surface). But GPT often misreads the card name or hallucinates one for
+  // slabbed/hard-to-read cards ("Special Red Card" for a real card).
+  // Ximilar's collectibles model IDs the card accurately in ~1s.
+  // Result is merged into cardInfo AFTER GPT parsing so:
+  //   - Ximilar wins: card_name, card_number, set_name, set_code, card_type,
+  //     is_japanese, image_url, grounded_id, rarity
+  //   - GPT keeps: psa_estimate, centering, corners, edges, surface,
+  //     confidence, notes (all grade fields)
+  let gradeXimResult = null;
+  if (isGradeMode && ximilarToken && imageBase64) {
+    const t0 = Date.now();
+    let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg');
+    if (!xim.ok && (xim.reason === 'no_match' || xim.reason === 'no_card_detected')) {
+      const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport');
+      if (ximSport.ok) xim = ximSport;
+    }
+    console.log('[scan] ximilar (grade-mode ident) took', Date.now() - t0, 'ms ok=', xim.ok, 'reason=', xim.reason);
+    if (xim.ok && xim.cardInfo) gradeXimResult = xim.cardInfo;
+  }
+
   // ── 4. Call GPT-4o Vision (fallback) ──
   try {
     const mime   = mimeType || 'image/jpeg';
@@ -1127,6 +1149,30 @@ Respond ONLY with valid JSON, no explanation:
       cardInfo.rarity      = c0.rarity      || cardInfo.rarity;
       cardInfo.sport       = c0.sport       || cardInfo.sport;
       cardInfo.year        = c0.year        || cardInfo.year;
+    }
+
+    // 2026-08-20: In grade mode, if Ximilar identified the card, its answer
+    // WINS on identity fields (name, type, set, image_url, grounded_id).
+    // Ximilar's collectibles model is far more accurate than GPT vision at
+    // reading card names — GPT hallucinates "Special Red Card" for slabbed
+    // cards it can't read; Ximilar returns the actual card.
+    // GPT keeps all grade fields (psa_estimate, centering, corners, etc.).
+    if (isGradeMode && gradeXimResult && gradeXimResult.card_name) {
+      console.log('[scan] grade-mode: overriding GPT ident with Ximilar:',
+        'gpt=', cardInfo.card_name, '→ xim=', gradeXimResult.card_name,
+        'type:', cardInfo.card_type, '→', gradeXimResult.card_type);
+      cardInfo.card_name   = gradeXimResult.card_name   || cardInfo.card_name;
+      cardInfo.card_number = gradeXimResult.card_number || cardInfo.card_number;
+      cardInfo.set_name    = gradeXimResult.set_name    || cardInfo.set_name;
+      cardInfo.set_code    = gradeXimResult.set_code    || cardInfo.set_code;
+      cardInfo.card_type   = gradeXimResult.card_type   || cardInfo.card_type;
+      cardInfo.is_japanese = gradeXimResult.is_japanese === true || cardInfo.is_japanese === true;
+      cardInfo.rarity      = gradeXimResult.rarity      || cardInfo.rarity;
+      cardInfo.sport       = gradeXimResult.sport       || cardInfo.sport;
+      cardInfo.year        = gradeXimResult.year        || cardInfo.year;
+      cardInfo.image_url   = gradeXimResult.image_url   || gradeXimResult.image_small || cardInfo.image_url;
+      cardInfo.image_small = gradeXimResult.image_small || cardInfo.image_small;
+      cardInfo.grounded_id = gradeXimResult.grounded_id || gradeXimResult._grounded_id || cardInfo.grounded_id;
     }
 
     if (!cardInfo.card_name) {
