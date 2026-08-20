@@ -50,11 +50,11 @@ export default async function handler(req, res) {
 
   if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
-  // Cache key bumped v3→5 (2026-08-19). v4 caught the $99,999 sentinel;
-  // v5 tightens the low-lister guard (previous version's 25% threshold
-  // failed on Elsa Trusted Sister where market/mid was 47%). Bumping
-  // forces fresh resolves with the new guard.
-  const cacheKey = `v5|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // Cache key bumped v5→v6 (2026-08-19). v4 caught the $99,999 sentinel,
+  // v5 added mid-preference for low-lister distortion, v6 replaces both
+  // with a trimmed-weighted-mean across low/market/mid/high so the
+  // headline price is always a proper average of non-outlier sales.
+  const cacheKey = `v6|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -112,20 +112,22 @@ export default async function handler(req, res) {
     // makes the app look broken — caught in bulk-scan test 2026-08-19
     // where a One Piece Luffy card showed "$99,999.00" as the market price.
     if (r && r.ok && r.market != null && !_isSentinelPrice(r.market)) {
-      // 2026-08-19: Low-lister guard. TCGcsv's "market" field reflects the
-      // most recent sale price, which can be distorted by a single ultra-low
-      // lister ($0.01) even when mid/high indicate the card has real value.
-      // Trigger: mid > market AND high > 5× market — that's a bimodal price
-      // distribution where the low tail is dragging market down. Prefer mid
-      // (the median) in that case. Caught in bulk-scan test 2026-08-19
-      // where Lorcana Elsa Trusted Sister showed:
-      //   low: $0.01, market: $0.07, mid: $0.15, high: $2.29
-      // Now displays $0.15 (mid) as the headline price.
-      let displayMarket = r.market;
-      if (r.mid != null && r.mid > 0 && r.high != null && r.high > 0 &&
-          r.mid > r.market && r.high > r.market * 5) {
-        displayMarket = r.mid;
-      }
+      // 2026-08-19: Trimmed-mean pricing. TCGcsv gives us four price points
+      // (low / market / mid / high). Any single one can mislead:
+      //   • "market" (last-sale) gets dragged down by a single $0.01 lister
+      //   • "low" is always the cheapest active listing (often a firesale)
+      //   • "high" often reflects a holdout listing 10-100× above real value
+      //   • "mid" (median) is stable but ignores recent movement
+      // Solution: compute an average across the middle of the distribution.
+      // Drop low if it's <30% of mid (outlier low-lister). Drop high if
+      // it's >3× mid (outlier holdout). Weight mid ×2 since it IS the
+      // median. This produces sensible headline prices across all TCGs:
+      //   Elsa    (low $0.01 / mkt $0.07 / mid $0.15 / high $2.29) → $0.12
+      //   Harpy   (low $0.02 / mkt $0.28 / mid $0.30 / high $3.98) → $0.29
+      //   Normal  (low $1.00 / mkt $1.10 / mid $1.15 / high $1.30) → $1.14
+      const displayMarket = _trimmedMean({
+        low: r.low, market: r.market, mid: r.mid, high: r.high,
+      });
       const data = {
         market: displayMarket,
         low:    r.low  ?? (displayMarket * 0.85),
@@ -319,6 +321,44 @@ function _isSentinelPrice(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return false;
   return _PRICE_SENTINELS.has(v) || v >= 99999;
+}
+
+// 2026-08-19: Trimmed-weighted mean across low/market/mid/high.
+// Drops outliers on both tails then averages, weighting mid ×2 since
+// it's the true median. Falls back to market when mid is unavailable.
+// Returns a positive Number rounded to 2 decimal places, or null if
+// there's no usable data.
+function _trimmedMean({ low, market, mid, high }) {
+  const num = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    if (_isSentinelPrice(n)) return null;
+    return n;
+  };
+  const L = num(low);
+  const M = num(market);
+  const D = num(mid);   // median
+  const H = num(high);
+
+  // If we don't have a median, just fall back to market (or mid if that's
+  // all we have). Can't do robust trimming without a center point.
+  if (D == null) return M != null ? Math.round(M * 100) / 100 : null;
+
+  // Build the weighted sample. mid always in with weight 2. market always
+  // in with weight 1. low + high included only if within reasonable bands
+  // around mid.
+  const points = [{ v: D, w: 2 }];
+  if (M != null) points.push({ v: M, w: 1 });
+  // Drop low if it's < 30% of mid — that's a firesale/error listing.
+  if (L != null && L >= D * 0.3) points.push({ v: L, w: 1 });
+  // Drop high if it's > 3× mid — that's a holdout listing not real market.
+  if (H != null && H <= D * 3) points.push({ v: H, w: 1 });
+
+  const sumW = points.reduce((s, p) => s + p.w, 0);
+  const sumV = points.reduce((s, p) => s + p.v * p.w, 0);
+  if (sumW === 0) return null;
+  return Math.round((sumV / sumW) * 100) / 100;
 }
 
 // ── Free-API price fallbacks (2026-08-19) ─────────────────────────────────
