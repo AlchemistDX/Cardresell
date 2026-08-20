@@ -12016,9 +12016,41 @@ async function shareGrade(btn) {
     if (!url) throw new Error('no_url');
 
     // Try native share sheet first (mobile) — falls back to clipboard.
+    // Text is dynamic-per-grade so shares feel personal instead of automated:
+    //  PSA 9-10  → flex
+    //  PSA 7-8   → curiosity / "what would you grade this?"
+    //  PSA 1-6   → self-deprecating
+    //  no grade  → generic teaser
+    const _cardName = stash.data.card_name || 'my card';
+    const _psa      = Number(stash.data.psa_estimate);
+    let _shareText;
+    if (!isFinite(_psa) || _psa <= 0) {
+      _shareText = `Check out my ${_cardName} grade — estimated by CardResell AI`;
+    } else if (_psa >= 9) {
+      const flex = [
+        `🔥 My ${_cardName} just came back PSA ${_psa} from CardResell AI. Grade yours free:`,
+        `PSA ${_psa} on my ${_cardName} 💯 CardResell AI called it — what would you grade it?`,
+        `Just graded my ${_cardName} on CardResell AI → PSA ${_psa}. Try it on yours:`,
+      ];
+      _shareText = flex[Math.floor(Math.random() * flex.length)];
+    } else if (_psa >= 7) {
+      const mid = [
+        `Got a PSA ${_psa} on my ${_cardName} from CardResell AI — what would you grade it?`,
+        `CardResell AI graded my ${_cardName} at PSA ${_psa}. Second opinion?`,
+        `PSA ${_psa} on my ${_cardName} per CardResell AI — fair? Try yours:`,
+      ];
+      _shareText = mid[Math.floor(Math.random() * mid.length)];
+    } else {
+      const low = [
+        `Rough one 😂 CardResell AI graded my ${_cardName} at PSA ${_psa}. Try yours:`,
+        `Ouch. My ${_cardName} pulled a PSA ${_psa} from CardResell AI. See what yours grades:`,
+        `PSA ${_psa} on my ${_cardName} — CardResell AI kept it real. Grade yours free:`,
+      ];
+      _shareText = low[Math.floor(Math.random() * low.length)];
+    }
     const shareData = {
-      title: (stash.data.card_name || 'Card grade') + ' — PSA ' + (stash.data.psa_estimate || '?'),
-      text: 'Check out my card grade — analyzed by CardResell AI',
+      title: _cardName + ' — PSA ' + (isFinite(_psa) && _psa > 0 ? _psa : '?'),
+      text:  _shareText,
       url,
     };
     let shared = false;
