@@ -50,10 +50,11 @@ export default async function handler(req, res) {
 
   if (!name) return res.status(400).json({ error: 'name required (or q= alias)' });
 
-  // Cache key bumped v3→v4 (2026-08-19) to invalidate cached $99,999 sentinel
-  // entries + cached market-below-mid low-lister prices from the previous
-  // pre-guard code path. Same namespacing rules as v3.
-  const cacheKey = `v4|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // Cache key bumped v3→5 (2026-08-19). v4 caught the $99,999 sentinel;
+  // v5 tightens the low-lister guard (previous version's 25% threshold
+  // failed on Elsa Trusted Sister where market/mid was 47%). Bumping
+  // forces fresh resolves with the new guard.
+  const cacheKey = `v5|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -111,15 +112,18 @@ export default async function handler(req, res) {
     // makes the app look broken — caught in bulk-scan test 2026-08-19
     // where a One Piece Luffy card showed "$99,999.00" as the market price.
     if (r && r.ok && r.market != null && !_isSentinelPrice(r.market)) {
-      // 2026-08-19: Low-lister guard. TCGcsv's "market" field is the most
-      // recent sale price, which can be distorted by a single ultra-low
-      // lister ($0.01) even when the actual market range is much higher.
-      // If market is dramatically below mid (< 25% of mid), prefer mid —
-      // it's the median and is more representative of what the card sells
-      // for. Caught in bulk-scan test 2026-08-19 where Lorcana Elsa
-      // showed "$0.07" as market while mid was $0.15 and high was $2.29.
+      // 2026-08-19: Low-lister guard. TCGcsv's "market" field reflects the
+      // most recent sale price, which can be distorted by a single ultra-low
+      // lister ($0.01) even when mid/high indicate the card has real value.
+      // Trigger: mid > market AND high > 5× market — that's a bimodal price
+      // distribution where the low tail is dragging market down. Prefer mid
+      // (the median) in that case. Caught in bulk-scan test 2026-08-19
+      // where Lorcana Elsa Trusted Sister showed:
+      //   low: $0.01, market: $0.07, mid: $0.15, high: $2.29
+      // Now displays $0.15 (mid) as the headline price.
       let displayMarket = r.market;
-      if (r.mid != null && r.mid > 0 && r.market < r.mid * 0.25) {
+      if (r.mid != null && r.mid > 0 && r.high != null && r.high > 0 &&
+          r.mid > r.market && r.high > r.market * 5) {
         displayMarket = r.mid;
       }
       const data = {
