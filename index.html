@@ -9696,12 +9696,38 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
       rarity:     dg.rarity     || '',
       cardType:   dg.cardType   || cardType || 'pokemon',
       isJapanese: (dg.isJapanese === true) || (isJapanese === true),
+      imageUrl:   dg.imageUrl   || '',
       sport:      '',
       year:       '',
     };
     // Refresh ambient identify state so downstream flows (share, grade
     // history, etc.) still see the right card.
     try { window._pendingIdScanCard = pending; window._lastIdentifiedCard = pending; } catch(_){}
+
+    // 2026-08-20 fix: switch the game selector to the RIGHT game FIRST.
+    // Otherwise doSearch inside _loadScannedNonPokemonCard runs against
+    // Pokemon TCG and returns "No Pokemon cards found", which clobbers
+    // the panel to the empty state.
+    try {
+      const typeToGame = {
+        pokemon:  pending.isJapanese ? 'pokemonjp' : 'pokemon',
+        yugioh:   'yugioh',
+        mtg:      'mtg',
+        magic:    'mtg',
+        lorcana:  'lorcana',
+        onepiece: 'onepiece',
+        sports:   'sports',
+        other:    'other',
+      };
+      const targetGame = typeToGame[(pending.cardType || 'pokemon').toLowerCase()] || 'pokemon';
+      const gSel = document.getElementById('gameSelect');
+      if (gSel && gSel.value !== targetGame) {
+        gSel.value = targetGame;
+        if (typeof onGameSelectChange === 'function') {
+          try { onGameSelectChange(targetGame); } catch(_){}
+        }
+      }
+    } catch(_){}
 
     // Route to exact-load pipeline, then apply the PSA grade pill.
     try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(_){}
@@ -12175,6 +12201,7 @@ async function submitGradeScan(deepGrade) {
         rarity:      data.rarity       || '',
         cardType:    data.card_type    || 'pokemon',
         isJapanese:  data.is_japanese === true,
+        imageUrl:    data.image_url    || '',
       };
       console.log('[grade] stashed _deepGradeIdent', window._deepGradeIdent);
     } catch(_){}

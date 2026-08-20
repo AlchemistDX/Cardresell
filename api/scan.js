@@ -1835,6 +1835,7 @@ Respond ONLY with valid JSON, no explanation:
         rarity:        cardInfo.rarity        || '',
         card_type:     cardInfo.card_type     || 'pokemon',
         is_japanese:   cardInfo.is_japanese === true,
+        image_url:     cardInfo.image_url     || cardInfo.image_small || '',
 
         // Centering — measured ratios + official PSA thresholds
         centering:            centeringDisplay,
