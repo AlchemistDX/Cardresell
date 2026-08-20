@@ -9271,6 +9271,132 @@ function openScanner() {
   document.getElementById('scanFileInput').click();
 }
 
+// 2026-08-20: Deep Grade "Grading Upside" panel renderer.
+// Takes the raw PriceCharting /api/pricecharting response and paints a compact
+// price ladder: Raw → PSA 8 → PSA 9 → PSA 10 with $ delta and net-after-fees
+// upside. The row matching the AI's estimated PSA grade is highlighted gold.
+//
+// pc is the raw response body — shape is { source, prices: { raw, grade_7,
+// grade_8, grade_9, grade_95, psa_10, ... }, productName, consoleName, url,
+// confidence, ... }. If pc.source === 'unconfigured' or prices are all null
+// we render a compact fallback that pitches the manual price panel instead.
+function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
+  if (!el) return;
+
+  const GRADING_FEE = 25;   // PSA value tier ~$25 all-in
+  const FEES_PCT    = 13;   // eBay + shipping typical
+
+  // Unconfigured / no match / all null — don't waste screen space, fall back.
+  const p = pc && pc.prices ? pc.prices : {};
+  const hasAny = ['raw','grade_8','grade_9','psa_10','grade_7','grade_95'].some(k => p[k] != null && p[k] > 0);
+  if (!pc || pc.source === 'unconfigured' || !hasAny) {
+    el.innerHTML =
+      `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.35rem">💰 GRADING UPSIDE</div>` +
+      `<div style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.5">` +
+        `We couldn't find comps for this exact printing on PriceCharting. ` +
+        `Tap <strong style="color:rgba(255,255,255,.8)">View PSA ${psaGradeBucket} price</strong> below to check TCGplayer, eBay sold, and other sources.` +
+      `</div>`;
+    return;
+  }
+
+  const raw = p.raw || 0;
+
+  // Build the ladder rows we want to show. Always show raw + the three PSA
+  // tiers (8/9/10) so the user sees the full upside curve, not just their
+  // AI-estimated grade.
+  const rows = [
+    { key: 'raw',     label: 'Raw / Ungraded', price: raw,          isGrade: 0  },
+    { key: 'grade_8', label: 'PSA 8',          price: p.grade_8 || 0, isGrade: 8  },
+    { key: 'grade_9', label: 'PSA 9',          price: p.grade_9 || 0, isGrade: 9  },
+    { key: 'psa_10',  label: 'PSA 10',         price: p.psa_10  || 0, isGrade: 10 },
+  ];
+
+  // Compute per-row net upside vs raw sell:
+  //   raw_net    = raw * (1 - fees)
+  //   graded_net = graded * (1 - fees)
+  //   upside     = graded_net - raw_net - grading_fee
+  const rawNet = raw > 0 ? raw * (1 - FEES_PCT/100) : 0;
+  rows.forEach(r => {
+    if (r.isGrade === 0 || r.price <= 0) {
+      r.upsideNet = 0;
+      r.upsidePct = 0;
+      return;
+    }
+    const gradedNet = r.price * (1 - FEES_PCT/100);
+    r.upsideNet = gradedNet - rawNet - GRADING_FEE;
+    r.upsidePct = raw > 0 ? (r.upsideNet / raw) * 100 : 0;
+  });
+
+  const fmt$ = n => (n == null || !isFinite(n)) ? '—' : (n < 0 ? '−$' + Math.abs(n).toFixed(0) : '$' + n.toFixed(0));
+  const fmtPct = n => (n == null || !isFinite(n)) ? '' : (n >= 0 ? '+' + Math.round(n) + '%' : Math.round(n) + '%');
+
+  const rowHtml = rows.map(r => {
+    const isEst = r.isGrade === psaGradeBucket && r.isGrade !== 0;
+    const priceStr = r.price > 0 ? '$' + r.price.toFixed(r.price < 20 ? 2 : 0) : '—';
+    let upsideStr = '';
+    let upsideCol = 'rgba(255,255,255,.5)';
+    if (r.isGrade === 0) {
+      upsideStr = '<span style="color:rgba(255,255,255,.35);font-size:.62rem">baseline</span>';
+    } else if (r.price <= 0 || raw <= 0) {
+      upsideStr = '<span style="color:rgba(255,255,255,.3);font-size:.62rem">no comp</span>';
+    } else if (r.upsideNet > 5) {
+      upsideCol = '#4ade80';
+      upsideStr = `<strong style="color:${upsideCol}">${fmt$(r.upsideNet)}</strong> <span style="color:${upsideCol};opacity:.75;font-size:.65rem">(${fmtPct(r.upsidePct)})</span>`;
+    } else if (r.upsideNet > -5) {
+      upsideCol = '#facc15';
+      upsideStr = `<strong style="color:${upsideCol}">${fmt$(r.upsideNet)}</strong> <span style="color:${upsideCol};opacity:.75;font-size:.65rem">(${fmtPct(r.upsidePct)})</span>`;
+    } else {
+      upsideCol = '#f87171';
+      upsideStr = `<strong style="color:${upsideCol}">${fmt$(r.upsideNet)}</strong> <span style="color:${upsideCol};opacity:.75;font-size:.65rem">(${fmtPct(r.upsidePct)})</span>`;
+    }
+
+    const bg     = isEst ? 'rgba(212,175,55,.12)' : 'transparent';
+    const border = isEst ? '1px solid rgba(212,175,55,.4)' : '1px solid transparent';
+    const labelC = isEst ? 'var(--gold)' : 'rgba(255,255,255,.85)';
+    const labelW = isEst ? '800' : '600';
+    const est    = isEst ? ' <span style="font-size:.55rem;font-weight:800;color:var(--gold);letter-spacing:.05em;background:rgba(212,175,55,.18);padding:.1rem .3rem;border-radius:4px;margin-left:.25rem">AI EST</span>' : '';
+
+    return (
+      `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.4rem .55rem;background:${bg};border:${border};border-radius:8px;margin-bottom:.2rem">` +
+        `<div style="font-size:.75rem;color:${labelC};font-weight:${labelW}">${r.label}${est}</div>` +
+        `<div style="font-size:.78rem;color:${labelC};font-weight:${labelW};text-align:right;min-width:52px">${priceStr}</div>` +
+        `<div style="text-align:right;min-width:80px">${upsideStr}</div>` +
+      `</div>`
+    );
+  }).join('');
+
+  // Pick the best PSA tier for the "headline" pitch — highest upside > 0
+  const bestTier = rows.filter(r => r.isGrade > 0 && r.upsideNet > 5).sort((a,b) => b.upsideNet - a.upsideNet)[0];
+  const headline = bestTier
+    ? `📈 Best case: <strong style="color:#4ade80">${bestTier.label} → ${fmt$(bestTier.upsideNet)} net upside</strong> vs raw sell`
+    : (raw > 0
+        ? `⚠️ Grading may not pencil out at current comps (raw $${raw.toFixed(0)}). Numbers assume $${GRADING_FEE} PSA fee + ${FEES_PCT}% sale fees.`
+        : `Missing raw comp — upside ‘$’ assumes raw = PriceCharting median.`);
+
+  // Best service links: for pokemon use PriceCharting product page, for the
+  // AI-est grade also expose "View PSA X price" (existing button, already
+  // there right below). Sports → 130point button already exists elsewhere.
+  const pcUrl = pc.url ? pc.url : '';
+  const pcLink = pcUrl
+    ? `<a href="${pcUrl}" target="_blank" rel="noopener" style="font-size:.7rem;color:#93c5fd;text-decoration:none;font-weight:700">See full price history on PriceCharting →</a>`
+    : '';
+
+  el.innerHTML =
+    `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem">` +
+      `<span>💰 GRADING UPSIDE</span>` +
+      `<span style="color:rgba(255,255,255,.35);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:.58rem">net after $${GRADING_FEE} PSA fee + ${FEES_PCT}% sale fees</span>` +
+    `</div>` +
+    // Column headers
+    `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;padding:0 .55rem .25rem;font-size:.55rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.35)">` +
+      `<div>TIER</div>` +
+      `<div style="text-align:right;min-width:52px">SELL</div>` +
+      `<div style="text-align:right;min-width:80px">NET UPSIDE</div>` +
+    `</div>` +
+    rowHtml +
+    `<div style="font-size:.7rem;color:rgba(255,255,255,.75);margin-top:.45rem;line-height:1.45">${headline}</div>` +
+    (pcLink ? `<div style="margin-top:.3rem">${pcLink}</div>` : '');
+}
+
 function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   // Close the scan overlay and any CTAs
   const ov = document.getElementById('scanOverlay');
@@ -12006,7 +12132,22 @@ async function submitGradeScan(deepGrade) {
     const _ct = String(data.card_type || 'pokemon').replace(/'/g,"\\'");
     const _jp = data.is_japanese === true ? 'true' : 'false';
     const _cn = (data.card_name||'').replace(/'/g,"\\'");
+    // 2026-08-20: Grading upside panel — pulls the full PriceCharting price
+    // ladder (raw → PSA 7 → 8 → 9 → 10) so users see the *dollar difference*
+    // between raw sell and each graded tier, minus grading fees. This is the
+    // core Deep Grade value pitch — "is it worth $25 to send this in?"
+    const upsideId = 'gradingUpside_' + Date.now();
     resultEl.innerHTML +=
+      `<div id="${upsideId}" style="margin-top:.75rem;padding:.65rem .75rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px">` +
+        `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.35rem;display:flex;align-items:center;gap:.3rem">` +
+          `<span>💰 GRADING UPSIDE</span>` +
+          `<span style="color:rgba(255,255,255,.35);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:.6rem">loading comps…</span>` +
+        `</div>` +
+        `<div style="display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:rgba(255,255,255,.5);padding:.4rem 0">` +
+          `<div class="spinner" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite"></div>` +
+          `Checking PriceCharting for raw + graded comps…` +
+        `</div>` +
+      `</div>` +
       `<button onclick="viewGradedCard('${_cn}', ${psaGrade}, '${_ct}', ${_jp})" ` +
       `style="margin-top:.65rem;width:100%;padding:.6rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:900;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">` +
       `📊 View PSA ${psaGrade} price →</button>` +
@@ -12016,6 +12157,38 @@ async function submitGradeScan(deepGrade) {
       `<button id="shareGradeBtn" onclick="shareGrade(this)" ` +
       `style="margin-top:.4rem;width:100%;padding:.55rem 1rem;background:linear-gradient(135deg,rgba(96,165,250,.18),rgba(139,92,246,.18));color:#93c5fd;border:1px solid rgba(96,165,250,.35);border-radius:10px;font-weight:700;font-size:.84rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.35rem">` +
       `🔗 Share this grade</button>`;
+
+    // Fire the PriceCharting fetch — render the ladder when it returns.
+    // Uses the identify metadata (set + number) if available for accuracy.
+    (async () => {
+      const upsideEl = document.getElementById(upsideId);
+      if (!upsideEl) return;
+      try {
+        const ident = window._pendingIdScanCard || {};
+        const params = new URLSearchParams();
+        params.set('name', data.card_name || '');
+        if (ident.setName)     params.set('set',    ident.setName);
+        if (ident.number)      params.set('number', ident.number);
+        const gameForPc = ({
+          pokemon:  data.is_japanese ? 'pokemonjp' : 'pokemon',
+          yugioh:   'yugioh',
+          mtg:      'mtg',
+          lorcana:  'lorcana',
+          onepiece: 'onepiece',
+          sports:   'sports',
+        })[(data.card_type || 'pokemon').toLowerCase()] || 'pokemon';
+        params.set('game', gameForPc);
+
+        const r = await fetch('/api/pricecharting?' + params.toString());
+        const pc = await r.json();
+        renderGradingUpside(upsideEl, pc, psa, psaGrade, data);
+      } catch(e) {
+        console.warn('[grading-upside] fetch failed', e);
+        upsideEl.innerHTML =
+          `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.35rem">💰 GRADING UPSIDE</div>` +
+          `<div style="font-size:.72rem;color:rgba(255,255,255,.5)">Comps unavailable right now. Tap <strong style="color:rgba(255,255,255,.75)">View PSA ${psaGrade} price</strong> below for live prices.</div>`;
+      }
+    })();
 
     window._pendingScanBannerCard = data.card_name;
 
