@@ -16,11 +16,33 @@ async function kvSet(key, val) {
   return fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(val))}`,
     { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
 }
+async function kvSetWithTTL(key, val, ttlSec) {
+  // Upstash REST: SET with EX for TTL. Query-string form.
+  return fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(val))}?EX=${ttlSec}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
+}
+async function kvIncr(key) {
+  const r = await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
+  const d = await r.json();
+  return parseInt(d.result || '0', 10) || 0;
+}
+async function kvExpire(key, ttlSec) {
+  return fetch(`${kvUrl}/expire/${encodeURIComponent(key)}/${ttlSec}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
+}
 async function kvGet(key) {
   const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`,
     { headers: { Authorization: `Bearer ${kvToken}` } });
   const d = await r.json();
   return d.result;
+}
+
+// Best-effort client IP from Vercel headers. Strips leading proxies from XFF.
+function getClientIP(req) {
+  const xff = req.headers['x-forwarded-for'] || '';
+  const first = xff.split(',')[0].trim();
+  return first || req.headers['x-real-ip'] || req.socket?.remoteAddress || '';
 }
 
 function normalizeEmail(email) {
@@ -129,6 +151,38 @@ export default async function handler(req, res) {
     } else if (emailBonusGiven) {
       bonusReason = 'email-already-claimed';
     } else {
+      // ---- IP throttle (2026-08-20) --------------------------------
+      // Cap signup bonuses per IP per 24h. Legit users won't hit 2.
+      // Farmers running 50 Gmail aliases from one laptop will. Silent
+      // to legit users; only fires when we're about to grant.
+      // Env override: SIGNUP_BONUS_IP_MAX_PER_DAY (default 2), or 0 to
+      // disable entirely.
+      const ipMax = parseInt(process.env.SIGNUP_BONUS_IP_MAX_PER_DAY || '2', 10);
+      const clientIP = getClientIP(req);
+      if (ipMax > 0 && clientIP) {
+        const ipKey = `signup_bonus_ip:${clientIP}`;
+        const count = await kvIncr(ipKey);
+        // Set 24h TTL on first hit (INCR alone doesn't set expiry).
+        if (count === 1) {
+          try { await kvExpire(ipKey, 86400); } catch(_){}
+        }
+        if (count > ipMax) {
+          console.warn('[verify-claim] IP throttle hit ip=' + clientIP + ' count=' + count + ' email=' + email);
+          bonusReason = 'ip-throttle';
+          // Fall through: verification succeeds, but no bonus. User
+          // sees a friendly "verified" message; farmer sees no credits.
+          return res.status(200).json({
+            ok: true,
+            verified: true,
+            email,
+            bonusGranted: false,
+            bonusReason: 'ip-throttle',
+            message: 'Verified. (Sign-up bonus limit reached on your network today — try tomorrow or contact support.)',
+          });
+        }
+      }
+      // --------------------------------------------------------------
+
       const getInt = async (k) => {
         const v = await kvGet(k);
         return parseInt(v || '0', 10) || 0;
