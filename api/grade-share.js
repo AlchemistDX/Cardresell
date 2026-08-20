@@ -98,8 +98,8 @@ function renderPage({ id, share, host }) {
   const ogImage  = image ? `https://${host}/api/grade-share?id=${encodeURIComponent(id)}&image=1` : `https://${host}/logo.png`;
   const title    = `${name} — Est. PSA ${psa} · ${label}`;
   const desc     = isDeep
-    ? `Deep Grade analysis: Centering ${centLR || '—'}, Corners ${corners || '—'}. Try it free at cardresell.org.`
-    : `Estimated grade: PSA ${psa}. Grade your own cards free at cardresell.org.`;
+    ? `Deep Grade analysis: Centering ${centLR || '—'}, Corners ${corners || '—'}. Try CardResell free — 10 ID scans + 1 AI Grade on signup.`
+    : `Estimated grade: PSA ${psa}. Try CardResell free — 10 ID scans + 1 AI Grade on signup.`;
 
   const distBar = psaDist.length > 0
     ? `<div class="dist">
@@ -336,8 +336,8 @@ function renderPage({ id, share, host }) {
       ${notes    ? `<div class="notes"><strong style="color:rgba(255,255,255,.85)">Grader notes: </strong>${esc(notes)}</div>` : ''}
     </div>
 
-    <a href="/" class="cta">Grade your own card free →</a>
-    <div class="cta-sub">Scan · AI grade · portfolio tracking</div>
+    <a href="/signin" class="cta">Try CardResell free →</a>
+    <div class="cta-sub">Sign up bonus: 10 ID scans + 1 AI Grade · Scan · portfolio tracking</div>
 
     <div class="disclaimer">
       Estimated grade only — not a PSA/BGS/CGC certification.
