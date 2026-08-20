@@ -12449,10 +12449,13 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
   };
 })();
 
-<!-- 2026-08-20: Photo QC (blur/dupe/low-res) gates. Rejects bad photos
-     BEFORE they consume a Ximilar credit or hit /api/scan. See
-     /home/user/workspace/cardresell/js/photo-qc.js for the source. -->
-<script>
+// 2026-08-20: Photo QC (blur/dupe/low-res) gates. Rejects bad photos
+// BEFORE they consume a Ximilar credit or hit /api/scan. See
+// /home/user/workspace/cardresell/js/photo-qc.js for the source.
+// NOTE: inlined directly into the parent <script> block — do NOT wrap in
+// its own <script> tag, that would break the parent block and dump the
+// rest of the page's inline JS into the DOM as text (root cause of the
+// 2026-08-20 sign-in-return blank-page bug).
 // photo-qc.js (2026-08-20)
 // Client-side quality gates that reject bad photos BEFORE we spend a
 // Ximilar / API credit. Three gates:
@@ -12673,8 +12676,6 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 
   window.CardResellPhotoQC = { check, reset, MIN_SHORT_EDGE, BLUR_THRESHOLD, DUPE_DISTANCE };
 })();
-
-</script>
 
 // Restore Google session on page load
 // Session restore handled by Firebase onAuthStateChanged
