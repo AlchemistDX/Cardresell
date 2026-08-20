@@ -3532,6 +3532,100 @@ let activeGame = 'pokemon';
 let sortMode = 'payout';
 let searchTimeout = null;
 
+// ── Last-card persistence (2026-08-20) ──
+// Two bugs this fixes:
+//   1) Deep Grade "View Card" was flaky because it relied on
+//      window._pendingIdScanCard, which gets consumed and null'd by the
+//      identify auto-load. Solution: mirror every identify into a stable
+//      window._lastIdentifiedCard that's never null'd, only overwritten.
+//   2) Refreshing the page nuked the card the user was viewing. Solution:
+//      persist the last loaded card to localStorage on every loadCardUI,
+//      then restore it on window 'load' after auth resolves.
+window._lastIdentifiedCard = window._lastIdentifiedCard || null;
+const _CR_LAST_CARD_KEY = 'cr:lastCard:v1';
+
+function _persistLastIdentified(pending) {
+  if (!pending || !pending.name) return;
+  try {
+    window._lastIdentifiedCard = JSON.parse(JSON.stringify(pending));
+    localStorage.setItem(_CR_LAST_CARD_KEY + ':ident', JSON.stringify(pending));
+  } catch(e) { /* localStorage may be full or disabled */ }
+}
+
+function _persistLastLoadedCard(card) {
+  if (!card) return;
+  try {
+    // Save the minimum shape needed to re-load: name, number/id, game, image, prices.
+    const snapshot = {
+      name:     card.name || '',
+      number:   card.number || card.card_number || '',
+      setName:  card.set || card.setName || card.set_name || '',
+      setCode:  card.setCode || card.set_code || '',
+      id:       card.id || card.groundedId || '',
+      game:     card.game || activeGame || 'pokemon',
+      images:   card.images || null,
+      rarity:   card.rarity || '',
+      hp:       card.hp || '',
+      _fullCard: card,       // stash the whole thing for exact re-render
+      _savedAt: Date.now(),
+    };
+    localStorage.setItem(_CR_LAST_CARD_KEY, JSON.stringify(snapshot));
+  } catch(e) { /* ignore */ }
+}
+
+function _clearLastLoadedCard() {
+  try {
+    localStorage.removeItem(_CR_LAST_CARD_KEY);
+    localStorage.removeItem(_CR_LAST_CARD_KEY + ':ident');
+  } catch(e) {}
+}
+
+function _restoreLastLoadedCard() {
+  try {
+    const raw = localStorage.getItem(_CR_LAST_CARD_KEY);
+    if (!raw) return false;
+    const snap = JSON.parse(raw);
+    if (!snap || !snap.name) return false;
+    // Only auto-restore cards saved in the last 7 days.
+    if (snap._savedAt && (Date.now() - snap._savedAt) > 7*24*3600*1000) {
+      _clearLastLoadedCard();
+      return false;
+    }
+    // Also restore ident snapshot if present so Deep Grade View Card works
+    // for the restored card on the very first tap after refresh.
+    try {
+      const identRaw = localStorage.getItem(_CR_LAST_CARD_KEY + ':ident');
+      if (identRaw) {
+        const ident = JSON.parse(identRaw);
+        if (ident && ident.name) {
+          window._lastIdentifiedCard = ident;
+          window._pendingIdScanCard = ident;
+        }
+      }
+    } catch(_) {}
+
+    // Switch to Card Lookup view and align game selector.
+    try { if (snap.game && snap.game !== activeGame && typeof switchGame === 'function') switchGame(snap.game); } catch(_) {}
+    try { if (typeof switchView === 'function') switchView('lookup'); } catch(_) {}
+
+    // Fast path: if we saved the full card object, re-hydrate directly.
+    if (snap._fullCard && typeof loadCardUI === 'function') {
+      try { selectedCard = snap._fullCard; loadCardUI(snap._fullCard); return true; } catch(_) {}
+    }
+    // Fallback: use exact-load routers if available.
+    if (snap.name && typeof _loadScannedCardExact === 'function') {
+      const pending = {
+        name: snap.name, number: snap.number, setName: snap.setName,
+        setCode: snap.setCode, groundedId: snap.id, rarity: snap.rarity,
+        hp: snap.hp, cardType: snap.game === 'sports' ? 'sports' : (snap.game || 'pokemon'),
+        isJapanese: snap.game === 'pokemonjp',
+      };
+      try { _loadScannedCardExact(pending); return true; } catch(_) {}
+    }
+  } catch(e) { console.warn('[_restoreLastLoadedCard] failed', e); }
+  return false;
+}
+
 // ── DOM refs ──
 const searchInput   = document.getElementById('searchInput');
 const searchRow     = document.getElementById('searchRow');
@@ -5314,6 +5408,8 @@ function loadCardUI(card) {
   // Show the Add to My Collection button whenever a card is loaded
   const _colBtn = document.getElementById('addCollectionBtn');
   if (_colBtn) _colBtn.style.display = '';
+  // Persist the loaded card so a page refresh restores the user's spot.
+  try { _persistLastLoadedCard(card); } catch(_) {}
   // Increment social proof counter on each card load
   if (window._triggerSocialProof) window._triggerSocialProof();
   const isSports  = card.game === 'sports';
@@ -9420,9 +9516,14 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   // in window._pendingIdScanCard; we should reuse the same _loadScanned*
   // pipeline the ID-scan flow uses so the exact printing loads with real
   // comps, then apply the PSA grade on top.
+  // Prefer the fresh pending record; fall back to the stable last-identified
+  // snapshot so View Card still works after the identify auto-load has
+  // already consumed _pendingIdScanCard (2026-08-20 fix).
   const ident = (window._pendingIdScanCard && window._pendingIdScanCard.name)
     ? window._pendingIdScanCard
-    : null;
+    : (window._lastIdentifiedCard && window._lastIdentifiedCard.name
+        ? window._lastIdentifiedCard
+        : null);
 
   // If we have identify context AND it matches this graded card, use the
   // exact-load routers. Match on name (case-insensitive substring, since
@@ -10793,6 +10894,7 @@ async function _pickScanCandidate(idx) {
     sport:    picked.sport     || '',
     year:     picked.year      || '',
   };
+  try { _persistLastIdentified(window._pendingIdScanCard); } catch(_) {}
   // Cross-TCG auto-switch: if user was on Pokemon but picked a Lorcana
   // candidate (etc.), silently swap the game selector before rendering.
   try {
@@ -10980,6 +11082,7 @@ async function processScanImage(input) {
           setCode: c.set_code, groundedId: c.id, rarity: c.rarity, hp: '',
           cardType: 'pokemon', sport: '', year: '', isJapanese: false, jpName: '',
         };
+        try { _persistLastIdentified(window._pendingIdScanCard); } catch(_) {}
         URL.revokeObjectURL(objectUrl);
         const spinnerFp = document.getElementById('scanSpinner');
         if (spinnerFp) spinnerFp.style.display = 'none';
@@ -11336,6 +11439,7 @@ async function processScanImage(input) {
       // matches the passcode we passed in.
       imageUrl: data.image_url || rerankedImageLarge || rerankedImageSmall || '',
     };
+    try { _persistLastIdentified(window._pendingIdScanCard); } catch(_) {}
     URL.revokeObjectURL(objectUrl);
 
     // Show success state — hide spinner, show View Card + Scan Another
@@ -13875,6 +13979,18 @@ window.addEventListener('load', () => {
   if (oaiInput && window._openAiKey) oaiInput.value = window._openAiKey;
   const gcInput = document.getElementById('googleClientIdInput');
   if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
+
+  // 2026-08-20: restore the last-viewed card across page refresh.
+  // Do it after a short delay so the game selector / view switch have time
+  // to attach, and skip if the URL already has share/deep-link parameters
+  // that will load their own card.
+  try {
+    const q = new URLSearchParams(location.search);
+    const hasDeepLink = q.get('c') || q.get('card') || q.get('share') || location.pathname.startsWith('/grade/');
+    if (!hasDeepLink) {
+      setTimeout(() => { try { _restoreLastLoadedCard(); } catch(e) { console.warn('[restore] failed', e); } }, 400);
+    }
+  } catch(_) {}
 });
 </script>
 
