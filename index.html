@@ -9558,6 +9558,8 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   const cleanName = (cardName || '').trim();
   if (!cleanName) return;
 
+  try { console.log('[viewGradedCard] START', { cleanName, psaGrade, cardType, isJapanese, _pending: window._pendingIdScanCard, _lastIdent: window._lastIdentifiedCard }); } catch(_){}
+
   // 2026-08-20 FIX: The old path here just typed the card name into the
   // search box and hoped the first dropdown match was the correct printing.
   // That routinely landed users on the WRONG card — e.g. "Charizard" grade
@@ -9582,6 +9584,8 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
     (ident.name || '').toLowerCase().includes(cleanName.toLowerCase()) ||
     cleanName.toLowerCase().includes((ident.name || '').toLowerCase())
   );
+
+  try { console.log('[viewGradedCard] ident?', { hasIdent: !!ident, identName: ident?.name, cleanName, identMatches }); } catch(_){}
 
   const psaGradeNum = Number(psaGrade) || 0;
 
@@ -9617,6 +9621,7 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   // exact card by set + number.
   if (identMatches) {
     try {
+      console.log('[viewGradedCard] EXACT-LOAD path entered');
       // The ident routers each null out _pendingIdScanCard on entry, so
       // grab a snapshot before they consume it.
       const pending = {
@@ -9636,24 +9641,31 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
       try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(e) {}
       try { selectedCard = null; } catch(e) {}
 
+      console.log('[viewGradedCard] pending built', pending);
       if (pending.cardType === 'sports') {
+        console.log('[viewGradedCard] → sports router');
         _routeScannedSportsCard(pending);
       } else if (pending.isJapanese === true) {
+        console.log('[viewGradedCard] → JP router');
         try { _loadScannedJPCard(pending); }
-        catch(e) { _loadScannedCardExact(pending); }
+        catch(e) { console.warn('[viewGradedCard] JP threw, exact fallback', e); _loadScannedCardExact(pending); }
       } else if (pending.cardType && pending.cardType !== 'pokemon') {
+        console.log('[viewGradedCard] → non-pokemon router', pending.cardType);
         try { _loadScannedNonPokemonCard(pending); }
-        catch(e) { _loadScannedCardExact(pending); }
+        catch(e) { console.warn('[viewGradedCard] non-poke threw, exact fallback', e); _loadScannedCardExact(pending); }
       } else {
+        console.log('[viewGradedCard] → pokemon exact');
         _loadScannedCardExact(pending);
       }
 
       applyGradeAfter(1200); // exact-load pipelines take ~1s
       return;
     } catch(e) {
-      console.warn('[viewGradedCard] exact router failed, falling back to search', e);
+      console.warn('[viewGradedCard] exact router failed SYNCHRONOUSLY, falling back to search', e);
       // Fall through to legacy search path.
     }
+  } else {
+    console.log('[viewGradedCard] identMatches=false, taking FALLBACK path');
   }
 
   // FALLBACK PATH: no identify context (rare — shouldn't happen after Deep
