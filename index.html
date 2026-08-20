@@ -9286,11 +9286,102 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
   const cleanName = (cardName || '').trim();
   if (!cleanName) return;
 
-  // 2026-08-18: Cross-link to correct TCG game.
-  // The gameSelect may still be on "Pokemon EN" from the user's last
-  // search, but the scanned card could be YGO/MTG/Lorcana/OP/sports.
-  // Map the scan's card_type → gameSelect value so search hits the
-  // right database instead of returning "Image unavailable".
+  // 2026-08-20 FIX: The old path here just typed the card name into the
+  // search box and hoped the first dropdown match was the correct printing.
+  // That routinely landed users on the WRONG card — e.g. "Charizard" grade
+  // routed to a random Charizard SKU with no set/number match. Ximilar
+  // already gave us set + number + grounded_id at ID time and stashed them
+  // in window._pendingIdScanCard; we should reuse the same _loadScanned*
+  // pipeline the ID-scan flow uses so the exact printing loads with real
+  // comps, then apply the PSA grade on top.
+  const ident = (window._pendingIdScanCard && window._pendingIdScanCard.name)
+    ? window._pendingIdScanCard
+    : null;
+
+  // If we have identify context AND it matches this graded card, use the
+  // exact-load routers. Match on name (case-insensitive substring, since
+  // Ximilar sometimes returns fuller variants like "Charizard ex").
+  const identMatches = ident && (
+    (ident.name || '').toLowerCase().includes(cleanName.toLowerCase()) ||
+    cleanName.toLowerCase().includes((ident.name || '').toLowerCase())
+  );
+
+  const psaGradeNum = Number(psaGrade) || 0;
+
+  // Post-route: apply the PSA grade pill/select once results are loaded.
+  const applyGradeAfter = (delay) => {
+    if (!psaGradeNum) return; // 0 = "View Card" only, no grade to apply
+    setTimeout(() => {
+      try {
+        const gradedToggle = document.getElementById('gradedToggle');
+        if (gradedToggle && !gradedToggle.classList.contains('active')) {
+          gradedToggle.click();
+        }
+        const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
+        if (psaPill && typeof setPill === 'function') {
+          setPill(psaPill, 'gradedPills');
+          if (typeof toggleGrade === 'function') toggleGrade();
+        }
+        setTimeout(() => {
+          const gradeSelect = document.getElementById('gradeSelect');
+          if (gradeSelect) {
+            gradeSelect.value = String(psaGradeNum);
+            gradeSelect.dispatchEvent(new Event('change'));
+            if (typeof calc === 'function') calc();
+          }
+          const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
+          if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+      } catch(e) { console.warn('[viewGradedCard] applyGrade failed', e); }
+    }, delay);
+  };
+
+  // FAST PATH: reuse the identify router that already knows how to load the
+  // exact card by set + number.
+  if (identMatches) {
+    try {
+      // The ident routers each null out _pendingIdScanCard on entry, so
+      // grab a snapshot before they consume it.
+      const pending = {
+        name:     ident.name     || cleanName,
+        number:   ident.number   || '',
+        setName:  ident.setName  || '',
+        setCode:  ident.setCode  || '',
+        groundedId: ident.groundedId || '',
+        rarity:   ident.rarity   || '',
+        hp:       ident.hp       || '',
+        cardType: ident.cardType || cardType || 'pokemon',
+        isJapanese: (ident.isJapanese === true) || (isJapanese === true),
+        sport:    ident.sport    || '',
+        year:     ident.year     || '',
+      };
+
+      try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(e) {}
+      try { selectedCard = null; } catch(e) {}
+
+      if (pending.cardType === 'sports') {
+        _routeScannedSportsCard(pending);
+      } else if (pending.isJapanese === true) {
+        try { _loadScannedJPCard(pending); }
+        catch(e) { _loadScannedCardExact(pending); }
+      } else if (pending.cardType && pending.cardType !== 'pokemon') {
+        try { _loadScannedNonPokemonCard(pending); }
+        catch(e) { _loadScannedCardExact(pending); }
+      } else {
+        _loadScannedCardExact(pending);
+      }
+
+      applyGradeAfter(1200); // exact-load pipelines take ~1s
+      return;
+    } catch(e) {
+      console.warn('[viewGradedCard] exact router failed, falling back to search', e);
+      // Fall through to legacy search path.
+    }
+  }
+
+  // FALLBACK PATH: no identify context (rare — shouldn't happen after Deep
+  // Grade since Deep Grade requires an identified card), or router blew up.
+  // Old behavior: type the name into search and click first dropdown match.
   const typeToGame = {
     pokemon:  isJapanese ? 'pokemonjp' : 'pokemon',
     yugioh:   'yugioh',
@@ -9309,61 +9400,27 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
     }
   }
 
-  // Search for the card, then auto-apply PSA + grade
   const searchInput = document.getElementById('searchInput');
   if (!searchInput) return;
 
-  searchInput.value = cleanName;
-  searchInput.dispatchEvent(new Event('input'));
-  // Also fire the full search immediately so results show even if the
-  // autocomplete dropdown never populates (e.g. rare / misidentified cards).
-  const searchBtn = document.getElementById('searchBtn');
-  if (searchBtn) {
-    try { searchBtn.click(); } catch(e) {}
-  }
+  // Build a more specific query if we have identify metadata (even if name
+  // didn't match exactly — e.g. append the set/number to disambiguate).
+  let query = cleanName;
+  if (ident && ident.number) query = `${cleanName} ${ident.number}`;
 
-  // After dropdown populates, click the best match; if none appears, fall
-  // back to using the search results directly with the requested PSA grade.
-  // psaGrade === 0 means "View Card" (raw view, don't apply PSA grade).
-  const applyGrade = () => {
-    if (!psaGrade || psaGrade === 0) {
-      const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
-      if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-    const gradedToggle = document.getElementById('gradedToggle');
-    if (gradedToggle && !gradedToggle.classList.contains('active')) {
-      try { gradedToggle.click(); } catch(e) {}
-    }
-    const psaPill = document.querySelector('#gradedPills .pill[data-val="psa"]');
-    if (psaPill) {
-      try { setPill(psaPill, 'gradedPills'); } catch(e) {}
-      if (typeof toggleGrade === 'function') { try { toggleGrade(); } catch(e) {} }
-    }
-    setTimeout(() => {
-      const gradeSelect = document.getElementById('gradeSelect');
-      if (gradeSelect) {
-        gradeSelect.value = String(psaGrade);
-        gradeSelect.dispatchEvent(new Event('change'));
-        if (typeof calc === 'function') { try { calc(); } catch(e) {} }
-      }
-      const resultsEl = document.getElementById('sellSection') || document.getElementById('platformCards');
-      if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 300);
-  };
+  searchInput.value = query;
+  searchInput.dispatchEvent(new Event('input'));
+  const searchBtn = document.getElementById('searchBtn');
+  if (searchBtn) { try { searchBtn.click(); } catch(e) {} }
 
   setTimeout(() => {
     const best = document.querySelector('.drop-item');
     if (best) {
       try { best.click(); } catch(e) {}
-      setTimeout(applyGrade, 600);
+      applyGradeAfter(600);
     } else {
-      // No dropdown match — leave the search query in place, still apply the
-      // graded pill + PSA grade so the price panel is meaningful. Also scroll
-      // to the search input so the user can see we DID execute their query
-      // instead of dumping them back to the home screen.
       try { searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
-      applyGrade();
+      applyGradeAfter(0);
     }
   }, 800);
 }
