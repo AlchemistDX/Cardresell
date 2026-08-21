@@ -13,8 +13,12 @@
 
 export const TIER_BENEFITS = {
   free: {
-    gradeGrant:    0,
-    idGrant:       0,
+    // Recurring monthly grant for VERIFIED free users only. Unverified accounts
+    // still get 0 — they must complete the email-verify flow (Turnstile + IP
+    // throttle + one-time-per-email gate in verify-confirm.js). This makes the
+    // free tier competitive with Ludex/CollX without opening a bot-farm hole.
+    gradeGrant:    1,
+    idGrant:       5,
     topupDiscount: 0,     // percent off top-ups
     couponId:      null,
   },

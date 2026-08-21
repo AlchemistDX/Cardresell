@@ -461,16 +461,37 @@ export default async function handler(req, res) {
   if (hasKV) {
     const tier       = await getUserTier(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
     const isPro      = isPaidTier(tier); // any paid tier gets monthly grants
+
+    // 2026-08-20: Recurring monthly free grant for VERIFIED free users only.
+    // Bots that skip email verification get 0 credits. Verified free users
+    // get 5 ID / 1 Grade per month (auto-resets via monthStamp keying).
+    // Stacks on all existing defenses: Google OAuth + Turnstile + IP throttle
+    // + one-time-per-email verify gate in verify-confirm.js.
+    let emailVerified = false;
+    if (tier === 'free' && googleSub) {
+      try {
+        const vr = await fetch(`${kvUrl}/get/${encodeURIComponent(`email_verified:${googleSub}`)}`, {
+          headers: { Authorization: `Bearer ${kvToken}` }
+        });
+        if (vr.ok) {
+          const vj = await vr.json().catch(() => null);
+          emailVerified = !!(vj && vj.result);
+        }
+      } catch (_) { /* fail closed */ }
+    }
+    const grantEligible = isPro || emailVerified;
+
     const benefits   = TIER_BENEFITS[tier] || TIER_BENEFITS.free;
-    const gradeGrant = benefits.gradeGrant; // 0 / 10 / 25 / 60
-    const idGrant    = benefits.idGrant;    // 0 / 20 / 50 / 150
+    const gradeGrant = benefits.gradeGrant; // 0 / 1(verified) / 10 / 25 / 60
+    const idGrant    = benefits.idGrant;    // 0 / 5(verified) / 20 / 50 / 150
 
     if (isIdentifyMode) {
-      // ID scans: paid tiers draw from monthly free bucket first (grant), then
-      // fall back to paid ID credits. Non-paid users go straight to paid.
+      // ID scans: grant-eligible users (paid tiers + verified free) draw from
+      // monthly free bucket first, then fall back to paid ID credits.
+      // Unverified free users go straight to paid (0 free bucket).
       const stamp      = getMonthStamp();
-      const idFreeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : idGrant;
-      const idFreeLeft = isPro ? Math.max(0, idGrant - idFreeUsed) : 0;
+      const idFreeUsed = grantEligible ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : idGrant;
+      const idFreeLeft = grantEligible ? Math.max(0, idGrant - idFreeUsed) : 0;
       const idPaid     = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
 
       if (idFreeLeft <= 0 && idPaid <= 0) {
@@ -486,12 +507,13 @@ export default async function handler(req, res) {
         consumedAmount = 1;
       }
     } else {
-      // Graded scans: draw from tier's monthly grant bucket first, then paid_left.
+      // Graded scans: grant-eligible users (paid tiers + verified free) draw
+      // from monthly grant bucket first, then paid_left.
       // Deep Grade costs 2 credits — must come from the SAME bucket (no mixing).
       const paid     = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
       const stamp    = getMonthStamp();
-      const freeUsed = isPro ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : gradeGrant;
-      const freeLeft = isPro ? Math.max(0, gradeGrant - freeUsed) : 0;
+      const freeUsed = grantEligible ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : gradeGrant;
+      const freeLeft = grantEligible ? Math.max(0, gradeGrant - freeUsed) : 0;
 
       if (freeLeft < gradeCost && paid < gradeCost) {
         return res.status(402).json({

@@ -3,8 +3,10 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
 
-const FREE_SCANS_PER_MONTH = 10; // legacy default — replaced by per-tier grants below
-const TIER_GRADE_GRANT = { free: 0, pro: 10, pro_max: 25, ultimate: 60 };
+// Per-tier monthly grants. Free tier grants require email verification
+// (enforced above by grantEligible check). Kept in sync with api/_tier.js.
+const TIER_GRADE_GRANT = { free: 1, pro: 10, pro_max: 25, ultimate: 60 };
+const TIER_ID_GRANT    = { free: 5, pro: 20, pro_max: 50, ultimate: 150 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -132,14 +134,37 @@ export default async function handler(req, res) {
 
   // 3. Get scan credits
   let freeScansLeft = 0, paidScansLeft = 0, freeScansUsed = 0, idPaidLeft = 0;
+  let idFreeLeft = 0, idFreeUsed = 0;
   if (kvUrl && kvToken) {
     paidScansLeft = await getKVInt(kvUrl, kvToken, `scans:${userSub}:paid_left`);
     idPaidLeft    = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_paid_left`);
-    if (isPro) {
-      const monthKey  = `scans:${userSub}:free_used_${getMonthStamp()}`;
-      const monthly   = TIER_GRADE_GRANT[userTier] || TIER_GRADE_GRANT.pro;
-      freeScansUsed   = await getKVInt(kvUrl, kvToken, monthKey);
-      freeScansLeft   = Math.max(0, monthly - freeScansUsed);
+
+    // Grant buckets: paid tiers always get grants. Verified free users also
+    // get a small recurring monthly grant (5 ID / 1 Grade). Unverified free
+    // users get 0 — they must complete the email-verify flow first.
+    // We compute emailVerified here so the grant check below can use it.
+    let grantEligible = isPro;
+    if (!grantEligible && userTier === 'free') {
+      try {
+        const vr = await fetch(`${kvUrl}/get/${encodeURIComponent(`email_verified:${userSub}`)}`, {
+          headers: { Authorization: `Bearer ${kvToken}` },
+        });
+        if (vr.ok) {
+          const vj = await vr.json().catch(() => null);
+          if (vj && vj.result) grantEligible = true;
+        }
+      } catch(_) { /* fail closed */ }
+    }
+
+    if (grantEligible) {
+      const stamp    = getMonthStamp();
+      const gMonthly = TIER_GRADE_GRANT[userTier] || TIER_GRADE_GRANT.free || 0;
+      const iMonthly = TIER_ID_GRANT[userTier]    || TIER_ID_GRANT.free    || 0;
+
+      freeScansUsed   = await getKVInt(kvUrl, kvToken, `scans:${userSub}:free_used_${stamp}`);
+      freeScansLeft   = Math.max(0, gMonthly - freeScansUsed);
+      idFreeUsed      = await getKVInt(kvUrl, kvToken, `scans:${userSub}:id_free_used_${stamp}`);
+      idFreeLeft      = Math.max(0, iMonthly - idFreeUsed);
     }
 
     // 3b. Check KV email_verified:<uid> override — universal verify flow.
@@ -164,8 +189,6 @@ export default async function handler(req, res) {
       const ed = await er.json();
       if (ed.result) verifiedEmail = String(ed.result).replace(/^"|"$/g, '');
     } catch(e) { /* non-fatal */ }
-  } else if (isPro) {
-    freeScansLeft = FREE_SCANS_PER_MONTH;
   }
 
   // 5. Referral code (deterministic)
@@ -224,7 +247,10 @@ export default async function handler(req, res) {
     email: userEmail,
     freeScansLeft,
     freeScansUsed,
-    freeScansTotal: TIER_GRADE_GRANT[userTier] || FREE_SCANS_PER_MONTH,
+    freeScansTotal: TIER_GRADE_GRANT[userTier] || 0,
+    idFreeLeft,
+    idFreeUsed,
+    idFreeTotal: TIER_ID_GRANT[userTier] || 0,
     paidScansLeft,
     idPaidLeft,
     idCredits: idPaidLeft,
