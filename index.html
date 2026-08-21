@@ -10692,6 +10692,9 @@ async function _loadScannedCardExact(pending) {
   const { name, number, setName, rarity, groundedId } = pending;
   const si = document.getElementById('searchInput');
   if (si) si.value = name;
+  // 2026-08-21: track whether the synth-card fallback already rendered a
+  // real price so we can skip the miss panel and avoid double-panels.
+  let _synthCardLoadedWithPrice = false;
 
   // 2026-08-16 FAST PATH: if the server-side scan endpoint already resolved
   // this card in pokemontcg.io via set_code + number, hit /v2/cards/<id>
@@ -11122,9 +11125,23 @@ async function _loadScannedCardExact(pending) {
       try { loadCardUI(synthCard); } catch(uiErr) { console.warn('[synth loadCardUI]', uiErr); }
       const mainCard = document.getElementById('cardHero');
       if (mainCard) mainCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // 2026-08-21: if the synth card loaded with real tcgcsv pricing,
+      // skip the miss panel entirely — otherwise we render two
+      // competing prices (tcgcsv market vs PriceCharting median) for
+      // the same card, which looks broken to the user.
+      if (synthPriceVariants.length > 0) {
+        _synthCardLoadedWithPrice = true;
+      }
     }
   } catch(synthErr) {
     console.warn('[_loadScannedCardExact] synthetic-card error:', synthErr);
+  }
+
+  // 2026-08-21: skip the miss panel when the synth card already rendered
+  // with a real tcgcsv price — the panel would just duplicate the info
+  // with a different price source, confusing the user.
+  if (_synthCardLoadedWithPrice) {
+    return;
   }
 
   // Still render the scan-miss panel with affiliate search buttons on top
