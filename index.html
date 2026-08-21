@@ -6319,6 +6319,13 @@ function updateSellLinks(card) {
   const poshQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail} ${gameTag}`);
   const fanaticsQ  = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}${isPokemon ? ' pokemon' : ''}`);
   const pwccQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}`);
+  // Whatnot: /search?query=<term> — verified 2026-08-21 in-browser. Path-
+  // style /search/<term> returns 404. Keep query terse (name+number+game)
+  // — Whatnot search is TCG-focused so gameTag ('pokemon' etc) helps.
+  const whatnotQ   = encodeURIComponent(`${searchName}${numTail} ${gameTag}`.trim());
+  // Mercari: /search/?keyword=<term> — verified 2026-08-21. Note trailing
+  // slash and 'keyword' param. Do NOT prefix with /us/ (returns 404).
+  const mercariQ   = encodeURIComponent(`${searchName}${numTail} ${gameTag}`.trim());
   const isTCGGame   = isPokemon || isMagic || isYugioh || game === 'lorcana' || game === 'onepiece';
   const tcgpUrl     = isTCGGame ? buildTcgpUrl(searchName, setName, number) : '';
 
@@ -6329,7 +6336,9 @@ function updateSellLinks(card) {
     comc:      `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
     poshmark:  `https://poshmark.com/search?query=${poshQ}&type=listings`,
     fanatics:  `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
-    pwcc:      `https://www.pwccmarketplace.com/search?query=${pwccQ}`
+    pwcc:      `https://www.pwccmarketplace.com/search?query=${pwccQ}`,
+    whatnot:   `https://www.whatnot.com/search?query=${whatnotQ}`,
+    mercari:   `https://www.mercari.com/search/?keyword=${mercariQ}`
   };
   // Upgrade TCGplayer URL to product-page deeplink if we have a card object.
   // This routes users to the EXACT product page where they tap "Sell Yours"
