@@ -333,7 +333,12 @@ async function groundLorcanaCardInfo(cardInfo) {
 //   Tier 4: name:<identifier>*                    (wildcard, filter by number+set)
 async function groundPokemonCardInfo(cardInfo) {
   if (!cardInfo || cardInfo.card_type !== 'pokemon') return;
-  if (cardInfo.is_japanese) return; // JP has its own path (client-side); pokemontcg.io is EN only
+  // Note: pokemontcg.io DOES carry many recent JP sets (sv1a Triplet Beat, sv2a
+  // 151, sv5k Wild Force, sv6a Night Wanderer, etc). We used to skip JP here
+  // because the API was long thought to be EN-only, but they've been indexing
+  // JP releases since 2023. Try the lookup for JP too — if the tiered query
+  // finds nothing (older/JP-only sets like s10a, sm1a), we silently fall
+  // through and the client-side JP path can still populate images later.
 
   const rawName = String(cardInfo.card_name || '').trim();
   const rawNum  = String(cardInfo.card_number || '').trim();
@@ -502,6 +507,122 @@ async function groundPokemonCardInfo(cardInfo) {
   console.log(`[scan] Pokemon grounded: "${rawName}" #${rawNum} \u2192 id=${best.id} img=${!!(best.images?.large || best.images?.small)}`);
 }
 
+// ============================================================================
+// One Piece grounding via Limitless One Piece CDN (deterministic URL pattern).
+// Set prefix is uppercase (OP01, OP02, ST01, EB01, P-001 etc), number is
+// zero-padded to 3 digits, English cards use _EN.webp, parallel/alt-art use
+// _p1_EN.webp / _p2_EN.webp variants.
+//
+// This is a HEAD-only grounder — we probe HEAD to check the image exists at
+// the deterministic URL, and only assign image_url when confirmed. No API call
+// needed; Limitless serves the set+number scheme uniformly.
+// ============================================================================
+async function groundOnePieceCardInfo(cardInfo) {
+  if (!cardInfo || cardInfo.card_type !== 'onepiece') return;
+
+  const rawName = String(cardInfo.card_name || '').trim();
+  const rawNum  = String(cardInfo.card_number || '').trim();
+  const rawGid  = String(cardInfo.grounded_id || cardInfo._grounded_id || '').trim();
+  if (!rawName || !rawNum) return;
+
+  // Extract set prefix from grounded_id (Ximilar sets it as "op01-1") or from
+  // card_number if it already includes it ("OP01-001").
+  let setPrefix = '';
+  let cardNumRaw = rawNum.replace(/^#/, '');
+  const gidMatch = rawGid.match(/^([a-z]+\d+|st\d+|eb\d+|p)-(\d+)$/i);
+  const numMatch = cardNumRaw.match(/^([a-z]+\d+|st\d+|eb\d+|p)-?(\d+)$/i);
+  if (gidMatch) {
+    setPrefix = gidMatch[1].toUpperCase();
+    cardNumRaw = gidMatch[2];
+  } else if (numMatch) {
+    setPrefix = numMatch[1].toUpperCase();
+    cardNumRaw = numMatch[2];
+  } else if (cardInfo.set_code) {
+    setPrefix = String(cardInfo.set_code).toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  }
+  if (!setPrefix) return;
+
+  // Zero-pad to 3 digits
+  const paddedNum = cardNumRaw.padStart(3, '0');
+  const cardCode = `${setPrefix}-${paddedNum}`;
+
+  // Try standard, then parallel variants. Limitless serves *_EN.webp for base,
+  // *_p1_EN.webp for first parallel/alt-art, etc.
+  const base = 'https://limitlesstcg.nyc3.cdn.digitaloceanspaces.com/one-piece';
+  const candidates = [
+    `${base}/${setPrefix}/${cardCode}_EN.webp`,
+    `${base}/${setPrefix}/${cardCode}_p1_EN.webp`,
+    `${base}/${setPrefix}/${cardCode}_p2_EN.webp`,
+  ];
+
+  for (const url of candidates) {
+    try {
+      const r = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(2500) });
+      if (r.ok) {
+        cardInfo.image_url   = url;
+        cardInfo.image_small = url;
+        cardInfo._grounded_id = cardCode.toLowerCase();
+        cardInfo.grounded_id  = cardCode.toLowerCase();
+        cardInfo.card_number  = paddedNum;
+        cardInfo.set_code     = setPrefix;
+        cardInfo._grounded    = true;
+        cardInfo._onepiece_grounded_by = 'limitless-cdn';
+        console.log(`[scan] One Piece grounded: "${rawName}" ${cardCode} \u2192 ${url}`);
+        return;
+      }
+    } catch (_) { /* try next variant */ }
+  }
+  console.log(`[scan] One Piece grounding miss: "${rawName}" ${cardCode}`);
+}
+
+// ============================================================================
+// Sports grounding — minimal enrichment. Ximilar returns name+number+year but
+// often empty set_name. We can't cheaply fetch card images for sports (no
+// public CDN pattern like Limitless), so this function focuses on:
+//   1. Ensuring `year` is populated and consistent
+//   2. Detecting brand from Ximilar tags/name (Fleer/Topps/Bowman/Panini/etc)
+//      so downstream PriceCharting can query with brand+year, avoiding the
+//      Tom Brady → Funko POP NFL failure mode
+//   3. Detecting sport (basketball/football/baseball/hockey) from card fields
+// ============================================================================
+function groundSportsCardInfo(cardInfo) {
+  if (!cardInfo || cardInfo.card_type !== 'sports') return;
+
+  const name = String(cardInfo.card_name || '');
+  const set  = String(cardInfo.set_name || '');
+  const combined = (name + ' ' + set).toLowerCase();
+
+  // Brand detection — the most common vintage/modern sports card manufacturers.
+  // We attach as cardInfo.brand for the client to pass to /api/pricecharting.
+  const brandPatterns = [
+    'fleer', 'topps', 'bowman', 'panini', 'donruss', 'upper deck',
+    'score', 'leaf', 'pro set', 'stadium club', 'skybox', 'prizm',
+    'select', 'optic', 'chrome', 'mosaic', 'contenders', 'hoops',
+    'absolute', 'certified', 'immaculate', 'national treasures',
+    'flair', 'metal universe', 'e-x', 'ultra',
+  ];
+  for (const b of brandPatterns) {
+    if (combined.includes(b)) {
+      cardInfo.brand = b.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+      break;
+    }
+  }
+
+  // Sport detection — either from cardInfo.sport (Ximilar may set it) or
+  // guessed from set name / famous player names.
+  if (!cardInfo.sport) {
+    if (/basketball|nba|hoops|prizm bk/.test(combined)) cardInfo.sport = 'basketball';
+    else if (/football|nfl|nfl draft/.test(combined))  cardInfo.sport = 'football';
+    else if (/baseball|mlb|topps baseball/.test(combined)) cardInfo.sport = 'baseball';
+    else if (/hockey|nhl/.test(combined))              cardInfo.sport = 'hockey';
+    else if (/soccer|fifa|mls|premier league/.test(combined)) cardInfo.sport = 'soccer';
+  }
+
+  cardInfo._grounded = true;
+  cardInfo._sports_grounded_by = 'field-enrichment';
+  console.log(`[scan] Sports enriched: "${name}" year=${cardInfo.year} brand=${cardInfo.brand||'?'} sport=${cardInfo.sport||'?'}`);
+}
+
 // Dispatcher — call the right per-game grounder
 async function groundCardInfoByGame(cardInfo) {
   if (!cardInfo) return;
@@ -510,6 +631,8 @@ async function groundCardInfoByGame(cardInfo) {
   if (t === 'mtg' || t === 'magic')    return groundMagicCardInfo(cardInfo);
   if (t === 'lorcana')                 return groundLorcanaCardInfo(cardInfo);
   if (t === 'pokemon')                 return groundPokemonCardInfo(cardInfo);
+  if (t === 'onepiece' || t === 'one_piece' || t === 'one piece') return groundOnePieceCardInfo(cardInfo);
+  if (t === 'sports')                  return groundSportsCardInfo(cardInfo);
 }
 
 // /api/scan — Ximilar-first card identification (GPT-5 fallback)
@@ -2233,6 +2356,7 @@ Respond ONLY with valid JSON, no explanation:
         rarity:       cardInfo.rarity      || cleanCandidates[0].rarity      || '',
         sport:        cardInfo.sport       || cleanCandidates[0].sport       || '',
         year:         cardInfo.year        || cleanCandidates[0].year        || '',
+        brand:        cardInfo.brand       || cleanCandidates[0].brand       || '',
         image_url:    cardInfo.image_url   || cardInfo.image_small || '',
       });
     }
@@ -2282,6 +2406,7 @@ Respond ONLY with valid JSON, no explanation:
       rarity:      cardInfo.rarity      || '',
       sport:       cardInfo.sport       || '',
       year:        cardInfo.year        || '',
+      brand:       cardInfo.brand       || '',
       // 2026-08-19: image_url from grounding (YGOProDeck currently; can be
       // extended to pokemontcg.io images too). Client shows this in the
       // scan overlay so users get a visual confirmation of the ID.

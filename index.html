@@ -5034,6 +5034,12 @@ async function fetchAndApplySoldComps(forceRefresh) {
   if (card.setName) pcParams.set('set', card.setName);
   if (card.game)    pcParams.set('game', card.game);
   if (grade)        pcParams.set('grade', grade);
+  // Sports needs year + sport + brand to disambiguate — without these,
+  // PriceCharting matches "Tom Brady" to Funko POP NFL etc. See
+  // scan_full_audit_2026-08-21.md § "Sports" for the failure mode.
+  if (card.year)  pcParams.set('year', card.year);
+  if (card.sport) pcParams.set('sport', card.sport);
+  if (card.brand) pcParams.set('brand', card.brand);
 
   const clientTimeoutMs = 10000;
   const _clientController = new AbortController();

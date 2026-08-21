@@ -115,8 +115,23 @@ function consoleMatchesGame(consoleName, game) {
   if (g === 'yugioh' && (c.includes('yu-gi-oh') || c.includes('yugioh'))) return true;
   if (g === 'lorcana' && c.includes('lorcana')) return true;
   if (g === 'onepiece' && (c.includes('one piece') || c.includes('onepiece'))) return true;
-  if (g === 'sports' && /basketball|football|baseball|hockey|soccer|fleer|topps|panini|bowman|upper deck/.test(c)) return true;
+  if (g === 'sports' && /basketball|football|baseball|hockey|soccer|fleer|topps|panini|bowman|upper deck|donruss|score|leaf|pro set|action packed|stadium club|skybox/.test(c)) return true;
   return false;
+}
+
+// For sports specifically, reject wildly-wrong console matches like Funko POP,
+// merch, toys, or non-sport-card items. PriceCharting has a HUGE catalog and
+// "Tom Brady" alone hits POP figures with $12 raw prices — 3 orders of
+// magnitude off from his rookie card. This is the guard rail.
+function isSportsCategoryOk(consoleName) {
+  const c = String(consoleName || '').toLowerCase();
+  if (!c) return false;
+  // Reject known bad matches
+  const bad = /funko|pop\!|amiibo|figure|figurine|action figure|plush|comic|manga|dvd|blu-ray|game boy|nintendo|playstation|xbox|sega|atari|arcade|book|magazine|poster|jersey|autograph book/;
+  if (bad.test(c)) return false;
+  // Require positive signal of "sports card"
+  const good = /card|fleer|topps|panini|bowman|upper deck|donruss|score|leaf|pro set|stadium club|skybox|prizm|select|optic|chrome|mosaic|contenders|hoops|absolute/;
+  return good.test(c);
 }
 
 export default async function handler(req, res) {
@@ -131,6 +146,9 @@ export default async function handler(req, res) {
   const game   = (req.query.game   || 'pokemon').trim().toLowerCase();
   const number = (req.query.number || '').trim();
   const setStr = (req.query.set    || '').trim();
+  const year   = (req.query.year   || '').trim();
+  const sport  = (req.query.sport  || '').trim();
+  const brand  = (req.query.brand  || '').trim();
   if (!name) return res.status(400).json({ error: 'name required' });
 
   const token = process.env.PRICECHARTING_API_TOKEN;
@@ -149,7 +167,7 @@ export default async function handler(req, res) {
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
-  const cacheKey = `v2|${game}|${name}|${setStr}|${number}|${grade}`.toLowerCase();
+  const cacheKey = `v2|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -169,13 +187,24 @@ export default async function handler(req, res) {
     game === 'sports'    ? '' : // sports queries include year/brand already
     '';
 
-  // For sports, the caller (frontend) usually passes name = "MJ 1986 Fleer"
-  // already — don't re-append the year. For TCGs, set + number give PC the
-  // extra signal it needs to pick the right printing.
-  const qParts = [name];
-  if (setStr && !name.toLowerCase().includes(setStr.toLowerCase())) qParts.push(setStr);
-  if (number) qParts.push(String(number).replace(/^#/, ''));
-  if (gameHint && !name.toLowerCase().includes(gameHint)) qParts.push(gameHint);
+  // Build query. For SPORTS, year + brand + sport are critical to avoid
+  // wildly-wrong matches like Tom Brady → Funko POP NFL. For TCGs, set +
+  // number give PC enough signal to pick the right printing.
+  const qParts = [];
+  if (game === 'sports') {
+    // Prepend year to bias PC search toward that release year first
+    if (year && !name.includes(year)) qParts.push(year);
+    if (brand && !name.toLowerCase().includes(brand.toLowerCase())) qParts.push(brand);
+    qParts.push(name);
+    if (setStr && !name.toLowerCase().includes(setStr.toLowerCase())) qParts.push(setStr);
+    if (number) qParts.push(String(number).replace(/^#/, ''));
+    if (sport && !name.toLowerCase().includes(sport.toLowerCase())) qParts.push(sport);
+  } else {
+    qParts.push(name);
+    if (setStr && !name.toLowerCase().includes(setStr.toLowerCase())) qParts.push(setStr);
+    if (number) qParts.push(String(number).replace(/^#/, ''));
+    if (gameHint && !name.toLowerCase().includes(gameHint)) qParts.push(gameHint);
+  }
   const q = qParts.join(' ');
   const url = `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
 
@@ -196,6 +225,22 @@ export default async function handler(req, res) {
         confidence: 'insufficient', confidenceScore: 0,
         confidenceReasons: ['no PriceCharting match'],
         source: 'pricecharting', fetchedAt, cacheAgeSec: 0,
+      };
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      return res.status(200).json(data);
+    }
+
+    // SPORTS category guard — reject matches that landed on Funko POP, plush,
+    // figures, videogames, etc. Return "no match" instead of a wrong price.
+    if (game === 'sports' && !isSportsCategoryOk(pc['console-name'])) {
+      const data = {
+        median: null, avg: null, low: null, high: null, count: 0,
+        confidence: 'insufficient', confidenceScore: 0,
+        confidenceReasons: [`sports category mismatch: '${pc['console-name']}'`],
+        source: 'pricecharting',
+        rejectedProductName: pc['product-name'],
+        rejectedConsoleName: pc['console-name'],
+        fetchedAt, cacheAgeSec: 0,
       };
       await setCache(kvUrl, kvToken, cacheKey, data);
       return res.status(200).json(data);
