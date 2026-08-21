@@ -11289,6 +11289,81 @@ function _renderScanMissPanel(pending) {
     const target = cardHero || panel;
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch(e) {}
+
+  // 2026-08-21: PriceCharting fallback — when pokemontcg.io hasn't
+  // indexed the set yet (e.g. new Mega Evolution promos, JP-only sets),
+  // PC often has the raw + graded price and a canonical product URL.
+  // We enrich the miss panel in-place when the fetch resolves so the
+  // user goes from "LIVE PRICING UNAVAILABLE" to a real market value
+  // without another tap.
+  _enrichMissPanelWithPriceCharting(panel, {
+    name, number, setName, cardType: pending?.cardType || 'pokemon',
+  }).catch(err => console.warn('[scan-miss] PC enrichment failed:', err));
+}
+
+// 2026-08-21: Background fetch PriceCharting for the scanned card and,
+// if a match returns, replace the miss panel's "unavailable" header with
+// a real market price row. Silent-fail so a PC 4xx/5xx just leaves the
+// original panel in place.
+async function _enrichMissPanelWithPriceCharting(panel, info) {
+  if (!panel || !info || !info.name) return;
+  // Only enrich for TCG cards — sports has its own PC path elsewhere and
+  // we don't want two overlapping renders.
+  const game = (info.cardType || 'pokemon').toLowerCase();
+  if (game === 'sports') return;
+  const pcGame = ({
+    pokemon: 'pokemon', mtg: 'magic', magic: 'magic',
+    yugioh: 'yugioh', lorcana: 'lorcana', onepiece: 'onepiece',
+  })[game] || 'pokemon';
+
+  const params = new URLSearchParams();
+  params.set('game', pcGame);
+  params.set('name', String(info.name).replace(/["\\]/g, '').trim());
+  if (info.setName) params.set('set', String(info.setName));
+  if (info.number)  params.set('number', String(info.number).replace(/^#/, '').split('/')[0].trim());
+
+  let pc;
+  try {
+    const r = await fetch('/api/pricecharting?' + params.toString());
+    if (!r.ok) return;
+    pc = await r.json();
+  } catch(e) { return; }
+
+  if (!pc || pc.median == null || pc.source !== 'pricecharting') return;
+
+  // Panel may have been dismissed while we were fetching — check both
+  // that our reference is still in the DOM and that its id is intact.
+  if (!panel.isConnected || panel.id !== 'scanMissPanel') return;
+
+  const price = Number(pc.median);
+  const priceStr = price >= 100 ? '$' + price.toFixed(0) : '$' + price.toFixed(2);
+  const psa10   = (pc.prices && pc.prices.psa_10 != null) ? Number(pc.prices.psa_10) : null;
+  const psa10Str = psa10 != null && isFinite(psa10) ? '$' + (psa10 >= 100 ? psa10.toFixed(0) : psa10.toFixed(2)) : '';
+  const pcUrl   = pc.url || '';
+
+  // Find the "LIVE PRICING UNAVAILABLE" header block and swap it for a
+  // real price row. We identify it by the gold-uppercase span text; if
+  // the panel layout changed and we can't find it, no-op instead of
+  // corrupting the DOM.
+  const headerRow = panel.querySelector('div[style*="letter-spacing:.05em"]');
+  if (!headerRow) return;
+  headerRow.innerHTML = '<span style="color:#4ade80">Market price — raw</span>';
+
+  // Find the copy paragraph (starts with "This card loaded but") and
+  // replace it with a compact price row.
+  const paras = panel.querySelectorAll('div');
+  for (const d of paras) {
+    if (d.textContent && d.textContent.startsWith("This card loaded but")) {
+      d.style.color = '#e5e5e5';
+      d.style.fontSize = '.78rem';
+      d.style.marginTop = '.5rem';
+      d.style.lineHeight = '1.45';
+      d.innerHTML = 'Raw NM <b style="color:#4ade80;font-size:1.05rem">' + priceStr + '</b>'
+        + (psa10Str ? ' · <span style="color:#a3a3a3">PSA 10 ≈ ' + psa10Str + '</span>' : '')
+        + (pcUrl ? ' · <a href="' + pcUrl + '" target="_blank" rel="noopener" style="color:#f2c14e;text-decoration:underline">PriceCharting →</a>' : '');
+      break;
+    }
+  }
 }
 
 // User tapped "Add to My Collection" from the scan-miss notice. Delegates
