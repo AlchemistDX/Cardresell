@@ -1591,7 +1591,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock 4 more platforms</span> &mdash; Poshmark, COMC, Fanatics &amp; PWCC.<br>
+      <span>&#11088; Unlock 6 more marketplaces</span> &mdash; Poshmark, Whatnot, Mercari, COMC, Fanatics &amp; PWCC.<br>
       <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
@@ -2681,10 +2681,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>1 AI Grade/mo</strong> &middot; recurring</li>
           <li><strong>10 flips tracked</strong></li>
           <li>Card price lookup (all games)</li>
-          <li>eBay + TCGPlayer fees</li>
+          <li><strong>2 marketplaces:</strong> eBay + TCGPlayer</li>
           <li>Flip calc + Deal Score</li>
           <li class="faded">Top-up discounts</li>
-          <li class="faded">4 more platforms</li>
+          <li class="faded">6 more marketplaces</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -2701,7 +2701,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>15 AI Grades/mo</strong></li>
           <li><strong>30 ID scans/mo</strong></li>
           <li><strong>10% off</strong> top-up packs</li>
-          <li><strong>6 platforms</strong> compared</li>
+          <li><strong>5 marketplaces</strong> — adds Poshmark, Whatnot, Mercari</li>
           <li>Payout bar chart</li>
           <li><strong>Unlimited</strong> flip tracking</li>
           <li>Deal Score + Max Buy</li>
@@ -2719,11 +2719,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-price"><sup>$</sup><span data-price-monthly="19" data-price-annual="179">19</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
         <div class="plan-annual-note">Just $15/mo &middot; 3 months free</div>
         <div class="plan-value">Serious flipper</div>
-        <div class="plan-value-sub">Serious flipper — 40 grades &amp; 80 IDs / mo</div>
+        <div class="plan-value-sub">Serious flipper — 40 grades &amp; 100 IDs / mo</div>
         <ul class="plan-features">
           <li><strong>40 AI Grades/mo</strong></li>
-          <li><strong>80 ID scans/mo</strong></li>
+          <li><strong>100 ID scans/mo</strong></li>
           <li><strong>15% off</strong> top-up packs</li>
+          <li><strong>All 8 marketplaces</strong> — adds COMC, Fanatics, PWCC</li>
           <li>Everything in Pro</li>
           <li>Priority email support</li>
           <li>Early access to new features</li>
@@ -2740,11 +2741,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div class="plan-price"><sup>$</sup><span data-price-monthly="39" data-price-annual="359">39</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
         <div class="plan-annual-note">Just $30/mo &middot; 3 months free</div>
         <div class="plan-value">Volume operator</div>
-        <div class="plan-value-sub">Volume operator — 100 grades &amp; 250 IDs / mo</div>
+        <div class="plan-value-sub">Volume operator — 100 grades &amp; 300 IDs / mo</div>
         <ul class="plan-features">
           <li><strong>100 AI Grades/mo</strong></li>
-          <li><strong>250 ID scans/mo</strong></li>
+          <li><strong>300 ID scans/mo</strong></li>
           <li><strong>25% off</strong> top-up packs</li>
+          <li>All 8 marketplaces</li>
           <li>Everything in Pro Max</li>
           <li>&#128188; <strong>Bulk Grade tool</strong> <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
           <li>&#9733; Ultimate badge</li>
@@ -6570,10 +6572,33 @@ const PLATFORMS = {
     effort: 'hard',   effortLabel: 'Hard · consignment, 2–4 wk auction',
     workflow: 'consignment', payoutTime: '4–8 weeks after auction settles',
     hassle: 'You consign, they auction. Payout comes weeks later — best for $75+ cards.',
-    redFlags: ['📦 Ship-in + consignment required', '🔨 Auction only — no fixed Buy Now', '⏳ 4–8 wk payout after sale clears', '💵 Best only for $75+ cards — low-value cards net near zero'] }
+    redFlags: ['📦 Ship-in + consignment required', '🔨 Auction only — no fixed Buy Now', '⏳ 4–8 wk payout after sale clears', '💵 Best only for $75+ cards — low-value cards net near zero'] },
+  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · live auction, you host',
+    workflow: 'list', payoutTime: '1–3 days after sale ships',
+    hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
+    redFlags: ['🎙️ Best results require hosting live shows', '📦 You ship the card yourself', '📉 Slower for solo sellers without an audience'] },
+  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · cross-category, high volume',
+    workflow: 'list', payoutTime: '2–5 days after buyer confirms',
+    hassle: 'High-volume general resale. Card buyers exist but ad spend is where TCG-focused platforms win.',
+    redFlags: ['📦 You ship the card yourself', '🔹 Non-TCG audience — slower for high-end singles', '💰 Payout on demand carries a 2% instant transfer fee'] }
 };
-// Free tier: eBay + TCGPlayer. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
-const FREE_PLATFORMS = new Set(['ebay', 'tcgplayer']);
+
+// TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
+//   Free      → easy platforms (eBay, TCGPlayer) — 2
+//   Pro       → + medium (Poshmark, Whatnot, Mercari)     — 5
+//   Pro Max   → + hard (COMC, Fanatics Collect, PWCC)      — 8 (all)
+//   Ultimate  → all 8 (same platforms; extras are volume/support perks)
+const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
+const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari']);
+const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'pwcc']);
+
+function platformsForTier(tier) {
+  if (tier === 'ultimate' || tier === 'pro_max') return PRO_MAX_PLATFORMS;
+  if (tier === 'pro')                            return PRO_PLATFORMS;
+  return FREE_PLATFORMS;
+}
 
 function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   const total = price + shipCharge;
@@ -6647,6 +6672,34 @@ function feeCOMC(price, service, isGraded, cashout) {
     items.push({ l: 'Cash-out fee (10%)', a: Math.max(0, price - txFee - shFee) * 0.10 });
   }
   return items;
+}
+
+// Whatnot — TCG live-auction leader. Fees per Whatnot's public help center
+// (helpcenter.whatnot.com/hc/en-us/articles/8055316816539). Seller pays:
+//   • 8% marketplace commission on sale price
+//   • 2.9% + $0.30 payment processing (Stripe pass-through)
+// No listing fees, no monthly cost. Seller ships from home.
+function feeWhatnot(price) {
+  const commission = price * 0.08;
+  const processing = price * 0.029 + 0.30;
+  return [
+    { l: 'Marketplace commission (8%)', a: commission },
+    { l: 'Payment processing (2.9% + $0.30)', a: processing }
+  ];
+}
+
+// Mercari — Cross-category resale. Fees per mercari.com/help_center/article/1229
+// (updated 2024 fee model). Seller pays:
+//   • 10% marketplace commission on sale price
+//   • 2.9% + $0.50 payment processing
+// Zero-fee to list, no monthly cost. Seller ships from home.
+function feeMercari(price) {
+  const commission = price * 0.10;
+  const processing = price * 0.029 + 0.50;
+  return [
+    { l: 'Marketplace commission (10%)', a: commission },
+    { l: 'Payment processing (2.9% + $0.50)', a: processing }
+  ];
 }
 
 /* ═══ MAIN CALC ═══ */
@@ -6725,6 +6778,24 @@ function calc() {
       note: pwccWorthy
         ? (isGraded ? 'Auction consignment. Best for graded slabs $75+. PSA Vault → direct ship saves you shipping costs.' : 'Auction consignment. Best for raw cards $75+. Typical 2–4 week auction cycle.')
         : 'Best for cards $75+. For lower-value cards, eBay fees are typically lower.'
+    },
+    {
+      pid: 'whatnot',
+      eligible: true,
+      feeItems: feeWhatnot(price),
+      sellerShip: shipCost,
+      note: (isYugioh || isMagic)
+        ? 'Live-auction TCG marketplace. Great for MTG/YGO breakers if you can host or clip fixed-price listings.'
+        : isSports
+          ? 'Sports breakers use Whatnot heavily. Best if you host or run box breaks.'
+          : 'Live-auction TCG hub — huge Pokémon breaker community if you can host shows.'
+    },
+    {
+      pid: 'mercari',
+      eligible: true,
+      feeItems: feeMercari(price),
+      sellerShip: shipCost,
+      note: 'General resale — lower fees than eBay but smaller card-buyer audience. Best for mid/low tier cards.'
     }
   ];
 
@@ -6749,11 +6820,16 @@ function calc() {
 
   // Winner banner
   // Free users see the best of their FREE platforms; Pro sees the true best across all.
-  const freeWinner = eligible.find(r => FREE_PLATFORMS.has(r.pid));
-  const bannerResult = window._isPro ? winner : (freeWinner || winner);
+  // Tier-aware winner banner — show the best platform *the user can actually see*.
+  const _tierPlatforms = platformsForTier(window._userTier || (window._isPro ? 'pro' : 'free'));
+  const tierWinner = eligible.find(r => _tierPlatforms.has(r.pid));
+  const bannerResult = tierWinner || winner;
   if (bannerResult) {
     const hasCost = itemCost > 0;
-    const bannerLabel = window._isPro ? 'Best Net Payout' : 'Best Free Payout';
+    const _bTier = window._userTier || (window._isPro ? 'pro' : 'free');
+    const bannerLabel = _bTier === 'free' ? 'Best Free Payout'
+                       : _bTier === 'pro' ? 'Best Pro Payout'
+                       : 'Best Net Payout';
     html += `<div class="winner">
       <div class="winner-icon">${PLATFORMS[bannerResult.pid].emoji}</div>
       <div class="winner-info">
@@ -6780,7 +6856,9 @@ function calc() {
   html += `<div class="plat-grid">`;
 
   // Free users see eBay only. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
-  const displaySorted = window._isPro ? sorted : sorted.filter(r => FREE_PLATFORMS.has(r.pid));
+  // Show only platforms the user's tier unlocks. Pro Max + Ultimate see all 8.
+  const _displayTierPlatforms = platformsForTier(window._userTier || (window._isPro ? 'pro' : 'free'));
+  const displaySorted = sorted.filter(r => _displayTierPlatforms.has(r.pid));
 
   displaySorted.forEach(r => {
     const info   = PLATFORMS[r.pid];
@@ -6873,12 +6951,14 @@ function calc() {
   });
 
   // Pro gate — Pro-only platforms blurred to entice upgrade
-  if (!window._isPro) {
-    const proOnlyResults = results.filter(r => !FREE_PLATFORMS.has(r.pid) && r.eligible);
+  if (!window._isPro || (window._userTier && window._userTier !== 'pro_max' && window._userTier !== 'ultimate')) {
+    const _uTier = window._userTier || (window._isPro ? 'pro' : 'free');
+    const _visible = platformsForTier(_uTier);
+    const proOnlyResults = results.filter(r => !_visible.has(r.pid) && r.eligible);
     proOnlyResults.sort((a, b) => b.netPayout - a.netPayout);
     // Compare Pro platforms against the best of the free tier (not just eBay),
     const bestFreePayout = Math.max(
-      ...results.filter(r => FREE_PLATFORMS.has(r.pid) && r.eligible).map(r => r.netPayout),
+      ...results.filter(r => _visible.has(r.pid) && r.eligible).map(r => r.netPayout),
       0
     );
     const mightEarnMore = proOnlyResults[0] && proOnlyResults[0].netPayout > bestFreePayout;
@@ -6911,15 +6991,15 @@ function calc() {
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 4 more platforms + AI grading — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro unlocks Poshmark, COMC, Fanatics &amp; PWCC + bar chart + unlimited flip tracking</div>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 6 more marketplaces + AI grading — $9.99/mo</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro adds Poshmark, Whatnot &amp; Mercari · Pro Max adds COMC, Fanatics &amp; PWCC (8 total)</div>
       </div>
     </div>`;
     html += `</div>`;
 
   // ── Deal Score (shared: free + pro) ───────────────────────────────
   if (itemCost > 0) {
-    const _dsRef   = window._isPro ? winner : (freeWinner || winner);
+    const _dsRef   = tierWinner || winner;
     if (_dsRef) {
       const _bestNet   = _dsRef.netPayout;
       const _profit    = _bestNet - itemCost;
@@ -6951,7 +7031,7 @@ function calc() {
       // For free "Buy" verdicts: show Pro platform nudge
       if (!window._isPro && _verdict === 'Buy') {
         html += `<div style="margin-top:.35rem;padding:.45rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('deal_score_nudge')">
-          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">Pro unlocks 4 more platforms — maximize this deal</span>
+          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">Pro unlocks 6 more marketplaces — maximize this deal</span>
           <span style="font-size:.68rem;font-weight:800;color:var(--gold);white-space:nowrap">Upgrade →</span>
         </div>`;
       }
@@ -6960,7 +7040,7 @@ function calc() {
 
   // ── Max Buy Price (shared: free + pro) ────────────────────────────
   {
-    const _mbpRef = window._isPro ? winner : (freeWinner || winner);
+    const _mbpRef = tierWinner || winner;
     if (_mbpRef && price > 0) {
       const _bestNetMBP = _mbpRef.netPayout;
       const _targetMargins = [20, 30, 40];

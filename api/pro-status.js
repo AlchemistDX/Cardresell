@@ -5,8 +5,8 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 
 // Per-tier monthly grants. Free tier grants require email verification
 // (enforced above by grantEligible check). Kept in sync with api/_tier.js.
-const TIER_GRADE_GRANT = { free: 1, pro: 15, pro_max: 40, ultimate: 100 };
-const TIER_ID_GRANT    = { free: 5, pro: 30, pro_max: 80, ultimate: 250 };
+const TIER_GRADE_GRANT = { free: 1, pro: 15, pro_max: 40,  ultimate: 100 };
+const TIER_ID_GRANT    = { free: 5, pro: 30, pro_max: 100, ultimate: 300 }; // 2026-08-21: pro_max 80→100, ultimate 250→300
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

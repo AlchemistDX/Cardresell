@@ -30,13 +30,13 @@ export const TIER_BENEFITS = {
   },
   pro_max: {
     gradeGrant:    40,
-    idGrant:       80,
+    idGrant:       100,  // 2026-08-21: bumped 80→100 to sharpen ladder vs Pro (30)
     topupDiscount: 15,
     couponId:      'MAX_TOPUP_15',
   },
   ultimate: {
     gradeGrant:    100,
-    idGrant:       250,
+    idGrant:       300,  // 2026-08-21: bumped 250→300 for volume operators
     topupDiscount: 25,
     couponId:      'ULTIMATE_TOPUP_25',
   },
