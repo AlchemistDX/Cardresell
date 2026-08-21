@@ -13177,21 +13177,83 @@ async function shareGrade(btn) {
   }
 }
 
-// Compress image to max maxPx wide/tall, return base64 JPEG string
+// Compress image to max maxPx wide/tall, return base64 JPEG string.
+// 2026-08-21: Now runs client-side auto-crop first. Uses detectCardBounds
+// (already defined for fastpath) to isolate the card silhouette from the
+// background before compression. Cropping happens ONLY when bounds look
+// sensible (≥40% of image area, aspect ratio 0.5–0.9 for a portrait card).
+// Falls back to the whole image if the crop looks wrong — never worse than
+// the old behavior.
 function compressImage(file, maxPx) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      let w = img.width, h = img.height;
+
+      // Step 1: try to detect and crop to card bounds on the FULL-res image
+      // (bounds are computed on a 256px downsample internally so this is
+      // fast — ~30-60ms even on a 4000×3000 iPhone photo).
+      let srcCanvas = null;
+      try {
+        const full = document.createElement('canvas');
+        full.width = img.naturalWidth || img.width;
+        full.height = img.naturalHeight || img.height;
+        const fctx = full.getContext('2d');
+        fctx.drawImage(img, 0, 0);
+        const _detect = (window.CardResellFastPath && window.CardResellFastPath.detectCardBounds) || null;
+        if (_detect) {
+          const t0 = performance.now();
+          const imgData = fctx.getImageData(0, 0, full.width, full.height).data;
+          const bounds = _detect(imgData, full.width, full.height);
+          const dt = (performance.now() - t0) | 0;
+          if (bounds) {
+            const area = bounds.w * bounds.h;
+            const total = full.width * full.height;
+            const ratio = area / total;
+            const aspect = bounds.h > 0 ? bounds.w / bounds.h : 0;
+            // Reject junk bounds:
+            //  - < 25% of the frame (we probably picked up a shadow/hand)
+            //  - aspect way off for a portrait TCG card (0.55–0.85 is normal)
+            //  - aspect way off for a landscape card / bulk-scan layout too
+            //    (accept 1.15–1.8 as landscape). Anything in between (0.85–1.15
+            //    square-ish) is suspicious — skip.
+            const goodPortrait  = ratio >= 0.25 && aspect >= 0.55 && aspect <= 0.85;
+            const goodLandscape = ratio >= 0.25 && aspect >= 1.15 && aspect <= 1.80;
+            if (goodPortrait || goodLandscape) {
+              const cropped = document.createElement('canvas');
+              cropped.width = bounds.w;
+              cropped.height = bounds.h;
+              cropped.getContext('2d').drawImage(
+                full, bounds.x, bounds.y, bounds.w, bounds.h,
+                0, 0, bounds.w, bounds.h
+              );
+              srcCanvas = cropped;
+              try { console.log('[scan] client-crop OK: ' + bounds.w + '×' + bounds.h + ' (' + (ratio*100|0) + '% of frame, aspect ' + aspect.toFixed(2) + ') in ' + dt + 'ms'); } catch(_){}
+            } else {
+              try { console.log('[scan] client-crop skipped: ratio=' + (ratio*100|0) + '%, aspect=' + aspect.toFixed(2)); } catch(_){}
+            }
+          }
+        }
+      } catch(cropErr) {
+        try { console.warn('[scan] client-crop failed, using full frame:', cropErr && cropErr.message); } catch(_){}
+      }
+
+      // Step 2: downscale (from either the cropped canvas or the original img).
+      const srcW = srcCanvas ? srcCanvas.width  : (img.naturalWidth  || img.width);
+      const srcH = srcCanvas ? srcCanvas.height : (img.naturalHeight || img.height);
+      let w = srcW, h = srcH;
       if (w > maxPx || h > maxPx) {
         if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
         else       { w = Math.round(w * maxPx / h); h = maxPx; }
       }
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      if (srcCanvas) {
+        canvas.getContext('2d').drawImage(srcCanvas, 0, 0, w, h);
+      } else {
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      }
       // quality 0.82 gives good detail at ~200-400KB
       const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
       resolve(dataUrl.split(',')[1]);
@@ -13579,6 +13641,9 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     hamming,
     enrichCard,
     deriveLargeUrl,
+    // 2026-08-21: expose detectCardBounds so compressImage() can reuse
+    // it for client-side auto-crop before uploading to /api/scan.
+    detectCardBounds,
   };
 })();
 
