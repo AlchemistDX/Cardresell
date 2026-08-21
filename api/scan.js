@@ -367,11 +367,27 @@ async function groundPokemonCardInfo(cardInfo) {
   let best = null;
   const wantNum = cleanNum ? cleanNum.replace(/^0+/, '') || '0' : '';
 
+  // Small helper: fetch with one retry on 5xx / network error. pokemontcg.io
+  // returns intermittent 502s (Cloudflare edge). Without the retry, whichever
+  // of {cardInfo, candidates[0]} hits the 502 first stays ungrounded even
+  // though the *other* copy succeeds a moment later.
+  const fetchWithRetry = async (url) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(4500) });
+        if (r.ok) return r;
+        if (r.status < 500) return r; // 4xx — no point retrying
+      } catch(_) { /* fall through to retry */ }
+      if (attempt === 0) await new Promise(res => setTimeout(res, 250));
+    }
+    return null;
+  };
+
   for (const q of queries) {
     try {
       const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=25&select=id,name,set,number,rarity,hp,images`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(4500) });
-      if (!r.ok) continue;
+      const r = await fetchWithRetry(url);
+      if (!r || !r.ok) continue;
       const j = await r.json();
       let cards = (j.data || []);
 
