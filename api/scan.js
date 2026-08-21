@@ -343,6 +343,39 @@ async function groundPokemonCardInfo(cardInfo) {
   const cleanName = rawName.replace(/["\\]/g, '');
   const cleanNum  = rawNum.replace(/\/.*$/, '').replace(/^0+/, '') || rawNum;
 
+  // KV cache lookup — same card gets scanned by many users. 30-day TTL,
+  // ID + image lookups are effectively immutable per printing. Cuts
+  // pokemontcg.io traffic massively and gives us instant enrichment when
+  // the community API is 502'ing.
+  const kvUrl2   = process.env.KV_REST_API_URL;
+  const kvToken2 = process.env.KV_REST_API_TOKEN;
+  const cacheKey = `ptcg:${cleanName.toLowerCase()}|${cleanNum}|${rawSet.toLowerCase()}`;
+  let cached = null;
+  if (kvUrl2 && kvToken2) {
+    try {
+      const cr = await fetch(`${kvUrl2}/get/${encodeURIComponent(cacheKey)}`,
+        { headers: { Authorization: `Bearer ${kvToken2}` }, signal: AbortSignal.timeout(1200) });
+      const cd = await cr.json();
+      if (cd?.result) cached = JSON.parse(cd.result);
+    } catch(_) { /* KV best-effort */ }
+  }
+  if (cached && cached.id) {
+    cardInfo.card_name = cached.name || cardInfo.card_name;
+    if (cached.number)   cardInfo.card_number = String(cached.number);
+    if (cached.set_name) cardInfo.set_name    = cached.set_name;
+    if (cached.set_code) cardInfo.set_code    = cached.set_code;
+    if (cached.rarity && !cardInfo.rarity) cardInfo.rarity = cached.rarity;
+    if (cached.hp     && !cardInfo.hp)     cardInfo.hp     = String(cached.hp);
+    if (cached.year   && !cardInfo.year)   cardInfo.year   = cached.year;
+    cardInfo._grounded_id = cached.id;
+    cardInfo.grounded_id  = cached.id;
+    if (cached.image_url)   cardInfo.image_url   = cached.image_url;
+    if (cached.image_small) cardInfo.image_small = cached.image_small;
+    cardInfo._grounded = true;
+    cardInfo._pokemon_grounded_by = 'kv-cache';
+    return;
+  }
+
   const queries = [];
   if (cleanName && cleanNum) {
     queries.push(`name:"${cleanName}" number:${cleanNum}`);
@@ -367,18 +400,19 @@ async function groundPokemonCardInfo(cardInfo) {
   let best = null;
   const wantNum = cleanNum ? cleanNum.replace(/^0+/, '') || '0' : '';
 
-  // Small helper: fetch with one retry on 5xx / network error. pokemontcg.io
-  // returns intermittent 502s (Cloudflare edge). Without the retry, whichever
-  // of {cardInfo, candidates[0]} hits the 502 first stays ungrounded even
-  // though the *other* copy succeeds a moment later.
+  // Small helper: fetch with retries on 5xx / network error. pokemontcg.io
+  // is a Cloudflare-fronted community API that returns intermittent 502s
+  // (~10-20% of the time under any load). 3 attempts with exponential
+  // backoff (250ms, 750ms) covers the vast majority of transient failures
+  // and keeps total worst-case latency under ~8s.
   const fetchWithRetry = async (url) => {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const r = await fetch(url, { signal: AbortSignal.timeout(4500) });
+        const r = await fetch(url, { signal: AbortSignal.timeout(3500) });
         if (r.ok) return r;
         if (r.status < 500) return r; // 4xx — no point retrying
       } catch(_) { /* fall through to retry */ }
-      if (attempt === 0) await new Promise(res => setTimeout(res, 250));
+      if (attempt < 2) await new Promise(res => setTimeout(res, 250 * (attempt + 1)));
     }
     return null;
   };
@@ -418,6 +452,27 @@ async function groundPokemonCardInfo(cardInfo) {
   }
 
   if (!best) return;
+
+  // Write to KV cache for future scans of this card (30d TTL).
+  if (kvUrl2 && kvToken2) {
+    try {
+      const payload = {
+        id:          best.id,
+        name:        best.name,
+        number:      best.number,
+        set_name:    best.set?.name || '',
+        set_code:    best.set?.ptcgoCode || best.set?.id || '',
+        rarity:      best.rarity || '',
+        hp:          best.hp || '',
+        year:        (best.set?.releaseDate && /^\d{4}/.test(best.set.releaseDate)) ? best.set.releaseDate.slice(0,4) : '',
+        image_url:   best.images?.large || best.images?.small || '',
+        image_small: best.images?.small || best.images?.large || '',
+      };
+      // 30 days = 2_592_000s
+      await fetch(`${kvUrl2}/setex/${encodeURIComponent(cacheKey)}/2592000/${encodeURIComponent(JSON.stringify(payload))}`,
+        { method: 'POST', headers: { Authorization: `Bearer ${kvToken2}` }, signal: AbortSignal.timeout(1500) });
+    } catch(_) { /* best-effort */ }
+  }
 
   cardInfo.card_name   = best.name || cardInfo.card_name;
   if (best.number)     cardInfo.card_number = String(best.number);
