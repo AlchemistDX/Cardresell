@@ -312,6 +312,125 @@ async function groundLorcanaCardInfo(cardInfo) {
   console.log(`[scan] Lorcana grounded (${source}): "${before.name}" \u2192 "${cardInfo.card_name}" set=${cardInfo.set_code} img=${!!card.Image}`);
 }
 
+// ── PokemonTCG.io grounding (Pokemon EN) — added 2026-08-21 ──
+// Root cause of the ~25% "wrong card + shows my photo" bug: on the Ximilar
+// happy path, Pokemon cards were returned with `image_url=null`,
+// `grounded_id=null`, and a set_code Ximilar invented ("B2") that doesn't
+// resolve on pokemontcg.io (whose Base Set 2 prefix is "base4"). The client
+// then had to fuzzy-search on `name + number` alone; Pikachu #1 has dozens
+// of promo printings so the wrong match rate was enormous, and when the
+// client picked nothing, the synth-card fallback (`imageDataUrl`) rendered
+// the user's own photo as the card image.
+//
+// This grounder mirrors the GPT-fallback grounding block at line ~1360, but
+// runs on the Ximilar happy path so response.image_url is populated for
+// every English Pokemon card that pokemontcg.io knows about.
+//
+// Tiers, most specific first:
+//   Tier 1: name:<name> number:<num>              (exact name + exact number)
+//   Tier 2: name:<nameNoSuffix> number:<num>      (strip ex/EX/VMAX/etc)
+//   Tier 3: name:<identifier> number:<num>        (last identifying word)
+//   Tier 4: name:<identifier>*                    (wildcard, filter by number+set)
+async function groundPokemonCardInfo(cardInfo) {
+  if (!cardInfo || cardInfo.card_type !== 'pokemon') return;
+  if (cardInfo.is_japanese) return; // JP has its own path (client-side); pokemontcg.io is EN only
+
+  const rawName = String(cardInfo.card_name || '').trim();
+  const rawNum  = String(cardInfo.card_number || '').trim();
+  const rawSet  = String(cardInfo.set_name  || '').trim();
+  if (!rawName) return;
+
+  const cleanName = rawName.replace(/["\\]/g, '');
+  const cleanNum  = rawNum.replace(/\/.*$/, '').replace(/^0+/, '') || rawNum;
+
+  const queries = [];
+  if (cleanName && cleanNum) {
+    queries.push(`name:"${cleanName}" number:${cleanNum}`);
+
+    const nameNoSuffix = cleanName
+      .replace(/\s+(ex|EX|VMAX|VSTAR|V|GX|Star|\u2605)$/i, '')
+      .trim();
+    if (nameNoSuffix && nameNoSuffix !== cleanName) {
+      queries.push(`name:"${nameNoSuffix}" number:${cleanNum}`);
+    }
+
+    const words = cleanName.split(/\s+/).filter(w => w && !/^(mega|dark|radiant|shining|team|light|ex|EX|VMAX|VSTAR|V|GX|Star|\u2605)$/i.test(w));
+    const identifier = words[words.length - 1] || words[0];
+    if (identifier && identifier !== cleanName && !queries.some(q => q.includes(`"${identifier}"`))) {
+      queries.push(`name:"${identifier}" number:${cleanNum}`);
+    }
+  }
+  if (cleanName && queries.length === 0) {
+    queries.push(`name:"${cleanName}"`);
+  }
+
+  let best = null;
+  const wantNum = cleanNum ? cleanNum.replace(/^0+/, '') || '0' : '';
+
+  for (const q of queries) {
+    try {
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=25&select=id,name,set,number,rarity,hp,images`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(4500) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      let cards = (j.data || []);
+
+      // Hard number filter when we have a number.
+      if (wantNum) {
+        cards = cards.filter(c => {
+          const cn = String(c.number || '').replace(/^0+/, '') || '0';
+          return cn === wantNum;
+        });
+      }
+      if (cards.length === 0) continue;
+
+      // Prefer cards whose set name shares tokens with Ximilar's set_name.
+      const modelSetLo = rawSet.toLowerCase();
+      let ranked = cards;
+      if (modelSetLo && cards.length > 1) {
+        ranked = cards.map(c => {
+          const setLo = (c.set?.name || '').toLowerCase();
+          const setTokens = new Set(modelSetLo.split(/\W+/).filter(t => t.length >= 3));
+          let hit = 0;
+          for (const t of setTokens) if (setLo.includes(t)) hit++;
+          return { c, score: hit };
+        }).sort((a,b) => b.score - a.score).map(x => x.c);
+      }
+      best = ranked[0];
+      if (best) break;
+    } catch(_) { /* try next query */ }
+  }
+
+  if (!best) return;
+
+  cardInfo.card_name   = best.name || cardInfo.card_name;
+  if (best.number)     cardInfo.card_number = String(best.number);
+  if (best.set?.name)  cardInfo.set_name    = best.set.name;
+  if (best.set?.ptcgoCode) cardInfo.set_code = best.set.ptcgoCode;
+  else if (best.set?.id)   cardInfo.set_code = best.set.id;
+  if (best.rarity && !cardInfo.rarity) cardInfo.rarity = best.rarity;
+  if (best.hp && !cardInfo.hp)         cardInfo.hp     = String(best.hp);
+  if (best.set?.releaseDate && !cardInfo.year) {
+    const yr = String(best.set.releaseDate).slice(0, 4);
+    if (/^\d{4}$/.test(yr)) cardInfo.year = yr;
+  }
+
+  // CRITICAL: overwrite grounded_id with a REAL pokemontcg.io id
+  // (was previously Ximilar's `<set_series_code>-<num>` which rarely matched).
+  cardInfo._grounded_id = best.id || null;
+  cardInfo.grounded_id  = best.id || cardInfo.grounded_id || null;
+
+  // CRITICAL: populate image_url so the client never falls back to imageDataUrl.
+  if (best.images?.large || best.images?.small) {
+    cardInfo.image_url   = best.images.large || best.images.small;
+    cardInfo.image_small = best.images.small || best.images.large;
+  }
+
+  cardInfo._grounded = true;
+  cardInfo._pokemon_grounded_by = 'pokemontcg.io';
+  console.log(`[scan] Pokemon grounded: "${rawName}" #${rawNum} \u2192 id=${best.id} img=${!!(best.images?.large || best.images?.small)}`);
+}
+
 // Dispatcher — call the right per-game grounder
 async function groundCardInfoByGame(cardInfo) {
   if (!cardInfo) return;
@@ -319,6 +438,7 @@ async function groundCardInfoByGame(cardInfo) {
   if (t === 'yugioh')                  return groundYugiohCardInfo(cardInfo);
   if (t === 'mtg' || t === 'magic')    return groundMagicCardInfo(cardInfo);
   if (t === 'lorcana')                 return groundLorcanaCardInfo(cardInfo);
+  if (t === 'pokemon')                 return groundPokemonCardInfo(cardInfo);
 }
 
 // /api/scan — Ximilar-first card identification (GPT-5 fallback)
