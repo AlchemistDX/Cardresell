@@ -7371,6 +7371,18 @@ function saveFlipEntry() {
     const cardImg = (selectedCard && (selectedCard.images?.small || selectedCard.images?.large)) || '';
     const cardNum = (selectedCard && selectedCard.number) || '';
     const cardTcgpUrl = (selectedCard && selectedCard.tcgplayer?.url) || '';
+    // 2026-08-21: persist game/set/rarity/groundedId so "View full card"
+    // from the Collection modal can route straight through the scan-load
+    // pipeline (same as if we'd just identified the card) instead of
+    // dumping the user into a text-search that loses game context and
+    // matches e.g. Pokemon Inkay for a Lorcana "Hades 74".
+    const cardGame = (selectedCard && (selectedCard.game))
+                   || (typeof activeGame === 'string' ? activeGame : '')
+                   || '';
+    const cardSetCode = (selectedCard && (selectedCard.setCode || selectedCard.set_code || (selectedCard.set && selectedCard.set.id))) || '';
+    const cardGroundedId = (selectedCard && (selectedCard.id || selectedCard.groundedId)) || '';
+    const cardRarity = (selectedCard && selectedCard.rarity) || '';
+    const cardIsJP = cardGame === 'pokemonjp';
     port.push({
       id: Date.now(),
       card: cardName,
@@ -7384,6 +7396,13 @@ function saveFlipEntry() {
       tcgplayerUrl: cardTcgpUrl,
       grader: savedGrader || null,
       grade: savedGrade || null,
+      // Identity fields for lossless "View full card" replay:
+      game:       cardGame,
+      cardType:   cardGame === 'pokemonjp' ? 'pokemon' : cardGame,
+      setCode:    cardSetCode,
+      groundedId: cardGroundedId,
+      rarity:     cardRarity,
+      isJapanese: cardIsJP,
     });
     savePortData(port);
     window.trackEvent?.('collection_add', {
@@ -8294,6 +8313,27 @@ function openCollectionCardDetail(entryId) {
 // with "<name> <number>", clicks the top result, and (if the entry was
 // saved at a specific grader+grade) auto-selects that grader pill + grade
 // so the user lands on the exact configuration they saved.
+// 2026-08-21: For legacy Collection entries saved before we persisted
+// game/cardType, try to infer the game from set-string keywords. Loose,
+// but way better than defaulting every card to Pokemon (which pulled up
+// an Inkay for a Lorcana "Hades 74").
+function _ccmInferGameFromSet(setStr) {
+  const s = String(setStr || '').toLowerCase();
+  if (!s) return '';
+  // Lorcana sets
+  if (/lorcana|ursula|inklands|chapters|shimmering|azurite|reign|archazia|first chapter/.test(s)) return 'lorcana';
+  // Magic: The Gathering sets (common keywords)
+  if (/\bmtg\b|magic:|magic the gathering|commander|modern horizons|dominaria|innistrad|ravnica|zendikar|kaldheim|ikoria|throne of eldraine|foundations|murders at karlov|bloomburrow|duskmourn/.test(s)) return 'mtg';
+  // Yu-Gi-Oh
+  if (/yu-?gi-?oh|ygo|structure deck|starter deck|legendary duelists|dark magician|blue-eyes|red-eyes|maze of|phantom rage|rise of the duelist|dawn of majesty|burst of destiny/.test(s)) return 'yugioh';
+  // One Piece
+  if (/one piece|romance dawn|paramount war|pillars of strength|kingdoms of intrigue|awakening of the new era|wings of the captain|two legends/.test(s)) return 'onepiece';
+  // Sports
+  if (/topps|panini|bowman|donruss|prizm|upper deck|fleer|score|leaf|score baseball|score football|nba hoops|select|contenders|optic|mosaic/.test(s)) return 'sports';
+  // Default: Pokemon (safest default — biggest catalog and the app's home game)
+  return 'pokemon';
+}
+
 function _ccmViewFullCard() {
   if (!window._ccmCurrentId) return;
   const port = loadPortData();
@@ -8306,63 +8346,151 @@ function _ccmViewFullCard() {
   // Switch to the Card Lookup tab
   if (typeof switchView === 'function') { try { switchView('lookup'); } catch(e) {} }
 
-  // Build the search query: prefer name + number for a precise match
+  // Clean the card name (strip trailing "100/086"-style number)
   const cardName = String(p.card || '').replace(/\s+\d+\s*\/\s*\d+\s*$/, '').trim();
   const numFromSet = ((p.set || '').match(/#(\S+)/) || [])[1] || '';
   const num = String(p.number || numFromSet || '').replace(/^0+/, '').trim();
-  const query = [cardName, num].filter(Boolean).join(' ');
-  if (!query) return;
+  if (!cardName) return;
 
-  const searchInput = document.getElementById('searchInput');
-  if (!searchInput) return;
-  searchInput.value = query;
-  searchInput.dispatchEvent(new Event('input'));
-
-  // Also fire the full search button so results appear even if the
-  // autocomplete dropdown never populates.
-  const searchBtn = document.getElementById('searchBtn');
-  if (searchBtn) { try { searchBtn.click(); } catch(e) {} }
-
-  // After results settle, click the best match, then optionally apply the
-  // saved grader/grade. Only apply grade if the entry has a real saved
-  // grader+grade pair — estGrade is a guess and shouldn't force a graded
-  // price display.
   const graderKey = p.grader ? String(p.grader).toLowerCase() : null;
   const grade     = (p.grade != null && p.grade !== '') ? String(p.grade) : null;
 
+  // Post-route: apply the saved grader pill + grade select once results load.
+  const applyGradeAfter = (delay) => {
+    if (!graderKey || !grade) {
+      setTimeout(() => {
+        const results = document.getElementById('sellSection') || document.getElementById('platformCards');
+        if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, delay);
+      return;
+    }
+    setTimeout(() => {
+      try {
+        const gradedToggle = document.getElementById('gradedToggle');
+        if (gradedToggle && !gradedToggle.classList.contains('active')) {
+          gradedToggle.click();
+        }
+        const pill = document.querySelector(`#gradedPills .pill[data-val="${graderKey}"]`);
+        if (pill && typeof setPill === 'function') {
+          setPill(pill, 'gradedPills');
+          if (typeof toggleGrade === 'function') toggleGrade();
+        }
+        setTimeout(() => {
+          const gradeSelect = document.getElementById('gradeSelect');
+          if (gradeSelect) {
+            gradeSelect.value = grade;
+            gradeSelect.dispatchEvent(new Event('change'));
+            if (typeof calc === 'function') calc();
+          }
+          const results = document.getElementById('sellSection') || document.getElementById('platformCards');
+          if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+      } catch(e) { console.warn('[_ccmViewFullCard] applyGrade failed', e); }
+    }, delay);
+  };
+
+  // 2026-08-21 FIX: The old path stuffed the card name into #searchInput,
+  // fired a search, then clicked the first .drop-item after 800ms. That
+  // failed hard for non-Pokemon flips because the search ran against
+  // whatever game tab happened to be active — for Hades (Lorcana), that
+  // returned two Inkays from Pokemon XY. The user's ask: "pull up the
+  // card as if we just scanned it — should be even easier since we have
+  // it saved." Correct: route through the scan-load pipeline directly,
+  // preserving game + set + number + groundedId. Falls back to name
+  // search only if we have no way to infer the game.
+
+  // Prefer the persisted game/cardType (new saves), fall back to a
+  // heuristic on the set string (legacy saves).
+  const savedGame = String(p.game || '').toLowerCase();
+  const savedCardType = String(p.cardType || '').toLowerCase();
+  const inferredGame = savedGame || savedCardType || _ccmInferGameFromSet(p.set);
+  const isJP = (p.isJapanese === true) || (savedGame === 'pokemonjp');
+
+  const pending = {
+    name:       cardName,
+    number:     num,
+    setName:    String(p.set || '').replace(/\s*·?\s*#\S+\s*$/, '').trim(),
+    setCode:    p.setCode || '',
+    groundedId: p.groundedId || '',
+    rarity:     p.rarity || '',
+    cardType:   inferredGame === 'pokemonjp' ? 'pokemon' : (inferredGame || 'pokemon'),
+    isJapanese: isJP,
+    imageUrl:   p.img || p.imageUrl || '',
+    marketPrice: (p.currentValue != null ? p.currentValue : null),
+    tcgplayerUrl: p.tcgplayerUrl || '',
+    sport:      '',
+    year:       '',
+  };
+
+  // Switch the game selector to the right tab BEFORE routing. Otherwise
+  // _loadScannedNonPokemonCard's internal doSearch runs against the
+  // wrong DB and clobbers the panel to the empty state.
+  try {
+    const typeToGame = {
+      pokemon:  isJP ? 'pokemonjp' : 'pokemon',
+      yugioh:   'yugioh',
+      mtg:      'mtg',
+      magic:    'mtg',
+      lorcana:  'lorcana',
+      onepiece: 'onepiece',
+      sports:   'sports',
+      other:    'other',
+    };
+    const targetGame = typeToGame[pending.cardType.toLowerCase()] || 'pokemon';
+    const gSel = document.getElementById('gameSelect');
+    if (gSel && gSel.value !== targetGame) {
+      gSel.value = targetGame;
+      if (typeof onGameSelectChange === 'function') {
+        try { onGameSelectChange(targetGame); } catch(_){}
+      }
+    }
+  } catch(_){}
+
+  // Refresh ambient identify state so downstream flows (share, refresh
+  // price, grade routing) see the right card.
+  try {
+    window._pendingIdScanCard  = pending;
+    window._lastIdentifiedCard = pending;
+  } catch(_){}
+
+  try { if (typeof resetCardPanel === 'function') resetCardPanel(); } catch(_){}
+  try { selectedCard = null; } catch(_){}
+  try {
+    const si = document.getElementById('searchInput');
+    if (si) si.value = pending.name;
+  } catch(_){}
+
+  try {
+    if (pending.cardType === 'sports') {
+      _routeScannedSportsCard(pending);
+    } else if (pending.isJapanese === true) {
+      try { _loadScannedJPCard(pending); }
+      catch(e) { _loadScannedCardExact(pending); }
+    } else if (pending.cardType && pending.cardType !== 'pokemon') {
+      try { _loadScannedNonPokemonCard(pending); }
+      catch(e) { _loadScannedCardExact(pending); }
+    } else {
+      _loadScannedCardExact(pending);
+    }
+    applyGradeAfter(1200); // exact-load pipelines settle in ~1s
+    return;
+  } catch(e) {
+    console.warn('[_ccmViewFullCard] exact router failed, falling back to search', e);
+  }
+
+  // Last-resort legacy fallback: type name+number into search, click first
+  // dropdown match after settling. Only reached if the exact-load pipeline
+  // threw synchronously.
+  const searchInput = document.getElementById('searchInput');
+  if (!searchInput) return;
+  searchInput.value = [pending.name, pending.number].filter(Boolean).join(' ');
+  searchInput.dispatchEvent(new Event('input'));
+  const searchBtn = document.getElementById('searchBtn');
+  if (searchBtn) { try { searchBtn.click(); } catch(e) {} }
   setTimeout(() => {
     const best = document.querySelector('.drop-item');
     if (best) { try { best.click(); } catch(e) {} }
-    if (!graderKey || !grade) {
-      // No grade to apply — just scroll to results
-      setTimeout(() => {
-        const results = document.getElementById('sellSection') || document.getElementById('platformCards');
-        if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 500);
-      return;
-    }
-    // Apply grader pill + grade
-    setTimeout(() => {
-      const gradedToggle = document.getElementById('gradedToggle');
-      if (gradedToggle && !gradedToggle.classList.contains('active')) {
-        try { gradedToggle.click(); } catch(e) {}
-      }
-      const pill = document.querySelector(`#gradedPills .pill[data-val="${graderKey}"]`);
-      if (pill) {
-        try { setPill(pill, 'gradedPills'); } catch(e) {}
-        if (typeof toggleGrade === 'function') { try { toggleGrade(); } catch(e) {} }
-      }
-      setTimeout(() => {
-        const gradeSelect = document.getElementById('gradeSelect');
-        if (gradeSelect) {
-          gradeSelect.value = grade;
-          gradeSelect.dispatchEvent(new Event('change'));
-          if (typeof calc === 'function') { try { calc(); } catch(e) {} }
-        }
-        const results = document.getElementById('sellSection') || document.getElementById('platformCards');
-        if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 300);
-    }, 600);
+    applyGradeAfter(600);
   }, 800);
 }
 
