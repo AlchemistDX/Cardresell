@@ -1536,8 +1536,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <div style="padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem">
     <div style="flex:1;min-width:0">
       <div style="font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.2rem">🎁 New user offer</div>
-      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in with Google —<br>get <span style="color:var(--gold)">10 ID scans</span> + <span style="color:var(--gold)">1 grade scan free</span></div>
-      <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Instant · Never expires</div>
+      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in + verify email —<br>get <span style="color:var(--gold)">10 ID scans</span> + <span style="color:var(--gold)">1 AI Grade free</span></div>
+      <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Credits never expire</div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex-shrink:0">
       <a href="/signin" style="padding:.5rem .9rem;background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;letter-spacing:.01em;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;user-select:none;text-decoration:none;display:inline-block">Sign in free →</a>
@@ -2664,21 +2664,31 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       🎁 <strong style="color:var(--gold)">Best value:</strong> pay yearly, get <strong>3 months free</strong> on every tier · same scans, same features, one payment.
     </div>
 
+    <!-- 2026-08-20: Sign-up bonus banner — shown to unverified free users only. -->
+    <div id="pricingSignupBonusBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(56,189,248,.14),rgba(56,189,248,.05));border:1px solid rgba(56,189,248,.35);border-radius:10px;color:#bae6fd;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600">
+      ✨ <strong style="color:#7dd3fc">Verify your email</strong> and get <strong>10 ID scans + 1 AI Grade</strong> instantly — plus 5 IDs + 1 Grade every month, forever.
+    </div>
+
+    <!-- 2026-08-20: Credits-never-expire trust line — always visible. -->
+    <div style="margin:.15rem auto .55rem;padding:.35rem .8rem;max-width:520px;color:var(--text-muted);font-size:.68rem;text-align:center;line-height:1.4;font-weight:500">
+      🔒 Cancel anytime · credits never expire · no long-term contract
+    </div>
+
     <div class="pricing-cards">
 
       <!-- FREE -->
       <div class="plan-card">
         <div class="plan-name">Free</div>
         <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
-        <div class="plan-value">Verify email to unlock</div>
-        <div class="plan-value-sub">Google + email verify required</div>
+        <div class="plan-value">Try it — no card required</div>
+        <div class="plan-value-sub">Verify email to unlock scans</div>
         <ul class="plan-features">
           <li><strong>5 ID scans/mo</strong> &middot; recurring</li>
           <li><strong>1 AI Grade/mo</strong> &middot; recurring</li>
+          <li><strong>10 flips tracked</strong></li>
           <li>Card price lookup (all games)</li>
           <li>eBay + TCGPlayer fees</li>
           <li>Flip calc + Deal Score</li>
-          <li>5 flips tracked</li>
           <li class="faded">Top-up discounts</li>
           <li class="faded">4 more platforms</li>
         </ul>
@@ -2687,21 +2697,21 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
       <!-- PRO -->
       <div class="plan-card featured" data-tier="pro">
-        <div class="plan-badge">START HERE</div>
+        <div class="plan-badge">MOST POPULAR</div>
         <div class="plan-name">Pro</div>
         <div class="plan-price"><sup>$</sup><span data-price-monthly="9" data-price-annual="89">9</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
         <div class="plan-annual-note">Just $7.50/mo &middot; 3 months free</div>
-        <div class="plan-value">Worth ~$14/mo</div>
-        <div class="plan-value-sub">Pays for itself in one flip</div>
+        <div class="plan-value">Everyday reseller</div>
+        <div class="plan-value-sub">Pays for itself in 1–2 flips</div>
         <ul class="plan-features">
-          <li><strong>10 grade scans/mo</strong></li>
-          <li><strong>20 ID scans/mo</strong></li>
+          <li><strong>15 AI Grades/mo</strong></li>
+          <li><strong>30 ID scans/mo</strong></li>
           <li><strong>10% off</strong> top-up packs</li>
-          <li>6 platforms compared</li>
+          <li><strong>6 platforms</strong> compared</li>
           <li>Payout bar chart</li>
-          <li>Unlimited flip tracking</li>
+          <li><strong>Unlimited</strong> flip tracking</li>
           <li>Deal Score + Max Buy</li>
-          <li>&#9889; Rapid Scan priority</li>
+          <li>Skip one bad PSA sub → saves a year</li>
         </ul>
         <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startTierCheckout('pro')">
           <span data-cta-monthly="Get Pro &mdash; $9.99/mo" data-cta-annual="Get Annual &mdash; $89.99/yr">Get Pro &mdash; $9.99/mo</span>
@@ -2710,19 +2720,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
       <!-- PRO MAX -->
       <div class="plan-card tier-max" data-tier="pro_max">
-        <div class="plan-badge">POPULAR</div>
+        <div class="plan-badge">BEST VALUE</div>
         <div class="plan-name">Pro Max</div>
         <div class="plan-price"><sup>$</sup><span data-price-monthly="19" data-price-annual="179">19</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
         <div class="plan-annual-note">Just $15/mo &middot; 3 months free</div>
-        <div class="plan-value">Worth ~$35/mo</div>
-        <div class="plan-value-sub">For serious resellers</div>
+        <div class="plan-value">Serious flipper</div>
+        <div class="plan-value-sub">$0.50/grade — half the pack price</div>
         <ul class="plan-features">
-          <li><strong>25 grade scans/mo</strong></li>
-          <li><strong>50 ID scans/mo</strong></li>
+          <li><strong>40 AI Grades/mo</strong></li>
+          <li><strong>80 ID scans/mo</strong></li>
           <li><strong>15% off</strong> top-up packs</li>
           <li>Everything in Pro</li>
-          <li>&#9889; Rapid Scan &mdash; higher priority</li>
-          <li>Priority support</li>
+          <li>Priority email support</li>
+          <li>Early access to new features</li>
         </ul>
         <button id="pricingMaxBtn" class="plan-btn max-btn" onclick="startTierCheckout('pro_max')">
           <span data-cta-monthly="Get Pro Max &mdash; $19.99/mo" data-cta-annual="Get Annual &mdash; $179.99/yr">Get Pro Max &mdash; $19.99/mo</span>
@@ -2731,19 +2741,18 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
       <!-- ULTIMATE -->
       <div class="plan-card tier-ultimate" data-tier="ultimate">
-        <div class="plan-badge">&#9733; PREMIUM</div>
+        <div class="plan-badge">FOR DEALERS</div>
         <div class="plan-name">Ultimate</div>
         <div class="plan-price"><sup>$</sup><span data-price-monthly="39" data-price-annual="359">39</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
         <div class="plan-annual-note">Just $30/mo &middot; 3 months free</div>
-        <div class="plan-value">Worth ~$90/mo</div>
-        <div class="plan-value-sub">Whale-tier value</div>
+        <div class="plan-value">Volume operator</div>
+        <div class="plan-value-sub">$0.40/grade — cheapest per-scan</div>
         <ul class="plan-features">
-          <li><strong>60 grade scans/mo</strong></li>
-          <li><strong>150 ID scans/mo</strong></li>
+          <li><strong>100 AI Grades/mo</strong></li>
+          <li><strong>250 ID scans/mo</strong></li>
           <li><strong>25% off</strong> top-up packs</li>
           <li>Everything in Pro Max</li>
-          <li>&#9889; Rapid Scan &mdash; top priority</li>
-          <li>&#128188; Bulk Grade tool <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
+          <li>&#128188; <strong>Bulk Grade tool</strong> <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
           <li>&#9733; Ultimate badge</li>
         </ul>
         <button id="pricingUltimateBtn" class="plan-btn ultimate-btn" onclick="startTierCheckout('ultimate')">
@@ -7394,8 +7403,8 @@ function saveFlipEntry() {
     const platform  = document.getElementById('mPlatform').value;
     const profit    = sellPrice - buyPrice;
     const flips = loadFlipsData();
-    // Free users capped at 5 flips
-    if (!window._isPro && flips.length >= 5) {
+    // Free users capped at 10 flips (bumped from 5, 2026-08-20)
+    if (!window._isPro && flips.length >= 10) {
       document.getElementById('flipModal').classList.remove('open');
       setTimeout(() => openPricingModal('flips_cap'), 200);
       return;
@@ -7403,7 +7412,7 @@ function saveFlipEntry() {
     flips.push({ id: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, profit, platform, date });
     saveFlipsData(flips);
     // Warn free users when they're 1 flip away from the cap
-    if (!window._isPro && flips.length === 4) {
+    if (!window._isPro && flips.length === 9) {
       setTimeout(() => showToast('1 flip slot left on the free plan — Pro unlocks unlimited tracking 📊', 'gold'), 400);
     }
   }
@@ -8621,9 +8630,9 @@ function confirmMarkSold() {
     return;
   }
 
-  // Free-plan cap — 5 flips max, matches saveFlipEntry:6956.
+  // Free-plan cap — 10 flips max (bumped from 5, 2026-08-20). Matches saveFlipEntry above.
   const flips = loadFlipsData();
-  if (!window._isPro && flips.length >= 5) {
+  if (!window._isPro && flips.length >= 10) {
     document.getElementById('markSoldModal').classList.remove('open');
     setTimeout(() => { if (typeof openPricingModal === 'function') openPricingModal('flips_cap'); }, 200);
     return;
@@ -8784,7 +8793,7 @@ function renderFlipsView() {
           <div class="empty-flips-h">Start tracking your flips</div>
           <div class="empty-flips-p" style="max-width:22ch">Log every card you sell — see your total profit, best flips, and platform breakdown.</div>
           <div style="margin-top:1.1rem;display:flex;flex-direction:column;gap:.5rem;max-width:260px;width:100%">
-            <div style="display:flex;align-items:center;gap:.55rem;font-size:.78rem;color:var(--text-muted);text-align:left"><span style="font-size:1rem">✅</span> Free: 5 flips tracked</div>
+            <div style="display:flex;align-items:center;gap:.55rem;font-size:.78rem;color:var(--text-muted);text-align:left"><span style="font-size:1rem">✅</span> Free: 10 flips tracked</div>
             <div style="display:flex;align-items:center;gap:.55rem;font-size:.78rem;color:var(--text-muted);text-align:left"><span style="font-size:1rem">🚀</span> Pro: unlimited + all platforms</div>
           </div>
           <button onclick="openPricingModal('flips_empty')" style="margin-top:1.1rem;padding:.55rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:99px;font-weight:800;font-size:.82rem;cursor:pointer">Upgrade to Pro</button>
@@ -13837,6 +13846,17 @@ function openPricingModal(source) {
       const span = btn.querySelector('span');
       if (span) span.textContent = '✓ Current Plan';
     }
+  }
+  // 2026-08-20: Sign-up bonus banner — only for unverified free users.
+  //   Signed out → hide (they'll see the sign-in prompt instead).
+  //   Signed in + verified → hide (already claimed).
+  //   Signed in + unverified free → SHOW.
+  const bonusBanner = document.getElementById('pricingSignupBonusBanner');
+  if (bonusBanner) {
+    const signedIn = !!(window._user && window._user.uid);
+    const verified = !!window._emailVerified;
+    const isFree   = currentTier === 'free';
+    bonusBanner.style.display = (signedIn && !verified && isFree) ? 'block' : 'none';
   }
 }
 
