@@ -10224,6 +10224,7 @@ function _setScanBtns(state) {
 // name+number.
 // ========================================================================
 function openWrongCardPicker() {
+  _clearScanAutoAdvance();
   const cands = window._lastScanCandidates || [];
   if (cands.length < 2) {
     showToast('No other matches for this card + number', 'gold');
@@ -10310,6 +10311,7 @@ function pickCorrectCard(idx) {
 
 // Retry — re-trigger camera without closing overlay
 function retryIdScan() {
+  _clearScanAutoAdvance();
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
   if (statusEl) statusEl.textContent = 'Identifying card…';
@@ -10396,7 +10398,36 @@ function scanAnother() {
   setTimeout(() => openGradedScanGate(), 150);
 }
 
+// 2026-08-21: Auto-advance timer. After a confident single-scan ID, we wait
+// ~1s so the user reads the green checkmark, then call cancelScan() which
+// (via its _pendingIdScanCard branch) routes to the card view with prices.
+// Cancelled the moment the user manually taps View Card / Scan Another /
+// Wrong Card so we never double-navigate.
+window._scanAutoAdvanceTimer = null;
+function _scheduleScanAutoAdvance(delayMs) {
+  const d = typeof delayMs === 'number' ? delayMs : 900;
+  _clearScanAutoAdvance();
+  window._scanAutoAdvanceTimer = setTimeout(() => {
+    window._scanAutoAdvanceTimer = null;
+    // Only fire if the overlay is still open on a success state (user
+    // hasn't already navigated or dismissed).
+    const overlay = document.getElementById('scanOverlay');
+    if (!overlay || overlay.style.display === 'none') return;
+    const viewBtn = document.getElementById('scanViewCardBtn');
+    if (viewBtn && viewBtn.style.display !== 'none') {
+      cancelScan();
+    }
+  }, d);
+}
+function _clearScanAutoAdvance() {
+  if (window._scanAutoAdvanceTimer) {
+    clearTimeout(window._scanAutoAdvanceTimer);
+    window._scanAutoAdvanceTimer = null;
+  }
+}
+
 function cancelScan() {
+  _clearScanAutoAdvance();
   document.getElementById('scanOverlay').style.display = 'none';
   const spinner5 = document.getElementById('scanSpinner');
   if (spinner5) spinner5.style.display = 'none';
@@ -11613,6 +11644,9 @@ async function processScanImage(input) {
         const badgeFp = document.getElementById('scanSuccessBadge');
         if (badgeFp) badgeFp.style.display = 'flex';
         _setScanBtns('success');
+        // 2026-08-21: auto-advance to card view on confident fastpath hit.
+        // User confirmed they want the manual "View Card Prices" click gone.
+        _scheduleScanAutoAdvance();
         return;
       } else if (fp) {
         console.log(`[scan] fastpath MISS (${fp.totalMs}ms, ${fp.reason}) — using LLM`);
@@ -11987,6 +12021,10 @@ async function processScanImage(input) {
     const badge = document.getElementById('scanSuccessBadge');
     if (badge) badge.style.display = 'flex';
     _setScanBtns('success');
+    // 2026-08-21: auto-advance to card view on confident LLM/Ximilar ID.
+    // Skipped when the header rendered the amber "low-confidence" state
+    // — there we want the user to review before we swap the panel.
+    if (_idIsReliable) _scheduleScanAutoAdvance();
     // Nudge when credits are running low (≤ 3 remaining)
     if (!window._isPro) {
       const remaining = (window._idScanCredits || 0);
@@ -15963,41 +16001,80 @@ async function startBulkQueue() {
 
   const total = queue.length;
 
+  // 2026-08-21: Concurrent scan pipeline (was strictly sequential — 10
+  // cards = 60s+). Runs up to CONCURRENCY scans in-flight at once while
+  // preserving row order in the UI. Ximilar's TCG endpoint handles this
+  // fine (~2-5s per card, well within rate limit), and pokemontcg.io
+  // grounding is per-card so parallel requests don't collide.
+  //
+  // 402 (out of credits) stops the whole pipeline. 401 (auth expired)
+  // clears the token so subsequent in-flight scans fail fast.
+  const CONCURRENCY = 3;
+  const listEl = document.getElementById('bulkResultsList');
+
+  // Pre-render all placeholder rows in order so the UI matches queue order
+  // even when scans complete out of order.
   for (let i = 0; i < total; i++) {
-    if (!window._bulkProcessing) break; // user closed overlay
-
-    const item = queue[i];
-    const pct  = Math.round((i / total) * 100);
-
-    // Update progress
-    document.getElementById('bulkProgressLabel').textContent =
-      'Scanning ' + (i+1) + ' of ' + total + '…';
-    document.getElementById('bulkProgressBar').style.width = pct + '%';
-
-    const credLeft = (window._idScanCredits || 0);
-    document.getElementById('bulkProgressCredits').textContent =
-      credLeft + ' credit' + (credLeft!==1?'s':'') + ' remaining';
-
-    // Insert a "processing" placeholder row
-    const rowId  = 'bulk-row-' + i;
-    const listEl = document.getElementById('bulkResultsList');
+    const item  = queue[i];
+    const rowId = 'bulk-row-' + i;
     listEl.insertAdjacentHTML('beforeend', `
       <div id="${rowId}" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e">
         <img src="${item.objectUrl}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.6" alt="Card" />
         <div style="flex:1;min-width:0">
-          <div style="font-size:.78rem;color:rgba(255,255,255,.35)">Identifying…</div>
+          <div style="font-size:.78rem;color:rgba(255,255,255,.35)">Queued…</div>
         </div>
-        <div style="width:20px;height:20px;border:2px solid rgba(139,92,246,.5);border-top-color:rgba(139,92,246,1);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div>
+        <div style="width:20px;height:20px;border:2px solid rgba(139,92,246,.3);border-top-color:rgba(139,92,246,.7);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div>
       </div>`);
-    listEl.scrollTop = listEl.scrollHeight;
-
-    const result = await _bulkScanOne(item, rowId, false);
-    if (result === 'STOP') break;
-
-    window._bulkResults.push(result);
-    _bulkUpdateRow(rowId, result);
-    try { _bulkUpdatePackTracker(); } catch(e) {}
   }
+  listEl.scrollTop = listEl.scrollHeight;
+
+  window._bulkResults = new Array(total); // preserve order by index
+  let nextIdx = 0;
+  let completed = 0;
+  let hardStop = false;
+
+  async function worker() {
+    while (true) {
+      if (hardStop || !window._bulkProcessing) return;
+      const i = nextIdx++;
+      if (i >= total) return;
+      const item  = queue[i];
+      const rowId = 'bulk-row-' + i;
+      // Flip the placeholder to "identifying" state now that a worker is on it.
+      try {
+        const row = document.getElementById(rowId);
+        const label = row?.querySelector('div[style*="flex:1"] div');
+        if (label) label.textContent = 'Identifying…';
+      } catch(_) {}
+
+      const result = await _bulkScanOne(item, rowId, false);
+
+      if (result === 'STOP') {
+        hardStop = true;
+        return;
+      }
+
+      window._bulkResults[i] = result;
+      completed++;
+      _bulkUpdateRow(rowId, result);
+      try { _bulkUpdatePackTracker(); } catch(e) {}
+
+      const pct = Math.round((completed / total) * 100);
+      document.getElementById('bulkProgressLabel').textContent =
+        'Scanning ' + completed + ' of ' + total + '…';
+      document.getElementById('bulkProgressBar').style.width = pct + '%';
+      const credLeft = (window._idScanCredits || 0);
+      document.getElementById('bulkProgressCredits').textContent =
+        credLeft + ' credit' + (credLeft!==1?'s':'') + ' remaining';
+    }
+  }
+
+  const workerCount = Math.min(CONCURRENCY, total);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  // Compact out any undefined slots (from STOP or skipped) so downstream
+  // callers that iterate _bulkResults don't hit gaps.
+  window._bulkResults = window._bulkResults.filter(r => r);
 
   _bulkFinishQueue(total);
 }
