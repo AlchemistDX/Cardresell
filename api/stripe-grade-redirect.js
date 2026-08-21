@@ -1,21 +1,21 @@
 // /api/stripe-grade-redirect — GET → 302 to Stripe checkout
 // Called via hidden form submit (iOS Safari compatible — no popup blocking)
-// ?tier=5|15|40&uid=xxx&email=yyy&name=zzz
+// ?tier=10|25|50&uid=xxx&email=yyy&name=zzz
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { tier = '5', email = '', uid = '', name = '' } = req.query;
+  const { tier = '10', email = '', uid = '', name = '' } = req.query;
 
   if (!email || !email.includes('@')) return res.status(302).setHeader('Location', '/?error=signin').end();
 
   const priceMap = {
-    '5':  process.env.STRIPE_GRADE_SCAN_PRICE_5,
-    '15': process.env.STRIPE_GRADE_SCAN_PRICE_15,
-    '40': process.env.STRIPE_GRADE_SCAN_PRICE_40,
+    '10': process.env.STRIPE_GRADE_SCAN_PRICE_10,
+    '25': process.env.STRIPE_GRADE_SCAN_PRICE_25,
+    '50': process.env.STRIPE_GRADE_SCAN_PRICE_50,
   };
-  const creditsMap = { '5': 5, '15': 15, '40': 40 };
+  const creditsMap = { '10': 10, '25': 25, '50': 50 };
   const priceId = priceMap[String(tier)];
 
   if (!priceId) return res.status(302).setHeader('Location', '/?error=invalid_tier').end();
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       'metadata[user_name]': name,
       'metadata[type]': 'grade_scan',
       'metadata[tier]': String(tier),
-      'metadata[credits]': String(creditsMap[String(tier)] || 5),
+      'metadata[credits]': String(creditsMap[String(tier)] || 10),
     });
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {

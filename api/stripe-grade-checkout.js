@@ -1,6 +1,6 @@
 // /api/stripe-grade-checkout — One-time purchase of Grade Scan credits
-// POST body: { tier: '5' | '15' | '40', email?, userId?, name? }
-// Packs: 5 scans $3.99 | 15 scans $9.99 | 40 scans $19.99
+// POST body: { tier: '10' | '25' | '50', email?, userId?, name? }
+// Packs: 10 scans $5.99 | 25 scans $12.99 | 50 scans $22.99
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { getUserTier, TIER_BENEFITS } from './_tier.js';
@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const body    = req.body || {};
-  const tier    = String(body.tier || '5'); // '5', '15', '40'
+  const tier    = String(body.tier || '10'); // '10', '25', '50'
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
 
   let userEmail = body.email  || '';
@@ -39,19 +39,19 @@ export default async function handler(req, res) {
   }
 
   const priceMap = {
-    '5':  process.env.STRIPE_GRADE_SCAN_PRICE_5,
-    '15': process.env.STRIPE_GRADE_SCAN_PRICE_15,
-    '40': process.env.STRIPE_GRADE_SCAN_PRICE_40,
+    '10': process.env.STRIPE_GRADE_SCAN_PRICE_10,
+    '25': process.env.STRIPE_GRADE_SCAN_PRICE_25,
+    '50': process.env.STRIPE_GRADE_SCAN_PRICE_50,
   };
   const labelMap = {
-    '5':  '5 Grade Scans — $3.99',
-    '15': '15 Grade Scans — $9.99',
-    '40': '40 Grade Scans — $19.99',
+    '10': '10 Grade Scans — $5.99',
+    '25': '25 Grade Scans — $12.99',
+    '50': '50 Grade Scans — $22.99',
   };
-  const creditsMap = { '5': 5, '15': 15, '40': 40 };
+  const creditsMap = { '10': 10, '25': 25, '50': 50 };
   const priceId = priceMap[tier];
 
-  if (!priceId) return res.status(400).json({ error: 'Invalid tier. Choose 5, 15, or 40.' });
+  if (!priceId) return res.status(400).json({ error: 'Invalid tier. Choose 10, 25, or 50.' });
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) return res.status(503).json({ error: 'Payments not configured.' });

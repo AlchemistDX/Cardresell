@@ -55,10 +55,10 @@ export default async function handler(req, res) {
     if (googleSub) {
       if (paymentType === 'grade_scan') {
         // Grade scan pack — credit based on tier.
-        // New tiers: 5 / 15 / 40. Old tiers (20, 50) kept for any in-flight
+        // New tiers: 10 / 25 / 50. Old tiers (5, 15, 20, 40) kept for any in-flight
         // checkout sessions created before the 2026-08-17 price switch.
-        const tierMap = { '5': 5, '15': 15, '40': 40, '20': 20, '50': 50 };
-        const qty = tierMap[obj.metadata?.tier] || parseInt(obj.metadata?.credits) || 5;
+        const tierMap = { '10': 10, '25': 25, '50': 50, '5': 5, '15': 15, '20': 20, '40': 40 };
+        const qty = tierMap[obj.metadata?.tier] || parseInt(obj.metadata?.credits) || 10;
         await addPaidScanCredit(googleSub, qty, 'graded');
         console.log('GRADE_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email, qty }));
       } else if (paymentType === 'graded_scan') {
@@ -67,9 +67,9 @@ export default async function handler(req, res) {
         console.log('GRADED_SCAN_CREDIT_ADDED_LEGACY:', JSON.stringify({ googleSub, email }));
       } else if (paymentType === 'id_scan') {
         // ID scan bundle — credit based on tier.
-        // New tiers: 10 / 40 / 80. Old tiers (50, 100) kept for any in-flight
+        // New tiers: 10 / 50 / 100. Old tiers (40, 80) kept for any in-flight
         // checkout sessions created before the 2026-08-17 price switch.
-        const tierMap = { '10': 10, '40': 40, '80': 80, '50': 50, '100': 100 };
+        const tierMap = { '10': 10, '50': 50, '100': 100, '40': 40, '80': 80 };
         const qty = tierMap[obj.metadata?.tier] || 10;
         await addPaidScanCredit(googleSub, qty, 'id');
         console.log('ID_SCAN_CREDIT_ADDED:', JSON.stringify({ googleSub, email, qty }));
