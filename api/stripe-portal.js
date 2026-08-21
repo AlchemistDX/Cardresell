@@ -29,7 +29,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 
-  if (!userEmail || !userEmail.includes('@')) {
+  // We need EITHER a verified email OR a verified uid to find the Stripe
+  // customer. Some legacy tokens (Apple, phone, anonymous) verify OK but
+  // have no email claim — in that case we fall back to uid metadata search.
+  if ((!userEmail || !userEmail.includes('@')) && !userSub) {
     return res.status(401).json({ error: 'Sign in with Google first.' });
   }
 
@@ -39,14 +42,43 @@ export default async function handler(req, res) {
   const origin     = (req.headers.origin || 'https://www.cardresell.org').replace(/\/$/, '');
   const returnUrl  = `${origin}/`;
 
+  // Find the Stripe customer. Try in order until one matches:
+  //   1. Customers with email == userEmail (fast path when email is present)
+  //   2. Subscriptions with metadata['google_sub'] == userSub, then read
+  //      their customer id (catches users whose Stripe email doesn't match
+  //      their current Firebase email — e.g. after email change — or whose
+  //      Firebase token has no email claim at all)
+  //
+  // We NEVER trust body.email or body.userId here — both userEmail and
+  // userSub come from the verified token above, so this stays secure.
+  async function stripeGet(path) {
+    return fetch(`https://api.stripe.com/v1/${path}`, {
+      headers: { 'Authorization': `Bearer ${stripeKey}` },
+    });
+  }
+
   try {
-    // Find existing Stripe customer by email
-    const searchRes = await fetch(
-      `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(userEmail)}'&limit=1`,
-      { headers: { 'Authorization': `Bearer ${stripeKey}` } }
-    );
-    const searchData = await searchRes.json();
-    const customer   = searchData.data?.[0];
+    let customer = null;
+
+    // 1. Email search
+    if (userEmail && userEmail.includes('@')) {
+      const r = await stripeGet(`customers/search?query=email:'${encodeURIComponent(userEmail)}'&limit=1`);
+      const d = await r.json();
+      customer = d.data?.[0] || null;
+    }
+
+    // 2. Subscription metadata search on google_sub
+    // Stripe's search index takes 1–10s to include new records, so this
+    // works for anyone whose subscription is at least a few seconds old.
+    if (!customer && userSub) {
+      const r = await stripeGet(`subscriptions/search?query=metadata['google_sub']:'${encodeURIComponent(userSub)}'&limit=1`);
+      const d = await r.json();
+      const subCustomerId = d.data?.[0]?.customer;
+      if (subCustomerId) {
+        const cr = await stripeGet(`customers/${encodeURIComponent(subCustomerId)}`);
+        if (cr.ok) customer = await cr.json();
+      }
+    }
 
     if (!customer) {
       return res.status(404).json({ error: 'No subscription found for this account.' });

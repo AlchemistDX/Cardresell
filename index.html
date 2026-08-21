@@ -14270,10 +14270,20 @@ async function openBillingPortal() {
   const btn = document.querySelector('[onclick="openBillingPortal()"]');
   const origText = btn?.innerHTML;
   if (btn) btn.innerHTML = '<span style="opacity:.6">Opening…</span>';
+  // Force-refresh the Firebase ID token before hitting the server. Cached
+  // tokens can be stale (expired, missing email claim after email change,
+  // etc.) — a fresh token includes the latest email and full 60min TTL.
+  let idTok = window._googleIdToken || '';
+  try {
+    if (window.googleUser && typeof window.googleUser.getIdToken === 'function') {
+      idTok = await window.googleUser.getIdToken(true);
+      window._googleIdToken = idTok;
+    }
+  } catch(e) { /* fall through with whatever token we have */ }
   try {
     const r = await fetch('/api/stripe-portal', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (window._googleIdToken || '') },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idTok },
       body: JSON.stringify({ email: window.googleUser.email, userId: window.googleUser.sub })
     });
     const d = await r.json();
