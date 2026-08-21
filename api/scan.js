@@ -850,11 +850,37 @@ export default async function handler(req, res) {
       // YGOProDeck grounding (passcode → set_code → name → fuzzy) fixes all of these.
       // 2026-08-19: now dispatches to per-game grounder (yugioh/mtg/lorcana).
       // Pokemon has its own grounding via pokemontcg.io later in the flow.
-      await groundCardInfoByGame(cardInfo);
-      // Also ground candidates (if any) for the picker path
-      if (Array.isArray(xim.candidates)) {
-        for (const c of xim.candidates) {
-          await groundCardInfoByGame(c);
+      // 2026-08-21: ground top + all candidates in parallel. Previously the
+      // top ran alone first, so a pokemontcg.io 502 flake disproportionately
+      // failed the top while candidates (which ran later) succeeded. Parallel
+      // + shared retry logic evens this out.
+      {
+        const allInfos = [cardInfo, ...(Array.isArray(xim.candidates) ? xim.candidates : [])];
+        await Promise.all(allInfos.map(info => groundCardInfoByGame(info).catch(() => {})));
+      }
+
+      // Belt-and-suspenders: if the top still has no image_url but a candidate
+      // representing the same card (name + number + set_name match) did get
+      // grounded, copy its enrichment onto the top. Same-card because Ximilar
+      // uses `cardInfo = candidates[0]` semantically — they came from the
+      // same best_match, but as independent object copies.
+      if (cardInfo && !cardInfo.image_url && Array.isArray(xim.candidates)) {
+        const sameCard = xim.candidates.find(c =>
+          c && c.image_url &&
+          (c.card_name  || '').toLowerCase() === (cardInfo.card_name  || '').toLowerCase() &&
+          String(c.card_number || '') === String(cardInfo.card_number || '') &&
+          (c.set_name   || '').toLowerCase() === (cardInfo.set_name   || '').toLowerCase()
+        );
+        if (sameCard) {
+          if (sameCard.image_url)   cardInfo.image_url   = sameCard.image_url;
+          if (sameCard.image_small) cardInfo.image_small = sameCard.image_small;
+          if (sameCard._grounded_id && !cardInfo._grounded_id) cardInfo._grounded_id = sameCard._grounded_id;
+          if (sameCard.grounded_id  && !cardInfo.grounded_id)  cardInfo.grounded_id  = sameCard.grounded_id;
+          if (sameCard.set_code     && !cardInfo.set_code)     cardInfo.set_code     = sameCard.set_code;
+          if (sameCard.rarity       && !cardInfo.rarity)       cardInfo.rarity       = sameCard.rarity;
+          if (sameCard.hp           && !cardInfo.hp)           cardInfo.hp           = sameCard.hp;
+          if (sameCard.year         && !cardInfo.year)         cardInfo.year         = sameCard.year;
+          console.log(`[scan] copied grounding from candidate onto top: ${sameCard.grounded_id || sameCard._grounded_id}`);
         }
       }
 
