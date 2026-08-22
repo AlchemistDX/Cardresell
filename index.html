@@ -13225,7 +13225,14 @@ async function shareGrade(btn) {
 // sensible (≥40% of image area, aspect ratio 0.5–0.9 for a portrait card).
 // Falls back to the whole image if the crop looks wrong — never worse than
 // the old behavior.
-function compressImage(file, maxPx) {
+// 2026-08-21: compressImage(file, maxPx, opts?) — opts.skipCrop=true disables
+// the client-side card-bounds crop (used by bulk-scan, where the user has
+// already staged one card per photo and false crops caused ID failures).
+// opts.quality overrides the JPEG quality (default 0.82).
+function compressImage(file, maxPx, opts) {
+  const _opts = opts || {};
+  const skipCrop = !!_opts.skipCrop;
+  const jpegQuality = typeof _opts.quality === 'number' ? _opts.quality : 0.82;
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -13234,9 +13241,13 @@ function compressImage(file, maxPx) {
 
       // Step 1: try to detect and crop to card bounds on the FULL-res image
       // (bounds are computed on a 256px downsample internally so this is
-      // fast — ~30-60ms even on a 4000×3000 iPhone photo).
+      // fast — ~30-60ms even on a 4000×3000 iPhone photo). Skipped for
+      // bulk mode: staged photos rarely benefit and false crops caused
+      // ID misses on 4/14 MTG cards.
       let srcCanvas = null;
-      try {
+      if (skipCrop) {
+        try { console.log('[scan] client-crop disabled (bulk mode)'); } catch(_){}
+      } else try {
         const full = document.createElement('canvas');
         full.width = img.naturalWidth || img.width;
         full.height = img.naturalHeight || img.height;
@@ -13295,8 +13306,9 @@ function compressImage(file, maxPx) {
       } else {
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       }
-      // quality 0.82 gives good detail at ~200-400KB
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      // quality 0.82 gives good detail at ~200-400KB (default);
+      // bulk mode uses 0.90 for text-heavy MTG cards.
+      const dataUrl = canvas.toDataURL('image/jpeg', jpegQuality);
       resolve(dataUrl.split(',')[1]);
     };
     img.onerror = reject;
@@ -16358,14 +16370,20 @@ async function _bulkScanOne(item, rowId, isRetry) {
     rowId, wasRetry: !!isRetry,
   };
   try {
-    const imageBase64 = await compressImage(item.file, 1000);
+    // 2026-08-21: bulk-mode compression — skip client-crop (staged photos
+    // don't benefit, and false crops were breaking IDs on 4/14 MTG cards
+    // where the bounds detector locked onto shadows against dark surfaces)
+    // and raise JPEG quality to 0.90 so small MTG text stays legible.
+    // Bumped maxPx 1000→1200 for the same reason — Ximilar handles it fine.
+    const imageBase64 = await compressImage(item.file, 1200, { skipCrop: true, quality: 0.90 });
     // Keep a tiny (~350px) compressed base64 as a persistent thumbnail
     // fallback if pokemontcg.io doesn't return an image (rare cards, API
     // timeouts, mis-identified sets). Stored as a data: URL so it survives
     // page reload (unlike the blob: objectUrl). Kept small to avoid
-    // blowing out localStorage on large bulk scans.
+    // blowing out localStorage on large bulk scans. Thumb also skips crop
+    // so the failed-scan tile shows the actual photo, not a bad crop.
     try {
-      const thumbBase64 = await compressImage(item.file, 350);
+      const thumbBase64 = await compressImage(item.file, 350, { skipCrop: true });
       result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64;
     } catch(e) { /* thumbnail fallback is best-effort */ }
     const idToken     = window._googleIdToken || '';
