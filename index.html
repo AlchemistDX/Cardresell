@@ -3742,6 +3742,33 @@ function _stripEmoji(s) {
 }
 
 // ── Category pills ──
+// 2026-08-22: "Try an example" CTA on the landing/social-proof bar.
+// Previously the inline onclick referenced an undefined function and threw
+// ReferenceError on tap. Now: switch to Pokemon, populate the search input
+// with an iconic name, kick off the same doSearch() the user would run.
+function loadExampleCard() {
+  try {
+    // Ensure Pokemon is the active game (default anyway, but be explicit)
+    if (activeGame !== 'pokemon') {
+      try { onGameSelectChange('pokemon'); } catch(_) {}
+    }
+    const si = document.getElementById('searchInput');
+    if (si) {
+      si.value = 'Charizard';
+      si.focus();
+      // Scroll the search row into view so the dropdown lands on screen
+      try { si.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(_){}
+    }
+    // Trigger the normal search flow so the user sees the real dropdown
+    // of printings they'd get after typing themselves.
+    if (typeof doSearch === 'function') doSearch('Charizard');
+    try { window.trackEvent?.('example_card_tap', { name: 'Charizard' }); } catch(_){}
+  } catch(err) {
+    console.warn('[loadExampleCard] failed:', err);
+  }
+}
+try { window.loadExampleCard = loadExampleCard; } catch(_){}
+
 function onGameSelectChange(game) {
   activeGame = game;
   try { window.activeGame = game; } catch(_) {} // 2026-08-22: expose for FastPath
@@ -5517,7 +5544,10 @@ function loadCardUI(card) {
   const jpEbaySellLink = document.getElementById('jpEbaySellLink');
   if (isJPCard && card._jpEbayUrl) {
     jpLinksPanel.style.display = 'block';
-    jpEbayLink.href = card._jpEbayUrl;
+    // 2026-08-22: route JP eBay link through affiliate builder so the panel
+    // CTA earns EPN credit like the auto-open link and companion sell link.
+    try { jpEbayLink.href = (typeof buildEbayUrl === 'function') ? buildEbayUrl(card._jpEbayUrl) : card._jpEbayUrl; }
+    catch(_) { jpEbayLink.href = card._jpEbayUrl; }
     jpPCLink.href   = card._jpPCUrl || '#';
     // Companion sell link — route to a buyer's-eye JP search so users see
     // active + sold comps for the exact card before listing (2026-08-14).
@@ -5565,6 +5595,10 @@ function loadCardUI(card) {
   // Blank first — never let the previous card's image bleed through to a new card
   cardImg.src = '';
   cardImgWrap.style.display = 'none';
+  // 2026-08-22: reset one-attempt refresh guard so every new card gets its own
+  // /api/tcg-price recovery chance (previously the flag stuck to the shared
+  // <img> element and disabled recovery for EVERY later card).
+  try { if (cardImg.dataset && 'crRefreshed' in cardImg.dataset) delete cardImg.dataset.crRefreshed; } catch(_){}
   if (primaryUrl) {
     // Give the browser a hint to prioritize this image
     try { cardImg.fetchPriority = 'high'; cardImg.loading = 'eager'; cardImg.decoding = 'async'; } catch(e) {}
@@ -16740,6 +16774,9 @@ async function _bulkScanOne(item, rowId, isRetry) {
 }
 
 function _bulkFinishQueue(total) {
+  // 2026-08-22: clear processing flag on the normal finish path (previously
+  // only close/open cleared it, so state falsely claimed "processing" after done).
+  window._bulkProcessing = false;
   // Done — show bottom bar
   document.getElementById('bulkProgressBar').style.width = '100%';
   document.getElementById('bulkProgressLabel').textContent = 'Done!';
@@ -17237,7 +17274,7 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     added,
     // If price fetch missed and we saved as "Price not fetched", capture that
     // rate — it's the single best signal for how well bulk-scan pricing works.
-    withoutPrice: results.filter(r => !r.marketPrice).length,
+    withoutPrice: successful.filter(r => !r.marketPrice).length,
   });
   // Verify the write landed — if getUserKey returned an unscoped key (googleUser was
   // briefly null during the write), the data is orphaned and Collection won't show it.
