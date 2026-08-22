@@ -11791,8 +11791,14 @@ async function processScanImage(input) {
 
   statusEl.textContent = 'Identifying card\u2026';
 
-  // Compress image before sending — resize to max 1000px to stay under payload limits
-  const imageBase64 = await compressImage(file, 1000);
+  // Compress image before sending — resize to max 1200px to stay under payload limits
+  // 2026-08-22: single/rapid scan now matches bulk — no client-crop, higher
+  // quality, larger max edge. Client-crop was locking onto shadows/hand
+  // highlights on ~25% of single-scan photos (esp. dark MTG cards held in
+  // hand against busy backgrounds), sending misaligned/dark tiles to Ximilar
+  // and causing 'Card not recognized' on clearly readable photos.
+  // The photo-qc.js gates upstream already reject actually-bad photos.
+  const imageBase64 = await compressImage(file, 1200, { skipCrop: true, quality: 0.90 });
   const idToken = window._googleIdToken || '';
 
   // 2026-08-20: stash the front-of-card image so View Card / View PSA X price
