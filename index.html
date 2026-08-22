@@ -11873,6 +11873,48 @@ async function processScanImage(input) {
     if (!rawCardName || data.identified === false) {
       // 2026-08-19: Ximilar didn't recognize the card and we no longer
       // fall through to GPT vision (which used to hallucinate names).
+      // 2026-08-21: BEFORE giving up, try OCR-then-Scryfall for MTG.
+      // MTG cards have a bold, isolated name at the top-left which
+      // Tesseract reads reliably. If we get a name Scryfall confirms,
+      // hydrate the card view directly and skip the manual state.
+      // Refund already happened server-side (identified=false) so this
+      // rescue is free — either it works and the user is unblocked, or
+      // we fall through to the same manual UI as before.
+      const _isMTGGuess = (typeof activeGame !== 'undefined' && activeGame === 'mtg')
+                        || String(data.card_type || '').toLowerCase() === 'mtg';
+      if (_isMTGGuess && typeof _tryOCRThenScryfall === 'function' && file) {
+        statusEl.innerHTML = '<span style="color:#c4b5fd">Reading card name\u2026</span>';
+        try {
+          const rescued = await _tryOCRThenScryfall(file, statusEl);
+          if (rescued && rescued.name) {
+            // Route through the existing single-scan flow as if Ximilar
+            // had returned this card.
+            statusEl.innerHTML = '<span style="color:#10b981">Recovered via text\u2026</span>';
+            try {
+              _loadScannedCardExact({
+                name: rescued.name,
+                number: rescued.number || '',
+                setName: rescued.setName || '',
+                setCode: rescued.setCode || '',
+                cardType: 'mtg',
+                imageUrl: rescued.imageUrl || '',
+                _viaOCR: true,
+              });
+              const spinnerX2 = document.getElementById('scanSpinner');
+              if (spinnerX2) spinnerX2.style.display = 'none';
+              _setScanBtns('success');
+              URL.revokeObjectURL(objectUrl);
+              try { if (window.va) va('track', 'scan_ocr_rescue', { game: 'mtg', name: rescued.name.slice(0, 40) }); } catch(_){}
+              return;
+            } catch(loadErr) {
+              console.warn('[ocr-rescue] loadCard failed:', loadErr);
+              // fall through to manual UI
+            }
+          }
+        } catch(ocrErr) {
+          console.warn('[ocr-rescue] failed:', ocrErr && ocrErr.message);
+        }
+      }
       // Show a proper "unidentified" state with a hint, refund badge,
       // and "Not my card" button so the user knows we tried and failed
       // honestly — not that we returned a wrong answer.
@@ -13314,6 +13356,82 @@ function compressImage(file, maxPx, opts) {
     img.onerror = reject;
     img.src = url;
   });
+}
+
+// 2026-08-21: OCR + Scryfall rescue for MTG cards Ximilar can't ID.
+// Runs Tesseract on the top strip of the card (where the name lives),
+// then queries Scryfall for exact-name matches. Only returns a card if
+// Scryfall confirms it's real — never invents names.
+// Called from single-scan flow on identified=false; also usable from
+// bulk-scan retry paths.
+async function _tryOCRThenScryfall(file, statusEl) {
+  try {
+    if (!window.Tesseract) {
+      if (statusEl) statusEl.textContent = 'Loading text reader\u2026';
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    if (statusEl) statusEl.textContent = 'Reading card name\u2026';
+
+    // Crop to the top ~15% of the image — the MTG name is always at the
+    // top-left inside a light banner. Tesseract on the full card produces
+    // messy multi-line results (rules text + flavor text) that break the
+    // fuzzy name search.
+    const topStripUrl = await new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          URL.revokeObjectURL(url);
+          const c = document.createElement('canvas');
+          const stripH = Math.round((img.naturalHeight || img.height) * 0.15);
+          c.width = img.naturalWidth || img.width;
+          c.height = stripH;
+          c.getContext('2d').drawImage(img, 0, 0);
+          resolve(c.toDataURL('image/jpeg', 0.92));
+        } catch(e) { reject(e); }
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+
+    const { data: { text } } = await window.Tesseract.recognize(topStripUrl, 'eng', {
+      // No verbose logger for the rescue path.
+    });
+    // Take the first non-trivial line as the candidate name.
+    const lines = String(text || '').split('\n').map(l => l.trim())
+      // strip mana-cost gibberish characters Tesseract loves to invent
+      .map(l => l.replace(/[|_\\\/\[\]{}<>=+*@#\$%^&`~]/g, '').replace(/\s+/g, ' ').trim())
+      .filter(l => l.length >= 3 && /[a-zA-Z]/.test(l));
+    const candidate = lines[0] || '';
+    if (!candidate || candidate.length < 3) return null;
+
+    if (statusEl) statusEl.textContent = 'Confirming with Scryfall\u2026';
+
+    // Ask Scryfall for a fuzzy match — if it confirms a real card, use it.
+    const r = await fetch('https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(candidate), {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.name) return null;
+    return {
+      name:    j.name,
+      number:  j.collector_number || '',
+      setName: j.set_name || '',
+      setCode: j.set || '',
+      imageUrl: (j.image_uris && (j.image_uris.small || j.image_uris.normal))
+              || (j.card_faces && j.card_faces[0] && j.card_faces[0].image_uris && j.card_faces[0].image_uris.small)
+              || '',
+    };
+  } catch(err) {
+    try { console.warn('[_tryOCRThenScryfall]', err && err.message); } catch(_){}
+    return null;
+  }
 }
 
 async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
