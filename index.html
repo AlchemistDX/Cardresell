@@ -11608,6 +11608,21 @@ async function _pickScanCandidate(idx) {
   try { if (window._pendingScanObjectUrl) URL.revokeObjectURL(window._pendingScanObjectUrl); } catch(e) {}
   window._pendingScanCandidates = null;
   window._pendingScanObjectUrl  = null;
+
+  // 2026-08-22: Reveal the View Card button + schedule auto-advance so the
+  // overlay actually dismisses. Before this fix, the picker set all the
+  // state but never revealed a View Card affordance or triggered
+  // cancelScan(), leaving the user stuck on the grading-CTA overlay with
+  // no visible way forward (IMG_3935). Auto-advance calls cancelScan(),
+  // which reads _pendingIdScanCard and dispatches to the correct
+  // exact-load router (_loadScannedCardExact / _loadScannedJPCard /
+  // _loadScannedNonPokemonCard / _routeScannedSportsCard) so the card
+  // panel loads with real prices and image the moment the overlay
+  // dismisses.
+  try { _setScanBtns('success'); } catch(_) {}
+  const badgePk = document.getElementById('scanSuccessBadge');
+  if (badgePk) badgePk.style.display = 'flex';
+  try { _scheduleScanAutoAdvance(); } catch(_) {}
 }
 
 function showScanGradeCTA(cardName, grader, grade, opts) {
