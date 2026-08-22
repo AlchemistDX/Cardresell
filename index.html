@@ -3545,6 +3545,7 @@ async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
 let selectedCard = null;
 let currentPrices = {};      // { variantKey: { market, low, mid, high } }
 let activeGame = 'pokemon';
+try { window.activeGame = 'pokemon'; } catch(_) {} // 2026-08-22: expose for FastPath IIFE
 let sortMode = 'payout';
 let searchTimeout = null;
 
@@ -3743,6 +3744,7 @@ function _stripEmoji(s) {
 // ── Category pills ──
 function onGameSelectChange(game) {
   activeGame = game;
+  try { window.activeGame = game; } catch(_) {} // 2026-08-22: expose for FastPath
   try { document.body.setAttribute('data-game-theme', game); } catch(_) {}
 
   // Sync select
@@ -11739,14 +11741,21 @@ async function processScanImage(input) {
       window._lastFastpathResult = fp; // reused by LLM-shortlist rerank
       if (fp && fp.hit && fp.card) {
         const c = fp.card;
-        console.log(`[scan] fastpath HIT (${fp.totalMs}ms, dist=${fp.distance}): ${c.card_name} ${c.set_name} #${c.card_number}`);
+        // 2026-08-22: FastPath now covers Pokemon + MTG. Route hydration by game.
+        const fpGame = c.game || 'pokemon';
+        console.log(`[scan] fastpath HIT (${fp.totalMs}ms, dist=${fp.distance}, game=${fpGame}): ${c.card_name} ${c.set_name} #${c.card_number}`);
 
         // Preload hires image so "View Card" opens instantly.
         try { const pre = new Image(); pre.src = c.image_large; } catch(_) {}
 
-        // Also warm the pokemontcg.io detail endpoint so _loadScannedCardExact
-        // hits browser cache when the user taps View Card.
-        try { fetch('https://api.pokemontcg.io/v2/cards/' + encodeURIComponent(c.id)).catch(()=>{}); } catch(_) {}
+        // Warm the detail endpoint so downstream tap-through hits browser cache.
+        try {
+          if (fpGame === 'pokemon') {
+            fetch('https://api.pokemontcg.io/v2/cards/' + encodeURIComponent(c.id)).catch(()=>{});
+          } else if (fpGame === 'mtg') {
+            fetch('https://api.scryfall.com/cards/' + encodeURIComponent(c.id)).catch(()=>{});
+          }
+        } catch(_) {}
 
         // Swap the preview thumb to the CLEAN catalog small image so the user
         // sees the correctly-identified card art, not their phone photo.
@@ -11768,7 +11777,7 @@ async function processScanImage(input) {
         window._pendingIdScanCard = {
           name: c.card_name, number: c.card_number, setName: c.set_name,
           setCode: c.set_code, groundedId: c.id, rarity: c.rarity, hp: '',
-          cardType: 'pokemon', sport: '', year: '', isJapanese: false, jpName: '',
+          cardType: fpGame, sport: '', year: '', isJapanese: false, jpName: '',
         };
         try { _persistLastIdentified(window._pendingIdScanCard); } catch(_) {}
         URL.revokeObjectURL(objectUrl);
@@ -13545,22 +13554,52 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 (function() {
   'use strict';
 
-  let _cardIndex = null;
-  let _indexLoading = null;
+  // 2026-08-22: Multi-game index shards. Load only the shard(s) needed for
+  // the current activeGame. Pokemon shard is legacy /card-index.json (~4MB);
+  // MTG shard is /mtg-index.json (~3.5MB, Scryfall unique-artwork 2024+).
+  //
+  // When activeGame is unknown or 'auto', we merge both shards so a scan can
+  // resolve across games. When it's a single game, we load only that shard.
+  const _shards = {
+    pokemon: { url: '/card-index.json', promise: null, data: null },
+    mtg:     { url: '/mtg-index.json',  promise: null, data: null },
+  };
 
-  async function loadCardIndex() {
-    if (_cardIndex) return _cardIndex;
-    if (_indexLoading) return _indexLoading;
-    _indexLoading = (async () => {
+  async function _loadShard(game) {
+    const s = _shards[game];
+    if (!s) return [];
+    if (s.data) return s.data;
+    if (s.promise) return s.promise;
+    s.promise = (async () => {
       const t0 = performance.now();
-      const r = await fetch('/card-index.json');
-      if (!r.ok) throw new Error('Index fetch failed: ' + r.status);
+      const r = await fetch(s.url);
+      if (!r.ok) throw new Error(`shard ${game} fetch failed: ${r.status}`);
       const idx = await r.json();
-      console.log(`[fastpath] Loaded ${idx.length} cards in ${(performance.now()-t0).toFixed(0)}ms`);
-      _cardIndex = idx;
+      console.log(`[fastpath] shard ${game}: ${idx.length} cards in ${(performance.now()-t0).toFixed(0)}ms`);
+      s.data = idx;
       return idx;
     })();
-    return _indexLoading;
+    return s.promise;
+  }
+
+  async function loadCardIndex(gameHint) {
+    // gameHint: 'pokemon' | 'mtg' | 'both' | undefined
+    //
+    // Strategy: for scan calls, ALWAYS load both shards. Users may scan a
+    // card that doesn't match their currently-selected game (game selector
+    // is intent, not truth). The pHash NN across both shards is only ~32k
+    // rows and takes <100ms; the extra 3.5MB download is worth it once per
+    // session. Callers can still pass a specific hint to limit scope.
+    const game = gameHint || (typeof window !== 'undefined' && window.activeGame) || null;
+    // Explicit single-shard when called from a search-list rerank on Japanese
+    // Pokemon (which has no MTG equivalent) or similar narrow paths.
+    if (game === 'pokemonjp') return _loadShard('pokemon');
+    // Everything else: both shards in parallel.
+    const [pk, mtg] = await Promise.all([
+      _loadShard('pokemon').catch(e => (console.warn('[fastpath] pokemon shard failed:', e), [])),
+      _loadShard('mtg').catch(e => (console.warn('[fastpath] mtg shard failed:', e), [])),
+    ]);
+    return pk.concat(mtg);
   }
 
   // ── Card detection: find bounding box of high-gradient region ──
@@ -13744,6 +13783,8 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     if (!smallUrl) return '';
     if (smallUrl.includes('scrydex.com')) return smallUrl.replace(/\/small$/, '/large');
     if (smallUrl.includes('pokemontcg.io')) return smallUrl.replace(/\.png$/, '_hires.png');
+    // 2026-08-22: Scryfall URLs — the index stores /normal/, upgrade to /large/
+    if (smallUrl.includes('cards.scryfall.io')) return smallUrl.replace('/normal/', '/large/');
     return smallUrl;
   }
 
@@ -13763,6 +13804,7 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
       dhash:       rec.d,
       image_small: rec.i,   // 245x342 - use as thumb for instant paint
       image_large: deriveLargeUrl(rec.i), // hires - use in detail modal
+      game:        rec.g || 'pokemon',    // 2026-08-22: game marker
     };
   }
 
