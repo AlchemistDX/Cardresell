@@ -5731,7 +5731,12 @@ function loadCardUI(card) {
         : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(card.name || '')}&view=grid`;
       if (typeof buildTcgpSmart === 'function') {
         try {
+          // 2026-08-22 [F3]: capture the card generation this async lookup is
+          // for; if the user switches cards before it resolves, discard the
+          // result instead of overwriting the newer card's button.
+          const _tcgpGenSnap = _myImgGen;
           Promise.resolve(buildTcgpSmart(card)).then(function(u) {
+            if (_tcgpGenSnap !== window._imgGen) return; // stale — user moved on
             if (u && typeof u === 'string') tcgpListBtn.href = u;
           }).catch(function(){});
         } catch(e) {}
@@ -5822,6 +5827,27 @@ function loadCardUI(card) {
 
   // Auto-fetch eBay sold comps (non-blocking, skip sports/JP)
   setTimeout(() => fetchAndApplySoldComps(false), 300);
+
+  // 2026-08-22 [B1]: centralized "open grader after scan" consumption.
+  // Previously only two of the five post-scan card-load paths cleared this
+  // one-shot flag (fuzzy Pokemon match + TPL fallback), so AI Grading
+  // Estimate silently failed after grounded-ID / JP / non-Pokemon / sports
+  // routes and could later fire on an unrelated scan. Consume once here
+  // regardless of which loader ran.
+  try {
+    if (window._openGradeAfterScan) {
+      window._openGradeAfterScan = false;
+      setTimeout(() => {
+        try {
+          const cardHero = document.getElementById('cardHero');
+          if (cardHero) cardHero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch(_){}
+        if (typeof openGradeScanGate === 'function') {
+          try { openGradeScanGate(); } catch(e) { console.warn('[openGradeAfterScan]', e); }
+        }
+      }, 500);
+    }
+  } catch(_){}
 }
 
 function resetCardPanel() {
@@ -9946,6 +9972,12 @@ async function _reidentifyAndLoadGraded(frontBase64, psaGrade) {
 
     cleanup();
 
+    // 2026-08-22 [F7]: clear _pendingIdScanCard after grade-view direct routing
+    // so a later cancelScan() doesn't treat this graded snapshot as an active
+    // pending scan and reroute back to it. _lastIdentifiedCard remains set for
+    // Deep Grade share/re-ID.
+    try { window._pendingIdScanCard = null; } catch(_){}
+
     // Apply the PSA grade pill after the card panel is populated.
     const psaGradeNum = Number(psaGrade) || 0;
     if (psaGradeNum) {
@@ -10087,6 +10119,9 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
           } catch(e) { console.warn('[viewGradedCard] applyGrade failed', e); }
         }, 1200);
       }
+      // 2026-08-22 [F7]: clear pending after direct grade routing so a later
+      // cancelScan() doesn't reroute back to this graded snapshot.
+      try { setTimeout(() => { window._pendingIdScanCard = null; }, 1300); } catch(_){}
       return;
     } catch(e) {
       console.warn('[viewGradedCard] _deepGradeIdent exact-load failed, falling through:', e);
