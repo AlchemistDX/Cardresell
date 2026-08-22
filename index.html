@@ -15868,27 +15868,57 @@ async function _bulkFetchPokemonCards(q, timeoutMs) {
 // Route to the right DB per TCG. Bulk scanner used to always hit PokemonTCG.io,
 // which broke Magic/Yu-Gi-Oh/Lorcana/JP-Pokemon results entirely (scan ID'd them
 // but price fetch returned 0 matches → "Price unavailable" + no thumbnail).
-async function _bulkFetchPriceMTG(cleanName, cleanNumber) {
+async function _bulkFetchPriceMTG(cleanName, cleanNumber, setName) {
   // Scryfall search notes:
   // — Collector numbers are un-zero-padded ("87" not "087") — always strip.
   // — Query `name 087` returns 0 hits even when "87" would match; strip zeros.
   // — Diacritics in the scanned name ("Lüm-Dûl's") may mis-match Scryfall's
   //   ASCII stored forms; strip diacritics as a fallback query.
-  // Try progressively broader queries; take the highest-USD print.
+  //
+  // 2026-08-21: STOP picking the most expensive printing. With `cn:175` on a
+  // card that has both a base and Promos print (e.g. Berta, Wise Extrapolator
+  // SOS #175 vs SOS Promos #175p), `order=usd desc` was returning the $1.01
+  // promo when the user actually has the $0.32 base print. Now:
+  //   1. Prefer an EXACT set-name match when setName is provided.
+  //   2. Otherwise prefer the print whose collector number matches EXACTLY
+  //      (no letter suffix like "175p").
+  //   3. Sort `asc` so the cheapest (≈ base print) wins on final fallback.
   const stripDiacritics = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const numShort = cleanNumber ? String(cleanNumber).replace(/^0+/, '') : '';
+  const cleanSet = setName ? String(setName).trim() : '';
   const queries = [
     numShort ? `${cleanName} cn:${numShort}` : '',
     `!"${cleanName}"`,      // exact-name match (unique per print)
     cleanName,              // fuzzy name only
     stripDiacritics(cleanName),
   ].filter(Boolean);
+
+  const pickBest = (rows) => {
+    if (!Array.isArray(rows) || !rows.length) return null;
+    if (cleanSet) {
+      const wantSet = cleanSet.toLowerCase();
+      const setMatch = rows.filter(c => (c.set_name || '').toLowerCase() === wantSet);
+      if (setMatch.length) {
+        if (numShort) {
+          const exact = setMatch.find(c => String(c.collector_number || '').replace(/^0+/, '') === numShort);
+          if (exact) return exact;
+        }
+        return setMatch[0];
+      }
+    }
+    if (numShort) {
+      const exact = rows.find(c => String(c.collector_number || '').replace(/^0+/, '') === numShort);
+      if (exact) return exact;
+    }
+    return rows[0];
+  };
+
   for (const q of queries) {
     try {
-      const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=desc`, { signal: AbortSignal.timeout(7000) });
+      const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=asc`, { signal: AbortSignal.timeout(7000) });
       if (!r.ok) continue;
       const d = await r.json();
-      const first = d?.data?.[0];
+      const first = pickBest(d && d.data);
       if (!first) continue;
       const usd = parseFloat(first.prices?.usd) || parseFloat(first.prices?.usd_foil) || null;
       return {
@@ -15988,7 +16018,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   // Route to the correct database. Falls back to Pokemon lookup for legacy
   // rows without cardType, but also as a last-ditch recovery when a non-Pokemon
   // DB returns nothing.
-  if (type === 'mtg') return _bulkFetchPriceMTG(cleanName, cleanNumber);
+  if (type === 'mtg') return _bulkFetchPriceMTG(cleanName, cleanNumber, setName);
   if (type === 'yugioh' || type === 'ygo') return _bulkFetchPriceYGO(cleanName);
   if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName, cleanNumber, setName, cleanRarity);
   if (type === 'onepiece') return _bulkFetchPriceOnePiece(cleanName, cleanNumber, setName, cleanRarity);
