@@ -10686,6 +10686,21 @@ function _loadScannedJPCard(pending) {
   const setName     = pending.setName || 'Japanese Set';
   const rarity      = pending.rarity  || '';
 
+  // 2026-08-22: Kill any stale scanMissPanel from a previous scan of a
+  // different card. Without this, the header updates to the new (JP) card
+  // but the miss-panel below still shows the previous card's info —
+  // exactly what happened with Iduna (Lorcana) → Blaziken (JP) in prod.
+  try {
+    const stale = document.getElementById('scanMissPanel');
+    if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+  } catch(_) {}
+
+  // 2026-08-22: Image hydration. PokemonTCG.io doesn't index JP-only sets,
+  // but the raw scan photo the user just took IS the card image. If the
+  // scan path stored the photo as a data URL, use it so the detail card
+  // shows the card the user is looking at instead of "Image unavailable".
+  const scanImg = (typeof window !== 'undefined' && window._lastScanImageDataUrl) || '';
+
   // Build eBay JP + PriceCharting URLs the same way the JP search dropdown does.
   const numTail = cardNumber ? (' ' + cardNumber) : '';
   const ebayJPUrl = 'https://www.ebay.com/sch/i.html?_nkw='
@@ -10697,7 +10712,7 @@ function _loadScannedJPCard(pending) {
   const jpCard = {
     name: displayName,
     game: 'pokemonjp',
-    images: { small: '', large: '' },
+    images: { small: scanImg, large: scanImg },  // 2026-08-22: use scan photo
     setName: setName,
     number: cardNumber,
     rarity: rarity,
@@ -11676,9 +11691,38 @@ async function processScanImage(input) {
   resultEl.textContent = '';
   statusEl.textContent = 'Identifying card\u2026';
 
+  // 2026-08-22: Nuke any stale scan-miss / cross-card panels from a
+  // previous scan. Different code paths (JP, non-Pokemon, sports)
+  // update the header/hero but historically didn't all clear the
+  // "MARKET PRICE — RAW" panel from a prior card, so users saw the
+  // new card's photo above the previous card's price. Clear it at
+  // the top of every scan so the full page commits to the new card.
+  try {
+    const stale = document.getElementById('scanMissPanel');
+    if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+  } catch(_) {}
+
   const objectUrl = URL.createObjectURL(file);
   prevImg.src = objectUrl;
   prevWrap.style.display = 'block';
+
+  // 2026-08-22: Stash the scan photo so JP-Pokemon cards (which have no
+  // PokemonTCG.io catalog image) can render the user's scanned photo in
+  // the detail card instead of "Image unavailable". Object URL is
+  // synchronous — valid immediately — and the async data-URL upgrade
+  // (below) replaces it once available, so persistence survives across
+  // URL.revokeObjectURL. Reads: _loadScannedJPCard in this file.
+  try { window._lastScanImageDataUrl = objectUrl; } catch(_) {}
+  try {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const url = String(reader.result || '');
+        if (url && url.length < 2 * 1024 * 1024) window._lastScanImageDataUrl = url;
+      } catch(_) {}
+    };
+    reader.readAsDataURL(file);
+  } catch(_) {}
 
   // ── Photo QC gates (2026-08-20): reject bad photos BEFORE we spend a
   //    credit or hit /api/scan. Three gates: low-res, blur, dupe.
