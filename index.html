@@ -11877,6 +11877,12 @@ async function processScanImage(input) {
     } catch(e) {}
 
     if (!rawCardName || data.identified === false) {
+      // 2026-08-22: The next scan attempt should skip the dupe check.
+      // A failed scan usually means the user will retry the same card
+      // (better lighting, closer framing, different angle), and blocking
+      // it as 'same card as last scan' turns a bad UX into a worse one.
+      // Cleared implicitly by processScanImage() after one use.
+      window._skipQCDupe = true;
       // 2026-08-19: Ximilar didn't recognize the card and we no longer
       // fall through to GPT vision (which used to hallucinate names).
       // 2026-08-21: BEFORE giving up, try OCR-then-Scryfall for MTG.
@@ -13425,6 +13431,52 @@ async function _tryOCRThenScryfall(file, statusEl) {
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.name) return null;
+
+    // 2026-08-22: Scryfall fuzzy is TOO permissive — for OCR gibberish it
+    // still returns whatever's closest, which is often a completely
+    // unrelated card (e.g. "Mindful Biomancer" OCR'd badly → fuzzy returned
+    // "Spring-Loaded Sawblades"). Require a real similarity between the
+    // OCR candidate and the returned name before trusting it.
+    // Normalize both to lowercase alphanumerics-with-spaces, then require
+    // at least ONE shared meaningful token (>=4 chars) OR a Dice bigram
+    // coefficient >= 0.55. That still catches typical OCR noise (a couple
+    // of letters wrong, spacing off) while rejecting semantic mismatches.
+    const _norm = (s) => String(s || '').toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const nC = _norm(candidate);
+    const nR = _norm(j.name);
+    if (!nC || !nR) return null;
+
+    const tokensC = new Set(nC.split(' ').filter(t => t.length >= 4));
+    const tokensR = new Set(nR.split(' ').filter(t => t.length >= 4));
+    let sharedToken = false;
+    for (const t of tokensC) { if (tokensR.has(t)) { sharedToken = true; break; } }
+
+    // Dice bigram coefficient — catches near-misses where no whole word
+    // survived OCR intact.
+    const bigrams = (s) => {
+      const b = new Map();
+      for (let i = 0; i < s.length - 1; i++) {
+        const g = s.slice(i, i + 2);
+        b.set(g, (b.get(g) || 0) + 1);
+      }
+      return b;
+    };
+    const bC = bigrams(nC.replace(/\s/g, ''));
+    const bR = bigrams(nR.replace(/\s/g, ''));
+    let overlap = 0, totalC = 0, totalR = 0;
+    for (const [, v] of bC) totalC += v;
+    for (const [, v] of bR) totalR += v;
+    for (const [g, v] of bC) {
+      if (bR.has(g)) overlap += Math.min(v, bR.get(g));
+    }
+    const dice = (totalC + totalR) > 0 ? (2 * overlap) / (totalC + totalR) : 0;
+
+    if (!sharedToken && dice < 0.55) {
+      try { console.warn('[_tryOCRThenScryfall] rejected fuzzy hit — OCR="' + candidate + '" → Scryfall="' + j.name + '" (dice=' + dice.toFixed(2) + ', no shared token)'); } catch(_){}
+      return null;
+    }
+
     return {
       name:    j.name,
       number:  j.collector_number || '',
