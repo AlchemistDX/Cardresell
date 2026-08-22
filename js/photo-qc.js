@@ -37,7 +37,10 @@
 
   const MIN_SHORT_EDGE = 400;   // pixels
   const BLUR_THRESHOLD = 120;   // variance of Laplacian; below = blurry
-  const DUPE_DISTANCE  = 6;     // Hamming; <= is a dupe
+  // 2026-08-21: tightened from 6 to 4 to combat false positives on
+  // cards shot against the same background. Combined with cropped-
+  // region hashing in check().
+  const DUPE_DISTANCE  = 4;     // Hamming on cropped card; <= is a dupe
   const RECENT_HASH_CAP = 8;    // keep last 8 scans
 
   const recentHashes = []; // ring buffer of hex strings
@@ -191,8 +194,31 @@
     }
 
     // Gate 3: dupe (unless caller opted out — e.g. user pressed "scan again")
+    // 2026-08-21: hash the CROPPED card region, not the whole frame,
+    // so the desk / hand / keyboard background can't dominate the hash.
     try {
-      details.phash = dHash(bitmap);
+      let hashSource = bitmap;
+      try {
+        const detect = window.CardResellFastPath && window.CardResellFastPath.detectCardBounds;
+        if (detect && bitmap && bitmap.width && bitmap.height) {
+          const fc = document.createElement('canvas');
+          fc.width = bitmap.width; fc.height = bitmap.height;
+          fc.getContext('2d').drawImage(bitmap, 0, 0);
+          const imgData = fc.getContext('2d').getImageData(0, 0, fc.width, fc.height).data;
+          const bounds = detect(imgData, fc.width, fc.height);
+          if (bounds) {
+            const ratio = (bounds.w * bounds.h) / (fc.width * fc.height);
+            const aspect = bounds.h > 0 ? bounds.w / bounds.h : 0;
+            if (ratio >= 0.25 && ((aspect >= 0.55 && aspect <= 0.85) || (aspect >= 1.15 && aspect <= 1.80))) {
+              const cc = document.createElement('canvas');
+              cc.width = bounds.w; cc.height = bounds.h;
+              cc.getContext('2d').drawImage(fc, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
+              hashSource = cc;
+            }
+          }
+        }
+      } catch(_) {}
+      details.phash = dHash(hashSource);
       if (!skipDupe) {
         const dup = findDupe(details.phash);
         if (dup) {

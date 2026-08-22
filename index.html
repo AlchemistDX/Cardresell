@@ -5583,17 +5583,52 @@ function loadCardUI(card) {
       }
     };
     cardImg.onerror = () => {
-      cardImgWrap.style.display = 'none';
-      if (isSports) {
-        sportsCardPh.style.display = 'flex';
-        cardImgPh.style.display = 'none';
-      } else {
-        // 2026-08-15: card IS loaded (name/meta populated below) but the
-        // image URL failed — don't say "No card selected", say the truth.
-        const _lab = document.getElementById('cardImgPhLabel');
-        if (_lab) _lab.textContent = 'Image unavailable';
-        cardImgPh.style.display = 'flex';
-        sportsCardPh.style.display = 'none';
+      if (_myImgGen !== window._imgGen) return; // stale — user moved on
+      // 2026-08-21: BEFORE showing "Image unavailable", try one silent
+      // refresh from /api/tcg-price. Stale pokemontcg.io URLs (esp. for
+      // restored cards from prior sessions) can 404 while tcgcsv still
+      // returns a fresh TCGplayer CDN URL for the same card. Only for
+      // Pokemon/YGO/MTG — sports cards use their own placeholder.
+      const g = String(card && card.game || '').toLowerCase();
+      const supportsRefresh = (g === 'pokemon' || g === 'pokemonjp' || g === 'ygo' || g === 'mtg' || g === 'yugioh');
+      const alreadyRefreshed = cardImg.dataset && cardImg.dataset.crRefreshed === '1';
+      if (supportsRefresh && !alreadyRefreshed && card && card.name) {
+        try { if (cardImg.dataset) cardImg.dataset.crRefreshed = '1'; } catch(_){}
+        (async () => {
+          try {
+            const params = new URLSearchParams({ name: card.name || '', game: g === 'yugioh' ? 'ygo' : g });
+            if (card.number)  params.set('number', card.number);
+            if (card.setName) params.set('set', card.setName);
+            const r = await fetch('/api/tcg-price?' + params.toString(), { headers: { 'x-cardresell-source': 'img-refresh' } });
+            if (!r.ok) throw new Error('tcg-price ' + r.status);
+            const j = await r.json();
+            if (_myImgGen !== window._imgGen) return;
+            if (j && j.imageUrl && j.imageUrl !== cardImg.src) {
+              cardImg.src = j.imageUrl;
+              return; // onload/onerror will re-fire; on load we succeed silently
+            }
+          } catch(refreshErr) {
+            try { console.warn('[card-img refresh] failed:', refreshErr && refreshErr.message); } catch(_){}
+          }
+          // Fallthrough: refresh didn't help — show placeholder.
+          _showImgUnavailable();
+        })();
+        return;
+      }
+      _showImgUnavailable();
+      function _showImgUnavailable() {
+        cardImgWrap.style.display = 'none';
+        if (isSports) {
+          sportsCardPh.style.display = 'flex';
+          cardImgPh.style.display = 'none';
+        } else {
+          // 2026-08-15: card IS loaded (name/meta populated below) but the
+          // image URL failed — don't say "No card selected", say the truth.
+          const _lab = document.getElementById('cardImgPhLabel');
+          if (_lab) _lab.textContent = 'Image unavailable';
+          cardImgPh.style.display = 'flex';
+          sportsCardPh.style.display = 'none';
+        }
       }
     };
     if (cardImg.complete && cardImg.naturalWidth > 0) {
@@ -11099,8 +11134,14 @@ async function _loadScannedCardExact(pending) {
                 mid:    pJson.mid  != null ? Number(pJson.mid)  : Number(pJson.market),
                 high:   pJson.high != null ? Number(pJson.high) : null,
               });
-              // Also promote the tcgcsv image + url if we didn't have one
-              if (!synthImg && pJson.imageUrl) synthImg = pJson.imageUrl;
+              // 2026-08-21: ALWAYS prefer the tcgcsv image over the
+              // pokemontcg.io fallback. The tcgcsv image is the exact
+              // scanned card's TCGplayer product photo. The earlier
+              // `cards` array may only contain same-number Fennekins
+              // from a DIFFERENT set (e.g. sm6-14 Forbidden Light) whose
+              // pokemontcg.io CDN URL sometimes 404s on mobile Safari,
+              // producing the "Image unavailable" state on Fennekin MEP.
+              if (pJson.imageUrl) synthImg = pJson.imageUrl;
               if (!pending.tcgplayerUrl && pJson.url) pending = { ...pending, tcgplayerUrl: pJson.url };
             }
           }
@@ -13693,7 +13734,13 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 
   const MIN_SHORT_EDGE = 400;   // pixels
   const BLUR_THRESHOLD = 120;   // variance of Laplacian; below = blurry
-  const DUPE_DISTANCE  = 6;     // Hamming; <= is a dupe
+  // 2026-08-21: DUPE_DISTANCE tightened from 6 to 4. Two DIFFERENT cards
+  // shot on the same background (same keyboard, same hand pose) were
+  // routinely landing within 6 Hamming bits on dHash alone — the frame's
+  // large-scale luminance gradients dominated the 64-bit signal. Now
+  // combined with cropped hashing (see below) we can afford a tighter
+  // threshold on the card region itself.
+  const DUPE_DISTANCE  = 4;     // Hamming on cropped card; <= is a dupe
   const RECENT_HASH_CAP = 8;    // keep last 8 scans
 
   const recentHashes = []; // ring buffer of hex strings
@@ -13847,8 +13894,43 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     }
 
     // Gate 3: dupe (unless caller opted out — e.g. user pressed "scan again")
+    // 2026-08-21: hash the CROPPED card region, not the whole frame. Two
+    // different cards on the same background were false-positiving on
+    // dHash of the raw photo because the frame's luminance layout was
+    // near-identical (same keyboard, same hand). Cropping to the card
+    // silhouette (via the fastpath's detectCardBounds) makes the hash
+    // reflect the card art, not the desk.
     try {
-      details.phash = dHash(bitmap);
+      let hashSource = bitmap;
+      try {
+        const detect = window.CardResellFastPath && window.CardResellFastPath.detectCardBounds;
+        if (detect && bitmap && bitmap.width && bitmap.height) {
+          const fc = document.createElement('canvas');
+          fc.width = bitmap.width; fc.height = bitmap.height;
+          const fctx = fc.getContext('2d');
+          fctx.drawImage(bitmap, 0, 0);
+          const imgData = fctx.getImageData(0, 0, fc.width, fc.height).data;
+          const bounds = detect(imgData, fc.width, fc.height);
+          if (bounds) {
+            const area  = bounds.w * bounds.h;
+            const total = fc.width * fc.height;
+            const ratio = area / total;
+            const aspect = bounds.h > 0 ? bounds.w / bounds.h : 0;
+            const goodPortrait  = ratio >= 0.25 && aspect >= 0.55 && aspect <= 0.85;
+            const goodLandscape = ratio >= 0.25 && aspect >= 1.15 && aspect <= 1.80;
+            if (goodPortrait || goodLandscape) {
+              const cc = document.createElement('canvas');
+              cc.width = bounds.w; cc.height = bounds.h;
+              cc.getContext('2d').drawImage(fc, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
+              hashSource = cc;
+            }
+          }
+        }
+      } catch(cropErr) {
+        // fall through to full-frame hash if crop fails
+        try { console.warn('[photo-qc] crop-for-dupe failed:', cropErr && cropErr.message); } catch(_){}
+      }
+      details.phash = dHash(hashSource);
       if (!skipDupe) {
         const dup = findDupe(details.phash);
         if (dup) {
