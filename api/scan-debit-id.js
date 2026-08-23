@@ -32,6 +32,27 @@ async function kvSet(key, val) {
     { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
 }
 
+// 2026-08-22 [F6]: atomic DECR with new-value return. See /api/scan.js for
+// full rationale — concurrent picker confirmations could otherwise race
+// read → setKV(cur-1) and debit only 1 credit for N parallel picks.
+async function kvDecr(key) {
+  try {
+    const r = await fetch(`${kvUrl}/decr/${encodeURIComponent(key)}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
+    const d = await r.json();
+    const raw = d && d.result;
+    if (raw === null || raw === undefined) return null;
+    const n = parseInt(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch(e) { return null; }
+}
+async function kvIncr(key) {
+  try {
+    await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } });
+  } catch(e) {}
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
 
@@ -54,10 +75,21 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, remaining: 0, kv: false });
   }
 
-  const cur = await kvGetInt(`scans:${key}:id_paid_left`);
-  if (cur <= 0) {
+  // 2026-08-22 [F6]: atomic DECR guards against concurrent picker confirms.
+  // If the new value is negative, refund immediately and return 402.
+  const newLeft = await kvDecr(`scans:${key}:id_paid_left`);
+  if (newLeft === null) {
+    // Transient KV error — fall back to read-then-write so users aren't blocked.
+    const cur = await kvGetInt(`scans:${key}:id_paid_left`);
+    if (cur <= 0) {
+      return res.status(402).json({ ok: false, error: 'No ID scan credits remaining.', needsPayment: true });
+    }
+    await kvSet(`scans:${key}:id_paid_left`, cur - 1);
+    return res.status(200).json({ ok: true, remaining: cur - 1 });
+  }
+  if (newLeft < 0) {
+    await kvIncr(`scans:${key}:id_paid_left`);
     return res.status(402).json({ ok: false, error: 'No ID scan credits remaining.', needsPayment: true });
   }
-  await kvSet(`scans:${key}:id_paid_left`, cur - 1);
-  return res.status(200).json({ ok: true, remaining: cur - 1 });
+  return res.status(200).json({ ok: true, remaining: newLeft });
 }

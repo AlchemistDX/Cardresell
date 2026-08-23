@@ -806,17 +806,30 @@ export default async function handler(req, res) {
       const stamp      = getMonthStamp();
       const idFreeUsed = grantEligible ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : idGrant;
       const idFreeLeft = grantEligible ? Math.max(0, idGrant - idFreeUsed) : 0;
-      const idPaid     = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
 
-      if (idFreeLeft <= 0 && idPaid <= 0) {
-        return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
-      }
       if (idFreeLeft > 0) {
+        // Free bucket usage is capped by monthly grant — an over-INCR here is
+        // bounded and reconciled by the refund path; keep the simple flow.
         await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
         consumedFrom = 'id_free';
         consumedAmount = 1;
       } else {
-        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaid - 1);
+        // 2026-08-22 [F6]: atomic DECR guards against concurrent bulk workers
+        // racing read → setKV(cur-1). If the new value is negative, refund and
+        // return 402 — the credits ran out during this batch.
+        const newLeft = await decrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+        if (newLeft === null) {
+          // KV DECR failed — fall back to old read-then-write to avoid hard-blocking users on transient errors.
+          const idPaidFallback = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+          if (idPaidFallback <= 0) {
+            return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
+          }
+          await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaidFallback - 1);
+        } else if (newLeft < 0) {
+          // Over-drawn by a concurrent worker — refund the debit atomically.
+          await incrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
+          return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
+        }
         consumedFrom = 'id_paid_left';
         consumedAmount = 1;
       }
@@ -829,17 +842,6 @@ export default async function handler(req, res) {
       const freeUsed = grantEligible ? await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`) : gradeGrant;
       const freeLeft = grantEligible ? Math.max(0, gradeGrant - freeUsed) : 0;
 
-      if (freeLeft < gradeCost && paid < gradeCost) {
-        return res.status(402).json({
-          error: gradeCost > 1
-            ? `Deep Grade needs ${gradeCost} grading credits. You have ${Math.max(freeLeft, paid)}.`
-            : 'No grading credits remaining.',
-          needsPayment: true,
-          mode: 'grade',
-          deepGrade: isDeepGrade,
-          cost: gradeCost,
-        });
-      }
       if (freeLeft >= gradeCost) {
         // Deduct from free bucket by incrementing free_used by gradeCost
         for (let i = 0; i < gradeCost; i++) {
@@ -848,7 +850,31 @@ export default async function handler(req, res) {
         consumedFrom = 'free';
         consumedAmount = gradeCost;
       } else {
-        await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paid - gradeCost);
+        // 2026-08-22 [F6]: atomic DECRBY protects paid credit accounting across
+        // concurrent scans (Deep Grade costs 2 — must be one atomic op).
+        const newPaid = await decrByKV(kvUrl, kvToken, `scans:${key}:paid_left`, gradeCost);
+        if (newPaid === null) {
+          // KV DECRBY failed — fall back to read-then-write.
+          const paidFallback = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
+          if (paidFallback < gradeCost) {
+            return res.status(402).json({
+              error: gradeCost > 1
+                ? `Deep Grade needs ${gradeCost} grading credits. You have ${Math.max(freeLeft, paidFallback)}.`
+                : 'No grading credits remaining.',
+              needsPayment: true, mode: 'grade', deepGrade: isDeepGrade, cost: gradeCost,
+            });
+          }
+          await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, paidFallback - gradeCost);
+        } else if (newPaid < 0) {
+          // Over-drawn — refund and 402. Restore whatever we took (up to `gradeCost`).
+          await incrByKV(kvUrl, kvToken, `scans:${key}:paid_left`, gradeCost);
+          return res.status(402).json({
+            error: gradeCost > 1
+              ? `Deep Grade needs ${gradeCost} grading credits. You have ${Math.max(freeLeft, 0)}.`
+              : 'No grading credits remaining.',
+            needsPayment: true, mode: 'grade', deepGrade: isDeepGrade, cost: gradeCost,
+          });
+        }
         consumedFrom = 'paid_left';
         consumedAmount = gradeCost;
       }
@@ -2454,6 +2480,52 @@ async function setKV(kvUrl, kvToken, key, value) {
 async function incrKV(kvUrl, kvToken, key) {
   try {
     await fetch(`${kvUrl}/incr/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+  } catch(e) {}
+}
+
+// 2026-08-22 [F6]: Atomic DECR with returned new value. Concurrent bulk scans
+// used to race read → setKV(cur-1), letting N parallel workers debit only 1
+// credit. DECR is atomic in Redis; if the returned new value is negative the
+// caller MUST compensate with INCR and treat the request as insufficient funds.
+// Returns Number (possibly negative) or null on error.
+async function decrKV(kvUrl, kvToken, key) {
+  try {
+    const r = await fetch(`${kvUrl}/decr/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+    const d = await r.json();
+    const raw = d && d.result;
+    if (raw === null || raw === undefined) return null;
+    const n = parseInt(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch(e) { return null; }
+}
+
+// 2026-08-22 [F6]: Atomic DECRBY with returned new value. Same guarantees as
+// decrKV but subtracts `amount` in one op — needed for Deep Grade (cost 2).
+async function decrByKV(kvUrl, kvToken, key, amount) {
+  try {
+    const r = await fetch(`${kvUrl}/decrby/${encodeURIComponent(key)}/${amount}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+    const d = await r.json();
+    const raw = d && d.result;
+    if (raw === null || raw === undefined) return null;
+    const n = parseInt(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch(e) { return null; }
+}
+
+// 2026-08-22 [F6]: Atomic INCRBY — compensating counterpart to decrByKV, used
+// to refund a failed atomic debit.
+async function incrByKV(kvUrl, kvToken, key, amount) {
+  try {
+    await fetch(`${kvUrl}/incrby/${encodeURIComponent(key)}/${amount}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${kvToken}` }
     });
