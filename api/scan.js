@@ -1233,11 +1233,17 @@ camera and the card:
 • If confidence is "low", psa_distribution MUST spread across at least 3
   grades with no bucket > 55%. High-confidence-looking distributions
   (80/15/5) on low-confidence scans are dishonest.
-• If confidence_drivers contains ANY entry other than ["none"], you MAY
-  NOT return psa_estimate=10. A card you cannot fully inspect is not a
-  Gem Mint candidate.
-• If confidence_drivers is non-empty, eye_appeal cannot be "Strong" —
-  eye appeal requires being able to see the card cleanly.
+• If confidence_drivers contains any VISUAL IMPAIRMENT (holder_glare,
+  blurry_photo, reflective_sleeve, low_resolution, finger_covering_card),
+  you MAY NOT return psa_estimate=10 — you cannot verify Gem Mint through
+  a defect that blocks inspection. Drivers that just reflect product
+  scope (single_photo_only, back_not_visible, limited_edge_visibility)
+  are NOT impairments — a textbook-clean pack-fresh front photo CAN and
+  SHOULD be graded PSA 10 even with only one photo, as long as no visual
+  impairment is present. Do NOT self-cap at 9 for "only one photo".
+• If confidence_drivers contains a VISUAL IMPAIRMENT (as listed above),
+  eye_appeal cannot be "Strong" — eye appeal requires being able to see
+  the card cleanly. Product-scope drivers alone do not block "Strong".
 • If you notice ANY visible defect (whitening, chipping, scratches,
   print lines, off-centering worse than 55/45), it MUST be named
   specifically in the relevant *_desc field AND counted in flaw_count.
@@ -1257,7 +1263,8 @@ following SHOULD be a PSA 10 candidate:
   • four perfectly sharp corners under close inspection
   • smooth edges with no chipping / whitening / roughness
   • no visible surface scratches, print lines, or gloss breaks
-  • confidence_drivers=["none"]
+  • no VISUAL IMPAIRMENT drivers (glare / blur / sleeve / low-res)
+    — product-scope drivers like single_photo_only are FINE
 When those conditions are met, the correct output is psa_estimate=10
 with a probability distribution like {10: 55–75, 9: 20–35, 8: 5–10}.
 Refusing to name a real PSA 10 candidate because "PSA 10 is rare" is
@@ -2158,12 +2165,25 @@ Respond ONLY with valid JSON, no explanation:
       }
 
       // ── CONFIDENCE-VS-GRADE HONESTY ENFORCEMENT ──
-      // A card with impediments cannot be a PSA 10. If drivers are
-      // non-empty AND non-['none'], cap psa_estimate at 9.
-      const hasRealDrivers = Array.isArray(cardInfo.confidence_drivers)
-        && cardInfo.confidence_drivers.some(d => d && d !== 'none');
-      if (hasRealDrivers && psaEstimate === 10) {
-        console.warn('[scan] impediments present but psa_estimate=10 — capping at 9');
+      // A card with genuine visual IMPEDIMENTS cannot be a PSA 10. But drivers
+      // that just reflect the product scope (Quick Grade = 1 photo by design)
+      // are NOT impediments — they're product features. Previously any driver
+      // other than 'none' capped psa_estimate at 9, which meant EVERY Quick
+      // Grade of a perfect card capped at 9 because we auto-inject
+      // 'single_photo_only' and 'back_not_visible' server-side (2026-08-22).
+      //
+      // Impairment drivers (block visual assessment): holder_glare,
+      // blurry_photo, reflective_sleeve, low_resolution, finger_covering_card.
+      // Product-scope drivers (fine on Quick Grade): single_photo_only,
+      // back_not_visible, limited_edge_visibility.
+      const IMPAIRMENT_DRIVERS = new Set([
+        'holder_glare', 'blurry_photo', 'reflective_sleeve',
+        'low_resolution', 'finger_covering_card',
+      ]);
+      const hasImpairment = Array.isArray(cardInfo.confidence_drivers)
+        && cardInfo.confidence_drivers.some(d => d && IMPAIRMENT_DRIVERS.has(d));
+      if (hasImpairment && psaEstimate === 10) {
+        console.warn('[scan] visual impairment present but psa_estimate=10 — capping at 9');
         psaEstimate = 9;
       }
       // worth_grading backstop: if final psa_estimate < 9 or confidence is
