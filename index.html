@@ -3897,15 +3897,29 @@ document.addEventListener('click', e => {
 });
 
 // ── Main search dispatcher ──
+// 2026-08-22 [F4]: monotonic search request ID guards against out-of-order
+// dropdown responses. Each doSearch() bumps the ID; game-specific search
+// functions capture their snapshot and check window._searchReqId before
+// writing to dropList.innerHTML. Late responses from an earlier query no
+// longer overwrite the newer query's results.
+window._searchReqId = 0;
+// 2026-08-22 [F4]: helper for search functions to guard innerHTML writes.
+// Call at entry: const reqSnap = _snapSearchReq();  Then before writing:
+// if (!_searchReqStillCurrent(reqSnap)) return;
+function _snapSearchReq() { return window._searchReqId; }
+function _searchReqStillCurrent(snap) { return snap === window._searchReqId; }
 async function doSearch(q) {
   if (!q) return;
   if (activeGame === 'sports') return;
+
+  const myReqId = ++window._searchReqId;
 
   // 2026-08-15: track the query that populated dropList so openCatalog can
   // detect stale results from a previous search (e.g. user types Pidove but
   // the old Latias ex drops are still cached in the list).
   dropList.dataset.lastQuery = (q || '').toLowerCase().trim();
   dropList.dataset.lastGame  = activeGame || '';
+  dropList.dataset.reqId     = String(myReqId);
   dropList.innerHTML = '<div class="drop-loading"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--gold)"></span> Searching…</div>';
   dropList.classList.add('open');
 
@@ -3923,11 +3937,15 @@ async function doSearch(q) {
     } else if (activeGame === 'onepiece') {
       await searchOnePiece(q);
     } else if (activeGame === 'other') {
-      dropList.innerHTML = '<div class="drop-empty">No live API for "Other TCG". Enter your price manually in the Override field.</div>';
+      if (myReqId === window._searchReqId) {
+        dropList.innerHTML = '<div class="drop-empty">No live API for "Other TCG". Enter your price manually in the Override field.</div>';
+      }
     }
   } catch(err) {
     console.error(err);
-    dropList.innerHTML = '<div class="drop-empty">Search failed — check your connection and try again.</div>';
+    if (myReqId === window._searchReqId) {
+      dropList.innerHTML = '<div class="drop-empty">Search failed — check your connection and try again.</div>';
+    }
   }
   // Return drop items so callers can render directly without polling
   return dropList.querySelectorAll('.drop-item');
@@ -3935,8 +3953,10 @@ async function doSearch(q) {
 
 /* ── Pokémon API (PokemonTCG.io) ── */
 async function searchPokemon(q) {
+  const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4] stale-write guard
   // Try TCGPriceLookup first if key is set
   const tplData = await searchWithTPL(q, 'pokemon');
+  if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData) {
     // Sort by name relevance: exact → starts-with → word-starts-with → contains
     const ql = q.toLowerCase().trim();
@@ -3975,6 +3995,7 @@ async function searchPokemon(q) {
   const url = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
   const r = await fetch(url);
   const data = await r.json();
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-22 [F4]
   let cards = data.data || [];
 
   // Sort: exact match first, then by rarity (rarest first), then by set date desc
@@ -4068,8 +4089,10 @@ async function searchPokemon(q) {
 
 /* ── Pokémon JP (TCGdex + eBay fallback) ── */
 async function searchPokemonJP(q) {
+  const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4] stale-write guard
   // Strategy 0: Try TCGPriceLookup (pokemon-jp) if key is set
   const tplData = await searchWithTPL(q, 'pokemon-jp');
+  if (!_searchReqStillCurrent(_reqSnap)) return;
 
   // Strategy 1: Try TCGdex for JP cards (has some JP sets)
   // Strategy 2: For any card, always show eBay JP comps as the primary resource
@@ -4223,8 +4246,10 @@ async function searchPokemonJP(q) {
 
 /* ── Magic: The Gathering (Scryfall) ── */
 async function searchMTG(q) {
+  const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TCGPriceLookup first if key is set
   const tplData = await searchWithTPL(q, 'mtg');
+  if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData) {
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
@@ -4319,8 +4344,10 @@ async function _getLorcanaCards() {
 }
 
 async function searchLorcana(q) {
+  const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TPL first if key available
   const tplData = await searchWithTPL(q, 'lorcana');
+  if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData && tplData.length) {
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
@@ -4400,8 +4427,10 @@ async function searchLorcana(q) {
 
 /* ── One Piece TCG (no free public API — manual entry) ── */
 async function searchOnePiece(q) {
+  const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TPL if key available
   const tplData = await searchWithTPL(q, 'onepiece');
+  if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData && tplData.length) {
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
@@ -4466,8 +4495,10 @@ async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
 
 /* ── Yu-Gi-Oh! (YGOProDeck) ── */
 async function searchYugioh(q) {
+  const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TCGPriceLookup first if key is set
   const tplData = await searchWithTPL(q, 'yugioh');
+  if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData) {
     window._searchCards = {};
     dropList.innerHTML = tplData.map((c, i) => {
@@ -12040,7 +12071,13 @@ async function processScanImage(input) {
             // had returned this card.
             statusEl.innerHTML = '<span style="color:#10b981">Recovered via text\u2026</span>';
             try {
-              _loadScannedCardExact({
+              // 2026-08-22 [F8]: MTG rescue MUST dispatch to the non-Pokemon
+              // loader. Previously it hardcoded _loadScannedCardExact which
+              // builds a pokemon-shaped card and queries pokemontcg.io — the
+              // rescued MTG name was invariably mis-loaded as a synthetic
+              // Pokemon fallback. _loadScannedNonPokemonCard routes to the
+              // MTG (Scryfall) path via the game selector auto-switch.
+              const _pending = {
                 name: rescued.name,
                 number: rescued.number || '',
                 setName: rescued.setName || '',
@@ -12048,7 +12085,12 @@ async function processScanImage(input) {
                 cardType: 'mtg',
                 imageUrl: rescued.imageUrl || '',
                 _viaOCR: true,
-              });
+              };
+              if (typeof _loadScannedNonPokemonCard === 'function') {
+                _loadScannedNonPokemonCard(_pending);
+              } else {
+                _loadScannedCardExact(_pending);
+              }
               const spinnerX2 = document.getElementById('scanSpinner');
               if (spinnerX2) spinnerX2.style.display = 'none';
               _setScanBtns('success');
@@ -16753,18 +16795,26 @@ async function _bulkScanOne(item, rowId, isRetry) {
         return result;
       }
       _bulkUpdateRow(rowId, result);
-      // Mark remaining as skipped
+      // 2026-08-22 [F5]: Update the PRE-RENDERED placeholder rows in place
+      // instead of appending duplicate bulk-row-N elements. Previously the
+      // 402 path inserted new rows with the same IDs as the placeholders,
+      // producing colliding DOM IDs and two visible rows per index.
       const queue = window._bulkQueue || [];
       const total = queue.length;
       const i = queue.indexOf(item);
       for (let j = i+1; j < total; j++) {
-        const skipId = 'bulk-row-' + j;
-        const skipItem = queue[j];
-        listEl.insertAdjacentHTML('beforeend', `
-          <div id="${skipId}" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e;opacity:.4">
-            <img src="${skipItem.objectUrl}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0" alt="Card" />
-            <div style="flex:1;font-size:.75rem;color:rgba(255,255,255,.3)">Skipped — out of credits</div>
-          </div>`);
+        const skipRow = document.getElementById('bulk-row-' + j);
+        if (!skipRow) continue;
+        try {
+          skipRow.style.opacity = '.4';
+          skipRow.style.background = '#111';
+          skipRow.style.border = '1px solid #1e1e1e';
+          // Replace the label + drop the spinner
+          const label = skipRow.querySelector('div[style*="flex:1"]');
+          if (label) label.innerHTML = '<div style="font-size:.75rem;color:rgba(255,255,255,.3)">Skipped — out of credits</div>';
+          const spinner = skipRow.querySelector('div[style*="animation:spin"]');
+          if (spinner && spinner.parentNode) spinner.parentNode.removeChild(spinner);
+        } catch(_){}
       }
       window._bulkResults.push(result);
       showToast('Ran out of credits mid-scan. Results saved for cards that completed.', 'info');
