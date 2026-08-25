@@ -12124,6 +12124,12 @@ async function processScanImage(input) {
       const badgeX = document.getElementById('scanSuccessBadge');
       if (badgeX) badgeX.style.display = 'none';
       _setScanBtns('error');
+      // 2026-08-25: The unidentified-state resultEl already renders its own
+      // 'Try again' + 'Search by name' buttons above. Hide the generic
+      // scanRetryBtn that _setScanBtns('error') would otherwise reveal so
+      // we don't stack two 'Try again' buttons on top of each other.
+      const _retryDup = document.getElementById('scanRetryBtn');
+      if (_retryDup) _retryDup.style.display = 'none';
       URL.revokeObjectURL(objectUrl);
       return;
     }
