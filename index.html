@@ -1591,7 +1591,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock 6 more marketplaces</span> &mdash; Poshmark, Whatnot, Mercari, COMC, Fanatics &amp; PWCC.<br>
+      <span>&#11088; Unlock 5 more marketplaces</span> &mdash; Poshmark, Whatnot, Mercari, COMC &amp; Fanatics Collect.<br>
       <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
@@ -1822,7 +1822,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
               <div class="sell-link-btns">
                 <a id="slEbaySell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-ebay">🛒 eBay</a>
                 <a id="slTcgpSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-tcgp" style="display:none">🃏 TCGPlayer</a>
-                <a id="slPwccSell" href="https://www.pwccmarketplace.com/consign" target="_blank" rel="noopener" class="sell-platform-btn spb-pwcc">🏆 PWCC</a>
+                <a id="slFanaticsSell" href="https://www.fanaticscollect.com/sell" target="_blank" rel="noopener" class="sell-platform-btn spb-pwcc">💎 Fanatics Collect</a>
                 <a id="slComcSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-comc">📦 COMC</a>
               </div>
             </div>
@@ -2077,13 +2077,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
                 <option value="yes">Yes — +10% cash-out fee</option>
               </select>
             </div>
-            <div>
-              <div class="field-label" style="margin-top:0">Poshmark Seller Tier</div>
-              <select id="poshTier" onchange="calc()">
-                <option value="standard">Standard (20% on $15+)</option>
-                <option value="premium">P+ Badge (15% on $15+)</option>
-              </select>
-            </div>
           </div>
         </div>
 
@@ -2106,7 +2099,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <span style="font-size:1rem;margin-top:.05rem">💰</span>
           <div>
             <div style="font-size:.78rem;font-weight:700;color:var(--text)">Side-by-side payout comparison</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">eBay, COMC, Fanatics, PWCC &amp; more — after fees</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">eBay, COMC, Fanatics Collect &amp; more — after fees</div>
           </div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:.6rem">
@@ -2843,7 +2836,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
   <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a> ·
   <a href="https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe" target="_blank" rel="noopener">Fanatics Collect</a> ·
-  <a href="https://www.pwccmarketplace.com/pages/seller-fees" target="_blank" rel="noopener">PWCC</a>.<br>
+  <a href="https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe" target="_blank" rel="noopener">Fanatics Collect</a>.<br>
   Estimates only — verify current rates before listing.
 </footer>
 
@@ -2856,7 +2849,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <div style="text-align:left;font-size:.83rem;line-height:1.65;color:var(--text-muted);margin-bottom:1rem">
       CardResell was built by <strong style="color:var(--text)">Will Jones</strong> in <strong style="color:var(--text)">Bradenton, Florida</strong> to solve a problem every reseller hits — you know your card is worth money but you have no idea which platform actually pays you the most after fees.<br><br>
-      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, COMC, Poshmark, Fanatics Collect, and PWCC — so you never leave money on the table.<br><br>
+      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, and Fanatics Collect — so you never leave money on the table.<br><br>
       The AI Grading Estimate uses GPT-4o vision to analyze centering, corners, edges, and surface — giving you a realistic grade prediction before you spend money on a PSA submission.
     </div>
 
@@ -5349,21 +5342,22 @@ async function doSportsSearchLive(q) {
     <div class="drop-thumb-ph" style="font-size:.95rem">💰</div>
     <div class="drop-info">
       <div class="drop-name">${esc(q)} on 130point</div>
-      <div class="drop-meta">Aggregated sold sales — eBay + PWCC + Goldin + more</div>
+      <div class="drop-meta">Aggregated sold sales — eBay + Fanatics Collect + Goldin + more</div>
     </div>
     <span style="font-size:.68rem;color:var(--text-muted)">130pt →</span>
   </div>`;
 
-  // PWCC Marketplace — major sports auction house / fixed-price listings.
-  // Include card# so a "Ja Morant 2019 Panini Select 42" search hits the exact print.
-  const pwccUrl = `https://www.pwccmarketplace.com/search?q=${encodeURIComponent([q, year, brand, cardnum].filter(Boolean).join(' '))}`;
-  html += `<div class="drop-item" data-sports-idx="pwcc" data-pwcc-url="${esc(pwccUrl)}" style="cursor:pointer">
-    <div class="drop-thumb-ph" style="font-size:.95rem">🏆</div>
+  // Fanatics Collect (formerly PWCC — rebranded Jul 15, 2024).
+  // Major sports auction house / fixed-price listings. Include card# so
+  // "Ja Morant 2019 Panini Select 42" hits the exact print.
+  const fanaticsCompUrl = `https://www.fanaticscollect.com/search?q=${encodeURIComponent([q, year, brand, cardnum].filter(Boolean).join(' '))}`;
+  html += `<div class="drop-item" data-sports-idx="fanatics" data-fanatics-url="${esc(fanaticsCompUrl)}" style="cursor:pointer">
+    <div class="drop-thumb-ph" style="font-size:.95rem">💎</div>
     <div class="drop-info">
-      <div class="drop-name">${esc(q)} on PWCC Marketplace</div>
-      <div class="drop-meta">Auction house comps + fixed-price listings (graded)</div>
+      <div class="drop-name">${esc(q)} on Fanatics Collect</div>
+      <div class="drop-meta">Auction house comps + fixed-price listings (formerly PWCC)</div>
     </div>
-    <span style="font-size:.68rem;color:var(--text-muted)">PWCC →</span>
+    <span style="font-size:.68rem;color:var(--text-muted)">Fanatics →</span>
   </div>`;
 
   sdl.innerHTML = html;
@@ -5388,8 +5382,8 @@ async function doSportsSearchLive(q) {
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
-      } else if (idx === 'pwcc') {
-        window.open(el.dataset.pwccUrl, '_blank');
+      } else if (idx === 'fanatics') {
+        window.open(el.dataset.fanaticsUrl, '_blank');
         const spPlayer = document.getElementById('sp_player');
         if (spPlayer && !spPlayer.value) spPlayer.value = q;
         loadSportsCardFromSearch(q);
@@ -6457,7 +6451,6 @@ function updateSellLinks(card) {
   const comcQ      = encodeURIComponent(`${searchName}${numTail}`);
   const poshQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail} ${gameTag}`);
   const fanaticsQ  = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}${isPokemon ? ' pokemon' : ''}`);
-  const pwccQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}`);
   // Whatnot: /search?query=<term> — verified 2026-08-21 in-browser. Path-
   // style /search/<term> returns 404. Keep query terse (name+number+game)
   // — Whatnot search is TCG-focused so gameTag ('pokemon' etc) helps.
@@ -6475,7 +6468,6 @@ function updateSellLinks(card) {
     comc:      `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
     poshmark:  `https://poshmark.com/search?query=${poshQ}&type=listings`,
     fanatics:  `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
-    pwcc:      `https://www.pwccmarketplace.com/search?query=${pwccQ}`,
     whatnot:   `https://www.whatnot.com/search?query=${whatnotQ}`,
     mercari:   `https://www.mercari.com/search/?keyword=${mercariQ}`
   };
@@ -6716,11 +6708,6 @@ const PLATFORMS = {
     workflow: 'shipIn', payoutTime: '1–4 weeks after sale settles',
     hassle: 'You mail the card to Fanatics’ vault BEFORE it can list. Sports-heavy audience, weekly auction + Buy Now cycle.',
     redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted'] },
-  pwcc:      { name: 'PWCC Marketplace',  color: '#b45309', emoji: '🏆', verified: 'Jun 2026',
-    effort: 'hard',   effortLabel: 'Hard · consignment, 2–4 wk auction',
-    workflow: 'consignment', payoutTime: '4–8 weeks after auction settles',
-    hassle: 'You consign, they auction. Payout comes weeks later — best for $75+ cards.',
-    redFlags: ['📦 Ship-in + consignment required', '🔨 Auction only — no fixed Buy Now', '⏳ 4–8 wk payout after sale clears', '💵 Best only for $75+ cards — low-value cards net near zero'] },
   whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Aug 2026',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
@@ -6736,11 +6723,12 @@ const PLATFORMS = {
 // TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
 //   Free      → easy platforms (eBay, TCGPlayer) — 2
 //   Pro       → + medium (Poshmark, Whatnot, Mercari)     — 5
-//   Pro Max   → + hard (COMC, Fanatics Collect, PWCC)      — 8 (all)
-//   Ultimate  → all 8 (same platforms; extras are volume/support perks)
+//   Pro Max   → + hard (COMC, Fanatics Collect)             — 7 (all)
+//   Ultimate  → all 7 (same platforms; extras are volume/support perks)
+// Note: PWCC was retired Jul 15, 2024 and is fully part of Fanatics Collect.
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
 const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari']);
-const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'pwcc']);
+const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics']);
 
 function platformsForTier(tier) {
   if (tier === 'ultimate' || tier === 'pro_max') return PRO_MAX_PLATFORMS;
@@ -6748,17 +6736,21 @@ function platformsForTier(tier) {
   return FREE_PLATFORMS;
 }
 
+// eBay — 2026 fee schedule for Trading Cards category (verified Aug 2026)
+// Standard/Store: 13.25% on portion up to $7,500, then 2.35% above.
+// Basic Store: 12.35%. Top Rated Seller: 10% discount on FVF.
+// The old $150/$1000 sub-tiers were retired — flat rate now applies up to $7,500.
+// Source: https://www.ebay.com/sellercenter/resources/seller-updates/2025-january/final-value-fee
 function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   const total = price + shipCharge;
   const items = [];
   const baseRate = ebayStore === 'basic' ? 0.1235 : 0.1325;
   let fvf = 0;
-  if (total <= 150)       fvf = total * baseRate;
-  else if (total <= 1000) fvf = 150 * baseRate + (total - 150) * 0.03;
-  else if (total <= 7500) fvf = 150 * baseRate + 850 * 0.03 + (total - 1000) * 0.015;
-  else                    fvf = 150 * baseRate + 850 * 0.03 + 6500 * 0.015 + (total - 7500) * 0.0235;
+  if (total <= 7500) fvf = total * baseRate;
+  else               fvf = 7500 * baseRate + (total - 7500) * 0.0235;
   if (ebayTopRated === 'yes') fvf *= 0.9;
-  items.push({ l: `Final Value Fee (trading cards, tiered)`, a: fvf });
+  const rateLabel = (baseRate * 100).toFixed(2).replace(/\.?0+$/,'');
+  items.push({ l: `Final Value Fee (${rateLabel}% trading cards)`, a: fvf });
   const perOrder = total <= 10 ? 0.30 : 0.40;
   items.push({ l: 'Per-order fee', a: perOrder });
   if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100 });
@@ -6779,74 +6771,86 @@ function feeTCGPlayer(price) {
   ];
 }
 
-// PWCC Marketplace — consignment auction house, best for $75+ graded/raw cards
-// Standard: 10% commission (capped at $250). Vault: 8% if card stored in PSA/PWCC vault.
-// Source: https://www.pwccmarketplace.com/pages/seller-fees
-function feePWCC(price, isGraded) {
-  const commission = Math.min(price * 0.10, 250);
-  const items = [{ l: 'Commission (10%, max $250)', a: commission }];
-  if (!isGraded) items.push({ l: 'Grading/shipping to auction (est.)', a: 15 });
-  return items;
-}
-
-function feePoshmark(price, tier) {
+// Poshmark — single-tier 2026 fee model (verified Aug 2026).
+// $2.95 flat on sales under $15; 20% on sales at $15+. No listing fee,
+// no separate processing fee. The old "P+ Badge 15%" tier does not exist.
+// Source: https://feefigure.com/poshmark-fees/
+function feePoshmark(price) {
   if (price < 15) return [{ l: 'Flat commission (under $15)', a: 2.95 }];
-  const rate = tier === 'premium' ? 0.15 : 0.20;
-  return [{ l: `Commission (${tier === 'premium' ? '15%' : '20%'})`, a: price * rate }];
+  return [{ l: 'Commission (20%)', a: price * 0.20 }];
 }
 
 
 
-// Fanatics Collect (formerly PWCC). Default is Buy Now marketplace at 6%
-// for cards priced within 120% of Card Ladder market value. We don't have
-// Card Ladder market data at calc time, so we assume in-band pricing and
-// surface the 12% overprice tier + 0% auction alternative in a note.
-// Sources: https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe
+// Fanatics Collect (formerly PWCC — merger complete Jul 15, 2024).
+// Default: Buy Now marketplace at 6% for cards priced ≤120% of Card Ladder
+// market value. Overprice tier is 12%. Auction alternative: 0% seller fee
+// + 20% buyer premium. Requires shipping card in to Fanatics vault before
+// listing — we surface a $5 inbound-ship line item.
+// Sources:
+//   https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe
+//   https://www.fanaticscollect.com/newsroom/pwcc-is-now-fanatics-collect
 function feeFanatics(price) {
-  return [{ l: 'Buy Now seller fee (6%)', a: price * 0.06 }];
+  return [
+    { l: 'Buy Now seller fee (6%)', a: price * 0.06 },
+    { l: 'Ship-in to vault (est.)', a: 5 }
+  ];
 }
 
+// COMC — consignment: per-card intake fee + 5% transaction + optional 10% cashout.
+// Per Oct 2025 ingestion update: Standard $0.65 raw / $1.25 graded (min $65
+// submission = 100 cards on Standard tier); Select $1.00/$1.50; Elite $2.00/$2.50.
+// Seller must also mail cards INBOUND to COMC before listing — we surface a
+// $5 tracked-ship line as "Ship-in to COMC".
+// Sources:
+//   https://blog.comc.com/2025/10/01/ingestion-service-level-update-october-1-2025/
+//   https://comc.zendesk.com/hc/en-us/articles/360053737993
 function feeCOMC(price, service, isGraded, cashout) {
   const subFees = { standard:{raw:.65,graded:1.25}, select:{raw:1.00,graded:1.50}, elite:{raw:2.00,graded:2.50} };
   const subFee = subFees[service]?.[isGraded ? 'graded' : 'raw'] ?? 0.65;
   const txFee  = price * 0.05;
-  const shFee  = isGraded ? 2.00 : 0.50;
   const items  = [
     { l: `Submission fee (${service})`, a: subFee },
     { l: 'Transaction fee (5%)', a: txFee },
-    { l: `S&H (${isGraded ? 'graded' : 'standard'})`, a: shFee }
+    { l: 'Ship-in to COMC (est.)', a: 5 }
   ];
   if (cashout === 'yes') {
-    items.push({ l: 'Cash-out fee (10%)', a: Math.max(0, price - txFee - shFee) * 0.10 });
+    items.push({ l: 'Cash-out fee (10%)', a: Math.max(0, price - txFee - 5) * 0.10 });
   }
   return items;
 }
 
-// Whatnot — TCG live-auction leader. Fees per Whatnot's public help center
-// (helpcenter.whatnot.com/hc/en-us/articles/8055316816539). Seller pays:
-//   • 8% marketplace commission on sale price
+// Whatnot — TCG live-auction leader. Fees per Whatnot's public help center.
+// Seller pays:
+//   • 8% marketplace commission on sale price, BUT 0% on the portion above
+//     $1,500 for TCG / sports / comics / toys categories (single-item cap)
 //   • 2.9% + $0.30 payment processing (Stripe pass-through)
 // No listing fees, no monthly cost. Seller ships from home.
+// Source: https://help.whatnot.com/hc/en-us/articles/4847069165965
 function feeWhatnot(price) {
-  const commission = price * 0.08;
+  // 8% up to $1,500, 0% commission above that (TCG/sports category cap)
+  const commissionable = Math.min(price, 1500);
+  const commission = commissionable * 0.08;
   const processing = price * 0.029 + 0.30;
+  const commissionLabel = price > 1500
+    ? 'Commission (8% up to $1,500, 0% above)'
+    : 'Marketplace commission (8%)';
   return [
-    { l: 'Marketplace commission (8%)', a: commission },
+    { l: commissionLabel, a: commission },
     { l: 'Payment processing (2.9% + $0.30)', a: processing }
   ];
 }
 
-// Mercari — Cross-category resale. Fees per mercari.com/help_center/article/1229
-// (updated 2024 fee model). Seller pays:
-//   • 10% marketplace commission on sale price
-//   • 2.9% + $0.50 payment processing
-// Zero-fee to list, no monthly cost. Seller ships from home.
+// Mercari — Cross-category resale.
+// As of Jan 6, 2025 Mercari eliminated the seller payment processing fee.
+// Sellers now pay a FLAT 10% commission only. (Buyer pays a separate 3.6%
+// Buyer Protection fee; that does not come out of the seller's payout.)
+// Sources:
+//   https://www.mercari.com/us/help_center/article/2518/
+//   https://www.mercari.com/us/help_center/article/2517/
 function feeMercari(price) {
-  const commission = price * 0.10;
-  const processing = price * 0.029 + 0.50;
   return [
-    { l: 'Marketplace commission (10%)', a: commission },
-    { l: 'Payment processing (2.9% + $0.50)', a: processing }
+    { l: 'Marketplace commission (10%)', a: price * 0.10 }
   ];
 }
 
@@ -6866,15 +6870,11 @@ function calc() {
   const ebayTopRated  = document.getElementById('ebayTopRated').value;
   const comcService   = document.getElementById('comcService').value;
   const comcCashout   = document.getElementById('comcCashout').value;
-  const poshTier      = document.getElementById('poshTier').value;
   const graderVal     = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const isGraded      = graderVal !== 'no';
   const isSports      = activeGame === 'sports';
   const isYugioh      = selectedCard?.game === 'yugioh';
   const isMagic       = selectedCard?.game === 'mtg';
-
-  // PWCC is best for $75+ cards; flag for note display
-  const pwccWorthy    = price >= 75;
 
   const platforms = [
     {
@@ -6898,7 +6898,7 @@ function calc() {
     {
       pid: 'poshmark',
       eligible: true,
-      feeItems: feePoshmark(price, poshTier),
+      feeItems: feePoshmark(price),
       sellerShip: 0,
       note: 'Primarily clothing — lower card demand.'
     },
@@ -6917,15 +6917,6 @@ function calc() {
       note: isSports
         ? 'Buy Now default. Auction: 0% seller, 20% buyer premium. Listings >120% market: 12% fee.'
         : 'Buy Now default. Listings priced >120% of market pay 12%; auction has 0% seller fee + 20% buyer premium.'
-    },
-    {
-      pid: 'pwcc',
-      eligible: true,
-      feeItems: feePWCC(price, isGraded),
-      sellerShip: 0,
-      note: pwccWorthy
-        ? (isGraded ? 'Auction consignment. Best for graded slabs $75+. PSA Vault → direct ship saves you shipping costs.' : 'Auction consignment. Best for raw cards $75+. Typical 2–4 week auction cycle.')
-        : 'Best for cards $75+. For lower-value cards, eBay fees are typically lower.'
     },
     {
       pid: 'whatnot',
@@ -7003,8 +6994,9 @@ function calc() {
   }
   html += `<div class="plat-grid">`;
 
-  // Free users see eBay only. Pro unlocks Poshmark, COMC, Fanatics Collect, PWCC.
-  // Show only platforms the user's tier unlocks. Pro Max + Ultimate see all 8.
+  // Free users see eBay only. Pro unlocks Poshmark, Whatnot, Mercari.
+  // Pro Max + Ultimate add COMC and Fanatics Collect (7 total).
+  // (PWCC merged into Fanatics Collect Jul 2024 — no longer a separate row.)
   const _displayTierPlatforms = platformsForTier(window._userTier || (window._isPro ? 'pro' : 'free'));
   const displaySorted = sorted.filter(r => _displayTierPlatforms.has(r.pid));
 
@@ -7140,7 +7132,7 @@ function calc() {
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
         <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 6 more marketplaces + AI grading — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro adds Poshmark, Whatnot &amp; Mercari · Pro Max adds COMC, Fanatics &amp; PWCC (8 total)</div>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro adds Poshmark, Whatnot &amp; Mercari · Pro Max adds COMC &amp; Fanatics Collect (7 total)</div>
       </div>
     </div>`;
     html += `</div>`;

@@ -5,3 +5,4 @@ config.js
 .env.*
 !.env.example
 .vercel
+tools/__pycache__/
