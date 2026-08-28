@@ -10164,9 +10164,17 @@ function viewGradedCard(cardName, psaGrade, cardType, isJapanese) {
       // 2026-08-22 [F7]: clear pending after direct grade routing so a later
       // cancelScan() doesn't reroute back to this graded snapshot.
       try { setTimeout(() => { window._pendingIdScanCard = null; }, 1300); } catch(_){}
+      // 2026-08-25 [S] Consume _deepGradeIdent so a subsequent scan doesn't
+      // reuse a stale snapshot. Previously this global was set but never
+      // cleared — View Card on the next graded card could route to the
+      // previous card's exact-load pipeline.
+      try { setTimeout(() => { window._deepGradeIdent = null; }, 1300); } catch(_){}
       return;
     } catch(e) {
       console.warn('[viewGradedCard] _deepGradeIdent exact-load failed, falling through:', e);
+      // Even on failure, drop the snapshot so we don't loop on the same
+      // broken card.
+      try { window._deepGradeIdent = null; } catch(_){}
     }
   }
 
@@ -13689,6 +13697,10 @@ async function _tryOCRThenScryfall(file, statusEl) {
 }
 
 async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
+  // 2026-08-25 [M] track whether we minted the object URL locally so we can
+  // revoke it. Previously the file-only branch leaked a blob every time the
+  // OCR path was taken.
+  let _localObjUrl = null;
   try {
     if (!window.Tesseract) {
       statusEl.textContent = 'Loading text reader…';
@@ -13700,7 +13712,11 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
       });
     }
     statusEl.textContent = 'Reading card text…';
-    const imgUrl = objectUrl || (file ? URL.createObjectURL(file) : null);
+    let imgUrl = objectUrl;
+    if (!imgUrl && file) {
+      imgUrl = URL.createObjectURL(file);
+      _localObjUrl = imgUrl;
+    }
     if (!imgUrl) { statusEl.textContent = 'No image to process.'; return; }
     const { data: { text } } = await Tesseract.recognize(imgUrl, 'eng', {
       logger: m => { if (m.status === 'recognizing text') statusEl.textContent = 'Reading… ' + Math.round(m.progress * 100) + '%'; }
@@ -13718,6 +13734,8 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     }, 900);
   } catch(err) {
     statusEl.textContent = 'Could not read card. Try a clearer, well-lit photo.';
+  } finally {
+    if (_localObjUrl) { try { URL.revokeObjectURL(_localObjUrl); } catch(_){} }
   }
 }
 
