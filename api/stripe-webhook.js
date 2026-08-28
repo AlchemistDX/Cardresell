@@ -188,15 +188,33 @@ async function addPaidScanCredit(googleSub, amount, type = 'graded') {
     console.log('SCAN_CREDIT:', JSON.stringify({ googleSub, amount, type }));
     return;
   }
+  // graded scans: scans:{sub}:paid_left   id scans: scans:{sub}:id_paid_left
+  const key = type === 'id' ? `scans:${googleSub}:id_paid_left` : `scans:${googleSub}:paid_left`;
+
+  // 2026-08-25 [P1-1]: Atomic INCRBY. Previously this was read (getKVInt)
+  // then write (set current+amount) which loses credits on concurrent
+  // deliveries of DIFFERENT purchases (two different event.ids for two
+  // different packs racing produces one +N instead of +2N). Event-id
+  // SETNX idempotency (markEventProcessed) still guards duplicate
+  // deliveries of the SAME event.
   try {
-    // graded scans: scans:{sub}:paid_left   id scans: scans:{sub}:id_paid_left
-    const key     = type === 'id' ? `scans:${googleSub}:id_paid_left` : `scans:${googleSub}:paid_left`;
+    const r = await fetch(`${kvUrl}/incrby/${encodeURIComponent(key)}/${amount}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}` },
+    });
+    if (r.ok) return;
+    console.error('KV INCRBY non-OK:', r.status);
+  } catch(e) { console.error('KV INCRBY error:', e); }
+
+  // Fallback: read-modify-write (best-effort, may lose credits under
+  // concurrent load but better than dropping the credit entirely).
+  try {
     const current = await getKVInt(kvUrl, kvToken, key);
     await fetch(`${kvUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(String(current + amount))}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${kvToken}` },
     });
-  } catch(e) { console.error('KV scan credit error:', e); }
+  } catch(e) { console.error('KV scan credit fallback error:', e); }
 }
 
 async function getKVInt(kvUrl, kvToken, key) {
@@ -226,7 +244,23 @@ async function verifyStripeSignature(payload, sigHeader, secret) {
   const sigBuf = await crypto.subtle.sign('HMAC', key, encoder.encode(signedPayload));
   const expected = Buffer.from(sigBuf).toString('hex');
 
-  if (!signatures.some(s => s === expected)) throw new Error('Signature mismatch');
+  // 2026-08-25 [P1-4]: Constant-time comparison to prevent timing
+  // side-channels. The previous s === expected comparison could
+  // theoretically leak information about the expected signature via
+  // response-time observation (extremely low practical risk given the
+  // upstream network jitter, but the fix is trivial).
+  const { timingSafeEqual } = await import('crypto');
+  const expectedBuf = Buffer.from(expected, 'hex');
+  let matched = false;
+  for (const s of signatures) {
+    let sBuf;
+    try { sBuf = Buffer.from(s, 'hex'); } catch(_) { continue; }
+    if (sBuf.length !== expectedBuf.length) continue;
+    try {
+      if (timingSafeEqual(sBuf, expectedBuf)) { matched = true; break; }
+    } catch(_) { /* length mismatch already guarded above */ }
+  }
+  if (!matched) throw new Error('Signature mismatch');
   if (Math.floor(Date.now() / 1000) - parseInt(timestamp) > 300) throw new Error('Timestamp too old');
 
   return JSON.parse(payload.toString());
