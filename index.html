@@ -12072,40 +12072,53 @@ async function processScanImage(input) {
       window._skipQCDupe = true;
       // 2026-08-19: Ximilar didn't recognize the card and we no longer
       // fall through to GPT vision (which used to hallucinate names).
-      // 2026-08-21: BEFORE giving up, try OCR-then-Scryfall for MTG.
-      // MTG cards have a bold, isolated name at the top-left which
-      // Tesseract reads reliably. If we get a name Scryfall confirms,
+      // 2026-08-21: BEFORE giving up, try OCR-then-catalog rescue.
+      // If we get a name the game's authoritative catalog confirms,
       // hydrate the card view directly and skip the manual state.
       // Refund already happened server-side (identified=false) so this
       // rescue is free — either it works and the user is unblocked, or
       // we fall through to the same manual UI as before.
-      const _isMTGGuess = (typeof activeGame !== 'undefined' && activeGame === 'mtg')
-                        || String(data.card_type || '').toLowerCase() === 'mtg';
-      if (_isMTGGuess && typeof _tryOCRThenScryfall === 'function' && file) {
+      // 2026-08-28: Generalized from MTG-only to all supported games via
+      // _tryOCRRescue. Same pattern that saved Secrets of Strixhaven for
+      // MTG now covers Pokémon, Yu-Gi-Oh!, Lorcana, and Pokémon JP too.
+      const _rescueGame = (() => {
+        // Prefer the explicit UI selection; fall back to Ximilar's card_type.
+        const sel = (typeof activeGame !== 'undefined' && activeGame) ? String(activeGame).toLowerCase() : '';
+        const xim = String(data.card_type || '').toLowerCase();
+        const cand = sel || xim;
+        // Normalize to the keys _tryOCRRescue expects.
+        if (['mtg', 'magic'].includes(cand)) return 'mtg';
+        if (['pokemon', 'pkmn'].includes(cand)) return 'pokemon';
+        if (['pokemonjp', 'pokemon_jp', 'pokemon-jp', 'pkmnjp'].includes(cand)) return 'pokemonJP';
+        if (['yugioh', 'yu-gi-oh', 'ygo'].includes(cand)) return 'yugioh';
+        if (cand === 'lorcana') return 'lorcana';
+        if (['onepiece', 'one-piece', 'one_piece'].includes(cand)) return 'onepiece';
+        return null;
+      })();
+      if (_rescueGame && typeof _tryOCRRescue === 'function' && file) {
         statusEl.innerHTML = '<span style="color:#c4b5fd">Reading card name\u2026</span>';
         try {
-          const rescued = await _tryOCRThenScryfall(file, statusEl);
+          const rescued = await _tryOCRRescue(file, statusEl, _rescueGame);
           if (rescued && rescued.name) {
-            // Route through the existing single-scan flow as if Ximilar
-            // had returned this card.
             statusEl.innerHTML = '<span style="color:#10b981">Recovered via text\u2026</span>';
             try {
-              // 2026-08-22 [F8]: MTG rescue MUST dispatch to the non-Pokemon
-              // loader. Previously it hardcoded _loadScannedCardExact which
-              // builds a pokemon-shaped card and queries pokemontcg.io — the
-              // rescued MTG name was invariably mis-loaded as a synthetic
-              // Pokemon fallback. _loadScannedNonPokemonCard routes to the
-              // MTG (Scryfall) path via the game selector auto-switch.
               const _pending = {
                 name: rescued.name,
                 number: rescued.number || '',
                 setName: rescued.setName || '',
                 setCode: rescued.setCode || '',
-                cardType: 'mtg',
+                cardType: rescued.cardType || _rescueGame,
                 imageUrl: rescued.imageUrl || '',
+                pokemontcgId: rescued.pokemontcgId || '',
                 _viaOCR: true,
               };
-              if (typeof _loadScannedNonPokemonCard === 'function') {
+              // Route by game: Pokémon-family goes through the Pokémon exact
+              // loader (queries pokemontcg.io by id); everything else uses
+              // the non-Pokémon loader that auto-switches the game selector.
+              const isPokemonFamily = (rescued.cardType === 'pokemon' || rescued.cardType === 'pokemonJP');
+              if (isPokemonFamily && typeof _loadScannedCardExact === 'function') {
+                _loadScannedCardExact(_pending);
+              } else if (typeof _loadScannedNonPokemonCard === 'function') {
                 _loadScannedNonPokemonCard(_pending);
               } else {
                 _loadScannedCardExact(_pending);
@@ -12114,7 +12127,7 @@ async function processScanImage(input) {
               if (spinnerX2) spinnerX2.style.display = 'none';
               _setScanBtns('success');
               URL.revokeObjectURL(objectUrl);
-              try { if (window.va) va('track', 'scan_ocr_rescue', { game: 'mtg', name: rescued.name.slice(0, 40) }); } catch(_){}
+              try { if (window.va) va('track', 'scan_ocr_rescue', { game: _rescueGame, name: rescued.name.slice(0, 40) }); } catch(_){}
               return;
             } catch(loadErr) {
               console.warn('[ocr-rescue] loadCard failed:', loadErr);
@@ -13692,6 +13705,216 @@ async function _tryOCRThenScryfall(file, statusEl) {
     };
   } catch(err) {
     try { console.warn('[_tryOCRThenScryfall]', err && err.message); } catch(_){}
+    return null;
+  }
+}
+
+// 2026-08-28: Universal OCR + catalog rescue.
+// When Ximilar can't ID a card (usually a set it hasn't been trained on yet),
+// OCR the card's name strip and confirm it against the game's authoritative
+// free catalog. Same shape as _tryOCRThenScryfall (MTG) but generalized so
+// we never leave the user stranded on a valid card regardless of game.
+//
+// Per-game crop tuning (top-of-card % height) and name-search endpoint:
+//   mtg        → top 15%   → Scryfall /cards/named?fuzzy
+//   pokemon    → top 12%   → pokemontcg.io ?q=name:X*
+//   pokemonJP  → top 12%   → pokemontcg.io (romaji reference) then TCGdex
+//   yugioh     → top 11%   → YGOProDeck ?fname=X
+//   lorcana    → top 14%   → lorcana-api.com (cache filter)
+//   onepiece   → top 13%   → TPL fallback (best-effort)
+async function _ocrCropTopStrip(file, cropFraction) {
+  return await new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(url);
+        const c = document.createElement('canvas');
+        const stripH = Math.round((img.naturalHeight || img.height) * cropFraction);
+        c.width = img.naturalWidth || img.width;
+        c.height = stripH;
+        c.getContext('2d').drawImage(img, 0, 0);
+        resolve(c.toDataURL('image/jpeg', 0.92));
+      } catch(e) { reject(e); }
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function _ocrCandidateFromText(text) {
+  const lines = String(text || '').split('\n').map(l => l.trim())
+    .map(l => l.replace(/[|_\\\/\[\]{}<>=+*@#\$%^&`~]/g, '').replace(/\s+/g, ' ').trim())
+    .filter(l => l.length >= 3 && /[a-zA-Z]/.test(l));
+  return lines[0] || '';
+}
+
+// Dice bigram + shared-token guard — rejects OCR gibberish that fuzzy-matches
+// to an unrelated real card name.
+function _nameMatchIsPlausible(candidate, matchedName) {
+  const _norm = (s) => String(s || '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const nC = _norm(candidate);
+  const nR = _norm(matchedName);
+  if (!nC || !nR) return false;
+  const tokensC = new Set(nC.split(' ').filter(t => t.length >= 4));
+  const tokensR = new Set(nR.split(' ').filter(t => t.length >= 4));
+  let sharedToken = false;
+  for (const t of tokensC) { if (tokensR.has(t)) { sharedToken = true; break; } }
+  const bigrams = (s) => {
+    const b = new Map();
+    for (let i = 0; i < s.length - 1; i++) {
+      const g = s.slice(i, i + 2);
+      b.set(g, (b.get(g) || 0) + 1);
+    }
+    return b;
+  };
+  const bC = bigrams(nC.replace(/\s/g, ''));
+  const bR = bigrams(nR.replace(/\s/g, ''));
+  let overlap = 0, totalC = 0, totalR = 0;
+  for (const [, v] of bC) totalC += v;
+  for (const [, v] of bR) totalR += v;
+  for (const [g, v] of bC) if (bR.has(g)) overlap += Math.min(v, bR.get(g));
+  const dice = (totalC + totalR) > 0 ? (2 * overlap) / (totalC + totalR) : 0;
+  return sharedToken || dice >= 0.55;
+}
+
+// Per-game catalog confirmation. Each branch returns a normalized card
+// object { name, number, setName, setCode, imageUrl, cardType } or null.
+async function _confirmCardByName(candidate, game) {
+  if (!candidate || candidate.length < 3) return null;
+
+  try {
+    if (game === 'mtg') {
+      const r = await fetch('https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(candidate), { signal: AbortSignal.timeout(6000) });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || !j.name || !_nameMatchIsPlausible(candidate, j.name)) return null;
+      return {
+        name: j.name,
+        number: j.collector_number || '',
+        setName: j.set_name || '',
+        setCode: j.set || '',
+        imageUrl: (j.image_uris && (j.image_uris.small || j.image_uris.normal))
+                || (j.card_faces && j.card_faces[0] && j.card_faces[0].image_uris && j.card_faces[0].image_uris.small)
+                || '',
+        cardType: 'mtg',
+      };
+    }
+
+    if (game === 'pokemon' || game === 'pokemonJP') {
+      // pokemontcg.io substring match, newest sets first. Works for both
+      // EN and JP-with-EN-reference cards.
+      const q = 'name:' + candidate.replace(/["\\]/g, '').split(' ')[0] + '*';
+      const url = 'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q)
+                + '&pageSize=10&orderBy=-set.releaseDate'
+                + '&select=id,name,set,number,rarity,images';
+      const r = await fetch(url, { signal: AbortSignal.timeout(7000) });
+      if (!r.ok) return null;
+      const j = await r.json();
+      const hits = (j && j.data) || [];
+      // Score hits by plausibility against the FULL OCR candidate.
+      const scored = hits.filter(h => h && h.name && _nameMatchIsPlausible(candidate, h.name));
+      if (!scored.length) return null;
+      const pick = scored[0];
+      return {
+        name: pick.name,
+        number: pick.number || '',
+        setName: (pick.set && pick.set.name) || '',
+        setCode: (pick.set && pick.set.id) || '',
+        imageUrl: (pick.images && (pick.images.small || pick.images.large)) || '',
+        cardType: game === 'pokemonJP' ? 'pokemonJP' : 'pokemon',
+        pokemontcgId: pick.id || '',
+      };
+    }
+
+    if (game === 'yugioh') {
+      const url = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=' + encodeURIComponent(candidate) + '&num=5&offset=0';
+      const r = await fetch(url, { signal: AbortSignal.timeout(7000) });
+      if (!r.ok) return null;
+      const j = await r.json();
+      const hits = (j && j.data) || [];
+      const scored = hits.filter(h => h && h.name && _nameMatchIsPlausible(candidate, h.name));
+      if (!scored.length) return null;
+      const pick = scored[0];
+      const firstSet = (pick.card_sets && pick.card_sets[0]) || {};
+      return {
+        name: pick.name,
+        number: firstSet.set_code || '',
+        setName: firstSet.set_name || '',
+        setCode: firstSet.set_code || '',
+        imageUrl: (pick.card_images && pick.card_images[0] && pick.card_images[0].image_url_small) || '',
+        cardType: 'yugioh',
+      };
+    }
+
+    if (game === 'lorcana') {
+      // We already load the full Lorcana DB on demand — reuse it.
+      let db = null;
+      if (typeof _lorcanaCachePending !== 'undefined' && _lorcanaCachePending) {
+        try { db = await _lorcanaCachePending; } catch(_){}
+      }
+      if (!db) {
+        try {
+          const r = await fetch('https://api.lorcana-api.com/cards/all', { signal: AbortSignal.timeout(7000) });
+          if (r.ok) db = await r.json();
+        } catch(_){}
+      }
+      if (!Array.isArray(db) || !db.length) return null;
+      const cand = candidate.toLowerCase();
+      // Prefer name-startswith, then any-substring, both filtered by plausibility.
+      const starts = db.filter(c => c && c.Name && c.Name.toLowerCase().startsWith(cand.split(' ')[0]));
+      const pool = starts.length ? starts : db.filter(c => c && c.Name && c.Name.toLowerCase().includes(cand.split(' ')[0]));
+      const scored = pool.filter(c => _nameMatchIsPlausible(candidate, c.Name));
+      if (!scored.length) return null;
+      const pick = scored[0];
+      return {
+        name: pick.Name || '',
+        number: pick.Card_Num || pick.Number || '',
+        setName: pick.Set_Name || pick.Set || '',
+        setCode: pick.Set_ID || '',
+        imageUrl: pick.Image || '',
+        cardType: 'lorcana',
+      };
+    }
+
+    // One Piece: no free authoritative fuzzy catalog we can call from the
+    // browser without a TPL key. Skip rescue and let the manual UI handle it.
+    return null;
+  } catch(err) {
+    try { console.warn('[_confirmCardByName]', game, err && err.message); } catch(_){}
+    return null;
+  }
+}
+
+async function _tryOCRRescue(file, statusEl, game) {
+  try {
+    if (!file || !game) return null;
+    if (!window.Tesseract) {
+      if (statusEl) statusEl.textContent = 'Loading text reader\u2026';
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    // Per-game name-strip crop fractions — calibrated to where the printed
+    // name banner sits on each game's card layout.
+    const cropByGame = {
+      mtg: 0.15, pokemon: 0.12, pokemonJP: 0.12,
+      yugioh: 0.11, lorcana: 0.14, onepiece: 0.13,
+    };
+    const crop = cropByGame[game] || 0.15;
+    if (statusEl) statusEl.textContent = 'Reading card name\u2026';
+    const stripUrl = await _ocrCropTopStrip(file, crop);
+    const { data: { text } } = await window.Tesseract.recognize(stripUrl, 'eng', {});
+    const candidate = _ocrCandidateFromText(text);
+    if (!candidate || candidate.length < 3) return null;
+    if (statusEl) statusEl.textContent = 'Confirming with catalog\u2026';
+    return await _confirmCardByName(candidate, game);
+  } catch(err) {
+    try { console.warn('[_tryOCRRescue]', game, err && err.message); } catch(_){}
     return null;
   }
 }
