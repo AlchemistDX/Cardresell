@@ -24,22 +24,28 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // ── 1. Auth ──
-  const idToken   = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  const bodyEmail = req.body?.email || '';
-  const bodySub   = req.body?.googleSub || '';
-
-  let userEmail = bodyEmail;
-  let googleSub = bodySub;
-
-  if (idToken && idToken.length > 20) {
-    try {
-      const tokenInfo = await verifyTokenFlexible(idToken);
-      googleSub = tokenInfo.uid   || googleSub;
-      userEmail = tokenInfo.email || userEmail;
-    } catch(e) { /* proceed with body values */ }
+  // 2026-08-25: Require a verified Google/Firebase ID token. The previous
+  // flexible-auth path accepted body-supplied email/googleSub as a fallback,
+  // which meant a scan_id leak (log, referrer, screenshot) could let an
+  // unauthenticated caller trigger refund flows on the victim's account and
+  // burn their daily refund rate limit. Identity now comes ONLY from a
+  // cryptographically verified token — body identity fields are ignored.
+  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!idToken || idToken.length < 20) {
+    return res.status(401).json({ error: 'Sign in with Google to request a refund.' });
   }
 
-  if (!userEmail) {
+  let userEmail = '';
+  let googleSub = '';
+  try {
+    const tokenInfo = await verifyTokenFlexible(idToken);
+    googleSub = tokenInfo.uid   || '';
+    userEmail = tokenInfo.email || '';
+  } catch(e) {
+    return res.status(401).json({ error: 'Session expired. Sign in again to request a refund.' });
+  }
+
+  if (!userEmail && !googleSub) {
     return res.status(401).json({ error: 'Sign in with Google to request a refund.' });
   }
 

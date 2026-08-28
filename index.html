@@ -4106,9 +4106,12 @@ async function searchPokemonJP(q) {
     const enTimeout = setTimeout(() => enCtrl.abort(), 5000);
     const enR = await fetch(enUrl, { signal: enCtrl.signal });
     clearTimeout(enTimeout);
+    if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
     const enData = await enR.json();
+    if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
     enCards = (enData.data || []).slice(0, 5); // just for images
   } catch(e) { /* silently ignore timeout or network errors */ }
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
 
   // Build JP search results — always show an eBay JP search card first
   window._searchCards = {};
@@ -4180,11 +4183,13 @@ async function searchPokemonJP(q) {
     // PokemonTCG.io ingestion. Also tells us whether users are searching for
     // things we simply don't cover (foreign, sports, custom).
     window.trackEvent?.('search_zero_results', { game: activeGame || 'pokemon', q: (q || '').slice(0, 60) });
+    if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
     dropList.innerHTML = '<div class="drop-empty">No results found. Try clicking the JP COMPS button above.</div>';
     return;
   }
 
   window.trackEvent?.('search_results', { game: activeGame || 'pokemon', count: items.length });
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   dropList.innerHTML = items.join('');
 
   attachDropHandlers(i => {
@@ -4274,11 +4279,13 @@ async function searchMTG(q) {
   // Fallback: Scryfall
   const url = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=desc`;
   const r = await fetch(url);
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   if (!r.ok) {
     if (r.status === 404) { dropList.innerHTML = '<div class="drop-empty">No Magic cards found. Try a different name.</div>'; return; }
     throw new Error(`Scryfall ${r.status}`);
   }
   const data = await r.json();
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   const cards = (data.data || []).slice(0, 20);
 
   if (!cards.length) { dropList.innerHTML = '<div class="drop-empty">No Magic cards found. Try a different name.</div>'; return; }
@@ -4371,6 +4378,7 @@ async function searchLorcana(q) {
   dropList.classList.add('open');
 
   const allCards = await _getLorcanaCards();
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   if (!allCards.length) {
     dropList.innerHTML = '<div class="drop-empty">Lorcana card database unavailable. Try again later.</div>';
     return;
@@ -4449,6 +4457,7 @@ async function searchOnePiece(q) {
     return;
   }
   // No free API available — guide user to manual entry
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   dropList.innerHTML = `<div style="padding:.9rem 1rem">
     <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.35rem">⚓ One Piece TCG</div>
     <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:.6rem">No free card database is available yet. Enter your card name above, then use the <strong>Override price</strong> field to set the market value manually.</div>
@@ -4530,11 +4539,13 @@ async function searchYugioh(q) {
   // Fallback: YGOProDeck
   const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=20&offset=0`;
   const r = await fetch(url);
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   if (!r.ok) {
     dropList.innerHTML = '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>';
     return;
   }
   const data = await r.json();
+  if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   const cards = (data.data || []).slice(0, 20);
 
   if (!cards.length) { dropList.innerHTML = '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>'; return; }
@@ -16822,7 +16833,11 @@ async function _bulkScanOne(item, rowId, isRetry) {
           if (spinner && spinner.parentNode) spinner.parentNode.removeChild(spinner);
         } catch(_){}
       }
-      window._bulkResults.push(result);
+      // 2026-08-25 [P1-3]: _bulkResults is preallocated with new Array(total)
+      // and filled positionally by index. push() here landed the failure at
+      // the wrong position (length-based, not queue-index based). Restore
+      // positional insertion so the summary UI reflects the correct row.
+      window._bulkResults[i] = result;
       showToast('Ran out of credits mid-scan. Results saved for cards that completed.', 'info');
       return 'STOP';
     } else if (resp.status === 401) {

@@ -644,22 +644,28 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // ── 1. Auth ──
-  const idToken   = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-  const bodyEmail = req.body?.email || '';
-  const bodySub   = req.body?.googleSub || '';
-
-  let userEmail = bodyEmail;
-  let googleSub = bodySub;
-
-  if (idToken && idToken.length > 20) {
-    try {
-      const tokenInfo = await verifyTokenFlexible(idToken);
-      googleSub = tokenInfo.uid   || googleSub;
-      userEmail = tokenInfo.email || userEmail;
-    } catch(e) { /* proceed with body values */ }
+  // 2026-08-25: Require a verified Google/Firebase ID token. The previous
+  // flexible-auth accepted body-supplied email/googleSub, which let an
+  // unauthenticated attacker call this endpoint against a victim's uid and
+  // drain their ID/paid credits (the DECR is atomic per key). Identity now
+  // comes ONLY from a cryptographically verified token — body identity is
+  // ignored.
+  const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
+  if (!idToken || idToken.length < 20) {
+    return res.status(401).json({ error: 'Sign in with Google to use the scanner.' });
   }
 
-  if (!userEmail) {
+  let userEmail = '';
+  let googleSub = '';
+  try {
+    const tokenInfo = await verifyTokenFlexible(idToken);
+    googleSub = tokenInfo.uid   || '';
+    userEmail = tokenInfo.email || '';
+  } catch(e) {
+    return res.status(401).json({ error: 'Session expired. Sign in again to use the scanner.' });
+  }
+
+  if (!userEmail && !googleSub) {
     return res.status(401).json({ error: 'Sign in with Google to use the scanner.' });
   }
 
@@ -670,6 +676,14 @@ export default async function handler(req, res) {
 
   // ── 3. Get image + mode (read early so credit logic can branch) ──
   const { imageBase64, mimeType, mode, deepGrade } = req.body || {};
+
+  // 2026-08-25 [P0-3]: Validate presence of imageBase64 BEFORE any credit
+  // debit. Previously the check lived at ~line 883 — AFTER the atomic DECR —
+  // so a client bug or truncated request would burn a paid credit and return
+  // 400 without refunding. Fail cleanly here.
+  if (!imageBase64) {
+    return res.status(400).json({ error: 'No image provided.' });
+  }
   const isGradeMode    = mode === 'grade';
   const isIdentifyMode = !isGradeMode; // identify is the default
   // Deep Grade = 6-photo PSA-style inspection (front + back + 4 edges), costs 2 credits.
@@ -880,7 +894,8 @@ export default async function handler(req, res) {
       }
     }
   }
-  if (!imageBase64) return res.status(400).json({ error: 'No image provided.' });
+  // (imageBase64 presence was already validated near line 684 before any
+  // credit was debited — unreachable here, kept intentionally omitted.)
 
   // Refund helper — called on any downstream failure so the user isn't charged for a broken scan.
   async function refundCredits() {
