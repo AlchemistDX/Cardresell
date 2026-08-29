@@ -12745,23 +12745,80 @@ async function processScanImage(input) {
         // Load index (usually already cached from the fastpath attempt above)
         const idxAll = await window.CardResellFastPath.loadCardIndex().catch(() => null);
         if (idxAll && Array.isArray(idxAll)) {
-          // Normalize LLM name: lowercase, alphanumeric only
-          const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const llmName = norm(rawCardName);
-          const llmNumClean = (cardNumber || '').replace(/\/.*$/, '').trim();
-          const candidates = idxAll.filter(c => {
-            // Name must be a substring match either direction (handles "Ampharos" vs "Ampharos ex")
-            const cn = norm(c.n);
-            if (!cn.includes(llmName) && !llmName.includes(cn)) return false;
-            // If we have a number, must match (strip leading zeros both sides)
-            if (llmNumClean) {
-              const a = String(c.nu).replace(/^0+/, '');
-              const b = llmNumClean.replace(/^0+/, '');
-              if (a !== b) return false;
+          // Normalization helpers
+          const norm       = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Number normalization: strip leading zeros AND alpha prefixes so
+          // "SV199" == "199", "TG10/TG30" == "TG10" == "10". Ximilar and the
+          // LLM sometimes return the raw printed number, sometimes the local
+          // set-numeric part, and reprints/promos use letter prefixes
+          // inconsistently across catalogs.
+          const normNum    = s => {
+            const clean = String(s || '').replace(/\/.*$/, '').trim();
+            // strip leading zeros
+            const noZeros = clean.replace(/^0+/, '') || clean;
+            // strip leading alpha prefix (SV, TG, GG, SWSH, SM, etc.)
+            const noPrefix = noZeros.replace(/^[a-z]+/i, '');
+            return { full: noZeros.toLowerCase(), tail: noPrefix.toLowerCase() };
+          };
+          // Word-boundary name match: split into word tokens and require the
+          // shorter side's tokens to be a subset of the longer side's tokens.
+          // Prevents "Mew" matching "Mewtwo", "Zoroark" matching "Zoroark GX"
+          // still works because tokens {zoroark} ⊆ {zoroark, gx}.
+          const tokens = s => (s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+          const nameMatches = (a, b) => {
+            const A = tokens(a), B = tokens(b);
+            if (!A.length || !B.length) return false;
+            const [small, big] = A.length <= B.length ? [A, B] : [B, A];
+            const bigSet = new Set(big);
+            return small.every(t => bigSet.has(t));
+          };
+          // Set-recency preference: newer set-id prefix wins reprint tiebreaks.
+          // Rank (higher = newer): sv > swsh > sm > xy > bw > hgss > dp > ex > <legacy>.
+          const setRank = sid => {
+            const s = (sid || '').toLowerCase();
+            if (s.startsWith('me'))   return 105; // Mega Evolution era (2025+)
+            if (s.startsWith('zsv'))  return 102;
+            if (s.startsWith('rsv'))  return 101;
+            if (s.startsWith('sv'))   return 100;
+            if (s.startsWith('swsh')) return 90;
+            if (s.startsWith('sm'))   return 80;
+            if (s.startsWith('xy'))   return 70;
+            if (s.startsWith('bw'))   return 60;
+            if (s.startsWith('hgss')) return 55;
+            if (s.startsWith('col'))  return 52;
+            if (s.startsWith('pl'))   return 50;
+            if (s.startsWith('dp'))   return 48;
+            if (s.startsWith('ex'))   return 40;
+            return 10;
+          };
+
+          const llmName    = rawCardName || '';
+          const llmNumRaw  = (cardNumber || '').replace(/\/.*$/, '').trim();
+          const llmNum     = normNum(llmNumRaw);
+
+          // Two-pass filter: strict (name + number) first, then name-only if
+          // strict yields nothing (LLM sometimes hallucinates or drops the
+          // number on holo art with intrusive backgrounds).
+          const filterCands = requireNumber => idxAll.filter(c => {
+            if (!nameMatches(c.n, llmName)) return false;
+            if (requireNumber && llmNum.full) {
+              const cnu = normNum(c.nu);
+              if (cnu.full !== llmNum.full && cnu.tail !== llmNum.tail && cnu.full !== llmNum.tail && cnu.tail !== llmNum.full) return false;
             }
             return true;
           });
-          console.log('[rerank]', candidates.length, 'candidates match name="' + rawCardName + '" num="' + llmNumClean + '"');
+
+          let candidates = filterCands(true);
+          let looseName = false;
+          if (!candidates.length && llmNum.full) {
+            // Number match failed — fall back to name-only. This catches
+            // number OCR errors ("188" vs "166") and mis-boxed numbers.
+            candidates = filterCands(false);
+            looseName = true;
+            console.log('[rerank] no strict match; retrying name-only:', candidates.length);
+          }
+          console.log('[rerank]', candidates.length, 'candidates match name="' + rawCardName + '" num="' + llmNumRaw + '"' + (looseName ? ' (name-only)' : ''));
+
           if (candidates.length === 1) {
             // Unambiguous — use it directly, no need to pHash
             const c = candidates[0];
@@ -12774,24 +12831,43 @@ async function processScanImage(input) {
             rerankedRarity     = c.r || '';
             window._lastScanCandidates = [c];
             console.log('[rerank] EXACT match:', c.id, c.n, c.s);
-          } else if (candidates.length >= 2 && candidates.length <= 60) {
+          } else if (candidates.length >= 2) {
+            // Cap for pHash cost — raised from 60 to 250 so common Pokemon
+            // names (Pikachu, Charizard) still get reranked instead of
+            // silently falling back to the LLM's guess.
+            const RERANK_CAP = 250;
+            if (candidates.length > RERANK_CAP) {
+              // Deterministic trim: prefer newer sets so the picker still
+              // shows relevant printings even when we can't hash them all.
+              candidates.sort((a, b) => setRank(b.si) - setRank(a.si));
+              candidates = candidates.slice(0, RERANK_CAP);
+              console.log('[rerank] trimmed to', RERANK_CAP, 'newest candidates');
+            }
             // Always stash all matching candidates for the local "Wrong card?" picker.
-            // Free correction path — zero API calls, zero credit spend.
             window._lastScanCandidates = candidates.slice();
             // 2026-08-17: Ximilar-set trust pass BEFORE pHash rerank.
-            // Ximilar's collectibles model identifies set names way more reliably
-            // than pHash on a blurry phone photo. If Ximilar returned a set_name
-            // and exactly one candidate matches that set, trust it and skip pHash.
-            // Only pHash-tiebreak when Ximilar didn't give a set or its set doesn't
-            // uniquely match one candidate.
+            // Prefer EXACT normalized-name match; fall back to bidirectional
+            // includes only when no exact match exists. Prior version treated
+            // "Base" as matching "Base Set", "Base Set 2", and "Legendary
+            // Base" — causing wrong-reprint picks.
             let ximilarSetResolved = false;
-            const normSet = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const normSet = s => norm(s);
             const ximilarSetNorm = normSet(setName);
             if (ximilarSetNorm) {
-              const setMatches = candidates.filter(c => {
-                const cs = normSet(c.s);
-                return cs === ximilarSetNorm || cs.includes(ximilarSetNorm) || ximilarSetNorm.includes(cs);
-              });
+              // Pass 1: exact normalized-set match
+              let setMatches = candidates.filter(c => normSet(c.s) === ximilarSetNorm);
+              // Pass 2: strict bidirectional includes but require length ratio > 0.6
+              // (so "base" matches "base set" but not "legendary base").
+              if (!setMatches.length) {
+                setMatches = candidates.filter(c => {
+                  const cs = normSet(c.s);
+                  if (!cs || !ximilarSetNorm) return false;
+                  const short = cs.length < ximilarSetNorm.length ? cs : ximilarSetNorm;
+                  const long  = cs.length < ximilarSetNorm.length ? ximilarSetNorm : cs;
+                  if (!long.includes(short)) return false;
+                  return (short.length / long.length) >= 0.6;
+                });
+              }
               if (setMatches.length === 1) {
                 const c = setMatches[0];
                 rerankedGroundedId = c.id;
@@ -12803,6 +12879,13 @@ async function processScanImage(input) {
                 rerankedRarity     = c.r || '';
                 console.log('[rerank] Ximilar-set trust:', c.id, c.n, c.s, '(matched "' + setName + '")');
                 ximilarSetResolved = true;
+              } else if (setMatches.length > 1) {
+                // Narrow candidates to Ximilar's set before pHash tiebreak.
+                // This is the key fix for reprint collisions: even if pHash
+                // ties Kyurem-EX across three sets, restricting to Ximilar's
+                // set makes the tie moot.
+                candidates = setMatches;
+                console.log('[rerank] narrowed to', setMatches.length, 'candidates in set "' + setName + '"');
               }
             }
             // pHash tiebreak — only runs when Ximilar-set trust didn't resolve
@@ -12825,25 +12908,38 @@ async function processScanImage(input) {
               } catch(_) {}
             }
             if (!ximilarSetResolved && ph && dh) {
-              let best = null, bestD = 999;
-              for (const c of candidates) {
-                const d = window.CardResellFastPath.hamming(ph, c.p) * 2 +
-                          window.CardResellFastPath.hamming(dh, c.d);
-                if (d < bestD) { bestD = d; best = c; }
+              // Score every candidate; track top-2 for a tie-break and an
+              // ambiguity signal we surface to the picker.
+              const scored = candidates.map(c => ({
+                c,
+                d: window.CardResellFastPath.hamming(ph, c.p) * 2 +
+                   window.CardResellFastPath.hamming(dh, c.d)
+              }));
+              scored.sort((a, b) => a.d - b.d || setRank(b.c.si) - setRank(a.c.si));
+              const best = scored[0];
+              const second = scored[1];
+              const gap = second ? second.d - best.d : 999;
+              // Ambiguous within 2 units → nudge toward newer set (reprint
+              // collisions: same art shipped in swsh + bw sets both hash-tie).
+              let picked = best;
+              if (second && gap <= 2 && setRank(second.c.si) > setRank(best.c.si)) {
+                picked = second;
+                console.log('[rerank] reprint tiebreak: preferred newer set',
+                            second.c.si, 'over', best.c.si, 'at gap=' + gap);
               }
-              if (best) {
-                rerankedGroundedId = best.id;
-                rerankedImageSmall = best.i;
-                rerankedImageLarge = window.CardResellFastPath.deriveLargeUrl(best.i);
-                rerankedSetName    = best.s;
-                rerankedSetCode    = best.sc || '';
-                rerankedNumber     = best.nu;
-                rerankedRarity     = best.r || '';
-                console.log('[rerank] pHash pick (dist=' + bestD + '):', best.id, best.n, best.s);
-              }
+              const b = picked.c;
+              rerankedGroundedId = b.id;
+              rerankedImageSmall = b.i;
+              rerankedImageLarge = window.CardResellFastPath.deriveLargeUrl(b.i);
+              rerankedSetName    = b.s;
+              rerankedSetCode    = b.sc || '';
+              rerankedNumber     = b.nu;
+              rerankedRarity     = b.r || '';
+              // Ambiguity signal — exposed so the picker can suggest
+              // "Wrong card?" more prominently on close calls.
+              window._lastScanAmbiguous = (gap < 4);
+              console.log('[rerank] pHash pick (dist=' + picked.d + ' gap=' + gap + '):', b.id, b.n, b.s);
             }
-          } else if (candidates.length > 60) {
-            console.log('[rerank] too many candidates (' + candidates.length + '), skipping');
           }
         }
         console.log('[rerank] took', (performance.now() - rerankStart).toFixed(0), 'ms');
