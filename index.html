@@ -1598,10 +1598,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       AI Grade <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.15rem"></span>
     </button>
   </div>
-  <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
+  <!-- Pro promo banner — shown to signed-in free users (dismissed per session).
+       Copy is honest about the ladder: Pro adds 3-5 marketplaces depending on
+       the card game (5 for MTG since it adds Mana Pool + Cardsphere), Pro Max
+       adds the rest. Never claim "7 more" at the $9.99 tier since that number
+       only lands with Pro Max on an MTG card. -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock 7 more marketplaces</span> &mdash; Poshmark, Whatnot, Mercari, COMC, Fanatics Collect, Mana Pool &amp; Cardsphere (MTG).<br>
+      <span>&#11088; Unlock more marketplaces</span> &mdash; Pro adds Poshmark, Whatnot, Mercari (+ Mana Pool &amp; Cardsphere for MTG). Pro Max adds COMC &amp; Fanatics Collect.<br>
       <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
@@ -2689,7 +2693,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>2 marketplaces:</strong> eBay + TCGPlayer</li>
           <li>Flip calc + Deal Score</li>
           <li class="faded">Top-up discounts</li>
-          <li class="faded">7 more marketplaces</li>
+          <li class="faded">7 more marketplaces (Pro / Pro Max)</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -2706,9 +2710,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>15 AI Grades/mo</strong></li>
           <li><strong>30 ID scans/mo</strong></li>
           <li><strong>10% off</strong> top-up packs</li>
-          <li><strong>Adds more marketplaces</strong></li>
-          <li>Payout bar chart</li>
-          <li><strong>Unlimited</strong> flip tracking</li>
+          <li><strong>+3 marketplaces:</strong> Poshmark, Whatnot, Mercari</li>
+          <li><strong>+2 MTG marketplaces:</strong> Mana Pool, Cardsphere</li>
+          <li>Payout bar chart + <strong>unlimited</strong> flips</li>
           <li>Deal Score + Max Buy</li>
           <li>Skip one bad PSA sub → saves a year</li>
         </ul>
@@ -2729,7 +2733,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>40 AI Grades/mo</strong></li>
           <li><strong>100 ID scans/mo</strong></li>
           <li><strong>15% off</strong> top-up packs</li>
-          <li><strong>Adds more marketplaces</strong></li>
+          <li><strong>+2 pro marketplaces:</strong> COMC, Fanatics Collect</li>
+          <li><strong>All 9 marketplaces</strong> unlocked</li>
           <li>Everything in Pro</li>
           <li>Priority email support</li>
           <li>Early access to new features</li>
@@ -2751,7 +2756,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>100 AI Grades/mo</strong></li>
           <li><strong>300 ID scans/mo</strong></li>
           <li><strong>25% off</strong> top-up packs</li>
-          <li>All marketplaces</li>
+          <li>All 9 marketplaces unlocked</li>
           <li>Everything in Pro Max</li>
           <li>&#128188; <strong>Bulk Grade tool</strong> <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
           <li>&#9733; Ultimate badge</li>
@@ -7230,22 +7235,34 @@ function calc() {
       </div>`;
     }).join('');
 
+    // Dynamic count — free users on Pokemon see 3 locked (Poshmark/Whatnot/
+    // Mercari), free MTG users see 5 (adds Mana Pool + Cardsphere), Pro users
+    // see whatever their tier hasn’t unlocked yet. Header + CTA both mirror
+    // the actual locked count so the pitch never lies.
+    const _lockedCount = proOnlyResults.length;
+    const _lockedLabel = _lockedCount === 1 ? '1 More Platform' : `${_lockedCount} More Platforms`;
+    // What the user is upgrading TO. If they're on free, Pro is the entry step.
+    // If they're already Pro, the remaining locked (COMC/Fanatics) is Pro Max.
+    const _upgradeTarget = _uTier === 'free' ? 'Pro' : 'Pro Max';
+    const _upgradePrice  = _uTier === 'free' ? '$9.99/mo' : '$19.99/mo';
+    // Ordered list of what's actually locked, for the sub-caption.
+    const _lockedNames = proOnlyResults.map(r => PLATFORMS[r.pid].name).join(', ');
     html += `
     <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="openPricingModal('calc_gate')">
       <div class="plat-accent" style="background:linear-gradient(135deg,#b8860b,#f5c518)"></div>
       <div class="plat-hdr" style="margin-bottom:.3rem">
-        <span class="plat-name">&#11088; 3 More Platforms</span>
-        <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">PRO</span>
+        <span class="plat-name">&#11088; ${_lockedLabel}</span>
+        <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">${esc(_upgradeTarget.toUpperCase())}</span>
       </div>
       ${mightEarnMore && diff > 0.5
-          ? `<div style="font-size:.76rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; You could net <strong>$${diff.toFixed(2)} more</strong> on another platform</div>`
+          ? `<div style="font-size:.76rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; You could net <strong>$${diff.toFixed(2)} more</strong> on ${esc(PLATFORMS[bestAlt.pid].name)}</div>`
           : mightEarnMore
-            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; A Pro platform pays more than any free one</div>`
+            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; A ${esc(_upgradeTarget)} platform pays more than any free one</div>`
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 7 more marketplaces + AI grading — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro adds Poshmark, Whatnot, Mercari + Mana Pool &amp; Cardsphere (MTG) · Pro Max adds COMC &amp; Fanatics Collect (9 total)</div>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock ${_lockedCount} more marketplace${_lockedCount === 1 ? '' : 's'} — ${esc(_upgradePrice)}</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">${esc(_lockedNames)}</div>
       </div>
     </div>`;
     html += `</div>`;
@@ -7283,8 +7300,15 @@ function calc() {
       </div>`;
       // For free "Buy" verdicts: show Pro platform nudge
       if (!window._isPro && _verdict === 'Buy') {
+        // Count what Pro actually adds for THIS card (game-aware). Pokemon
+        // free → Pro adds 3 (Poshmark, Whatnot, Mercari). MTG free → Pro adds 5
+        // (adds Mana Pool + Cardsphere). Never claim more than we deliver.
+        const _proAddCount = results.filter(r => r.eligible && PRO_PLATFORMS.has(r.pid) && !FREE_PLATFORMS.has(r.pid)).length;
+        const _nudgeCopy = _proAddCount > 0
+          ? `Pro unlocks ${_proAddCount} more marketplace${_proAddCount === 1 ? '' : 's'} — maximize this deal`
+          : 'Pro Max unlocks COMC + Fanatics Collect — maximize this deal';
         html += `<div style="margin-top:.35rem;padding:.45rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('deal_score_nudge')">
-          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">Pro unlocks 7 more marketplaces — maximize this deal</span>
+          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">${esc(_nudgeCopy)}</span>
           <span style="font-size:.68rem;font-weight:800;color:var(--gold);white-space:nowrap">Upgrade →</span>
         </div>`;
       }
