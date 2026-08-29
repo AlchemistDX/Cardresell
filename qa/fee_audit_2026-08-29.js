@@ -15,7 +15,7 @@ const feeFnMatch = html.match(/function feeEbay[\s\S]*?^\}$[\s\S]*?function feeB
 // Fallback: pull each function individually by name.
 const fnNames = ['feeEbay','feeTCGPlayer','feePoshmark','feeFanatics','feeCOMC',
                  'feeWhatnot','feeMercari','feeManaPool','feeCardsphere',
-                 'feeCardmarket','feeBuylist'];
+                 'feeCardmarket','feeBuylist','feeCardNexus'];
 const fnSrc = fnNames.map(name => {
   const re = new RegExp(`function ${name}\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\}`, 'm');
   const m = html.match(re);
@@ -43,7 +43,7 @@ const factory = new Function(factorySrc);
 const {
   feeEbay, feeTCGPlayer, feePoshmark, feeFanatics, feeCOMC,
   feeWhatnot, feeMercari, feeManaPool, feeCardsphere,
-  feeCardmarket, feeBuylist,
+  feeCardmarket, feeBuylist, feeCardNexus,
   PLATFORMS
 } = factory();
 
@@ -117,6 +117,19 @@ const EXPECTED = {
   coolstuffinc(price) {
     // Buylist: 48% cash haircut → "fee" = 52% of price
     return price * (1 - 0.48);
+  },
+  scg(price) {
+    // Star City Games buylist: 55% cash → "fee" = 45% of price
+    return price * (1 - 0.55);
+  },
+  cardnexus(price) {
+    // Flat 8% NA seller commission on order total. No per-order fixed fee
+    // for the seller (the $0.30 is buyer-side).
+    return price * 0.08;
+  },
+  tcgbulk(price) {
+    // Buylist aggregator baseline 50% → "fee" = 50% of price
+    return price * (1 - 0.50);
   }
 };
 
@@ -140,6 +153,9 @@ const ACTUAL = {
   cardmarket:   (p) => sumFees(feeCardmarket(p)),
   cardkingdom:  (p) => sumFees(feeBuylist(p, PLATFORMS.cardkingdom.buylistRatio.cash)),
   coolstuffinc: (p) => sumFees(feeBuylist(p, PLATFORMS.coolstuffinc.buylistRatio.cash)),
+  scg:          (p) => sumFees(feeBuylist(p, PLATFORMS.scg.buylistRatio.cash)),
+  cardnexus:    (p) => sumFees(feeCardNexus(p)),
+  tcgbulk:      (p) => sumFees(feeBuylist(p, PLATFORMS.tcgbulk.buylistRatio.cash)),
 };
 
 // -----------------------------------------------------------------------------
@@ -348,7 +364,7 @@ console.log('\n' + '-'.repeat(80));
 console.log(`REGRESSION vs EXPECTED: ${flags.length} discrepancies (out of ${rows.length} checks)`);
 console.log('-'.repeat(80));
 if (flags.length === 0) {
-  console.log('✅ All 12 platforms match their expected fee models across the price matrix.');
+  console.log('✅ All 15 platforms match their expected fee models across the price matrix.');
 } else {
   for (const f of flags) {
     console.log(`❌ ${f.platform} @ $${f.price}: expected=$${f.expected}, actual=$${f.actual}, diff=$${f.diff} (${f.diffPct}%)`);

@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-08-29T20:03:41.702Z",
+  "runAt": "2026-08-29T20:43:10.826Z",
   "priceMatrix": [
     1,
     5,
@@ -974,6 +974,246 @@
       "diffPctOfPrice": 0,
       "effectiveTakeRate": 52,
       "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 1,
+      "expectedFee": 0.44999999999999996,
+      "actualFee": 0.44999999999999996,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 44.99999999999999,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 5,
+      "expectedFee": 2.25,
+      "actualFee": 2.25,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 45,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 15,
+      "expectedFee": 6.749999999999999,
+      "actualFee": 6.75,
+      "diffDol": 8.881784197001252e-16,
+      "diffPctOfPrice": 5.921189464667502e-15,
+      "effectiveTakeRate": 45,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 50,
+      "expectedFee": 22.499999999999996,
+      "actualFee": 22.499999999999996,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 44.99999999999999,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 100,
+      "expectedFee": 44.99999999999999,
+      "actualFee": 44.99999999999999,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 44.99999999999999,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 500,
+      "expectedFee": 224.99999999999997,
+      "actualFee": 225,
+      "diffDol": 2.842170943040401e-14,
+      "diffPctOfPrice": 5.684341886080802e-15,
+      "effectiveTakeRate": 45,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 1500,
+      "expectedFee": 674.9999999999999,
+      "actualFee": 674.9999999999999,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 44.99999999999999,
+      "passed": true
+    },
+    {
+      "platform": "scg",
+      "price": 5000,
+      "expectedFee": 2250,
+      "actualFee": 2250,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 45,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 1,
+      "expectedFee": 0.08,
+      "actualFee": 0.08,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 5,
+      "expectedFee": 0.4,
+      "actualFee": 0.4,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 15,
+      "expectedFee": 1.2,
+      "actualFee": 1.2,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 50,
+      "expectedFee": 4,
+      "actualFee": 4,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 100,
+      "expectedFee": 8,
+      "actualFee": 8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 500,
+      "expectedFee": 40,
+      "actualFee": 40,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 1500,
+      "expectedFee": 120,
+      "actualFee": 120,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardnexus",
+      "price": 5000,
+      "expectedFee": 400,
+      "actualFee": 400,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 1,
+      "expectedFee": 0.5,
+      "actualFee": 0.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 5,
+      "expectedFee": 2.5,
+      "actualFee": 2.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 15,
+      "expectedFee": 7.5,
+      "actualFee": 7.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 50,
+      "expectedFee": 25,
+      "actualFee": 25,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 100,
+      "expectedFee": 50,
+      "actualFee": 50,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 500,
+      "expectedFee": 250,
+      "actualFee": 250,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 1500,
+      "expectedFee": 750,
+      "actualFee": 750,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "tcgbulk",
+      "price": 5000,
+      "expectedFee": 2500,
+      "actualFee": 2500,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
     }
   ],
   "flags": [],
@@ -1048,7 +1288,7 @@
     }
   ],
   "summary": {
-    "totalChecks": 96,
+    "totalChecks": 120,
     "regressionCount": 0,
     "edgeCasesPassed": 10,
     "edgeCasesTotal": 10

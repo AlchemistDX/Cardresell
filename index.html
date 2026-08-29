@@ -6543,15 +6543,56 @@ function updateSellLinks(card) {
   const isTCGGame   = isPokemon || isMagic || isYugioh || game === 'lorcana' || game === 'onepiece';
   const tcgpUrl     = isTCGGame ? buildTcgpUrl(searchName, setName, number) : '';
 
+  // Cardmarket search: /<Game>/Products/Search?searchString=<name>. Game path
+  // segment is TitleCased (Magic / Pokemon / YuGiOh / Lorcana / OnePiece).
+  // For non-TCG scans we fall back to the top-level Products search.
+  const cardmarketGame = isMagic ? 'Magic' : isPokemon ? 'Pokemon' : isYugioh ? 'YuGiOh' : game === 'lorcana' ? 'Lorcana' : game === 'onepiece' ? 'OnePiece' : '';
+  const cardmarketQ    = encodeURIComponent(`${searchName}${numTail}`.trim());
+  const cardmarketUrl  = cardmarketGame
+    ? `https://www.cardmarket.com/en/${cardmarketGame}/Products/Search?searchString=${cardmarketQ}`
+    : `https://www.cardmarket.com/en`;
+  // Card Kingdom buylist deep link. MTG has a proper search route:
+  //   /purchasing/mtg_singles?filter[search]=<name>
+  // Non-MTG games route to the generic "How to Sell" landing since CK's
+  // Pokemon/Lorcana buylists aren't publicly searchable by URL.
+  const ckSearchQ = encodeURIComponent(searchName);
+  const cardkingdomUrl = isMagic
+    ? `https://www.cardkingdom.com/purchasing/mtg_singles?filter%5Bsearch%5D=${ckSearchQ}`
+    : `https://www.cardkingdom.com/purchasing/how_to_sell`;
+  // CoolStuffInc has no per-card buylist deep link — route to the main
+  // full-service sell list landing.
+  const coolstuffincUrl = `https://www.coolstuffinc.com/main_fullservice_selllist.php`;
+  // Cardsphere — MTG-only offer marketplace. No searchable buylist URL
+  // pattern; route to the marketplace home so users land on active offers.
+  const cardsphereUrl = `https://www.cardsphere.com/`;
+  // Star City Games — Sell Your Cards landing (Sell List + Ship + Sell).
+  const scgUrl = `https://sellyourcards.starcitygames.com/`;
+  // CardNexus — no per-card sell deep link (sellers list from in-app inventory).
+  // Route to the seller onboarding walkthrough.
+  const cardnexusUrl = `https://cardnexus.com/en/how-it-works`;
+  // TCG Bulk — aggregator app; sellers browse buyer offers in-app.
+  const tcgbulkUrl = `https://tcgbulk.com/`;
+  // Mana Pool — MTG-only. Route to sell landing (MTG cards only; empty for
+  // non-MTG so the tile stays non-clickable for wrong-game scans).
+  const manapoolUrl = isMagic ? `https://manapool.com/sell` : '';
+
   // Store URLs globally — calc() reads these to make cards clickable
   window._platSellUrls = {
-    ebay:      buildEbayUrl(ebaySellRaw),
-    tcgplayer: isTCGGame ? tcgpUrl : '',
-    comc:      `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
-    poshmark:  `https://poshmark.com/search?query=${poshQ}&type=listings`,
-    fanatics:  `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
-    whatnot:   `https://www.whatnot.com/search?query=${whatnotQ}`,
-    mercari:   `https://www.mercari.com/search/?keyword=${mercariQ}`
+    ebay:         buildEbayUrl(ebaySellRaw),
+    tcgplayer:    isTCGGame ? tcgpUrl : '',
+    comc:         `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
+    poshmark:     `https://poshmark.com/search?query=${poshQ}&type=listings`,
+    fanatics:     `https://www.fanaticscollect.com/search?q=${fanaticsQ}`,
+    whatnot:      `https://www.whatnot.com/search?query=${whatnotQ}`,
+    mercari:      `https://www.mercari.com/search/?keyword=${mercariQ}`,
+    manapool:     manapoolUrl,
+    cardsphere:   isMagic ? cardsphereUrl : '',
+    cardmarket:   isTCGGame ? cardmarketUrl : '',
+    cardkingdom:  isTCGGame ? cardkingdomUrl : '',
+    coolstuffinc: isTCGGame ? coolstuffincUrl : '',
+    scg:          isTCGGame ? scgUrl : '',
+    cardnexus:    isTCGGame ? cardnexusUrl : '',
+    tcgbulk:      isTCGGame ? tcgbulkUrl : ''
   };
   // Upgrade TCGplayer URL to product-page deeplink if we have a card object.
   // This routes users to the EXACT product page where they tap "Sell Yours"
@@ -6879,7 +6920,51 @@ const PLATFORMS = {
     hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
     bestFor: '💵 Best for Yu-Gi-Oh! bulk — strong rates + no fees',
     buylistRatio: { cash: 0.48, credit: 0.60 },
-    redFlags: ['💰 Buylist offer ~48% of retail (cash) / ~60% (store credit)', '🔄 25% store credit bonus if you’re also a buyer', '📦 You ship cards to them; cards under $1 = bulk rates', '⚠️ Estimated payout — verify live quote before shipping'] }
+    redFlags: ['💰 Buylist offer ~48% of retail (cash) / ~60% (store credit)', '🔄 25% store credit bonus if you’re also a buyer', '📦 You ship cards to them; cards under $1 = bulk rates', '⚠️ Estimated payout — verify live quote before shipping'] },
+  // Star City Games — largest US MTG retailer; expanding buylist to Pokemon, Lorcana,
+  // FAB, Riftbound. Sell List (sorted) has ZERO service fee — paid by check/PayPal/credit.
+  // Ship + Sell (unsorted) is 10% flat (5% over $10K). +30% store credit bonus.
+  // We default to the sorted Sell List rate as the honest baseline for a scanner user
+  // who knows what they have — Ship + Sell is a fallback for bulk collections.
+  //   Sources:
+  //     https://sellyourcards.starcitygames.com/  (fee tiers verified 2026-08-29)
+  //     https://help.starcitygames.com/en-US/articles/sell-to-us-229858
+  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · buylist — 0% fee on sorted lists',
+    workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
+    hassle: 'Sell List (sorted): NO service fee, ~55% of retail cash / ~72% store credit. Ship + Sell (unsorted): 10% service fee (5% over $10K). MTG + Pokemon + Lorcana + FAB + Riftbound.',
+    bestFor: '💵 Best for MTG collections — biggest US buylist, 0% fee on sorted lists',
+    buylistRatio: { cash: 0.55, credit: 0.72 },
+    redFlags: ['💰 Buylist offer ~55% of retail (cash) / ~72% (store credit)', '🔄 30% store credit bonus if you’re also a buyer', '📦 You ship cards to them; Sell List = sorted, Ship + Sell = unsorted (10% fee)', '⚠️ Estimated payout — verify live quote before shipping'] },
+  // CardNexus — new multi-TCG peer-to-peer marketplace (launched Mar 2026).
+  // Clean 8% flat NA seller commission on order total (items + shipping), NO per-order
+  // fixed fee, NO payment surcharge. 10+ games: MTG, Pokemon, Lorcana, One Piece,
+  // FAB, Sorcery, Riftbound, YGO, and more. Payouts via Stripe Connect.
+  // US PRO seller onboarding opened Aug 2026.
+  //   Sources:
+  //     https://help.cardnexus.com/articles/9938652-fee-structure-overview
+  //     https://help.cardnexus.com/articles/1754380-selling-faq
+  //     https://cardnexus.com/en/blog/cardnexus-marketplace-is-live
+  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', verified: 'Aug 2026',
+    effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
+    workflow: 'list', payoutTime: 'Fast — Stripe Connect payouts',
+    hassle: 'Multi-TCG peer-to-peer marketplace with a flat 8% commission (NA). 10+ games. New in 2026 — audience is smaller than TCGplayer but growing fast.',
+    bestFor: '💵 Best for multi-TCG sellers — flat 8% total, no per-order fees',
+    redFlags: ['🌱 New platform (launched Mar 2026) — smaller audience than TCGplayer / eBay', '📬 You ship the card yourself', '🪪 Identity verification required before first payout (Stripe)'] },
+  // TCG Bulk — buylist aggregator. Sellers browse verified buyers and their current
+  // rates, submit cards to a chosen buyer, ship, and get paid via PayPal after the
+  // buyer confirms receipt. Games: Pokemon, MTG, One Piece, Riftbound, YGO, Lorcana, FAB.
+  // Exact seller fee not publicly published — deducted from PayPal payout on completion.
+  // We estimate 10% aggregator fee as an honest baseline; the tile flags this.
+  //   Sources:
+  //     https://tcgbulk.com/  (workflow + games verified 2026-08-29)
+  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
+    workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
+    hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
+    bestFor: '💵 Best for bulk that needs shopping around — one place to compare buyers',
+    buylistRatio: { cash: 0.50, credit: 0.50 },
+    redFlags: ['💰 Buylist offer varies by buyer (~50% of retail typical)', '💳 Aggregator fee deducted from PayPal payout at completion', '📦 You ship cards to the buyer you pick', '⚠️ Estimated payout — verify live quote before shipping'] }
 };
 
 // TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
@@ -6893,8 +6978,8 @@ const PLATFORMS = {
 // Note: Cardmarket, Card Kingdom, and CoolStuffInc are ALL-TCG (Pokemon, MTG,
 // YGO, Lorcana, One Piece). They render for any TCG scan, hidden for sports.
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
-const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere', 'cardmarket']);
-const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'manapool', 'cardsphere', 'cardmarket', 'cardkingdom', 'coolstuffinc']);
+const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere', 'cardmarket', 'cardnexus']);
+const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'manapool', 'cardsphere', 'cardmarket', 'cardnexus', 'cardkingdom', 'coolstuffinc', 'scg', 'tcgbulk']);
 
 function platformsForTier(tier) {
   if (tier === 'ultimate' || tier === 'pro_max') return PRO_MAX_PLATFORMS;
@@ -7097,6 +7182,16 @@ function feeBuylist(price, ratio) {
   ];
 }
 
+// CardNexus — flat 8% NA seller commission on order total. No per-order fixed
+// fee for the seller (the $0.30 fixed fee is a BUYER-side charge, not seller).
+// No payment surcharge; payouts settle via Stripe Connect.
+//   Source: https://help.cardnexus.com/articles/9938652-fee-structure-overview
+function feeCardNexus(price) {
+  return [
+    { l: 'Seller commission (8%)', a: price * 0.08 }
+  ];
+}
+
 /* ═══ MAIN CALC ═══ */
 function calc() {
   const price = getEffectivePrice();
@@ -7236,6 +7331,42 @@ function calc() {
         : isYugioh
           ? 'Strong Yu-Gi-Oh! buylist rates. Instant offer (~48% cash / ~60% store credit). Estimated — verify live quote.'
           : 'Buylist — instant offer (~48% cash / ~60% store credit). Strong for MTG + YGO. Estimated — verify live quote.'
+    },
+    {
+      pid: 'scg',
+      // Star City Games buylist. All 5 TCGs (MTG + Pokemon + Lorcana + FAB +
+      // Riftbound). Uses cash ratio (0.55) as honest default; store credit
+      // adds +30% (0.72) called out in tile notes.
+      eligible: !isSports,
+      feeItems: feeBuylist(price, PLATFORMS.scg.buylistRatio.cash),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'Star City Games buys TCG singles only, not sports cards.'
+        : isMagic
+          ? 'Biggest US MTG buylist. Sell List (sorted): 0% fee. Ship + Sell (unsorted): 10% fee. ~55% cash / ~72% store credit. Estimated — verify live quote.'
+          : 'Buylist — sorted Sell List has 0% service fee. ~55% cash / ~72% store credit. Estimated — verify live quote.'
+    },
+    {
+      pid: 'cardnexus',
+      // CardNexus — multi-TCG peer-to-peer marketplace, flat 8% NA commission.
+      // Hidden for sports (TCG-only).
+      eligible: !isSports,
+      feeItems: feeCardNexus(price),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'CardNexus is a multi-TCG marketplace, not sports cards.'
+        : 'Multi-TCG marketplace with a flat 8% seller commission (NA). 10+ games. Newer platform — growing audience.'
+    },
+    {
+      pid: 'tcgbulk',
+      // TCG Bulk buylist aggregator. Compare offers from multiple US buyers.
+      // Uses conservative 50% ratio as honest baseline; actual varies by buyer.
+      eligible: !isSports,
+      feeItems: feeBuylist(price, PLATFORMS.tcgbulk.buylistRatio.cash),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'TCG Bulk is a TCG buylist aggregator, not sports cards.'
+        : 'Aggregator — compare offers from multiple verified US buylist buyers. Ship to the buyer you pick, PayPal payout. ~50% typical. Verify live offers.'
     }
   ];
 
