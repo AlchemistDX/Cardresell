@@ -6292,7 +6292,15 @@ async function syncGradeToPrintSelect() {
         const upsellBtn = document.getElementById('gradedUpsellBtn');
         if (upsellBtn) upsellBtn.style.display = window.tplApiKey ? 'none' : 'flex';
       }
-      // Keep printSelect on whatever raw variant it had
+      // 2026-08-29 fix: if the previous sync stashed a stale graded key on
+      // printSelect (e.g. user went PSA 10 -> BGS 10 and BGS has no data),
+      // the tail updatePriceFromPrinting below would keep showing the stale
+      // PSA 10 price. Reset printSelect to the first RAW variant so the
+      // banner text and the priceMain display agree: 'no comp, showing raw'.
+      const rawKey = Object.keys(currentPrices).find(k => !isGradedVariant(k));
+      if (rawKey && printSelect.value !== rawKey) {
+        printSelect.value = rawKey;
+      }
     }
   }
   // Final stale-check guard: don't touch the price display if a newer
@@ -10370,7 +10378,7 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
 
   // Unconfigured / no match / all null — don't waste screen space, fall back.
   const p = pc && pc.prices ? pc.prices : {};
-  const hasAny = ['raw','grade_8','grade_9','psa_10','grade_7','grade_95'].some(k => p[k] != null && p[k] > 0);
+  const hasAny = ['raw','grade_7','grade_8','grade_9','grade_95','psa_10'].some(k => p[k] != null && p[k] > 0);
   if (!pc || pc.source === 'unconfigured' || !hasAny) {
     el.innerHTML =
       `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.35rem">💰 GRADING UPSIDE</div>` +
@@ -10383,100 +10391,151 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
 
   const raw = p.raw || 0;
 
-  // Build the ladder rows we want to show. Always show raw + the three PSA
-  // tiers (8/9/10) so the user sees the full upside curve, not just their
-  // AI-estimated grade.
-  const rows = [
-    { key: 'raw',     label: 'Raw / Ungraded', price: raw,          isGrade: 0  },
-    { key: 'grade_8', label: 'PSA 8',          price: p.grade_8 || 0, isGrade: 8  },
-    { key: 'grade_9', label: 'PSA 9',          price: p.grade_9 || 0, isGrade: 9  },
-    { key: 'psa_10',  label: 'PSA 10',         price: p.psa_10  || 0, isGrade: 10 },
+  // 2026-08-29: Grade ladder is now HORIZONTAL — grades across the top as
+  // scrollable columns instead of a stack of vertical rows. Same 6 buckets
+  // PriceCharting actually publishes (raw + 7 + 8 + 9 + 9.5 + 10 — there is
+  // no data for grades 1-6, they don't publish those). Tapping a column
+  // switches the pricing UI to that grader/grade combo.
+  const grades = [
+    { key: 'raw',      label: 'Raw',    sub: 'Ungraded',    price: raw,             isGrade: 0,   syncKey: 'raw'  },
+    { key: 'grade_7',  label: '7',      sub: 'PSA 7',       price: p.grade_7  || 0, isGrade: 7,   syncKey: 'psa:7'  },
+    { key: 'grade_8',  label: '8',      sub: 'PSA 8',       price: p.grade_8  || 0, isGrade: 8,   syncKey: 'psa:8'  },
+    { key: 'grade_9',  label: '9',      sub: 'PSA 9',       price: p.grade_9  || 0, isGrade: 9,   syncKey: 'psa:9'  },
+    { key: 'grade_95', label: '9.5',    sub: 'BGS 9.5',     price: p.grade_95 || 0, isGrade: 9.5, syncKey: 'bgs:9.5' },
+    { key: 'psa_10',   label: '10',     sub: 'PSA 10',      price: p.psa_10   || 0, isGrade: 10,  syncKey: 'psa:10' },
   ];
 
-  // Compute per-row net upside vs raw sell:
+  // Compute per-column net upside vs raw sell:
   //   raw_net    = raw * (1 - fees)
   //   graded_net = graded * (1 - fees)
   //   upside     = graded_net - raw_net - grading_fee
   const rawNet = raw > 0 ? raw * (1 - FEES_PCT/100) : 0;
-  rows.forEach(r => {
-    if (r.isGrade === 0 || r.price <= 0) {
-      r.upsideNet = 0;
-      r.upsidePct = 0;
+  grades.forEach(g => {
+    if (g.isGrade === 0 || g.price <= 0) {
+      g.upsideNet = 0;
+      g.upsidePct = 0;
       return;
     }
-    const gradedNet = r.price * (1 - FEES_PCT/100);
-    r.upsideNet = gradedNet - rawNet - GRADING_FEE;
-    r.upsidePct = raw > 0 ? (r.upsideNet / raw) * 100 : 0;
+    const gradedNet = g.price * (1 - FEES_PCT/100);
+    g.upsideNet = gradedNet - rawNet - GRADING_FEE;
+    g.upsidePct = raw > 0 ? (g.upsideNet / raw) * 100 : 0;
   });
 
   const fmt$ = n => (n == null || !isFinite(n)) ? '—' : (n < 0 ? '−$' + Math.abs(n).toFixed(0) : '$' + n.toFixed(0));
   const fmtPct = n => (n == null || !isFinite(n)) ? '' : (n >= 0 ? '+' + Math.round(n) + '%' : Math.round(n) + '%');
 
-  const rowHtml = rows.map(r => {
-    const isEst = r.isGrade === psaGradeBucket && r.isGrade !== 0;
-    const priceStr = r.price > 0 ? '$' + r.price.toFixed(r.price < 20 ? 2 : 0) : '—';
+  const colHtml = grades.map(g => {
+    const isEst = g.isGrade === psaGradeBucket && g.isGrade !== 0;
+    const isRaw = g.isGrade === 0;
+    const priceStr = g.price > 0 ? '$' + g.price.toFixed(g.price < 20 ? 2 : 0) : '—';
     let upsideStr = '';
     let upsideCol = 'rgba(255,255,255,.5)';
-    if (r.isGrade === 0) {
-      upsideStr = '<span style="color:rgba(255,255,255,.35);font-size:.62rem">baseline</span>';
-    } else if (r.price <= 0 || raw <= 0) {
-      upsideStr = '<span style="color:rgba(255,255,255,.3);font-size:.62rem">no comp</span>';
-    } else if (r.upsideNet > 5) {
+    if (isRaw) {
+      upsideStr = '<span style="color:rgba(255,255,255,.35);font-size:.55rem;letter-spacing:.04em">baseline</span>';
+    } else if (g.price <= 0 || raw <= 0) {
+      upsideStr = '<span style="color:rgba(255,255,255,.3);font-size:.55rem">no comp</span>';
+    } else if (g.upsideNet > 5) {
       upsideCol = '#4ade80';
-      upsideStr = `<strong style="color:${upsideCol}">${fmt$(r.upsideNet)}</strong> <span style="color:${upsideCol};opacity:.75;font-size:.65rem">(${fmtPct(r.upsidePct)})</span>`;
-    } else if (r.upsideNet > -5) {
+      upsideStr = `<div style="color:${upsideCol};font-weight:700;font-size:.7rem">${fmt$(g.upsideNet)}</div><div style="color:${upsideCol};opacity:.7;font-size:.55rem;letter-spacing:.03em">${fmtPct(g.upsidePct)}</div>`;
+    } else if (g.upsideNet > -5) {
       upsideCol = '#facc15';
-      upsideStr = `<strong style="color:${upsideCol}">${fmt$(r.upsideNet)}</strong> <span style="color:${upsideCol};opacity:.75;font-size:.65rem">(${fmtPct(r.upsidePct)})</span>`;
+      upsideStr = `<div style="color:${upsideCol};font-weight:700;font-size:.7rem">${fmt$(g.upsideNet)}</div><div style="color:${upsideCol};opacity:.7;font-size:.55rem;letter-spacing:.03em">${fmtPct(g.upsidePct)}</div>`;
     } else {
       upsideCol = '#f87171';
-      upsideStr = `<strong style="color:${upsideCol}">${fmt$(r.upsideNet)}</strong> <span style="color:${upsideCol};opacity:.75;font-size:.65rem">(${fmtPct(r.upsidePct)})</span>`;
+      upsideStr = `<div style="color:${upsideCol};font-weight:700;font-size:.7rem">${fmt$(g.upsideNet)}</div><div style="color:${upsideCol};opacity:.7;font-size:.55rem;letter-spacing:.03em">${fmtPct(g.upsidePct)}</div>`;
     }
 
-    const bg     = isEst ? 'rgba(212,175,55,.12)' : 'transparent';
-    const border = isEst ? '1px solid rgba(212,175,55,.4)' : '1px solid transparent';
-    const labelC = isEst ? 'var(--gold)' : 'rgba(255,255,255,.85)';
-    const labelW = isEst ? '800' : '600';
-    const est    = isEst ? ' <span style="font-size:.55rem;font-weight:800;color:var(--gold);letter-spacing:.05em;background:rgba(212,175,55,.18);padding:.1rem .3rem;border-radius:4px;margin-left:.25rem">AI EST</span>' : '';
+    const bg      = isEst ? 'rgba(212,175,55,.14)' : (isRaw ? 'rgba(255,255,255,.03)' : 'rgba(255,255,255,.02)');
+    const border  = isEst ? '1.5px solid rgba(212,175,55,.55)' : '1px solid rgba(255,255,255,.06)';
+    const labelC  = isEst ? 'var(--gold)' : (g.price > 0 ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.45)');
+    const priceC  = isEst ? 'var(--gold)' : (g.price > 0 ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.35)');
+    const badge   = isEst ? `<div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-size:.5rem;font-weight:800;color:#000;background:var(--gold);letter-spacing:.06em;padding:.12rem .3rem;border-radius:4px;white-space:nowrap">AI EST</div>` : '';
+    // Encode syncKey for onclick without breaking quoting.
+    const sk = g.syncKey.replace(/'/g, "\\'");
+    // Only make tappable columns look interactive when they have real data.
+    const clickable = (g.price > 0 || isRaw) ? `onclick="applyGradeFromLadder('${sk}')" style="cursor:pointer;"` : 'style="cursor:default;opacity:.55"';
 
     return (
-      `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.4rem .55rem;background:${bg};border:${border};border-radius:8px;margin-bottom:.2rem">` +
-        `<div style="font-size:.75rem;color:${labelC};font-weight:${labelW}">${r.label}${est}</div>` +
-        `<div style="font-size:.78rem;color:${labelC};font-weight:${labelW};text-align:right;min-width:52px">${priceStr}</div>` +
-        `<div style="text-align:right;min-width:80px">${upsideStr}</div>` +
+      `<div ${clickable}` +
+         ` data-syncgrade="${g.syncKey}"` +
+         ` style="position:relative;min-width:74px;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:.65rem .3rem .55rem;background:${bg};border:${border};border-radius:10px;transition:transform .12s ease,background .15s ease">` +
+        badge +
+        `<div style="font-size:.95rem;font-weight:900;color:${labelC};line-height:1">${g.label}</div>` +
+        `<div style="font-size:.5rem;font-weight:700;color:${labelC};opacity:.65;letter-spacing:.06em;text-transform:uppercase">${g.sub}</div>` +
+        `<div style="width:100%;height:1px;background:rgba(255,255,255,.08);margin:.15rem 0"></div>` +
+        `<div style="font-size:.78rem;font-weight:800;color:${priceC};line-height:1;margin-top:.05rem">${priceStr}</div>` +
+        `<div style="text-align:center;line-height:1.15;margin-top:.15rem;min-height:1.6em">${upsideStr}</div>` +
       `</div>`
     );
   }).join('');
 
   // Pick the best PSA tier for the "headline" pitch — highest upside > 0
-  const bestTier = rows.filter(r => r.isGrade > 0 && r.upsideNet > 5).sort((a,b) => b.upsideNet - a.upsideNet)[0];
+  const bestTier = grades.filter(g => g.isGrade > 0 && g.upsideNet > 5).sort((a,b) => b.upsideNet - a.upsideNet)[0];
   const headline = bestTier
-    ? `📈 Best case: <strong style="color:#4ade80">${bestTier.label} → ${fmt$(bestTier.upsideNet)} net upside</strong> vs raw sell`
+    ? `📈 Best case: <strong style="color:#4ade80">${bestTier.sub} → ${fmt$(bestTier.upsideNet)} net upside</strong> vs raw sell`
     : (raw > 0
         ? `⚠️ Grading may not pencil out at current comps (raw $${raw.toFixed(0)}). Numbers assume $${GRADING_FEE} PSA fee + ${FEES_PCT}% sale fees.`
         : `Missing raw comp — upside ‘$’ assumes raw = PriceCharting median.`);
 
-  // Best service links: for pokemon use PriceCharting product page, for the
-  // AI-est grade also expose "View PSA X price" (existing button, already
-  // there right below). Sports → 130point button already exists elsewhere.
   const pcUrl = pc.url ? pc.url : '';
   const pcLink = pcUrl
     ? `<a href="${pcUrl}" target="_blank" rel="noopener" style="font-size:.7rem;color:#93c5fd;text-decoration:none;font-weight:700">See full price history on PriceCharting →</a>`
     : '';
 
   el.innerHTML =
-    `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem">` +
-      `<span>💰 GRADING UPSIDE</span>` +
-      `<span style="color:rgba(255,255,255,.35);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:.58rem">net after $${GRADING_FEE} PSA fee + ${FEES_PCT}% sale fees</span>` +
+    `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">` +
+      `<span>💰 GRADING UPSIDE — tap a grade</span>` +
+      `<span style="color:rgba(255,255,255,.35);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:.55rem">net after $${GRADING_FEE} fee + ${FEES_PCT}% sale fees</span>` +
     `</div>` +
-    // Column headers
-    `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;padding:0 .55rem .25rem;font-size:.55rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.35)">` +
-      `<div>TIER</div>` +
-      `<div style="text-align:right;min-width:52px">SELL</div>` +
-      `<div style="text-align:right;min-width:80px">NET UPSIDE</div>` +
+    // Horizontal scrollable grade columns
+    `<div style="display:flex;flex-direction:row;gap:.4rem;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:.5rem .1rem .4rem;margin:0 -.15rem;scrollbar-width:thin">` +
+      colHtml +
     `</div>` +
-    rowHtml +
-    `<div style="font-size:.7rem;color:rgba(255,255,255,.75);margin-top:.45rem;line-height:1.45">${headline}</div>` +
+    `<div style="font-size:.7rem;color:rgba(255,255,255,.75);margin-top:.35rem;line-height:1.45">${headline}</div>` +
     (pcLink ? `<div style="margin-top:.3rem">${pcLink}</div>` : '');
+
+  // Stash prices + card metadata so applyGradeFromLadder can update the
+  // pricing UI without re-fetching. Written every render so a re-scan
+  // clobbers stale data.
+  window._lastGradeLadder = { grades: grades, cardData: cardData || null };
+}
+
+// Called when the user taps a grade column in the upside ladder.
+// syncKey format: 'raw' | '<grader>:<grade>' e.g. 'psa:10', 'bgs:9.5'.
+// Applies the tap by activating the matching grader pill + grade select,
+// then triggers the same sync path a manual dropdown change would.
+function applyGradeFromLadder(syncKey) {
+  try {
+    if (!syncKey) return;
+    // Raw / Ungraded — flip the first pill
+    if (syncKey === 'raw') {
+      const rawPill = document.querySelector('#gradedPills .pill[data-val="no"]');
+      if (!rawPill) return;
+      if (typeof setPill === 'function') setPill(rawPill, 'gradedPills');
+      if (typeof toggleGrade === 'function') toggleGrade();
+      if (typeof calc === 'function') calc();
+    } else {
+      const [grader, grade] = syncKey.split(':');
+      const pill = document.querySelector(`#gradedPills .pill[data-val="${grader}"]`);
+      const gradeSel = document.getElementById('gradeSelect');
+      if (!pill || !gradeSel) return;
+      if (typeof setPill === 'function') setPill(pill, 'gradedPills');
+      if (typeof toggleGrade === 'function') toggleGrade();
+      gradeSel.value = grade;
+      if (typeof updateGradeLabel === 'function') updateGradeLabel();
+      if (typeof syncGradeToPrintSelect === 'function') syncGradeToPrintSelect();
+      if (typeof calc === 'function') calc();
+    }
+    // Visual feedback — highlight the tapped column briefly
+    document.querySelectorAll('[data-syncgrade]').forEach(node => {
+      node.style.transform = node.dataset.syncgrade === syncKey ? 'scale(1.04)' : 'scale(1)';
+    });
+    setTimeout(() => {
+      document.querySelectorAll('[data-syncgrade]').forEach(n => { n.style.transform = 'scale(1)'; });
+    }, 180);
+  } catch(e) {
+    console.warn('[grade-ladder] apply failed', e);
+  }
 }
 
 // 2026-08-20: Historically we tried to re-identify via /api/scan on the
