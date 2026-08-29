@@ -44,6 +44,12 @@
 .spb-comc{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}
 [data-theme=dark] .spb-comc{background:#0d1f3c;color:#60a5fa;border-color:#1e3a8a}
 .spb-comc:hover{background:#dbeafe}
+.spb-manapool{background:#f5f3ff;color:#5b21b6;border-color:#c4b5fd}
+[data-theme=dark] .spb-manapool{background:#1e1533;color:#a78bfa;border-color:#4c1d95}
+.spb-manapool:hover{background:#ede9fe}
+.spb-cardsphere{background:#ecfeff;color:#0e7490;border-color:#67e8f9}
+[data-theme=dark] .spb-cardsphere{background:#083344;color:#22d3ee;border-color:#155e75}
+.spb-cardsphere:hover{background:#cffafe}
 
 .sell-divider{height:1px;background:var(--divider);margin:.5rem 0}
 /* ─── SETTINGS PANEL ─── */
@@ -576,6 +582,10 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-rule-line:last-child{margin-bottom:0}
 .plat-flags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem}
 .plat-flag{display:inline-flex;align-items:center;font-size:.6rem;font-weight:700;padding:.18rem .4rem;border-radius:.35rem;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.3);line-height:1.15;letter-spacing:.01em;white-space:nowrap}
+/* "Best for cards $X" pill — positive framing (green) so it reads as
+   "this is the platform's sweet spot" not "warning". Sits above the amber
+   red-flag row and hugs the same layout, distinct color signal. */
+.plat-bestfor{display:inline-flex;align-items:center;font-size:.65rem;font-weight:700;padding:.28rem .55rem;border-radius:.4rem;background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.28);line-height:1.25;letter-spacing:.01em;margin:.4rem .45rem .1rem;max-width:calc(100% - .9rem)}
 .note-warn{font-size:.68rem;color:var(--orange);background:var(--orange-bg);border-radius:var(--radius-sm);padding:.3rem .55rem;margin:.4rem .45rem}
 
 /* bar chart */
@@ -1591,7 +1601,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session) -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock 5 more marketplaces</span> &mdash; Poshmark, Whatnot, Mercari, COMC &amp; Fanatics Collect.<br>
+      <span>&#11088; Unlock 7 more marketplaces</span> &mdash; Poshmark, Whatnot, Mercari, COMC, Fanatics Collect, Mana Pool &amp; Cardsphere (MTG).<br>
       <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
@@ -1822,6 +1832,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
               <div class="sell-link-btns">
                 <a id="slEbaySell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-ebay">🛒 eBay</a>
                 <a id="slTcgpSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-tcgp" style="display:none">🃏 TCGPlayer</a>
+                <a id="slManaPoolSell" href="https://manapool.com/sell" target="_blank" rel="noopener" class="sell-platform-btn spb-manapool" style="display:none">🔮 Mana Pool</a>
+                <a id="slCardsphereSell" href="https://cardsphere.com" target="_blank" rel="noopener" class="sell-platform-btn spb-cardsphere" style="display:none">🎯 Cardsphere</a>
                 <a id="slFanaticsSell" href="https://www.fanaticscollect.com/sell" target="_blank" rel="noopener" class="sell-platform-btn spb-pwcc">💎 Fanatics Collect</a>
                 <a id="slComcSell" href="#" target="_blank" rel="noopener" class="sell-platform-btn spb-comc">📦 COMC</a>
               </div>
@@ -2677,7 +2689,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>2 marketplaces:</strong> eBay + TCGPlayer</li>
           <li>Flip calc + Deal Score</li>
           <li class="faded">Top-up discounts</li>
-          <li class="faded">6 more marketplaces</li>
+          <li class="faded">7 more marketplaces</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -2833,10 +2845,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a> (Yu-Gi-Oh!).
   Platform fees from official sources (2026):
   <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees" target="_blank" rel="noopener">eBay</a> ·
+  <a href="https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees" target="_blank" rel="noopener">TCGplayer</a> ·
   <a href="https://poshmark.com/fee" target="_blank" rel="noopener">Poshmark</a> ·
+  <a href="https://help.whatnot.com/hc/en-us/articles/4847069165965" target="_blank" rel="noopener">Whatnot</a> ·
+  <a href="https://www.mercari.com/us/help_center/article/2518/" target="_blank" rel="noopener">Mercari</a> ·
   <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a> ·
   <a href="https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe" target="_blank" rel="noopener">Fanatics Collect</a> ·
-  <a href="https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe" target="_blank" rel="noopener">Fanatics Collect</a>.<br>
+  <a href="https://support.manapool.com/hc/en-us/articles/21779686206615" target="_blank" rel="noopener">Mana Pool</a> ·
+  <a href="https://cardsphere.com" target="_blank" rel="noopener">Cardsphere</a>.<br>
   Estimates only — verify current rates before listing.
 </footer>
 
@@ -2849,7 +2865,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <div style="text-align:left;font-size:.83rem;line-height:1.65;color:var(--text-muted);margin-bottom:1rem">
       CardResell was built by <strong style="color:var(--text)">Will Jones</strong> in <strong style="color:var(--text)">Bradenton, Florida</strong> to solve a problem every reseller hits — you know your card is worth money but you have no idea which platform actually pays you the most after fees.<br><br>
-      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, and Fanatics Collect — so you never leave money on the table.<br><br>
+      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, Fanatics Collect, plus Mana Pool &amp; Cardsphere for Magic — so you never leave money on the table.<br><br>
       The AI Grading Estimate uses GPT-4o vision to analyze centering, corners, edges, and surface — giving you a realistic grade prediction before you spend money on a PSA submission.
     </div>
 
@@ -6493,6 +6509,12 @@ function updateSellLinks(card) {
       slTcgpSellEl.style.display = 'none';
     }
   }
+  // Show Mana Pool + Cardsphere sell buttons only for MTG cards — both are
+  // Magic-only marketplaces so surfacing them for Pokemon/YGO would be a lie.
+  const slManaPoolSellEl   = document.getElementById('slManaPoolSell');
+  const slCardsphereSellEl = document.getElementById('slCardsphereSell');
+  if (slManaPoolSellEl)   slManaPoolSellEl.style.display   = isMagic ? '' : 'none';
+  if (slCardsphereSellEl) slCardsphereSellEl.style.display = isMagic ? '' : 'none';
 
   // Also keep eBay buy/comps link alive for the graded comps banner.
   // Drop setName here too — sellers rarely spell the set the way our
@@ -6693,11 +6715,13 @@ const PLATFORMS = {
     effort: 'medium', effortLabel: 'Medium · clothing-first, thin card audience',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Fewer card buyers browsing — listings can sit for weeks.',
+    bestFor: '💵 Best for cards under $15 — flat $2.95 fee (jumps to 20% at $15+)',
     redFlags: ['👗 Clothing-first — tiny card audience', '📬 You ship the card yourself', '⏳ Listings often sit for weeks'] },
   comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Jun 2026',
     effort: 'hard',   effortLabel: 'Hard · ship-in service, weeks to list',
     workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
+    bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
     redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale'] },
   fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026',
     // 2026-08-19: user feedback — old label undersold the real friction.
@@ -6707,28 +6731,57 @@ const PLATFORMS = {
     effort: 'hard',   effortLabel: 'Hard · ship-in to Fanatics vault first',
     workflow: 'shipIn', payoutTime: '1–4 weeks after sale settles',
     hassle: 'You mail the card to Fanatics’ vault BEFORE it can list. Sports-heavy audience, weekly auction + Buy Now cycle.',
+    bestFor: '💵 Best for cards $75+ — ship-in overhead not worth it below this',
     redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted'] },
   whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Aug 2026',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
+    bestFor: '💵 Best for cards $5,000+ — 8% commission caps at $1,500 (or any price via live shows)',
     redFlags: ['🎙️ Best results require hosting live shows', '📦 You ship the card yourself', '📉 Slower for solo sellers without an audience'] },
   mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', verified: 'Aug 2026',
     effort: 'medium', effortLabel: 'Medium · cross-category, high volume',
     workflow: 'list', payoutTime: '2–5 days after buyer confirms',
     hassle: 'High-volume general resale. Card buyers exist but ad spend is where TCG-focused platforms win.',
-    redFlags: ['📦 You ship the card yourself', '🔹 Non-TCG audience — slower for high-end singles', '💰 Payout on demand carries a 2% instant transfer fee'] }
+    bestFor: '💵 Best for cards $5–$100 — flat 10% beats most competitors at this range',
+    redFlags: ['📦 You ship the card yourself', '🔹 Non-TCG audience — slower for high-end singles', '💰 Payout on demand carries a 2% instant transfer fee'] },
+  // Mana Pool — MTG-only marketplace. Verified fees from support.manapool.com:
+  //   5% marketplace fee (on merchandise only, NOT shipping)
+  //   + Stripe processing 2.9% + $0.30 per seller/order
+  //   Effective total ~7.9% + $0.30, versus TCGplayer's 12.75%+.
+  //   Sources:
+  //     https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
+  //     https://manapool.com/affiliates (referral program open, 5% first sale)
+  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', verified: 'Aug 2026',
+    effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
+    workflow: 'list', payoutTime: 'Fast payouts (per-order)',
+    hassle: 'MTG-only marketplace with the lowest fees of any listing platform. You ship directly to buyers.',
+    bestFor: '🔮 Best for MTG cards $20+ — ~8% fees, cheapest listing marketplace anywhere',
+    redFlags: ['🔮 Magic: The Gathering only', '📬 You ship the card yourself', '📉 Smaller audience than TCGplayer (but growing fast)'] },
+  // Cardsphere — MTG-only offer-driven marketplace (buyers post wants, sellers fulfill).
+  //   3% seller fee + 10% (or $10, whichever higher) PayPal cashout.
+  //   Sources:
+  //     https://trademagic.gg/compare
+  //     https://www.reddit.com/r/mtgfinance/comments/1kzab2o/
+  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · buyer-offer model, low fees',
+    workflow: 'list', payoutTime: 'Instant credit; 10% fee to cash out to PayPal',
+    hassle: 'Buyers post offers for cards they want; you decide whether to sell at their price. Lowest per-sale fee anywhere but 10% cashout hurts.',
+    bestFor: '💵 Best for MTG cards under $10 — flat ~12.7% beats TCGplayer / eBay on low-price MTG',
+    redFlags: ['🔮 Magic: The Gathering only', '🎯 Offer-driven — you sell into buyer wants, not list', '💰 10% PayPal cashout ($10 min — batch sales to amortize)', '📬 You ship the card yourself'] }
 };
 
 // TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
 //   Free      → easy platforms (eBay, TCGPlayer) — 2
 //   Pro       → + medium (Poshmark, Whatnot, Mercari)     — 5
-//   Pro Max   → + hard (COMC, Fanatics Collect)             — 7 (all)
-//   Ultimate  → all 7 (same platforms; extras are volume/support perks)
+//   Pro Max   → + hard (COMC, Fanatics Collect) + MTG (Mana Pool, Cardsphere)  — 9 (all)
+//   Ultimate  → all 9 (same platforms; extras are volume/support perks)
 // Note: PWCC was retired Jul 15, 2024 and is fully part of Fanatics Collect.
+// Note: Mana Pool + Cardsphere are MTG-only — they'll only render when the
+// active card game is Magic. Eligibility is enforced in the results loop.
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
-const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari']);
-const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics']);
+const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere']);
+const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'manapool', 'cardsphere']);
 
 function platformsForTier(tier) {
   if (tier === 'ultimate' || tier === 'pro_max') return PRO_MAX_PLATFORMS;
@@ -6854,6 +6907,40 @@ function feeMercari(price) {
   ];
 }
 
+// Mana Pool — MTG-only marketplace.
+//   5% marketplace fee on merchandise (NOT shipping)
+//   + Stripe processing 2.9% + $0.30 per seller/order
+// Source: https://support.manapool.com/hc/en-us/articles/21779686206615
+function feeManaPool(price) {
+  const marketplace = price * 0.05;
+  const processing  = price * 0.029 + 0.30;
+  return [
+    { l: 'Marketplace fee (5%)', a: marketplace },
+    { l: 'Payment processing (2.9% + $0.30)', a: processing }
+  ];
+}
+
+// Cardsphere — MTG-only offer-driven marketplace.
+//   3% seller fee per trade
+//   10% (or $10 min) cashout fee to PayPal — amortized across ALL sales
+//   in a batch, so per-card we surface the 10% marginal rate. The $10 min
+//   floor bites only if you cash out very small balances, which savvy
+//   sellers avoid; the red-flag pill on the tile calls this out.
+// Sources: https://trademagic.gg/compare · https://www.reddit.com/r/mtgfinance/comments/1kzab2o/
+function feeCardsphere(price) {
+  const seller    = price * 0.03;
+  const netBefore = price - seller;
+  // Per-card marginal cashout (10%). The $10 floor is a batch-level cost
+  // called out in the tile’s red-flags rather than baked into per-card
+  // fees — otherwise a $5 card looks like -200% take-home which is not
+  // how anyone actually uses the platform.
+  const cashout = netBefore * 0.10;
+  return [
+    { l: 'Seller fee (3%)', a: seller },
+    { l: 'PayPal cashout (10%)', a: cashout }
+  ];
+}
+
 /* ═══ MAIN CALC ═══ */
 function calc() {
   const price = getEffectivePrice();
@@ -6935,6 +7022,28 @@ function calc() {
       feeItems: feeMercari(price),
       sellerShip: shipCost,
       note: 'General resale — lower fees than eBay but smaller card-buyer audience. Best for mid/low tier cards.'
+    },
+    {
+      pid: 'manapool',
+      // MTG-only — hidden entirely for Pokemon/Yu-Gi-Oh!/sports. If you scan
+      // a Magic card, this is the strongest listing marketplace we surface
+      // (lowest fees anywhere for pure list-and-ship).
+      eligible: isMagic,
+      feeItems: feeManaPool(price),
+      sellerShip: shipCost,
+      note: isMagic
+        ? 'MTG-only marketplace with the lowest total fees anywhere (~7.9%). Growing fast, CSV import supported.'
+        : 'Mana Pool is Magic: The Gathering only.'
+    },
+    {
+      pid: 'cardsphere',
+      // MTG-only, buyer-offer model. Best fee at low-end but 10% cashout hurts.
+      eligible: isMagic,
+      feeItems: feeCardsphere(price),
+      sellerShip: shipCost,
+      note: isMagic
+        ? 'MTG offer-driven marketplace — buyers post wants, you decide whether to fulfill. 3% + 10% cashout to PayPal.'
+        : 'Cardsphere is Magic: The Gathering only.'
     }
   ];
 
@@ -7047,6 +7156,9 @@ function calc() {
     };
     const workflowText = info.workflow ? (workflowLabelMap[info.workflow] || '') : '';
     const payoutText   = info.payoutTime ? `💰 Payout: ${esc(info.payoutTime)}` : '';
+    // Positive framing pill — "here's where this platform shines" — rendered
+    // just above the amber red-flag row so users see the sweet spot first.
+    const bestForHtml  = info.bestFor ? `<div class="plat-bestfor">${esc(info.bestFor)}</div>` : '';
     const redFlagsHtml = Array.isArray(info.redFlags) && info.redFlags.length
       ? `<div class="plat-rules">
            ${workflowText ? `<div class="plat-rule-line">${workflowText}</div>` : ''}
@@ -7079,6 +7191,7 @@ function calc() {
         ? `<div class="plat-sub">Profit: <span style="color:${r.grossProfit>=0?'var(--green)':'var(--red)'};font-weight:600">${fmt(r.grossProfit)}</span> · <span style="${r.margin>=0?'color:var(--green)':'color:var(--red)'}">${r.margin.toFixed(1)}%</span></div>`
         : `<div class="plat-sub">After all fees &amp; shipping</div>`}
       ${hassleHtml}
+      ${bestForHtml}
       ${redFlagsHtml}
       ${r.note ? `<div class="note-italic">${r.note}</div>` : ''}
       <div class="fee-block">
@@ -7131,8 +7244,8 @@ function calc() {
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 6 more marketplaces + AI grading — $9.99/mo</button>
-        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro adds Poshmark, Whatnot &amp; Mercari · Pro Max adds COMC &amp; Fanatics Collect (7 total)</div>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock 7 more marketplaces + AI grading — $9.99/mo</button>
+        <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">eBay &amp; TCGPlayer free · Pro adds Poshmark, Whatnot, Mercari + Mana Pool &amp; Cardsphere (MTG) · Pro Max adds COMC &amp; Fanatics Collect (9 total)</div>
       </div>
     </div>`;
     html += `</div>`;
@@ -7171,7 +7284,7 @@ function calc() {
       // For free "Buy" verdicts: show Pro platform nudge
       if (!window._isPro && _verdict === 'Buy') {
         html += `<div style="margin-top:.35rem;padding:.45rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('deal_score_nudge')">
-          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">Pro unlocks 6 more marketplaces — maximize this deal</span>
+          <span style="font-size:.7rem;color:rgba(196,122,0,.9)">Pro unlocks 7 more marketplaces — maximize this deal</span>
           <span style="font-size:.68rem;font-weight:800;color:var(--gold);white-space:nowrap">Upgrade →</span>
         </div>`;
       }
