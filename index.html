@@ -1605,7 +1605,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
        only lands with Pro Max on an MTG card. -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock more marketplaces</span> &mdash; Pro adds Poshmark, Whatnot, Mercari (+ Mana Pool &amp; Cardsphere for MTG). Pro Max adds COMC &amp; Fanatics Collect.<br>
+      <span>&#11088; Unlock 10 more marketplaces</span> &mdash; Pro adds Poshmark, Whatnot, Mercari, Cardmarket (+ Mana Pool &amp; Cardsphere for MTG). Pro Max adds COMC, Fanatics, Card Kingdom &amp; CoolStuffInc.<br>
       <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
@@ -2693,7 +2693,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>2 marketplaces:</strong> eBay + TCGPlayer</li>
           <li>Flip calc + Deal Score</li>
           <li class="faded">Top-up discounts</li>
-          <li class="faded">7 more marketplaces (Pro / Pro Max)</li>
+          <li class="faded">10 more marketplaces (Pro / Pro Max)</li>
         </ul>
         <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
       </div>
@@ -2712,6 +2712,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>10% off</strong> top-up packs</li>
           <li><strong>+3 marketplaces:</strong> Poshmark, Whatnot, Mercari</li>
           <li><strong>+2 MTG marketplaces:</strong> Mana Pool, Cardsphere</li>
+          <li><strong>+1 all-TCG marketplace:</strong> Cardmarket (EU audience)</li>
           <li>Payout bar chart + <strong>unlimited</strong> flips</li>
           <li>Deal Score + Max Buy</li>
           <li>Skip one bad PSA sub → saves a year</li>
@@ -2734,7 +2735,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>100 ID scans/mo</strong></li>
           <li><strong>15% off</strong> top-up packs</li>
           <li><strong>+2 pro marketplaces:</strong> COMC, Fanatics Collect</li>
-          <li><strong>All 9 marketplaces</strong> unlocked</li>
+          <li><strong>+2 buylists:</strong> Card Kingdom, CoolStuffInc (instant offers)</li>
+          <li><strong>All 12 marketplaces</strong> unlocked</li>
           <li>Everything in Pro</li>
           <li>Priority email support</li>
           <li>Early access to new features</li>
@@ -2756,7 +2758,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>100 AI Grades/mo</strong></li>
           <li><strong>300 ID scans/mo</strong></li>
           <li><strong>25% off</strong> top-up packs</li>
-          <li>All 9 marketplaces unlocked</li>
+          <li>All 12 marketplaces unlocked</li>
           <li>Everything in Pro Max</li>
           <li>&#128188; <strong>Bulk Grade tool</strong> <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
           <li>&#9733; Ultimate badge</li>
@@ -2857,7 +2859,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC</a> ·
   <a href="https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe" target="_blank" rel="noopener">Fanatics Collect</a> ·
   <a href="https://support.manapool.com/hc/en-us/articles/21779686206615" target="_blank" rel="noopener">Mana Pool</a> ·
-  <a href="https://cardsphere.com" target="_blank" rel="noopener">Cardsphere</a>.<br>
+  <a href="https://cardsphere.com" target="_blank" rel="noopener">Cardsphere</a> ·
+  <a href="https://www.cardmarket.com/en/Policies/Fees" target="_blank" rel="noopener">Cardmarket</a> ·
+  <a href="https://www.cardkingdom.com/purchasing/how_to_sell" target="_blank" rel="noopener">Card Kingdom</a> ·
+  <a href="https://www.coolstuffinc.com/main_fullservice_selllist.php" target="_blank" rel="noopener">CoolStuffInc</a>.<br>
   Estimates only — verify current rates before listing.
 </footer>
 
@@ -2870,7 +2875,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <div style="text-align:left;font-size:.83rem;line-height:1.65;color:var(--text-muted);margin-bottom:1rem">
       CardResell was built by <strong style="color:var(--text)">Will Jones</strong> in <strong style="color:var(--text)">Bradenton, Florida</strong> to solve a problem every reseller hits — you know your card is worth money but you have no idea which platform actually pays you the most after fees.<br><br>
-      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, Fanatics Collect, plus Mana Pool &amp; Cardsphere for Magic — so you never leave money on the table.<br><br>
+      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, Fanatics Collect, Cardmarket, Card Kingdom &amp; CoolStuffInc buylists, plus Mana Pool &amp; Cardsphere for Magic — so you never leave money on the table.<br><br>
       The AI Grading Estimate uses GPT-4o vision to analyze centering, corners, edges, and surface — giving you a realistic grade prediction before you spend money on a PSA submission.
     </div>
 
@@ -6773,20 +6778,67 @@ const PLATFORMS = {
     workflow: 'list', payoutTime: 'Instant credit; 10% fee to cash out to PayPal',
     hassle: 'Buyers post offers for cards they want; you decide whether to sell at their price. Lowest per-sale fee anywhere but 10% cashout hurts.',
     bestFor: '💵 Best for MTG cards under $10 — flat ~12.7% beats TCGplayer / eBay on low-price MTG',
-    redFlags: ['🔮 Magic: The Gathering only', '🎯 Offer-driven — you sell into buyer wants, not list', '💰 10% PayPal cashout ($10 min — batch sales to amortize)', '📬 You ship the card yourself'] }
+    redFlags: ['🔮 Magic: The Gathering only', '🎯 Offer-driven — you sell into buyer wants, not list', '💰 10% PayPal cashout ($10 min — batch sales to amortize)', '📬 You ship the card yourself'] },
+  // Cardmarket — massive EU listing marketplace, ALL TCGs (Pokemon, MTG, YGO,
+  // Lorcana, One Piece, and more). 5% commission on the article price only,
+  // capped at €100/article. USD sellers pay a 3% currency conversion when
+  // withdrawing to a non-EUR account. The audience is enormous but you’re
+  // competing against European sellers whose baseline prices skew lower;
+  // shipping from US is the real gotcha.
+  //   Sources:
+  //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
+  //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
+  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · EU-focused, all TCGs',
+    workflow: 'list', payoutTime: '3–5 days after buyer confirms',
+    hassle: 'Europe’s biggest TCG marketplace — huge audience but you’re competing against EU sellers with lower baselines. International shipping from US matters.',
+    bestFor: '💵 Best for scarce EU-demand cards — low 5% fee + massive audience',
+    redFlags: ['🌐 EU-based — international shipping from US', '💱 3% currency conversion (USD withdrawals)', '📬 You ship the card yourself', '💬 Some communication in German/French common'] },
+  // Card Kingdom — buylist model, all TCGs. NO fees; instead the buylist offer
+  // itself is 40–65% of retail comp price (they eat margin on resale). The
+  // 30% store credit bonus is huge if you’re also a buyer.
+  //   Sources:
+  //     https://cardkingdom.freshdesk.com/support/solutions/articles/3000093663 (30% store credit bonus)
+  //     https://www.cardkingdom.com/purchasing/how_to_sell
+  //     https://cardrouter.com/buylists/cardkingdom (CSV bulk upload workflow)
+  // Modeled with a buylistRatio field: cash ≈ 50% of retail, credit ≈ 65%.
+  // These are estimates — the tile discloses this clearly and pushes the user
+  // to verify against the live quote before shipping.
+  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · buylist — instant offer, lower payout',
+    workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
+    hassle: 'Buylist model — they quote you a fixed offer, no fees but ~50% of retail for cash (or ~65% for store credit). CSV bulk upload supported.',
+    bestFor: '💵 Best for bulk / instant-cash sales — no listing hassle',
+    buylistRatio: { cash: 0.50, credit: 0.65 },
+    redFlags: ['💰 Buylist offer ~50% of retail (cash) / ~65% (store credit)', '🔄 30% store credit bonus if you’re also a buyer', '📦 You ship cards to them; they inspect on arrival', '⚠️ Estimated payout — verify live quote before shipping'] },
+  // CoolStuffInc — buylist, all TCGs including strong Yu-Gi-Oh! presence.
+  // No seller fees. 25% store credit bonus. Payment 1–2 business days after
+  // approval. Cards under $1 processed at bulk rates.
+  //   Sources:
+  //     https://www.coolstuffinc.com/main_fullservice_selllist.php (verified)
+  //     https://www.reddit.com/r/yugioh/comments/ngtcqa/ (community confirmation of 25% bonus)
+  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', verified: 'Aug 2026',
+    effort: 'medium', effortLabel: 'Medium · buylist — strong for YGO + MTG',
+    workflow: 'buylist', payoutTime: '1–2 business days after approval',
+    hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
+    bestFor: '💵 Best for Yu-Gi-Oh! bulk — strong rates + no fees',
+    buylistRatio: { cash: 0.48, credit: 0.60 },
+    redFlags: ['💰 Buylist offer ~48% of retail (cash) / ~60% (store credit)', '🔄 25% store credit bonus if you’re also a buyer', '📦 You ship cards to them; cards under $1 = bulk rates', '⚠️ Estimated payout — verify live quote before shipping'] }
 };
 
 // TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
-//   Free      → easy platforms (eBay, TCGPlayer) — 2
-//   Pro       → + medium (Poshmark, Whatnot, Mercari)     — 5
-//   Pro Max   → + hard (COMC, Fanatics Collect) + MTG (Mana Pool, Cardsphere)  — 9 (all)
-//   Ultimate  → all 9 (same platforms; extras are volume/support perks)
+//   Free      → easy listing platforms (eBay, TCGPlayer) — 2
+//   Pro       → + medium listing (Poshmark, Whatnot, Mercari, Cardmarket) + MTG (Mana Pool, Cardsphere) — 8
+//   Pro Max   → + hard listing (COMC, Fanatics Collect) + buylists (Card Kingdom, CoolStuffInc) — 12 (all)
+//   Ultimate  → all 12 (same platforms; extras are volume/support perks)
 // Note: PWCC was retired Jul 15, 2024 and is fully part of Fanatics Collect.
 // Note: Mana Pool + Cardsphere are MTG-only — they'll only render when the
 // active card game is Magic. Eligibility is enforced in the results loop.
+// Note: Cardmarket, Card Kingdom, and CoolStuffInc are ALL-TCG (Pokemon, MTG,
+// YGO, Lorcana, One Piece). They render for any TCG scan, hidden for sports.
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
-const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere']);
-const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'manapool', 'cardsphere']);
+const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere', 'cardmarket']);
+const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'manapool', 'cardsphere', 'cardmarket', 'cardkingdom', 'coolstuffinc']);
 
 function platformsForTier(tier) {
   if (tier === 'ultimate' || tier === 'pro_max') return PRO_MAX_PLATFORMS;
@@ -6946,6 +6998,39 @@ function feeCardsphere(price) {
   ];
 }
 
+// Cardmarket — EU listing marketplace. 5% commission on article price only
+// (capped at €100/article ≈ $110). USD sellers pay 3% currency conversion
+// when withdrawing. International shipping from US typically adds $10-15
+// but we don't bake that in — the user's shipCost input handles it.
+//   Source: https://www.cardmarket.com/en/Policies/Fees
+function feeCardmarket(price) {
+  // Cap the commission at ~$110 to match the €100/article ceiling.
+  const rawCommission = price * 0.05;
+  const commission    = Math.min(rawCommission, 110);
+  const currencyConv  = price * 0.03;
+  return [
+    { l: 'Sales commission (5%, cap ~$110)', a: commission },
+    { l: 'Currency conversion (3%)',         a: currencyConv }
+  ];
+}
+
+// Buylist "fee" model — the platform pays a fixed offer that's a fraction of
+// retail comp price. There's no percentage fee to subtract; instead the
+// take-home IS the buylist offer. We surface this as a single "buylist offer
+// haircut" line so the fee-breakdown UI still works, and the tile note tells
+// the user this is an ESTIMATE and to verify the live quote.
+//
+// The `mode` param picks cash vs store credit. Default cash (worst-case);
+// users planning to also buy from the same shop get the boosted credit rate.
+function feeBuylist(price, ratio) {
+  // How much of retail the seller actually pockets
+  const offer   = price * ratio;
+  const haircut = price - offer;
+  return [
+    { l: `Buylist offer (~${Math.round(ratio*100)}% of retail)`, a: haircut }
+  ];
+}
+
 /* ═══ MAIN CALC ═══ */
 function calc() {
   const price = getEffectivePrice();
@@ -7049,6 +7134,42 @@ function calc() {
       note: isMagic
         ? 'MTG offer-driven marketplace — buyers post wants, you decide whether to fulfill. 3% + 10% cashout to PayPal.'
         : 'Cardsphere is Magic: The Gathering only.'
+    },
+    {
+      pid: 'cardmarket',
+      // All-TCG EU listing marketplace. Hidden for sports since it’s TCG-focused.
+      // International shipping cost from US isn’t baked in — relies on user’s
+      // sellerShip. Best for scarce cards with EU demand.
+      eligible: !isSports,
+      feeItems: feeCardmarket(price),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'Cardmarket is TCG-only — not sports cards.'
+        : 'Europe’s biggest TCG marketplace. Great audience for scarce cards; international shipping from US is the tradeoff.'
+    },
+    {
+      pid: 'cardkingdom',
+      // Buylist model — estimated payout. All TCGs, hidden for sports.
+      // We use the cash rate (0.50) as the honest default. If users want
+      // the 30% store credit bonus, they can eyeball buylistRatio.credit
+      // (0.65) themselves — called out in the tile note + red flags.
+      eligible: !isSports,
+      feeItems: feeBuylist(price, PLATFORMS.cardkingdom.buylistRatio.cash),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'Card Kingdom buys TCG singles only, not sports cards.'
+        : 'Buylist — instant offer (~50% of retail cash / ~65% store credit). CSV bulk upload. Estimated payout — verify live quote.'
+    },
+    {
+      pid: 'coolstuffinc',
+      eligible: !isSports,
+      feeItems: feeBuylist(price, PLATFORMS.coolstuffinc.buylistRatio.cash),
+      sellerShip: shipCost,
+      note: isSports
+        ? 'CoolStuffInc buys TCG singles only, not sports cards.'
+        : isYugioh
+          ? 'Strong Yu-Gi-Oh! buylist rates. Instant offer (~48% cash / ~60% store credit). Estimated — verify live quote.'
+          : 'Buylist — instant offer (~48% cash / ~60% store credit). Strong for MTG + YGO. Estimated — verify live quote.'
     }
   ];
 
@@ -7157,7 +7278,8 @@ function calc() {
       list:        '🛠️ Workflow: List &amp; ship yourself',
       shipIn:      '📦 Workflow: Ship-in required (they hold the card)',
       consignment: '🤝 Workflow: Consignment (they auction it for you)',
-      liveAuction: '🎥 Workflow: Live auction / audience required'
+      liveAuction: '🎥 Workflow: Live auction / audience required',
+      buylist:     '💰 Workflow: Buylist — instant offer, no listing'
     };
     const workflowText = info.workflow ? (workflowLabelMap[info.workflow] || '') : '';
     const payoutText   = info.payoutTime ? `💰 Payout: ${esc(info.payoutTime)}` : '';
