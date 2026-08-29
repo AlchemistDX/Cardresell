@@ -6846,18 +6846,28 @@ function platformsForTier(tier) {
   return FREE_PLATFORMS;
 }
 
-// eBay — 2026 fee schedule for Trading Cards category (verified Aug 2026)
-// Standard/Store: 13.25% on portion up to $7,500, then 2.35% above.
-// Basic Store: 12.35%. Top Rated Seller: 10% discount on FVF.
-// The old $150/$1000 sub-tiers were retired — flat rate now applies up to $7,500.
-// Source: https://www.ebay.com/sellercenter/resources/seller-updates/2025-january/final-value-fee
+// eBay Trading Cards fees — verified Aug 2026 from ebay.com/help/selling and
+// multiple 2026 secondary sources including pages.ebay.com/promo/2025/tc-singles/:
+//
+//   No Store / Starter Store: 13.25% up to $7,500, then 2.35% above.
+//   Basic Store and above:    12.35% up to $2,500, then 2.35% above.
+//
+// The threshold for the drop to 2.35% is DIFFERENT by store tier ($7,500 vs
+// $2,500). This function models both accurately.
+//
+// Per-order fee: $0.30 for orders ≤ $10 total, $0.40 above.
+// Top Rated Seller (TRS) discount: 10% off the FVF only (not per-order).
 function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   const total = price + shipCharge;
   const items = [];
-  const baseRate = ebayStore === 'basic' ? 0.1235 : 0.1325;
+  // Basic Store and above uses 12.35% with $2,500 tier boundary.
+  // No store / Starter uses 13.25% with $7,500 boundary.
+  const isBasicPlus = ebayStore === 'basic';
+  const baseRate    = isBasicPlus ? 0.1235 : 0.1325;
+  const tierBoundary = isBasicPlus ? 2500 : 7500;
   let fvf = 0;
-  if (total <= 7500) fvf = total * baseRate;
-  else               fvf = 7500 * baseRate + (total - 7500) * 0.0235;
+  if (total <= tierBoundary) fvf = total * baseRate;
+  else                       fvf = tierBoundary * baseRate + (total - tierBoundary) * 0.0235;
   if (ebayTopRated === 'yes') fvf *= 0.9;
   const rateLabel = (baseRate * 100).toFixed(2).replace(/\.?0+$/,'');
   items.push({ l: `Final Value Fee (${rateLabel}% trading cards)`, a: fvf });

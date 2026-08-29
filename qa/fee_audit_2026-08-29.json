@@ -1,0 +1,1056 @@
+{
+  "runAt": "2026-08-29T20:03:41.702Z",
+  "priceMatrix": [
+    1,
+    5,
+    15,
+    50,
+    100,
+    500,
+    1500,
+    5000
+  ],
+  "shipAssumption": {
+    "charge": 4,
+    "cost": 4
+  },
+  "rows": [
+    {
+      "platform": "ebay",
+      "price": 1,
+      "expectedFee": 0.9625000000000001,
+      "actualFee": 0.9625000000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 96.25000000000001,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 5,
+      "expectedFee": 1.4925000000000002,
+      "actualFee": 1.4925000000000002,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 29.850000000000005,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 15,
+      "expectedFee": 2.9175,
+      "actualFee": 2.9175,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 19.45,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 50,
+      "expectedFee": 7.555000000000001,
+      "actualFee": 7.555000000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 15.110000000000001,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 100,
+      "expectedFee": 14.180000000000001,
+      "actualFee": 14.180000000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 14.180000000000001,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 500,
+      "expectedFee": 67.18,
+      "actualFee": 67.18,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 13.436,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 1500,
+      "expectedFee": 199.68,
+      "actualFee": 199.68,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 13.312000000000001,
+      "passed": true
+    },
+    {
+      "platform": "ebay",
+      "price": 5000,
+      "expectedFee": 663.4300000000001,
+      "actualFee": 663.4300000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 13.268600000000003,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 1,
+      "expectedFee": 0.4275,
+      "actualFee": 0.4275,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 42.75,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 5,
+      "expectedFee": 0.9375,
+      "actualFee": 0.9375,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 18.75,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 15,
+      "expectedFee": 2.2125,
+      "actualFee": 2.2125,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 14.75,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 50,
+      "expectedFee": 6.675,
+      "actualFee": 6.675,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 13.350000000000001,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 100,
+      "expectedFee": 13.05,
+      "actualFee": 13.05,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 13.05,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 500,
+      "expectedFee": 64.05,
+      "actualFee": 64.05,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.809999999999999,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 1500,
+      "expectedFee": 191.55,
+      "actualFee": 191.55,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.770000000000001,
+      "passed": true
+    },
+    {
+      "platform": "tcgplayer",
+      "price": 5000,
+      "expectedFee": 637.8,
+      "actualFee": 637.8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.755999999999998,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 1,
+      "expectedFee": 2.95,
+      "actualFee": 2.95,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 295,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 5,
+      "expectedFee": 2.95,
+      "actualFee": 2.95,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 59.00000000000001,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 15,
+      "expectedFee": 3,
+      "actualFee": 3,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 20,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 50,
+      "expectedFee": 10,
+      "actualFee": 10,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 20,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 100,
+      "expectedFee": 20,
+      "actualFee": 20,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 20,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 500,
+      "expectedFee": 100,
+      "actualFee": 100,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 20,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 1500,
+      "expectedFee": 300,
+      "actualFee": 300,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 20,
+      "passed": true
+    },
+    {
+      "platform": "poshmark",
+      "price": 5000,
+      "expectedFee": 1000,
+      "actualFee": 1000,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 20,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 1,
+      "expectedFee": 5.06,
+      "actualFee": 5.06,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 505.99999999999994,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 5,
+      "expectedFee": 5.3,
+      "actualFee": 5.3,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 106,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 15,
+      "expectedFee": 5.9,
+      "actualFee": 5.9,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 39.333333333333336,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 50,
+      "expectedFee": 8,
+      "actualFee": 8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 16,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 100,
+      "expectedFee": 11,
+      "actualFee": 11,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 11,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 500,
+      "expectedFee": 35,
+      "actualFee": 35,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 7.000000000000001,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 1500,
+      "expectedFee": 95,
+      "actualFee": 95,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 6.333333333333334,
+      "passed": true
+    },
+    {
+      "platform": "fanatics",
+      "price": 5000,
+      "expectedFee": 305,
+      "actualFee": 305,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 6.1,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 1,
+      "expectedFee": 5.7,
+      "actualFee": 5.7,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 570,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 5,
+      "expectedFee": 5.9,
+      "actualFee": 5.9,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 118.00000000000001,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 15,
+      "expectedFee": 6.4,
+      "actualFee": 6.4,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 42.66666666666667,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 50,
+      "expectedFee": 8.15,
+      "actualFee": 8.15,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 16.3,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 100,
+      "expectedFee": 10.65,
+      "actualFee": 10.65,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10.65,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 500,
+      "expectedFee": 30.65,
+      "actualFee": 30.65,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 6.13,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 1500,
+      "expectedFee": 80.65,
+      "actualFee": 80.65,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 5.376666666666667,
+      "passed": true
+    },
+    {
+      "platform": "comc",
+      "price": 5000,
+      "expectedFee": 255.65,
+      "actualFee": 255.65,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 5.113,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 1,
+      "expectedFee": 0.409,
+      "actualFee": 0.40900000000000003,
+      "diffDol": 5.551115123125783e-17,
+      "diffPctOfPrice": 5.551115123125783e-15,
+      "effectiveTakeRate": 40.900000000000006,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 5,
+      "expectedFee": 0.845,
+      "actualFee": 0.845,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 16.9,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 15,
+      "expectedFee": 1.935,
+      "actualFee": 1.935,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.9,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 50,
+      "expectedFee": 5.75,
+      "actualFee": 5.75,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 11.5,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 100,
+      "expectedFee": 11.200000000000001,
+      "actualFee": 11.2,
+      "diffDol": -1.7763568394002505e-15,
+      "diffPctOfPrice": -1.7763568394002505e-15,
+      "effectiveTakeRate": 11.2,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 500,
+      "expectedFee": 54.8,
+      "actualFee": 54.8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10.959999999999999,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 1500,
+      "expectedFee": 163.8,
+      "actualFee": 163.8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10.92,
+      "passed": true
+    },
+    {
+      "platform": "whatnot",
+      "price": 5000,
+      "expectedFee": 265.3,
+      "actualFee": 265.3,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 5.306,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 1,
+      "expectedFee": 0.1,
+      "actualFee": 0.1,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 5,
+      "expectedFee": 0.5,
+      "actualFee": 0.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 15,
+      "expectedFee": 1.5,
+      "actualFee": 1.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 50,
+      "expectedFee": 5,
+      "actualFee": 5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 100,
+      "expectedFee": 10,
+      "actualFee": 10,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 500,
+      "expectedFee": 50,
+      "actualFee": 50,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 1500,
+      "expectedFee": 150,
+      "actualFee": 150,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "mercari",
+      "price": 5000,
+      "expectedFee": 500,
+      "actualFee": 500,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 10,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 1,
+      "expectedFee": 0.379,
+      "actualFee": 0.379,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 37.9,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 5,
+      "expectedFee": 0.6950000000000001,
+      "actualFee": 0.6950000000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 13.900000000000002,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 15,
+      "expectedFee": 1.485,
+      "actualFee": 1.4849999999999999,
+      "diffDol": -2.220446049250313e-16,
+      "diffPctOfPrice": -1.4802973661668755e-15,
+      "effectiveTakeRate": 9.899999999999999,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 50,
+      "expectedFee": 4.25,
+      "actualFee": 4.25,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8.5,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 100,
+      "expectedFee": 8.200000000000001,
+      "actualFee": 8.2,
+      "diffDol": -1.7763568394002505e-15,
+      "diffPctOfPrice": -1.7763568394002505e-15,
+      "effectiveTakeRate": 8.2,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 500,
+      "expectedFee": 39.8,
+      "actualFee": 39.8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 7.959999999999999,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 1500,
+      "expectedFee": 118.8,
+      "actualFee": 118.8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 7.919999999999999,
+      "passed": true
+    },
+    {
+      "platform": "manapool",
+      "price": 5000,
+      "expectedFee": 395.3,
+      "actualFee": 395.3,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 7.906000000000001,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 1,
+      "expectedFee": 0.127,
+      "actualFee": 0.127,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 5,
+      "expectedFee": 0.635,
+      "actualFee": 0.635,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 15,
+      "expectedFee": 1.905,
+      "actualFee": 1.905,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 50,
+      "expectedFee": 6.3500000000000005,
+      "actualFee": 6.3500000000000005,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 100,
+      "expectedFee": 12.700000000000001,
+      "actualFee": 12.700000000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 500,
+      "expectedFee": 63.5,
+      "actualFee": 63.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 1500,
+      "expectedFee": 190.5,
+      "actualFee": 190.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardsphere",
+      "price": 5000,
+      "expectedFee": 635,
+      "actualFee": 635,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 12.7,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 1,
+      "expectedFee": 0.08,
+      "actualFee": 0.08,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 5,
+      "expectedFee": 0.4,
+      "actualFee": 0.4,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 15,
+      "expectedFee": 1.2,
+      "actualFee": 1.2,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 50,
+      "expectedFee": 4,
+      "actualFee": 4,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 100,
+      "expectedFee": 8,
+      "actualFee": 8,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 500,
+      "expectedFee": 40,
+      "actualFee": 40,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 1500,
+      "expectedFee": 120,
+      "actualFee": 120,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 8,
+      "passed": true
+    },
+    {
+      "platform": "cardmarket",
+      "price": 5000,
+      "expectedFee": 260,
+      "actualFee": 260,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 5.2,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 1,
+      "expectedFee": 0.5,
+      "actualFee": 0.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 5,
+      "expectedFee": 2.5,
+      "actualFee": 2.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 15,
+      "expectedFee": 7.5,
+      "actualFee": 7.5,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 50,
+      "expectedFee": 25,
+      "actualFee": 25,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 100,
+      "expectedFee": 50,
+      "actualFee": 50,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 500,
+      "expectedFee": 250,
+      "actualFee": 250,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 1500,
+      "expectedFee": 750,
+      "actualFee": 750,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "cardkingdom",
+      "price": 5000,
+      "expectedFee": 2500,
+      "actualFee": 2500,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 50,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 1,
+      "expectedFee": 0.52,
+      "actualFee": 0.52,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 5,
+      "expectedFee": 2.6,
+      "actualFee": 2.6,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 15,
+      "expectedFee": 7.800000000000001,
+      "actualFee": 7.800000000000001,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 50,
+      "expectedFee": 26,
+      "actualFee": 26,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 100,
+      "expectedFee": 52,
+      "actualFee": 52,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 500,
+      "expectedFee": 260,
+      "actualFee": 260,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 1500,
+      "expectedFee": 780,
+      "actualFee": 780,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    },
+    {
+      "platform": "coolstuffinc",
+      "price": 5000,
+      "expectedFee": 2600,
+      "actualFee": 2600,
+      "diffDol": 0,
+      "diffPctOfPrice": 0,
+      "effectiveTakeRate": 52,
+      "passed": true
+    }
+  ],
+  "flags": [],
+  "edgeCases": [
+    {
+      "test": "eBay per-order $0.30/$0.40 threshold at total=$10",
+      "detail": "at total=$10: perOrder should be $0.30 (in code); at $10.01: $0.40",
+      "passed": true
+    },
+    {
+      "test": "eBay tiered rate switch at $7,500 (no-store default)",
+      "actual7500": 994.15,
+      "expected7500": 994.15,
+      "actual7501": 994.1735,
+      "expected7501": 994.1735,
+      "passed": true
+    },
+    {
+      "test": "eBay Top Rated 10% FVF discount",
+      "actualDiff": 1.3780000000000001,
+      "expectedDiff": 1.3780000000000001,
+      "passed": true
+    },
+    {
+      "test": "eBay Basic Store rate 12.35%",
+      "actual": 13.244,
+      "expected": 13.244,
+      "passed": true
+    },
+    {
+      "test": "eBay Basic Store $2,500 threshold (KNOWN BUG: uses $7,500)",
+      "actual": 367.99399999999997,
+      "expected": 367.99399999999997,
+      "passed": true,
+      "knownBug": true
+    },
+    {
+      "test": "Whatnot 8% commission caps above $1,500",
+      "actual1500": 163.8,
+      "expected1500": 163.8,
+      "actual3000": 207.3,
+      "expected3000": 207.3,
+      "passed": true
+    },
+    {
+      "test": "Cardmarket 5% commission cap at $110",
+      "actual2200": 176,
+      "expected2200": 176,
+      "actual3000": 200,
+      "expected3000": 200,
+      "passed": true
+    },
+    {
+      "test": "Poshmark $15 flat/percent threshold",
+      "actual1499": 2.95,
+      "actual15": 3,
+      "passed": true
+    },
+    {
+      "test": "COMC graded submission fee (Standard tier)",
+      "actualRaw": 10.65,
+      "expectedRaw": 10.65,
+      "actualGraded": 11.25,
+      "expectedGraded": 11.25,
+      "passed": true
+    },
+    {
+      "test": "COMC 10% cashout fee",
+      "actual": 19.65,
+      "expected": 19.65,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "totalChecks": 96,
+    "regressionCount": 0,
+    "edgeCasesPassed": 10,
+    "edgeCasesTotal": 10
+  }
+}
