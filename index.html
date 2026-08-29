@@ -532,6 +532,62 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .plat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.875rem}
 @media(max-width:600px){.plat-grid{grid-template-columns:1fr}}
 
+/* 2026-08-29: Section grouping for 12-tile marketplace grid.
+   Splits results into 3 semantic sections — List & ship yourself, Ship-in / consignment,
+   Instant buylists — so users compare apples-to-apples instead of ranking a
+   flat 52% buylist next to a 13% listing marketplace. */
+.plat-section{margin-top:1rem}
+.plat-section:first-of-type{margin-top:0}
+.plat-section-hdr{display:flex;align-items:center;gap:.5rem;padding:0 .1rem .55rem;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);border-bottom:1px dashed var(--border);margin-bottom:.75rem}
+.plat-section-hdr .sec-count{margin-left:auto;font-size:.62rem;color:var(--text-faint);letter-spacing:.02em;text-transform:none;font-weight:600}
+.plat-section-hdr .sec-icon{font-size:.85rem;line-height:1}
+
+/* Compact-mode toggle — hides the fee-block, hassle, bestFor, and redFlag details.
+   Default: compact on mobile (≤600px), detailed on desktop.
+   Users can override via the toggle button. */
+.density-row{display:flex;align-items:center;gap:.5rem;padding:.15rem .1rem .5rem;font-size:.68rem;color:var(--text-muted);flex-wrap:wrap}
+.density-row .dens-label{letter-spacing:.05em;text-transform:uppercase;font-weight:700}
+.density-btns{display:inline-flex;gap:.25rem;background:var(--surface);border:1px solid var(--border);border-radius:.4rem;padding:.15rem}
+.density-btn{background:transparent;border:none;color:var(--text-muted);font-size:.65rem;font-weight:700;padding:.28rem .55rem;border-radius:.3rem;cursor:pointer;letter-spacing:.02em}
+.density-btn.active{background:var(--gold);color:#111}
+.density-btn:hover:not(.active){color:var(--text-primary)}
+
+/* Compact-mode: hide details but keep header + payout + effort + tap-to-expand */
+.plat-grid.compact .plat-hassle,
+.plat-grid.compact .plat-bestfor,
+.plat-grid.compact .plat-rules,
+.plat-grid.compact .fee-block,
+.plat-grid.compact .note-italic{display:none}
+.plat-grid.compact .plat-card{padding:.75rem .85rem}
+.plat-grid.compact .plat-hdr{margin-bottom:.5rem}
+.plat-grid.compact .plat-effort{margin-bottom:.35rem}
+.plat-grid.compact .plat-payout{margin-bottom:.15rem}
+.plat-grid.compact .plat-sub{margin-bottom:0}
+.plat-grid.compact .plat-details-toggle{display:flex}
+.plat-grid:not(.compact) .plat-details-toggle{display:none}
+
+/* Tap-to-expand caret in compact mode — taps toggle a .expanded class that
+   overrides the display:none rules above for that specific card. */
+.plat-details-toggle{display:none;align-items:center;gap:.3rem;background:transparent;border:none;color:var(--text-muted);font-size:.62rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:.35rem 0 0;cursor:pointer;width:100%;justify-content:center}
+.plat-details-toggle .caret{transition:transform var(--ease);display:inline-block}
+.plat-grid.compact .plat-card.expanded .plat-hassle,
+.plat-grid.compact .plat-card.expanded .plat-bestfor,
+.plat-grid.compact .plat-card.expanded .plat-rules,
+.plat-grid.compact .plat-card.expanded .fee-block,
+.plat-grid.compact .plat-card.expanded .note-italic{display:block}
+.plat-grid.compact .plat-card.expanded .plat-flags{display:flex}
+.plat-grid.compact .plat-card.expanded .plat-details-toggle .caret{transform:rotate(180deg)}
+
+/* Extended rank badges: 6th–12th get a muted style so users can tell them
+   apart without shouting. Only ranks 1st–5th keep the gold badge. */
+.badge-rank-muted{background:rgba(255,255,255,.05);color:var(--text-faint);border:1px solid var(--border);font-size:.55rem;font-weight:600;padding:.15rem .4rem;border-radius:.35rem;text-transform:none;letter-spacing:.02em}
+
+/* Bad-value visual state — tiles where effective take-rate exceeds 30%.
+   Subtle red-tinged left accent + reduced saturation on the payout number. */
+.plat-card.bad-value{opacity:.85}
+.plat-card.bad-value .plat-accent{background:linear-gradient(180deg,var(--red) 0%,rgba(248,113,113,.3) 100%) !important;width:4px}
+.plat-card.bad-value .plat-payout{color:#f87171}
+
 .plat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.15rem;position:relative;overflow:hidden;transition:border-color var(--ease),box-shadow var(--ease),transform var(--ease);display:block;text-decoration:none;color:inherit;cursor:default}
 a.plat-card{cursor:pointer}
 a.plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
@@ -7237,7 +7293,20 @@ function calc() {
       </div>
     </div>`;
   }
-  html += `<div class="plat-grid">`;
+  // 2026-08-29: Density toggle (compact vs detailed). Persisted in localStorage.
+  // Default compact on mobile (≤600px), detailed on desktop, so 12 tiles are
+  // scannable on phones without hiding value on wide screens.
+  const _isMobile = window.matchMedia && window.matchMedia('(max-width:600px)').matches;
+  const _densityStored = (function(){ try { return localStorage.getItem('cr_density'); } catch(_) { return null; } })();
+  const density = _densityStored || (_isMobile ? 'compact' : 'detailed');
+  window._crDensity = density;
+  html += `<div class="density-row">
+    <span class="dens-label">View:</span>
+    <div class="density-btns">
+      <button class="density-btn ${density==='detailed'?'active':''}" onclick="setDensity('detailed')">Detailed</button>
+      <button class="density-btn ${density==='compact'?'active':''}" onclick="setDensity('compact')">Compact</button>
+    </div>
+  </div>`;
 
   // Free users see eBay only. Pro unlocks Poshmark, Whatnot, Mercari.
   // Pro Max + Ultimate add COMC and Fanatics Collect (7 total).
@@ -7245,7 +7314,27 @@ function calc() {
   const _displayTierPlatforms = platformsForTier(window._userTier || (window._isPro ? 'pro' : 'free'));
   const displaySorted = sorted.filter(r => _displayTierPlatforms.has(r.pid));
 
-  displaySorted.forEach(r => {
+  // 2026-08-29: Partition tiles into 3 workflow sections so buylists
+  // (flat 45-52% haircut, instant offer) don't rank next to listings
+  // (10-14% + wait for a buyer). Cardsphere is routed to the buylist
+  // section — its "instant credit / 10% cashout" model is buylist-like
+  // even though its `workflow` field is 'list'.
+  const SECTION_OVERRIDES = { cardsphere: 'buylist' };
+  const sectionOf = (pid) => SECTION_OVERRIDES[pid] || PLATFORMS[pid].workflow || 'list';
+  const sectionDefs = [
+    { key: 'list',    label: 'List & ship yourself',       icon: '🛠️',
+      sub: 'Photograph, list, and mail the card yourself' },
+    { key: 'shipIn',  label: 'Ship-in / consignment',      icon: '📦',
+      sub: 'Send cards to their warehouse; they list or auction' },
+    { key: 'buylist', label: 'Instant buylists',            icon: '💰',
+      sub: 'Get an instant cash offer — no listing, no waiting' }
+  ];
+
+  // Compute display rank across ALL eligible tiles (not per-section) so 1st is
+  // the true overall winner. Then render sections independently.
+  const _eligibleDisplay = displaySorted.filter(r => r.eligible);
+
+  const renderTile = (r) => {
     const info   = PLATFORMS[r.pid];
     const isWin  = r.eligible && winner && r.pid === winner.pid;
     const isWrst = r.eligible && worst  && r.pid === worst.pid && eligible.length > 1;
@@ -7255,11 +7344,25 @@ function calc() {
     else if (isWin)  badgeHtml = `<span class="badge-best">Best</span>`;
     else if (isWrst) badgeHtml = `<span class="badge-worst">Lowest</span>`;
     else {
-      const rank = ['1st','2nd','3rd','4th','5th'][eligible.indexOf(r)];
-      if (rank) badgeHtml = `<span class="badge-rank">${rank}</span>`;
+      // 2026-08-29: Extend rank badges past 5th so all 12 tiles show their place.
+      // Ranks 1-5 keep the gold badge; 6-12 use a muted grey badge.
+      const rankIdx = eligible.indexOf(r);
+      const rankMap = ['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th'];
+      const rank = rankMap[rankIdx];
+      if (rank) {
+        const rankCls = rankIdx < 5 ? 'badge-rank' : 'badge-rank-muted';
+        badgeHtml = `<span class="${rankCls}">${rank}</span>`;
+      }
     }
 
-    const cls = ['plat-card', isWin ? 'best' : '', isWrst ? 'worst' : '', !r.eligible ? 'worst' : ''].filter(Boolean).join(' ');
+    // 2026-08-29: Bad-value visual state — effective take-rate > 30% of price.
+    // Applies to buylists on low-value cards (Card Kingdom 50% flat on a $10 card)
+    // and to listings where flat per-order fees dominate a cheap sale (eBay on $1).
+    // Skips the winner tile so "Best" always looks best even if take is high.
+    const _effTake = r.eligible && price > 0 ? (r.totalFees + (r.sellerShip||0)) / price * 100 : 0;
+    const isBadValue = r.eligible && !isWin && _effTake > 30;
+
+    const cls = ['plat-card', isWin ? 'best' : '', isWrst ? 'worst' : '', !r.eligible ? 'worst' : '', isBadValue ? 'bad-value' : ''].filter(Boolean).join(' ');
 
     // Build platform-specific sell URL (used to make card clickable)
     const sellUrl = window._platSellUrls ? (window._platSellUrls[r.pid] || '') : '';
@@ -7337,7 +7440,29 @@ function calc() {
         <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
         ${info.verified ? `<div style="font-size:.6rem;color:rgba(255,255,255,.28);margin-top:.35rem;text-align:right">✓ Fees verified ${info.verified}</div>` : ''}
       </div>
+      <button class="plat-details-toggle" type="button" onclick="event.preventDefault();event.stopPropagation();this.closest('.plat-card').classList.toggle('expanded');">
+        <span class="toggle-text">Details</span>
+        <span class="caret">▾</span>
+      </button>
     </${cardTag}>`;
+  };
+
+  // Emit each section as its own .plat-grid with a section header above it.
+  // Empty sections are omitted so users don't see "Ship-in / consignment (0)"
+  // when their tier doesn't include those platforms.
+  sectionDefs.forEach(secDef => {
+    const secTiles = displaySorted.filter(r => sectionOf(r.pid) === secDef.key);
+    if (!secTiles.length) return;
+    const eligibleCount = secTiles.filter(r => r.eligible).length;
+    html += `<div class="plat-section">
+      <div class="plat-section-hdr">
+        <span class="sec-icon">${secDef.icon}</span>
+        <span>${secDef.label}</span>
+        <span class="sec-count">${eligibleCount} available</span>
+      </div>
+      <div class="plat-grid ${density === 'compact' ? 'compact' : ''}">`;
+    secTiles.forEach(renderTile);
+    html += `</div></div>`;
   });
 
   // Pro gate — Pro-only platforms blurred to entice upgrade
@@ -7472,7 +7597,6 @@ function calc() {
     resultsArea.innerHTML = html;
     return;
   }
-  html += `</div>`;
 
   // ── Deal Score (Pro path) ─────────────────────────────────────────
   if (itemCost > 0 && winner) {
@@ -7549,6 +7673,23 @@ function setSort(m) {
   } else {
     // Just update the button active state visually
     document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(m === 'payout' ? 'payout' : '%')));
+  }
+}
+
+// 2026-08-29: Density toggle (compact vs detailed marketplace tiles).
+// Persists to localStorage so the user's preference survives reloads.
+function setDensity(mode) {
+  if (mode !== 'compact' && mode !== 'detailed') return;
+  try { localStorage.setItem('cr_density', mode); } catch(_) {}
+  window._crDensity = mode;
+  // Toggle grid class directly to avoid full recalc — also update button states.
+  document.querySelectorAll('.plat-grid').forEach(g => g.classList.toggle('compact', mode === 'compact'));
+  document.querySelectorAll('.density-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent.trim().toLowerCase() === mode);
+  });
+  // When switching to compact, collapse any previously expanded cards.
+  if (mode === 'compact') {
+    document.querySelectorAll('.plat-card.expanded').forEach(c => c.classList.remove('expanded'));
   }
 }
 
