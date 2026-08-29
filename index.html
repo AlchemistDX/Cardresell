@@ -8609,6 +8609,24 @@ function clearCollection() {
     // Re-render the Collection view so counts reset immediately.
     try { if (typeof renderCollectionView === 'function') renderCollectionView(); } catch(e) {}
     try { if (typeof renderFlipTable === 'function') renderFlipTable(); } catch(e) {}
+    // Push the empty state to the server IMMEDIATELY (no debounce). Prior
+    // versions only removed local keys, so on reload _pullUserData() unioned
+    // the still-cloud-persisted rows back into local storage and the cleared
+    // cards reappeared. Bypass _scheduleUserDataSync's 1.5s debounce and any
+    // in-flight sync flag so this write is authoritative.
+    (async () => {
+      try {
+        if (!window.googleUser || !window._googleIdToken) return;
+        await fetch('/api/user-data', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + window._googleIdToken,
+          },
+          body: JSON.stringify({ portfolio: [], flips: [], clientUpdatedAt: Date.now() }),
+        });
+      } catch(e) { /* offline / network issue — next save attempt will retry */ }
+    })();
     showToast('Collection cleared — ' + totalRows + ' entr' + (totalRows === 1 ? 'y' : 'ies') + ' removed.', 'success');
   } catch(e) {
     console.error('[clearCollection] failed:', e);
