@@ -13663,7 +13663,7 @@ function _launchQuickGrade() {
   window._gradeEdges = {}; // no edges for quick
   const overlay = document.getElementById('gradeTierOverlay');
   if (overlay) overlay.classList.remove('open');
-  document.getElementById('gradeFileInput').click();
+  _startGradeFrontCapture();
 }
 
 function _launchDeepGrade() {
@@ -13671,7 +13671,68 @@ function _launchDeepGrade() {
   window._gradeEdges = {}; // reset edge collection
   const overlay = document.getElementById('gradeTierOverlay');
   if (overlay) overlay.classList.remove('open');
-  document.getElementById('gradeFileInput').click();
+  _startGradeFrontCapture();
+}
+
+// 2026-08-30: Route Quick / Deep Grade front photo through the live camera
+// overlay so users see the same dashed-frame guide + live QA hints (dark,
+// bright, blur, glare, out-of-frame) as Rapid Scan. If getUserMedia fails
+// or the user cancels, fall through to the native camera picker so no
+// hardware combo is left without a path.
+function _startGradeFrontCapture() {
+  openLiveCameraCapture({
+    label: 'Front photo',
+    sublabel: window._gradeIsDeep ? 'Deep Grade \u2014 Step 1 of 3+' : 'Quick Grade \u2014 Step 1 of 2',
+    onCapture: (file) => {
+      // Feed the captured File straight into the existing pipeline so all
+      // downstream logic (compress \u2192 stash \u2192 prompt for back photo) works unchanged.
+      processGradeImage({ files: [file] });
+    },
+    onCancel: (reason) => {
+      // On permission-denied or unsupported, silently fall back to the native
+      // <input capture=environment> flow. On explicit user cancel, do nothing
+      // \u2014 they backed out on purpose.
+      if (reason === 'permission-denied' || reason === 'unsupported') {
+        document.getElementById('gradeFileInput').click();
+      }
+    }
+  });
+}
+
+// 2026-08-30: Same treatment for the BACK photo prompt \u2014 replaces the inline
+// button's document.getElementById('gradeBackFileInput').click() with a live
+// camera capture. Called from the "Take Back Photo" button in processGradeImage.
+function _startGradeBackCapture() {
+  openLiveCameraCapture({
+    label: 'Back photo',
+    sublabel: window._gradeIsDeep ? 'Deep Grade \u2014 Step 2 of 3+' : 'Quick Grade \u2014 Step 2 of 2',
+    onCapture: (file) => { processGradeBack({ files: [file] }); },
+    onCancel: (reason) => {
+      if (reason === 'permission-denied' || reason === 'unsupported') {
+        document.getElementById('gradeBackFileInput').click();
+      }
+    }
+  });
+}
+
+// 2026-08-30: Deep Grade edge capture \u2014 four possible edges (top/bottom/left/right).
+// Each edge button in showDeepGradeEdgeUI() calls this with its edgeKey. On success
+// we route the File into the existing processGradeEdge(input, edgeKey) which stashes
+// it in window._gradeEdges and re-renders the edge UI.
+function _startGradeEdgeCapture(edgeKey) {
+  const nice = { top: 'Top edge', bottom: 'Bottom edge', left: 'Left edge', right: 'Right edge' }[edgeKey] || 'Edge';
+  openLiveCameraCapture({
+    label: nice,
+    sublabel: 'Deep Grade \u2014 edge close-up',
+    onCapture: (file) => { processGradeEdge({ files: [file], value: '' }, edgeKey); },
+    onCancel: (reason) => {
+      if (reason === 'permission-denied' || reason === 'unsupported') {
+        const inputId = 'gradeEdge' + edgeKey.charAt(0).toUpperCase() + edgeKey.slice(1) + 'Input';
+        const el = document.getElementById(inputId);
+        if (el) el.click();
+      }
+    }
+  });
 }
 
 // Public entry points from the tier picker.
@@ -13761,7 +13822,7 @@ async function processGradeImage(input) {
 
   const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 1 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 1 of 2)</span>';
   statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span>' + stepLabel + '<br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 take the BACK photo</span>';
-  resultEl.innerHTML = '<button onclick="document.getElementById(\'gradeBackFileInput\').click()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
+  resultEl.innerHTML = '<button onclick="_startGradeBackCapture()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
 }
 
 // Step 2: Back photo captured
@@ -13814,7 +13875,7 @@ function showDeepGradeEdgeUI() {
     const bord = done ? '1px solid rgba(74,222,128,.5)' : '1px solid rgba(255,255,255,.15)';
     const check = done ? '<span style="color:#4ade80;font-weight:900">\u2713 </span>' : '';
     const doneLabel = done ? ' <span style="font-size:.65rem;color:#4ade80">CAPTURED — tap to retake</span>' : '';
-    return '<button onclick="document.getElementById(\'gradeEdge' + key + 'Input\').click()" ' +
+    return '<button onclick="_startGradeEdgeCapture(\'' + key.toLowerCase() + '\')" ' +
       'style="padding:.65rem .7rem;background:' + bg + ';color:#fff;border:' + bord + ';border-radius:10px;font-size:.8rem;text-align:left;cursor:pointer;width:100%;line-height:1.35">' +
       check + emoji + ' <strong>' + label + '</strong>' + doneLabel +
       '<br><span style="font-size:.66rem;color:rgba(255,255,255,.5);font-weight:500">' + tip + '</span>' +
@@ -17331,6 +17392,256 @@ function openBulkModePicker() {
 function closeBulkModePicker() {
   const ov = document.getElementById('bulkModePickerOverlay');
   if (ov) ov.style.display = 'none';
+}
+
+/* ── Reusable Live Camera Capture ────────────────────────────────
+   openLiveCameraCapture({ label, sublabel, onCapture, onCancel })
+
+   One-shot live camera overlay for grade flows. Shows a viewfinder with
+   the same dashed card guide + live QA hints as Rapid Scan, but instead
+   of queueing multiple photos, it takes ONE, hands it to onCapture(file),
+   and closes.
+
+     label     — big slot label at top ("Front photo", "Right edge", etc.)
+     sublabel  — optional smaller hint under it
+     onCapture — required. Called with the captured File
+     onCancel  — optional. Called if the user backs out.
+
+   Uses the same _bulkRapidQATick analyzer (imported by DOM id reuse: we
+   swap the video/frame/pill element ids for the shared ones by mounting
+   into a distinct overlay but pointing the analyzer at the same DOM ids).
+
+   Falls back to onCancel + native camera picker if getUserMedia fails.
+   ==================================================================== */
+window._liveCapState = { active: false, stream: null, onCapture: null, onCancel: null };
+
+async function openLiveCameraCapture(opts) {
+  const { label = 'Take photo', sublabel = '', onCapture, onCancel } = opts || {};
+  if (!onCapture) { console.warn('[live-cap] onCapture required'); return; }
+
+  // Native fallback if the browser has no getUserMedia at all
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (onCancel) onCancel('unsupported');
+    return;
+  }
+
+  // Build overlay DOM lazily on first use
+  let ov = document.getElementById('liveCapOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'liveCapOverlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:#000;z-index:320;flex-direction:column;overflow:hidden';
+    ov.innerHTML =
+      '<video id="liveCapVideo" playsinline autoplay muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>' +
+      '<canvas id="liveCapCanvas" style="display:none"></canvas>' +
+      '<div style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">' +
+        '<div id="liveCapFrame" style="width:min(72vw,320px);aspect-ratio:2.5/3.5;border:2.5px dashed rgba(196,122,0,.85);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);transition:border-color .18s,box-shadow .18s"></div>' +
+      '</div>' +
+      '<div id="liveCapQABar" style="position:absolute;bottom:120px;left:0;right:0;display:none;justify-content:center;padding:0 1rem;pointer-events:none">' +
+        '<div id="liveCapQAPill" style="padding:.5rem .85rem;background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.15);border-radius:99px;color:#fff;font-size:.72rem;font-weight:700;line-height:1.3;display:flex;align-items:center;gap:.4rem;box-shadow:0 4px 18px rgba(0,0,0,.45);max-width:88vw"><span id="liveCapQAIcon">\uD83D\uDCA1</span><span id="liveCapQAText">Looking good</span></div>' +
+      '</div>' +
+      '<div style="position:absolute;top:0;left:0;right:0;padding:.75rem 1rem 1rem;display:flex;justify-content:space-between;align-items:flex-start;background:linear-gradient(to bottom,rgba(0,0,0,.8),transparent);pointer-events:auto">' +
+        '<button id="liveCapCancelBtn" style="padding:.4rem .75rem;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer">\u2715 Cancel</button>' +
+        '<div style="text-align:right;color:#fff">' +
+          '<div id="liveCapLabel" style="font-size:.95rem;font-weight:800;text-shadow:0 1px 4px rgba(0,0,0,.6)">Take photo</div>' +
+          '<div id="liveCapSub" style="font-size:.7rem;color:rgba(255,255,255,.75);margin-top:.1rem"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="position:absolute;bottom:0;left:0;right:0;padding:1rem 1.25rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:.75rem;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);pointer-events:auto">' +
+        '<button id="liveCapShutter" aria-label="Capture" style="width:78px;height:78px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform=\'scale(.92)\'" ontouchend="this.style.transform=\'scale(1)\'"></button>' +
+      '</div>' +
+      '<div id="liveCapFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>';
+    document.body.appendChild(ov);
+    // Wire buttons once
+    document.getElementById('liveCapCancelBtn').addEventListener('click', _liveCapCancel);
+    document.getElementById('liveCapShutter').addEventListener('click', _liveCapSnap);
+  }
+
+  window._liveCapState = { active: true, stream: null, onCapture, onCancel };
+  document.getElementById('liveCapLabel').textContent = label;
+  document.getElementById('liveCapSub').textContent   = sublabel || '';
+  ov.style.display = 'flex';
+
+  const video = document.getElementById('liveCapVideo');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+      audio: false
+    });
+    window._liveCapState.stream = stream;
+    video.srcObject = stream;
+    await video.play().catch(()=>{});
+    _liveCapStartQA();
+  } catch(err) {
+    console.warn('[live-cap] getUserMedia failed', err);
+    _liveCapTeardown();
+    if (onCancel) onCancel('permission-denied');
+  }
+}
+
+function _liveCapCancel() {
+  const s = window._liveCapState;
+  _liveCapTeardown();
+  if (s && s.onCancel) s.onCancel('user-cancel');
+}
+
+function _liveCapTeardown() {
+  _liveCapStopQA();
+  const s = window._liveCapState;
+  if (s && s.stream) { try { s.stream.getTracks().forEach(t => t.stop()); } catch(_){} }
+  const ov = document.getElementById('liveCapOverlay');
+  if (ov) ov.style.display = 'none';
+  window._liveCapState = { active: false, stream: null, onCapture: null, onCancel: null };
+}
+
+function _liveCapSnap() {
+  const video  = document.getElementById('liveCapVideo');
+  const canvas = document.getElementById('liveCapCanvas');
+  if (!video || !video.videoWidth) { showToast('Camera still loading\u2026'); return; }
+  const flash = document.getElementById('liveCapFlash');
+  if (flash) { flash.style.opacity = '.85'; setTimeout(() => { flash.style.opacity = '0'; }, 120); }
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(blob => {
+    if (!blob) { showToast('Capture failed \u2014 try again'); return; }
+    const file = new File([blob], 'livecap_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+    const cb = window._liveCapState && window._liveCapState.onCapture;
+    _liveCapTeardown();
+    if (cb) cb(file);
+  }, 'image/jpeg', 0.92);
+}
+
+/* ── Live QA analyzer for live-capture overlay ───────────────────────────
+   Mirrors _bulkRapidQATick but points at liveCap* DOM ids. Same thresholds
+   so users see identical hints across Rapid Scan and Grade capture.
+   ==================================================================== */
+window._liveCapQATimer  = null;
+window._liveCapQACanvas = null;
+window._liveCapQAState  = null;
+window._liveCapQAStreak = 0;
+window._liveCapQACand   = null;
+
+function _liveCapStopQA() {
+  if (window._liveCapQATimer) { clearInterval(window._liveCapQATimer); window._liveCapQATimer = null; }
+  window._liveCapQAState  = null;
+  window._liveCapQAStreak = 0;
+  window._liveCapQACand   = null;
+  _liveCapRenderQA(null);
+}
+
+function _liveCapStartQA() {
+  _liveCapStopQA();
+  if (!window._liveCapQACanvas) {
+    const c = document.createElement('canvas');
+    c.width = 96; c.height = 134;
+    window._liveCapQACanvas = c;
+  }
+  window._liveCapQATimer = setInterval(_liveCapQATick, 250);
+}
+
+function _liveCapQATick() {
+  const video = document.getElementById('liveCapVideo');
+  if (!video || !video.videoWidth) return;
+  const ov = document.getElementById('liveCapOverlay');
+  if (!ov || ov.style.display === 'none') { _liveCapStopQA(); return; }
+
+  const c = window._liveCapQACanvas;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const cw = c.width, ch = c.height;
+  const vAspect = vw/vh, cAspect = cw/ch;
+  let sx, sy, sw, sh;
+  if (vAspect > cAspect) { sh = vh; sw = vh * cAspect; sx = (vw - sw)/2; sy = 0; }
+  else                   { sw = vw; sh = vw / cAspect; sx = 0;           sy = (vh - sh)/2; }
+  try { ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch); } catch(_) { return; }
+
+  let data;
+  try { data = ctx.getImageData(0, 0, cw, ch).data; } catch(_) { return; }
+
+  const N = cw * ch;
+  let sumLuma = 0, hotCount = 0;
+  const luma = new Float32Array(N);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const r = data[i], g = data[i+1], b = data[i+2];
+    const y = 0.299*r + 0.587*g + 0.114*b;
+    luma[p] = y; sumLuma += y;
+    if (y > 245) {
+      const maxC = Math.max(r,g,b), minC = Math.min(r,g,b);
+      if (maxC - minC < 22) hotCount++;
+    }
+  }
+  const meanLuma = sumLuma / N;
+
+  let borderSum = 0, borderN = 0, centerSum = 0, centerN = 0;
+  const bx0 = Math.round(cw*0.10), bx1 = Math.round(cw*0.90);
+  const by0 = Math.round(ch*0.10), by1 = Math.round(ch*0.90);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const v = luma[y*cw + x];
+    if (x < bx0 || x > bx1 || y < by0 || y > by1) { borderSum += v; borderN++; }
+    else                                          { centerSum += v; centerN++; }
+  }
+  const borderMean = borderSum / Math.max(1, borderN);
+  const centerMean = centerSum / Math.max(1, centerN);
+
+  let lapSum = 0, lapSqSum = 0, lapN = 0;
+  for (let y = by0+1; y < by1-1; y++) for (let x = bx0+1; x < bx1-1; x++) {
+    const i = y*cw + x;
+    const lap = -4*luma[i] + luma[i-1] + luma[i+1] + luma[i-cw] + luma[i+cw];
+    lapSum += lap; lapSqSum += lap*lap; lapN++;
+  }
+  const lapMean = lapSum / Math.max(1, lapN);
+  const lapVar  = (lapSqSum / Math.max(1, lapN)) - lapMean*lapMean;
+
+  let hint = null;
+  if (centerMean > 8 && borderMean > centerMean * 0.88) {
+    hint = { id: 'frame',  icon: '\uD83C\uDFAF', text: 'Card not in the frame' };
+  } else if (meanLuma < 42) {
+    hint = { id: 'dark',   icon: '\uD83C\uDF19', text: 'Too dark \u2014 more light please' };
+  } else if (meanLuma > 218) {
+    hint = { id: 'bright', icon: '\u2600\uFE0F', text: 'Too bright \u2014 ease off the light' };
+  } else if (hotCount > N * 0.012) {
+    hint = { id: 'glare',  icon: '\u2728', text: 'Glare on the card \u2014 tilt slightly' };
+  } else if (lapVar < 55) {
+    hint = { id: 'blur',   icon: '\uD83D\uDCA8', text: 'Blurry \u2014 hold steady' };
+  }
+
+  const candId = hint ? hint.id : null;
+  if (candId === window._liveCapQACand) { window._liveCapQAStreak++; }
+  else { window._liveCapQACand = candId; window._liveCapQAStreak = 1; }
+  if (window._liveCapQAStreak >= 2 && window._liveCapQAState !== candId) {
+    window._liveCapQAState = candId;
+    _liveCapRenderQA(hint);
+  }
+}
+
+function _liveCapRenderQA(hint) {
+  const bar   = document.getElementById('liveCapQABar');
+  const icon  = document.getElementById('liveCapQAIcon');
+  const text  = document.getElementById('liveCapQAText');
+  const pill  = document.getElementById('liveCapQAPill');
+  const frame = document.getElementById('liveCapFrame');
+  if (!bar) return;
+  if (!hint) {
+    bar.style.display = 'none';
+    if (frame) {
+      frame.style.borderColor = 'rgba(74,222,128,.85)';
+      frame.style.boxShadow   = '0 0 0 9999px rgba(0,0,0,.35), 0 0 22px rgba(74,222,128,.35)';
+    }
+    return;
+  }
+  if (icon) icon.textContent = hint.icon;
+  if (text) text.textContent = hint.text;
+  bar.style.display = 'flex';
+  if (pill) {
+    pill.style.background  = 'rgba(196,122,0,.92)';
+    pill.style.borderColor = 'rgba(255,224,120,.55)';
+    pill.style.color       = '#111';
+  }
+  if (frame) {
+    frame.style.borderColor = 'rgba(255,196,80,.9)';
+    frame.style.boxShadow   = '0 0 0 9999px rgba(0,0,0,.35)';
+  }
 }
 
 // Public entry point used by the sub-row buttons under the search bar.
