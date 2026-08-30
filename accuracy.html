@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accuracy · CardResell</title>
+<meta name="description" content="How CardResell calculates net payout, verifies marketplace fees, sanity-checks graded prices, and estimates raw-card grades. Our methodology, our data sources, our known limits.">
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#71717a;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--green:#4ade80;--red:#f87171;--radius-md:8px;--radius-xl:14px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;font-size:15px}
+a{color:var(--gold);text-decoration:none}
+a:hover{text-decoration:underline}
+header.site{position:sticky;top:0;background:rgba(10,10,11,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;z-index:10}
+header.site .brand{font-weight:800;letter-spacing:-.02em;font-size:1.05rem;color:var(--text)}
+header.site .brand span{color:var(--gold)}
+header.site nav a{margin-left:1rem;color:var(--text-muted);font-size:.85rem;font-weight:600}
+header.site nav a:hover{color:var(--text);text-decoration:none}
+main{max-width:820px;margin:0 auto;padding:2rem 1.25rem 3rem}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:0 0 .35rem}
+.updated{color:var(--text-faint);font-size:.78rem;margin-bottom:1.75rem;display:block}
+h2{font-size:1.2rem;font-weight:800;letter-spacing:-.01em;margin:2.4rem 0 .5rem;color:var(--text);scroll-margin-top:5rem}
+h3{font-size:.98rem;font-weight:700;margin:1.4rem 0 .35rem;color:var(--text)}
+p,ul,ol{color:var(--text-muted);margin:.55rem 0}
+li{margin:.25rem 0}
+strong{color:var(--text)}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.85em;background:var(--surface-2);padding:.05em .35em;border-radius:4px;color:var(--text)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 1.5rem;margin-top:1rem}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin:1rem 0}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1rem}
+.stat-num{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:1.35rem;font-weight:600;color:var(--gold);letter-spacing:-.02em}
+.stat-lab{font-size:.72rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-top:.2rem}
+.methodology-box{background:var(--surface);border-left:3px solid var(--gold);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:.9rem 0}
+.methodology-box p:first-child{margin-top:0}
+.methodology-box p:last-child{margin-bottom:0}
+table.fee-table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.85rem}
+table.fee-table th,table.fee-table td{border-bottom:1px solid var(--border);padding:.55rem .5rem;text-align:left}
+table.fee-table th{color:var(--text-faint);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em}
+table.fee-table td{color:var(--text-muted)}
+table.fee-table td:first-child{color:var(--text);font-weight:600}
+.pill-verified{display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;color:var(--green);background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.28);border-radius:99px;padding:.1rem .5rem;white-space:nowrap}
+.limits{background:rgba(248,113,113,.05);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:.9rem 0}
+.limits strong{color:var(--red)}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:1.25rem 0;font-size:.88rem}
+.toc-title{font-size:.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:.5rem}
+.toc a{display:inline-block;color:var(--text-muted);margin-right:1rem;padding:.15rem 0;font-weight:600}
+.toc a:hover{color:var(--gold)}
+footer.site{border-top:1px solid var(--border);padding:1rem;text-align:center;font-size:.75rem;color:var(--text-faint)}
+footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
+</style>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="/">Card<span>Resell</span></a>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/about.html">About</a>
+    <a href="/contact.html">Contact</a>
+  </nav>
+</header>
+<main>
+
+<h1>Accuracy &amp; Methodology</h1>
+<span class="updated">Last updated · Aug 30, 2026 · We audit this page every release cycle</span>
+
+<p>CardResell exists so card sellers can pick the venue that actually pays them the most. That only works if you can trust the numbers. This page publishes exactly how we calculate them, where the source data comes from, and what we know we get wrong.</p>
+
+<div class="toc">
+  <div class="toc-title">On this page</div>
+  <a href="#prices">Live pricing</a>
+  <a href="#graded">Graded price sanity checks</a>
+  <a href="#fees">Marketplace fees</a>
+  <a href="#grading">Estimated grade scans</a>
+  <a href="#coverage">Card database coverage</a>
+  <a href="#limits">Known limits</a>
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><div class="stat-num">20,506</div><div class="stat-lab">Pokémon cards indexed</div></div>
+  <div class="stat"><div class="stat-num">171</div><div class="stat-lab">Sets covered</div></div>
+  <div class="stat"><div class="stat-num">15</div><div class="stat-lab">Sell venues compared</div></div>
+  <div class="stat"><div class="stat-num">Weekly</div><div class="stat-lab">Auto-index refresh</div></div>
+</div>
+
+<h2 id="prices">Live pricing</h2>
+<p>When you look up a card, we fetch its live market price from up to three sources in parallel and merge them into a single price ladder per printing (Normal, Holofoil, Reverse Holo, Unlimited, 1st Edition, etc.).</p>
+<ul>
+  <li><strong>TCGplayer Market Price</strong> — pulled via the official TCGplayer / TCGcsv feed on every card load. This is the primary price for ungraded Pokémon, MTG, Yu-Gi-Oh!, Lorcana, and One Piece singles.</li>
+  <li><strong>eBay sold comps</strong> — recent completed sales for the same card + printing, used to sanity-check TCGplayer and to power the sports-card path (eBay is the only real comp source for sports).</li>
+  <li><strong>PriceCharting</strong> — used for graded values (PSA, BGS, CGC, SGC, TAG) and as a graded-tier backstop when TCGplayer's graded slot is empty. See <a href="#graded">Graded price sanity checks</a> below.</li>
+</ul>
+
+<div class="methodology-box">
+  <p><strong>High-price clamp.</strong> Every venue's Net Payout is calculated against a clamped "High" price, not the raw High that some data feeds return. If a feed's raw High is more than 4× the current Market Price on the same card, we clamp it back to <code>max(4 × Market, 1.5 × Low)</code>. This is why you'll sometimes see the raw High shown crossed out on a card — it's the correct behavior. Real Charizard ex #234 examples went from a $2,533 raw High down to an $866 clamped High.</p>
+  <p>The clamp fires on every read path (fresh fetch, cached, printing-switch, grade-switch) so the same card can't show two different Highs depending on how you got to it.</p>
+</div>
+
+<h2 id="graded">Graded price sanity checks</h2>
+<p>Graded values (PSA 10, PSA 9, BGS 10, etc.) are harder than raw prices because different data sources use different sample sizes and different clean rules. Our current policy:</p>
+<ol>
+  <li><strong>PriceCharting wins over TCGplayer</strong> for graded slots. PriceCharting samples eBay sold comps directly and its numbers matched hand-audited reality more often (e.g. Mew GG10 PSA 10 was $557.50 on PriceCharting vs. $120 on TCGplayer's stale graded slot).</li>
+  <li><strong>3-attempt retry with 12s timeout</strong> against PriceCharting, plus a 60s error cache so a bad response never spams the API.</li>
+  <li><strong>Grade-switch race protection</strong> — a <code>_syncGen</code> generation guard prevents stale grade-change results from overwriting a newer one when you rapid-flip between PSA 10 → PSA 9 → BGS 10.</li>
+  <li><strong>Reverse Holo / Holofoil dropdown stays pruned</strong> when you switch grades — no dead options bleeding across printings.</li>
+</ol>
+
+<h2 id="fees">Marketplace fees</h2>
+<p>We track the exact fee schedule for every venue in the payout ranking and re-verify it on the cadence below. Every fee row on a card's Net Payout tile carries a <span class="pill-verified">• Verified &lt;month&gt;</span> pill that links here. If a fee has changed and we haven't caught it yet, <a href="/contact.html">tell us</a>.</p>
+<table class="fee-table">
+  <thead><tr><th>Venue</th><th>Fee model</th><th>Last verified</th><th>Source</th></tr></thead>
+  <tbody>
+    <tr><td>eBay</td><td>13.25% FVF + $0.30/order + shipping FVF + store discount</td><td>Jun 2026</td><td><a href="https://www.ebay.com/help/selling/fees-credits-invoices/store-selling-fees?id=4809" target="_blank" rel="noopener">eBay seller hub</a></td></tr>
+    <tr><td>TCGplayer</td><td>10.25% commission + 2.5% payment fee (marketplace baseline)</td><td>Jun 2026</td><td><a href="https://help.tcgplayer.com/hc/en-us/articles/220561508" target="_blank" rel="noopener">TCGplayer help</a></td></tr>
+    <tr><td>COMC</td><td>Per-card intake + 5% transaction + optional 10% cashout</td><td>Jun 2026</td><td><a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC blog</a></td></tr>
+    <tr><td>Fanatics Collect</td><td>Buy Now: 8% seller · Auction: 0% seller + 20% buyer premium</td><td>Jun 2026</td><td><a href="https://help.fanaticscollect.com/" target="_blank" rel="noopener">Fanatics help</a></td></tr>
+    <tr><td>Whatnot</td><td>8% commission (capped at $1,500) + 2.9% + $0.30 processing</td><td>Aug 2026</td><td><a href="https://help.whatnot.com/hc/en-us" target="_blank" rel="noopener">Whatnot help</a></td></tr>
+    <tr><td>Mercari</td><td>10% marketplace + 2.9% + $0.50 processing</td><td>Aug 2026</td><td><a href="https://www.mercari.com/help_center/" target="_blank" rel="noopener">Mercari help</a></td></tr>
+    <tr><td>Poshmark</td><td>$2.95 flat under $15 · 20% at $15+</td><td>Jun 2026</td><td><a href="https://blog.poshmark.com/faq" target="_blank" rel="noopener">Poshmark FAQ</a></td></tr>
+    <tr><td>Mana Pool</td><td>5% marketplace + Stripe 2.9% + $0.30 (MTG only)</td><td>Aug 2026</td><td><a href="https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees" target="_blank" rel="noopener">Mana Pool support</a></td></tr>
+    <tr><td>Cardsphere</td><td>3% seller fee + 10% ($10 min) PayPal cashout (MTG only)</td><td>Aug 2026</td><td><a href="https://cardsphere.com/pages/help" target="_blank" rel="noopener">Cardsphere help</a></td></tr>
+    <tr><td>Cardmarket</td><td>5% commission (capped €100/article) + FX cost for USD sellers</td><td>Aug 2026</td><td><a href="https://help.cardmarket.com/en/CommissionFees" target="_blank" rel="noopener">Cardmarket help</a></td></tr>
+    <tr><td>Card Kingdom (buylist)</td><td>~50% cash / ~65% store credit ratio</td><td>Aug 2026</td><td><a href="https://www.cardkingdom.com/help/buylist" target="_blank" rel="noopener">Card Kingdom buylist</a></td></tr>
+    <tr><td>CoolStuffInc (buylist)</td><td>~48% cash / ~60% store credit ratio</td><td>Aug 2026</td><td><a href="https://www.coolstuffinc.com/main_buylist.php" target="_blank" rel="noopener">CoolStuffInc buylist</a></td></tr>
+    <tr><td>Star City Games (buylist)</td><td>~55% cash / ~72% store credit · Sell List 0% fee · Ship+Sell 10%</td><td>Aug 2026</td><td><a href="https://sellyourcards.starcitygames.com/" target="_blank" rel="noopener">SCG buylist</a></td></tr>
+    <tr><td>CardNexus</td><td>Flat 8% seller commission (NA)</td><td>Aug 2026</td><td><a href="https://www.cardnexus.com/help" target="_blank" rel="noopener">CardNexus help</a></td></tr>
+    <tr><td>TCG Bulk (aggregator)</td><td>Compares multiple US buylist buyers · ~50% typical</td><td>Aug 2026</td><td><a href="https://tcgbulk.com/" target="_blank" rel="noopener">TCG Bulk</a></td></tr>
+  </tbody>
+</table>
+
+<h2 id="grading">Estimated grade scans</h2>
+<p>Our AI grading estimate is a <strong>screening tool</strong>, not a PSA replacement. It scores four sub-grades — Centering, Corners, Edges, Surface — and outputs an overall estimate on the PSA 1–10 scale. Two rules keep it honest:</p>
+<ul>
+  <li><strong>The AI only sees what your camera shows it.</strong> A bad photo tanks the score. The <a href="/photo-tips/">photo-tips overlay</a> walks you through capture rules before every grade scan.</li>
+  <li><strong>We don't claim "within N points of PSA."</strong> We haven't published a validation set yet. The roadmap is a 100-card gold-set audit (paired PSA slabs + our estimate) — when that ships, the results land on this page with the raw comparison, not marketing copy.</li>
+</ul>
+<p>Use grade scans to decide whether it's worth paying $25+ to submit a card. Don't use them to price a slab you don't own yet.</p>
+
+<h2 id="coverage">Card database coverage</h2>
+<p>The offline card index covers every Pokémon TCG set from Base Set (1999) through the latest release, refreshed weekly by an automated seeder. Non-Pokémon TCGs (MTG, Yu-Gi-Oh!, Lorcana, One Piece) are looked up live and don't require pre-seeding. Sports cards are keyed off eBay sold-comp search — accuracy scales with how specific the player + year + set query is.</p>
+<p>Known upstream gaps:</p>
+<ul>
+  <li>4 older McDonald's Pokémon promo sets have broken image URLs at the upstream image CDN. Prices work; images 404.</li>
+  <li>Alpha Black Lotus and a handful of reserved-list MTG cards have no TCGplayer market row — we fall back to eBay comps or return an honest "no comp data".</li>
+  <li>One Piece Luffy Leader mapping in the tcgcsv resolver is being tuned; one specific printing may resolve slowly.</li>
+</ul>
+
+<h2 id="limits">Known limits</h2>
+<div class="limits">
+  <ul>
+    <li><strong>Buylist quotes are estimated, not live.</strong> Card Kingdom, CoolStuffInc, Star City Games, and TCG Bulk offer real quotes only after you build a cart on their site. Our ratios are honest averages; verify the exact number before shipping cards.</li>
+    <li><strong>Cashout timing is not baked into net payout.</strong> COMC 2–6 wk intake, Fanatics vault dwell, Cardsphere 10% PayPal cashout — these are surfaced as red flags on each tile but they don't reduce the dollar number.</li>
+    <li><strong>Sports-card sold comps depend on eBay availability.</strong> If eBay's Marketplace Insights API rate-limits us (403s from Vercel IPs happen), we fall back to sparser data. We flag this in the UI when it happens.</li>
+    <li><strong>Cardmarket international shipping</strong> from a US seller is not modeled — you have to add that to your "Your shipping cost" field yourself.</li>
+    <li><strong>eBay Top Rated seller discounts</strong> are user-input, not detected. If you toggle it on and you're not actually Top Rated, the number's wrong.</li>
+  </ul>
+</div>
+
+<p style="margin-top:2rem;font-size:.82rem;color:var(--text-faint)">If you spot a fee that's out of date or a price that doesn't match a real sold listing, <a href="/contact.html">email us</a> — we log every report and audit the flagged venue within a week.</p>
+
+</main>
+<footer class="site">
+  <a href="/">Home</a> · <a href="/about.html">About</a> · <a href="/contact.html">Contact</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+</footer>
+</body>
+</html>

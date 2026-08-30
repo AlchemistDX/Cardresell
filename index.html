@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CardResell — Find Your Card's Value &amp; Best Platform to Sell</title>
-  <meta name="description" content="Search any Pokémon, Magic, Yu-Gi-Oh!, sports, or TCG card, get live market value, and instantly see which platform pays you the most after all 2026 fees." />
+  <title>CardResell — See the highest net payout across 12 venues, after fees</title>
+  <meta name="description" content="Scan or search any Pokémon, MTG, Yu-Gi-Oh!, Lorcana, One Piece, or sports card. See the ranked net payout across eBay, TCGplayer, COMC, Fanatics, Whatnot and 7 more — after all 2026 fees, shipping, and cash-out rules. Then list where you'll pocket the most." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Preconnect to card image CDNs so the first card render doesn't wait
@@ -520,6 +520,32 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .winner-sub{font-size:.75rem;color:var(--text-muted);margin-top:.1rem}
 .winner-payout{font-family:var(--mono);font-size:1.7rem;font-weight:500;color:var(--green);letter-spacing:-.03em;flex-shrink:0}
 
+/* 2026-08-30: Payout ranking strip — the deck's core "where do I sell this?" UX. */
+.payout-rank{margin:.75rem 0 1rem;background:var(--surface-off);border:1px solid var(--divider);border-radius:var(--radius-lg);padding:.75rem .85rem}
+.payout-rank-header{display:flex;align-items:baseline;gap:.5rem;margin-bottom:.5rem}
+.payout-rank-title{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+.payout-rank-sub{font-size:.66rem;color:var(--text-muted)}
+.payout-rank-row{display:grid;grid-template-columns:20px 22px minmax(90px,120px) 1fr auto auto;align-items:center;gap:.5rem;padding:.32rem 0;font-size:.78rem}
+.payout-rank-row:not(:last-child){border-bottom:1px solid rgba(255,255,255,.03)}
+.payout-rank-rank{font-family:var(--mono);font-size:.68rem;color:var(--text-muted);text-align:center;font-weight:700}
+.payout-rank-emoji{font-size:1rem;line-height:1;text-align:center}
+.payout-rank-name{font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.payout-rank-bar-wrap{height:6px;background:rgba(255,255,255,.05);border-radius:99px;overflow:hidden;min-width:40px}
+.payout-rank-bar{height:100%;border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.payout-rank-amt{font-family:var(--mono);font-weight:600;color:var(--text);font-size:.85rem;min-width:64px;text-align:right}
+
+/* 2026-08-30: "Last verified" pill on every venue's fee block. Links to /accuracy. */
+.fee-verified-row{margin-top:.4rem;display:flex;justify-content:flex-end}
+.fee-verified-pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid color-mix(in srgb,var(--green) 25%,transparent);border-radius:99px;padding:.15rem .55rem;text-decoration:none;transition:all var(--ease)}
+.fee-verified-pill:hover{background:color-mix(in srgb,var(--green) 20%,transparent);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
+.fee-verified-dot{font-size:1.1rem;line-height:.5;color:var(--green)}
+
+/* 2026-08-30: Share ranking button below payout-rank strip. */
+.payout-share-btn{margin-top:.65rem;width:100%;padding:.5rem;background:transparent;border:1px dashed var(--divider);border-radius:var(--radius-md);color:var(--text-muted);font-size:.72rem;font-weight:700;cursor:pointer;transition:all var(--ease);-webkit-tap-highlight-color:transparent}
+.payout-share-btn:hover{border-color:var(--gold);color:var(--gold)}
+.payout-rank-delta{font-family:var(--mono);font-size:.7rem;color:var(--text-muted);min-width:52px;text-align:right}
+@media(max-width:520px){.payout-rank-row{grid-template-columns:18px 20px minmax(70px,90px) 1fr auto;gap:.4rem;font-size:.72rem}.payout-rank-delta{display:none}.payout-rank-amt{font-size:.78rem;min-width:56px}}
+
 /* sort bar */
 .sort-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
 .sort-label{font-size:.7rem;color:var(--text-muted);font-weight:500}
@@ -925,11 +951,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- SEO / Open Graph / Twitter Card -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.cardresell.org/" />
-  <meta property="og:title" content="CardResell — Find Your Card's Value & Best Platform to Sell" />
+  <meta property="og:title" content="CardResell — See the highest net payout across 12 venues, after fees" />
   <meta property="og:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell — free." />
   <meta property="og:image" content="https://www.cardresell.org/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="CardResell — Find Your Card's Value & Best Platform to Sell" />
+  <meta name="twitter:title" content="CardResell — See the highest net payout across 12 venues, after fees" />
   <meta name="twitter:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell." />
   <meta name="twitter:image" content="https://www.cardresell.org/og-image.png" />
 
@@ -1604,6 +1630,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
   </div>
   <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
+</div>
+
+<!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-30) -->
+<!-- The site's positioning shifted from "find your card's value" (commodity) to
+     "see the highest net payout across 12 venues" (differentiated). This hero
+     commits to that job in one line. Only shown on the initial (no-card) view;
+     hidden once a card is loaded so the results panel takes over. -->
+<div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
+  <div style="font-size:.68rem;color:var(--gold);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Before you list on eBay</div>
+  <h1 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">See where you'll actually pocket the most — after fees.</h1>
+  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Scan or search any card. We rank <strong style="color:var(--text)">eBay, TCGplayer, COMC, Fanatics, Whatnot</strong> and 7 more by net payout — after 2026 fees, shipping, and cash-out rules.</div>
 </div>
 
 <!-- SOCIAL PROOF BAR -->
@@ -2541,7 +2578,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <div class="scan-gate-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
     <div class="scan-gate-icon">📸</div>
     <div class="scan-gate-title">How to take a great grading photo</div>
-    <div class="scan-gate-sub" style="line-height:1.5">Follow these and your grade estimate will match a real grader within 1 point far more often. The AI only sees what your camera shows it.</div>
+    <div class="scan-gate-sub" style="line-height:1.5">Follow these and the AI can see the same defects a real grader would. It's a screening tool, not a PSA replacement — <a href="/accuracy" style="color:var(--gold);text-decoration:underline">see our accuracy log</a>.</div>
 
     <!-- Golden Rules with real DO/DON'T demo photos.
          Images are lazy-loaded — they don't hit the network until the
@@ -5738,6 +5775,10 @@ function loadCardUI(card) {
   // Show the Add to My Collection button whenever a card is loaded
   const _colBtn = document.getElementById('addCollectionBtn');
   if (_colBtn) _colBtn.style.display = '';
+  // 2026-08-30: hide the landing hero once a card is loaded — the payout
+  // ranking becomes the visual hero. Persists across the session.
+  const _hero = document.getElementById('landingHero');
+  if (_hero) _hero.style.display = 'none';
   // Persist the loaded card so a page refresh restores the user's spot.
   try { _persistLastLoadedCard(card); } catch(_) {}
   // Increment social proof counter on each card load
@@ -7582,6 +7623,50 @@ function calc() {
       </div>
       <div class="winner-payout">${fmt(bannerResult.netPayout)}</div>
     </div>`;
+
+    // 2026-08-30: NEW — sorted net-payout ranking strip. Delivers the deck's
+    // core positioning move: instead of one "winner" tile plus 12 detailed
+    // tiles below, users see a scannable ranking bar right up top that
+    // answers "where do I sell this?" in one glance. Restricted to venues
+    // the user's tier can actually see, sorted highest-net-first.
+    //
+    // Each row: emoji + venue name + horizontal bar (width = payout/best) +
+    // net dollar amount + delta vs #1. Free/locked venues are dimmed.
+    const rankVenues = eligible.filter(r => _tierPlatforms.has(r.pid)).slice(0, 8);
+    const rankBest   = rankVenues[0]?.netPayout ?? 1;
+    if (rankVenues.length >= 2) {
+      html += `<div class="payout-rank" role="list" aria-label="Net payout ranking">
+        <div class="payout-rank-header">
+          <span class="payout-rank-title">Ranked by net payout</span>
+          <span class="payout-rank-sub">after fees${itemCost > 0 ? ' + cost basis' : ''}</span>
+        </div>`;
+      rankVenues.forEach((r, i) => {
+        const p = PLATFORMS[r.pid];
+        const pct = Math.max(6, (r.netPayout / rankBest) * 100);
+        const delta = i === 0 ? '' : `−${fmt(rankBest - r.netPayout)}`;
+        const barColor = i === 0 ? 'var(--green)' : (i === 1 ? 'var(--gold)' : 'var(--text-muted)');
+        html += `<div class="payout-rank-row" role="listitem">
+          <div class="payout-rank-rank">${i + 1}</div>
+          <div class="payout-rank-emoji">${p.emoji}</div>
+          <div class="payout-rank-name">${p.name}</div>
+          <div class="payout-rank-bar-wrap"><div class="payout-rank-bar" style="width:${pct}%;background:${barColor}"></div></div>
+          <div class="payout-rank-amt">${fmt(r.netPayout)}</div>
+          <div class="payout-rank-delta">${delta}</div>
+        </div>`;
+      });
+      // Cache the ranking data on window so shareRanking() can build the OG URL.
+      try {
+        window._lastRanking = {
+          card: (selectedCard?.name || 'Your card') + (selectedCard?.number ? ' #' + selectedCard.number : ''),
+          price: price,
+          venues: rankVenues.map(r => ({ name: PLATFORMS[r.pid].name, pay: r.netPayout }))
+        };
+      } catch(_) {}
+      html += `<button class="payout-share-btn" type="button" onclick="shareRanking()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:.35rem"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>Share this ranking
+      </button>`;
+      html += `</div>`;
+    }
   }
 
   // Sort bar — only meaningful for Pro (multiple platforms)
@@ -7739,7 +7824,7 @@ function calc() {
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
-        ${info.verified ? `<div style="font-size:.6rem;color:rgba(255,255,255,.28);margin-top:.35rem;text-align:right">✓ Fees verified ${info.verified}</div>` : ''}
+        ${info.verified ? `<div class="fee-verified-row"><a href="/accuracy#fees" class="fee-verified-pill" title="View methodology + full fee sources"><span class="fee-verified-dot">•</span>Verified ${info.verified}</a></div>` : ''}
       </div>
       <button class="plat-details-toggle" type="button" onclick="event.preventDefault();event.stopPropagation();this.closest('.plat-card').classList.toggle('expanded');">
         <span class="toggle-text">Details</span>
@@ -10467,13 +10552,47 @@ async function _verifyFirebaseLinkDone() {
 }
 
 
+// 2026-08-30: shareRanking — opens a native share sheet (or copies to clipboard)
+// with a link to the site whose OG image is a dynamic /api/payout-og
+// rendering of the ranking bar. This is how CardResell spreads to Reddit /
+// Discord / Twitter without paid ads.
+function shareRanking() {
+  const r = window._lastRanking;
+  if (!r || !r.venues || r.venues.length < 2) {
+    showToast && showToast('Load a card first, then tap Share.');
+    return;
+  }
+  // Build canonical share URL. Params round-trip through the OG endpoint
+  // so the preview image reflects the exact ranking the user saw.
+  const venuesParam = r.venues.slice(0, 5)
+    .map(v => `${encodeURIComponent(v.name)}:${(Number(v.pay) || 0).toFixed(2)}`).join(',');
+  const params = new URLSearchParams({
+    card: r.card,
+    venues: venuesParam,
+  });
+  if (typeof r.price === 'number' && !isNaN(r.price)) params.set('price', r.price.toFixed(2));
+  const shareUrl = `${window.location.origin}/?share=1&${params.toString()}`;
+  const best = r.venues[0];
+  const msg = `${r.card} → ${best.name} pays $${best.pay.toFixed(2)} after fees. Full ranking on CardResell:`;
+  const data = { title: 'CardResell payout ranking', text: msg, url: shareUrl };
+  if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+    navigator.share(data).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      showToast && showToast('🔗 Link copied — paste anywhere');
+    }).catch(() => {
+      prompt('Copy this link:', shareUrl);
+    });
+  }
+}
+
 function shareReferralLink() {
   const code = window._userRefCode || '';
   if (!code) return;
   const link = window.location.origin + '/?ref=' + encodeURIComponent(code);
   const msg  = 'Check out CardResell — it tells you exactly where to sell your trading cards for the most profit. Sign up free and we both get 5 bonus ID scans: ' + link;
   if (navigator.share) {
-    navigator.share({ title: 'CardResell — find your card\'s value', text: msg, url: link })
+    navigator.share({ title: 'CardResell — see where you\'ll pocket the most', text: msg, url: link })
       .catch(() => {});
   } else {
     navigator.clipboard.writeText(link).then(() => {
@@ -18888,6 +19007,119 @@ function _esc(s) {
       </div>
     </div>
   </div>
+
+<!-- ============================================================
+     2026-08-30: PWA install banner — "Add to Home Screen" prompt.
+     ~80% of scans happen on phone at a shop/show. Native install
+     gives us icon on home screen, fullscreen (no browser chrome),
+     and offline-shell caching. Two triggers:
+       1. Chrome/Edge fire beforeinstallprompt → show banner with
+          native prompt.
+       2. iOS Safari has no programmatic install — detect iOS +
+          not-already-standalone, show manual instructions.
+     Dismissal is remembered for 30 days via localStorage.
+     ============================================================ -->
+<div id="pwaInstallBanner" style="display:none;position:fixed;bottom:.75rem;left:.75rem;right:.75rem;max-width:520px;margin:0 auto;background:linear-gradient(135deg,rgba(196,122,0,.15),rgba(196,122,0,.05));border:1.5px solid var(--gold);border-radius:14px;padding:.85rem 1rem;z-index:9999;box-shadow:0 10px 40px rgba(0,0,0,.5);backdrop-filter:blur(12px);align-items:center;gap:.75rem">
+  <div style="font-size:1.8rem;line-height:1;flex-shrink:0">📱</div>
+  <div style="flex:1;min-width:0">
+    <div style="font-size:.85rem;font-weight:800;color:var(--text);margin-bottom:.15rem">Install CardResell on your phone</div>
+    <div id="pwaBannerSub" style="font-size:.7rem;color:var(--text-muted);line-height:1.35">Scan cards right from your home screen — no browser tabs.</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.35rem;flex-shrink:0">
+    <button id="pwaInstallBtn" onclick="pwaInstall()" style="padding:.45rem .8rem;background:var(--gold);border:none;border-radius:8px;color:#000;font-weight:800;font-size:.75rem;cursor:pointer;white-space:nowrap">Install</button>
+    <button onclick="pwaDismissBanner()" style="padding:.25rem;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:.65rem;cursor:pointer">Not now</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  var DISMISS_KEY = 'cr_pwa_dismissed_at';
+  var DISMISS_DAYS = 30;
+
+  function isStandalone() {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true;
+    } catch(e) { return false; }
+  }
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  }
+  function wasDismissedRecently() {
+    try {
+      var ts = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+      if (!ts) return false;
+      var age = (Date.now() - ts) / 86400000;
+      return age < DISMISS_DAYS;
+    } catch(e) { return false; }
+  }
+  function showBanner() {
+    var b = document.getElementById('pwaInstallBanner');
+    if (b) b.style.display = 'flex';
+  }
+  function hideBanner() {
+    var b = document.getElementById('pwaInstallBanner');
+    if (b) b.style.display = 'none';
+  }
+
+  window.pwaDismissBanner = function() {
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch(e) {}
+    hideBanner();
+  };
+
+  // Chrome / Edge / Android path — native prompt.
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferred = e;
+    if (isStandalone() || wasDismissedRecently()) return;
+    // Only show once the user has actually loaded a card (proves value).
+    var check = function() {
+      if (window.selectedCard) showBanner();
+      else setTimeout(check, 3000);
+    };
+    check();
+  });
+
+  window.pwaInstall = function() {
+    if (deferred) {
+      deferred.prompt();
+      deferred.userChoice.then(function(choice) {
+        if (choice && choice.outcome === 'accepted') {
+          hideBanner();
+        } else {
+          window.pwaDismissBanner();
+        }
+        deferred = null;
+      });
+    } else if (isIOS()) {
+      // No programmatic install — show manual instructions.
+      alert('To install CardResell on iOS:\n\n1. Tap the Share button in Safari (⬆️)\n2. Scroll down and tap “Add to Home Screen”\n3. Tap Add');
+    }
+  };
+
+  // iOS Safari path — no beforeinstallprompt event exists. If we detect
+  // iOS + not already standalone + not dismissed, wait for a card load
+  // and show the banner with manual-install instructions.
+  if (isIOS() && !isStandalone() && !wasDismissedRecently()) {
+    var iosCheck = function() {
+      if (window.selectedCard) {
+        var sub = document.getElementById('pwaBannerSub');
+        if (sub) sub.textContent = 'Tap Install → follow the 3-step guide (uses Safari’s Share menu).';
+        showBanner();
+      } else {
+        setTimeout(iosCheck, 3000);
+      }
+    };
+    setTimeout(iosCheck, 2000);
+  }
+
+  window.addEventListener('appinstalled', function() {
+    hideBanner();
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch(e) {}
+  });
+})();
+</script>
 
 </body>
 </html>
