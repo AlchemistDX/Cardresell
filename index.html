@@ -18359,6 +18359,7 @@ function _bulkShowSection(section) {
   if (section !== 'rapidCam' && window._bulkRapidStream) {
     try { window._bulkRapidStream.getTracks().forEach(t => t.stop()); } catch(_) {}
     window._bulkRapidStream = null;
+    try { _bulkRapidStopQA(); } catch(_) {}
   }
 }
 
@@ -18396,6 +18397,8 @@ async function startBulkRapid() {
     window._bulkRapidStream = stream;
     video.srcObject = stream;
     await video.play().catch(()=>{});
+    // Kick off the live QA analyzer once video has real dimensions.
+    _bulkRapidStartQA();
   } catch(err) {
     console.warn('[rapid] getUserMedia failed', err);
     showToast('⚠️ Camera permission needed for Rapid Scan.');
@@ -18404,8 +18407,175 @@ async function startBulkRapid() {
   }
 }
 
+/* ── Live QA analyzer for Rapid Scan ─────────────────────────────────────
+   Samples a downsampled frame (~96x134) every 250ms while the rapid camera
+   is on. Runs four cheap checks:
+     • brightness (mean luma)              → too dark / too bright
+     • blur (Laplacian variance in centre) → blurry / hold steady
+     • card-in-frame (border vs centre)    → card not in the guide
+     • glare (bright-pixel clustering)     → hotspot on card face
+   Renders one hint pill at the bottom (highest-priority active issue only
+   — stacking them causes flicker). Advisory: the shutter is never
+   disabled. Debounces on/off transitions so a wobbly middle-band value
+   doesn't strobe the pill.
+   ==================================================================== */
+window._bulkRapidQATimer   = null;
+window._bulkRapidQACanvas  = null;
+window._bulkRapidQAState   = null; // last committed hint id
+window._bulkRapidQAStreak  = 0;    // consecutive samples agreeing with candidate
+window._bulkRapidQACand    = null; // candidate hint id we're building consensus for
+
+function _bulkRapidStopQA() {
+  if (window._bulkRapidQATimer) { clearInterval(window._bulkRapidQATimer); window._bulkRapidQATimer = null; }
+  window._bulkRapidQAState  = null;
+  window._bulkRapidQAStreak = 0;
+  window._bulkRapidQACand   = null;
+  _bulkRapidRenderQA(null);
+}
+
+function _bulkRapidStartQA() {
+  _bulkRapidStopQA();
+  if (!window._bulkRapidQACanvas) {
+    const c = document.createElement('canvas');
+    c.width = 96; c.height = 134; // ~card aspect at low res
+    window._bulkRapidQACanvas = c;
+  }
+  window._bulkRapidQATimer = setInterval(_bulkRapidQATick, 250);
+}
+
+function _bulkRapidQATick() {
+  const video = document.getElementById('bulkRapidVideo');
+  if (!video || !video.videoWidth) return;
+  // If the section is no longer rapidCam, stop
+  const rapid = document.getElementById('bulkRapidCam');
+  if (!rapid || rapid.style.display === 'none') { _bulkRapidStopQA(); return; }
+
+  const c = window._bulkRapidQACanvas;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+
+  // Draw the video into the small canvas using object-fit:cover semantics so
+  // the sampled region matches what the user sees inside the frame.
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const cw = c.width, ch = c.height;
+  const vAspect = vw / vh, cAspect = cw / ch;
+  let sx, sy, sw, sh;
+  if (vAspect > cAspect) { sh = vh; sw = vh * cAspect; sx = (vw - sw) / 2; sy = 0; }
+  else                   { sw = vw; sh = vw / cAspect; sx = 0;             sy = (vh - sh) / 2; }
+  try { ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch); }
+  catch(_) { return; }
+
+  let data;
+  try { data = ctx.getImageData(0, 0, cw, ch).data; }
+  catch(_) { return; }
+
+  const N = cw * ch;
+  let sumLuma = 0, hotCount = 0;
+  const luma = new Float32Array(N);
+  // Luma pass + glare count (very bright + low colour saturation ≈ spec highlight)
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const r = data[i], g = data[i+1], b = data[i+2];
+    const y = 0.299*r + 0.587*g + 0.114*b;
+    luma[p] = y; sumLuma += y;
+    if (y > 245) {
+      const maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
+      if (maxC - minC < 22) hotCount++;
+    }
+  }
+  const meanLuma = sumLuma / N;
+
+  // Border vs centre luma — if border activity approaches centre activity,
+  // the card isn't filling the frame.
+  let borderSum = 0, borderN = 0, centerSum = 0, centerN = 0;
+  const bx0 = Math.round(cw * 0.10), bx1 = Math.round(cw * 0.90);
+  const by0 = Math.round(ch * 0.10), by1 = Math.round(ch * 0.90);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const v = luma[y*cw + x];
+      if (x < bx0 || x > bx1 || y < by0 || y > by1) { borderSum += v; borderN++; }
+      else                                          { centerSum += v; centerN++; }
+    }
+  }
+  const borderMean = borderSum / Math.max(1, borderN);
+  const centerMean = centerSum / Math.max(1, centerN);
+
+  // Blur: Laplacian variance over the centre region only (background clutter
+  // in the border shouldn't rescue a soft card).
+  let lapSum = 0, lapSqSum = 0, lapN = 0;
+  for (let y = by0 + 1; y < by1 - 1; y++) {
+    for (let x = bx0 + 1; x < bx1 - 1; x++) {
+      const i = y*cw + x;
+      const lap = -4*luma[i] + luma[i-1] + luma[i+1] + luma[i-cw] + luma[i+cw];
+      lapSum   += lap;
+      lapSqSum += lap*lap;
+      lapN++;
+    }
+  }
+  const lapMean = lapSum / Math.max(1, lapN);
+  const lapVar  = (lapSqSum / Math.max(1, lapN)) - lapMean*lapMean;
+
+  // Decide which single hint to show. Priority order: framing > lighting > glare > blur.
+  // (Framing kills grades hardest; blur is often user-fixable by holding still.)
+  let hint = null;
+  if (centerMean > 8 && borderMean > centerMean * 0.88) {
+    hint = { id: 'frame', icon: '🎯', text: 'Card not in the frame' };
+  } else if (meanLuma < 42) {
+    hint = { id: 'dark',  icon: '🌙', text: 'Too dark — more light please' };
+  } else if (meanLuma > 218) {
+    hint = { id: 'bright',icon: '☀️', text: 'Too bright — ease off the light' };
+  } else if (hotCount > N * 0.012) {
+    hint = { id: 'glare', icon: '✨', text: 'Glare on the card — tilt slightly' };
+  } else if (lapVar < 55) {
+    hint = { id: 'blur',  icon: '💨', text: 'Blurry — hold steady' };
+  }
+
+  // Debounce: require 2 consecutive samples (~500ms) agreeing before we
+  // switch state on OR off. Prevents strobing between neighbouring hints.
+  const candId = hint ? hint.id : null;
+  if (candId === window._bulkRapidQACand) {
+    window._bulkRapidQAStreak++;
+  } else {
+    window._bulkRapidQACand   = candId;
+    window._bulkRapidQAStreak = 1;
+  }
+  if (window._bulkRapidQAStreak >= 2 && window._bulkRapidQAState !== candId) {
+    window._bulkRapidQAState = candId;
+    _bulkRapidRenderQA(hint);
+  }
+}
+
+function _bulkRapidRenderQA(hint) {
+  const bar   = document.getElementById('bulkRapidQABar');
+  const icon  = document.getElementById('bulkRapidQAIcon');
+  const text  = document.getElementById('bulkRapidQAText');
+  const pill  = document.getElementById('bulkRapidQAPill');
+  const frame = document.getElementById('bulkRapidFrame');
+  if (!bar) return;
+  if (!hint) {
+    bar.style.display = 'none';
+    if (frame) {
+      frame.style.borderColor = 'rgba(74,222,128,.85)'; // green
+      frame.style.boxShadow   = '0 0 0 9999px rgba(0,0,0,.35), 0 0 22px rgba(74,222,128,.35)';
+    }
+    return;
+  }
+  if (icon) icon.textContent = hint.icon;
+  if (text) text.textContent = hint.text;
+  bar.style.display = 'flex';
+  // Colour cue on the pill and frame depending on severity.
+  if (pill) {
+    pill.style.background  = 'rgba(196,122,0,.92)';
+    pill.style.borderColor = 'rgba(255,224,120,.55)';
+    pill.style.color       = '#111';
+  }
+  if (frame) {
+    frame.style.borderColor = 'rgba(255,196,80,.9)'; // amber
+    frame.style.boxShadow   = '0 0 0 9999px rgba(0,0,0,.35)';
+  }
+}
+
 function closeBulkRapid() {
   // Discard the rapid session and return to mode picker.
+  try { _bulkRapidStopQA(); } catch(_) {}
   (window._bulkQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
   window._bulkQueue = [];
   window._bulkMode  = null;
@@ -19979,7 +20149,13 @@ function _esc(s) {
       <canvas id="bulkRapidCanvas" style="display:none"></canvas>
       <!-- Card-frame overlay -->
       <div style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">
-        <div id="bulkRapidFrame" style="width:min(72vw,320px);aspect-ratio:2.5/3.5;border:2.5px dashed rgba(139,92,246,.75);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);transition:border-color .18s"></div>
+        <div id="bulkRapidFrame" style="width:min(72vw,320px);aspect-ratio:2.5/3.5;border:2.5px dashed rgba(139,92,246,.75);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);transition:border-color .18s,box-shadow .18s"></div>
+      </div>
+      <!-- Live QA hint bar: shows above shutter when the current frame trips a threshold.
+           Advisory only — shutter always works. Sampled at ~4Hz off a downsampled
+           frame draw so we're not burning CPU on a full-res read every rAF tick. -->
+      <div id="bulkRapidQABar" style="position:absolute;bottom:112px;left:0;right:0;display:none;justify-content:center;padding:0 1rem;pointer-events:none">
+        <div id="bulkRapidQAPill" style="padding:.5rem .85rem;background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.15);border-radius:99px;color:#fff;font-size:.72rem;font-weight:700;line-height:1.3;display:flex;align-items:center;gap:.4rem;box-shadow:0 4px 18px rgba(0,0,0,.45);max-width:88vw;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)"><span id="bulkRapidQAIcon">💡</span><span id="bulkRapidQAText">Looking good</span></div>
       </div>
       <!-- Top bar: close + queue count -->
       <div style="position:absolute;top:0;left:0;right:0;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);pointer-events:auto">
