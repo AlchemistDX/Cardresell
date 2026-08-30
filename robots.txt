@@ -1,0 +1,12 @@
+# CardResell robots.txt
+# Full crawl access — this is a public marketplace-pricing site and we want
+# every card page, comp reference, and marketing page indexed.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Block automated card-image scrapers from replicating our metadata endpoints
+# but leave the main site fully open.
+
+Sitemap: https://www.cardresell.org/sitemap.xml

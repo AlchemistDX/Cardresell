@@ -12,6 +12,8 @@
     { "src": "manifest.json", "use": "@vercel/static" },
     { "src": "config.js", "use": "@vercel/static" },
     { "src": "card-index.json", "use": "@vercel/static" },
+    { "src": "robots.txt", "use": "@vercel/static" },
+    { "src": "sitemap.xml", "use": "@vercel/static" },
     { "src": "public/photo-tips/*.webp", "use": "@vercel/static" }
   ],
   "routes": [
@@ -26,6 +28,8 @@
     { "src": "/contact", "dest": "/contact.html" },
     { "src": "/accuracy", "dest": "/accuracy.html" },
     { "src": "/manifest.json", "dest": "/manifest.json" },
+    { "src": "/robots.txt", "dest": "/robots.txt", "headers": { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } },
+    { "src": "/sitemap.xml", "dest": "/sitemap.xml", "headers": { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } },
     { "src": "/photo-tips/(.*\\.webp)", "dest": "/public/photo-tips/$1", "headers": { "Cache-Control": "public, max-age=604800, immutable", "Content-Type": "image/webp" } },
     { "src": "/_vercel/insights/(.*)", "continue": true },
     { "src": "/(.*\\.html)", "dest": "/$1" },
