@@ -17446,6 +17446,116 @@ function _bulkGradeShowSection(section) {
   document.getElementById('bulkGradeProcessing').style.display    = section === 'processing'    ? 'flex' : 'none';
 }
 
+/* ================================================================
+   Photo Quality Assistant
+   Runs client-side, entirely local. Returns advisory warnings only
+   — never blocks a grade. False positives kill trust so thresholds
+   are set to fire only on obvious failures.
+
+   Checks:
+     - blur:       Laplacian variance on a 128px thumbnail. <30 = blurry.
+     - brightness: mean pixel luma on a 64px thumbnail. <40 too dark, >220 too bright.
+     - cardInFrame: rough contour check via edge density near frame edges vs middle.
+                    If the edges are as busy as the middle the card is likely off-frame.
+   ================================================================ */
+async function analyzePhotoQuality(file) {
+  const warnings = [];
+  const stats = { blur: null, brightness: null, cardInFrame: null };
+  try {
+    const bmp = await createImageBitmap(file);
+    // Downsample to 128x128 for blur, 64x64 for brightness / frame.
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    // Fit-into-square, preserve aspect.
+    const scale = Math.min(size / bmp.width, size / bmp.height);
+    const w = Math.round(bmp.width * scale);
+    const h = Math.round(bmp.height * scale);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(bmp, (size - w) / 2, (size - h) / 2, w, h);
+    const img = ctx.getImageData(0, 0, size, size).data;
+
+    // Build luma buffer.
+    const luma = new Float32Array(size * size);
+    let brightSum = 0, brightCount = 0;
+    for (let i = 0, j = 0; i < img.length; i += 4, j++) {
+      // Only count pixels that aren't pure-black padding.
+      const r = img[i], g = img[i+1], b = img[i+2];
+      const y = 0.299*r + 0.587*g + 0.114*b;
+      luma[j] = y;
+      if (r + g + b > 6) { brightSum += y; brightCount++; }
+    }
+    stats.brightness = brightCount ? brightSum / brightCount : 128;
+    if (stats.brightness < 45) warnings.push({ type: 'dark',   msg: 'Photo looks dark — try more light' });
+    else if (stats.brightness > 215) warnings.push({ type: 'bright', msg: 'Photo looks overexposed — avoid direct glare' });
+
+    // Laplacian variance for blur. Kernel: [0,1,0; 1,-4,1; 0,1,0].
+    let sum = 0, sumSq = 0, n = 0;
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
+        const i = y * size + x;
+        const v = -4 * luma[i] + luma[i-1] + luma[i+1] + luma[i-size] + luma[i+size];
+        sum += v; sumSq += v * v; n++;
+      }
+    }
+    const mean = sum / n;
+    stats.blur = (sumSq / n) - (mean * mean); // variance
+    if (stats.blur < 25) warnings.push({ type: 'blur', msg: 'Photo looks blurry — hold steady or focus on the card' });
+
+    // Card-in-frame: compare mean gradient magnitude in a 12-px border band
+    // vs the center. If the border has strong edges the card is likely cropped.
+    let borderGrad = 0, borderN = 0, centerGrad = 0, centerN = 0;
+    for (let y = 1; y < size - 1; y++) {
+      for (let x = 1; x < size - 1; x++) {
+        const i = y * size + x;
+        const gx = luma[i+1] - luma[i-1];
+        const gy = luma[i+size] - luma[i-size];
+        const mag = Math.abs(gx) + Math.abs(gy);
+        const inBorder = x < 12 || x >= size - 12 || y < 12 || y >= size - 12;
+        if (inBorder) { borderGrad += mag; borderN++; }
+        else if (x > 24 && x < size - 24 && y > 24 && y < size - 24) { centerGrad += mag; centerN++; }
+      }
+    }
+    const borderMean = borderN ? borderGrad / borderN : 0;
+    const centerMean = centerN ? centerGrad / centerN : 1;
+    stats.cardInFrame = 1 - Math.min(1, borderMean / (centerMean + 1e-6));
+    // Fire only when border activity is nearly as high as center activity — that's
+    // when the card is bleeding out of frame or the crop is way off.
+    if (borderMean > centerMean * 0.85 && borderMean > 8) {
+      warnings.push({ type: 'frame', msg: 'Card may be cropped — leave a little margin around all 4 sides' });
+    }
+    bmp.close && bmp.close();
+  } catch(err) {
+    // Never fail-fast on QA errors — just return no warnings.
+    return { ok: true, warnings: [], stats, error: err.message };
+  }
+  return { ok: warnings.length === 0, warnings, stats };
+}
+
+/* Runs QA analysis over every photo in the current bulk queue in parallel
+   and returns a per-card summary. Non-blocking — the user can still hit
+   'Grade All' even with warnings. */
+async function _bulkGradeQAScan() {
+  const queue = window._bulkGradeQueue || [];
+  const mode = window._bulkGradeMode || 'quick';
+  const results = [];
+  await Promise.all(queue.map(async (card, idx) => {
+    const slots = mode === 'deep'
+      ? [['front', card.front], ['back', card.back], ['top edge', card.topEdge], ['bottom edge', card.bottomEdge], ['left edge', card.leftEdge], ['right edge', card.rightEdge]]
+      : [['front', card.front], ['back', card.back]];
+    const perSlot = await Promise.all(slots.map(async ([name, slot]) => {
+      if (!slot?.file) return { slot: name, warnings: [] };
+      const qa = await analyzePhotoQuality(slot.file);
+      return { slot: name, warnings: qa.warnings, stats: qa.stats };
+    }));
+    const allWarns = perSlot.flatMap(s => s.warnings.map(w => ({ ...w, slot: s.slot })));
+    results[idx] = { cardIdx: idx, perSlot, warnings: allWarns };
+  }));
+  return results;
+}
+
 function startBulkGradeUpload() {
   document.getElementById('bulkGradeInput').click();
 }
@@ -17540,11 +17650,53 @@ function processBulkGradeFiles(input) {
   try { window.trackEvent && window.trackEvent('bulk_grade_files_selected', { count: String(count), mode, enough: hasEnough ? 'yes' : 'no' }); } catch(_) {}
 
   _bulkGradeShowSection('creditConfirm');
+
+  // Kick off async photo QA scan — renders warnings into #bulkGradeQABox
+  // when done. Never blocks the confirm button.
+  _bulkGradeRenderQALoading();
+  _bulkGradeQAScan().then(_bulkGradeRenderQAResults).catch(() => _bulkGradeRenderQAClear());
+}
+
+function _bulkGradeRenderQALoading() {
+  const box = document.getElementById('bulkGradeQABox');
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = '<div style="font-size:.72rem;color:rgba(255,255,255,.5);text-align:center;padding:.4rem 0">🔍 Checking photo quality…</div>';
+}
+function _bulkGradeRenderQAClear() {
+  const box = document.getElementById('bulkGradeQABox');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+function _bulkGradeRenderQAResults(results) {
+  const box = document.getElementById('bulkGradeQABox');
+  if (!box) return;
+  const flagged = results.filter(r => r.warnings.length > 0);
+  if (!flagged.length) {
+    box.style.display = 'block';
+    box.innerHTML = '<div style="font-size:.72rem;color:#4ade80;text-align:center;padding:.4rem 0">✓ Photos look good — ready to grade</div>';
+    return;
+  }
+  const rows = flagged.slice(0, 5).map(f => {
+    const bullets = f.warnings.slice(0, 3).map(w =>
+      '<li style="margin:.15rem 0"><span style="color:#fbbf24;font-weight:700">' + _bgEsc(w.slot) + ':</span> ' + _bgEsc(w.msg) + '</li>'
+    ).join('');
+    return '<div style="padding:.35rem .5rem;background:rgba(251,191,36,.06);border-left:2px solid #fbbf24;border-radius:4px;margin-bottom:.35rem">' +
+      '<div style="font-size:.72rem;font-weight:700;color:#fff">Card ' + (f.cardIdx + 1) + '</div>' +
+      '<ul style="margin:.2rem 0 0;padding-left:1rem;font-size:.68rem;color:rgba(255,255,255,.75);line-height:1.5">' + bullets + '</ul>' +
+    '</div>';
+  }).join('');
+  const extra = flagged.length > 5 ? '<div style="font-size:.65rem;color:rgba(255,255,255,.4);text-align:center;margin-top:.2rem">+' + (flagged.length - 5) + ' more cards with warnings</div>' : '';
+  box.style.display = 'block';
+  box.innerHTML =
+    '<div style="font-size:.72rem;font-weight:800;color:#fbbf24;margin-bottom:.3rem;display:flex;align-items:center;gap:.35rem">⚠️ Photo QA — ' + flagged.length + ' card' + (flagged.length !== 1 ? 's' : '') + ' with warnings</div>' +
+    rows + extra +
+    '<div style="font-size:.62rem;color:rgba(255,255,255,.4);margin-top:.35rem;line-height:1.45">These are advisory only. Grading will still run but accuracy improves a lot with clearer photos. Cancel and retake for the best results.</div>';
 }
 
 function cancelBulkGradeConfirm() {
   _bulkGradeRevokeAllUrls();
   window._bulkGradeQueue = [];
+  _bulkGradeRenderQAClear();
   _bulkGradeShowSection('intro');
 }
 
@@ -20053,7 +20205,18 @@ function _esc(s) {
 
   <!-- ==================== INTRO / UPLOAD ==================== -->
   <div id="bulkGradeIntro" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:2rem 1.5rem;text-align:center;gap:1.1rem">
-    <div style="font-size:2.5rem">🎯</div>
+    <!-- Fill-in-box guide illustration: shows the shape/margin the scanner wants to see. -->
+    <div style="position:relative;width:88px;height:120px;flex-shrink:0">
+      <div style="position:absolute;inset:0;border:2px dashed rgba(196,122,0,.55);border-radius:8px"></div>
+      <div style="position:absolute;left:10px;right:10px;top:10px;bottom:10px;background:linear-gradient(160deg,rgba(196,122,0,.14),rgba(196,122,0,.04));border-radius:5px;display:flex;align-items:center;justify-content:center">
+        <svg width="24" height="32" viewBox="0 0 24 32" fill="none" stroke="rgba(196,122,0,.9)" stroke-width="1.5"><rect x="2" y="2" width="20" height="28" rx="2"/><line x1="2" y1="11" x2="22" y2="11"/><circle cx="12" cy="20" r="3"/></svg>
+      </div>
+      <!-- Corner ticks so it reads like a viewfinder / fill-in-box -->
+      <div style="position:absolute;left:-2px;top:-2px;width:10px;height:10px;border-left:2px solid var(--gold);border-top:2px solid var(--gold)"></div>
+      <div style="position:absolute;right:-2px;top:-2px;width:10px;height:10px;border-right:2px solid var(--gold);border-top:2px solid var(--gold)"></div>
+      <div style="position:absolute;left:-2px;bottom:-2px;width:10px;height:10px;border-left:2px solid var(--gold);border-bottom:2px solid var(--gold)"></div>
+      <div style="position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border-right:2px solid var(--gold);border-bottom:2px solid var(--gold)"></div>
+    </div>
     <div style="font-size:1.05rem;font-weight:800;color:#fff;max-width:340px;line-height:1.4">Grade a whole stack at once</div>
     <div style="font-size:.82rem;color:var(--text-muted);max-width:340px;line-height:1.55">
       Upload front photos of up to <strong style="color:#fff">25 cards</strong>. Each gets a full
@@ -20080,6 +20243,10 @@ function _esc(s) {
     <div style="font-size:2.5rem" id="bulkGradeCreditIcon">🎯</div>
     <div id="bulkGradeCreditMsg" style="font-size:.95rem;color:rgba(255,255,255,.85);line-height:1.5;max-width:340px"></div>
     <div id="bulkGradeCreditBudget" style="font-size:.76rem;color:var(--text-muted);line-height:1.5;max-width:340px"></div>
+
+    <!-- Photo QA warnings box — populated by _bulkGradeRenderQAResults after processBulkGradeFiles -->
+    <div id="bulkGradeQABox" style="display:none;width:100%;max-width:340px;text-align:left;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.6rem .7rem;margin-top:.15rem"></div>
+
     <div style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:280px;margin-top:.5rem">
       <button id="bulkGradeStartBtn" onclick="runBulkGrade()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.25rem;font-weight:800;font-size:.9rem;cursor:pointer">Grade All ⚡</button>
       <button onclick="cancelBulkGradeConfirm()" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.55rem 1.25rem;font-weight:600;font-size:.82rem;cursor:pointer">Back</button>
