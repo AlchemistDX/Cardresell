@@ -6188,6 +6188,24 @@ function rebuildPrintSelect(variants) {
   });
 }
 
+// 2026-08-30: purge hidden graded <option> pollution from the print select.
+// Bug report: user sees 'Holofoil' dropdown fill with 'the most recent grades
+// you click' — that's because ensureGradedOptionInSelect() has been appending
+// hidden graded options as the user browses grades, and on some browsers
+// (Safari iOS, older Android WebViews) `option.hidden` DOES NOT hide options
+// from the native <select> dropdown UI. Belt-and-suspenders: also remove
+// them from the DOM entirely when we no longer need them. We only keep the
+// ONE hidden option that matches the currently selected graded key.
+function pruneStaleGradedOptions(keepKey) {
+  if (!printSelect) return;
+  const opts = Array.from(printSelect.options);
+  opts.forEach(o => {
+    if (o.dataset.gradedHidden === '1' && o.value !== keepKey) {
+      o.remove();
+    }
+  });
+}
+
 // Generation counter guards against stale async syncGradeToPrintSelect calls.
 // Scenario the counter fixes: user clicks PSA → async TPL fetch starts → user
 // clicks Raw before fetch finishes → Raw path completes synchronously → stale
@@ -6204,6 +6222,15 @@ async function syncGradeToPrintSelect() {
   const graderNames = { psa: 'PSA', bgs: 'BGS/Beckett', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
 
   if (grader === 'no') {
+    // 2026-08-30: stale-gen guard on the fast path. Previously only the async
+    // TPL branch checked _syncGen; the fast Raw and Graded paths raced when
+    // the user tapped multiple grades quickly (grade 8 -> 9 -> 10), letting
+    // an older run's synchronous printSelect.value=... overwrite the newer
+    // one AFTER the newer run had finished. This gate ensures only the LAST
+    // clicked grade actually writes to the DOM.
+    if (myGen !== window._syncGen) return;
+    // Remove all hidden graded options — we're on Raw now, keep none.
+    pruneStaleGradedOptions(null);
     // Raw / Ungraded — switch printSelect back to first non-graded variant.
     // IMPORTANT: exclude ALL graders (added sgc|ace|tag after this regex was
     // written) — otherwise 'sgc_10' passed the old !(psa|bgs|cgc) filter and
@@ -6270,8 +6297,14 @@ async function syncGradeToPrintSelect() {
     const fallbackKey = !graded && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
     const fallback = fallbackKey ? currentPrices[fallbackKey] : null;
     if (graded || fallback) {
+      // 2026-08-30 stale-gen guard on the graded fast path (see note above).
+      if (myGen !== window._syncGen) return;
       const useKey = graded ? targetKey : fallbackKey;
       const useLabel = (graded || fallback).label;
+      // Purge ALL other hidden graded options before adding this one — the
+      // dropdown should only ever have zero or one hidden graded entry so
+      // it never accumulates 'PSA 8', 'PSA 9', 'BGS 10' as the user browses.
+      pruneStaleGradedOptions(useKey);
       ensureGradedOptionInSelect(useKey, useLabel);
       // Has graded data in API — use it
       printSelect.value = useKey;
@@ -6334,8 +6367,12 @@ async function syncGradeToPrintSelect() {
         const fbKey2 = !g2 && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
         const fb2 = fbKey2 ? currentPrices[fbKey2] : null;
         if (g2 || fb2) {
+          // 2026-08-30 stale-gen guard — async TPL fetch may have raced
+          if (myGen !== window._syncGen) return;
           const useKey2 = g2 ? targetKey2 : fbKey2;
           const useLbl2 = (g2 || fb2).label;
+          // Purge ALL other hidden graded options first (see pruneStaleGradedOptions note)
+          pruneStaleGradedOptions(useKey2);
           if (!Array.from(printSelect.options).find(o => o.value === useKey2)) {
             const opt = document.createElement('option');
             opt.value = useKey2;
