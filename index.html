@@ -17333,6 +17333,87 @@ function closeBulkModePicker() {
   if (ov) ov.style.display = 'none';
 }
 
+// Switch between ID and Grade tabs inside the scan menu.
+function switchScanMenuTab(which) {
+  const tabId    = document.getElementById('scanMenuTabId');
+  const tabGrade = document.getElementById('scanMenuTabGrade');
+  const panelId    = document.getElementById('scanMenuPanelId');
+  const panelGrade = document.getElementById('scanMenuPanelGrade');
+  if (!tabId || !tabGrade || !panelId || !panelGrade) return;
+  const active   = { background: 'var(--gold)', color: '#000' };
+  const inactive = { background: 'transparent',  color: 'rgba(255,255,255,.6)' };
+  if (which === 'grade') {
+    Object.assign(tabGrade.style, active);
+    Object.assign(tabId.style, inactive);
+    panelGrade.style.display = 'flex';
+    panelId.style.display    = 'none';
+  } else {
+    Object.assign(tabId.style, active);
+    Object.assign(tabGrade.style, inactive);
+    panelId.style.display    = 'flex';
+    panelGrade.style.display = 'none';
+  }
+  try { window.trackEvent && window.trackEvent('scan_menu_tab', { tab: which === 'grade' ? 'grade' : 'id' }); } catch(_){}
+}
+
+// Open the Bulk Scan overlay and jump straight into Rapid Scan (live camera).
+function openRapidScanDirect() {
+  try { openBulkScan(); } catch(_){}
+  // Wait a frame so the overlay is on-screen before requesting camera perms.
+  setTimeout(function(){ try { startBulkRapid(); } catch(_){ } }, 30);
+  try { window.trackEvent && window.trackEvent('rapid_scan_direct_open', {}); } catch(_){}
+}
+
+// Bulk Grade batch picker (Quick vs Deep) — opened from the Grade tab.
+function openBulkGradeBatchPicker() {
+  if (!window.googleUser) {
+    showToast('Sign in with Google first for Bulk Grade');
+    triggerGoogleSignIn && triggerGoogleSignIn();
+    return;
+  }
+  const ov = document.getElementById('bulkGradeBatchPickerOverlay');
+  if (ov) ov.style.display = 'flex';
+  try { window.trackEvent && window.trackEvent('bulk_grade_batch_picker_open', {}); } catch(_){}
+}
+function closeBulkGradeBatchPicker() {
+  const ov = document.getElementById('bulkGradeBatchPickerOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+// Single-card grade dispatcher. Reuses openGradeScanGate() for auth + ROI
+// warning + pricing routing, then routes credit-holders straight into the
+// requested mode instead of showing the Quick/Deep tier picker again.
+function startSingleGradeFlow(mode) {
+  mode = (mode === 'deep') ? 'deep' : 'quick';
+  if (!window.googleUser) {
+    showToast('Sign in with Google first to use the grader');
+    triggerGoogleSignIn && triggerGoogleSignIn();
+    return;
+  }
+  // ROI credit-saver warning (same copy as openGradeScanGate).
+  const gOpp = window._lastGradeOpportunity;
+  if (gOpp && gOpp.recommendation === 'sell_raw' && gOpp.rawPrice != null) {
+    const rawStr = gOpp.rawPrice < 2 ? 'under $2' : ('~$' + Number(gOpp.rawPrice).toFixed(2));
+    const est = gOpp.expectedProfit != null ? Number(gOpp.expectedProfit).toFixed(0) : '?';
+    const msg = est !== '?' && Number(est) < 0
+      ? 'Heads up — this raw card is ' + rawStr + '. Even at PSA 10 the math shows about $' + est + ' profit after grading fees. Grade anyway?'
+      : 'Heads up — this raw card is ' + rawStr + '. Grading may not be profitable here. Grade anyway?';
+    if (!confirm(msg)) return;
+  }
+  const credits = (window._scanCredits || 0) + (window._freeScansLeft || 0);
+  const needed = (mode === 'deep') ? 2 : 1;
+  if (credits < needed) {
+    openPricingModal('grade_scan_gate');
+    return;
+  }
+  if (mode === 'deep') {
+    try { startDeepGrade(); } catch(e) { openGradeTierPicker(); }
+  } else {
+    try { startQuickGrade(); } catch(e) { openGradeTierPicker(); }
+  }
+  try { window.trackEvent && window.trackEvent('single_grade_direct', { mode: mode }); } catch(_){}
+}
+
 function openBulkGrade(mode) {
   mode = (mode === 'deep') ? 'deep' : 'quick';
   window._bulkGradeMode = mode;
@@ -20125,43 +20206,109 @@ function _esc(s) {
      ===================================================================== -->
 <div id="bulkModePickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:305;align-items:flex-end;justify-content:center;padding:0" onclick="if(event.target===this)closeBulkModePicker()">
   <div style="width:100%;max-width:480px;background:#0a0a0a;border-top:1px solid #1e1e1e;border-radius:16px 16px 0 0;padding:1.1rem 1.1rem 1.4rem;display:flex;flex-direction:column;gap:.65rem;box-shadow:0 -8px 40px rgba(0,0,0,.6)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-      <div style="font-size:1rem;font-weight:800;color:#fff">Bulk mode</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.15rem">
+      <div style="font-size:1rem;font-weight:800;color:#fff">Scan menu</div>
       <button onclick="closeBulkModePicker()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.4rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
     </div>
-    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;line-height:1.45">Pick how deep you want to go. All bulk modes process cards in parallel.</div>
 
-    <!-- ID Scan -->
-    <button onclick="closeBulkModePicker();openBulkScan()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
-      <div style="width:38px;height:38px;flex-shrink:0;background:rgba(255,255,255,.06);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">📷</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:.9rem;font-weight:800">Bulk ID Scan</div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Identify + price up to 50 cards. <strong style="color:var(--gold)">1 ID credit / card</strong> · 1 photo</div>
-      </div>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-    </button>
+    <!-- Tab strip: ID | Grade -->
+    <div role="tablist" style="display:flex;gap:.4rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.3rem;margin-bottom:.45rem">
+      <button id="scanMenuTabId" role="tab" onclick="switchScanMenuTab('id')" style="flex:1;padding:.55rem 0;background:var(--gold);color:#000;border:none;border-radius:8px;font-weight:800;font-size:.85rem;cursor:pointer;transition:background .15s">ID</button>
+      <button id="scanMenuTabGrade" role="tab" onclick="switchScanMenuTab('grade')" style="flex:1;padding:.55rem 0;background:transparent;color:rgba(255,255,255,.6);border:none;border-radius:8px;font-weight:800;font-size:.85rem;cursor:pointer;transition:background .15s">Grade</button>
+    </div>
 
-    <!-- Quick Grade -->
-    <button onclick="closeBulkModePicker();openBulkGrade('quick')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
+    <!-- ==================== ID PANEL ==================== -->
+    <div id="scanMenuPanelId" style="display:flex;flex-direction:column;gap:.55rem">
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;line-height:1.45">Identify + price cards. Uses <strong style="color:#fff">ID credits</strong>.</div>
+
+      <!-- Bulk ID Scan -->
+      <button onclick="closeBulkModePicker();openBulkScan()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
+        <div style="width:38px;height:38px;flex-shrink:0;background:rgba(255,255,255,.06);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">📷</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.9rem;font-weight:800">Bulk ID Scan</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Identify + price up to 50 cards. <strong style="color:var(--gold)">1 ID credit / card</strong> · 1 photo</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
+      <!-- Rapid Scan (live camera loop) -->
+      <button onclick="closeBulkModePicker();openRapidScanDirect()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.4);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.85)'" onmouseout="this.style.borderColor='rgba(139,92,246,.4)'">
+        <div style="width:38px;height:38px;flex-shrink:0;background:rgba(139,92,246,.16);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🎥</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.9rem;font-weight:800">Rapid Scan</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Live camera loop — point, tap, next. <strong style="color:rgba(139,92,246,.9)">1 ID credit / card</strong> · fastest for stacks</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+
+    <!-- ==================== GRADE PANEL ==================== -->
+    <div id="scanMenuPanelGrade" style="display:none;flex-direction:column;gap:.55rem">
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;line-height:1.45">Estimate PSA-style grades. Uses <strong style="color:#fff">grade credits</strong>.</div>
+
+      <!-- Quick Grade (single card) -->
+      <button onclick="closeBulkModePicker();startSingleGradeFlow('quick')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
+        <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">⚡</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.9rem;font-weight:800">Quick Grade</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, ballpark PSA estimate. <strong style="color:var(--gold)">1 credit</strong> · 2 photos (front + back)</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
+      <!-- Deep Grade (single card) -->
+      <button onclick="closeBulkModePicker();startSingleGradeFlow('deep')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
+        <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.9rem;font-weight:800">Deep Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, tightest PSA estimate. <strong style="color:var(--gold)">2 credits</strong> · 6 photos (front, back, 4 edges)</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
+      <!-- Bulk Grade (batch, asks quick-or-deep next) -->
+      <button onclick="closeBulkModePicker();openBulkGradeBatchPicker()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(196,122,0,.06);border:1px solid rgba(196,122,0,.45);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.85)'" onmouseout="this.style.borderColor='rgba(196,122,0,.45)'">
+        <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🎯</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.9rem;font-weight:800">Bulk Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Grade a stack — up to 10 cards in one session. Pick Quick or Deep next.</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
+      <div style="font-size:.65rem;color:rgba(255,255,255,.35);text-align:center;margin-top:.35rem;line-height:1.5">Deep uses 6 photos per card for the tightest PSA-style estimate — recommended before submitting to a grading company.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BULK GRADE BATCH PICKER (Quick vs Deep) ==================== -->
+<div id="bulkGradeBatchPickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:306;align-items:flex-end;justify-content:center;padding:0" onclick="if(event.target===this)closeBulkGradeBatchPicker()">
+  <div style="width:100%;max-width:480px;background:#0a0a0a;border-top:1px solid #1e1e1e;border-radius:16px 16px 0 0;padding:1.1rem 1.1rem 1.4rem;display:flex;flex-direction:column;gap:.65rem;box-shadow:0 -8px 40px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
+      <div style="font-size:1rem;font-weight:800;color:#fff">Bulk Grade — pick a mode</div>
+      <button onclick="closeBulkGradeBatchPicker()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.4rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;line-height:1.45">Same batch, different depth. Both cap at 10 cards per session.</div>
+
+    <!-- Quick Grade batch -->
+    <button onclick="closeBulkGradeBatchPicker();openBulkGrade('quick')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
       <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">⚡</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.9rem;font-weight:800">Quick Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Ballpark AI grade, up to 10 cards. <strong style="color:var(--gold)">1 credit / card</strong> · 2 photos (front + back)</div>
+        <div style="font-size:.9rem;font-weight:800">Bulk Quick Grade</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Ballpark grades for a fast sort. <strong style="color:var(--gold)">1 credit / card</strong> · 2 photos each (front + back)</div>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </button>
 
-    <!-- Deep Grade -->
-    <button onclick="closeBulkModePicker();openBulkGrade('deep')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
+    <!-- Deep Grade batch -->
+    <button onclick="closeBulkGradeBatchPicker();openBulkGrade('deep')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
       <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.9rem;font-weight:800">Deep Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Front + back + 4 edges, up to 10 cards. <strong style="color:var(--gold)">2 credits / card</strong> · 6 photos</div>
+        <div style="font-size:.9rem;font-weight:800">Bulk Deep Grade</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Tightest per-card estimate for cards worth submitting. <strong style="color:var(--gold)">2 credits / card</strong> · 6 photos each</div>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </button>
-
-    <div style="font-size:.65rem;color:rgba(255,255,255,.35);text-align:center;margin-top:.35rem;line-height:1.5">Deep Grade uses 6 photos per card for the tightest PSA-style estimate — recommended before submitting to a grading company.</div>
   </div>
 </div>
 
