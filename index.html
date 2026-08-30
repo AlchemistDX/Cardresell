@@ -17336,7 +17336,10 @@ function closeBulkModePicker() {
 function openBulkGrade(mode) {
   mode = (mode === 'deep') ? 'deep' : 'quick';
   window._bulkGradeMode = mode;
-  window._bulkGradeCap = (mode === 'deep') ? 10 : 25;
+  // Both modes require front+back per card. Deep additionally uses 4 edge
+  // photos per card. Cap stays at 10 cards per session either way — that
+  // matches the server-side rate + credit floor and keeps memory reasonable.
+  window._bulkGradeCap = 10;
 
   if (!window.googleUser) {
     showToast('Sign in with Google first to use Bulk Grade');
@@ -17357,8 +17360,8 @@ function openBulkGrade(mode) {
   const subtitle = document.getElementById('bulkGradeSubtitle');
   if (subtitle) {
     subtitle.textContent = (mode === 'deep')
-      ? '2 grade credits per card · front + back · up to 10 per session'
-      : '1 grade credit per card · front photo · up to 25 per session';
+      ? '2 credits per card · front + back + 4 edges · up to 10 per session'
+      : '1 credit per card · front + back · up to 10 per session';
   }
   // Update the header title to include the mode.
   const titleWrap = ov.querySelector('div[style*="font-size:1rem"]');
@@ -17384,18 +17387,18 @@ function openBulkGrade(mode) {
   const intro = document.getElementById('bulkGradeIntro');
   const introTitle = intro?.querySelector('div[style*="font-size:1.05rem"]');
   const introDesc  = intro?.querySelector('div[style*="font-size:.82rem"]');
-  if (introTitle) introTitle.textContent = (mode === 'deep') ? 'Deep grade a stack (front + back)' : 'Quick-grade a stack';
+  if (introTitle) introTitle.textContent = (mode === 'deep') ? 'Deep grade a stack (full accuracy)' : 'Quick-grade a stack (ballpark)';
   if (introDesc) {
     introDesc.innerHTML = (mode === 'deep')
-      ? 'Take or upload <strong style="color:#fff">front + back photos</strong> of up to 10 cards. We grade each side and average the sub-grades for a stronger PSA-style estimate.'
-      : 'Take or upload front photos of up to <strong style="color:#fff">25 cards</strong>. Each gets a full AI grade (corners, edges, surface, centering) with expected PSA 10 ROI.';
+      ? 'Take or upload <strong style="color:#fff">front + back + 4 edge close-ups</strong> per card, up to 10 cards. Highest accuracy — the AI grader sees every angle. <strong style="color:#fff">6 photos = 1 card.</strong>'
+      : 'Take or upload <strong style="color:#fff">front + back photos</strong> per card, up to 10 cards. Ballpark grade for a quick sort. <strong style="color:#fff">2 photos = 1 card.</strong>';
   }
   // Tip block — different content per mode.
   const tip = ov.querySelector('#bulkGradeIntro div[style*="background:rgba(255,255,255,.04)"]');
   if (tip) {
     tip.innerHTML = (mode === 'deep')
-      ? '💡 Tip: <strong style="color:#fff">alternate photos front, back, front, back…</strong> Card 1 front, card 1 back, card 2 front, card 2 back, and so on.'
-      : '💡 Tip: use good lighting and lay cards flat. Photo quality drives grade accuracy.';
+      ? '💡 Order: <strong style="color:#fff">front, back, top edge, bottom edge, left edge, right edge</strong> — repeat for each card.'
+      : '💡 Order: <strong style="color:#fff">front, back, front, back</strong> — repeat for each card.';
   }
   // File input: for Quick we take any set of files; for Deep we pair them front/back.
   const fileInput = document.getElementById('bulkGradeInput');
@@ -17453,9 +17456,9 @@ function startBulkGradeUpload() {
 function startBulkGradeCamera() {
   const mode = window._bulkGradeMode || 'quick';
   if (mode === 'deep') {
-    showToast('Take photos in order: card 1 front, card 1 back, card 2 front, card 2 back…');
+    showToast('Order per card: front, back, top edge, bottom edge, left edge, right edge. 6 photos = 1 card.');
   } else {
-    showToast('Take a front photo of each card. Up to 25.');
+    showToast('Order per card: front, back. 2 photos = 1 card. Up to 10 cards.');
   }
   document.getElementById('bulkGradeCameraInput').click();
 }
@@ -17466,42 +17469,41 @@ function processBulkGradeFiles(input) {
   if (!files.length) return;
 
   const mode = window._bulkGradeMode || 'quick';
-  const cap = window._bulkGradeCap || 25;
+  const cap = window._bulkGradeCap || 10;
+  // photos-per-card: quick = 2 (front, back), deep = 6 (front, back, 4 edges).
+  const perCard = (mode === 'deep') ? 6 : 2;
 
   let count, credits, hasEnough, needCredits, truncated = false;
 
-  if (mode === 'deep') {
-    // Deep: pair files as [front, back, front, back, ...]. Odd trailing file dropped.
-    if (files.length < 2) {
-      showToast('Deep Grade needs at least 2 photos (front + back).');
-      return;
-    }
-    // If odd count, drop the last one.
-    const usable = files.length - (files.length % 2);
-    const pairs = [];
-    for (let i = 0; i < usable; i += 2) {
-      pairs.push({
-        front: { file: files[i],     objectUrl: URL.createObjectURL(files[i]) },
-        back:  { file: files[i + 1], objectUrl: URL.createObjectURL(files[i + 1]) },
-      });
-    }
-    let selected = pairs;
-    if (pairs.length > cap) { selected = pairs.slice(0, cap); truncated = true; }
-    window._bulkGradeQueue = selected;
-    count = selected.length;
-    needCredits = count * 2;
-    credits = (window._scanCredits || 0);
-    hasEnough = credits >= needCredits;
-  } else {
-    // Quick: 1 photo per card.
-    let selected = files;
-    if (files.length > cap) { selected = files.slice(0, cap); truncated = true; }
-    window._bulkGradeQueue = selected.map(f => ({ file: f, objectUrl: URL.createObjectURL(f) }));
-    count = selected.length;
-    needCredits = count;
-    credits = (window._scanCredits || 0);
-    hasEnough = credits >= needCredits;
+  if (files.length < perCard) {
+    showToast(mode === 'deep'
+      ? 'Deep Grade needs 6 photos per card (front, back, 4 edges).'
+      : 'Quick Grade needs 2 photos per card (front + back).');
+    return;
   }
+  // Trim to a multiple of perCard.
+  const usable = files.length - (files.length % perCard);
+  const cards = [];
+  for (let i = 0; i < usable; i += perCard) {
+    const item = {
+      front: { file: files[i],     objectUrl: URL.createObjectURL(files[i]) },
+      back:  { file: files[i + 1], objectUrl: URL.createObjectURL(files[i + 1]) },
+    };
+    if (mode === 'deep') {
+      item.topEdge    = { file: files[i + 2], objectUrl: URL.createObjectURL(files[i + 2]) };
+      item.bottomEdge = { file: files[i + 3], objectUrl: URL.createObjectURL(files[i + 3]) };
+      item.leftEdge   = { file: files[i + 4], objectUrl: URL.createObjectURL(files[i + 4]) };
+      item.rightEdge  = { file: files[i + 5], objectUrl: URL.createObjectURL(files[i + 5]) };
+    }
+    cards.push(item);
+  }
+  let selected = cards;
+  if (cards.length > cap) { selected = cards.slice(0, cap); truncated = true; }
+  window._bulkGradeQueue = selected;
+  count = selected.length;
+  needCredits = (mode === 'deep') ? count * 2 : count;
+  credits = (window._scanCredits || 0);
+  hasEnough = credits >= needCredits;
 
   const icon = document.getElementById('bulkGradeCreditIcon');
   const msg  = document.getElementById('bulkGradeCreditMsg');
@@ -17510,11 +17512,12 @@ function processBulkGradeFiles(input) {
 
   if (icon) icon.textContent = hasEnough ? (mode === 'deep' ? '🔍' : '🎯') : '⚠️';
   if (msg) {
-    const photosLine = (mode === 'deep')
-      ? '<br><span style="font-size:.72rem;color:var(--text-muted)">' + (count * 2) + ' photos paired as front + back</span>'
-      : '';
+    const totalPhotos = count * perCard;
+    const photoLabel = (mode === 'deep')
+      ? totalPhotos + ' photos (front + back + 4 edges each)'
+      : totalPhotos + ' photos (front + back each)';
     msg.innerHTML = '<strong style="color:#fff">' + count + ' card' + (count !== 1 ? 's' : '') + ' ready</strong>' +
-      photosLine +
+      '<br><span style="font-size:.72rem;color:var(--text-muted)">' + photoLabel + '</span>' +
       (truncated ? '<br><span style="color:var(--gold);font-size:.72rem">(capped at ' + cap + ' cards this session)</span>' : '');
   }
   if (bud) {
@@ -17574,7 +17577,7 @@ async function runBulkGrade() {
   document.getElementById('bulkGradeBottomBar').style.display = 'none';
   for (let i = 0; i < queue.length; i++) {
     const rowId = 'bulk-grade-row-' + i;
-    const thumb = (mode === 'deep') ? queue[i].front.objectUrl : queue[i].objectUrl;
+    const thumb = queue[i].front.objectUrl;
     listEl.insertAdjacentHTML('beforeend',
       '<div id="' + rowId + '" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e">' +
         '<img src="' + thumb + '" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.6" />' +
@@ -17605,9 +17608,7 @@ async function runBulkGrade() {
         if (label) label.textContent = (mode === 'deep') ? 'Analyzing front…' : 'Grading…';
       } catch(_) {}
 
-      const result = (mode === 'deep')
-        ? await _bulkDeepGradeOne(item, rowId)
-        : await _bulkGradeOne(item, rowId);
+      const result = await _bulkGradeOne(item, rowId, mode);
 
       if (result === 'STOP') { hardStop = true; return; }
 
@@ -17632,95 +17633,21 @@ async function runBulkGrade() {
   _bulkGradeFinish();
 }
 
-/* Deep-grade one card: grades front, then back, then averages sub-grades.
-   Uses 2 grade credits (server debits one per /api/scan?mode=grade call).
-   If the back fails, we keep the front-only result and mark it partial. */
-async function _bulkDeepGradeOne(item, rowId) {
-  // Grade the FRONT first (this is what the identifier + market prices come from).
-  const frontRes = await _bulkGradeOne({ file: item.front.file, objectUrl: item.front.objectUrl }, rowId);
-  if (frontRes === 'STOP') return 'STOP';
-  if (!frontRes.success) {
-    // Front failed — give up on this card, don't waste a back credit.
-    return frontRes;
-  }
-
-  // Update spinner label to "Analyzing back…".
-  try {
-    const row = document.getElementById(rowId);
-    const label = row?.querySelector('div[style*="flex:1"] div');
-    if (label) label.textContent = 'Analyzing back…';
-  } catch(_) {}
-
-  // Grade the BACK. Reuse _bulkGradeOne — the identifier will often fail on a
-  // back photo, but we only care about the sub-grades. Pass allowBack so the
-  // helper accepts a grades-only response with no card name.
-  const backRes = await _bulkGradeOne({ file: item.back.file, objectUrl: item.back.objectUrl }, rowId, /*allowBack*/true);
-  // If the back call ran out of credits, keep the successful front result but
-  // return STOP so the outer worker halts the rest of the queue.
-  if (backRes === 'STOP') return 'STOP';
-
-  // Compose the deep result from front (identity + prices) + averaged sub-grades.
-  const merged = Object.assign({}, frontRes, { deepMode: true });
-  if (backRes.success && backRes.grades) {
-    const fG = frontRes.grades || {};
-    const bG = backRes.grades || {};
-    const avg = (a, b) => {
-      if (a == null && b == null) return null;
-      if (a == null) return b;
-      if (b == null) return a;
-      return (a + b) / 2;
-    };
-    merged.grades = {
-      corners:   avg(fG.corners,   bG.corners),
-      edges:     avg(fG.edges,     bG.edges),
-      surface:   avg(fG.surface,   bG.surface),
-      // Centering is meaningful only from the front, don't dilute with back.
-      centering: fG.centering,
-      // Recompute final as the min of the 4 sub-grades (PSA-style), fallback to averaged final.
-      final: null,
-      condition: fG.condition || bG.condition || null,
-    };
-    const subs = [merged.grades.corners, merged.grades.edges, merged.grades.surface, merged.grades.centering]
-      .filter(v => v != null);
-    if (subs.length) {
-      // Use min sub-grade rounded down to nearest 0.5 as the "final" — stricter than a simple average
-      // and closer to how PSA weights the lowest attribute.
-      const minSub = Math.min(...subs);
-      merged.grades.final = Math.floor(minSub * 2) / 2;
-    } else {
-      merged.grades.final = avg(fG.final, bG.final);
-    }
-    // Recompute ROI with the new final grade if we have prices.
-    if (merged.rawPrice > 0 && merged.gradedPrice > 0) {
-      const feesPct = 13, gradingCost = 25;
-      const rawNet = merged.rawPrice * (1 - feesPct / 100);
-      const grdNet = merged.gradedPrice * (1 - feesPct / 100);
-      merged.roi = grdNet - rawNet - gradingCost;
-    }
-  } else {
-    // Back grade failed — keep the front-only result but flag as partial.
-    merged.partial = true;
-    merged.error = 'Back photo unclear — grade based on front only';
-  }
-  return merged;
-}
-
-/* Grades a single queued item via /api/scan?mode=grade.
-   The endpoint auto-debits 1 grade credit and refunds server-side on failure.
-   allowBack=true relaxes identity-required checks so a back photo can still
-   return sub-grades even when the identifier can't recognize the card.
+/* Grades a single queued card via /api/scan?mode=grade, sending front+back
+   (and 4 edges for Deep) in a SINGLE server call so Ximilar's native grader
+   applies its tuned 70/30 front-back weighting. Never grades front and back
+   separately client-side — the server always sees both together.
 
    Accuracy loop: if the first attempt returns no grades, retry once with a
-   larger/less-compressed image before giving up. This is what makes Bulk
-   Grade more patient than Rapid Scan — we spend the extra compute rather
-   than fail-fast the way Rapid does. Server refunds credits on identify
-   failures already, so retries don't double-charge. */
-async function _bulkGradeOne(item, rowId, allowBack) {
+   larger/less-compressed image before giving up. Server refunds credits on
+   grade-not-produced, so retries don't double-charge. */
+async function _bulkGradeOne(item, rowId, mode) {
+  const isDeep = mode === 'deep';
   let result = {
-    objectUrl: item.objectUrl, file: item.file, success: false,
+    objectUrl: item.front.objectUrl, file: item.front.file, success: false,
     cardName: '', setName: '', cardNumber: '', imageDataUrl: null,
     grades: null, rawPrice: null, gradedPrice: null, roi: null,
-    error: '', rowId, rawServer: null,
+    error: '', rowId, rawServer: null, deepMode: isDeep,
   };
   // Two attempts: (px, quality). Second pass is bigger + higher quality.
   const attempts = [
@@ -17730,7 +17657,7 @@ async function _bulkGradeOne(item, rowId, allowBack) {
   try {
     // Thumbnail for the row (unchanged across attempts).
     try {
-      const thumbBase64 = await compressImage(item.file, 350, { skipCrop: true });
+      const thumbBase64 = await compressImage(item.front.file, 350, { skipCrop: true });
       result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64;
     } catch(_) {}
 
@@ -17744,18 +17671,36 @@ async function _bulkGradeOne(item, rowId, allowBack) {
           if (label) label.textContent = 'Retrying at higher quality…';
         } catch(_){}
       }
-      const imageBase64 = await compressImage(item.file, px, { skipCrop: true, quality: q });
+      // Compress every photo in parallel — front + back (+ 4 edges for Deep).
+      const encode = (f) => compressImage(f, px, { skipCrop: true, quality: q });
+      const [imageBase64, backBase64, topEdgeBase64, bottomEdgeBase64, leftEdgeBase64, rightEdgeBase64] = await Promise.all([
+        encode(item.front.file),
+        encode(item.back.file),
+        isDeep ? encode(item.topEdge.file)    : Promise.resolve(null),
+        isDeep ? encode(item.bottomEdge.file) : Promise.resolve(null),
+        isDeep ? encode(item.leftEdge.file)   : Promise.resolve(null),
+        isDeep ? encode(item.rightEdge.file)  : Promise.resolve(null),
+      ]);
+
       const idToken = window._googleIdToken || '';
+      const body = {
+        imageBase64, backBase64,
+        mimeType: 'image/jpeg',
+        mode: 'grade',
+        deepGrade: isDeep,
+        email: window.googleUser?.email || window._userEmail || '',
+        googleSub: window.googleUser?.sub || window._googleSub || '',
+      };
+      if (isDeep) {
+        body.topEdgeBase64 = topEdgeBase64;
+        body.bottomEdgeBase64 = bottomEdgeBase64;
+        body.leftEdgeBase64 = leftEdgeBase64;
+        body.rightEdgeBase64 = rightEdgeBase64;
+      }
       const resp = await fetch('/api/scan?mode=grade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-        body: JSON.stringify({
-          imageBase64,
-          mimeType: 'image/jpeg',
-          mode: 'grade',
-          email: window.googleUser?.email || window._userEmail || '',
-          googleSub: window.googleUser?.sub || window._googleSub || '',
-        }),
+        body: JSON.stringify(body),
       });
 
       if (resp.status === 402) {
@@ -17777,17 +17722,20 @@ async function _bulkGradeOne(item, rowId, allowBack) {
 
       const data = await resp.json();
       // The server refunds on grader failure, so we only debit locally when we
-      // got a successful grade back. Otherwise (retrying), leave the local
-      // count untouched — the server tally is authoritative.
-      if (data.grades && (data.grades.final != null || data.grades.corners != null)) {
-        try { if (typeof window._scanCredits === 'number') window._scanCredits = Math.max(0, window._scanCredits - 1); } catch(_){}
+      // got a successful grade back. Deep costs 2 credits, Quick costs 1.
+      const gotGrade = data.grades && (data.grades.final != null || data.grades.corners != null);
+      if (gotGrade) {
+        try {
+          const cost = isDeep ? 2 : 1;
+          if (typeof window._scanCredits === 'number') window._scanCredits = Math.max(0, window._scanCredits - cost);
+        } catch(_){}
         try { updateKeyStatus && updateKeyStatus(); } catch(_){}
       }
 
-      if (data.grades && (data.grades.final != null || data.grades.corners != null)) {
+      if (gotGrade) {
         result.rawServer = data;
         result.success  = true;
-        result.cardName = data.card_name || data.cardName || (allowBack ? 'Back photo' : 'Unknown card');
+        result.cardName = data.card_name || data.cardName || 'Unknown card';
         result.setName  = data.set_name  || data.setName  || '';
         result.cardNumber = data.card_number || data.cardNumber || '';
         result.grades = {
@@ -20046,7 +19994,7 @@ function _esc(s) {
       <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">⚡</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:.9rem;font-weight:800">Quick Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Fast AI grade, up to 25 cards. <strong style="color:var(--gold)">1 grade credit / card</strong> · 1 photo (front)</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Ballpark AI grade, up to 10 cards. <strong style="color:var(--gold)">1 credit / card</strong> · 2 photos (front + back)</div>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </button>
@@ -20056,12 +20004,12 @@ function _esc(s) {
       <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:.9rem;font-weight:800">Deep Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Front + back analysis, up to 10 cards. <strong style="color:var(--gold)">2 grade credits / card</strong> · 2 photos</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Front + back + 4 edges, up to 10 cards. <strong style="color:var(--gold)">2 credits / card</strong> · 6 photos</div>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </button>
 
-    <div style="font-size:.65rem;color:rgba(255,255,255,.35);text-align:center;margin-top:.35rem;line-height:1.5">Deep Grade averages front + back sub-grades for a more accurate final — great before PSA submission.</div>
+    <div style="font-size:.65rem;color:rgba(255,255,255,.35);text-align:center;margin-top:.35rem;line-height:1.5">Deep Grade uses 6 photos per card for the tightest PSA-style estimate — recommended before submitting to a grading company.</div>
   </div>
 </div>
 
