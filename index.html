@@ -1420,15 +1420,63 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     })();
   </script>
   <script>
-    // Safe wrapper: never throws if analytics is blocked (ad-blockers) or
-    // hasn't loaded yet. All CardResell funnel events go through this.
-    window.trackEvent = function trackEvent(name, props) {
+    // 2026-08-30: dual-write analytics. Vercel Web Analytics is primary
+    // (free, nice dashboard) but the domain provisioning is flaky and
+    // custom-event data can drop. We ALSO fire-and-forget POST every event
+    // to /api/events which writes to Upstash Redis with daily counters.
+    // Read the funnel via GET /api/events?admin=<ANALYTICS_ADMIN_KEY>.
+    //
+    // Never throw — analytics must never break the app.
+    (function() {
+      // Persistent anon session id (24h) for stitching funnel steps.
+      var SESS_KEY = 'cr_sess_id';
+      var SESS_TTL = 24 * 60 * 60 * 1000;
+      function sessionId() {
+        try {
+          var raw = localStorage.getItem(SESS_KEY);
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.id && (Date.now() - parsed.t) < SESS_TTL) return parsed.id;
+          }
+        } catch (e) {}
+        var id = 's_' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-4);
+        try { localStorage.setItem(SESS_KEY, JSON.stringify({ id: id, t: Date.now() })); } catch (e) {}
+        return id;
+      }
+      var sid = null;
+      try { sid = sessionId(); } catch (e) {}
+
+      window.trackEvent = function trackEvent(name, props) {
+        try {
+          if (typeof window.va === 'function') {
+            window.va('event', { name: name, ...(props && typeof props === 'object' ? props : {}) });
+          }
+        } catch (e) {}
+        // Durable fallback — fire-and-forget, best-effort.
+        try {
+          if (navigator.sendBeacon) {
+            var blob = new Blob([JSON.stringify({ name: name, props: props || {}, session_id: sid })], { type: 'application/json' });
+            navigator.sendBeacon('/api/events', blob);
+          } else {
+            fetch('/api/events', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: name, props: props || {}, session_id: sid }),
+              keepalive: true
+            }).catch(function() {});
+          }
+        } catch (e) {}
+      };
+
+      // Fire one page_view per pageload so we have a top-of-funnel denominator.
       try {
-        if (typeof window.va === 'function') {
-          window.va('event', { name, ...(props && typeof props === 'object' ? props : {}) });
+        var wasFired = sessionStorage.getItem('cr_pv_fired');
+        if (!wasFired) {
+          sessionStorage.setItem('cr_pv_fired', '1');
+          setTimeout(function() { window.trackEvent('page_view'); }, 200);
         }
-      } catch (e) { /* swallow — analytics must never break the app */ }
-    };
+      } catch (e) {}
+    })();
   </script>
 </head>
 <body data-game-theme="pokemon">
@@ -1525,15 +1573,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy Grader Credits</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startGradeScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$5.99</div>
+          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$5.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.60/scan</div>
         </button>
         <button onclick="startGradeScanCheckout('25')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>25 scans</div><div style="color:var(--gold);font-weight:800">$12.99</div>
+          <div>25 scans</div><div style="color:var(--gold);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 13%</div>
         </button>
         <button onclick="startGradeScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
-          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$22.99</div>
+          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$22.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 23%</div>
         </button>
       </div>
     </div>
@@ -1546,15 +1594,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy ID Scanner Credits</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1.99</div>
+          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.20/scan</div>
         </button>
         <button onclick="startIdScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$7.99</div>
+          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$7.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 20%</div>
         </button>
         <button onclick="startIdScanCheckout('100')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
-          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$12.99</div>
+          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 35%</div>
         </button>
       </div>
     </div>
@@ -2770,8 +2818,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
 
     <!-- 2026-08-20: Credits-never-expire trust line — always visible. -->
+    <!-- 2026-08-30: strengthened with self-service refund policy: any Pro tier billed within 7 days that they haven't used gets refunded on request. -->
     <div style="margin:.15rem auto .55rem;padding:.35rem .8rem;max-width:520px;color:var(--text-muted);font-size:.68rem;text-align:center;line-height:1.4;font-weight:500">
-      🔒 Cancel anytime · credits never expire · no long-term contract
+      🔒 Cancel anytime · <strong style="color:#4ade80">7-day money-back guarantee</strong> · credits never expire · no contract
     </div>
 
     <div class="pricing-cards">
@@ -7668,7 +7717,7 @@ function calc() {
         const p = PLATFORMS[r.pid];
         const rowIdx = unlockedRank.length + idx + 1;
         const pct = Math.max(6, (r.netPayout / rankBest) * 100);
-        html += `<div class="payout-rank-row payout-rank-locked" role="listitem" onclick="openPricingModal && openPricingModal('ranking_strip_unlock')">
+        html += `<div class="payout-rank-row payout-rank-locked" role="listitem" onclick="(function(){ try{ window.trackEvent && window.trackEvent('ranking_locked_row_clicked', { source: 'ranking_strip' }); }catch(_){}; openPricingModal && openPricingModal('ranking_strip_unlock'); })()">
           <div class="payout-rank-rank">${rowIdx}</div>
           <div class="payout-rank-emoji">${p.emoji}</div>
           <div class="payout-rank-name">${p.name}</div>
@@ -7684,6 +7733,15 @@ function calc() {
           price: price,
           venues: unlockedRank.map(r => ({ name: PLATFORMS[r.pid].name, pay: r.netPayout }))
         };
+      } catch(_) {}
+      // 2026-08-30: instrument the ranking strip. Deduped per card render so
+      // a user scrolling doesn't fire dozens of view events. tier: free / pro.
+      try {
+        var _tierName = window._isPro ? (window._proTier || 'pro') : 'free';
+        window.trackEvent && window.trackEvent('payout_ranking_viewed', {
+          tier: _tierName,
+          game: (selectedCard && selectedCard.game) || 'pokemon',
+        });
       } catch(_) {}
       html += `<button class="payout-share-btn" type="button" onclick="shareRanking()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:.35rem"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>Share this ranking
@@ -10598,6 +10656,7 @@ function shareRanking() {
   const best = r.venues[0];
   const msg = `${r.card} → ${best.name} pays $${best.pay.toFixed(2)} after fees. Full ranking on CardResell:`;
   const data = { title: 'CardResell payout ranking', text: msg, url: shareUrl };
+  try { window.trackEvent && window.trackEvent('share_ranking_click'); } catch(_){}
   // Clipboard-first fallback so users ALWAYS get feedback, even on browsers
   // where navigator.share exists but the OS share sheet fails silently
   // (headless browsers, some webviews, certain iOS PWA contexts).
@@ -16562,6 +16621,37 @@ function calcGradingRoi() {
       `<span style="font-size:.72rem;font-weight:400;color:var(--text-muted)">` +
       `Raw net $${rawNet.toFixed(2)} → Graded net $${gradedNet.toFixed(2)} − $${gradingCost.toFixed(2)} grading = <strong style="color:#4ade80">+$${roi.toFixed(2)}</strong>` +
       `</span>`;
+    // 2026-08-30: profitable ROI → highest-intent moment to upsell Free users.
+    // Shows once per session, only if profit is meaningful ($20+), only for Free.
+    try {
+      var _tier = (window._userTier || 'free').toLowerCase();
+      var _seen = sessionStorage.getItem('cr_roi_upsell_shown');
+      if (_tier === 'free' && roi >= 20 && !_seen) {
+        sessionStorage.setItem('cr_roi_upsell_shown', '1');
+        setTimeout(function() {
+          try {
+            var host = document.getElementById('gradingRoiPanel');
+            if (!host) return;
+            var existing = document.getElementById('roiProfitUpsell');
+            if (existing) existing.remove();
+            var box = document.createElement('div');
+            box.id = 'roiProfitUpsell';
+            box.style.cssText = 'margin-top:.7rem;padding:.75rem .9rem;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;display:flex;flex-direction:column;gap:.55rem';
+            box.innerHTML =
+              '<div style="font-size:.74rem;color:rgba(255,255,255,.9);line-height:1.45">' +
+                '💰 <strong>This one flip pays for CardResell Pro for ' + Math.max(1, Math.floor(roi / 9.99)) + ' months.</strong> Unlock unlimited grade scans + all 12 marketplace payouts.' +
+              '</div>' +
+              '<button type="button" id="roiUpsellBtn" style="align-self:flex-start;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.42rem 1.05rem;font-weight:800;font-size:.75rem;cursor:pointer">Upgrade to Pro — $9.99/mo</button>';
+            host.appendChild(box);
+            window.trackEvent && window.trackEvent('post_grade_prompt_shown', { trigger: 'roi_profit_free', tier: _tier });
+            document.getElementById('roiUpsellBtn').addEventListener('click', function() {
+              try { window.trackEvent && window.trackEvent('post_grade_prompt_click', { trigger: 'roi_profit_free', tier: _tier }); } catch(_){}
+              if (typeof openPricingModal === 'function') openPricingModal('roi_profit_free');
+            });
+          } catch(_){}
+        }, 900);
+      }
+    } catch(_){}
   } else if (roi > -5) {
     verdict.style.background = 'rgba(234,179,8,.08)';
     verdict.style.border     = '1px solid rgba(234,179,8,.3)';
