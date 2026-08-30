@@ -4779,7 +4779,21 @@ let _compsAbortCard = null; // track which card we're fetching for
 //   Row 1 (always shows if TCG resolved): TCGplayer market · range · updated
 //   Row 2 (only if eBay has ≥2 comps):    eBay sold count + median + confidence pill
 // eBay currently 403s a lot from datacenter IPs; TCG is our source of truth.
+// 2026-08-30: client-side belt-and-suspenders High-price clamp. Server
+// clamps High to 3x Market before returning, but cached KV entries from
+// before this shipped are still un-clamped for 4h. Also protects against
+// any other source (eBay, PC) that might return an outlandish high.
+function _clampHigh(row) {
+  if (!row) return row;
+  const anchor = row.market != null ? row.market : row.mid;
+  if (anchor && row.high && row.high > anchor * 3) {
+    return { ...row, high: Math.round(anchor * 3 * 100) / 100, highClamped: true };
+  }
+  return row;
+}
+
 function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
+  tcg = _clampHigh(tcg);
   const parts = [];
 
   if (tcg && tcg.market != null && tcg.market > 0) {
@@ -6123,10 +6137,12 @@ function updatePriceFromPrinting() {
   priceMain.textContent = `$${adjusted.toFixed(2)}`;
   priceMain.style.color = 'var(--text)';
 
+  // 2026-08-30: clamp outlandish high before display (see _clampHigh comment)
+  const clamped = (typeof _clampHigh === 'function') ? _clampHigh(p) : p;
   const parts = [];
-  if (p.low  != null) parts.push(`Low $${(p.low  * condMult).toFixed(2)}`);
-  if (p.mid  != null) parts.push(`Mid $${(p.mid  * condMult).toFixed(2)}`);
-  if (p.high != null) parts.push(`High $${(p.high * condMult).toFixed(2)}`);
+  if (clamped.low  != null) parts.push(`Low $${(clamped.low  * condMult).toFixed(2)}`);
+  if (clamped.mid  != null) parts.push(`Mid $${(clamped.mid  * condMult).toFixed(2)}`);
+  if (clamped.high != null) parts.push(`High $${(clamped.high * condMult).toFixed(2)}`);
   priceRange.textContent = parts.join(' · ');
 
   const srcMap = { TCGPlayer: 'TCGPlayer market', Scryfall: 'Scryfall · Updated daily', YGOProDeck: 'YGOProDeck · TCGPlayer data', Manual: 'Manual entry', 'eBay JP Comps': 'eBay JP sold listings', 'TCGPlayer (EN)': 'TCGPlayer market (EN version)', TCGPriceLookup: 'TCGPriceLookup' };

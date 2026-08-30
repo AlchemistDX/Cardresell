@@ -293,8 +293,26 @@ export default async function handler(req, res) {
       } catch(e) {}
     }
 
+    // 2026-08-30: clamp outlandish High values. TCGplayer's highPrice is the
+    // ABSOLUTE HIGHEST current listing across all sellers — which includes
+    // sniper listings ($2500 for a $280 Charizard ex #234, someone hoping a
+    // whale mistakes it). Real users see the range and lose trust when High
+    // is 8-10x Market. Clamp High to at most 3x Market (or 3x Mid if Market
+    // is missing). Preserve the ORIGINAL value in highRaw for debugging.
+    const highRaw = high;
+    if (high != null && (market != null || mid != null)) {
+      const anchor = market || mid;
+      const CAP_MULT = 3.0;
+      const cap = anchor * CAP_MULT;
+      if (high > cap) {
+        high = Math.round(cap * 100) / 100;
+      }
+    }
+
     const data = {
       market, low, mid, high,
+      highRaw: (highRaw !== high) ? highRaw : undefined,
+      highClamped: (highRaw !== high) ? true : undefined,
       source: 'tcgplayer-live',
       productId,
       cardName: best.productName,
