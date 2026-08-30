@@ -5197,8 +5197,25 @@ async function fetchAndApplySoldComps(forceRefresh) {
     .then(r => r.ok ? r.json() : null).catch(() => null);
   const ebayP = fetch('/api/ebay-sold?'      + ebayParams.toString(), { signal: _clientController.signal })
     .then(r => r.ok ? r.json() : null).catch(() => null);
-  const pcP   = fetch('/api/pricecharting?'  + pcParams.toString(),   { signal: _clientController.signal })
+  // 2026-08-30: retry once if PC returns pricecharting-error. Our server
+  // already does upstream retries, but if the whole burst fails and gets
+  // cached (60s), a client retry ~1.5s later will still hit the cache.
+  // Instead, wait 1.2s and try again — by then the server’s error cache is
+  // expiring or the upstream has recovered. This eliminates the last ~5%
+  // of transient failures the user sees on-screen.
+  const _pcFetch = () => fetch('/api/pricecharting?' + pcParams.toString(),
+                               { signal: _clientController.signal })
     .then(r => r.ok ? r.json() : null).catch(() => null);
+  const pcP = _pcFetch().then(async (d) => {
+    if (d && d.source === 'pricecharting-error') {
+      await new Promise(r => setTimeout(r, 1200));
+      if (_compsAbortCard !== cardKey) return d; // scan changed — don’t retry
+      const d2 = await _pcFetch();
+      // Only replace if the retry actually succeeded
+      if (d2 && d2.source === 'pricecharting' && d2.prices) return d2;
+    }
+    return d;
+  });
 
   // Grade opportunity: only meaningful for raw scans (currentGraderPill = 'no').
   // If user is already viewing a specific graded price, skip — no point

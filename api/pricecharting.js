@@ -208,16 +208,41 @@ export default async function handler(req, res) {
   const q = qParts.join(' ');
   const url = `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
 
+  // 2026-08-30: retry with backoff on transient PC upstream failures.
+  // Root cause found in grade_price_audit_2026-08-30: at even 4 req/s the PC
+  // upstream returns 429/5xx or times out for ~40% of requests. The data IS
+  // there — cards that returned {source:'pricecharting-error'} succeeded when
+  // retried individually. So retry 2x with 400ms + 900ms backoff before
+  // giving up, and use 12s per-attempt timeout (was 8s).
+  async function fetchPcWithRetry(u) {
+    const backoffs = [0, 400, 900]; // 3 attempts total
+    let lastErr = null;
+    for (let i = 0; i < backoffs.length; i++) {
+      if (backoffs[i]) await new Promise(r => setTimeout(r, backoffs[i]));
+      try {
+        const controller = new AbortController();
+        const timeoutId  = setTimeout(() => controller.abort(), 12000);
+        const resp = await fetch(u, {
+          headers: { 'User-Agent': 'CardResell/1.0', 'Accept': 'application/json' },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (resp.ok) return await resp.json();
+        // 5xx and 429 are retryable; 4xx (except 429) are not
+        if (resp.status !== 429 && resp.status < 500) {
+          throw new Error(`PriceCharting returned ${resp.status}`);
+        }
+        lastErr = new Error(`PriceCharting returned ${resp.status} (attempt ${i+1})`);
+      } catch(e) {
+        // AbortError, network, JSON parse — all retryable
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('PriceCharting failed after retries');
+  }
+
   try {
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'CardResell/1.0', 'Accept': 'application/json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!r.ok) throw new Error(`PriceCharting returned ${r.status}`);
-    const pc = await r.json();
+    const pc = await fetchPcWithRetry(url);
 
     if (pc.status !== 'success' || !pc.id) {
       const data = {
@@ -291,11 +316,25 @@ export default async function handler(req, res) {
 
   } catch(e) {
     console.error('pricecharting error:', e.message);
-    return res.status(200).json({
+    // 2026-08-30: cache the ERROR briefly so a hot burst of requests for the
+    // same card doesn't hammer PC. 60s is short enough that a transient PC
+    // outage doesn't pin bad data in KV for 6h, but long enough to dedupe
+    // simultaneous scan retries. Successful results still get the full 6h TTL.
+    const errData = {
       median: null, avg: null, low: null, high: null, count: 0,
       confidence: 'insufficient', confidenceScore: 0,
       confidenceReasons: [e.message || 'PriceCharting request failed'],
       source: 'pricecharting-error', fetchedAt, cacheAgeSec: 0,
-    });
+    };
+    // Short-TTL cache for errors only
+    if (kvUrl && kvToken) {
+      try {
+        await fetch(
+          `${kvUrl}/setex/${encodeURIComponent('pc_cache:' + cacheKey)}/60/${encodeURIComponent(JSON.stringify(errData))}`,
+          { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
+        );
+      } catch(_) {}
+    }
+    return res.status(200).json(errData);
   }
 }
