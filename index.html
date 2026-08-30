@@ -1742,6 +1742,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       AI Grade <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.15rem"></span>
     </button>
+    <button class="scan-sub-btn grade-sub" id="bulkGradeSubBtn" onclick="openBulkGrade()" title="Bulk Grade — grade up to 25 cards at once (Pro Max)" style="position:relative">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/><rect x="14" y="14" width="8" height="8" rx="1" fill="var(--gold)" stroke="#000" stroke-width="1"/></svg>
+      Bulk Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .25rem;border-radius:3px;font-weight:900;margin-left:.15rem;vertical-align:middle">MAX</span>
+    </button>
   </div>
   <!-- Pro promo banner — shown to signed-in free users (dismissed per session).
        Copy is honest about the ladder: Pro adds 3-5 marketplaces depending on
@@ -1768,6 +1772,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <input type="file" id="gradeEdgeRightInput"  accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'right')" />
   <!-- Bulk scan file inputs -->
   <input type="file" id="bulkUploadInput" accept="image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
+  <!-- Bulk GRADE upload input (Pro Max / Ultimate only). Grades up to 25 cards -->
+  <!-- in one session via /api/scan?mode=grade with concurrency=2 (Ximilar-safe). -->
+  <input type="file" id="bulkGradeInput" accept="image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- Preview image -->
@@ -17300,6 +17307,450 @@ function _fbErrMsg(e) {
 
 
 /* =========================================================
+   BULK GRADE MODE (Pro Max / Ultimate)
+   Grades up to 25 cards via /api/scan?mode=grade with
+   concurrency=2 (Ximilar sync grader is ~3-8s per call).
+   Each card debits 1 grade credit; refunds happen server-side
+   on failure (same as the single-grade path).
+   ========================================================= */
+
+window._bulkGradeQueue      = [];   // [{file, objectUrl}]
+window._bulkGradeResults    = [];   // [{success, cardName, grades:{final,corners,edges,surface,centering}, rawPrice, gradedPrice, roi, error}]
+window._bulkGradeProcessing = false;
+window._bulkGradeCap        = 25;   // hard cap per session
+
+function openBulkGrade() {
+  if (!window.googleUser) {
+    showToast('Sign in with Google first to use Bulk Grade');
+    triggerGoogleSignIn && triggerGoogleSignIn();
+    return;
+  }
+  // Reset state
+  (window._bulkGradeQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
+  (window._bulkGradeResults || []).forEach(r => { try { URL.revokeObjectURL(r.objectUrl); } catch(_){} });
+  window._bulkGradeQueue      = [];
+  window._bulkGradeResults    = [];
+  window._bulkGradeProcessing = false;
+
+  const ov = document.getElementById('bulkGradeOverlay');
+  if (!ov) return;
+  ov.style.display = 'flex';
+
+  // Tier gate: Pro Max + Ultimate only. Owner override via ?dev=1 in URL.
+  const tier = (window._userTier || (window._isPro ? 'pro' : 'free')).toLowerCase();
+  const isEligible = tier === 'pro_max' || tier === 'ultimate';
+  const isOwner = (window._user && window._user.email && (window._user.email === 'willsep200@gmail.com' || window._user.email === 'willsep202@gmail.com'));
+
+  try { window.trackEvent && window.trackEvent('bulk_grade_open', { tier, eligible: isEligible || isOwner ? 'yes' : 'no' }); } catch(_) {}
+
+  if (!isEligible && !isOwner) {
+    _bulkGradeShowSection('tierGate');
+    return;
+  }
+
+  // Show credit balance in intro
+  const credits = (window._scanCredits || 0);
+  const info = document.getElementById('bulkGradeCreditsInfo');
+  if (info) {
+    info.innerHTML = 'You have <strong style="color:var(--gold)">' + credits + '</strong> grade credit' +
+      (credits !== 1 ? 's' : '') + ' available';
+  }
+  _bulkGradeShowSection('intro');
+}
+
+function closeBulkGrade() {
+  const ov = document.getElementById('bulkGradeOverlay');
+  if (ov) ov.style.display = 'none';
+  window._bulkGradeProcessing = false;
+  (window._bulkGradeQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
+  (window._bulkGradeResults || []).forEach(r => { try { URL.revokeObjectURL(r.objectUrl); } catch(_){} });
+  window._bulkGradeQueue   = [];
+  window._bulkGradeResults = [];
+}
+
+function _bulkGradeShowSection(section) {
+  // section: 'tierGate' | 'intro' | 'creditConfirm' | 'processing'
+  document.getElementById('bulkGradeTierGate').style.display      = section === 'tierGate'      ? 'flex' : 'none';
+  document.getElementById('bulkGradeIntro').style.display         = section === 'intro'         ? 'flex' : 'none';
+  document.getElementById('bulkGradeCreditConfirm').style.display = section === 'creditConfirm' ? 'flex' : 'none';
+  document.getElementById('bulkGradeProcessing').style.display    = section === 'processing'    ? 'flex' : 'none';
+}
+
+function startBulkGradeUpload() {
+  document.getElementById('bulkGradeInput').click();
+}
+
+function processBulkGradeFiles(input) {
+  const files = Array.from(input.files || []);
+  input.value = '';
+  if (!files.length) return;
+
+  const cap = window._bulkGradeCap || 25;
+  let selected = files;
+  let truncated = false;
+  if (files.length > cap) {
+    selected = files.slice(0, cap);
+    truncated = true;
+  }
+
+  window._bulkGradeQueue = selected.map(f => ({ file: f, objectUrl: URL.createObjectURL(f) }));
+
+  const count = selected.length;
+  const credits = (window._scanCredits || 0);
+  const hasEnough = credits >= count;
+
+  const icon = document.getElementById('bulkGradeCreditIcon');
+  const msg  = document.getElementById('bulkGradeCreditMsg');
+  const bud  = document.getElementById('bulkGradeCreditBudget');
+  const btn  = document.getElementById('bulkGradeStartBtn');
+
+  if (icon) icon.textContent = hasEnough ? '🎯' : '⚠️';
+  if (msg) {
+    msg.innerHTML = '<strong style="color:#fff">' + count + ' card' + (count > 1 ? 's' : '') + ' ready</strong>' +
+      (truncated ? '<br><span style="color:var(--gold);font-size:.75rem">(capped at ' + cap + ' — remove some or split into two sessions)</span>' : '');
+  }
+  if (bud) {
+    if (hasEnough) {
+      bud.innerHTML = 'Uses <strong style="color:var(--gold)">' + count + ' grade credit' + (count > 1 ? 's' : '') +
+        '</strong> · you have ' + credits;
+      if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Grade All ⚡'; }
+    } else {
+      const short = count - credits;
+      bud.innerHTML = '<strong style="color:#f87171">Need ' + count + ' grade credits, you have ' + credits + '.</strong><br>' +
+        '<button onclick="closeBulkGrade();openPricingModal(\'bulk_grade_low_credits\')" style="margin-top:.5rem;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.5rem 1rem;font-weight:800;font-size:.78rem;cursor:pointer">Buy ' + short + '+ more credits</button>';
+      if (btn) { btn.disabled = true; btn.style.opacity = '.5'; btn.textContent = 'Not enough credits'; }
+    }
+  }
+
+  try { window.trackEvent && window.trackEvent('bulk_grade_files_selected', { count: String(count), enough: hasEnough ? 'yes' : 'no' }); } catch(_) {}
+
+  _bulkGradeShowSection('creditConfirm');
+}
+
+function cancelBulkGradeConfirm() {
+  (window._bulkGradeQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
+  window._bulkGradeQueue = [];
+  _bulkGradeShowSection('intro');
+}
+
+/* Runs the queued Bulk Grade session against /api/scan?mode=grade.
+   Concurrency = 2 (Ximilar's sync grader ~3-8s per call; 3+ tends to 429). */
+async function runBulkGrade() {
+  const queue = window._bulkGradeQueue || [];
+  if (!queue.length) return;
+
+  const credits = (window._scanCredits || 0);
+  if (credits < queue.length) {
+    showToast('Not enough grade credits for ' + queue.length + ' cards.');
+    return;
+  }
+
+  window._bulkGradeProcessing = true;
+  window._bulkGradeResults    = new Array(queue.length);
+  _bulkGradeShowSection('processing');
+
+  try { window.trackEvent && window.trackEvent('bulk_grade_started', { count: String(queue.length) }); } catch(_) {}
+
+  // Pre-render placeholder rows so completion order matches queue order.
+  const listEl = document.getElementById('bulkGradeResultsList');
+  listEl.innerHTML = '';
+  document.getElementById('bulkGradeBottomBar').style.display = 'none';
+  for (let i = 0; i < queue.length; i++) {
+    const rowId = 'bulk-grade-row-' + i;
+    listEl.insertAdjacentHTML('beforeend',
+      '<div id="' + rowId + '" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e">' +
+        '<img src="' + queue[i].objectUrl + '" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.6" />' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:.78rem;color:rgba(255,255,255,.35)">Queued…</div>' +
+        '</div>' +
+        '<div style="width:20px;height:20px;border:2px solid rgba(196,122,0,.3);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></div>' +
+      '</div>');
+  }
+
+  const total = queue.length;
+  const CONCURRENCY = 2;
+  let nextIdx = 0;
+  let completed = 0;
+  let hardStop = false;
+
+  async function worker() {
+    while (true) {
+      if (hardStop || !window._bulkGradeProcessing) return;
+      const i = nextIdx++;
+      if (i >= total) return;
+      const item  = queue[i];
+      const rowId = 'bulk-grade-row-' + i;
+
+      try {
+        const row = document.getElementById(rowId);
+        const label = row?.querySelector('div[style*="flex:1"] div');
+        if (label) label.textContent = 'Grading…';
+      } catch(_) {}
+
+      const result = await _bulkGradeOne(item, rowId);
+      if (result === 'STOP') { hardStop = true; return; }
+
+      window._bulkGradeResults[i] = result;
+      completed++;
+      _bulkGradeUpdateRow(rowId, result);
+
+      const pct = Math.round((completed / total) * 100);
+      document.getElementById('bulkGradeProgressLabel').textContent = 'Grading ' + completed + ' of ' + total + '…';
+      document.getElementById('bulkGradeProgressBar').style.width = pct + '%';
+      const credLeft = (window._scanCredits || 0);
+      document.getElementById('bulkGradeProgressCredits').textContent =
+        credLeft + ' credit' + (credLeft !== 1 ? 's' : '') + ' remaining';
+    }
+  }
+
+  const workerCount = Math.min(CONCURRENCY, total);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  window._bulkGradeResults = window._bulkGradeResults.filter(r => r);
+  _bulkGradeFinish();
+}
+
+/* Grades a single queued item via /api/scan?mode=grade.
+   The endpoint auto-debits 1 grade credit and refunds server-side on failure. */
+async function _bulkGradeOne(item, rowId) {
+  let result = {
+    objectUrl: item.objectUrl, file: item.file, success: false,
+    cardName: '', setName: '', cardNumber: '', imageDataUrl: null,
+    grades: null, rawPrice: null, gradedPrice: null, roi: null,
+    error: '', rowId,
+  };
+  try {
+    // 1200px, skip crop (mirror single-grade path). Grader wants front face.
+    const imageBase64 = await compressImage(item.file, 1200, { skipCrop: true, quality: 0.90 });
+    try {
+      const thumbBase64 = await compressImage(item.file, 350, { skipCrop: true });
+      result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64;
+    } catch(_) {}
+
+    const idToken = window._googleIdToken || '';
+    const resp = await fetch('/api/scan?mode=grade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+      body: JSON.stringify({
+        imageBase64,
+        mimeType: 'image/jpeg',
+        mode: 'grade',
+        email: window.googleUser?.email || window._userEmail || '',
+        googleSub: window.googleUser?.sub || window._googleSub || '',
+      }),
+    });
+
+    if (resp.status === 402) {
+      result.error = 'Out of grade credits';
+      showToast('Ran out of grade credits mid-batch. Completed cards saved.', 'info');
+      return 'STOP';
+    } else if (resp.status === 401) {
+      result.error = 'Auth expired';
+      window._googleIdToken = null;
+      return result;
+    } else if (!resp.ok) {
+      let em = 'Grade failed';
+      try { const e = await resp.json(); em = e.error || em; } catch(_){}
+      result.error = em;
+      return result;
+    }
+
+    const data = await resp.json();
+    // Local grade credit is decremented by the server. Reflect in the UI.
+    try { if (typeof window._scanCredits === 'number') window._scanCredits = Math.max(0, window._scanCredits - 1); } catch(_){}
+    try { updateKeyStatus && updateKeyStatus(); } catch(_){}
+
+    if (data.grades && (data.grades.final != null || data.grades.corners != null)) {
+      result.success  = true;
+      result.cardName = data.card_name || data.cardName || 'Unknown card';
+      result.setName  = data.set_name  || data.setName  || '';
+      result.cardNumber = data.card_number || data.cardNumber || '';
+      result.grades = {
+        final:     _bgNum(data.grades.final),
+        corners:   _bgNum(data.grades.corners),
+        edges:     _bgNum(data.grades.edges),
+        surface:   _bgNum(data.grades.surface),
+        centering: _bgNum(data.grades.centering),
+        condition: data.grades.condition || null,
+      };
+      // Prices for ROI. Server returns market_price + graded_price when known.
+      result.rawPrice    = _bgNum(data.market_price || data.marketPrice);
+      result.gradedPrice = _bgNum(data.graded_price || data.gradedPrice);
+      // ROI = graded_net - raw_net - grading cost ($25 default) using 13% fees.
+      if (result.rawPrice > 0 && result.gradedPrice > 0) {
+        const feesPct = 13, gradingCost = 25;
+        const rawNet = result.rawPrice * (1 - feesPct / 100);
+        const grdNet = result.gradedPrice * (1 - feesPct / 100);
+        result.roi = grdNet - rawNet - gradingCost;
+      }
+    } else {
+      result.error = data.error || 'Could not grade card';
+    }
+  } catch(err) {
+    result.error = err.message || 'Grade error';
+  }
+  return result;
+}
+
+function _bgNum(v) {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _bulkGradeUpdateRow(rowId, result) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  const img = row.querySelector('img');
+  if (img) img.style.opacity = '1';
+  const spinner = row.querySelector('div[style*="animation:spin"]');
+  if (spinner && spinner.parentNode) spinner.parentNode.removeChild(spinner);
+
+  const body = row.querySelector('div[style*="flex:1"]');
+  if (!body) return;
+
+  if (!result.success) {
+    body.innerHTML =
+      '<div style="font-size:.78rem;color:#f87171;font-weight:700">' + _bgEsc(result.cardName || 'Failed') + '</div>' +
+      '<div style="font-size:.68rem;color:rgba(255,255,255,.5);margin-top:.15rem">' + _bgEsc(result.error || 'Unknown error') + '</div>';
+    row.style.border = '1px solid rgba(239,68,68,.25)';
+    return;
+  }
+
+  const g = result.grades || {};
+  const finalGrade = g.final != null ? g.final.toFixed(1) : '—';
+  const cornerG    = g.corners != null ? g.corners.toFixed(1) : '—';
+  const edgeG      = g.edges != null ? g.edges.toFixed(1) : '—';
+  const surfG      = g.surface != null ? g.surface.toFixed(1) : '—';
+  const centG      = g.centering != null ? g.centering.toFixed(1) : '—';
+
+  const gradeColor = (g.final || 0) >= 9 ? '#4ade80' : (g.final || 0) >= 7.5 ? 'var(--gold)' : '#f87171';
+
+  let roiHtml = '';
+  if (result.roi != null) {
+    const roiColor = result.roi > 0 ? '#4ade80' : result.roi > -5 ? 'var(--gold)' : '#f87171';
+    const roiVerdict = result.roi > 0 ? 'Worth grading' : result.roi > -5 ? 'Borderline' : 'Skip';
+    roiHtml =
+      '<div style="font-size:.68rem;color:' + roiColor + ';font-weight:700;margin-top:.2rem">' +
+      roiVerdict + ': ' + (result.roi > 0 ? '+' : '') + '$' + result.roi.toFixed(2) +
+      '</div>';
+  }
+
+  body.innerHTML =
+    '<div style="font-size:.78rem;color:#fff;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+      _bgEsc(result.cardName) +
+    '</div>' +
+    '<div style="font-size:.66rem;color:rgba(255,255,255,.5);margin-top:.1rem">' +
+      _bgEsc([result.setName, result.cardNumber].filter(Boolean).join(' · ')) +
+    '</div>' +
+    '<div style="display:flex;gap:.5rem;margin-top:.25rem;align-items:baseline;flex-wrap:wrap">' +
+      '<span style="font-size:.95rem;font-weight:900;color:' + gradeColor + '">Grade ' + finalGrade + '</span>' +
+      '<span style="font-size:.62rem;color:rgba(255,255,255,.45)">C ' + cornerG + ' · E ' + edgeG + ' · S ' + surfG + ' · Ctr ' + centG + '</span>' +
+    '</div>' +
+    roiHtml;
+  row.style.border = '1px solid rgba(196,122,0,.35)';
+}
+
+function _bgEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+}
+
+function _bulkGradeFinish() {
+  window._bulkGradeProcessing = false;
+  document.getElementById('bulkGradeProgressBar').style.width = '100%';
+  document.getElementById('bulkGradeProgressLabel').textContent = 'Done!';
+
+  const results = window._bulkGradeResults || [];
+  const successCount = results.filter(r => r.success).length;
+  const failCount    = results.filter(r => !r.success).length;
+  const worthGrading = results.filter(r => r.success && r.roi != null && r.roi > 0).length;
+
+  document.getElementById('bulkGradeSummaryLine').innerHTML =
+    '<strong style="color:#fff">' + successCount + ' graded' + (failCount ? ' · ' + failCount + ' failed' : '') + '</strong>' +
+    (worthGrading > 0 ? ' · <span style="color:#4ade80">' + worthGrading + ' worth submitting to PSA</span>' : '');
+
+  document.getElementById('bulkGradeBottomBar').style.display = '';
+
+  try {
+    window.trackEvent && window.trackEvent('bulk_grade_complete', {
+      count: String(results.length),
+      success: String(successCount),
+      worth_grading: String(worthGrading),
+    });
+  } catch(_) {}
+}
+
+/* Export current Bulk Grade results as CSV download. */
+function exportBulkGradeCSV() {
+  const results = (window._bulkGradeResults || []).filter(r => r.success);
+  if (!results.length) { showToast('No graded cards to export.'); return; }
+  const header = ['Card', 'Set', 'Number', 'Final Grade', 'Corners', 'Edges', 'Surface', 'Centering', 'Raw Price', 'Est Graded Price', 'Grading ROI'];
+  const rows = results.map(r => [
+    r.cardName, r.setName, r.cardNumber,
+    r.grades?.final ?? '', r.grades?.corners ?? '', r.grades?.edges ?? '',
+    r.grades?.surface ?? '', r.grades?.centering ?? '',
+    r.rawPrice ?? '', r.gradedPrice ?? '', r.roi != null ? r.roi.toFixed(2) : '',
+  ]);
+  const csv = [header, ...rows].map(row =>
+    row.map(v => {
+      const s = String(v == null ? '' : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',')
+  ).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cardresell-bulk-grade-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+  try { window.trackEvent && window.trackEvent('bulk_grade_export_csv', { count: String(results.length) }); } catch(_){}
+}
+
+/* Save all successful Bulk Grade results into the Collection as graded flips. */
+function saveBulkGradeToCollection() {
+  const results = (window._bulkGradeResults || []).filter(r => r.success);
+  if (!results.length) { showToast('No graded cards to save.'); return; }
+
+  try {
+    // Reuse existing flips storage. Each row becomes a graded flip entry.
+    const flips = JSON.parse(localStorage.getItem('flips') || '[]');
+    const now = new Date().toISOString().slice(0, 10);
+    let added = 0;
+    for (const r of results) {
+      const finalG = r.grades?.final;
+      const gradeLabel = finalG != null ? 'PSA ' + finalG.toFixed(1) + ' (AI est)' : 'AI graded';
+      flips.push({
+        id: 'bulk_grade_' + Date.now() + '_' + added,
+        cardName: r.cardName || 'Unknown card',
+        setName: [r.setName, r.cardNumber, gradeLabel].filter(Boolean).join(' · '),
+        buyPrice: 0,
+        sellPrice: null,
+        platform: '',
+        date: now,
+        currentValue: r.gradedPrice || r.rawPrice || 0,
+        thumbnail: r.imageDataUrl || '',
+        aiGrade: finalG,
+        isGraded: true,
+        _bulkGraded: true,
+      });
+      added++;
+    }
+    localStorage.setItem('flips', JSON.stringify(flips));
+    showToast('✓ Saved ' + added + ' graded cards to Collection', 'gold');
+    try { window.trackEvent && window.trackEvent('bulk_grade_saved', { count: String(added) }); } catch(_){}
+    // Refresh collection UI if the render fn exists.
+    try { if (typeof renderFlips === 'function') renderFlips(); } catch(_) {}
+  } catch(err) {
+    console.warn('[bulk-grade] save failed', err);
+    showToast('⚠️ Could not save to Collection. Try again.');
+  }
+}
+
+/* =========================================================
    BULK SCAN MODE
    ========================================================= */
 
@@ -19245,6 +19696,99 @@ function _esc(s) {
   });
 })();
 </script>
+
+<!-- =====================================================================
+     BULK GRADE OVERLAY (Pro Max / Ultimate)
+     Grades up to 25 cards in one session via /api/scan?mode=grade
+     with concurrency=2 (Ximilar sync grader is ~3-8s per call).
+     ===================================================================== -->
+<div id="bulkGradeOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:300;flex-direction:column;overflow:hidden">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
+    <div>
+      <div style="font-size:1rem;font-weight:800;color:#fff;display:flex;align-items:center;gap:.4rem">
+        <span style="color:var(--gold)">⭐</span> Bulk AI Grade
+        <span style="font-size:.6rem;font-weight:800;letter-spacing:.06em;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.15rem .4rem;border-radius:99px">PRO MAX</span>
+      </div>
+      <div id="bulkGradeSubtitle" style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">1 grade credit per card · up to 25 per session</div>
+    </div>
+    <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:rgba(255,255,255,.6);font-size:1.5rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
+  </div>
+
+  <!-- ==================== TIER GATE (free / pro) ==================== -->
+  <div id="bulkGradeTierGate" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:2rem 1.5rem;text-align:center;gap:1rem">
+    <div style="font-size:2.5rem">🔒</div>
+    <div style="font-size:1.1rem;font-weight:800;color:#fff">Bulk Grade is a Pro Max feature</div>
+    <div style="font-size:.85rem;color:var(--text-muted);max-width:340px;line-height:1.5">
+      Grade 25 cards in one shot instead of one-at-a-time. Ideal for evaluating a full binder page,
+      an Etsy lot, or a whole PC before submitting to PSA.
+    </div>
+    <div style="background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:12px;padding:.9rem 1.1rem;max-width:340px;font-size:.78rem;color:rgba(255,255,255,.85);line-height:1.55;text-align:left">
+      <div style="font-weight:800;color:var(--gold);margin-bottom:.4rem">Pro Max includes:</div>
+      • 40 AI Grades/mo · 100 ID scans/mo<br>
+      • 15% off top-up packs<br>
+      • <strong style="color:#fff">Bulk Grade tool</strong> (this one)<br>
+      • All 12 marketplaces unlocked<br>
+      • COMC, Fanatics, Card Kingdom, CoolStuffInc buylists
+    </div>
+    <button onclick="closeBulkGrade();openPricingModal('bulk_grade_gate')" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">Upgrade to Pro Max — $19.99/mo</button>
+    <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:var(--text-muted);font-size:.78rem;cursor:pointer;text-decoration:underline">Maybe later</button>
+  </div>
+
+  <!-- ==================== INTRO / UPLOAD ==================== -->
+  <div id="bulkGradeIntro" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:2rem 1.5rem;text-align:center;gap:1.1rem">
+    <div style="font-size:2.5rem">🎯</div>
+    <div style="font-size:1.05rem;font-weight:800;color:#fff;max-width:340px;line-height:1.4">Grade a whole stack at once</div>
+    <div style="font-size:.82rem;color:var(--text-muted);max-width:340px;line-height:1.55">
+      Upload front photos of up to <strong style="color:#fff">25 cards</strong>. Each gets a full
+      AI grade (corners, edges, surface, centering) with expected PSA 10 ROI.
+    </div>
+    <div style="font-size:.72rem;color:rgba(255,255,255,.55);max-width:320px;line-height:1.55;padding:.55rem .8rem;background:rgba(255,255,255,.04);border-radius:8px">
+      💡 Tip: use good lighting and lay cards flat. Photo quality drives grade accuracy.
+    </div>
+    <div id="bulkGradeCreditsInfo" style="font-size:.72rem;color:var(--text-muted)"></div>
+    <button id="bulkGradeUploadBtn" onclick="startBulkGradeUpload()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.72rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;gap:.45rem">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload photos
+    </button>
+  </div>
+
+  <!-- ==================== CREDIT CONFIRM ==================== -->
+  <div id="bulkGradeCreditConfirm" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:2rem 1.5rem;text-align:center;gap:1rem">
+    <div style="font-size:2.5rem" id="bulkGradeCreditIcon">🎯</div>
+    <div id="bulkGradeCreditMsg" style="font-size:.95rem;color:rgba(255,255,255,.85);line-height:1.5;max-width:340px"></div>
+    <div id="bulkGradeCreditBudget" style="font-size:.76rem;color:var(--text-muted);line-height:1.5;max-width:340px"></div>
+    <div style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:280px;margin-top:.5rem">
+      <button id="bulkGradeStartBtn" onclick="runBulkGrade()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.25rem;font-weight:800;font-size:.9rem;cursor:pointer">Grade All ⚡</button>
+      <button onclick="cancelBulkGradeConfirm()" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.55rem 1.25rem;font-weight:600;font-size:.82rem;cursor:pointer">Back</button>
+    </div>
+  </div>
+
+  <!-- ==================== PROCESSING ==================== -->
+  <div id="bulkGradeProcessing" style="display:none;flex-direction:column;flex:1;overflow:hidden;padding:1rem 1.25rem 0">
+    <!-- Progress -->
+    <div style="margin-bottom:.75rem;flex-shrink:0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.35rem">
+        <div id="bulkGradeProgressLabel" style="font-size:.85rem;font-weight:700;color:#fff">Grading 0 of 0…</div>
+        <div id="bulkGradeProgressCredits" style="font-size:.7rem;color:var(--text-muted)"></div>
+      </div>
+      <div style="height:6px;background:#1e1e1e;border-radius:99px;overflow:hidden">
+        <div id="bulkGradeProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--gold),#f59e0b);transition:width .35s ease"></div>
+      </div>
+    </div>
+    <!-- Results list -->
+    <div id="bulkGradeResultsList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:.5rem;padding-bottom:1rem"></div>
+    <!-- Bottom bar -->
+    <div id="bulkGradeBottomBar" style="display:none;flex-shrink:0;padding:.85rem 0 1rem;border-top:1px solid #1e1e1e;background:rgba(0,0,0,.95)">
+      <div id="bulkGradeSummaryLine" style="font-size:.78rem;color:var(--text-muted);margin-bottom:.6rem;text-align:center"></div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center">
+        <button id="bulkGradeExportBtn" onclick="exportBulkGradeCSV()" style="background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.55rem 1rem;font-weight:700;font-size:.8rem;cursor:pointer">📊 Export CSV</button>
+        <button id="bulkGradeSaveAllBtn" onclick="saveBulkGradeToCollection()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.55rem 1rem;font-weight:800;font-size:.8rem;cursor:pointer">💾 Save All to Collection</button>
+        <button onclick="closeBulkGrade()" style="background:transparent;color:var(--text-muted);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.55rem 1rem;font-weight:600;font-size:.8rem;cursor:pointer">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
