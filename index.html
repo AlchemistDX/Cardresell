@@ -1771,6 +1771,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Bulk GRADE upload input (Pro Max / Ultimate only). Grades up to 25 cards -->
   <!-- in one session via /api/scan?mode=grade with concurrency=2 (Ximilar-safe). -->
   <input type="file" id="bulkGradeInput" accept="image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
+  <input type="file" id="bulkGradeCameraInput" accept="image/*" capture="environment" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- Preview image -->
@@ -17386,8 +17387,8 @@ function openBulkGrade(mode) {
   if (introTitle) introTitle.textContent = (mode === 'deep') ? 'Deep grade a stack (front + back)' : 'Quick-grade a stack';
   if (introDesc) {
     introDesc.innerHTML = (mode === 'deep')
-      ? 'Upload <strong style="color:#fff">front + back photos</strong> of up to 10 cards. We grade each side and average the sub-grades for a stronger PSA-style estimate.'
-      : 'Upload front photos of up to <strong style="color:#fff">25 cards</strong>. Each gets a full AI grade (corners, edges, surface, centering) with expected PSA 10 ROI.';
+      ? 'Take or upload <strong style="color:#fff">front + back photos</strong> of up to 10 cards. We grade each side and average the sub-grades for a stronger PSA-style estimate.'
+      : 'Take or upload front photos of up to <strong style="color:#fff">25 cards</strong>. Each gets a full AI grade (corners, edges, surface, centering) with expected PSA 10 ROI.';
   }
   // Tip block — different content per mode.
   const tip = ov.querySelector('#bulkGradeIntro div[style*="background:rgba(255,255,255,.04)"]');
@@ -17426,6 +17427,8 @@ function _bulkGradeRevokeAllUrls() {
 function closeBulkGrade() {
   const ov = document.getElementById('bulkGradeOverlay');
   if (ov) ov.style.display = 'none';
+  const detail = document.getElementById('bulkGradeDetail');
+  if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
   window._bulkGradeProcessing = false;
   _bulkGradeRevokeAllUrls();
   window._bulkGradeQueue   = [];
@@ -17442,6 +17445,19 @@ function _bulkGradeShowSection(section) {
 
 function startBulkGradeUpload() {
   document.getElementById('bulkGradeInput').click();
+}
+
+/* Take photos with the phone camera. Native camera returns a batch of photos
+   which we process identically to the upload path. For Deep mode the user is
+   reminded to alternate front/back; for Quick mode just fronts. */
+function startBulkGradeCamera() {
+  const mode = window._bulkGradeMode || 'quick';
+  if (mode === 'deep') {
+    showToast('Take photos in order: card 1 front, card 1 back, card 2 front, card 2 back…');
+  } else {
+    showToast('Take a front photo of each card. Up to 25.');
+  }
+  document.getElementById('bulkGradeCameraInput').click();
 }
 
 function processBulkGradeFiles(input) {
@@ -17692,80 +17708,109 @@ async function _bulkDeepGradeOne(item, rowId) {
 /* Grades a single queued item via /api/scan?mode=grade.
    The endpoint auto-debits 1 grade credit and refunds server-side on failure.
    allowBack=true relaxes identity-required checks so a back photo can still
-   return sub-grades even when the identifier can't recognize the card. */
+   return sub-grades even when the identifier can't recognize the card.
+
+   Accuracy loop: if the first attempt returns no grades, retry once with a
+   larger/less-compressed image before giving up. This is what makes Bulk
+   Grade more patient than Rapid Scan — we spend the extra compute rather
+   than fail-fast the way Rapid does. Server refunds credits on identify
+   failures already, so retries don't double-charge. */
 async function _bulkGradeOne(item, rowId, allowBack) {
   let result = {
     objectUrl: item.objectUrl, file: item.file, success: false,
     cardName: '', setName: '', cardNumber: '', imageDataUrl: null,
     grades: null, rawPrice: null, gradedPrice: null, roi: null,
-    error: '', rowId,
+    error: '', rowId, rawServer: null,
   };
+  // Two attempts: (px, quality). Second pass is bigger + higher quality.
+  const attempts = [
+    { px: 1200, q: 0.90 },
+    { px: 1600, q: 0.95 },
+  ];
   try {
-    // 1200px, skip crop (mirror single-grade path). Grader wants front face.
-    const imageBase64 = await compressImage(item.file, 1200, { skipCrop: true, quality: 0.90 });
+    // Thumbnail for the row (unchanged across attempts).
     try {
       const thumbBase64 = await compressImage(item.file, 350, { skipCrop: true });
       result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64;
     } catch(_) {}
 
-    const idToken = window._googleIdToken || '';
-    const resp = await fetch('/api/scan?mode=grade', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-      body: JSON.stringify({
-        imageBase64,
-        mimeType: 'image/jpeg',
-        mode: 'grade',
-        email: window.googleUser?.email || window._userEmail || '',
-        googleSub: window.googleUser?.sub || window._googleSub || '',
-      }),
-    });
-
-    if (resp.status === 402) {
-      result.error = 'Out of grade credits';
-      showToast('Ran out of grade credits mid-batch. Completed cards saved.', 'info');
-      return 'STOP';
-    } else if (resp.status === 401) {
-      result.error = 'Auth expired';
-      window._googleIdToken = null;
-      return result;
-    } else if (!resp.ok) {
-      let em = 'Grade failed';
-      try { const e = await resp.json(); em = e.error || em; } catch(_){}
-      result.error = em;
-      return result;
-    }
-
-    const data = await resp.json();
-    // Local grade credit is decremented by the server. Reflect in the UI.
-    try { if (typeof window._scanCredits === 'number') window._scanCredits = Math.max(0, window._scanCredits - 1); } catch(_){}
-    try { updateKeyStatus && updateKeyStatus(); } catch(_){}
-
-    if (data.grades && (data.grades.final != null || data.grades.corners != null)) {
-      result.success  = true;
-      result.cardName = data.card_name || data.cardName || (allowBack ? 'Back photo' : 'Unknown card');
-      result.setName  = data.set_name  || data.setName  || '';
-      result.cardNumber = data.card_number || data.cardNumber || '';
-      result.grades = {
-        final:     _bgNum(data.grades.final),
-        corners:   _bgNum(data.grades.corners),
-        edges:     _bgNum(data.grades.edges),
-        surface:   _bgNum(data.grades.surface),
-        centering: _bgNum(data.grades.centering),
-        condition: data.grades.condition || null,
-      };
-      // Prices for ROI. Server returns market_price + graded_price when known.
-      result.rawPrice    = _bgNum(data.market_price || data.marketPrice);
-      result.gradedPrice = _bgNum(data.graded_price || data.gradedPrice);
-      // ROI = graded_net - raw_net - grading cost ($25 default) using 13% fees.
-      if (result.rawPrice > 0 && result.gradedPrice > 0) {
-        const feesPct = 13, gradingCost = 25;
-        const rawNet = result.rawPrice * (1 - feesPct / 100);
-        const grdNet = result.gradedPrice * (1 - feesPct / 100);
-        result.roi = grdNet - rawNet - gradingCost;
+    for (let attempt = 0; attempt < attempts.length; attempt++) {
+      const { px, q } = attempts[attempt];
+      // Update spinner label on retry so the user sees we're being patient.
+      if (attempt > 0) {
+        try {
+          const row = document.getElementById(rowId);
+          const label = row?.querySelector('div[style*="flex:1"] div');
+          if (label) label.textContent = 'Retrying at higher quality…';
+        } catch(_){}
       }
-    } else {
+      const imageBase64 = await compressImage(item.file, px, { skipCrop: true, quality: q });
+      const idToken = window._googleIdToken || '';
+      const resp = await fetch('/api/scan?mode=grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+        body: JSON.stringify({
+          imageBase64,
+          mimeType: 'image/jpeg',
+          mode: 'grade',
+          email: window.googleUser?.email || window._userEmail || '',
+          googleSub: window.googleUser?.sub || window._googleSub || '',
+        }),
+      });
+
+      if (resp.status === 402) {
+        result.error = 'Out of grade credits';
+        showToast('Ran out of grade credits mid-batch. Completed cards saved.', 'info');
+        return 'STOP';
+      } else if (resp.status === 401) {
+        result.error = 'Auth expired';
+        window._googleIdToken = null;
+        return result;
+      } else if (!resp.ok) {
+        // On non-2xx, only retry if we have another attempt left.
+        let em = 'Grade failed';
+        try { const e = await resp.json(); em = e.error || em; } catch(_){}
+        result.error = em;
+        if (attempt < attempts.length - 1) continue;
+        return result;
+      }
+
+      const data = await resp.json();
+      // The server refunds on grader failure, so we only debit locally when we
+      // got a successful grade back. Otherwise (retrying), leave the local
+      // count untouched — the server tally is authoritative.
+      if (data.grades && (data.grades.final != null || data.grades.corners != null)) {
+        try { if (typeof window._scanCredits === 'number') window._scanCredits = Math.max(0, window._scanCredits - 1); } catch(_){}
+        try { updateKeyStatus && updateKeyStatus(); } catch(_){}
+      }
+
+      if (data.grades && (data.grades.final != null || data.grades.corners != null)) {
+        result.rawServer = data;
+        result.success  = true;
+        result.cardName = data.card_name || data.cardName || (allowBack ? 'Back photo' : 'Unknown card');
+        result.setName  = data.set_name  || data.setName  || '';
+        result.cardNumber = data.card_number || data.cardNumber || '';
+        result.grades = {
+          final:     _bgNum(data.grades.final),
+          corners:   _bgNum(data.grades.corners),
+          edges:     _bgNum(data.grades.edges),
+          surface:   _bgNum(data.grades.surface),
+          centering: _bgNum(data.grades.centering),
+          condition: data.grades.condition || null,
+        };
+        result.rawPrice    = _bgNum(data.market_price || data.marketPrice);
+        result.gradedPrice = _bgNum(data.graded_price || data.gradedPrice);
+        if (result.rawPrice > 0 && result.gradedPrice > 0) {
+          const feesPct = 13, gradingCost = 25;
+          const rawNet = result.rawPrice * (1 - feesPct / 100);
+          const grdNet = result.gradedPrice * (1 - feesPct / 100);
+          result.roi = grdNet - rawNet - gradingCost;
+        }
+        return result;
+      }
+      // No grades — keep the last error, retry with bigger image if possible.
       result.error = data.error || 'Could not grade card';
+      if (attempt >= attempts.length - 1) return result;
     }
   } catch(err) {
     result.error = err.message || 'Grade error';
@@ -17839,6 +17884,92 @@ function _bulkGradeUpdateRow(rowId, result) {
     partialLine +
     roiHtml;
   row.style.border = '1px solid rgba(196,122,0,.35)';
+  // Make the row tappable to open the detail view (only successful grades).
+  row.style.cursor = 'pointer';
+  row.setAttribute('role', 'button');
+  const idx = parseInt(rowId.replace('bulk-grade-row-',''), 10);
+  row.onclick = function() { openBulkGradeDetail(idx); };
+  // Add a small chevron on the right so it's clear the row is tappable.
+  if (!row.querySelector('.bg-detail-chev')) {
+    const chev = document.createElement('div');
+    chev.className = 'bg-detail-chev';
+    chev.style.cssText = 'flex-shrink:0;color:rgba(255,255,255,.35);font-size:1rem;padding-left:.25rem';
+    chev.textContent = '›';
+    row.appendChild(chev);
+  }
+}
+
+/* Open the full grade detail for a completed bulk row.
+   Renders into #bulkGradeDetail (a full-screen section inside the overlay)
+   and hides the results list until the user hits ← Back. */
+function openBulkGradeDetail(idx) {
+  const r = (window._bulkGradeResults || [])[idx];
+  if (!r || !r.success) return;
+  const panel = document.getElementById('bulkGradeDetail');
+  if (!panel) return;
+  const g = r.grades || {};
+  const finalGrade = g.final != null ? g.final.toFixed(1) : '—';
+  const gradeColor = (g.final || 0) >= 9 ? '#4ade80' : (g.final || 0) >= 7.5 ? 'var(--gold)' : '#f87171';
+  const subGrades = [
+    { k: 'Centering', v: g.centering, note: 'How well the border is aligned front-to-back' },
+    { k: 'Corners',   v: g.corners,   note: 'Sharpness of all four corners; whitening or nicks hurt this' },
+    { k: 'Edges',     v: g.edges,     note: 'Edge whitening, dings, and print-line flaws' },
+    { k: 'Surface',   v: g.surface,   note: 'Print lines, scratches, holo scuffs, and gloss' },
+  ];
+  const roiBlock = (r.rawPrice > 0 && r.gradedPrice > 0)
+    ? '<div style="padding:.75rem;background:rgba(196,122,0,.06);border:1px solid rgba(196,122,0,.2);border-radius:10px;margin-top:.75rem">' +
+        '<div style="font-size:.72rem;font-weight:800;color:var(--gold);margin-bottom:.4rem">Grading ROI</div>' +
+        '<div style="display:flex;gap:.75rem;flex-wrap:wrap;font-size:.72rem;color:rgba(255,255,255,.75)">' +
+          '<div>Raw: <strong style="color:#fff">$' + r.rawPrice.toFixed(2) + '</strong></div>' +
+          '<div>PSA 10: <strong style="color:#fff">$' + r.gradedPrice.toFixed(2) + '</strong></div>' +
+          '<div>Net after 13% fees + $25 grading: <strong style="color:' + (r.roi > 0 ? '#4ade80' : '#f87171') + '">' + (r.roi > 0 ? '+' : '') + '$' + r.roi.toFixed(2) + '</strong></div>' +
+        '</div>' +
+      '</div>'
+    : '';
+  const partialWarning = r.partial
+    ? '<div style="padding:.6rem .75rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.72rem;color:#fbbf24;margin-top:.75rem">⚠️ Only the front photo produced a grade. Back-side sub-grades were skipped.</div>'
+    : '';
+  panel.innerHTML =
+    '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .75rem;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a0a0a;z-index:2">' +
+      '<button onclick="closeBulkGradeDetail()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#fff;padding:.4rem .7rem;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.35rem">← Back to bulk</button>' +
+      '<div style="flex:1"></div>' +
+      (r.deepMode ? '<span style="font-size:.6rem;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.2rem .45rem;border-radius:4px;font-weight:900">DEEP</span>' : '') +
+    '</div>' +
+    '<div style="flex:1;overflow-y:auto;padding:1rem 1rem 2rem">' +
+      '<div style="display:flex;gap:.85rem;align-items:flex-start">' +
+        (r.imageDataUrl ? '<img src="' + r.imageDataUrl + '" style="width:90px;height:126px;object-fit:cover;border-radius:8px;flex-shrink:0" />' : '') +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:1rem;font-weight:800;color:#fff;line-height:1.25">' + _bgEsc(r.cardName) + '</div>' +
+          '<div style="font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.15rem">' + _bgEsc([r.setName, r.cardNumber].filter(Boolean).join(' · ')) + '</div>' +
+          '<div style="display:flex;align-items:baseline;gap:.5rem;margin-top:.5rem">' +
+            '<span style="font-size:2rem;font-weight:900;color:' + gradeColor + ';line-height:1">' + finalGrade + '</span>' +
+            '<span style="font-size:.7rem;color:rgba(255,255,255,.5)">Est. PSA grade</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      partialWarning +
+      roiBlock +
+      '<div style="margin-top:1rem">' +
+        '<div style="font-size:.75rem;font-weight:800;color:#fff;margin-bottom:.5rem">Sub-grades — why this score</div>' +
+        subGrades.map(sg => {
+          const val = sg.v != null ? sg.v.toFixed(1) : '—';
+          const col = (sg.v || 0) >= 9 ? '#4ade80' : (sg.v || 0) >= 7.5 ? 'var(--gold)' : '#f87171';
+          return '<div style="padding:.55rem .7rem;background:#111;border:1px solid #1e1e1e;border-radius:8px;margin-bottom:.4rem">' +
+            '<div style="display:flex;justify-content:space-between;align-items:baseline">' +
+              '<span style="font-size:.78rem;font-weight:700;color:#fff">' + sg.k + '</span>' +
+              '<span style="font-size:.95rem;font-weight:900;color:' + col + '">' + val + '</span>' +
+            '</div>' +
+            '<div style="font-size:.65rem;color:rgba(255,255,255,.5);margin-top:.15rem">' + sg.note + '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+      '<div style="font-size:.65rem;color:rgba(255,255,255,.4);margin-top:.75rem;line-height:1.5">Final grade is the floor of the minimum sub-grade to the nearest 0.5 (PSA-style stricter weighting). Sub-grades come from Ximilar’s vision model.</div>' +
+    '</div>';
+  panel.style.display = 'flex';
+}
+function closeBulkGradeDetail() {
+  const panel = document.getElementById('bulkGradeDetail');
+  if (panel) panel.style.display = 'none';
 }
 
 function _bgEsc(s) {
@@ -19984,10 +20115,16 @@ function _esc(s) {
       💡 Tip: use good lighting and lay cards flat. Photo quality drives grade accuracy.
     </div>
     <div id="bulkGradeCreditsInfo" style="font-size:.72rem;color:var(--text-muted)"></div>
-    <button id="bulkGradeUploadBtn" onclick="startBulkGradeUpload()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.72rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;gap:.45rem">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Upload photos
-    </button>
+    <div style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:280px">
+      <button id="bulkGradeCameraBtn" onclick="startBulkGradeCamera()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.72rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Take photos
+      </button>
+      <button id="bulkGradeUploadBtn" onclick="startBulkGradeUpload()" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.6rem 1.5rem;font-weight:700;font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload from library
+      </button>
+    </div>
   </div>
 
   <!-- ==================== CREDIT CONFIRM ==================== -->
@@ -20025,6 +20162,8 @@ function _esc(s) {
       </div>
     </div>
   </div>
+  <!-- Per-card detail panel — shown on top of the results list when a row is tapped. -->
+  <div id="bulkGradeDetail" style="display:none;position:absolute;inset:0;background:#0a0a0a;flex-direction:column;z-index:5"></div>
 </div>
 
 </body>
