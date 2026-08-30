@@ -545,6 +545,10 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .payout-share-btn:hover{border-color:var(--gold);color:var(--gold)}
 .payout-rank-delta{font-family:var(--mono);font-size:.7rem;color:var(--text-muted);min-width:52px;text-align:right}
 @media(max-width:520px){.payout-rank-row{grid-template-columns:18px 20px minmax(70px,90px) 1fr auto;gap:.4rem;font-size:.72rem}.payout-rank-delta{display:none}.payout-rank-amt{font-size:.78rem;min-width:56px}}
+.payout-rank-locked{cursor:pointer;opacity:.72}
+.payout-rank-locked:hover{opacity:1;background:rgba(255,193,7,.04)}
+.payout-rank-locked .payout-rank-name{color:var(--text-muted)}
+.payout-rank-blur{color:var(--text-muted);letter-spacing:.05em;user-select:none}
 
 /* sort bar */
 .sort-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
@@ -7632,15 +7636,20 @@ function calc() {
     //
     // Each row: emoji + venue name + horizontal bar (width = payout/best) +
     // net dollar amount + delta vs #1. Free/locked venues are dimmed.
-    const rankVenues = eligible.filter(r => _tierPlatforms.has(r.pid)).slice(0, 8);
-    const rankBest   = rankVenues[0]?.netPayout ?? 1;
-    if (rankVenues.length >= 2) {
+    // 2026-08-30 revision: unlocked venues render fully; up to 3 locked venues
+    // render as teaser rows (name + blurred $ + Upgrade link) so Free users
+    // see the shape of the full ranking, not a wall of 2 rows. This honors
+    // the hero promise ("across 12 venues") without giving away Pro's value.
+    const unlockedRank = eligible.filter(r => _tierPlatforms.has(r.pid)).slice(0, 8);
+    const lockedRank   = eligible.filter(r => !_tierPlatforms.has(r.pid)).slice(0, 3);
+    const rankBest     = unlockedRank[0]?.netPayout ?? 1;
+    if (unlockedRank.length >= 2) {
       html += `<div class="payout-rank" role="list" aria-label="Net payout ranking">
         <div class="payout-rank-header">
           <span class="payout-rank-title">Ranked by net payout</span>
           <span class="payout-rank-sub">after fees${itemCost > 0 ? ' + cost basis' : ''}</span>
         </div>`;
-      rankVenues.forEach((r, i) => {
+      unlockedRank.forEach((r, i) => {
         const p = PLATFORMS[r.pid];
         const pct = Math.max(6, (r.netPayout / rankBest) * 100);
         const delta = i === 0 ? '' : `−${fmt(rankBest - r.netPayout)}`;
@@ -7654,12 +7663,26 @@ function calc() {
           <div class="payout-rank-delta">${delta}</div>
         </div>`;
       });
+      // Locked teaser rows: name visible, $ blurred, one-click upgrade CTA.
+      lockedRank.forEach((r, idx) => {
+        const p = PLATFORMS[r.pid];
+        const rowIdx = unlockedRank.length + idx + 1;
+        const pct = Math.max(6, (r.netPayout / rankBest) * 100);
+        html += `<div class="payout-rank-row payout-rank-locked" role="listitem" onclick="openPricingModal && openPricingModal('ranking_strip_unlock')">
+          <div class="payout-rank-rank">${rowIdx}</div>
+          <div class="payout-rank-emoji">${p.emoji}</div>
+          <div class="payout-rank-name">${p.name}</div>
+          <div class="payout-rank-bar-wrap"><div class="payout-rank-bar" style="width:${pct}%;background:var(--text-muted);opacity:.4"></div></div>
+          <div class="payout-rank-amt payout-rank-blur">$•••.••</div>
+          <div class="payout-rank-delta" style="color:var(--gold);font-weight:700">Unlock</div>
+        </div>`;
+      });
       // Cache the ranking data on window so shareRanking() can build the OG URL.
       try {
         window._lastRanking = {
           card: (selectedCard?.name || 'Your card') + (selectedCard?.number ? ' #' + selectedCard.number : ''),
           price: price,
-          venues: rankVenues.map(r => ({ name: PLATFORMS[r.pid].name, pay: r.netPayout }))
+          venues: unlockedRank.map(r => ({ name: PLATFORMS[r.pid].name, pay: r.netPayout }))
         };
       } catch(_) {}
       html += `<button class="payout-share-btn" type="button" onclick="shareRanking()">
@@ -10575,14 +10598,26 @@ function shareRanking() {
   const best = r.venues[0];
   const msg = `${r.card} → ${best.name} pays $${best.pay.toFixed(2)} after fees. Full ranking on CardResell:`;
   const data = { title: 'CardResell payout ranking', text: msg, url: shareUrl };
+  // Clipboard-first fallback so users ALWAYS get feedback, even on browsers
+  // where navigator.share exists but the OS share sheet fails silently
+  // (headless browsers, some webviews, certain iOS PWA contexts).
+  const copyToClipboard = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(shareUrl)
+        .then(() => { showToast && showToast('🔗 Link copied — paste anywhere'); })
+        .catch(() => { prompt('Copy this link:', shareUrl); });
+    }
+    prompt('Copy this link:', shareUrl);
+    return Promise.resolve();
+  };
   if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
-    navigator.share(data).catch(() => {});
-  } else {
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      showToast && showToast('🔗 Link copied — paste anywhere');
-    }).catch(() => {
-      prompt('Copy this link:', shareUrl);
+    navigator.share(data).catch((err) => {
+      // AbortError = user cancelled the share sheet on purpose; don't nag them
+      if (err && err.name === 'AbortError') return;
+      copyToClipboard();
     });
+  } else {
+    copyToClipboard();
   }
 }
 
