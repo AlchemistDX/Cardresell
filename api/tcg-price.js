@@ -64,7 +64,12 @@ export default async function handler(req, res) {
     const cacheAgeSec = cached.fetchedAt
       ? Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 1000)
       : 0;
-    return res.status(200).json({ ...cached, cached: true, cacheAgeSec });
+    // 2026-08-30: clamp cached entries too — old cache values written before
+    // the clamp landed still have outlandish highs. Applying on read too
+    // eliminates the 4-6h stale-cache window without a full cache flush.
+    const out = { ...cached, cached: true, cacheAgeSec };
+    _clampHighPriceInPlace(out);
+    return res.status(200).json(out);
   }
 
   // ── PRIMARY: tcgcsv.com catalog (deterministic; refreshed daily) ────────
@@ -145,6 +150,7 @@ export default async function handler(req, res) {
         fetchedAt: new Date().toISOString(),
         cacheAgeSec: 0,
       };
+      _clampHighPriceInPlace(data);
       await setCache(kvUrl, kvToken, cacheKey, data);
       _incrSearchStats(kvUrl, kvToken);
       return res.status(200).json(data);
@@ -181,6 +187,7 @@ export default async function handler(req, res) {
           fetchedAt: new Date().toISOString(),
           cacheAgeSec: 0,
         };
+        _clampHighPriceInPlace(data);
         await setCache(kvUrl, kvToken, cacheKey, data);
         _incrSearchStats(kvUrl, kvToken);
         return res.status(200).json(data);
@@ -293,26 +300,8 @@ export default async function handler(req, res) {
       } catch(e) {}
     }
 
-    // 2026-08-30: clamp outlandish High values. TCGplayer's highPrice is the
-    // ABSOLUTE HIGHEST current listing across all sellers — which includes
-    // sniper listings ($2500 for a $280 Charizard ex #234, someone hoping a
-    // whale mistakes it). Real users see the range and lose trust when High
-    // is 8-10x Market. Clamp High to at most 3x Market (or 3x Mid if Market
-    // is missing). Preserve the ORIGINAL value in highRaw for debugging.
-    const highRaw = high;
-    if (high != null && (market != null || mid != null)) {
-      const anchor = market || mid;
-      const CAP_MULT = 3.0;
-      const cap = anchor * CAP_MULT;
-      if (high > cap) {
-        high = Math.round(cap * 100) / 100;
-      }
-    }
-
     const data = {
       market, low, mid, high,
-      highRaw: (highRaw !== high) ? highRaw : undefined,
-      highClamped: (highRaw !== high) ? true : undefined,
       source: 'tcgplayer-live',
       productId,
       cardName: best.productName,
@@ -321,6 +310,7 @@ export default async function handler(req, res) {
       fetchedAt: new Date().toISOString(),
       cacheAgeSec: 0,
     };
+    _clampHighPriceInPlace(data);
     await setCache(kvUrl, kvToken, cacheKey, data);
     _incrSearchStats(kvUrl, kvToken);
     return res.status(200).json(data);
@@ -333,6 +323,24 @@ export default async function handler(req, res) {
 
 // 2026-08-19: TCGplayer uses these sentinel values to mean "no data".
 // Any of them appearing in a price field should be treated as null.
+// 2026-08-30: universal high-price clamp applied to every response path.
+// TCGplayer/tcgcsv/Scryfall/etc.  highPrice fields are current-listing max,
+// which includes sniper listings ($214k Mickey Mouse from a troll, $5000
+// Mew from a scammer). Real users see the range and lose trust when High
+// is 10-1000x Market. Clamp to 3x Market (or 3x Mid). Mutates data in
+// place — caller returns immediately after so no aliasing concerns.
+const _HIGH_CAP_MULT = 3.0;
+function _clampHighPriceInPlace(data) {
+  if (!data || typeof data !== 'object') return data;
+  const anchor = data.market != null ? data.market : data.mid;
+  if (anchor != null && anchor > 0 && data.high != null && data.high > anchor * _HIGH_CAP_MULT) {
+    data.highRaw     = data.high;
+    data.highClamped = true;
+    data.high        = Math.round(anchor * _HIGH_CAP_MULT * 100) / 100;
+  }
+  return data;
+}
+
 const _PRICE_SENTINELS = new Set([99999, 999999, 99999.99]);
 function _isSentinelPrice(n) {
   if (n == null) return false;
