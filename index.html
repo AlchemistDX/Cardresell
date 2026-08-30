@@ -5269,6 +5269,86 @@ async function fetchAndApplySoldComps(forceRefresh) {
   window._lastGradeOpportunity = gradeOpp;
   window._lastGradeOpportunityCard = cardKey;
 
+  // 2026-08-30 fix: inject PriceCharting's per-grade prices into currentPrices.
+  // Previously the client only used pc.median to fill priceOverride — but the
+  // full pc.prices { raw, grade_7, grade_8, grade_9, grade_95, psa_10, bgs_10,
+  // cgc_10, sgc_10 } object was thrown away. When TPL later populated psa_10
+  // with its ebay avg_7d (~$120 for Mew GG10 vs PriceCharting's guide value
+  // $557), the wrong TPL number won. PriceCharting is the authoritative
+  // guide-value source — use it for graded prices and only fall back to TPL
+  // for grades PC doesn't publish (BGS 9-, CGC 9-, SGC 9-, ACE, TAG, etc.).
+  if (pc && pc.source === 'pricecharting' && pc.prices && typeof pc.prices === 'object') {
+    try {
+      const PC_TO_KEY = {
+        // PC field key -> currentPrices/priceVariants key + label
+        grade_7:  { key: 'psa_7',  label: 'PSA 7 (PriceCharting)'  },
+        grade_8:  { key: 'psa_8',  label: 'PSA 8 (PriceCharting)'  },
+        grade_9:  { key: 'psa_9',  label: 'PSA 9 (PriceCharting)'  },
+        grade_95: { key: 'psa_9_5',label: 'PSA 9.5 (PriceCharting)'},
+        psa_10:   { key: 'psa_10', label: 'PSA 10 (PriceCharting)' },
+        bgs_10:   { key: 'bgs_10', label: 'BGS 10 (PriceCharting)' },
+        cgc_10:   { key: 'cgc_10', label: 'CGC 10 (PriceCharting)' },
+        sgc_10:   { key: 'sgc_10', label: 'SGC 10 (PriceCharting)' },
+      };
+      window.currentPrices = window.currentPrices || {};
+      Object.entries(PC_TO_KEY).forEach(([pcKey, m]) => {
+        const v = pc.prices[pcKey];
+        if (v == null || !isFinite(v) || v <= 0) return;
+        // Overwrite whatever was there — PriceCharting wins over TPL for the
+        // grades PC actually publishes. Uses same {market, low, mid, high}
+        // row shape as everything else so updatePriceFromPrinting reads it.
+        currentPrices[m.key] = {
+          key:    m.key,
+          label:  m.label,
+          market: v,
+          low:    v,
+          mid:    v,
+          high:   v,
+          source: 'pricecharting',
+        };
+        // Also mirror into selectedCard.priceVariants so any downstream code
+        // that iterates variants (fee audit, portfolio, etc.) sees it.
+        if (selectedCard && Array.isArray(selectedCard.priceVariants)) {
+          const idx = selectedCard.priceVariants.findIndex(x => x.key === m.key);
+          const row = {
+            key: m.key,
+            label: m.label,
+            market: v,
+            low: v, mid: v, high: v,
+            source: 'pricecharting',
+          };
+          if (idx >= 0) selectedCard.priceVariants[idx] = row;
+          else selectedCard.priceVariants.push(row);
+        }
+      });
+      // Also inject raw if we don't have a raw variant with a price yet — keeps
+      // the raw pill showing a real number instead of —.
+      const rawKey = pc.prices.raw;
+      if (rawKey != null && rawKey > 0) {
+        const hasRaw = selectedCard && (selectedCard.priceVariants || []).some(v =>
+          !/^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key) && v.market != null && v.market > 0
+        );
+        if (!hasRaw && selectedCard && Array.isArray(selectedCard.priceVariants)) {
+          selectedCard.priceVariants.unshift({
+            key: 'holofoil',
+            label: 'PriceCharting raw',
+            market: rawKey, low: rawKey, mid: rawKey, high: rawKey,
+            source: 'pricecharting',
+          });
+          currentPrices['holofoil'] = selectedCard.priceVariants[0];
+        }
+      }
+      // If the user is currently viewing a graded slab, repaint the price now
+      // that the accurate PC number landed — don't wait for a manual toggle.
+      const _curKey = (typeof printSelect !== 'undefined' && printSelect) ? printSelect.value : '';
+      if (_curKey && /^(psa|bgs|cgc|sgc)_/.test(_curKey) && typeof updatePriceFromPrinting === 'function') {
+        updatePriceFromPrinting();
+      }
+    } catch(e) {
+      console.warn('[pc-graded-inject] failed', e);
+    }
+  }
+
   // Render composed price status (TCG line always, PC + eBay overlays when available)
   // + grade opportunity pill (silent if not worth grading)
   statusTxt.innerHTML = renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) + renderGradeOpportunity(gradeOpp);
@@ -6215,9 +6295,21 @@ async function syncGradeToPrintSelect() {
         // visible dropdown but keeps them in currentPrices; we then inject a
         // hidden option for the exact grader+grade key so printSelect.value can
         // point at it and updatePriceFromPrinting reads the correct price row.
+        //
+        // 2026-08-30 fix: PRESERVE PriceCharting-sourced graded variants. TPL
+        // returns raw eBay 7d averages which are wildly wrong for low-volume
+        // grades (Mew GG10 PSA 10: TPL $120 vs PriceCharting guide $557). Keep
+        // PC's authoritative numbers, let TPL only fill in grades PC has NO
+        // data for (BGS 8/9/9.5, CGC 8/9/9.5, ACE, TAG, etc).
+        const pcGradedKept = selectedCard.priceVariants.filter(v =>
+          /^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key) && v.source === 'pricecharting'
+        );
+        const pcKeySet = new Set(pcGradedKept.map(v => v.key));
+        const tplFiltered = gradedVariants.filter(v => !pcKeySet.has(v.key));
         selectedCard.priceVariants = [
           ...selectedCard.priceVariants.filter(v => !/^(psa|bgs|cgc|ace|tag|sgc)_/.test(v.key)),
-          ...gradedVariants,
+          ...pcGradedKept,
+          ...tplFiltered,
         ];
         rebuildPrintSelect(selectedCard.priceVariants);
         const targetKey2 = `${grader}_${grade}`.replace(/\./g, '_');
