@@ -8853,8 +8853,15 @@ function openFlipDetail(flipId) {
   const q = [f.card, cardNum].filter(Boolean).join(' ');
   const ebayBtn = document.getElementById('fdmEbayBtn');
   const tcgBtn  = document.getElementById('fdmTcgBtn');
-  if (ebayBtn) ebayBtn.href = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&_sop=13&LH_Sold=1&LH_Complete=1`;
-  if (tcgBtn)  tcgBtn.href  = `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(q)}&view=grid`;
+  // 2026-08-30: These two hrefs used to go out un-wrapped, so every click from
+  // the Flip Detail Modal was an unattributed eBay/TCGplayer visit. Route them
+  // through buildEbayUrl / buildTcgpUrl so EPN + Impact commissions actually
+  // credit us. Falls back to the raw URL if the helpers aren't loaded yet.
+  const _fdmEbayRaw = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&_sop=13&LH_Sold=1&LH_Complete=1`;
+  if (ebayBtn) ebayBtn.href = (typeof buildEbayUrl === 'function') ? buildEbayUrl(_fdmEbayRaw) : _fdmEbayRaw;
+  if (tcgBtn)  tcgBtn.href  = (typeof buildTcgpUrl === 'function')
+    ? buildTcgpUrl(f.card || '', '', cardNum)
+    : `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(q)}&view=grid`;
 
   document.getElementById('flipDetailModal').classList.add('open');
 }
