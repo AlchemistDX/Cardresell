@@ -1288,6 +1288,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           setTimeout(() => switchView(_nextParam), 300);
           history.replaceState(null, '', location.pathname);
         }
+        // Handle deferred pricing-page upgrade intent. If the visitor arrived
+        // from /pricing.html?upgrade=pro and completed sign-in, pop the
+        // pricing modal so the CTA doesn't get lost.
+        try {
+          const pendingTier = window._pendingUpgradeTier || sessionStorage.getItem('_pendingUpgradeTier');
+          if (pendingTier) {
+            sessionStorage.removeItem('_pendingUpgradeTier');
+            window._pendingUpgradeTier = null;
+            setTimeout(() => {
+              try { window.openPricingModal && window.openPricingModal('pricing_page_' + pendingTier); } catch(_){}
+            }, 500);
+          }
+        } catch(_){}
       } else {
         // ONLY clear state if no valid user was ever set this session
         // Prevents token-refresh null callbacks from wiping an active session
@@ -2845,7 +2858,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li class="faded">Top-up discounts</li>
           <li class="faded">10 more marketplaces (Pro / Pro Max)</li>
         </ul>
-        <button class="plan-btn free-btn" onclick="closePricingModal()">Current Plan</button>
+        <button id="pricingFreeBtn" class="plan-btn free-btn" onclick="_freeTierCTA()">Current Plan</button>
       </div>
 
       <!-- PRO -->
@@ -2886,7 +2899,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>15% off</strong> top-up packs</li>
           <li><strong>+2 pro marketplaces:</strong> COMC, Fanatics Collect</li>
           <li><strong>+2 buylists:</strong> Card Kingdom, CoolStuffInc (instant offers)</li>
-          <li><strong>All 12 marketplaces</strong> unlocked</li>
+          <li><strong>All 15 venues</strong> unlocked</li>
           <li>Everything in Pro</li>
           <li>Priority email support</li>
           <li>Early access to new features</li>
@@ -2908,7 +2921,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>100 AI Grades/mo</strong></li>
           <li><strong>300 ID scans/mo</strong></li>
           <li><strong>25% off</strong> top-up packs</li>
-          <li>All 12 marketplaces unlocked</li>
+          <li>All 15 venues unlocked</li>
           <li>Everything in Pro Max</li>
           <li>&#128188; <strong>Bulk Grade tool</strong> <span style="color:var(--text-faint);font-weight:600">(soon)</span></li>
           <li>&#9733; Ultimate badge</li>
@@ -2990,6 +3003,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <strong style="color:var(--text)">CardResell</strong> &mdash; Built by <strong>Will Jones</strong> &middot;
     <a href="mailto:contact@cardresell.org">contact@cardresell.org</a> &middot;
     Bradenton, FL &middot;
+    <a href="/pricing" target="_blank" rel="noopener">Pricing</a> &middot;
+    <a href="/accuracy" target="_blank" rel="noopener">Accuracy</a> &middot;
     <a href="#" onclick="openAboutModal();return false">About</a> &middot;
     <a href="/terms" target="_blank" rel="noopener">Terms</a> &middot;
     <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
@@ -3239,6 +3254,36 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
       }
     } catch(e) {}
   }
+  // If arriving from /pricing.html with ?upgrade=pro (or pro_max, ultimate),
+  // stash the target tier and auto-open the pricing modal once auth resolves.
+  // Signed-out users get the sign-in dialog first; the deferred tier survives
+  // the auth round-trip via sessionStorage.
+  const upgradeParam = (p.get('upgrade') || '').toLowerCase();
+  if (['pro','pro_max','ultimate'].includes(upgradeParam)) {
+    window._pendingUpgradeTier = upgradeParam;
+    try { sessionStorage.setItem('_pendingUpgradeTier', upgradeParam); } catch(_){}
+    try {
+      p.delete('upgrade');
+      const clean = window.location.pathname + (p.toString() ? '?' + p.toString() : '') + window.location.hash;
+      window.history.replaceState({}, '', clean);
+    } catch(_){}
+    // Fallback: even if auth resolves before openPricingModal is defined, poll
+    // briefly for the fn and fire once. Auth-triggered path (in onAuthStateChanged)
+    // clears sessionStorage first, so this is a no-op when that path wins.
+    (function pollForModal(tries) {
+      if (!sessionStorage.getItem('_pendingUpgradeTier')) return;
+      if (tries > 40) return; // 20s max
+      if (typeof window.openPricingModal === 'function' && window._authInitialized && (window._user?.uid || window.googleUser?.uid)) {
+        const t = sessionStorage.getItem('_pendingUpgradeTier');
+        sessionStorage.removeItem('_pendingUpgradeTier');
+        window._pendingUpgradeTier = null;
+        try { window.openPricingModal('pricing_page_' + t); } catch(_){}
+        return;
+      }
+      setTimeout(() => pollForModal(tries + 1), 500);
+    })(0);
+  }
+
   // If arriving from the Firebase verification link (?verified=1), strip the
   // param so it doesn't stick in the URL bar, and set a flag so the auth-init
   // handler knows to reload the user token and claim the bonus.
@@ -16162,11 +16207,53 @@ function openPricingModal(source) {
   //   Signed in + verified → hide (already claimed).
   //   Signed in + unverified free → SHOW.
   const bonusBanner = document.getElementById('pricingSignupBonusBanner');
+  const signedIn = !!(window._user && window._user.uid);
+  const verified = !!window._emailVerified;
+  const isFree   = currentTier === 'free';
   if (bonusBanner) {
-    const signedIn = !!(window._user && window._user.uid);
-    const verified = !!window._emailVerified;
-    const isFree   = currentTier === 'free';
     bonusBanner.style.display = (signedIn && !verified && isFree) ? 'block' : 'none';
+  }
+  // 2026-08-31: Free-tier CTA is context-aware:
+  //   Signed out           → 'Get Started — Free' (kicks off Google sign-in)
+  //   Signed in + free     → '✓ Current Plan' (disabled, just closes modal)
+  //   Signed in + paid     → 'Free' (dimmed — you can't downgrade to free from here)
+  const freeBtn = document.getElementById('pricingFreeBtn');
+  if (freeBtn) {
+    freeBtn.disabled = false;
+    freeBtn.style.opacity = '';
+    freeBtn.style.cursor = '';
+    if (!signedIn) {
+      freeBtn.textContent = 'Get Started — Free';
+      freeBtn.style.background = 'var(--gold)';
+      freeBtn.style.color = '#000';
+      freeBtn.style.fontWeight = '800';
+    } else if (isFree) {
+      freeBtn.textContent = '✓ Current Plan';
+      freeBtn.disabled = true;
+      freeBtn.style.opacity = '.55';
+      freeBtn.style.cursor = 'default';
+      freeBtn.style.background = '';
+      freeBtn.style.color = '';
+    } else {
+      freeBtn.textContent = 'Free';
+      freeBtn.disabled = true;
+      freeBtn.style.opacity = '.4';
+      freeBtn.style.cursor = 'default';
+      freeBtn.style.background = '';
+      freeBtn.style.color = '';
+    }
+  }
+}
+
+// 2026-08-31: Free-tier CTA behavior. Signed-out visitors clicking the Free
+// card's button should be treated as sign-up intent — close the modal and
+// pop the Google sign-in dialog. Everyone else just closes the modal.
+function _freeTierCTA() {
+  const signedIn = !!(window._user && window._user.uid);
+  try { window.trackEvent && window.trackEvent('free_tier_cta_click', { signed_in: signedIn }); } catch(_){}
+  closePricingModal();
+  if (!signedIn) {
+    setTimeout(() => { try { triggerGoogleSignIn(); } catch(_){} }, 200);
   }
 }
 
