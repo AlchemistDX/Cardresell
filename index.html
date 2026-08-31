@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CardResell — See the highest net payout across 12 venues, after fees</title>
+  <title>CardResell — See the highest net payout across 15 venues, after fees</title>
   <meta name="description" content="Find out what your Pokémon, MTG, Yu-Gi-Oh!, Lorcana, One Piece, or sports card is really worth — and the best marketplace to sell it on. Free tier ranks eBay and TCGplayer by net payout after 2026 fees. Pro unlocks Whatnot, Poshmark, Mercari, COMC, Fanatics and more." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -955,11 +955,11 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- SEO / Open Graph / Twitter Card -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.cardresell.org/" />
-  <meta property="og:title" content="CardResell — See the highest net payout across 12 venues, after fees" />
+  <meta property="og:title" content="CardResell — See the highest net payout across 15 venues, after fees" />
   <meta property="og:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell — free." />
   <meta property="og:image" content="https://www.cardresell.org/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="CardResell — See the highest net payout across 12 venues, after fees" />
+  <meta name="twitter:title" content="CardResell — See the highest net payout across 15 venues, after fees" />
   <meta name="twitter:description" content="Instantly look up Pokémon, MTG, Yu-Gi-Oh!, Lorcana & One Piece card prices, calculate your profit, and find the best platform to sell." />
   <meta name="twitter:image" content="https://www.cardresell.org/og-image.png" />
 
@@ -1686,7 +1686,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-30) -->
 <!-- The site's positioning shifted from "find your card's value" (commodity) to
-     "see the highest net payout across 12 venues" (differentiated). This hero
+     "see the highest net payout across 15 venues" (differentiated). This hero
      commits to that job in one line. Only shown on the initial (no-card) view;
      hidden once a card is loaded so the results panel takes over. -->
 <div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
@@ -1703,7 +1703,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- SCAN GUARANTEE LINE — subtle, appears once under social proof -->
 <div id="scanGuaranteeBar" style="padding:.35rem 1rem;text-align:center;font-size:.68rem;color:rgba(255,255,255,.42);letter-spacing:.01em;line-height:1.35;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(255,255,255,.04)">
-  <span style="color:rgba(74,222,128,.75)">✓</span> Every scan is backed by an instant refund guarantee if we get it wrong.
+  <span style="color:rgba(74,222,128,.75)">✓</span> Scanner can't ID your card? Credit refunds instantly — automatic or one-tap.  <a href="/terms.html#refunds" style="color:rgba(74,222,128,.75);text-decoration:underline;text-underline-offset:2px">Details</a>
 </div>
 
 <section class="search-area">
@@ -7697,7 +7697,7 @@ function calc() {
     // 2026-08-30 revision: unlocked venues render fully; up to 3 locked venues
     // render as teaser rows (name + blurred $ + Upgrade link) so Free users
     // see the shape of the full ranking, not a wall of 2 rows. This honors
-    // the hero promise ("across 12 venues") without giving away Pro's value.
+    // the hero promise ("across 15 venues") without giving away Pro's value.
     const unlockedRank = eligible.filter(r => _tierPlatforms.has(r.pid)).slice(0, 8);
     const lockedRank   = eligible.filter(r => !_tierPlatforms.has(r.pid)).slice(0, 3);
     const rankBest     = unlockedRank[0]?.netPayout ?? 1;
