@@ -7287,15 +7287,20 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
 }
 
 // TCGPlayer — dominant TCG singles marketplace (Pokémon, MTG, Yu-Gi-Oh!, Lorcana, etc.)
-// Standard seller: 10.25% marketplace commission on sale price.
-// Payment processing: 2.5% + $0.30 per transaction (PayPal/card, taken from payout).
-// Verified seller (Direct): same 10.25% + processing. No listing fee, no monthly fee.
+// Level 1–4 Marketplace Seller (the default tier for new sellers):
+//   • 10.75% commission on sale price, capped at $75/item
+//     (rate raised from 10.25% on Feb 10, 2026; cap raised from $50 to $75 same day)
+//   • 2.5% + $0.30 payment processing on the full order total
+// Pro / Sync sellers pay 9.25% instead of 10.75% — not modeled here since the vast
+// majority of casual card flippers land in Level 1–4.
 // Source: https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
+// Feb 2026 change:  https://seller.tcgplayer.com/blog/important-changes-to-tcgplayer-direct-minimum-pricing-and-marketplace-fees
 function feeTCGPlayer(price) {
-  const commission   = price * 0.1025;          // 10.25% marketplace commission
-  const processing   = price * 0.025 + 0.30;    // 2.5% + $0.30 payment processing
+  const rawCommission = price * 0.1075;                    // 10.75% Level 1–4 rate
+  const commission    = Math.min(rawCommission, 75);       // $75 cap per item (kicks in ~$697.67)
+  const processing    = price * 0.025 + 0.30;              // 2.5% + $0.30 processing
   return [
-    { l: 'Marketplace commission (10.25%)', a: commission },
+    { l: 'Marketplace commission (10.75%' + (rawCommission > 75 ? ', $75 cap' : '') + ')', a: commission },
     { l: 'Payment processing (2.5% + $0.30)', a: processing }
   ];
 }

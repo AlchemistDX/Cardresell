@@ -70,8 +70,9 @@ const EXPECTED = {
     return fvf + per;
   },
   tcgplayer(price) {
-    // 10.25% + 2.5% + $0.30
-    return price * 0.1025 + price * 0.025 + 0.30;
+    // 10.75% (Level 1–4, capped $75/item) + 2.5% + $0.30 — rate raised Feb 10, 2026
+    const commission = Math.min(price * 0.1075, 75);
+    return commission + price * 0.025 + 0.30;
   },
   poshmark(price) {
     // Flat $2.95 under $15, else 20%
