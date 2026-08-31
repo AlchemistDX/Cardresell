@@ -95,7 +95,7 @@ export default async function handler(req, res) {
   const currentCount = await getKVInt(kvUrl, kvToken, rateKey);
   if (currentCount >= RATE_LIMIT) {
     return res.status(429).json({
-      error: `You've hit today's refund cap (${RATE_LIMIT} per 24 hours). If a scan really was wrong, message support@cardresell.org and we'll sort it out.`,
+      error: `You've hit today's refund cap (${RATE_LIMIT} per 24 hours). If a scan really was wrong, message will@cardresell.org and we'll sort it out.`,
       reason_code: 'rate_limited',
       cap: RATE_LIMIT,
     });
