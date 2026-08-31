@@ -152,6 +152,12 @@ body{min-height:100dvh;font-family:var(--font);font-size:15px;color:var(--text);
  * Missing/unknown → no pattern (transparent), so we degrade to plain --bg. */
 .theme-bg{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.16;transition:background-image .35s ease,opacity .35s ease;background-repeat:repeat;background-size:120px 120px;background-position:center}
 [data-theme="dark"] .theme-bg{opacity:.13}
+/* 2026-08-31: On first visit (landing view, hero visible, no card loaded), fade
+   the game-icon pattern down so the H1 has clean breathing room. External audit
+   flagged the background fighting the hero copy. Restores to full opacity as
+   soon as a card loads (results panel becomes the visual anchor). */
+body.landing-active .theme-bg{opacity:.055}
+html[data-theme="dark"] body.landing-active .theme-bg{opacity:.045}
 .wrap,.hdr,.modal-shell,.overlay,#scanOverlay,header,main,footer,.auth-card{position:relative;z-index:1}
 @media (prefers-reduced-motion: reduce){.theme-bg{transition:none}}
 
@@ -1697,21 +1703,43 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
 </div>
 
-<!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-30) -->
-<!-- The site's positioning shifted from "find your card's value" (commodity) to
-     "see the highest net payout across 15 venues" (differentiated). This hero
-     commits to that job in one line. Only shown on the initial (no-card) view;
-     hidden once a card is loaded so the results panel takes over. -->
+<!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-31)
+     Positioning: "see the highest net payout across 15 venues".
+     eBay-friendly kicker — they're a top affiliate partner and often the winning
+     venue for a given card, so we never frame them as the enemy. -->
 <div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
-  <div style="font-size:.68rem;color:var(--gold);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Before you list on eBay</div>
-  <h1 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">See where you'll actually pocket the most — after fees.</h1>
-  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Find out what your card's really worth and the best marketplace to sell it on. Net payout after 2026 fees, shipping, and cash-out rules — <strong style="color:var(--text)">eBay + TCGplayer free</strong>; <span>Whatnot, COMC, Fanatics, Card Kingdom &amp; 8 more unlock with Pro.</span></div>
+  <div style="font-size:.68rem;color:var(--gold);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
+  <h1 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h1>
+  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>; Whatnot, COMC, Fanatics, Card Kingdom &amp; 8 more unlock with Pro.</div>
 </div>
 
-<!-- SOCIAL PROOF BAR -->
+<!-- SOCIAL PROOF BAR + Try-an-example CTA -->
+<!-- 2026-08-31: first-visit "Try Charizard →" attention pulse.
+     First-time visitors see: a "New here?" prefix + a gentle 3-cycle pulse
+     on the button so it's discoverable without hijacking their attention.
+     Once they've either clicked it or come back a second time, the pulse
+     drops and the label reverts to the neutral "Try an example". -->
+<style>
+  @keyframes _tryExamplePulse {
+    0%,100% { box-shadow: 0 2px 8px rgba(196,122,0,.35); transform: scale(1); }
+    50%     { box-shadow: 0 3px 14px rgba(196,122,0,.65), 0 0 0 4px rgba(196,122,0,.18); transform: scale(1.045); }
+  }
+  #tryExampleBtn.first-visit {
+    animation: _tryExamplePulse 1.9s ease-in-out 3;
+  }
+  #tryExampleFirstVisitPrefix { display:none }
+  #tryExampleBtn.first-visit + #tryExampleFirstVisitPrefix,
+  body.first-visit #tryExampleFirstVisitPrefix { display:inline }
+  @media (prefers-reduced-motion: reduce) {
+    #tryExampleBtn.first-visit { animation:none }
+  }
+</style>
 <div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
   <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold);font-weight:800"></span> <span id="socialProofLabel"></span></span>
-  <button onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try an example →</button>
+  <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
+    <span id="tryExampleFirstVisitPrefix" style="font-size:.68rem;color:var(--text-faint);font-weight:600;white-space:nowrap">New here? →</span>
+    <button id="tryExampleBtn" onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try Charizard →</button>
+  </div>
 </div>
 
 <!-- SCAN GUARANTEE LINE — subtle, appears once under social proof -->
@@ -5881,6 +5909,11 @@ function loadCardUI(card) {
   // ranking becomes the visual hero. Persists across the session.
   const _hero = document.getElementById('landingHero');
   if (_hero) _hero.style.display = 'none';
+  // 2026-08-31: restore the game-icon background pattern to full opacity now
+  // that the results panel is the visual anchor, and drop the first-visit flag
+  // (they engaged — no need to re-pulse next time).
+  try { document.body.classList.remove('landing-active', 'first-visit'); } catch(_){}
+  try { localStorage.setItem('cs_landing_seen', '1'); } catch(_){}
   // Persist the loaded card so a page refresh restores the user's spot.
   try { _persistLastLoadedCard(card); } catch(_) {}
   // Increment social proof counter on each card load
@@ -16866,6 +16899,48 @@ window.addEventListener('load', () => {
   if (oaiInput && window._openAiKey) oaiInput.value = window._openAiKey;
   const gcInput = document.getElementById('googleClientIdInput');
   if (gcInput && _SAVED_CLIENT_ID) gcInput.value = _SAVED_CLIENT_ID;
+
+  // 2026-08-31: Mark landing-active so the game-icon background pattern fades
+  // while the hero is visible. Cleared in loadCardUI() once a card renders.
+  // Skip when we already have a deep-linked card queued (results come first).
+  try {
+    const q = new URLSearchParams(location.search);
+    const _hasDeepLink = q.get('c') || q.get('card') || q.get('share') || location.pathname.startsWith('/grade/');
+    if (!_hasDeepLink) {
+      document.body.classList.add('landing-active');
+    }
+  } catch(_) {}
+
+  // 2026-08-31: First-visit "Try Charizard" attention pulse. Only fires when
+  // localStorage flag is unset (never seen the landing before). Once they've
+  // clicked the button OR loaded any card by other means, the flag is set
+  // and future visits show the neutral state.
+  try {
+    const _seen = localStorage.getItem('cs_landing_seen') === '1';
+    if (!_seen) {
+      document.body.classList.add('first-visit');
+      const _btn = document.getElementById('tryExampleBtn');
+      if (_btn) {
+        // Kick off the pulse ~1s after load so the user's eye has time to
+        // land on the hero copy first, then get drawn to the CTA.
+        setTimeout(() => {
+          _btn.classList.add('first-visit');
+          // Drop the pulse class after animation completes (3 cycles × 1.9s + buffer)
+          setTimeout(() => { _btn.classList.remove('first-visit'); }, 6200);
+        }, 1000);
+      }
+      // Clear the first-visit marker as soon as they click the button OR
+      // load any card via other paths (search, scan, restore).
+      const _clearFirstVisit = () => {
+        try { localStorage.setItem('cs_landing_seen', '1'); } catch(_){}
+        document.body.classList.remove('first-visit');
+      };
+      if (_btn) _btn.addEventListener('click', _clearFirstVisit, { once: true });
+      // Also clear after 20s of idle so the button label doesn't stay in
+      // "Try Charizard" mode forever if they never click.
+      setTimeout(_clearFirstVisit, 20000);
+    }
+  } catch(_) {}
 
   // 2026-08-20: restore the last-viewed card across page refresh.
   // Do it after a short delay so the game selector / view switch have time
