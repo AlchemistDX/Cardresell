@@ -165,6 +165,16 @@ async function checkProStatus(kvUrl, kvToken, googleSub) {
       headers: { Authorization: `Bearer ${kvToken}` }
     });
     const d = await r.json();
-    return !!d.result;
+    // 2026-09-01 [SECURITY]: was `return !!d.result` — accepted ANY pro:<sub>
+    // record regardless of status, so cancelled/past_due users still passed as
+    // paid. Gate on record.status === 'active' to match scan.js / scan-credits
+    // / pro-status.js.
+    if (!d.result) return false;
+    try {
+      const rec = JSON.parse(d.result);
+      return rec && rec.status === 'active';
+    } catch(_) {
+      return false;
+    }
   } catch(e) { return false; }
 }

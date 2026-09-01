@@ -98,22 +98,45 @@ export default async function handler(req, res) {
     if (googleSub) await storeProUser(googleSub, email, subscriptionId, 'active', undefined, tier);
   }
 
-  // Subscription created or updated — tier can change on upgrade/downgrade
+  // Subscription created or updated — tier can change on upgrade/downgrade,
+  // and status can move to past_due / unpaid / paused / canceled / incomplete.
+  // 2026-09-01 [SECURITY]: previously we only handled status === 'active'. That
+  // left paid entitlement in place after a subscription became non-active. Now
+  // any non-active status is persisted as such so downstream tier lookups can
+  // deny access. 'trialing' is treated as active for entitlement purposes.
   if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
     const obj = event.data.object;
     const googleSub = obj.metadata?.google_sub || null;
     const priceId   = obj.items?.data?.[0]?.price?.id;
     const tier      = obj.metadata?.tier || priceIdToTier(priceId) || undefined;
-    if (googleSub && obj.status === 'active') {
-      await storeProUser(googleSub, '', obj.id, 'active', undefined, tier);
+    if (googleSub) {
+      const status = String(obj.status || '').toLowerCase();
+      const entitledStatuses = new Set(['active', 'trialing']);
+      const mapped = entitledStatuses.has(status) ? 'active' : (status || 'cancelled');
+      await storeProUser(googleSub, '', obj.id, mapped, undefined, tier);
     }
   }
 
   // Subscription cancelled or payment failed
+  // 2026-09-01 [SECURITY]: invoice.payment_failed carries an Invoice, whose
+  // subscription-scoped metadata lives on obj.subscription_details.metadata,
+  // not obj.metadata. Previously we only read obj.metadata.google_sub which
+  // is empty for many payment_failed deliveries, so paid entitlement stayed
+  // active after the card declined. Resolve UID from subscription_details
+  // first (invoice case), then fall back to obj.metadata (subscription.deleted).
   if (type === 'customer.subscription.deleted' || type === 'invoice.payment_failed') {
     const obj = event.data.object;
-    const googleSub = obj.metadata?.google_sub || null;
-    if (googleSub) await storeProUser(googleSub, '', obj.id, 'cancelled');
+    const googleSub =
+      obj.subscription_details?.metadata?.google_sub ||
+      obj.metadata?.google_sub ||
+      null;
+    if (googleSub) {
+      const status = type === 'invoice.payment_failed' ? 'past_due' : 'cancelled';
+      const subId = obj.subscription || obj.id;
+      await storeProUser(googleSub, '', subId, status);
+    } else {
+      console.warn('WEBHOOK_NO_GOOGLE_SUB_FOR_REVOCATION:', type, obj.id);
+    }
   }
 
   return res.status(200).json({ received: true });

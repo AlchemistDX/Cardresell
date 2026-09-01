@@ -15,23 +15,27 @@ export default async function handler(req, res) {
   const tier    = String(body.tier || '10'); // '10', '50', '100'
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
 
-  let userEmail = body.email  || '';
-  let userSub   = body.userId || '';
-  let userName  = body.name   || '';
-
-  // Verify Firebase or Google token — falls back to body values if verification fails
-  if (idToken && idToken.length > 20) {
-    try {
-      const info = await verifyTokenFlexible(idToken);
-      // Trust verified uid regardless of email presence (legacy account safety).
-      if (info.uid)   userSub   = info.uid;
-      if (info.email) userEmail = info.email;
-      if (info.name)  userName  = info.name;
-    } catch(e) {}
-  }
-
-  if (!userEmail || !userEmail.includes('@')) {
+  // 2026-09-01 [SECURITY]: identity must come from a verified token only.
+  // Do not accept body-supplied email/userId. Fail closed on missing/invalid
+  // tokens so caller-controlled google_sub can't reach the Stripe webhook.
+  if (!idToken || idToken.length < 20) {
     return res.status(401).json({ error: 'Sign in with Google first.' });
+  }
+  let verified;
+  try {
+    verified = await verifyTokenFlexible(idToken);
+  } catch (e) {
+    console.error('ID_CHECKOUT_TOKEN_INVALID:', e && e.message);
+    return res.status(401).json({ error: 'Sign-in expired. Please sign in again.' });
+  }
+  if (!verified || !verified.uid) {
+    return res.status(401).json({ error: 'Sign-in expired. Please sign in again.' });
+  }
+  const userSub   = verified.uid;
+  const userEmail = verified.email || '';
+  const userName  = verified.name  || '';
+  if (!userEmail || !userEmail.includes('@')) {
+    return res.status(401).json({ error: 'Your Google account is missing an email. Please sign in again with a Google account that exposes email.' });
   }
 
   const priceMap = {

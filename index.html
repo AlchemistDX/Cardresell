@@ -16501,6 +16501,9 @@ function setPricingMode(mode) {
 }
 
 // ── Unified tier checkout ──
+// 2026-09-01 [SECURITY]: identity is proven via Firebase ID token in the
+// Authorization header. Body no longer sends email/userId — the server
+// derives them from the verified token.
 async function startTierCheckout(tier) {
   await window._waitForAuth();
   if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
@@ -16514,10 +16517,27 @@ async function startTierCheckout(tier) {
   if (btn) btn.disabled = true;
   if (span) span.textContent = 'Loading…';
   try {
+    // Force-refresh the Firebase ID token so we send a fresh one to the
+    // server. Matches the openBillingPortal() pattern already in this file.
+    let idToken = window._googleIdToken || '';
+    try {
+      if (window.googleUser && typeof window.googleUser.getIdToken === 'function') {
+        idToken = await window.googleUser.getIdToken(true);
+        window._googleIdToken = idToken;
+      } else if (window._fbCurrentUser && typeof window._fbCurrentUser.getIdToken === 'function') {
+        idToken = await window._fbCurrentUser.getIdToken(true);
+        window._googleIdToken = idToken;
+      }
+    } catch(_) {}
+    if (!idToken || idToken.length < 20) {
+      closePricingModal();
+      setTimeout(() => triggerGoogleSignIn(), 200);
+      throw new Error('Not signed in');
+    }
     const res = await fetch('/api/stripe-subscription-checkout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tier, interval, email: window.googleUser.email, userId: window.googleUser.sub })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify({ tier, interval })
     });
     const data = await res.json();
     if (data.url) { window.location.href = data.url; return; }

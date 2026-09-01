@@ -1,6 +1,13 @@
 // /api/stripe-subscription-checkout — Create Stripe Checkout for any subscription tier
-// POST body: { email, userId, name?, tier: 'pro'|'pro_max'|'ultimate', interval: 'month'|'year' }
-// Authorization: Bearer <firebase_or_google_id_token>  (optional)
+// POST body: { tier: 'pro'|'pro_max'|'ultimate', interval: 'month'|'year' }
+// Authorization: Bearer <firebase_or_google_id_token>  (REQUIRED)
+//
+// 2026-09-01 [SECURITY]: Identity is now derived ONLY from a verified Firebase/
+// Google ID token. Previously the endpoint accepted { email, userId } from the
+// request body and swallowed token verification failures, letting a caller
+// mint a Checkout Session whose success webhook would grant Pro to any
+// google_sub they typed. Body values are ignored for identity; only the
+// verified token's uid/email/name are used.
 //
 // This is the new multi-tier subscription checkout endpoint. The legacy
 // /api/stripe-checkout (Pro monthly) and /api/stripe-annual-checkout (Pro
@@ -65,21 +72,26 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Payments not configured yet.' });
   }
 
-  let userEmail = body.email || '';
-  let userSub   = body.userId || '';
-  let userName  = body.name || '';
-
-  if (idToken && idToken.length > 20) {
-    try {
-      const info = await verifyTokenFlexible(idToken);
-      if (info.uid)   userSub   = info.uid;
-      if (info.email) userEmail = info.email;
-      if (info.name)  userName  = info.name;
-    } catch (e) { /* non-blocking */ }
-  }
-
-  if (!userEmail || !userEmail.includes('@')) {
+  // Identity MUST come from a verified token. Fail closed on any missing
+  // or invalid token — do NOT fall back to body-supplied email/uid.
+  if (!idToken || idToken.length < 20) {
     return res.status(401).json({ error: 'Sign in with Google first.' });
+  }
+  let verified;
+  try {
+    verified = await verifyTokenFlexible(idToken);
+  } catch (e) {
+    console.error('SUBSCRIPTION_CHECKOUT_TOKEN_INVALID:', e && e.message);
+    return res.status(401).json({ error: 'Sign-in expired. Please sign in again.' });
+  }
+  if (!verified || !verified.uid) {
+    return res.status(401).json({ error: 'Sign-in expired. Please sign in again.' });
+  }
+  const userSub   = verified.uid;
+  const userEmail = verified.email || '';
+  const userName  = verified.name  || '';
+  if (!userEmail || !userEmail.includes('@')) {
+    return res.status(401).json({ error: 'Your Google account is missing an email. Please sign in again with a Google account that exposes email.' });
   }
 
   const origin  = (req.headers.origin || 'https://www.cardresell.org').replace(/\/$/, '');
