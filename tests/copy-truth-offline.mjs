@@ -189,5 +189,72 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   }
 }
 
+// -- Single price anchor (2026-09-01) ---------------------------------------
+// The click path used to read the dropdown row's rendered price text into the
+// override, which blocked the real ladder and made the same card report two
+// different payouts across a reload. There must be exactly ONE anchor source.
+{
+  ok(!/priceSpan\.textContent\.replace/.test(idx),
+     'the drop-row DOM-text price prefill is gone');
+  ok(!/Auto-populate price override from the displayed price/.test(idx),
+     'the old prefill comment is gone too, so it cannot be resurrected by copy-paste');
+
+  // NB: 'let bestPrice = null;' also appears in cardFactory (max variant price),
+  // so anchor on the graded/raw split inside the comps resolver instead.
+  const f = idx.indexOf('if (gradedRequest)');
+  ok(f > 0, 'the price ladder still exists');
+  const ladder = idx.slice(f, f + 6500);
+
+  // Graded ladder: PriceCharting leads (unchanged, deliberate).
+  const gradedBranch = ladder.slice(ladder.indexOf('if (gradedRequest)'),
+                                    ladder.indexOf('Raw context'));
+  ok(gradedBranch.indexOf('pc.median') < gradedBranch.indexOf('ebay.median'),
+     'graded ladder still prefers PriceCharting over eBay comps');
+
+  // Raw ladder: TCG market leads, then eBay, then PriceCharting.
+  // Raw: TCG market leads, but it is applied as the DISPLAY BASIS via
+  // currentPrices (see the condition-multiplier block below) rather than written
+  // into the override, so the raw branch's first rung deliberately yields null.
+  const rawBranch = ladder.slice(ladder.indexOf('Raw context'));
+  const iTcg  = rawBranch.indexOf('_tcgFreshVariant');
+  const iEbay = rawBranch.indexOf('bestPrice = ebay.median');
+  const iPc   = rawBranch.indexOf('bestPrice = pc.median');
+  ok(iTcg >= 0 && iEbay >= 0 && iPc >= 0, 'raw ladder keeps all three rungs');
+  ok(iTcg < iEbay, 'raw ladder checks the fresh TCG basis before eBay comps');
+  ok(iEbay < iPc, 'eBay comps still outrank the PriceCharting backstop when present');
+}
+
+// -- Condition multiplier must reach the payouts (2026-09-01) --------------
+// getEffectivePrice() used to return an auto-filled override verbatim, so once
+// the ladder populated the field, changing condition moved the headline but not
+// a single payout row. A system-filled basis is Near Mint and must be adjusted;
+// a user-typed price is their expected sale price and must not be.
+{
+  const g = idx.indexOf('function getEffectivePrice()');
+  ok(g > 0, 'getEffectivePrice exists');
+  const body = idx.slice(g, g + 1400);
+  ok(/_ovAutoFilled && !isGradedVariant\(\)\) return ov \* getCondMultiplier\(\)/.test(body),
+     'a system-filled override gets the condition multiplier');
+  ok(/return ov;/.test(body), 'a user-typed override is still returned verbatim');
+
+  ok(/window\._ovAutoFilled = true;/.test(idx), 'the ladder marks its fill as system-filled');
+  const inp = idx.indexOf("getElementById('priceOverride')?.addEventListener('input'");
+  ok(inp > 0, 'the override input listener exists');
+  ok(/_ovAutoFilled = false/.test(idx.slice(inp, inp + 400)),
+     'typing in the override clears the auto-fill flag');
+
+  // Fresh tcgcsv becomes the display basis instead of a second override write.
+  ok(/currentPrices\[_k\] = Object\.assign/.test(idx),
+     'fresh tcg-price figures are injected into currentPrices as the basis');
+  ok(/window\._tcgFreshVariant/.test(idx), 'the injected variant is tracked');
+  const rawB = idx.slice(idx.indexOf('Raw context'));
+  ok(rawB.indexOf('bestPrice = null;') < rawB.indexOf('bestPrice = ebay.median'),
+     'raw path does not double-book TCG market into the override');
+
+  // Hand-computed: a $422.40 NM basis at Moderately Played (0.65) is $274.56.
+  ok(Math.abs(422.40 * 0.65 - 274.56) < 0.005, 'MP multiplier fixture is 0.65');
+  ok(/mp: 0\.65/.test(idx), 'MP multiplier in code is still 0.65');
+}
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);

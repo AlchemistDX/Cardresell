@@ -5029,21 +5029,21 @@ function attachDropHandlers(cardFactory) {
       selectedCard = card;
       dropList.classList.remove('open');
       searchInput.value = card.name;
-      // Auto-populate price override from the displayed price in this result row
-      const priceSpan = el.querySelector('.drop-price');
-      const displayedPrice = priceSpan ? parseFloat(priceSpan.textContent.replace(/[^0-9.]/g, '')) : NaN;
+      // 2026-09-01 (launch gate): do NOT prefill the override from this row.
+      //
+      // This used to read the price back out of the row's rendered DOM text and
+      // write it into the override. Because the pipeline only fills the override
+      // when it is empty, that prefill then BLOCKED the real price ladder, so the
+      // click path and the reload/restore path anchored on different sources and
+      // reported different payouts for the same card ($489.11 vs $272.56 on a
+      // Base Set 2 Charizard, verified in a browser).
+      //
+      // The row price comes from the embedded per-variant feed (pokemontcg.io),
+      // which is a STALER copy of the same metric /api/tcg-price serves from
+      // tcgcsv ($489.11 vs $422.40 for that card on the same day). It is fine as
+      // a browsing hint in the dropdown; it is not fit to anchor payout math.
+      // fetchAndApplySoldComps' documented ladder is now the single source.
       loadCardUI(card);
-      // Set override AFTER loadCardUI (which clears it) so it takes effect
-      if (!isNaN(displayedPrice) && displayedPrice > 0) {
-        const ovField = document.getElementById('priceOverride');
-        if (ovField) {
-          ovField.value = displayedPrice.toFixed(2);
-          calc(); // Recalc with the override price
-          // Brief gold flash to signal auto-fill
-          ovField.style.boxShadow = '0 0 0 2px var(--gold)';
-          setTimeout(() => { ovField.style.boxShadow = ''; }, 1800);
-        }
-      }
     });
   });
 
@@ -5607,6 +5607,38 @@ async function fetchAndApplySoldComps(forceRefresh) {
   //   For a RAW request:
   //     eBay comps (≥2) > PC (raw/loose) > TCG market
   //   TCG stays as the always-there floor for raw — it's live market data.
+  // 2026-09-01 (launch gate): reconcile the DISPLAYED price with the price the
+  // payouts are computed from.
+  //
+  // The "Market Value" headline reads currentPrices[variant].market from the
+  // embedded per-variant feed (pokemontcg.io), while payouts read the override.
+  // Those are two different feeds for the same metric and they disagree — same
+  // Base Set 2 Charizard, same day: embedded $489.11 vs tcgcsv $422.40. So the
+  // headline said one thing and every payout row was computed from another.
+  //
+  // Fix: when /api/tcg-price returns a fresh figure for the variant the user is
+  // actually looking at, write it into currentPrices and re-render. The headline
+  // and getEffectivePrice() then read the SAME basis, the Low/Mid/High row gets
+  // refreshed too, and the condition multiplier keeps working because it is
+  // applied on top of the basis rather than baked into an override.
+  try {
+    if (tcg && tcg.market != null && tcg.variant && currentPrices) {
+      const _k = Object.keys(currentPrices).find(k => k === tcg.variant)
+              || Object.keys(currentPrices).find(k => k.toLowerCase() === String(tcg.variant).toLowerCase());
+      if (_k && !isGradedVariant(_k)) {
+        const _prev = currentPrices[_k] || {};
+        currentPrices[_k] = Object.assign({}, _prev, {
+          market: tcg.market,
+          low:  tcg.low  != null ? tcg.low  : _prev.low,
+          mid:  tcg.mid  != null ? tcg.mid  : _prev.mid,
+          high: tcg.high != null ? tcg.high : _prev.high,
+        });
+        window._tcgFreshVariant = _k;
+        if (printSelect && printSelect.value === _k) updatePriceFromPrinting();
+      }
+    }
+  } catch(_) {}
+
   const ovField = document.getElementById('priceOverride');
   const currentGraderPill = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const gradedRequest     = !!grade;
@@ -5620,18 +5652,43 @@ async function fetchAndApplySoldComps(forceRefresh) {
         bestPrice = ebay.median;
       }
     } else {
-      // Raw context — eBay comps are usually the tightest signal when they exist,
-      // then PC's guide value, then TCG market.
-      if (ebay && ebay.count >= 2 && ebay.median != null) {
+      // Raw context — 2026-09-01: TCGplayer market now leads, ahead of both eBay
+      // comps and PriceCharting. Three reasons, all checked against live data:
+      //   1. eBay sold comps are 403ing sitewide right now (verified across five
+      //      different cards: count 0, confidence 'insufficient'), so the old
+      //      first rung effectively never fires and the anchor silently became
+      //      PriceCharting for every raw card.
+      //   2. PriceCharting's raw figure is a LOOSE value, which folds in played
+      //      copies. This panel defaults to Near Mint, so anchoring NM math on a
+      //      loose average understates it — $272.56 loose vs $422.40 TCG market
+      //      on the same Base Set 2 Charizard.
+      //   3. TCGplayer market is the number behind the venue the winner tile
+      //      actually names, it is present for essentially every card, and it is
+      //      stable across reloads. That last property is the whole point: the
+      //      anchor must not change when a stranger hits refresh.
+      // eBay median is kept as the second rung so it takes over automatically if
+      // comps ever come back, and PriceCharting remains the backstop.
+      // TCG market is NOT written into the override here — it was just injected
+      // into currentPrices above as the display basis, and getEffectivePrice()
+      // already falls through to that basis and applies the condition
+      // multiplier. Writing it here too would double-book the same number into
+      // a field that bypasses condition adjustment.
+      if (window._tcgFreshVariant && printSelect
+          && printSelect.value === window._tcgFreshVariant) {
+        bestPrice = null;
+      } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
       } else if (pc && pc.median != null && pc.source === 'pricecharting') {
         bestPrice = pc.median;
-      } else if (tcg && tcg.market != null) {
-        bestPrice = tcg.market;
       }
     }
     if (bestPrice != null) {
       ovField.value = Number(bestPrice).toFixed(2);
+      // Remember that WE filled this, not the user. A user-typed number is the
+      // price they expect to actually sell at, so it must be used verbatim; a
+      // system-filled number is a Near-Mint basis and has to be condition
+      // adjusted like any other basis. See getEffectivePrice().
+      window._ovAutoFilled = true;
       // 2026-09-01 (launch gate): name the rung that actually produced this
       // number. Before this, the caption under the price kept whatever
       // updatePriceFromPrinting() had written from selectedCard.source — so a
@@ -6122,6 +6179,8 @@ function loadCardUI(card) {
 
   // Clear price override on new card load
   if (priceOverride) priceOverride.value = '';
+  window._ovAutoFilled = false;   // new card: no system basis in the field yet
+  window._tcgFreshVariant = null; // and no fresh tcgcsv figure injected yet
 
   // Reset comps status
   _compsAbortCard = null;
@@ -6542,7 +6601,16 @@ function getCondMultiplier() {
 
 function getEffectivePrice() {
   const ov = parseFloat(priceOverride.value);
-  if (!isNaN(ov) && ov > 0) return ov;
+  if (!isNaN(ov) && ov > 0) {
+    // 2026-09-01: a system-filled override is a Near-Mint basis (an eBay sold
+    // median or a PriceCharting guide value), so the condition multiplier still
+    // applies. Previously this returned early and unadjusted, which meant that
+    // once the ladder auto-filled the field, selecting Moderately Played moved
+    // the "Market Value" headline but left every payout row unchanged.
+    // A price the USER typed is their expected sale price — never adjust it.
+    if (window._ovAutoFilled && !isGradedVariant()) return ov * getCondMultiplier();
+    return ov;
+  }
 
   const key = printSelect.value;
   const p = currentPrices[key];
@@ -17353,6 +17421,9 @@ function calcGradingRoi() {
 
 // Keep ROI raw price in sync when override changes
 document.getElementById('priceOverride')?.addEventListener('input', () => {
+  // User typed: this is now their expected sale price, so drop the auto-fill
+  // flag and stop applying the condition multiplier on top of it.
+  window._ovAutoFilled = false;
   const rawEl = document.getElementById('roiRawPrice');
   const ov = parseFloat(document.getElementById('priceOverride')?.value);
   if (rawEl) rawEl.textContent = ov > 0 ? '$' + ov.toFixed(2) : '—';
