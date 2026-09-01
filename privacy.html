@@ -55,7 +55,7 @@
   <p class="subtitle">Last updated: September 1, 2026 &nbsp;·&nbsp; Effective immediately</p>
 
   <div class="highlight">
-    <strong>Short version:</strong> We collect only what we need to run the app. We do not sell your data. Card images you upload for scanning are analyzed by OpenAI and are not stored by CardResell beyond the duration of your request.
+    <strong>Short version:</strong> We collect only what we need to run the app. We do not sell your data. Card images you upload are processed by Ximilar for card identification and by OpenAI and/or Ximilar for grading. CardResell does not retain the raw images after processing your request.
   </div>
 
   <h2>1. Who We Are</h2>
@@ -63,8 +63,8 @@
 
   <h2>2. Information We Collect</h2>
   <p><strong>Account data:</strong> When you sign in with Google, we receive your Google account ID, display name, and email address. This is used solely to authenticate you and link your credits and subscription.</p>
-  <p><strong>Usage data:</strong> We store your scan credit balance, subscription status, and flip/collection data in Firebase (Google) and Upstash (Redis). This data is associated with your Google account ID.</p>
-  <p><strong>Card images:</strong> When you use the AI Grading Estimate or Card ID Scanner, your card photo(s) are sent to OpenAI's API for analysis. Images are transmitted securely and are not stored by CardResell servers beyond your immediate request. See <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI's Privacy Policy</a> for how they handle API inputs.</p>
+  <p><strong>Usage data:</strong> We store account-linked information such as scan credit balances and subscription status using Firebase (Google) and Upstash (Redis). Portfolio, flip, and collection information may also be stored in your browser's local storage and, where an account-sync feature is available, associated with your Google account ID.</p>
+  <p><strong>Card images:</strong> When you use the Card ID Scanner, your card photo is sent to Ximilar's API for identification. When you use AI Grading, card photos are sent to OpenAI and may also be sent to Ximilar for computer-vision grading and card matching. Images are transmitted securely, and CardResell does not retain the raw images on its servers after completing your request. Third-party providers process inputs under their own policies; see <a href="https://www.ximilar.com/terms-of-use-privacy/" target="_blank" rel="noopener">Ximilar's Terms of Use &amp; Privacy</a> and <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI's Privacy Policy</a>.</p>
   <p><strong>Payment data:</strong> Payments are processed by Stripe. CardResell never sees or stores your full credit card number. See <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe's Privacy Policy</a>.</p>
   <p><strong>Analytics:</strong> We may use basic analytics (page views, feature usage) to improve the app. This does not include personally identifiable information.</p>
 
@@ -73,7 +73,7 @@
     <li>To authenticate you and maintain your session.</li>
     <li>To track your scan credit balance and subscription status.</li>
     <li>To process payments and manage your subscription through Stripe.</li>
-    <li>To analyze card images using OpenAI's API on your behalf.</li>
+    <li>To identify cards using Ximilar and to estimate card condition using OpenAI and/or Ximilar on your behalf.</li>
     <li>To store your flip history and collection data so it persists across sessions.</li>
     <li>To send transactional emails (e.g., password reset) via Firebase Auth.</li>
   </ul>
@@ -84,17 +84,18 @@
     <li><strong>Firebase / Google</strong> — authentication and database storage.</li>
     <li><strong>Upstash / Redis</strong> — session and credit caching.</li>
     <li><strong>Stripe</strong> — payment processing.</li>
-    <li><strong>OpenAI</strong> — card image analysis (AI grading and identification features).</li>
+    <li><strong>Ximilar</strong> — card identification, card matching, and computer-vision grading.</li>
+    <li><strong>OpenAI</strong> — AI grading analysis.</li>
     <li><strong>Vercel</strong> — hosting and serverless functions.</li>
   </ul>
   <p>We may also disclose data if required by law or to protect the rights, property, or safety of CardResell, its users, or the public.</p>
 
   <h2>5. Data Retention</h2>
   <p>Your account data is retained as long as your account exists. You may request deletion of your account and associated data at any time by emailing <a href="mailto:will@cardresell.org">will@cardresell.org</a>. We will process deletion requests within 30 days.</p>
-  <p>Card images submitted for scanning are not retained by CardResell after the API response is returned. OpenAI's data retention policies apply to API inputs; see their privacy policy for details.</p>
+  <p>Card images submitted for scanning are not retained by CardResell after the API response is returned. Ximilar's and OpenAI's respective data-handling and retention policies apply while they process API inputs; see their policies linked above for details.</p>
 
   <h2>6. Cookies &amp; Local Storage</h2>
-  <p>CardResell uses Firebase Auth tokens stored in your browser's memory for authentication. We do not use third-party advertising cookies. We do not use localStorage or sessionStorage for personal data (these are blocked in certain environments for security reasons).</p>
+  <p>CardResell uses Firebase authentication technology to maintain your signed-in session. We do not use third-party advertising cookies. We use browser local storage and session storage for app functions including portfolio, flip, and collection records, preferences, cached interface state, and temporary session state. Information stored in your browser remains on that device until you clear browser data or the app removes it; anyone with access to that browser profile may be able to view it.</p>
 
   <h2>7. Children's Privacy</h2>
   <p>CardResell is not directed at children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us and we will delete it.</p>

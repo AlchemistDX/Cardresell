@@ -5,9 +5,9 @@ import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
 
 // ── YGOProDeck grounding (extracted helper) ──
 // Mutates cardInfo in place. Returns nothing.
-// Called on BOTH the Ximilar-happy path AND the GPT-vision fallback path so
-// every YGO ID is enriched with canonical name, set, rarity, image, and
-// authoritative YGOProDeck id.
+// Called for Ximilar identification results and picker candidates so every
+// YGO ID is enriched with canonical name, set, rarity, image, and authoritative
+// YGOProDeck id.
 //
 // Four tiers, most specific first:
 //   Tier 0 (NEW 2026-08-19): numeric card_number → ?id=<passcode>
@@ -154,8 +154,8 @@ async function groundYugiohCardInfo(cardInfo) {
 }
 // ── Scryfall grounding (MTG) — added 2026-08-19 ──
 // Free API, 10 req/sec, no key. Mutates cardInfo in place.
-// Called on both Ximilar happy path AND fallback path so every MTG scan gets
-// canonical name, set_code, set_name, collector_number, image, and prices.
+// Called for Ximilar identification results and picker candidates so every MTG
+// scan gets canonical name, set_code, set_name, collector_number, image, and prices.
 //
 // Tiers, most specific first:
 //   Tier 1: /cards/<set>/<number>          (perfect precision if Ximilar gave both)
@@ -322,9 +322,8 @@ async function groundLorcanaCardInfo(cardInfo) {
 // client picked nothing, the synth-card fallback (`imageDataUrl`) rendered
 // the user's own photo as the card image.
 //
-// This grounder mirrors the GPT-fallback grounding block at line ~1360, but
-// runs on the Ximilar happy path so response.image_url is populated for
-// every English Pokemon card that pokemontcg.io knows about.
+// This grounder runs on the Ximilar identification path so response.image_url
+// is populated for every English Pokemon card that pokemontcg.io knows about.
 //
 // Tiers, most specific first:
 //   Tier 1: name:<name> number:<num>              (exact name + exact number)
@@ -635,7 +634,7 @@ async function groundCardInfoByGame(cardInfo) {
   if (t === 'sports')                  return groundSportsCardInfo(cardInfo);
 }
 
-// /api/scan — Ximilar-first card identification (GPT-5 fallback)
+// /api/scan — Ximilar-only card identification; AI-assisted grading
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
 // Returns: { card_name, card_number, set_name, hp, card_type, rarity, success: true }
@@ -921,7 +920,21 @@ export default async function handler(req, res) {
 
   const openaiKey    = process.env.OPENAI_API_KEY;
   const ximilarToken = process.env.XIMILAR_API_TOKEN;
-  if (!openaiKey) { await refundCredits(); return res.status(500).json({ error: 'Scanner not configured.' }); }
+
+  // Identification and grading have separate providers. Ximilar is the sole
+  // identity authority, so identify mode must never require or fall back to
+  // OpenAI. Grade mode still requires OpenAI for its grading analysis.
+  if (isIdentifyMode && !ximilarToken) {
+    await refundCredits();
+    return res.status(503).json({
+      error: 'Card identification is temporarily unavailable. Please try again.',
+      code: 'IDENTIFY_PROVIDER_UNAVAILABLE',
+    });
+  }
+  if (isGradeMode && !openaiKey) {
+    await refundCredits();
+    return res.status(503).json({ error: 'AI grading is temporarily unavailable. Please try again.' });
+  }
 
   // ── 4a. Try Ximilar FIRST for identify mode ──
   // Ximilar's purpose-built collectibles model returns in ~1s and covers
@@ -935,15 +948,14 @@ export default async function handler(req, res) {
   //     and let the client show the scan-miss panel. Do NOT fall through
   //     to GPT vision for ID (GPT hallucinates card names on fakes,
   //     off-frame shots, and cards outside Ximilar's DB).
-  //   - GPT is used as a fallback ONLY for hard Ximilar errors (network,
-  //     http 5xx, missing token, parse) so a Ximilar outage doesn't
-  //     brick the scanner.
+  //   - If Ximilar has a hard provider error (network, HTTP, parse, missing
+  //     configuration), refund the credit and return a temporary-unavailable
+  //     response. Never substitute a different model's identity guess.
   //
   // Grade mode is unchanged — Deep Grade still uses Ximilar CV grader,
   // Quick Grade still uses GPT for centering/edges/surface.
-  const XIMILAR_MISS_REASONS   = new Set(['no_match', 'no_card_detected', 'low_confidence', 'no_records']);
-  const XIMILAR_HARD_ERR_REASONS = new Set(['network', 'http', 'parse', 'missing_input']);
-  if (isIdentifyMode && ximilarToken && imageBase64) {
+  const XIMILAR_MISS_REASONS = new Set(['no_match', 'no_card_detected', 'low_confidence', 'no_records']);
+  if (isIdentifyMode && imageBase64) {
     // Detect "maybe sports" heuristically: user hasn't told us, and Ximilar's
     // TCG endpoint would return no_match for real sports cards. Try TCG first;
     // fall back to sport_id if the first attempt returns no_match/no_card.
@@ -958,11 +970,20 @@ export default async function handler(req, res) {
     const tMs = Date.now() - t0;
     console.log('[scan] ximilar took', tMs, 'ms ok=', xim.ok, 'reason=', xim.reason, 'dist=', xim.cardInfo?._ximilar_dist);
 
-    // Ximilar returned a definitive "we don't know this card" — do NOT
-    // fall through to GPT. Refund the credit and tell the client.
-    if (!xim.ok && XIMILAR_MISS_REASONS.has(xim.reason)) {
-      console.log('[scan] ximilar miss (' + xim.reason + ') — returning unidentified, NOT falling to GPT');
+    // Every Ximilar failure terminates identify mode. Expected misses return
+    // an unidentified result; provider/configuration failures return 503.
+    // Both paths refund the consumed credit and neither can reach GPT.
+    if (!xim.ok) {
       await refundCredits();
+      if (!XIMILAR_MISS_REASONS.has(xim.reason)) {
+        console.error('[scan] ximilar provider failure (' + (xim.reason || 'unknown') + ') — identify unavailable; no GPT fallback');
+        return res.status(503).json({
+          error: 'Card identification is temporarily unavailable. Please try again.',
+          code: 'IDENTIFY_PROVIDER_UNAVAILABLE',
+          provider_reason: xim.reason || 'unknown',
+        });
+      }
+      console.log('[scan] ximilar miss (' + xim.reason + ') — returning unidentified; no GPT fallback');
       return res.status(200).json({
         success: true,
         mode: 'identify',
@@ -1061,8 +1082,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // 2026-08-19: Run YGO grounding on Ximilar happy path (was previously only
-      // hit on GPT fallback). Ximilar's YGO data is often incomplete/wrong:
+      // Run YGO grounding on the Ximilar path. Ximilar's YGO data is often incomplete/wrong:
       //   - card_name occasionally misspelled ("Invoked Babalon" vs "Baybarron")
       //   - card_number returned as Konami passcode (101305031) not printed set code
       //   - set_code/set_name frequently "UNKNOWN"
@@ -1162,15 +1182,14 @@ export default async function handler(req, res) {
         ygo_grounded_by: cardInfo._ygo_grounded_by || null,
       });
     }
-    // else: fall through to GPT-5 vision (unchanged path below)
-    console.log('[scan] ximilar miss, falling back to GPT-5');
   }
 
   // Grade-mode Ximilar ident is called AFTER GPT succeeds (see below),
   // so we don't burn Ximilar credits if GPT vision fails/refunds.
   let gradeXimResult = null;
 
-  // ── 4. Call GPT-4o Vision (fallback) ──
+  // ── 4. Call GPT vision for grade mode only ──
+  // Identify mode always returns from the Ximilar block above.
   try {
     const mime   = mimeType || 'image/jpeg';
     const dataUrl = `data:${mime};base64,${imageBase64}`;
@@ -1837,14 +1856,6 @@ Respond ONLY with valid JSON, no explanation:
         // fall through to the model's original set_name.
         console.warn('pokemontcg.io grounding failed:', e?.message || e);
       }
-    }
-
-    // ── Yu-Gi-Oh grounding pass (YGOProDeck) — extracted to groundYugiohCardInfo()
-    //   at top of file 2026-08-19 so it runs on BOTH the Ximilar happy path AND
-    //   this GPT-fallback path. Also added Tier 0 (numeric passcode) which resolves
-    //   Ximilar's card_number (e.g. 101305031) directly via YGOProDeck ?id=<passcode>.
-    if (!isGradeMode) {
-      await groundCardInfoByGame(cardInfo);
     }
 
     if (isGradeMode) {
