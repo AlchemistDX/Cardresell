@@ -5631,6 +5631,25 @@ async function fetchAndApplySoldComps(forceRefresh) {
     }
     if (bestPrice != null) {
       ovField.value = Number(bestPrice).toFixed(2);
+      // 2026-09-01 (launch gate): name the rung that actually produced this
+      // number. Before this, the caption under the price kept whatever
+      // updatePriceFromPrinting() had written from selectedCard.source — so a
+      // price filled from PriceCharting still read "TCGPlayer market". Browser
+      // QA caught the same Charizard showing $489.11 (printing feed) on first
+      // load and $272.56 (PriceCharting) after a reload, both captioned
+      // "TCGPlayer market". The number moving is a data question; the caption
+      // naming a source that did not produce it is just untrue, so fix that.
+      try {
+        const _srcLabel =
+          (bestPrice === (ebay && ebay.median)) ? `eBay sold median · ${ebay.count} comps`
+          : (bestPrice === (pc && pc.median))   ? 'PriceCharting guide value'
+          : (bestPrice === (tcg && tcg.market)) ? 'TCGPlayer market'
+          : '';
+        if (_srcLabel && priceSource) {
+          priceSource.textContent = _srcLabel;
+          window._ovFilledBy = _srcLabel;
+        }
+      } catch(_) {}
       calc();
     }
   }

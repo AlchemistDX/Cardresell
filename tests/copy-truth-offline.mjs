@@ -127,5 +127,23 @@ ok(/!_seen && !_deepLink && !_hasSavedCard/.test(idx),
 ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('first-visit'\)/.test(idx),
    'a failed auto-run falls back to the Try Charizard pulse');
 
+// -- Price caption truthfulness (2026-09-01) --------------------------------
+// Browser QA: the same Charizard read $489.11 then $272.56 across a reload, and
+// BOTH were captioned "TCGPlayer market". The override is filled from a 3-rung
+// ladder (eBay median > PriceCharting > TCG market), so the caption has to name
+// the rung that actually won rather than whatever selectedCard.source was.
+{
+  const f = idx.indexOf('ovField.value = Number(bestPrice).toFixed(2)');
+  ok(f > 0, 'comps pipeline still fills the override from the ladder');
+  const region = idx.slice(f, f + 1800);
+  ok(/eBay sold median/.test(region),  'caption can name eBay sold median');
+  ok(/PriceCharting guide value/.test(region), 'caption can name PriceCharting');
+  ok(/TCGPlayer market/.test(region),  'caption can name TCGPlayer market');
+  ok(/ebay\.count\} comps/.test(region),
+     'the eBay caption discloses how many comps are behind the median');
+  ok(/priceSource\.textContent = _srcLabel/.test(region),
+     'the caption element is updated when the override is filled');
+}
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);
