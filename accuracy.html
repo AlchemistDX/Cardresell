@@ -40,6 +40,12 @@ table.fee-table th{color:var(--text-faint);font-size:.7rem;text-transform:upperc
 table.fee-table td{color:var(--text-muted)}
 table.fee-table td:first-child{color:var(--text);font-weight:600}
 .pill-verified{display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;color:var(--green);background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.28);border-radius:99px;padding:.1rem .5rem;white-space:nowrap}
+.pill-stale{display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;color:#f59e0b;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.32);border-radius:99px;padding:.1rem .5rem;white-space:nowrap;margin-left:.35rem}
+.changelog{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:1rem 0}
+.changelog-title{font-size:.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:.6rem}
+.changelog-entry{border-left:2px solid var(--gold);padding:.15rem 0 .15rem .75rem;margin:.55rem 0;font-size:.85rem;color:var(--text-muted)}
+.changelog-entry strong{color:var(--text);font-weight:600}
+.changelog-date{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.72rem;color:var(--text-faint);letter-spacing:.02em;text-transform:uppercase;font-weight:700;display:inline-block;min-width:5.5rem;margin-right:.35rem}
 .limits{background:rgba(248,113,113,.05);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:.9rem 0}
 .limits strong{color:var(--red)}
 .toc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:1.25rem 0;font-size:.88rem}
@@ -63,9 +69,19 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 <main>
 
 <h1>Accuracy &amp; Methodology</h1>
-<span class="updated">Last updated · Aug 30, 2026 · We audit this page every release cycle</span>
+<span class="updated">Last updated · Sep 1, 2026 · We audit this page every release cycle</span>
 
 <p>CardResell exists so card sellers can pick the venue that actually pays them the most. That only works if you can trust the numbers. This page publishes exactly how we calculate them, where the source data comes from, and what we know we get wrong.</p>
+
+<div class="changelog" id="changelog">
+  <div class="changelog-title">Changelog · newest first</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Stale-fee guardrail.</strong> Any venue whose fee schedule hasn't been re-verified in the last 30 days now shows a <span class="pill-stale">• Stale</span> pill in the fees table below. Venues older than 60 days can't rank #1 in the payout list even if their raw math wins &mdash; we'd rather be honest than confidently wrong. Currently flagged: COMC, Fanatics Collect, Poshmark (last verified Jun 2026).</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Changelog started.</strong> We're now dating every accuracy-affecting change on this page, newest first, so you can see exactly what moved and when.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 30, 2026</span><strong>eBay + TCGplayer + Whatnot + Mercari + Mana Pool + Cardsphere + Cardmarket + SCG + Card Kingdom + CoolStuffInc + CardNexus + TCG Bulk fees re-verified</strong> against each venue's official help pages. No fee changes detected; verification stamps refreshed to Aug 2026.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>High-price clamp.</strong> Added <code>max(4 &times; Market, 1.5 &times; Low)</code> clamp on every read path so Net Payout can't be inflated by an outlier raw High from a data feed. Real Charizard ex #234 example: raw High $2,533 &rarr; clamped $866.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>PriceCharting wins over TCGplayer</strong> for graded values (PSA 10, PSA 9, BGS, CGC, SGC, TAG). PriceCharting samples eBay sold comps directly and matched hand-audited reality more often. Backed by a 3-attempt retry, 12s timeout, and 60s error cache.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>Grade-switch race protection.</strong> Added a <code>_syncGen</code> generation guard so rapid PSA 10 &rarr; PSA 9 &rarr; BGS 10 flips can't leave a stale grade result on screen.</div>
+</div>
 
 <div class="toc">
   <div class="toc-title">On this page</div>
@@ -75,6 +91,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <a href="#grading">Estimated grade scans</a>
   <a href="#coverage">Card database coverage</a>
   <a href="#limits">Known limits</a>
+  <a href="#changelog">Changelog</a>
 </div>
 
 <div class="stat-grid">
@@ -113,11 +130,11 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <tbody>
     <tr><td>eBay</td><td>13.25% FVF on total (item&nbsp;+ shipping&nbsp;+ tax) up to $7,500/item, then 2.35% · $0.30/order &le;$10 or $0.40 above · Basic Store 12.35% with $2,500 boundary · Top Rated –10%</td><td>Aug 2026</td><td><a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822" target="_blank" rel="noopener">eBay seller hub</a></td></tr>
     <tr><td>TCGplayer</td><td>10.75% commission (Level 1–4, capped $75/item) + 2.5% + $0.30 payment fee on full order · Pro sellers 9.25%</td><td>Aug 2026</td><td><a href="https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees" target="_blank" rel="noopener">TCGplayer help</a></td></tr>
-    <tr><td>COMC</td><td>Per-card intake + 5% transaction + optional 10% cashout</td><td>Jun 2026</td><td><a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC blog</a></td></tr>
-    <tr><td>Fanatics Collect</td><td>Buy Now: 8% seller · Auction: 0% seller + 20% buyer premium</td><td>Jun 2026</td><td><a href="https://help.fanaticscollect.com/" target="_blank" rel="noopener">Fanatics help</a></td></tr>
+    <tr><td>COMC</td><td>Per-card intake + 5% transaction + optional 10% cashout</td><td>Jun 2026 <span class="pill-stale">&bull; Stale</span></td><td><a href="https://blog.comc.com/selling-rates/" target="_blank" rel="noopener">COMC blog</a></td></tr>
+    <tr><td>Fanatics Collect</td><td>Buy Now: 8% seller · Auction: 0% seller + 20% buyer premium</td><td>Jun 2026 <span class="pill-stale">&bull; Stale</span></td><td><a href="https://help.fanaticscollect.com/" target="_blank" rel="noopener">Fanatics help</a></td></tr>
     <tr><td>Whatnot</td><td>8% commission (capped at $1,500) + 2.9% + $0.30 processing</td><td>Aug 2026</td><td><a href="https://help.whatnot.com/hc/en-us" target="_blank" rel="noopener">Whatnot help</a></td></tr>
     <tr><td>Mercari</td><td>10% marketplace + 2.9% + $0.50 processing</td><td>Aug 2026</td><td><a href="https://www.mercari.com/help_center/" target="_blank" rel="noopener">Mercari help</a></td></tr>
-    <tr><td>Poshmark</td><td>$2.95 flat under $15 · 20% at $15+</td><td>Jun 2026</td><td><a href="https://blog.poshmark.com/faq" target="_blank" rel="noopener">Poshmark FAQ</a></td></tr>
+    <tr><td>Poshmark</td><td>$2.95 flat under $15 · 20% at $15+</td><td>Jun 2026 <span class="pill-stale">&bull; Stale</span></td><td><a href="https://blog.poshmark.com/faq" target="_blank" rel="noopener">Poshmark FAQ</a></td></tr>
     <tr><td>Mana Pool</td><td>5% marketplace + Stripe 2.9% + $0.30 (MTG only)</td><td>Aug 2026</td><td><a href="https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees" target="_blank" rel="noopener">Mana Pool support</a></td></tr>
     <tr><td>Cardsphere</td><td>3% seller fee + 10% ($10 min) PayPal cashout (MTG only)</td><td>Aug 2026</td><td><a href="https://cardsphere.com/pages/help" target="_blank" rel="noopener">Cardsphere help</a></td></tr>
     <tr><td>Cardmarket</td><td>5% commission (capped €100/article) + FX cost for USD sellers</td><td>Aug 2026</td><td><a href="https://help.cardmarket.com/en/CommissionFees" target="_blank" rel="noopener">Cardmarket help</a></td></tr>
