@@ -809,8 +809,11 @@ export default async function handler(req, res) {
     const grantEligible = isPro || emailVerified;
 
     const benefits   = TIER_BENEFITS[tier] || TIER_BENEFITS.free;
-    const gradeGrant = benefits.gradeGrant; // 0 / 1(verified) / 10 / 25 / 60
-    const idGrant    = benefits.idGrant;    // 0 / 5(verified) / 20 / 50 / 150
+    // Current grants (see api/_tier.js TIER_BENEFITS, which is authoritative):
+    //   grade  0 unverified / 1 verified free / 15 Pro / 40 Pro Max / 100 Ultimate
+    //   id     0 unverified / 5 verified free / 30 Pro / 100 Pro Max / 300 Ultimate
+    const gradeGrant = benefits.gradeGrant;
+    const idGrant    = benefits.idGrant;
 
     if (isIdentifyMode) {
       // ID scans: grant-eligible users (paid tiers + verified free) draw from

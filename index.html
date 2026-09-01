@@ -7184,7 +7184,7 @@ const PLATFORMS = {
   tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Sep 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
-    hassle: 'TCG-singles hub with built-in buyers. TCGplayer handles customer service so it’s less back-and-forth than eBay.',
+    hassle: 'TCG-singles hub with built-in buyers. TCGplayer fields customer service on your behalf, so most sales need no follow-up from you.',
     redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
   poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Jun 2026',
     effort: 'medium', effortLabel: 'Medium · clothing-first, thin card audience',
@@ -7962,8 +7962,9 @@ function calc() {
     </div>
   </div>`;
 
-  // Free users see eBay only. Pro unlocks Poshmark, Whatnot, Mercari.
-  // Pro Max + Ultimate add COMC and Fanatics Collect (7 total).
+  // Venue counts per tier live in FREE_PLATFORMS / PRO_PLATFORMS /
+  // PRO_MAX_PLATFORMS above: Free = 2, Pro = 9, Pro Max and Ultimate = 15.
+  // Change the sets, not this comment.
   // (PWCC merged into Fanatics Collect Jul 2024 — no longer a separate row.)
   const _displayTierPlatforms = platformsForTier(window._userTier || (window._isPro ? 'pro' : 'free'));
   const displaySorted = sorted.filter(r => _displayTierPlatforms.has(r.pid));
@@ -8188,9 +8189,9 @@ function calc() {
         <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">${esc(_lockedNames)}</div>
       </div>
     </div>`;
-    html += `</div>`;
 
-  // ── Deal Score (shared: free + pro) ───────────────────────────────
+  // ── Deal Score (free + Pro path; Pro Max / Ultimate fall through to the
+  //    dedicated blocks after this branch's early return at the bottom) ──────
   if (itemCost > 0) {
     const _dsRef   = tierWinner || winner;
     if (_dsRef) {
