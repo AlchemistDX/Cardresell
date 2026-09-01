@@ -1025,6 +1025,15 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- Google Sign-In -->
   <meta name="google-site-verification" content="vbXUqHxcuqg3LaCivRcNMtFPReLSMfWbid1Vi_QX6Yc" />
   <!-- Firebase Auth SDK -->
+  <!-- 2026-09-01 (launch gate): snapshot the landing URL's query string BEFORE
+       any handler runs. Several handlers (?upgrade=, ?packs=, ?photo_tips=,
+       ?verified=) strip their own param via history.replaceState as soon as
+       they fire, so anything reading location.search later sees a bare URL.
+       The first-visit auto-run guard was fooled by exactly this: it checked
+       location.search after ?packs= had already been removed, decided there was
+       no deep link, and auto-loaded a card underneath the packs overlay.
+       Must stay above the module script below, which is the earliest stripper. -->
+  <script>window._crLandingSearch = location.search || '';</script>
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
     import {
@@ -17380,7 +17389,9 @@ window.addEventListener('load', () => {
     // fired in production even though the code shipped. Verified in a browser.
     let _deepLink = false;
     try {
-      const _q = new URLSearchParams(location.search);
+      // Read the pre-strip snapshot, not location.search — by the time this
+      // runs the deep-link handlers have already removed their own params.
+      const _q = new URLSearchParams(window._crLandingSearch || location.search);
       _deepLink = !!(_q.get('c') || _q.get('card') || _q.get('share')
                      || _q.get('upgrade') || _q.get('packs') || _q.get('photo_tips')
                      || location.pathname.startsWith('/grade/'));

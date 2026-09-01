@@ -112,8 +112,17 @@ ok(/!_seen && !_deepLink && !_hasSavedCard/.test(idx),
   const region = idx.slice(g, g + 2500);
   ok(!/_hasDeepLink/.test(region.replace(/\/\/[^\n]*/g, '')),
      'auto-run guard does not read _hasDeepLink from another block scope');
-  ok(/const _q = new URLSearchParams\(location\.search\)/.test(region),
-     'auto-run computes its own deep-link check in local scope');
+  ok(/const _q = new URLSearchParams\(window\._crLandingSearch \|\| location\.search\)/.test(region),
+     'auto-run reads the pre-strip URL snapshot, not the already-stripped location.search');
+}
+// The snapshot must be set before ANY handler calls history.replaceState.
+{
+  const snap = idx.indexOf('window._crLandingSearch = location.search');
+  const mod  = idx.indexOf('<script type="module">');
+  const strip = idx.indexOf("p.delete('packs')");
+  ok(snap > 0, 'landing-URL snapshot exists');
+  ok(snap < mod, 'snapshot runs before the module script (the earliest stripper)');
+  ok(snap < strip, 'snapshot runs before the ?packs= stripper');
 }
 ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('first-visit'\)/.test(idx),
    'a failed auto-run falls back to the Try Charizard pulse');
