@@ -7181,7 +7181,7 @@ const PLATFORMS = {
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
     redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible'] },
-  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Aug 2026',
+  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Sep 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer handles customer service so it’s less back-and-forth than eBay.',
@@ -7198,7 +7198,7 @@ const PLATFORMS = {
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
     bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
     redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale'] },
-  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Jun 2026',
+  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Sep 2026',
     // 2026-08-19: user feedback — old label undersold the real friction.
     // Fanatics Collect requires you to physically ship the card in to their
     // vault before it can be listed via Buy Now / Weekly Auction. That's
@@ -7214,7 +7214,7 @@ const PLATFORMS = {
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
     bestFor: '💵 Best for cards $5,000+ — 8% commission caps at $1,500 (or any price via live shows)',
     redFlags: ['🎙️ Best results require hosting live shows', '📦 You ship the card yourself', '📉 Slower for solo sellers without an audience'] },
-  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', verified: 'Aug 2026',
+  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · cross-category, high volume',
     workflow: 'list', payoutTime: '2–5 days after buyer confirms',
     hassle: 'High-volume general resale. Card buyers exist but ad spend is where TCG-focused platforms win.',
@@ -7415,17 +7415,25 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
 
 // TCGPlayer — dominant TCG singles marketplace (Pokémon, MTG, Yu-Gi-Oh!, Lorcana, etc.)
 // Level 1–4 Marketplace Seller (the default tier for new sellers):
-//   • 10.75% commission on sale price, capped at $75/item
+//   • 10.75% commission, capped at $75/item
 //     (rate raised from 10.25% on Feb 10, 2026; cap raised from $50 to $75 same day)
-//   • 2.5% + $0.30 payment processing on the full order total
+//   • 2.5% + $0.30 payment processing
+// 2026-09-01 fee-truth pass: TCGplayer charges fees on the ORDER SUBTOTAL, which
+// is item amount + shipping (taxes are additionally included for credit-card and
+// PayPal orders; we do not model tax). We previously billed both the commission
+// and the processing fee against the item price alone, which understated fees on
+// any sale where the buyer paid shipping.
+// Note: help.tcgplayer.com still publishes the pre-Feb-2026 10.25%/$50 numbers;
+// the seller blog announcement below is the current authority. Re-verified Sep 1, 2026.
 // Pro / Sync sellers pay 9.25% instead of 10.75% — not modeled here since the vast
 // majority of casual card flippers land in Level 1–4.
 // Source: https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
 // Feb 2026 change:  https://seller.tcgplayer.com/blog/important-changes-to-tcgplayer-direct-minimum-pricing-and-marketplace-fees
-function feeTCGPlayer(price) {
-  const rawCommission = price * 0.1075;                    // 10.75% Level 1–4 rate
-  const commission    = Math.min(rawCommission, 75);       // $75 cap per item (kicks in ~$697.67)
-  const processing    = price * 0.025 + 0.30;              // 2.5% + $0.30 processing
+function feeTCGPlayer(price, shipCharge) {
+  const base          = price + (shipCharge || 0);         // fees bill on item + shipping
+  const rawCommission = base * 0.1075;                     // 10.75% Level 1–4 rate
+  const commission    = Math.min(rawCommission, 75);       // $75 cap per item
+  const processing    = base * 0.025 + 0.30;               // 2.5% + $0.30 processing
   return [
     { l: 'Marketplace commission (10.75%' + (rawCommission > 75 ? ', $75 cap' : '') + ')', a: commission },
     { l: 'Payment processing (2.5% + $0.30)', a: processing }
@@ -7504,14 +7512,17 @@ function feeWhatnot(price) {
 
 // Mercari — Cross-category resale.
 // As of Jan 6, 2025 Mercari eliminated the seller payment processing fee.
-// Sellers now pay a FLAT 10% commission only. (Buyer pays a separate 3.6%
+// Sellers now pay a FLAT 10% selling fee only. (Buyer pays a separate 3.6%
 // Buyer Protection fee; that does not come out of the seller's payout.)
+// 2026-09-01 fee-truth pass: the 10% is charged on the completed item price
+// AND buyer-paid shipping, not the item price alone. Re-verified Sep 1, 2026.
 // Sources:
 //   https://www.mercari.com/us/help_center/article/2518/
 //   https://www.mercari.com/us/help_center/article/2517/
-function feeMercari(price) {
+function feeMercari(price, shipCharge) {
+  const base = price + (shipCharge || 0);
   return [
-    { l: 'Marketplace commission (10%)', a: price * 0.10 }
+    { l: 'Selling fee (10% of item + shipping)', a: base * 0.10 }
   ];
 }
 
@@ -7625,13 +7636,19 @@ function calc() {
     {
       pid: 'tcgplayer',
       eligible: !isSports,   // TCGPlayer doesn’t carry sports cards
-      feeItems: feeTCGPlayer(price),
-      sellerShip: 0,         // TCGPlayer handles shipping
+      feeItems: feeTCGPlayer(price, shipCharge),
+      // 2026-09-01: Standard Level 1–4 marketplace sellers ship to the buyer
+      // themselves; TCGplayer collects buyer-paid shipping and reimburses it,
+      // but the seller still pays the real postage. Previously hardcoded to 0,
+      // which overstated TCGplayer's net payout against every self-ship venue.
+      // (TCGplayer Direct, where TCGplayer fulfills, is a separate program and
+      // is not the default for casual flippers.)
+      sellerShip: shipCost,
       note: isSports
         ? 'TCGPlayer is for TCG singles only — not sports cards.'
         : (isYugioh || isMagic)
-          ? 'Largest TCG marketplace for MTG & Yu-Gi-Oh! singles.'
-          : 'Largest TCG marketplace for Pokémon singles. Sellers ship directly to buyers.'
+          ? 'Largest TCG marketplace for MTG & Yu-Gi-Oh! singles. You ship the card yourself.'
+          : 'Largest TCG marketplace for Pokémon singles. You ship the card yourself.'
     },
     {
       pid: 'poshmark',
@@ -7651,7 +7668,11 @@ function calc() {
       pid: 'fanatics',
       eligible: true,
       feeItems: feeFanatics(price),
-      sellerShip: shipCost,
+      // 2026-09-01: Fanatics is a ship-in venue — the seller mails the card to
+      // the vault, which feeFanatics() already bills as a $5 inbound-ship line.
+      // Also deducting shipCost (postage to a buyer) double-charged shipping on
+      // a sale where the seller never ships to the buyer. Matches the COMC model.
+      sellerShip: 0,
       note: isSports
         ? 'Buy Now default. Auction: 0% seller, 20% buyer premium. Listings >120% market: 12% fee.'
         : 'Buy Now default. Listings priced >120% of market pay 12%; auction has 0% seller fee + 20% buyer premium.'
@@ -7670,7 +7691,7 @@ function calc() {
     {
       pid: 'mercari',
       eligible: true,
-      feeItems: feeMercari(price),
+      feeItems: feeMercari(price, shipCharge),
       sellerShip: shipCost,
       note: 'General resale — lower fees than eBay but smaller card-buyer audience. Best for mid/low tier cards.'
     },
