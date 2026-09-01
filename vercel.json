@@ -33,6 +33,7 @@
     { "src": "/robots.txt", "dest": "/robots.txt", "headers": { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } },
     { "src": "/sitemap.xml", "dest": "/sitemap.xml", "headers": { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } },
     { "src": "/photo-tips/(.*\\.webp)", "dest": "/public/photo-tips/$1", "headers": { "Cache-Control": "public, max-age=604800, immutable", "Content-Type": "image/webp" } },
+    { "src": "/photo-tips/?", "status": 308, "headers": { "Location": "/?photo_tips=1" } },
     { "src": "/_vercel/insights/(.*)", "continue": true },
     { "src": "/(.*\\.html)", "dest": "/$1" },
     { "src": "/(.*)", "dest": "/index.html", "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" } }

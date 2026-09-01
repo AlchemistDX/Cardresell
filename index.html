@@ -1615,7 +1615,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
 
     <!-- Grader Credits buy — right under balances -->
-    <div style="margin-bottom:.5rem">
+    <div id="gradeCreditsBuy" style="margin-bottom:.5rem">
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy Grader Credits</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startGradeScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -1636,7 +1636,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
 
     <!-- ID Credits buy -->
-    <div style="margin-bottom:.5rem">
+    <div id="idCreditsBuy" style="margin-bottom:.5rem">
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy ID Scanner Credits</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -2338,8 +2338,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         <div style="display:flex;align-items:flex-start;gap:.6rem">
           <span style="font-size:1rem;margin-top:.05rem">📈</span>
           <div>
-            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Live eBay sold comps</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">Real recent sales — raw &amp; graded prices</div>
+            <div style="font-size:.78rem;font-weight:700;color:var(--text)">eBay sold comps</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">Recent completed sales when eBay serves them — one tap straight to eBay when it doesn't</div>
           </div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:.6rem">
@@ -3096,7 +3096,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
     <div style="text-align:left;font-size:.83rem;line-height:1.65;color:var(--text-muted);margin-bottom:1rem">
       CardResell was built by <strong style="color:var(--text)">Will Jones</strong> in <strong style="color:var(--text)">Bradenton, Florida</strong> to solve a problem every reseller hits — you know your card is worth money but you have no idea which platform actually pays you the most after fees.<br><br>
-      The app pulls live sold comps from eBay and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, Fanatics Collect, Cardmarket, Card Kingdom &amp; CoolStuffInc buylists, plus Mana Pool &amp; Cardsphere for Magic — so you never leave money on the table.<br><br>
+      The app pulls recent eBay sold comps (when eBay serves them) and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, Fanatics Collect, Cardmarket, Card Kingdom &amp; CoolStuffInc buylists, plus Mana Pool &amp; Cardsphere for Magic — so you never leave money on the table.<br><br>
       The AI Grading Estimate uses GPT-4o vision to analyze centering, corners, edges, and surface — giving you a realistic grade prediction before you spend money on a PSA submission.
     </div>
 
@@ -3337,6 +3337,63 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
         return;
       }
       setTimeout(() => pollForModal(tries + 1), 500);
+    })(0);
+  }
+
+  // 2026-09-01 (CR-008): /pricing.html lists the six one-time credit packs and
+  // links each card here with ?packs=id or ?packs=grade. The packs live inside
+  // the pricing modal, so this reuses the same deferred-open machinery as
+  // ?upgrade= above: stash the intent, strip the param, then poll for both
+  // openPricingModal and a resolved auth state before firing once. Buying a
+  // pack requires a signed-in user, so waiting on auth is deliberate rather
+  // than opening a modal whose buttons would immediately bounce them.
+  const packsParam = (p.get('packs') || '').toLowerCase();
+  if (['id', 'grade'].includes(packsParam)) {
+    try { sessionStorage.setItem('_pendingPacksFocus', packsParam); } catch(_){}
+    try {
+      p.delete('packs');
+      const clean = window.location.pathname + (p.toString() ? '?' + p.toString() : '') + window.location.hash;
+      window.history.replaceState({}, '', clean);
+    } catch(_){}
+    (function pollForPacks(tries) {
+      let want; try { want = sessionStorage.getItem('_pendingPacksFocus'); } catch(_){ want = packsParam; }
+      if (!want) return;
+      if (tries > 40) return; // 20s ceiling, same as the upgrade path
+      if (typeof window.openPricingModal === 'function' && window._authInitialized) {
+        try { sessionStorage.removeItem('_pendingPacksFocus'); } catch(_){}
+        try { window.openPricingModal('pricing_page_packs_' + want); } catch(_){}
+        // Scroll the matching pack group into view once the modal has painted.
+        setTimeout(() => {
+          const el = document.getElementById(want === 'grade' ? 'gradeCreditsBuy' : 'idCreditsBuy');
+          if (el && typeof el.scrollIntoView === 'function') {
+            try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(_){ el.scrollIntoView(); }
+          }
+        }, 450);
+        return;
+      }
+      setTimeout(() => pollForPacks(tries + 1), 500);
+    })(0);
+  }
+
+  // 2026-09-01 (CR-015): /photo-tips/ used to soft-fall-through to this page,
+  // so the link on /accuracy quietly returned the homepage. The photo-tips
+  // content only ever existed as an in-app overlay, so vercel.json now 308s
+  // /photo-tips/ to ?photo_tips=1 and we open that overlay here. No auth or
+  // scan state is required to read the tips, so this fires as soon as the
+  // opener is defined.
+  if (p.get('photo_tips') === '1') {
+    try {
+      p.delete('photo_tips');
+      const clean = window.location.pathname + (p.toString() ? '?' + p.toString() : '') + window.location.hash;
+      window.history.replaceState({}, '', clean);
+    } catch(_){}
+    (function pollForTips(tries) {
+      if (tries > 40) return; // 20s ceiling
+      if (typeof window.openPhotoTipsModal === 'function') {
+        try { window.openPhotoTipsModal(); } catch(_){}
+        return;
+      }
+      setTimeout(() => pollForTips(tries + 1), 500);
     })(0);
   }
 

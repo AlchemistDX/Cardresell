@@ -106,6 +106,14 @@ strong{color:var(--text)}
 .pack-name{font-weight:700;color:var(--text);margin-bottom:.15rem}
 .pack-price{color:var(--gold);font-weight:700}
 .pack-note{color:var(--text-faint);font-size:.7rem;margin-top:.2rem}
+.packs-sub{font-size:.78rem;color:var(--text-faint);line-height:1.5;margin:-.15rem 0 .85rem;max-width:62ch}
+.packs-group-label{font-size:.72rem;font-weight:800;color:var(--text-muted);letter-spacing:.02em;margin:1rem 0 .45rem}
+a.pack{display:block;text-decoration:none;position:relative;transition:border-color .15s,transform .15s}
+a.pack:hover{border-color:var(--gold);transform:translateY(-1px)}
+.pack-pop{border-color:var(--gold-border)}
+.pack-badge{position:absolute;top:-.5rem;right:.7rem;font-size:.56rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:.14rem .4rem;border-radius:99px;background:var(--gold);color:#1a1200}
+.pack-badge-alt{background:rgba(56,189,248,.9);color:#04202c}
+.packs-foot{font-size:.74rem;color:var(--text-faint);line-height:1.55;margin-top:.9rem;padding-top:.7rem;border-top:1px solid var(--border)}
 
 /* Comparison */
 .compare{margin-top:2.5rem}
@@ -263,29 +271,54 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 </div>
 
 <!-- ============ CREDIT PACKS ============ -->
+<!-- 2026-09-01: this catalog was advertising three packs that could not be
+     bought (25 IDs/$4.99, 100 IDs/$14.99, 40 grades/$19.99). The six blocks
+     below are the actual purchasable SKUs, cross-checked against the in-app
+     buy buttons, api/stripe-id-checkout.js, api/stripe-grade-checkout.js and
+     the live Stripe price list. Do not edit one without the others. -->
 <div class="packs-title">One-time credit packs (never expire)</div>
+<div class="packs-sub">Six packs, and these are all of them. Every price below is what you'll actually be charged at checkout &mdash; tap one to open it in the app.</div>
+<div class="packs-group-label">ID Scanner credits &middot; identify a card and pull comps</div>
 <div class="packs">
-  <div class="pack">
-    <div class="pack-name">ID Scan Pack — Starter</div>
-    <div class="pack-price">$4.99 · 25 scans</div>
-    <div class="pack-note">$0.20/scan · perfect for a weekend flip haul</div>
-  </div>
-  <div class="pack">
-    <div class="pack-name">ID Scan Pack — Bulk</div>
-    <div class="pack-price">$14.99 · 100 scans</div>
-    <div class="pack-note">$0.15/scan · best value on ID</div>
-  </div>
-  <div class="pack">
-    <div class="pack-name">AI Grade Pack — Starter</div>
-    <div class="pack-price">$5.99 · 10 grades</div>
-    <div class="pack-note">$0.60/grade · one PSA sub avoided pays for the pack</div>
-  </div>
-  <div class="pack">
-    <div class="pack-name">AI Grade Pack — Bulk</div>
-    <div class="pack-price">$19.99 · 40 grades</div>
-    <div class="pack-note">$0.50/grade · Pro subs get 10% off</div>
-  </div>
+  <a class="pack" href="/?packs=id">
+    <div class="pack-name">10 ID scans</div>
+    <div class="pack-price">$1.99</div>
+    <div class="pack-note">$0.20 per scan</div>
+  </a>
+  <a class="pack pack-pop" href="/?packs=id">
+    <div class="pack-badge">Popular</div>
+    <div class="pack-name">50 ID scans</div>
+    <div class="pack-price">$7.99</div>
+    <div class="pack-note">$0.16 per scan &middot; save 20%</div>
+  </a>
+  <a class="pack" href="/?packs=id">
+    <div class="pack-badge pack-badge-alt">Best value</div>
+    <div class="pack-name">100 ID scans</div>
+    <div class="pack-price">$12.99</div>
+    <div class="pack-note">$0.13 per scan &middot; save 35%</div>
+  </a>
 </div>
+<div class="packs-group-label">Grader credits &middot; AI condition estimate before you pay to submit</div>
+<div class="packs">
+  <a class="pack" href="/?packs=grade">
+    <div class="pack-name">10 grade scans</div>
+    <div class="pack-price">$5.99</div>
+    <div class="pack-note">$0.60 per grade</div>
+  </a>
+  <a class="pack pack-pop" href="/?packs=grade">
+    <div class="pack-badge">Popular</div>
+    <div class="pack-name">25 grade scans</div>
+    <div class="pack-price">$12.99</div>
+    <div class="pack-note">$0.52 per grade &middot; save 13%</div>
+  </a>
+  <a class="pack" href="/?packs=grade">
+    <div class="pack-badge pack-badge-alt">Best value</div>
+    <div class="pack-name">50 grade scans</div>
+    <div class="pack-price">$22.99</div>
+    <div class="pack-note">$0.46 per grade &middot; save 23%</div>
+  </a>
+</div>
+<div class="packs-foot">Pro and above include <strong>15 grader + 30 ID scans every month</strong> plus 10% off top-ups. Paid credits never expire, and you need to be signed in to buy them.</div>
 
 <!-- ============ COMPARISON TABLE ============ -->
 <div class="compare">
