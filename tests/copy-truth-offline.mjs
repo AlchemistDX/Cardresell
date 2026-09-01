@@ -145,5 +145,49 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'the caption element is updated when the override is filled');
 }
 
+// -- Icons and social preview (2026-09-01) ----------------------------------
+// Every icon and the og-image were returning HTTP 200 with 1.19MB of index.html
+// because the /(.*) catch-all outranked them, so link previews were blank and
+// PWA install was broken. Pin the files, the routes, and the route ORDER.
+{
+  const fs2 = await import('node:fs');
+  const vj = JSON.parse(fs2.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  const srcs = vj.routes.map(r => r.src);
+  const catchAll = srcs.indexOf('/(.*)');
+  ok(catchAll > 0, 'catch-all route still exists');
+  for (const [route, file, ct] of [
+    ['/og-image.png', 'og-image.png', 'image/png'],
+    ['/favicon.ico', 'favicon.ico', 'image/x-icon'],
+    ['/apple-touch-icon.png', 'apple-touch-icon.png', 'image/png'],
+    ['/icon-192.png', 'icon-192.png', 'image/png'],
+    ['/icon-512.png', 'icon-512.png', 'image/png'],
+  ]) {
+    const i = srcs.indexOf(route);
+    ok(i >= 0, `vercel.json routes ${route}`);
+    ok(i < catchAll, `${route} is matched BEFORE the catch-all`);
+    const r = vj.routes[i];
+    ok(r.headers && r.headers['Content-Type'] === ct,
+       `${route} is served as ${ct}, not text/html`);
+    const st = fs2.statSync(new URL('../public/' + file, import.meta.url));
+    ok(st.size > 1000, `public/${file} exists and is a real asset`);
+    ok(st.size < 400000, `public/${file} is not oversized`);
+  }
+  const mf = JSON.parse(fs2.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  ok(mf.icons.some(i => i.sizes === '192x192'), 'manifest ships a 192 icon');
+  ok(mf.icons.some(i => i.sizes === '512x512'), 'manifest ships a 512 icon');
+  ok(mf.theme_color === '#111009', 'manifest theme_color matches the real brand black');
+  ok(!JSON.stringify(mf).includes('0f172a'), 'no stale slate-blue left in manifest');
+
+  for (const page of ['index.html','terms.html','privacy.html','signin.html',
+                      'pricing.html','accuracy.html','about.html','contact.html']) {
+    const h = fs2.readFileSync(new URL('../' + page, import.meta.url), 'utf8');
+    ok(/rel="icon"/.test(h), `${page} declares a favicon`);
+    ok(/apple-touch-icon/.test(h), `${page} declares an apple-touch-icon`);
+    ok(!h.includes('#0f172a'), `${page} has no stale slate-blue theme-color`);
+    ok((h.match(/name="theme-color"/g) || []).length === 1,
+       `${page} declares exactly one theme-color`);
+  }
+}
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);

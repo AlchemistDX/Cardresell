@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Source for /og-image.png. Screenshot at exactly 1200x630 with:
+     pplx-tool screenshot_page {"url":"file://.../tools/og-card.html","width":1200,"height":630}
+     Deliberately carries NO dollar figures: a social image is cached for weeks
+     by Facebook/Reddit/iMessage, so any price baked in here would be stale and
+     would contradict the live site. The pitch sentence is durable; prices are not. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  /* DM Sans / DM Mono embedded from tools/fonts so the render never depends on
+     a live Google Fonts fetch. Two faces per family with no unicode-range: the
+     text is ASCII, so whichever subset carries base latin wins via normal
+     font-family fallback. */
+  @font-face{font-family:'DMS-A';src:url('fonts/f5.woff2')format('woff2');font-weight:100 900;font-display:block}
+  @font-face{font-family:'DMS-B';src:url('fonts/f6.woff2')format('woff2');font-weight:100 900;font-display:block}
+  @font-face{font-family:'DMM-A';src:url('fonts/f1.woff2')format('woff2');font-weight:100 900;font-display:block}
+  @font-face{font-family:'DMM-B';src:url('fonts/f2.woff2')format('woff2');font-weight:100 900;font-display:block}
+  :root{
+    --bg:#111009; --gold:#c47a00; --gold-lt:#e0a52e;
+    --text:#f2f1ed; --muted:#a8a394; --line:rgba(242,241,237,.10);
+    --green:#2e7a40;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1200px;height:630px;overflow:hidden}
+  body{
+    background:
+      radial-gradient(1100px 520px at 88% -12%, rgba(196,122,0,.20), transparent 60%),
+      var(--bg);
+    font-family:'DMS-A','DMS-B',system-ui,sans-serif;
+    color:var(--text);
+    display:flex; flex-direction:column;
+    padding:64px 72px;
+  }
+  .top{display:flex;align-items:center;gap:14px}
+  .mark{
+    width:46px;height:46px;border-radius:11px;
+    background:linear-gradient(145deg,var(--gold-lt),var(--gold));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:22px;color:#1a1405;letter-spacing:-.5px;
+  }
+  .brand{font-size:27px;font-weight:700;letter-spacing:-.5px}
+  .brand span{color:var(--gold-lt)}
+  h1{
+    margin-top:44px;
+    font-size:57px;line-height:1.08;font-weight:700;letter-spacing:-1.7px;
+    width:600px;
+  }
+  h1 em{font-style:normal;color:var(--gold-lt)}
+  .sub{
+    margin-top:22px;font-size:23px;line-height:1.45;color:var(--muted);
+    width:560px;font-weight:400;
+  }
+  .rows{
+    position:absolute;right:72px;top:168px;width:352px;
+    display:flex;flex-direction:column;gap:11px;
+  }
+  .row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:15px 19px;border-radius:12px;
+    background:rgba(242,241,237,.045);
+    border:1px solid var(--line);
+    font-size:19px;
+  }
+  .row.win{
+    background:linear-gradient(135deg,rgba(46,122,64,.24),rgba(46,122,64,.10));
+    border-color:rgba(46,122,64,.55);
+  }
+  .row .v{font-family:'DMM-A','DMM-B',monospace;font-weight:500;color:var(--muted)}
+  .row.win .v{color:#7fd39a}
+  .row.lock .v{letter-spacing:1.5px}
+  .tag{
+    font-size:11px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;
+    color:#7fd39a;margin-bottom:5px;
+  }
+  .foot{
+    margin-top:auto;display:flex;align-items:center;gap:13px;
+    font-size:19px;color:var(--muted);
+  }
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--gold)}
+  .url{color:var(--text);font-weight:500}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="mark">CR</div>
+    <div class="brand">Card<span>Resell</span></div>
+  </div>
+
+  <h1>Know what your card <em>actually</em> pays out.</h1>
+  <div class="sub">Same card, eBay vs TCGPlayer vs the rest &mdash; after 2026 fees.</div>
+
+  <div class="rows">
+    <div class="tag">Ranked by net payout</div>
+    <div class="row win"><span>TCGPlayer</span><span class="v">Best net</span></div>
+    <div class="row"><span>eBay</span><span class="v">&minus; shipping</span></div>
+    <div class="row lock"><span>COMC</span><span class="v">&bull;&bull;&bull;&bull;</span></div>
+    <div class="row lock"><span>Fanatics Collect</span><span class="v">&bull;&bull;&bull;&bull;</span></div>
+    <div class="row lock"><span>Cardmarket</span><span class="v">&bull;&bull;&bull;&bull;</span></div>
+  </div>
+
+  <div class="foot">
+    <span class="url">cardresell.org</span>
+    <span class="dot"></span>
+    <span>15 venues &middot; real fee math &middot; free to try</span>
+  </div>
+</body>
+</html>

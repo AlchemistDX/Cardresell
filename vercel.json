@@ -15,7 +15,9 @@
     { "src": "card-index.json", "use": "@vercel/static" },
     { "src": "robots.txt", "use": "@vercel/static" },
     { "src": "sitemap.xml", "use": "@vercel/static" },
-    { "src": "public/photo-tips/*.webp", "use": "@vercel/static" }
+    { "src": "public/photo-tips/*.webp", "use": "@vercel/static" },
+    { "src": "public/*.png", "use": "@vercel/static" },
+    { "src": "public/favicon.ico", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
@@ -34,6 +36,11 @@
     { "src": "/sitemap.xml", "dest": "/sitemap.xml", "headers": { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } },
     { "src": "/photo-tips/(.*\\.webp)", "dest": "/public/photo-tips/$1", "headers": { "Cache-Control": "public, max-age=604800, immutable", "Content-Type": "image/webp" } },
     { "src": "/photo-tips/?", "status": 308, "headers": { "Location": "/?photo_tips=1" } },
+    { "src": "/og-image.png", "dest": "/public/og-image.png", "headers": { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" } },
+    { "src": "/favicon.ico", "dest": "/public/favicon.ico", "headers": { "Content-Type": "image/x-icon", "Cache-Control": "public, max-age=604800, immutable" } },
+    { "src": "/apple-touch-icon.png", "dest": "/public/apple-touch-icon.png", "headers": { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800, immutable" } },
+    { "src": "/icon-192.png", "dest": "/public/icon-192.png", "headers": { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800, immutable" } },
+    { "src": "/icon-512.png", "dest": "/public/icon-512.png", "headers": { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800, immutable" } },
     { "src": "/_vercel/insights/(.*)", "continue": true },
     { "src": "/(.*\\.html)", "dest": "/$1" },
     { "src": "/(.*)", "dest": "/index.html", "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" } }
