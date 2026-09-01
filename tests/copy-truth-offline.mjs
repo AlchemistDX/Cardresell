@@ -147,6 +147,10 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'the caption element is updated when the override is filled');
   ok(/_srcLabel = \(window\._crBasis && window\._crBasis\.label\)/.test(idx),
      'the caption reads the recorded rung label, not a float comparison');
+  ok(/window\._crBasis && window\._ovAutoFilled[\s\S]{0,90}updatePriceFromPrinting\(\);/.test(idx),
+     'recording the basis also repaints the headline from it');
+  ok(!/\} catch\(_\) \{\}\n      calc\(\);/.test(idx),
+     'the basis block no longer swallows its own failures');
 }
 
 // -- Icons and social preview (2026-09-01) ----------------------------------

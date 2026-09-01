@@ -5682,7 +5682,19 @@ async function fetchAndApplySoldComps(forceRefresh) {
           priceSource.textContent = _srcLabel;
           window._ovFilledBy = _srcLabel;
         }
-      } catch(_) {}
+        // Repaint the headline off the basis we just recorded. Without this the
+        // basis is stored but nothing re-renders, so "Market Value" keeps
+        // showing the embedded per-card figure while the payouts use the
+        // ladder - verified live as a $152.16 headline over a $123.28 basis.
+        if (window._crBasis && window._ovAutoFilled
+            && typeof updatePriceFromPrinting === 'function') {
+          updatePriceFromPrinting();
+        }
+      } catch(e) {
+        // Was `catch(_) {}`. A swallowed throw here is exactly how the headline
+        // silently kept disagreeing with the payouts.
+        console.warn('[price-basis] headline repaint failed', e);
+      }
       calc();
     }
   }
