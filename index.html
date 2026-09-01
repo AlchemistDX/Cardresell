@@ -545,6 +545,11 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .fee-verified-pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid color-mix(in srgb,var(--green) 25%,transparent);border-radius:99px;padding:.15rem .55rem;text-decoration:none;transition:all var(--ease)}
 .fee-verified-pill:hover{background:color-mix(in srgb,var(--green) 20%,transparent);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
 .fee-verified-dot{font-size:1.1rem;line-height:.5;color:var(--green)}
+/* 2026-09-01: Amber "Stale" variant. Applied when a venue's verified date is > 60 days old.
+   Such venues are also demoted from #1 in the payout ranker so a stale number can't be crowned the winner. */
+.fee-verified-pill.stale{color:#f59e0b;background:color-mix(in srgb,#f59e0b 12%,transparent);border-color:color-mix(in srgb,#f59e0b 30%,transparent)}
+.fee-verified-pill.stale:hover{background:color-mix(in srgb,#f59e0b 20%,transparent);border-color:color-mix(in srgb,#f59e0b 50%,transparent)}
+.fee-verified-pill.stale .fee-verified-dot{color:#f59e0b}
 
 /* 2026-08-30: Share ranking button below payout-rank strip. */
 .payout-share-btn{margin-top:.65rem;width:100%;padding:.5rem;background:transparent;border:1px dashed var(--divider);border-radius:var(--radius-md);color:var(--text-muted);font-size:.72rem;font-weight:700;cursor:pointer;transition:all var(--ease);-webkit-tap-highlight-color:transparent}
@@ -7156,12 +7161,12 @@ function esc(s) {
 // The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
 // downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
 const PLATFORMS = {
-  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Jun 2026',
+  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Aug 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
     redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible'] },
-  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Jun 2026',
+  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Aug 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer handles customer service so it’s less back-and-forth than eBay.',
@@ -7325,6 +7330,27 @@ const PLATFORMS = {
 // active card game is Magic. Eligibility is enforced in the results loop.
 // Note: Cardmarket, Card Kingdom, and CoolStuffInc are ALL-TCG (Pokemon, MTG,
 // YGO, Lorcana, One Piece). They render for any TCG scan, hidden for sports.
+// 2026-09-01: Stale-fee guardrail. Parses a venue's `verified: 'Mon YYYY'` stamp and
+// returns an age in days (integer). Undefined / unparseable stamps return Infinity so
+// they never become #1. Anchor is the LAST day of the stamped month, because 'Aug 2026'
+// means "sometime in August" and we should measure from the fairest read of that stamp.
+// This still makes the >60d ceiling fire correctly (a Jun 2026 stamp is 63d on Sep 1)
+// while avoiding noisy Day-1 amber pills for a venue verified in the previous month.
+const _MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+function verifiedAgeDays(stamp) {
+  if (!stamp || typeof stamp !== 'string') return Infinity;
+  const m = stamp.trim().toLowerCase().match(/^([a-z]{3})[a-z]*\s+(\d{4})$/);
+  if (!m) return Infinity;
+  const mo = _MONTHS[m[1]]; const yr = parseInt(m[2], 10);
+  if (mo === undefined || !Number.isFinite(yr)) return Infinity;
+  // Last day of the stamped month at 00:00 UTC.
+  const anchor = Date.UTC(yr, mo + 1, 0);
+  const ms = Date.now() - anchor;
+  return ms < 0 ? 0 : Math.floor(ms / 86400000);
+}
+function isFeeStale(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 60; }
+function isFeeAmber(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 30; }
+
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
 const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere', 'cardmarket', 'cardnexus']);
 const PRO_MAX_PLATFORMS  = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'comc', 'fanatics', 'manapool', 'cardsphere', 'cardmarket', 'cardnexus', 'cardkingdom', 'coolstuffinc', 'scg', 'tcgbulk']);
@@ -7734,6 +7760,16 @@ function calc() {
 
   const eligible   = results.filter(r => r.eligible);
   eligible.sort((a, b) => sortMode === 'margin' ? b.margin - a.margin : b.netPayout - a.netPayout);
+  // 2026-09-01: Stale-fee guardrail. After the payout sort, partition venues whose fee
+  // stamp is > 60 days old to the bottom of the eligible list, preserving relative order
+  // within each partition. This means a stale venue can never become the #1 winner,
+  // downstream `winner`, `bannerResult`, and `unlockedRank[0]` all pick from fresh venues
+  // first. Stale venues still appear in the ranking, just never as the top recommendation.
+  // The rule is documented on /accuracy#changelog so users can see why a venue got moved.
+  const _freshElig = eligible.filter(r => !isFeeStale(r.pid));
+  const _staleElig = eligible.filter(r =>  isFeeStale(r.pid));
+  eligible.length = 0;
+  eligible.push(..._freshElig, ..._staleElig);
   const ineligible = results.filter(r => !r.eligible);
   const sorted     = [...eligible, ...ineligible];
   const winner     = eligible[0];
@@ -7994,7 +8030,19 @@ function calc() {
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
-        ${info.verified ? `<div class="fee-verified-row"><a href="/accuracy#fees" class="fee-verified-pill" title="View methodology + full fee sources"><span class="fee-verified-dot">•</span>Verified ${info.verified}</a></div>` : ''}
+        ${info.verified ? (() => {
+          // 2026-09-01: pill color reflects staleness. >60d = amber + "Stale" text (venue also
+          // demoted from #1 by the payout ranker); 31-60d = amber pill but still "Verified";
+          // ≤30d = green. All three link to /accuracy#fees for the methodology.
+          const _stale = isFeeStale(r.pid);
+          const _amber = isFeeAmber(r.pid);
+          const _cls   = _stale || _amber ? 'fee-verified-pill stale' : 'fee-verified-pill';
+          const _label = _stale ? 'Stale' : 'Verified';
+          const _title = _stale
+            ? 'This venue\'s fees haven\'t been re-verified in over 60 days, so we won\'t rank it #1. Click for methodology.'
+            : 'View methodology + full fee sources';
+          return `<div class="fee-verified-row"><a href="/accuracy#fees" class="${_cls}" title="${_title}"><span class="fee-verified-dot">•</span>${_label} ${info.verified}</a></div>`;
+        })() : ''}
       </div>
       <button class="plat-details-toggle" type="button" onclick="event.preventDefault();event.stopPropagation();this.closest('.plat-card').classList.toggle('expanded');">
         <span class="toggle-text">Details</span>
