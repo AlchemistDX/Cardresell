@@ -17734,9 +17734,9 @@ async function openLiveCameraCapture(opts) {
       '<div style="position:absolute;bottom:0;left:0;right:0;padding:1rem 1.25rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:.75rem;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);pointer-events:auto">' +
         '<button id="liveCapShutter" aria-label="Capture" style="width:78px;height:78px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform=\'scale(.92)\'" ontouchend="this.style.transform=\'scale(1)\'"></button>' +
       '</div>' +
-      '<div id="liveCapZoomWrap" style="display:none;position:absolute;bottom:160px;left:0;right:0;padding:0 1.5rem;align-items:center;gap:.75rem;pointer-events:auto">' +
-        '<span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:32px;text-align:center" id="liveCapZoomLabel">1.0x</span>' +
-        '<input id="liveCapZoomSlider" type="range" min="1" max="3" step="0.1" value="1" style="flex:1;height:4px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#c47a00" />' +
+      '<div id="liveCapZoomWrap" style="display:none;position:absolute;right:16px;top:50%;transform:translateY(-50%);flex-direction:column;align-items:center;gap:.5rem;pointer-events:auto">' +
+        '<span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:36px;text-align:center" id="liveCapZoomLabel">1.0x</span>' +
+        '<input id="liveCapZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="-webkit-appearance:slider-vertical;appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#c47a00" />' +
       '</div>' +
       '<div id="liveCapFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>';
     document.body.appendChild(ov);
@@ -20857,10 +20857,10 @@ function _esc(s) {
         <button id="bulkRapidShutter" onclick="bulkRapidSnap()" aria-label="Capture" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'"></button>
         <button id="bulkRapidDoneBtn" onclick="bulkRapidDone()" style="width:70px;padding:.55rem .35rem;background:rgba(139,92,246,1);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.75rem;cursor:pointer;line-height:1.15;opacity:.5" disabled>Done ⚡</button>
       </div>
-      <!-- Zoom slider (hidden on browsers without zoom capability) -->
-      <div id="bulkRapidZoomWrap" style="display:none;position:absolute;bottom:160px;left:0;right:0;padding:0 1.5rem;align-items:center;gap:.75rem;pointer-events:auto">
-        <span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:32px;text-align:center" id="bulkRapidZoomLabel">1.0x</span>
-        <input id="bulkRapidZoomSlider" type="range" min="1" max="3" step="0.1" value="1" style="flex:1;height:4px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#8b5cf6" />
+      <!-- Zoom slider (vertical, right side - hidden on browsers without zoom capability) -->
+      <div id="bulkRapidZoomWrap" style="display:none;position:absolute;right:16px;top:50%;transform:translateY(-50%);flex-direction:column;align-items:center;gap:.5rem;pointer-events:auto">
+        <span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:36px;text-align:center" id="bulkRapidZoomLabel">1.0x</span>
+        <input id="bulkRapidZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="-webkit-appearance:slider-vertical;appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#8b5cf6" />
       </div>
       <!-- Flash effect -->
       <div id="bulkRapidFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>
