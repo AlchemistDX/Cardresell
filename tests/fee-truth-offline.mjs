@@ -107,5 +107,94 @@ assert('Accuracy page states Mercari flat 10%', /Flat 10% selling fee/.test(acc)
 assert('Accuracy page dropped Mercari 2.9% + $0.50', !/10% marketplace \+ 2\.9% \+ \$0\.50/.test(acc));
 assert('Accuracy page states TCGplayer self-ship', /you ship the card yourself/.test(acc));
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 2026-09-01 full 15-venue audit — fee-basis corrections
+ *
+ * Each expectation below is hand-computed from the venue's own published
+ * schedule. Sources:
+ *   Whatnot    commission on item only ("does not include shipping or taxes"),
+ *              processing on total order value ("plus shipping and buyer-paid tax")
+ *              https://help.whatnot.com/hc/en-us/articles/4847069165965-Whatnot-Seller-Fees-and-Commissions-Schedule
+ *   Mana Pool  5% "not applied to shipping charges, only the price of the product";
+ *              seller "receives the entire shipping fee, minus a credit card processing fee"
+ *              https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
+ *   CardNexus  "calculated on the order total (items + shipping)"
+ *              https://help.cardnexus.com/articles/9938652-fee-structure-overview
+ *   COMC       "$1 store credit fee when converting less than $250"
+ *              https://www.comc.com/cashout
+ * ══════════════════════════════════════════════════════════════════════════ */
+const feeWhatnot   = extractFn('feeWhatnot');
+const feeManaPool  = extractFn('feeManaPool');
+const feeCardNexus = extractFn('feeCardNexus');
+const feeCOMC      = extractFn('feeCOMC');
+
+// Whatnot, $100 card + $5 buyer-paid shipping.
+// commission = 100 * 0.08 = 8.00 (item only)
+// processing = 105 * 0.029 + 0.30 = 3.045 + 0.30 = 3.345
+eq('Whatnot split basis: commission item-only, processing on item+shipping',
+  sum(feeWhatnot(100, 5)), 8.00 + 3.345);
+eq('Whatnot commission ignores shipping',
+  feeWhatnot(100, 5).find(f => /ommission/.test(f.l)).a, 8.00);
+// Above the $1,500 category cutoff commission stops accruing but processing does not.
+// commission = 1500 * 0.08 = 120 ; processing = 2005 * 0.029 + 0.30 = 58.145 + 0.30
+eq('Whatnot 0% above $1,500 still pays processing on the whole order',
+  sum(feeWhatnot(2000, 5)), 120 + (2005 * 0.029 + 0.30));
+
+// Mana Pool, $100 card + $5 shipping.
+// marketplace = 100 * 0.05 = 5.00 ; processing = 105 * 0.029 + 0.30 = 3.345
+eq('Mana Pool 5% excludes shipping but processing includes it',
+  sum(feeManaPool(100, 5)), 5.00 + 3.345);
+eq('Mana Pool marketplace fee is item-only',
+  feeManaPool(100, 5).find(f => /Marketplace/.test(f.l)).a, 5.00);
+
+// CardNexus, $100 card + $5 shipping -> 8% of $105 = 8.40
+eq('CardNexus 8% bills the order total including shipping',
+  sum(feeCardNexus(100, 5)), 8.40);
+
+// COMC cash-out add-on. $100 card, standard raw sub ($0.65), 5% tx = $5.00,
+// $5 ship-in. convertible = 100 - 5 - 5 = 90 -> 10% = 9.00, plus $1 under-$250.
+eq('COMC adds the $1 under-$250 cash-out surcharge',
+  sum(feeCOMC(100, 'standard', false, 'yes')), 0.65 + 5.00 + 5 + 9.00 + 1);
+// A large card clears the $250 threshold: convertible = 1000 - 50 - 5 = 945 -> 94.50, no $1.
+eq('COMC drops the surcharge above $250',
+  sum(feeCOMC(1000, 'standard', false, 'yes')), 0.65 + 50.00 + 5 + 94.50);
+assert('COMC surcharge is absent when not cashing out',
+  !feeCOMC(100, 'standard', false, 'no').some(f => /surcharge/i.test(f.l)));
+
+// Legacy-call safety for the newly two-arg functions.
+assert('feeWhatnot tolerates missing shipCharge', Number.isFinite(sum(feeWhatnot(100))));
+assert('feeManaPool tolerates missing shipCharge', Number.isFinite(sum(feeManaPool(100))));
+assert('feeCardNexus tolerates missing shipCharge', Number.isFinite(sum(feeCardNexus(100))));
+
+// Wiring: call sites must pass shipping through.
+assert('Whatnot wired with shipCharge', src.includes('feeWhatnot(price, shipCharge)'));
+assert('Mana Pool wired with shipCharge', src.includes('feeManaPool(price, shipCharge)'));
+assert('CardNexus wired with shipCharge', src.includes('feeCardNexus(price, shipCharge)'));
+
+/* ── Cross-border disclosure must cover every venue, locked or not ────────── */
+const pids = ['ebay','tcgplayer','poshmark','comc','fanatics','whatnot','mercari',
+              'manapool','cardsphere','cardmarket','cardkingdom','coolstuffinc',
+              'scg','cardnexus','tcgbulk'];
+const cbStart = src.indexOf('const CROSS_BORDER = {');
+assert('CROSS_BORDER table exists', cbStart !== -1);
+const cbBlock = src.slice(cbStart, src.indexOf('\n};', cbStart));
+for (const pid of pids) {
+  assert(`CROSS_BORDER covers ${pid}`, new RegExp(`\\n  ${pid}: \\{`).test(cbBlock));
+}
+assert('Cardmarket flagged as a foreign operator', /cardmarket:[\s\S]*?foreign: true/.test(cbBlock));
+assert('CardNexus flagged as a foreign operator', /cardnexus:[\s\S]*?foreign: true/.test(cbBlock));
+assert('eBay discloses the 1.65% international fee', /1\.65% international fee/.test(cbBlock));
+assert('TCGplayer discloses the 3.5% international processing rate', /3\.5% \+ \$0\.30 on international/.test(cbBlock));
+assert('Cardmarket discloses EUR payout and US eligibility risk',
+  /paid in EUR/.test(cbBlock) && /may not be able to register/.test(cbBlock));
+assert('Cross-border block renders on the LOCKED (ineligible) tile',
+  /plat-sub">\$\{r\.note\}<\/div>\s*\n\s*\$\{crossBorderHtml\(r\.pid\)\}/.test(src));
+assert('Cross-border block renders on the unlocked tile',
+  /\$\{redFlagsHtml\}\s*\n\s*\$\{crossBorderHtml\(r\.pid\)\}/.test(src));
+assert('Locked upsell list flags foreign venues',
+  /CROSS_BORDER\[r\.pid\]\?\.foreign/.test(src));
+
+
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

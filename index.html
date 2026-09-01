@@ -690,6 +690,12 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-rules{margin:.35rem .45rem .5rem;padding:.4rem .5rem;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.18);border-radius:.5rem}
 .plat-rule-line{font-size:.66rem;color:var(--text-muted);line-height:1.35;margin-bottom:.15rem}
 .plat-rule-line:last-child{margin-bottom:0}
+.plat-xborder{margin-top:.5rem;padding:.45rem .55rem;border-radius:.4rem;background:rgba(148,163,184,.09);border:1px solid rgba(148,163,184,.22);font-size:.66rem;line-height:1.45}
+.plat-xborder .xb-head{font-weight:800;letter-spacing:.01em;color:var(--text);margin-bottom:.18rem}
+.plat-xborder .xb-body{color:var(--text-faint)}
+.plat-xborder .xb-body a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.plat-xborder.foreign{background:rgba(251,191,36,.11);border-color:rgba(251,191,36,.4)}
+.plat-xborder.foreign .xb-head{color:#f59e0b}
 .plat-region{display:inline-flex;align-items:center;gap:.2rem;font-size:.58rem;font-weight:800;padding:.14rem .34rem;border-radius:.3rem;background:rgba(56,189,248,.14);color:#38bdf8;border:1px solid rgba(56,189,248,.32);letter-spacing:.04em;white-space:nowrap;margin-left:.35rem;vertical-align:1px}
 .payout-rank-note{display:flex;gap:.4rem;align-items:flex-start;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--divider);font-size:.68rem;line-height:1.4;color:var(--text-muted)}
 .payout-rank-note b{color:#38bdf8;font-weight:800}
@@ -7176,28 +7182,28 @@ function esc(s) {
 // The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
 // downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
 const PLATFORMS = {
-  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Aug 2026',
+  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Sep 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
-    redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible'] },
+    redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible', '💸 Ship + Sell route charges a 10% service fee (5% at $10,000+) — payout above models the fee-free Sell List'] },
   tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Sep 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer fields customer service on your behalf, so most sales need no follow-up from you.',
     redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
-  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Jun 2026',
+  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · clothing-first, thin card audience',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Fewer card buyers browsing — listings can sit for weeks.',
     bestFor: '💵 Best for cards under $15 — flat $2.95 fee (jumps to 20% at $15+)',
-    redFlags: ['👗 Clothing-first — tiny card audience', '📬 You ship the card yourself', '⏳ Listings often sit for weeks'] },
-  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Jun 2026',
+    redFlags: ['👗 Clothing-first — tiny card audience', '📦 $5 packaging fee if the buyer picks Priority Mail (since Oct 2025)', '🇺🇸 US domestic only — no cross-border selling', '📬 You ship the card yourself', '⏳ Listings often sit for weeks'] },
+  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Sep 2026',
     effort: 'hard',   effortLabel: 'Hard · ship-in service, weeks to list',
     workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
     bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
-    redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale'] },
+    redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale', '⏱️ Enhanced Security Fee: 1¢ per $1,000 of list price per day on items over $50'] },
   fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Sep 2026',
     // 2026-08-19: user feedback — old label undersold the real friction.
     // Fanatics Collect requires you to physically ship the card in to their
@@ -7207,8 +7213,8 @@ const PLATFORMS = {
     workflow: 'shipIn', payoutTime: '1–4 weeks after sale settles',
     hassle: 'You mail the card to Fanatics’ vault BEFORE it can list. Sports-heavy audience, weekly auction + Buy Now cycle.',
     bestFor: '💵 Best for cards $75+ — ship-in overhead not worth it below this',
-    redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted'] },
-  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Aug 2026',
+    redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted', '⚠️ 12% seller fee (not 6%) if you list at or above 120% of Card Ladder market value', '🧾 $3 one-time fee on sub-$50 vault items still unsold after 30 days'] },
+  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
@@ -7227,7 +7233,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
   //     https://manapool.com/affiliates (referral program open, 5% first sale)
-  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', verified: 'Aug 2026',
+  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', verified: 'Sep 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast payouts (per-order)',
     hassle: 'MTG-only marketplace with the lowest fees of any listing platform. You ship directly to buyers.',
@@ -7238,7 +7244,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://trademagic.gg/compare
   //     https://www.reddit.com/r/mtgfinance/comments/1kzab2o/
-  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', verified: 'Aug 2026',
+  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · buyer-offer model, low fees',
     workflow: 'list', payoutTime: 'Instant credit; 10% fee to cash out to PayPal',
     hassle: 'Buyers post offers for cards they want; you decide whether to sell at their price. Lowest per-sale fee anywhere but 10% cashout hurts.',
@@ -7253,7 +7259,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
   //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
-  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', verified: 'Aug 2026',
+  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', verified: 'Sep 2026',
     // 2026-09-01: region flag. Cardmarket's 5% commission is the LOWEST of all
     // 15 venues, so it ranks near the top on raw net payout — but a US seller
     // can't realistically capture that number. International postage, ~3% FX
@@ -7275,7 +7281,7 @@ const PLATFORMS = {
   // Modeled with a buylistRatio field: cash ≈ 50% of retail, credit ≈ 65%.
   // These are estimates — the tile discloses this clearly and pushes the user
   // to verify against the live quote before shipping.
-  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', verified: 'Aug 2026',
+  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · buylist — instant offer, lower payout',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Buylist model — they quote you a fixed offer, no fees but ~50% of retail for cash (or ~65% for store credit). CSV bulk upload supported.',
@@ -7288,7 +7294,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://www.coolstuffinc.com/main_fullservice_selllist.php (verified)
   //     https://www.reddit.com/r/yugioh/comments/ngtcqa/ (community confirmation of 25% bonus)
-  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', verified: 'Aug 2026',
+  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · buylist — strong for YGO + MTG',
     workflow: 'buylist', payoutTime: '1–2 business days after approval',
     hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
@@ -7303,7 +7309,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://sellyourcards.starcitygames.com/  (fee tiers verified 2026-08-29)
   //     https://help.starcitygames.com/en-US/articles/sell-to-us-229858
-  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', verified: 'Aug 2026',
+  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · buylist — 0% fee on sorted lists',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Sell List (sorted): NO service fee, ~55% of retail cash / ~72% store credit. Ship + Sell (unsorted): 10% service fee (5% over $10K). MTG + Pokemon + Lorcana + FAB + Riftbound.',
@@ -7319,7 +7325,7 @@ const PLATFORMS = {
   //     https://help.cardnexus.com/articles/9938652-fee-structure-overview
   //     https://help.cardnexus.com/articles/1754380-selling-faq
   //     https://cardnexus.com/en/blog/cardnexus-marketplace-is-live
-  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', verified: 'Aug 2026',
+  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', verified: 'Sep 2026',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast — Stripe Connect payouts',
     hassle: 'Multi-TCG peer-to-peer marketplace with a flat 8% commission (NA). 10+ games. New in 2026 — audience is smaller than TCGplayer but growing fast.',
@@ -7332,14 +7338,101 @@ const PLATFORMS = {
   // We estimate 10% aggregator fee as an honest baseline; the tile flags this.
   //   Sources:
   //     https://tcgbulk.com/  (workflow + games verified 2026-08-29)
-  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', verified: 'Aug 2026',
+  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', verified: 'Sep 2026',
     effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
     workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
     hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
     bestFor: '💵 Best for bulk that needs shopping around — one place to compare buyers',
     buylistRatio: { cash: 0.50, credit: 0.50 },
-    redFlags: ['💰 Buylist offer varies by buyer (~50% of retail typical)', '💳 Aggregator fee deducted from PayPal payout at completion', '📦 You ship cards to the buyer you pick', '⚠️ Estimated payout — verify live quote before shipping'] }
+    redFlags: ['💰 Buylist offer varies by buyer (~50% of retail typical)', '💳 Aggregator fee deducted from PayPal payout at completion', '💸 10% TCG Bulk service fee comes out of your proceeds — included above', '📦 You ship cards to the buyer you pick', '⚠️ Estimated payout — verify live quote before shipping'] }
 };
+
+/* ═══ CROSS-BORDER / FOREIGN-VENUE DISCLOSURE ═══════════════════════════════
+ * Added 2026-09-01 after a full 15-venue seller-fee audit read against each
+ * venue's own published fee schedule, terms and help center.
+ *
+ * WHY THIS EXISTS: our payout math models a US seller shipping to a US buyer.
+ * Two of the fifteen venues are operated by foreign companies, and several US
+ * venues charge real money the moment the buyer is outside the country. Nobody
+ * reading a single net-payout number should be left assuming that selling
+ * across a border is free. Every venue below carries a plain-English line
+ * stating operator country, payout currency, and what cross-border actually
+ * costs — including the venues where the honest answer is "nothing, because
+ * they don't let you sell abroad at all".
+ *
+ * `foreign: true` means the OPERATOR is not a US company. It is not a quality
+ * judgement — it means the seller is contracting with a non-US entity, may be
+ * paid in a non-USD currency, and may not even be eligible to register.
+ *
+ * These strings are disclosure copy, not inputs to the payout math. The only
+ * cross-border cost baked into netPayout is Cardmarket's 3% currency
+ * conversion (see feeCardmarket), because that venue is EUR-denominated for a
+ * US seller by definition. Every other cross-border cost is buyer-dependent,
+ * so we disclose it rather than silently charging it.
+ */
+const CROSS_BORDER = {
+  ebay: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'Sells worldwide. If the buyer or the delivery address is outside the US, eBay adds a 1.65% international fee charged on the item + shipping + tax — waived if you use eBay International Shipping. Converting a foreign currency costs a further 3%. Neither is included in the payout above.',
+    src: 'https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822' },
+  tcgplayer: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'Sells internationally. Payment processing rises from 2.5% + $0.30 to 3.5% + $0.30 on international orders — a full point more than the payout above assumes.',
+    src: 'https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees' },
+  poshmark: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'Domestic only — Poshmark does not offer shipping between countries, so there is no cross-border fee because there is no cross-border sale. A Canadian buyer can only buy from you if they ship to a US address.',
+    src: 'https://blog.poshmark.com/poshmark-canada-faq/' },
+  comc: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD store credit',
+    text: 'US consignment warehouse ships to the buyer, so you carry no cross-border shipping exposure. Cashing out does carry it: COMC states the 10% rate may be slightly higher for international users, and a check mailed outside the US costs $15 instead of $5.',
+    src: 'https://www.comc.com/cashout' },
+  fanatics: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'The US vault ships both domestically and internationally and the buyer pays any duties, so no extra cross-border fee lands on you. Middle East shipments are capped under $10,000.',
+    src: 'https://support.fanaticscollect.com/en_us/shipping-fulfillment-overview-By46QAQ6gx' },
+  whatnot: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'Cross-border is actively disrupted, not merely taxed. Since the US removed the de minimis exemption on Aug 29, 2025, Whatnot has temporarily paused US buyers purchasing from Europe, the UK and Australia, and Canada→US now moves via UPS with tariffs billed to the buyer. No extra seller fee, but your international reach is smaller than it looks.',
+    src: 'https://help.whatnot.com/hc/en-us/articles/10626950552845-International-Shipping-Customs-and-Imports' },
+  mercari: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'US marketplace with no cross-border selling program and no international or currency-conversion fee published for sellers.',
+    src: 'https://www.mercari.com/us/help_center/article/169/' },
+  manapool: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'North America only — published rates cover US domestic, Canada domestic and US↔Canada. No cross-border fee, but letter shipments outside the US travel at the buyer\u2019s risk, so a card lost in transit is not on you.',
+    src: 'https://support.manapool.com/hc/en-us/articles/20931944865559-Shipping-Rates-and-Methods' },
+  cardsphere: { flag: '🇺🇸', country: 'Settles in USD', ccy: 'USD',
+    text: 'Stored value is denominated in USD and Cardsphere charges no cross-border fee. Shipping abroad is entirely on you: you bear all shipping cost and all loss risk, and any currency conversion is borne by the card holder rather than the platform.',
+    src: 'https://www.cardsphere.com/terms' },
+  cardmarket: { flag: '🇩🇪', country: 'Germany', ccy: 'EUR', foreign: true,
+    text: 'Foreign venue. Operated by Sammelkartenmarkt GmbH & Co. KG, a German company. You are paid in EUR, and its 3% currency conversion fee is already deducted in the payout above. Seller activation requires a verified bank account in a supported country, so a US seller may not be able to register at all — confirm eligibility before planning around this number. Selling in from outside the EU also carries VAT duties: Cardmarket collects VAT below €150 (EU) and £135 (UK) and requires their IOSS number on the package; above those thresholds the VAT is yours to handle.',
+    src: 'https://help.cardmarket.com/en/TaxRequirements' },
+  cardkingdom: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'US buyer in Monroe, WA — you ship to them, so there is no buyer-side border to cross. If you are shipping in from outside the US, the order must go Delivery Duties Paid; DDU packages are refused on arrival.',
+    src: 'https://www.cardkingdom.com/purchasing/how_to_sell' },
+  coolstuffinc: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'US buyer in Maitland, FL. No cross-border fee, but they buy only specific non-English printings — anything else sent in is rejected and returned at your expense, and return shipping outside the US varies by weight and location.',
+    src: 'https://www.coolstuffinc.com/main_selllist.php' },
+  scg: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
+    text: 'US buyer in Roanoke, VA, and all charges are made in US dollars. No cross-border fee. If a collection has to be returned to you outside the continental US, Star City Games covers only 25% of the return shipping and you pay the rest.',
+    src: 'https://help.starcitygames.com/en-US/payment-options-1056900' },
+  cardnexus: { flag: '🇫🇷', country: 'France', ccy: 'USD (North America)', foreign: true,
+    text: 'Foreign venue. Operated by Cardnexus SAS, a French company in Le Bouscat. US sellers are supported: you onboard into the North America region and both list and get paid in USD at the 8% commission used above, so no FX or cross-border fee hits you. Two catches — the region and currency you choose at signup are permanent, and carts are region-locked, so a North American seller cannot reach EU buyers without a second account.',
+    src: 'https://help.cardnexus.com/articles/1754380-selling-faq' },
+  tcgbulk: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD via PayPal',
+    text: 'US operator, CCGCastle LLC of East Windsor, CT. No platform cross-border fee, but each buyer sets their own accepted territory and you must respect it, and TCG Bulk warns that payout providers may impose their own currency conversions and fees on top.',
+    src: 'https://tcgbulk.com/page/terms-of-service' }
+};
+
+// Renders the cross-border line for a venue tile. Shown on EVERY venue, locked
+// or unlocked, so a seller comparing a blurred row still knows the venue is
+// foreign-operated before they pay to unlock it.
+function crossBorderHtml(pid) {
+  const cb = CROSS_BORDER[pid];
+  if (!cb) return '';
+  const cls = cb.foreign ? 'plat-xborder foreign' : 'plat-xborder';
+  const head = cb.foreign
+    ? `${cb.flag} Foreign venue · ${esc(cb.country)} · paid in ${esc(cb.ccy)}`
+    : `${cb.flag} ${esc(cb.country)} · paid in ${esc(cb.ccy)}`;
+  return `<div class="${cls}">
+    <div class="xb-head">${head}</div>
+    <div class="xb-body">${esc(cb.text)} <a href="${esc(cb.src)}" target="_blank" rel="noopener nofollow" onclick="event.stopPropagation()">Source</a></div>
+  </div>`;
+}
 
 // TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
 //   Free      → easy listing platforms (eBay, TCGPlayer) — 2
@@ -7484,7 +7577,17 @@ function feeCOMC(price, service, isGraded, cashout) {
     { l: 'Ship-in to COMC (est.)', a: 5 }
   ];
   if (cashout === 'yes') {
-    items.push({ l: 'Cash-out fee (10%)', a: Math.max(0, price - txFee - 5) * 0.10 });
+    // 2026-09-01 fee-truth pass: COMC's cash-out is 10% PLUS fixed add-ons that
+    // we were omitting. "There is a $1 store credit fee when converting less
+    // than $250" — which is most single-card conversions. ($5 for a mailed US
+    // check and $15 for a check outside the US are payout-method choices we do
+    // not model; the international one is surfaced in the cross-border note.)
+    // Source: https://www.comc.com/cashout
+    const convertible = Math.max(0, price - txFee - 5);
+    items.push({ l: 'Cash-out fee (10%)', a: convertible * 0.10 });
+    if (convertible < 250) {
+      items.push({ l: 'Cash-out surcharge (under $250)', a: 1 });
+    }
   }
   return items;
 }
@@ -7495,18 +7598,26 @@ function feeCOMC(price, service, isGraded, cashout) {
 //     $1,500 for TCG / sports / comics / toys categories (single-item cap)
 //   • 2.9% + $0.30 payment processing (Stripe pass-through)
 // No listing fees, no monthly cost. Seller ships from home.
-// Source: https://help.whatnot.com/hc/en-us/articles/4847069165965
-function feeWhatnot(price) {
+//
+// 2026-09-01 fee-truth pass: Whatnot uses a SPLIT BASIS and we were charging
+// processing on the item price alone. Whatnot's schedule is explicit —
+// commission uses "the price the item sold for to the buyer, which does not
+// include shipping or taxes", while payment processing is "a percentage of the
+// total order value ... the final price of the item sold plus shipping and
+// buyer-paid tax". We now bill commission on price and processing on
+// price + shipping. (We do not model buyer-paid tax anywhere in this engine.)
+// Source: https://help.whatnot.com/hc/en-us/articles/4847069165965-Whatnot-Seller-Fees-and-Commissions-Schedule
+function feeWhatnot(price, shipCharge) {
   // 8% up to $1,500, 0% commission above that (TCG/sports category cap)
   const commissionable = Math.min(price, 1500);
   const commission = commissionable * 0.08;
-  const processing = price * 0.029 + 0.30;
+  const processing = (price + (shipCharge || 0)) * 0.029 + 0.30;   // total order value
   const commissionLabel = price > 1500
     ? 'Commission (8% up to $1,500, 0% above)'
     : 'Marketplace commission (8%)';
   return [
     { l: commissionLabel, a: commission },
-    { l: 'Payment processing (2.9% + $0.30)', a: processing }
+    { l: 'Payment processing (2.9% + $0.30 of item + shipping)', a: processing }
   ];
 }
 
@@ -7529,13 +7640,21 @@ function feeMercari(price, shipCharge) {
 // Mana Pool — MTG-only marketplace.
 //   5% marketplace fee on merchandise (NOT shipping)
 //   + Stripe processing 2.9% + $0.30 per seller/order
-// Source: https://support.manapool.com/hc/en-us/articles/21779686206615
-function feeManaPool(price) {
-  const marketplace = price * 0.05;
-  const processing  = price * 0.029 + 0.30;
+//
+// 2026-09-01 fee-truth pass: the 5% genuinely excludes shipping ("the fee is
+// not applied to shipping charges, only the price of the product"), but the
+// card processing fee does NOT — Mana Pool states "the seller receives the
+// entire shipping fee, minus a credit card processing fee". We were billing
+// processing on the item price alone, understating fees on any shipped order.
+// Sources:
+//   https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
+//   https://support.manapool.com/hc/en-us/articles/20931944865559-Shipping-Rates-and-Methods
+function feeManaPool(price, shipCharge) {
+  const marketplace = price * 0.05;                                 // merchandise only
+  const processing  = (price + (shipCharge || 0)) * 0.029 + 0.30;   // incl. shipping
   return [
-    { l: 'Marketplace fee (5%)', a: marketplace },
-    { l: 'Payment processing (2.9% + $0.30)', a: processing }
+    { l: 'Marketplace fee (5% of item)', a: marketplace },
+    { l: 'Payment processing (2.9% + $0.30 of item + shipping)', a: processing }
   ];
 }
 
@@ -7584,22 +7703,46 @@ function feeCardmarket(price) {
 //
 // The `mode` param picks cash vs store credit. Default cash (worst-case);
 // users planning to also buy from the same shop get the boosted credit rate.
-function feeBuylist(price, ratio) {
+function feeBuylist(price, ratio, serviceFeePct) {
   // How much of retail the seller actually pockets
   const offer   = price * ratio;
   const haircut = price - offer;
-  return [
+  const items = [
     { l: `Buylist offer (~${Math.round(ratio*100)}% of retail)`, a: haircut }
   ];
+  // 2026-09-01 fee-truth pass: aggregators skim a service fee off the offer on
+  // top of the buylist haircut. TCG Bulk takes 10% of seller proceeds. Direct
+  // buylists (Card Kingdom, CoolStuffInc, SCG Sell List) charge nothing, so
+  // this stays undefined for them and the row never renders.
+  if (serviceFeePct) {
+    items.push({
+      l: `Aggregator service fee (${Math.round(serviceFeePct*100)}% of offer)`,
+      a: offer * serviceFeePct
+    });
+  }
+  return items;
 }
 
-// CardNexus — flat 8% NA seller commission on order total. No per-order fixed
-// fee for the seller (the $0.30 fixed fee is a BUYER-side charge, not seller).
+// CardNexus — flat 8% North America seller commission. No per-order fixed fee
+// for the seller (the 2.5% + $0.30 service fee is a BUYER-side charge).
 // No payment surcharge; payouts settle via Stripe Connect.
-//   Source: https://help.cardnexus.com/articles/9938652-fee-structure-overview
-function feeCardNexus(price) {
+//
+// 2026-09-01 fee-truth pass: the 8% bills on the ORDER TOTAL, not the item.
+// CardNexus is explicit — "The fee is calculated on the order total (items +
+// shipping)", with a worked example of €55 of cards + €5 shipping → fee on €60.
+// We were billing the item price alone.
+//
+// CardNexus is a FRENCH company (Cardnexus SAS, Le Bouscat) operating a
+// region-locked marketplace; a US seller onboards into the North America
+// region at 8% and is paid in USD. Region choice is permanent at signup.
+// Sources:
+//   https://help.cardnexus.com/articles/9938652-fee-structure-overview
+//   https://help.cardnexus.com/articles/1754380-selling-faq
+//   https://help.cardnexus.com/articles/1539844-legal-notice
+function feeCardNexus(price, shipCharge) {
+  const base = price + (shipCharge || 0);
   return [
-    { l: 'Seller commission (8%)', a: price * 0.08 }
+    { l: 'Seller commission (8% of item + shipping)', a: base * 0.08 }
   ];
 }
 
@@ -7680,7 +7823,7 @@ function calc() {
     {
       pid: 'whatnot',
       eligible: true,
-      feeItems: feeWhatnot(price),
+      feeItems: feeWhatnot(price, shipCharge),
       sellerShip: shipCost,
       note: (isYugioh || isMagic)
         ? 'Live-auction TCG marketplace. Great for MTG/YGO breakers if you can host or clip fixed-price listings.'
@@ -7701,7 +7844,7 @@ function calc() {
       // a Magic card, this is the strongest listing marketplace we surface
       // (lowest fees anywhere for pure list-and-ship).
       eligible: isMagic,
-      feeItems: feeManaPool(price),
+      feeItems: feeManaPool(price, shipCharge),
       sellerShip: shipCost,
       note: isMagic
         ? 'MTG-only marketplace with the lowest total fees anywhere (~7.9%). Growing fast, CSV import supported.'
@@ -7772,7 +7915,7 @@ function calc() {
       // CardNexus — multi-TCG peer-to-peer marketplace, flat 8% NA commission.
       // Hidden for sports (TCG-only).
       eligible: !isSports,
-      feeItems: feeCardNexus(price),
+      feeItems: feeCardNexus(price, shipCharge),
       sellerShip: shipCost,
       note: isSports
         ? 'CardNexus is a multi-TCG marketplace, not sports cards.'
@@ -7783,7 +7926,9 @@ function calc() {
       // TCG Bulk buylist aggregator. Compare offers from multiple US buyers.
       // Uses conservative 50% ratio as honest baseline; actual varies by buyer.
       eligible: !isSports,
-      feeItems: feeBuylist(price, PLATFORMS.tcgbulk.buylistRatio.cash),
+      // 10% TCG Bulk service fee comes out of the seller's proceeds on top of
+      // the buyer's buylist haircut. https://tcgbulk.com/page/terms-of-service
+      feeItems: feeBuylist(price, PLATFORMS.tcgbulk.buylistRatio.cash, 0.10),
       sellerShip: shipCost,
       note: isSports
         ? 'TCG Bulk is a TCG buylist aggregator, not sports cards.'
@@ -8069,6 +8214,7 @@ function calc() {
         ${effortHtml}
         <div class="plat-payout" style="color:var(--text-faint)">—</div>
         <div class="plat-sub">${r.note}</div>
+        ${crossBorderHtml(r.pid)}
       </div>`;
       return;
     }
@@ -8088,6 +8234,7 @@ function calc() {
       ${hassleHtml}
       ${bestForHtml}
       ${redFlagsHtml}
+      ${crossBorderHtml(r.pid)}
       ${r.note ? `<div class="note-italic">${r.note}</div>` : ''}
       <div class="fee-block">
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
@@ -8170,7 +8317,12 @@ function calc() {
     const _upgradeTarget = _uTier === 'free' ? 'Pro' : 'Pro Max';
     const _upgradePrice  = _uTier === 'free' ? '$9.99/mo' : '$19.99/mo';
     // Ordered list of what's actually locked, for the sub-caption.
-    const _lockedNames = proOnlyResults.map(r => PLATFORMS[r.pid].name).join(', ');
+    // Foreign-operated venues keep their flag even in the locked teaser list,
+    // so a seller knows before paying that some of what they're unlocking is
+    // a non-US company with its own currency and eligibility rules.
+    const _lockedNames = proOnlyResults
+      .map(r => PLATFORMS[r.pid].name + (CROSS_BORDER[r.pid]?.foreign ? ` ${CROSS_BORDER[r.pid].flag}` : ''))
+      .join(', ');
     html += `
     <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="openPricingModal('calc_gate')">
       <div class="plat-accent" style="background:linear-gradient(135deg,#b8860b,#f5c518)"></div>
