@@ -677,6 +677,9 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-rules{margin:.35rem .45rem .5rem;padding:.4rem .5rem;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.18);border-radius:.5rem}
 .plat-rule-line{font-size:.66rem;color:var(--text-muted);line-height:1.35;margin-bottom:.15rem}
 .plat-rule-line:last-child{margin-bottom:0}
+.plat-region{display:inline-flex;align-items:center;gap:.2rem;font-size:.58rem;font-weight:800;padding:.14rem .34rem;border-radius:.3rem;background:rgba(56,189,248,.14);color:#38bdf8;border:1px solid rgba(56,189,248,.32);letter-spacing:.04em;white-space:nowrap;margin-left:.35rem;vertical-align:1px}
+.payout-rank-note{display:flex;gap:.4rem;align-items:flex-start;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--divider);font-size:.68rem;line-height:1.4;color:var(--text-muted)}
+.payout-rank-note b{color:#38bdf8;font-weight:800}
 .plat-flags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem}
 .plat-flag{display:inline-flex;align-items:center;font-size:.6rem;font-weight:700;padding:.18rem .4rem;border-radius:.35rem;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.3);line-height:1.15;letter-spacing:.01em;white-space:nowrap}
 /* "Best for cards $X" pill — positive framing (green) so it reads as
@@ -7239,6 +7242,12 @@ const PLATFORMS = {
   //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
   //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
   cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', verified: 'Aug 2026',
+    // 2026-09-01: region flag. Cardmarket's 5% commission is the LOWEST of all
+    // 15 venues, so it ranks near the top on raw net payout — but a US seller
+    // can't realistically capture that number. International postage, ~3% FX
+    // on USD withdrawal, and EU-baseline pricing all eat it. We surface the
+    // region inline so the ranking isn't quietly misleading for US sellers.
+    region: 'EU', regionNote: 'EU-based marketplace. Payout shown is before international shipping from the US and ~3% currency conversion on USD withdrawal.',
     effort: 'medium', effortLabel: 'Medium · EU-focused, all TCGs',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Europe’s biggest TCG marketplace — huge audience but you’re competing against EU sellers with lower baselines. International shipping from US matters.',
@@ -7851,6 +7860,26 @@ function calc() {
           <div class="payout-rank-delta" style="color:var(--gold);font-weight:700">Unlock</div>
         </div>`;
       });
+      // 2026-09-01: region disclaimer. If any venue in the visible ranking is
+      // non-US, footnote it. Cardmarket has the lowest fee of all 15 venues so
+      // it lands high on raw net payout, but a US seller eats international
+      // postage + ~3% FX to actually realize it. Showing the number without
+      // the caveat is the kind of quiet lie the accuracy page exists to avoid.
+      try {
+        var _regionPids = unlockedRank.concat(lockedRank)
+          .map(function(r){ return r.pid; })
+          .filter(function(pid){ return PLATFORMS[pid] && PLATFORMS[pid].region; });
+        var _seenR = {}, _regionNotes = [];
+        _regionPids.forEach(function(pid){
+          var pf = PLATFORMS[pid];
+          if (_seenR[pf.name]) return;
+          _seenR[pf.name] = 1;
+          _regionNotes.push('<b>' + esc(pf.name) + ' (' + esc(pf.region) + ')</b> \u2014 ' + esc(pf.regionNote || ''));
+        });
+        if (_regionNotes.length) {
+          html += '<div class="payout-rank-note"><span>\u{1F310}</span><span>' + _regionNotes.join('<br>') + '</span></div>';
+        }
+      } catch(_) {}
       // Cache the ranking data on window so shareRanking() can build the OG URL.
       try {
         window._lastRanking = {
@@ -8002,7 +8031,7 @@ function calc() {
     if (!r.eligible) {
       html += `<div class="${cls}" style="opacity:.4">
         <div class="plat-accent" style="background:${info.color}"></div>
-        <div class="plat-hdr"><span class="plat-name">${info.emoji} ${info.name}</span>${badgeHtml}</div>
+        <div class="plat-hdr"><span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>${badgeHtml}</div>
         ${effortHtml}
         <div class="plat-payout" style="color:var(--text-faint)">—</div>
         <div class="plat-sub">${r.note}</div>
@@ -8013,7 +8042,7 @@ function calc() {
     html += `<${cardTag} class="${cls}"${cardHref}>
       <div class="plat-accent" style="background:${info.color}"></div>
       <div class="plat-hdr">
-        <span class="plat-name">${info.emoji} ${info.name}</span>
+        <span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>
         ${badgeHtml}
       </div>
       ${effortHtml}
