@@ -3074,8 +3074,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     </div>
 
     <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
-      <a href="mailto:contact@cardresell.org" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.82rem;color:var(--text);text-decoration:none">
-        <span>✉️</span><span>contact@cardresell.org</span>
+      <a href="mailto:will@cardresell.org" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .85rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.82rem;color:var(--text);text-decoration:none">
+        <span>✉️</span><span>will@cardresell.org</span>
       </a>
     </div>
 
@@ -10828,7 +10828,9 @@ function openScanner() {
     overlay.style.display = 'flex';
     return;
   }
-  document.getElementById('scanFileInput').click();
+  // 2026-09-01: Route the top-level Scan CTA through the live camera overlay
+  // (dashed card frame + QA feedback + zoom) instead of the raw phone camera.
+  _startSingleScanCapture();
 }
 
 // 2026-08-20: Deep Grade "Grading Upside" panel renderer.
@@ -12976,9 +12978,9 @@ async function processScanImage(input) {
         }
         statusEl.innerHTML = `<span style="color:#f87171;font-weight:700">${title}</span>`;
         const retryHtml = showRetry
-          ? `<button onclick="window._skipQCDupe=true;document.getElementById('scanFileInput').value='';document.getElementById('scanFileInput').click()" style="margin-right:.5rem;background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Scan again anyway</button>`
+          ? `<button onclick="window._skipQCDupe=true;_startSingleScanCapture()" style="margin-right:.5rem;background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Scan again anyway</button>`
           : '';
-        resultEl.innerHTML = `<div style="font-size:.85rem;color:rgba(255,255,255,.7);margin-bottom:.75rem">${msg}</div>${retryHtml}<button onclick="cancelScan();setTimeout(()=>document.getElementById('scanFileInput').click(),100)" style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Retake photo</button>`;
+        resultEl.innerHTML = `<div style="font-size:.85rem;color:rgba(255,255,255,.7);margin-bottom:.75rem">${msg}</div>${retryHtml}<button onclick="cancelScan();setTimeout(()=>_startSingleScanCapture(),100)" style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Retake photo</button>`;
         try { if (window.va) va('track', 'photo_qc_reject', { reason, blur: qc.details.blurScore, w: qc.details.width, h: qc.details.height }); } catch(_) {}
         return;
       }
@@ -13801,6 +13803,23 @@ function _startGradeBackCapture() {
     onCancel: (reason) => {
       if (reason === 'permission-denied' || reason === 'unsupported') {
         document.getElementById('gradeBackFileInput').click();
+      }
+    }
+  });
+}
+
+// 2026-09-01: Single Scan (ID) now uses the same live-camera overlay as Rapid
+// Scan and Grade capture, so users get the dashed card-aspect frame + zoom +
+// real-time QA feedback instead of the raw phone camera. Falls back to the
+// native <input capture=environment> flow on permission-denied or unsupported.
+function _startSingleScanCapture() {
+  openLiveCameraCapture({
+    label: 'Scan a card',
+    sublabel: 'Single Scan \u2014 1 ID credit',
+    onCapture: (file) => { processScanImage({ files: [file] }); },
+    onCancel: (reason) => {
+      if (reason === 'permission-denied' || reason === 'unsupported') {
+        document.getElementById('scanFileInput').click();
       }
     }
   });
@@ -18257,7 +18276,11 @@ function startBulkGradeUpload() {
 
 /* Take photos with the phone camera. Native camera returns a batch of photos
    which we process identically to the upload path. For Deep mode the user is
-   reminded to alternate front/back; for Quick mode just fronts. */
+   reminded to alternate front/back; for Quick mode just fronts.
+   TODO 2026-09-01: wrap in a Rapid-Scan-style live loop so Bulk Grade users
+   get the dashed frame + QA feedback + zoom. Currently uses the raw phone
+   camera because native multi-photo pickers do the batching for us; a live
+   loop would need to queue photos client-side and paint a running counter. */
 function startBulkGradeCamera() {
   const mode = window._bulkGradeMode || 'quick';
   if (mode === 'deep') {
@@ -21067,7 +21090,7 @@ function _esc(s) {
       <!-- Single Scan (2026-08-31) — collector on-ramp. One photo, one tap.
            Uses the existing hidden #scanFileInput (native camera) so we don't
            duplicate any capture code. Green treatment marks it as the default. -->
-      <button onclick="closeBulkModePicker();document.getElementById('scanFileInput').click()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.5);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(74,222,128,.9)'" onmouseout="this.style.borderColor='rgba(34,197,94,.5)'">
+      <button onclick="closeBulkModePicker();_startSingleScanCapture()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.5);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(74,222,128,.9)'" onmouseout="this.style.borderColor='rgba(34,197,94,.5)'">
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(34,197,94,.16);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:.9rem;font-weight:800">Single Scan <span style="font-size:.55rem;background:rgba(74,222,128,.9);color:#062611;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">START HERE</span></div>
