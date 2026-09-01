@@ -558,7 +558,7 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .fee-verified-pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid color-mix(in srgb,var(--green) 25%,transparent);border-radius:99px;padding:.15rem .55rem;text-decoration:none;transition:all var(--ease)}
 .fee-verified-pill:hover{background:color-mix(in srgb,var(--green) 20%,transparent);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
 .fee-verified-dot{font-size:1.1rem;line-height:.5;color:var(--green)}
-/* 2026-09-01: Amber "Stale" variant. Applied when a venue's verified date is > 60 days old.
+/* 2026-09-01: Amber "Stale" variant. Applied when a venue's verified date is > 45 days old.
    Such venues are also demoted from #1 in the payout ranker so a stale number can't be crowned the winner. */
 .fee-verified-pill.stale{color:#f59e0b;background:color-mix(in srgb,#f59e0b 12%,transparent);border-color:color-mix(in srgb,#f59e0b 30%,transparent)}
 .fee-verified-pill.stale:hover{background:color-mix(in srgb,#f59e0b 20%,transparent);border-color:color-mix(in srgb,#f59e0b 50%,transparent)}
@@ -667,6 +667,11 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-sub{font-size:.7rem;color:var(--text-muted);padding-left:.45rem;margin-bottom:.75rem}
 
 .fee-block{border-top:1px solid var(--divider);padding-top:.65rem;padding-left:.45rem}
+.fee-recipe{padding-bottom:.4rem;margin-bottom:.4rem;border-bottom:1px dashed var(--divider)}
+.fee-recipe-row .fee-val{color:var(--text)}
+.fee-basis{color:var(--text-muted);font-weight:400;font-size:.72rem;margin-left:.25rem}
+.fee-days-row{padding-top:.35rem;color:var(--text-muted);font-size:.72rem}
+.fee-days-row .fee-val{color:var(--text-muted);font-weight:500}
 .fee-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text-muted);padding:.15rem 0}
 .fee-val{font-family:var(--mono);font-size:.68rem;color:var(--red);flex-shrink:0;margin-left:.5rem}
 .fee-total{border-top:1px solid var(--divider);margin-top:.3rem;padding-top:.3rem;font-size:.75rem;font-weight:600;color:var(--text)}
@@ -1616,12 +1621,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </div>
     </div>
 
-    <!-- Manage Subscription — Pro users only -->
+    <!-- Manage billing — Pro users only -->
     <div id="manageSubSection" style="display:none;margin-bottom:.65rem">
       <button onclick="openBillingPortal()" style="width:100%;padding:.48rem .75rem;background:var(--surface-2);border:1.5px solid rgba(196,122,0,.35);color:var(--text);border-radius:var(--radius-md);font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='rgba(196,122,0,.35)'">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        <span>Manage Subscription</span>
-        <span style="font-size:.65rem;color:var(--text-muted);margin-left:.2rem">(cancel, update billing)</span>
+        <span>Manage billing</span>
+        <span style="font-size:.65rem;color:var(--text-muted);margin-left:.2rem">Cancel or update payment (Stripe)</span>
       </button>
     </div>
 
@@ -1829,7 +1834,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
        only lands with Pro Max on an MTG card. -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock 13 more marketplaces</span> &mdash; Pro adds Poshmark, Whatnot, Mercari, Cardmarket, CardNexus (+ Mana Pool &amp; Cardsphere for MTG). Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk.<br>
+      <span>&#11088; Unlock 13 more marketplaces &mdash; 7 with Pro, 6 more with Pro Max</span> &mdash; Pro adds Poshmark, Whatnot, Mercari, Cardmarket, CardNexus (+ Mana Pool &amp; Cardsphere for MTG). Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk.<br>
       <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
     </div>
     <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
@@ -2343,7 +2348,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <span style="font-size:1rem;margin-top:.05rem">💰</span>
           <div>
             <div style="font-size:.78rem;font-weight:700;color:var(--text)">Side-by-side payout comparison</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">eBay, COMC, Fanatics Collect &amp; more — after fees</div>
+            <div style="font-size:.7rem;color:var(--text-muted)">eBay, TCGplayer, Whatnot &amp; more — after fees</div>
           </div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:.6rem">
@@ -2974,28 +2979,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         </button>
       </div>
 
-      <!-- ULTIMATE -->
-      <div class="plan-card tier-ultimate" data-tier="ultimate">
-        <div class="plan-badge">FOR DEALERS</div>
-        <div class="plan-name">Ultimate</div>
-        <div class="plan-price"><sup>$</sup><span data-price-monthly="39" data-price-annual="359">39</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
-        <div class="plan-annual-note">Just $30/mo &middot; 3 months free</div>
-        <div class="plan-value">Volume operator</div>
-        <div class="plan-value-sub">Volume operator — 100 grades &amp; 300 IDs / mo</div>
-        <ul class="plan-features">
-          <li><strong>100 AI Grades/mo</strong></li>
-          <li><strong>300 ID scans/mo</strong></li>
-          <li><strong>25% off</strong> top-up packs</li>
-          <li>All 15 venues unlocked</li>
-          <li>Everything in Pro Max</li>
-          <li><strong>2.5× grade quota</strong> vs Pro Max</li>
-          <li><strong>3× ID quota</strong> vs Pro Max</li>
-          <li>&#9733; Ultimate badge</li>
-        </ul>
-        <button id="pricingUltimateBtn" class="plan-btn ultimate-btn" onclick="startTierCheckout('ultimate')">
-          <span data-cta-monthly="Get Ultimate &mdash; $39.99/mo" data-cta-annual="Get Annual &mdash; $359.99/yr">Get Ultimate &mdash; $39.99/mo</span>
-        </button>
-      </div>
 
     </div>
     <div class="pricing-close">
@@ -3350,7 +3333,7 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
   // routes signed-out users into sign-in, so we now open the modal for
   // everyone once auth state has settled.
   const upgradeParam = (p.get('upgrade') || '').toLowerCase();
-  if (['pro','pro_max','ultimate'].includes(upgradeParam)) {
+  if (['pro','pro_max'].includes(upgradeParam)) {  // ultimate retired 2026-09-01
     window._pendingUpgradeTier = upgradeParam;
     try { sessionStorage.setItem('_pendingUpgradeTier', upgradeParam); } catch(_){}
     // 2026-09-01 (CR-013): /pricing appends &p=annual when the visitor picked
@@ -7705,7 +7688,7 @@ function verifiedAgeDays(stamp) {
   const ms = Date.now() - anchor;
   return ms < 0 ? 0 : Math.floor(ms / 86400000);
 }
-function isFeeStale(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 60; }
+function isFeeStale(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 45; }
 function isFeeAmber(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 30; }
 
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
@@ -7990,6 +7973,23 @@ function feeCardNexus(price, shipCharge) {
 }
 
 /* ═══ MAIN CALC ═══ */
+// 2026-09-01 (Issue 2): "Days to cash" is per-venue, not per-listing. These
+// are conservative ranges after the sale closes: shipping/vault dwell for
+// consignment, PayPal batching for buylists/offer venues, next-day payouts
+// where the venue clears fast. Wide ranges are honest here - the point of
+// the row is that COMC is not eBay.
+const DAYS_TO_CASH = {
+  ebay:        [3, 7],    tcgplayer:  [3, 7],     poshmark:   [3, 7],
+  whatnot:     [1, 5],    mercari:    [3, 7],     comc:       [14, 45],
+  fanatics:    [7, 30],   manapool:   [7, 14],    cardsphere: [1, 3],
+  cardmarket:  [7, 21],   cardnexus:  [7, 21],    cardkingdom:[7, 14],
+  coolstuffinc:[7, 14],   scg:        [7, 14],    tcgbulk:    [7, 14],
+};
+function daysToCashText(pid) {
+  const d = DAYS_TO_CASH[pid]; if (!d) return '';
+  return d[0] === d[1] ? `${d[0]} days` : `${d[0]}–${d[1]} days`;
+}
+
 function calc() {
   const price = getEffectivePrice();
   if (price <= 0) {
@@ -8179,13 +8179,33 @@ function calc() {
     }
   ];
 
+  // The raw-price basis label - what the "Price used" line will read. Reads the
+  // same window._crBasis the headline uses, so the recipe cannot disagree with
+  // Market Value. When the user typed the number, we say so.
+  const _basis = window._crBasis || null;
+  const _priceLabel =
+    (window._ovAutoFilled === false && document.getElementById('priceOverride')?.value)
+      ? 'Your price'
+      : (_basis && _basis.label) || 'Price entered';
+
   const results = platforms.map(p => {
     if (!p.eligible) return { ...p, totalFees: null, netPayout: null, grossProfit: null, margin: null };
     const totalFees  = p.feeItems.reduce((s, f) => s + f.a, 0);
     const netPayout  = price + shipCharge - totalFees - p.sellerShip;
     const grossProfit = netPayout - itemCost;
     const margin     = price > 0 ? (grossProfit / price) * 100 : 0;
-    return { ...p, totalFees, netPayout, grossProfit, margin };
+    // Per-row recipe fields so the tile is auditable end-to-end.
+    // Cash-out haircut = any fee row whose label matches a cash-out pattern.
+    // We surface it separately in the recipe even though it's already in
+    // feeItems, so the row reads Price used -> Fees -> Ship -> Cash-out -> Net
+    // in the same order every time.
+    const _cashLabels = /(cashout|cash-out|PayPal cashout|Store credit|Store-credit haircut|Check by mail)/i;
+    const cashoutRow = p.feeItems.find(f => _cashLabels.test(f.l));
+    const cashoutAmt = cashoutRow ? cashoutRow.a : 0;
+    return { ...p, totalFees, netPayout, grossProfit, margin,
+             priceUsed: price, priceLabel: _priceLabel,
+             shipCharge, sellerShip: p.sellerShip,
+             cashoutAmt, daysToCash: daysToCashText(p.pid) };
   });
 
   const eligible   = results.filter(r => r.eligible);
@@ -8480,19 +8500,27 @@ function calc() {
       ${crossBorderHtml(r.pid)}
       ${r.note ? `<div class="note-italic">${r.note}</div>` : ''}
       <div class="fee-block">
+        <!-- 2026-09-01 (Issue 2): the row is auditable end-to-end. A stranger
+             should be able to rebuild the net from Price used + Fees + Ship +
+             Cash-out on a phone calculator and land within a cent. -->
+        <div class="fee-recipe">
+          <div class="fee-row fee-recipe-row"><span>Price used <span class="fee-basis">(${esc(r.priceLabel)})</span></span><span class="fee-val">${fmt(r.priceUsed)}</span></div>
+          ${r.shipCharge > 0 ? `<div class="fee-row fee-recipe-row"><span>Buyer-paid shipping</span><span class="fee-val">${fmt(r.shipCharge)}</span></div>` : ''}
+        </div>
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
-        ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your shipping cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
-        <div class="fee-row fee-total"><span>Total deducted</span><span class="fee-val">−${fmt(r.totalFees + (r.sellerShip||0))}</span></div>
+        ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your ship-out cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
+        <div class="fee-row fee-total"><span>Net after all deductions</span><span class="fee-val">${fmt(r.netPayout)}</span></div>
+        ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Days to cash</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
         ${info.verified ? (() => {
-          // 2026-09-01: pill color reflects staleness. >60d = amber + "Stale" text (venue also
-          // demoted from #1 by the payout ranker); 31-60d = amber pill but still "Verified";
+          // 2026-09-01: pill color reflects staleness. >45d = amber + "Stale" text (venue also
+          // demoted from #1 by the payout ranker); 31-45d = amber pill but still "Verified";
           // ≤30d = green. All three link to /accuracy#fees for the methodology.
           const _stale = isFeeStale(r.pid);
           const _amber = isFeeAmber(r.pid);
           const _cls   = _stale || _amber ? 'fee-verified-pill stale' : 'fee-verified-pill';
           const _label = _stale ? 'Stale' : 'Verified';
           const _title = _stale
-            ? 'This venue\'s fees haven\'t been re-verified in over 60 days, so we won\'t rank it #1. Click for methodology.'
+            ? 'This venue\'s fees haven\'t been re-verified in over 45 days, so we won\'t rank it #1. Click for methodology.'
             : 'View methodology + full fee sources';
           return `<div class="fee-verified-row"><a href="/accuracy#fees" class="${_cls}" title="${_title}"><span class="fee-verified-dot">•</span>${_label} ${info.verified}</a></div>`;
         })() : ''}
@@ -16686,7 +16714,7 @@ function updateProUI() {
   // Update flips wall now that sign-in state changed
   _updateFlipsSignInWall();
 
-  // Show/hide Manage Subscription button
+  // Show/hide Manage billing button
   const manageSub = document.getElementById('manageSubSection');
   if (manageSub) manageSub.style.display = window._isPro ? '' : 'none';
 
@@ -16974,6 +17002,11 @@ function startVenueUnlock(source) {
 window.startVenueUnlock = startVenueUnlock;
 
 async function startTierCheckout(tier) {
+  // Ultimate was retired on 2026-09-01: it sold 3x quota and a badge for $39.99
+  // with the same 15 venues as Pro Max. The Stripe prices are deactivated, so
+  // any stale link would fail at Checkout anyway - fail here with an honest
+  // message instead of a Stripe error page.
+  if (tier === 'ultimate') { tier = 'pro_max'; }
   await window._waitForAuth();
   if (!window.googleUser) {
     // 2026-09-01 (CR-013): re-stash the tier and interval so the deferred-open
@@ -21843,7 +21876,7 @@ function _esc(s) {
       • 15% off top-up packs<br>
       • <strong style="color:#fff">Bulk Grade tool</strong> (this one)<br>
       • All 15 marketplaces unlocked<br>
-      • COMC, Fanatics, Card Kingdom, CoolStuffInc buylists
+      • COMC &amp; Fanatics consignment + 4 buylists (Card Kingdom, CoolStuffInc, SCG, TCG Bulk)
     </div>
     <button onclick="closeBulkGrade();openPricingModal('bulk_grade_gate')" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">Upgrade to Pro Max — $19.99/mo</button>
     <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:var(--text-muted);font-size:.78rem;cursor:pointer;text-decoration:underline">Maybe later</button>

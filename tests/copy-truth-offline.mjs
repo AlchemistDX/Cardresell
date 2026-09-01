@@ -53,8 +53,10 @@ const vj=JSON.parse(fs.readFileSync('vercel.json','utf8'));
 const routes=vj.routes.map(r=>r.src);
 ok(routes.indexOf('/photo-tips/(.*\\.webp)') < routes.indexOf('/photo-tips/?'), 'webp route still precedes the redirect');
 // CR-013 — annual interval handoff from /pricing into the app
-ok(/data-upgrade-tier="pro"/.test(pr) && /data-upgrade-tier="pro_max"/.test(pr) && /data-upgrade-tier="ultimate"/.test(pr),
-   'all three paid CTAs are tagged for interval rewriting');
+// 2026-09-01: Ultimate retired. Two paid tiers now.
+ok(/data-upgrade-tier="pro"/.test(pr) && /data-upgrade-tier="pro_max"/.test(pr),
+   'both paid CTAs are tagged for interval rewriting');
+ok(!/data-upgrade-tier="ultimate"/.test(pr), 'no Ultimate CTA remains on the pricing page');
 ok(pr.includes("'/?upgrade=' + el.dataset.upgradeTier + (mode === 'annual' ? '&p=annual' : '')"),
    'pricing toggle rewrites CTA hrefs with the interval');
 ok(idx.includes('_pendingUpgradeInterval') && idx.includes("p.get('p')"),
@@ -307,6 +309,77 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   ok(PRO.filter(p => !FREE.includes(p)).length === 7, 'Pro adds exactly 7 venues over Free');
   ok(MAXP.filter(p => !PRO.includes(p)).length === 6, 'Pro Max adds exactly 6 venues over Pro');
   for (const pid of PRO) ok(idx.includes(`'${pid}'`), `PRO_PLATFORMS still lists ${pid}`);
+}
+
+// -- Issues 1/2/3/4/5 (2026-09-01) ----------------------------------------
+{
+  // Issue 1 - accuracy stamp and changelog
+  const ac = fs.readFileSync('accuracy.html','utf8');
+  ok(/Last updated &middot; Sep 1, 2026|Last updated · Sep 1, 2026/.test(ac),
+     'accuracy header stamped Sep 1, 2026');
+  ok(/We audit this page every release cycle/.test(ac),
+     'accuracy header carries the audit-cadence promise');
+  ok(/Poshmark, COMC and Fanatics&nbsp;Collect re-verified/.test(ac),
+     'the Sep 1 re-verification changelog entry exists');
+  ok(/Terms &amp; Privacy rewritten/.test(ac),
+     'the Sep 1 terms rewrite changelog entry exists');
+  ok(/TCGplayer and eBay fee corrections/.test(ac),
+     'the Aug 31 fee-correction changelog entry exists');
+  ok(/<td>Poshmark<\/td>[^<]*<td>[^<]*\$2\.95[^<]*<\/td>[^<]*<td>Sep 2026<\/td>/.test(ac.replace(/\s+/g,' ')),
+     'Poshmark row keeps $2.95/20% and stamps Sep 2026');
+  ok(/6% below 120%, 12% at or above/.test(ac.replace(/&nbsp;/g,' ')),
+     'Fanatics tiered 6/12 fee stated (checklist 8% was wrong)');
+
+  // Issue 1b - stale threshold tightened 60 -> 45
+  ok(/verifiedAgeDays\(PLATFORMS\[pid\]\?\.verified\) > 45/.test(idx),
+     'stale threshold is 45 days (was 60)');
+  ok(/haven\\'t been re-verified in over 45 days/.test(idx),
+     'the stale tooltip agrees with the 45-day rule');
+  ok(!/re-verified in over 60 days/.test(idx),
+     'no stale copy still claims the 60-day threshold');
+
+  // Issue 2 - fee recipe rows on every eligible tile
+  ok(/const DAYS_TO_CASH = \{/.test(idx), 'per-venue days-to-cash table exists');
+  ok(/daysToCash: daysToCashText\(p\.pid\)/.test(idx),
+     'each row carries a daysToCash string');
+  ok(/priceUsed: price, priceLabel: _priceLabel/.test(idx),
+     'each row carries the price basis it used');
+  ok(/<span>Price used <span class="fee-basis">/.test(idx),
+     'the recipe renders a "Price used" line with its basis label');
+  ok(/<span>Net after all deductions<\/span>/.test(idx),
+     'the recipe subtotal is the Net line');
+
+  // Issue 3 - pricing.html spells all 4 buylists
+  const pr2 = fs.readFileSync('pricing.html','utf8');
+  ok(/Buylist quotes \(Card Kingdom, CoolStuffInc, SCG, TCG&nbsp;Bulk\)/.test(pr2),
+     'pricing table names all 4 buylists (was missing TCG Bulk)');
+  ok(!/eBay, COMC, Fanatics Collect &amp; more/.test(idx),
+     'homepage feature blurb no longer promises COMC/Fanatics on Free');
+  ok(/eBay, TCGplayer, Whatnot &amp; more/.test(idx),
+     'homepage feature blurb names venues Free actually sees');
+  ok(/Unlock 13 more marketplaces &mdash; 7 with Pro, 6 more with Pro Max/.test(idx),
+     'the unlock strip splits the 13 into 7 Pro + 6 Pro Max');
+
+  // Issue 4 - Ultimate removed from every user-facing surface
+  ok(!/<div class="plan" id="ultimate">/.test(pr2), 'no Ultimate plan card on /pricing');
+  ok(!/tier-ultimate/.test(pr2), 'no tier-ultimate DOM on /pricing');
+  ok(!/<div class="plan-card tier-ultimate"/.test(idx), 'no Ultimate card in the upgrade modal');
+  ok(/Get Ultimate/.test(idx) === false, 'no "Get Ultimate" CTA left in the app');
+  ok(/"@type": "Offer", "name": "Pro Max \(monthly\)"/.test(pr2), 'Pro Max offer still in JSON-LD');
+  ok(!/"@type": "Offer", "name": "Ultimate \(monthly\)"/.test(pr2), 'Ultimate offer removed from JSON-LD');
+  const upTiers = idx.match(/\['pro','pro_max'(?:,'ultimate')?\]\.includes\(upgradeParam\)/);
+  ok(upTiers && !/ultimate/.test(upTiers[0]), 'the ?upgrade= router no longer accepts ultimate');
+
+  // Issue 5 - cancel copy points at the Stripe portal, not email
+  ok(!/emailing <a href="mailto:will@cardresell\.org">will@cardresell\.org<\/a>/.test(pr2) ||
+     /billing problems, not the cancel button/.test(pr2),
+     'FAQ no longer offers email as an equal cancel path');
+  ok(/open the profile menu.*Manage billing/.test(pr2.replace(/\s+/g,' ')),
+     'FAQ tells users where the Manage billing button is');
+  ok(/Manage billing/.test(idx) && /openBillingPortal/.test(idx),
+     'the profile popover button reads "Manage billing" and calls the portal');
+  ok(/Cancel or update payment \(Stripe\)/.test(idx),
+     'the sub-line names Stripe as the cancel surface');
 }
 
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
