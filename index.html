@@ -1331,6 +1331,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
             window._pendingUpgradeTier = null;
             setTimeout(() => {
               try { window.openPricingModal && window.openPricingModal('pricing_page_' + pendingTier); } catch(_){}
+              try { window._applyPendingUpgradeInterval && window._applyPendingUpgradeInterval(); } catch(_){}
             }, 500);
           }
         } catch(_){}
@@ -3318,7 +3319,14 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
   if (['pro','pro_max','ultimate'].includes(upgradeParam)) {
     window._pendingUpgradeTier = upgradeParam;
     try { sessionStorage.setItem('_pendingUpgradeTier', upgradeParam); } catch(_){}
+    // 2026-09-01 (CR-013): /pricing appends &p=annual when the visitor picked
+    // Annual. Carry it through the same deferred round-trip as the tier so the
+    // modal opens on the interval they were actually quoted.
+    const wantAnnual = (p.get('p') || '').toLowerCase() === 'annual';
+    window._pendingUpgradeInterval = wantAnnual ? 'annual' : 'monthly';
+    try { sessionStorage.setItem('_pendingUpgradeInterval', wantAnnual ? 'annual' : 'monthly'); } catch(_){}
     try {
+      p.delete('p');
       p.delete('upgrade');
       const clean = window.location.pathname + (p.toString() ? '?' + p.toString() : '') + window.location.hash;
       window.history.replaceState({}, '', clean);
@@ -3326,6 +3334,19 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
     // Fallback: even if auth resolves before openPricingModal is defined, poll
     // briefly for the fn and fire once. Auth-triggered path (in onAuthStateChanged)
     // clears sessionStorage first, so this is a no-op when that path wins.
+    // Applies the handed-over interval right after the modal opens. Reads
+    // sessionStorage rather than a closure so the auth-triggered path (which
+    // runs in a different scope) gets identical behaviour.
+    window._applyPendingUpgradeInterval = function () {
+      let want = null;
+      try { want = sessionStorage.getItem('_pendingUpgradeInterval'); } catch(_){}
+      want = want || window._pendingUpgradeInterval;
+      try { sessionStorage.removeItem('_pendingUpgradeInterval'); } catch(_){}
+      window._pendingUpgradeInterval = null;
+      if (want && typeof window.setPricingMode === 'function') {
+        try { window.setPricingMode(want === 'annual' ? 'annual' : 'monthly'); } catch(_){}
+      }
+    };
     (function pollForModal(tries) {
       if (!sessionStorage.getItem('_pendingUpgradeTier')) return;
       if (tries > 40) return; // 20s max
@@ -3334,6 +3355,7 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
         sessionStorage.removeItem('_pendingUpgradeTier');
         window._pendingUpgradeTier = null;
         try { window.openPricingModal('pricing_page_' + t); } catch(_){}
+        try { window._applyPendingUpgradeInterval && window._applyPendingUpgradeInterval(); } catch(_){}
         return;
       }
       setTimeout(() => pollForModal(tries + 1), 500);

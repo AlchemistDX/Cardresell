@@ -215,7 +215,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
       <li><strong>+2 all-TCG venues:</strong> Cardmarket (EU), CardNexus</li>
       <li>Payout bar chart + <strong>unlimited</strong> flips</li>
     </ul>
-    <a href="/?upgrade=pro" class="plan-btn primary" onclick="track_('pro')">
+    <a href="/?upgrade=pro" data-upgrade-tier="pro" class="plan-btn primary" onclick="track_('pro')">
       <span data-cta-monthly="Get Pro — $9.99/mo" data-cta-annual="Get Annual — $89.99/yr">Get Pro — $9.99/mo</span>
     </a>
   </div>
@@ -239,7 +239,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
       <li>Everything in Pro</li>
       <li>Priority email support</li>
     </ul>
-    <a href="/?upgrade=pro_max" class="plan-btn" onclick="track_('pro_max')">
+    <a href="/?upgrade=pro_max" data-upgrade-tier="pro_max" class="plan-btn" onclick="track_('pro_max')">
       <span data-cta-monthly="Get Pro Max — $19.99/mo" data-cta-annual="Get Annual — $179.99/yr">Get Pro Max — $19.99/mo</span>
     </a>
   </div>
@@ -263,7 +263,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
       <li><strong>3× ID quota</strong> vs Pro Max</li>
       <li>★ Ultimate badge</li>
     </ul>
-    <a href="/?upgrade=ultimate" class="plan-btn" onclick="track_('ultimate')">
+    <a href="/?upgrade=ultimate" data-upgrade-tier="ultimate" class="plan-btn" onclick="track_('ultimate')">
       <span data-cta-monthly="Get Ultimate — $39.99/mo" data-cta-annual="Get Annual — $359.99/yr">Get Ultimate — $39.99/mo</span>
     </a>
   </div>
@@ -450,6 +450,14 @@ function setInterval_(mode) {
   // "3 months free" annual note — only visible on annual
   document.querySelectorAll('[data-annual-note]').forEach(el => {
     el.innerHTML = mode === 'annual' ? el.dataset.annualNote : '&nbsp;';
+  });
+  // 2026-09-01 (CR-013): carry the chosen interval into the app. Without this
+  // the CTA read "Get Annual — $179.99/yr" but linked to a bare ?upgrade=,
+  // and the in-app modal opened in Monthly — a price switch on the user
+  // between click and checkout. startTierCheckout() reads window._pricingMode,
+  // so the app charges correctly once the mode is handed over.
+  document.querySelectorAll('a.plan-btn[data-upgrade-tier]').forEach(el => {
+    el.href = '/?upgrade=' + el.dataset.upgradeTier + (mode === 'annual' ? '&p=annual' : '');
   });
   try { history.replaceState(null, '', location.pathname + (mode === 'annual' ? '?p=annual' : '')); } catch(_){}
 }

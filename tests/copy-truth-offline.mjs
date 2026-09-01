@@ -52,5 +52,29 @@ ok(idx.includes("p.get('photo_tips')") && idx.includes('openPhotoTipsModal()'), 
 const vj=JSON.parse(fs.readFileSync('vercel.json','utf8'));
 const routes=vj.routes.map(r=>r.src);
 ok(routes.indexOf('/photo-tips/(.*\\.webp)') < routes.indexOf('/photo-tips/?'), 'webp route still precedes the redirect');
+// CR-013 — annual interval handoff from /pricing into the app
+ok(/data-upgrade-tier="pro"/.test(pr) && /data-upgrade-tier="pro_max"/.test(pr) && /data-upgrade-tier="ultimate"/.test(pr),
+   'all three paid CTAs are tagged for interval rewriting');
+ok(pr.includes("'/?upgrade=' + el.dataset.upgradeTier + (mode === 'annual' ? '&p=annual' : '')"),
+   'pricing toggle rewrites CTA hrefs with the interval');
+ok(idx.includes('_pendingUpgradeInterval') && idx.includes("p.get('p')"),
+   'index.html reads and stashes the handed-over interval');
+ok(idx.includes('window._applyPendingUpgradeInterval = function'),
+   'shared interval applier is defined');
+ok((idx.match(/_applyPendingUpgradeInterval && window\._applyPendingUpgradeInterval\(\)/g)||[]).length === 2,
+   'both deferred-open paths apply the interval');
+ok(idx.includes("p.delete('p');"), 'the interval param is stripped from the URL');
+ok(/window\._pricingMode === 'annual' \? 'annual' : 'monthly'/.test(idx),
+   'startTierCheckout still derives the Stripe interval from _pricingMode');
+{
+  // setPricingMode must be a plain global for the applier to reach it.
+  const i = idx.indexOf('function setPricingMode(mode)');
+  ok(i > 0, 'setPricingMode exists');
+  const before = idx.lastIndexOf('<script', i);
+  const attrs = idx.slice(before, idx.indexOf('>', before));
+  ok(!/type\s*=\s*["']module["']/.test(attrs), 'setPricingMode is not module-scoped');
+}
+ok(idx.includes('id="pricingBox"'), 'pricingBox exists so setPricingMode will not early-return');
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);
