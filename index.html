@@ -3311,10 +3311,34 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
       }
     } catch(e) {}
   }
+  // Applies a handed-over billing interval right after the pricing modal opens.
+  // Defined unconditionally (NOT inside the ?upgrade= branch) because
+  // startTierCheckout() re-stashes an interval when a signed-out user clicks a
+  // plan, and that round-trip has no upgrade param — scoping this inside the
+  // branch would silently drop the interval on exactly that path. Reads
+  // sessionStorage rather than a closure so every caller behaves identically.
+  window._applyPendingUpgradeInterval = function () {
+    let want = null;
+    try { want = sessionStorage.getItem('_pendingUpgradeInterval'); } catch(_){}
+    want = want || window._pendingUpgradeInterval;
+    try { sessionStorage.removeItem('_pendingUpgradeInterval'); } catch(_){}
+    window._pendingUpgradeInterval = null;
+    if (want && typeof window.setPricingMode === 'function') {
+      try { window.setPricingMode(want === 'annual' ? 'annual' : 'monthly'); } catch(_){}
+    }
+  };
+
   // If arriving from /pricing.html with ?upgrade=pro (or pro_max, ultimate),
   // stash the target tier and auto-open the pricing modal once auth resolves.
-  // Signed-out users get the sign-in dialog first; the deferred tier survives
-  // the auth round-trip via sessionStorage.
+  //
+  // 2026-09-01 (CR-013): the old comment here claimed "signed-out users get
+  // the sign-in dialog first". They did not — nothing triggered that dialog,
+  // and the poll below additionally required a signed-in uid, so a signed-out
+  // visitor who clicked a plan on /pricing landed on the app and got NOTHING:
+  // no modal, no sign-in prompt, params silently stripped. Confirmed in a live
+  // browser. openPricingModal() needs no auth, and startTierCheckout() already
+  // routes signed-out users into sign-in, so we now open the modal for
+  // everyone once auth state has settled.
   const upgradeParam = (p.get('upgrade') || '').toLowerCase();
   if (['pro','pro_max','ultimate'].includes(upgradeParam)) {
     window._pendingUpgradeTier = upgradeParam;
@@ -3334,23 +3358,12 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
     // Fallback: even if auth resolves before openPricingModal is defined, poll
     // briefly for the fn and fire once. Auth-triggered path (in onAuthStateChanged)
     // clears sessionStorage first, so this is a no-op when that path wins.
-    // Applies the handed-over interval right after the modal opens. Reads
-    // sessionStorage rather than a closure so the auth-triggered path (which
-    // runs in a different scope) gets identical behaviour.
-    window._applyPendingUpgradeInterval = function () {
-      let want = null;
-      try { want = sessionStorage.getItem('_pendingUpgradeInterval'); } catch(_){}
-      want = want || window._pendingUpgradeInterval;
-      try { sessionStorage.removeItem('_pendingUpgradeInterval'); } catch(_){}
-      window._pendingUpgradeInterval = null;
-      if (want && typeof window.setPricingMode === 'function') {
-        try { window.setPricingMode(want === 'annual' ? 'annual' : 'monthly'); } catch(_){}
-      }
-    };
     (function pollForModal(tries) {
       if (!sessionStorage.getItem('_pendingUpgradeTier')) return;
       if (tries > 40) return; // 20s max
-      if (typeof window.openPricingModal === 'function' && window._authInitialized && (window._user?.uid || window.googleUser?.uid)) {
+      // Gate on _authInitialized only (set on the signed-out branch too), NOT
+      // on a uid — requiring a uid is what made this silently no-op.
+      if (typeof window.openPricingModal === 'function' && window._authInitialized) {
         const t = sessionStorage.getItem('_pendingUpgradeTier');
         sessionStorage.removeItem('_pendingUpgradeTier');
         window._pendingUpgradeTier = null;
@@ -16771,7 +16784,18 @@ function setPricingMode(mode) {
 // derives them from the verified token.
 async function startTierCheckout(tier) {
   await window._waitForAuth();
-  if (!window.googleUser) { closePricingModal(); setTimeout(() => triggerGoogleSignIn(), 200); return; }
+  if (!window.googleUser) {
+    // 2026-09-01 (CR-013): re-stash the tier and interval so the deferred-open
+    // handler in onAuthStateChanged reopens this modal on the same plan and
+    // the same billing interval after sign-in, instead of dropping the intent.
+    try {
+      sessionStorage.setItem('_pendingUpgradeTier', tier);
+      sessionStorage.setItem('_pendingUpgradeInterval', window._pricingMode === 'annual' ? 'annual' : 'monthly');
+    } catch(_){}
+    closePricingModal();
+    setTimeout(() => triggerGoogleSignIn(), 200);
+    return;
+  }
   const interval = window._pricingMode === 'annual' ? 'annual' : 'monthly';
   window.trackEvent?.('checkout_attempt', { plan: `${tier}_${interval}` });
   const btnMap = { pro: 'pricingProBtn', pro_max: 'pricingMaxBtn', ultimate: 'pricingUltimateBtn' };

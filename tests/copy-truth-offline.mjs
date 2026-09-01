@@ -76,5 +76,23 @@ ok(/window\._pricingMode === 'annual' \? 'annual' : 'monthly'/.test(idx),
 }
 ok(idx.includes('id="pricingBox"'), 'pricingBox exists so setPricingMode will not early-return');
 
+// CR-013b — signed-out visitors from /pricing must not get a dead click.
+// Live browser run on 539ad08 showed: no modal, no sign-in prompt, params
+// stripped. Root cause was a uid requirement on the deferred-open gate.
+ok(!/window\._authInitialized && \(window\._user\?\.uid \|\| window\.googleUser\?\.uid\)/.test(idx),
+   'deferred pricing-modal open is no longer gated on a signed-in uid');
+{
+  const i = idx.indexOf('window._applyPendingUpgradeInterval = function');
+  const j = idx.indexOf('const upgradeParam');
+  ok(i > 0 && j > 0 && i < j,
+     'interval applier is hoisted above the ?upgrade= branch (sign-in round-trip needs it)');
+}
+ok(/sessionStorage\.setItem\('_pendingUpgradeTier', tier\)/.test(idx),
+   'signed-out plan click re-stashes the tier for the sign-in round-trip');
+ok(/sessionStorage\.setItem\('_pendingUpgradeInterval', window\._pricingMode === 'annual'/.test(idx),
+   'signed-out plan click re-stashes the interval too');
+ok(!/Signed-out users get the sign-in dialog first/.test(idx),
+   'stale comment claiming a sign-in dialog appears is gone');
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);
