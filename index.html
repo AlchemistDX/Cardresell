@@ -4131,6 +4131,49 @@ function loadExampleCard() {
 }
 try { window.loadExampleCard = loadExampleCard; } catch(_){}
 
+// 2026-09-01 (launch gate): a first-time visitor must land on a FINISHED
+// payout, not on "No card selected" and not on a dropdown they still have to
+// tap. This runs the real user path — doSearch() then a click on the first
+// printing — rather than hydrating a hardcoded card object, so the example can
+// never drift out of sync with the live catalog or the ranker.
+//
+// Deliberately does NOT focus the search input the way loadExampleCard() does:
+// focusing pops the soft keyboard on mobile over the very result we want them
+// to read.
+async function autoRunExampleCard() {
+  try {
+    if (activeGame !== 'pokemon') { try { onGameSelectChange('pokemon'); } catch(_){} }
+    const si = document.getElementById('searchInput');
+    if (si) si.value = 'Charizard';
+    try { window.trackEvent?.('example_card_auto', { name: 'Charizard' }); } catch(_){}
+    if (typeof doSearch !== 'function') return false;
+    doSearch('Charizard');
+
+    // Wait for the dropdown to populate, then take the top printing. Poll
+    // rather than use a fixed delay — search latency varies with cold caches.
+    const dl = document.getElementById('dropList');
+    if (!dl) return false;
+    for (let waited = 0; waited < 9000; waited += 150) {
+      const first = dl.querySelector('.drop-item');
+      if (first) {
+        // A real click so the existing handler runs: it builds the card via
+        // cardFactory, calls loadCardUI, and auto-fills the price override.
+        first.click();
+        try { dl.classList.remove('open'); } catch(_){}
+        return true;
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+    // Search never returned usable rows (API hiccup). Leave the hero and the
+    // "Try Charizard" CTA in place so the visitor still has a way forward.
+    return false;
+  } catch (err) {
+    console.warn('[autoRunExampleCard] failed:', err);
+    return false;
+  }
+}
+try { window.autoRunExampleCard = autoRunExampleCard; } catch(_){}
+
 function onGameSelectChange(game) {
   activeGame = game;
   try { window.activeGame = game; } catch(_) {} // 2026-08-22: expose for FastPath
@@ -17326,6 +17369,28 @@ window.addEventListener('load', () => {
   // and future visits show the neutral state.
   try {
     const _seen = localStorage.getItem('cs_landing_seen') === '1';
+    // 2026-09-01 (launch gate): only auto-run when there is genuinely nothing
+    // else to show — no deep link (it loads its own card) and no saved card
+    // (_restoreLastLoadedCard fires at 400ms and would race us).
+    let _hasSavedCard = false;
+    try { _hasSavedCard = !!localStorage.getItem(_CR_LAST_CARD_KEY); } catch(_){}
+    if (!_seen && !_hasDeepLink && !_hasSavedCard && typeof autoRunExampleCard === 'function') {
+      // Give the game selector and search wiring a beat to attach, then run.
+      setTimeout(() => {
+        autoRunExampleCard().then((ok) => {
+          if (!ok) {
+            // Fall back to the old attention pulse so a failed auto-run still
+            // leaves an obvious next action instead of a dead landing page.
+            document.body.classList.add('first-visit');
+            const _b = document.getElementById('tryExampleBtn');
+            if (_b) {
+              _b.classList.add('first-visit');
+              setTimeout(() => { _b.classList.remove('first-visit'); }, 6200);
+            }
+          }
+        });
+      }, 500);
+    }
     if (!_seen) {
       document.body.classList.add('first-visit');
       const _btn = document.getElementById('tryExampleBtn');

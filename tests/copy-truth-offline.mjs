@@ -94,5 +94,18 @@ ok(/sessionStorage\.setItem\('_pendingUpgradeInterval', window\._pricingMode ===
 ok(!/Signed-out users get the sign-in dialog first/.test(idx),
    'stale comment claiming a sign-in dialog appears is gone');
 
+// Launch gate — a first visit must land on a finished payout, not an empty
+// state or a dropdown the visitor still has to tap.
+ok(/async function autoRunExampleCard\(\)/.test(idx),
+   'autoRunExampleCard() exists');
+ok(/first\.click\(\)/.test(idx),
+   'auto-run clicks the first printing (reuses the real user path, no hardcoded card)');
+ok(!/autoRunExampleCard[\s\S]{0,400}si\.focus\(\)/.test(idx),
+   'auto-run does NOT focus the search input (would pop the mobile keyboard)');
+ok(/!_seen && !_hasDeepLink && !_hasSavedCard/.test(idx),
+   'auto-run is suppressed by a deep link or a saved card so it cannot race the restore path');
+ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('first-visit'\)/.test(idx),
+   'a failed auto-run falls back to the Try Charizard pulse');
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);
