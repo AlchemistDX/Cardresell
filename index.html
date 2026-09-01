@@ -17374,7 +17374,18 @@ window.addEventListener('load', () => {
     // (_restoreLastLoadedCard fires at 400ms and would race us).
     let _hasSavedCard = false;
     try { _hasSavedCard = !!localStorage.getItem(_CR_LAST_CARD_KEY); } catch(_){}
-    if (!_seen && !_hasDeepLink && !_hasSavedCard && typeof autoRunExampleCard === 'function') {
+    // Recompute the deep-link check locally. The _hasDeepLink above is a const
+    // scoped to a DIFFERENT try block, so reading it here threw a silent
+    // ReferenceError that the enclosing catch(_) swallowed — the auto-run never
+    // fired in production even though the code shipped. Verified in a browser.
+    let _deepLink = false;
+    try {
+      const _q = new URLSearchParams(location.search);
+      _deepLink = !!(_q.get('c') || _q.get('card') || _q.get('share')
+                     || _q.get('upgrade') || _q.get('packs') || _q.get('photo_tips')
+                     || location.pathname.startsWith('/grade/'));
+    } catch(_){}
+    if (!_seen && !_deepLink && !_hasSavedCard && typeof autoRunExampleCard === 'function') {
       // Give the game selector and search wiring a beat to attach, then run.
       setTimeout(() => {
         autoRunExampleCard().then((ok) => {

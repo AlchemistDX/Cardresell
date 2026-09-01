@@ -102,8 +102,19 @@ ok(/first\.click\(\)/.test(idx),
    'auto-run clicks the first printing (reuses the real user path, no hardcoded card)');
 ok(!/autoRunExampleCard[\s\S]{0,400}si\.focus\(\)/.test(idx),
    'auto-run does NOT focus the search input (would pop the mobile keyboard)');
-ok(/!_seen && !_hasDeepLink && !_hasSavedCard/.test(idx),
+ok(/!_seen && !_deepLink && !_hasSavedCard/.test(idx),
    'auto-run is suppressed by a deep link or a saved card so it cannot race the restore path');
+// The first attempt at this shipped green and still did nothing live: the guard
+// read _hasDeepLink, a const scoped to a different try block, so it threw a
+// ReferenceError that the enclosing catch(_) swallowed. Pin the local variable.
+{
+  const g = idx.indexOf("const _seen = localStorage.getItem('cs_landing_seen')");
+  const region = idx.slice(g, g + 2500);
+  ok(!/_hasDeepLink/.test(region.replace(/\/\/[^\n]*/g, '')),
+     'auto-run guard does not read _hasDeepLink from another block scope');
+  ok(/const _q = new URLSearchParams\(location\.search\)/.test(region),
+     'auto-run computes its own deep-link check in local scope');
+}
 ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('first-visit'\)/.test(idx),
    'a failed auto-run falls back to the Try Charizard pulse');
 
