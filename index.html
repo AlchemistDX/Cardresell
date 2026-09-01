@@ -239,6 +239,19 @@ img{display:block;max-width:100%;height:auto}
 .badge{font-size:.65rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:.2rem .55rem;border-radius:99px;background:var(--gold-hi);color:var(--gold);border:1px solid var(--gold-border)}
 .theme-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-muted);background:var(--surface);transition:all var(--ease)}
 .theme-btn:hover{background:var(--surface-off);color:var(--text)}
+/* Keep the conversion-critical Upgrade + Sign In controls readable on phones.
+   Settings and theme remain available on wider layouts; hiding them below
+   480px prevents the header from overlapping the CardResell wordmark. */
+@media(max-width:480px){
+  .wrap{padding-left:.75rem;padding-right:.75rem}
+  .hdr{gap:.45rem;padding:.8rem 0 1rem;margin-bottom:1rem}
+  .logo{min-width:0;flex-shrink:1}
+  .logo-text{font-size:1rem;white-space:nowrap}
+  .hdr-right{gap:.35rem;min-width:0;flex-shrink:0}
+  .hdr .settings-btn,.hdr .theme-btn{display:none!important}
+  #getProBtn{padding:.38rem .58rem;font-size:.68rem}
+  #googleSignInBtn{padding:.4rem .65rem!important;font-size:.72rem!important}
+}
 
 /* ─── SEARCH BAR ─── */
 .search-area{margin-bottom:1.5rem}
@@ -1783,9 +1796,9 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       ID Scan <span id="idScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.15rem"></span>
     </button>
-    <button class="scan-sub-btn bulk-sub" id="bulkScanSubBtn" onclick="openScanMenuOnTab('id')" title="Scan menu — ID and Grade">
+    <button class="scan-sub-btn bulk-sub" id="bulkScanSubBtn" onclick="openScanMenuOnTab('id')" title="Bulk card identification">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-      Bulk
+      Bulk ID
     </button>
     <button class="scan-sub-btn grade-sub" id="gradeScanSubBtn" onclick="openScanMenuOnTab('grade')" title="AI Grading — Quick or Deep">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
