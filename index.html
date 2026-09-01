@@ -2865,7 +2865,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
     <!-- 2026-08-20: Credits-never-expire trust line — always visible. -->
     <!-- 2026-08-30: strengthened with self-service refund policy: any Pro tier billed within 7 days that they haven't used gets refunded on request. -->
     <div style="margin:.15rem auto .55rem;padding:.35rem .8rem;max-width:520px;color:var(--text-muted);font-size:.68rem;text-align:center;line-height:1.4;font-weight:500">
-      🔒 Cancel anytime · <strong style="color:#4ade80">7-day money-back guarantee</strong> · credits never expire · no contract
+      🔒 Cancel anytime · <strong style="color:#4ade80">failed scans refund automatically</strong> · credits never expire · no contract
     </div>
 
     <div class="pricing-cards">
@@ -2884,7 +2884,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>2 marketplaces:</strong> eBay + TCGPlayer</li>
           <li>Flip calc + Deal Score</li>
           <li class="faded">Top-up discounts</li>
-          <li class="faded">10 more marketplaces (Pro / Pro Max)</li>
+          <li class="faded">13 more marketplaces (Pro / Pro Max)</li>
         </ul>
         <button id="pricingFreeBtn" class="plan-btn free-btn" onclick="_freeTierCTA()">Current Plan</button>
       </div>
@@ -2903,7 +2903,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>10% off</strong> top-up packs</li>
           <li><strong>+3 marketplaces:</strong> Poshmark, Whatnot, Mercari</li>
           <li><strong>+2 MTG marketplaces:</strong> Mana Pool, Cardsphere</li>
-          <li><strong>+1 all-TCG marketplace:</strong> Cardmarket (EU audience)</li>
+          <li><strong>+2 all-TCG marketplaces:</strong> Cardmarket, CardNexus</li>
           <li>Payout bar chart + <strong>unlimited</strong> flips</li>
           <li>Deal Score + Max Buy</li>
           <li>Skip one bad PSA sub → saves a year</li>
@@ -2926,7 +2926,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
           <li><strong>100 ID scans/mo</strong></li>
           <li><strong>15% off</strong> top-up packs</li>
           <li><strong>+2 pro marketplaces:</strong> COMC, Fanatics Collect</li>
-          <li><strong>+2 buylists:</strong> Card Kingdom, CoolStuffInc (instant offers)</li>
+          <li><strong>+4 buylists:</strong> Card Kingdom, CoolStuffInc, Star City Games, TCG Bulk</li>
           <li><strong>All 15 venues</strong> unlocked</li>
           <li>Everything in Pro</li>
           <li>Priority email support</li>
@@ -7315,9 +7315,9 @@ const PLATFORMS = {
 
 // TIER-BASED PLATFORM GATING — by effort level, ladder is unambiguous:
 //   Free      → easy listing platforms (eBay, TCGPlayer) — 2
-//   Pro       → + medium listing (Poshmark, Whatnot, Mercari, Cardmarket) + MTG (Mana Pool, Cardsphere) — 8
-//   Pro Max   → + hard listing (COMC, Fanatics Collect) + buylists (Card Kingdom, CoolStuffInc) — 12 (all)
-//   Ultimate  → all 12 (same platforms; extras are volume/support perks)
+//   Pro       → + medium listing (Poshmark, Whatnot, Mercari, Cardmarket, CardNexus) + MTG (Mana Pool, Cardsphere) — 9
+//   Pro Max   → + hard listing (COMC, Fanatics) + buylists (Card Kingdom, CoolStuffInc, Star City Games, TCG Bulk) — 15 (all)
+//   Ultimate  → all 15 (same platforms; extras are volume/support perks)
 // Note: PWCC was retired Jul 15, 2024 and is fully part of Fanatics Collect.
 // Note: Mana Pool + Cardsphere are MTG-only — they'll only render when the
 // active card game is Magic. Eligibility is enforced in the results loop.
@@ -7898,7 +7898,7 @@ function calc() {
     else if (isWin)  badgeHtml = `<span class="badge-best">Best</span>`;
     else if (isWrst) badgeHtml = `<span class="badge-worst">Lowest</span>`;
     else {
-      // 2026-08-29: Extend rank badges past 5th so all 12 tiles show their place.
+      // 2026-08-29: Extend rank badges past 5th so all 15 tiles show their place.
       // Ranks 1-5 keep the gold badge; 6-12 use a muted grey badge.
       const rankIdx = eligible.indexOf(r);
       const rankMap = ['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th'];
@@ -16836,7 +16836,7 @@ function calcGradingRoi() {
             box.style.cssText = 'margin-top:.7rem;padding:.75rem .9rem;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;display:flex;flex-direction:column;gap:.55rem';
             box.innerHTML =
               '<div style="font-size:.74rem;color:rgba(255,255,255,.9);line-height:1.45">' +
-                '💰 <strong>This one flip pays for CardResell Pro for ' + Math.max(1, Math.floor(roi / 9.99)) + ' months.</strong> Unlock unlimited grade scans + all 12 marketplace payouts.' +
+                '💰 <strong>This one flip pays for CardResell Pro for ' + Math.max(1, Math.floor(roi / 9.99)) + ' months.</strong> Unlock more grade scans + all 15 marketplace payouts.' +
               '</div>' +
               '<button type="button" id="roiUpsellBtn" style="align-self:flex-start;background:var(--gold);color:#000;border:none;border-radius:8px;padding:.42rem 1.05rem;font-weight:800;font-size:.75rem;cursor:pointer">Upgrade to Pro — $9.99/mo</button>';
             host.appendChild(box);
@@ -17589,6 +17589,94 @@ function closeBulkModePicker() {
    ==================================================================== */
 window._liveCapState = { active: false, stream: null, onCapture: null, onCancel: null };
 
+/* ── Shared camera-zoom helper ──────────────────────────────────────────
+   2026-08-31: User asked for pinch-to-zoom on the camera flows. iOS
+   Safari and Chromium expose MediaStreamTrack.getCapabilities().zoom on
+   the back camera on most modern phones. We bind pinch-to-zoom on the
+   video element AND drive a visible slider so users who don't discover
+   pinch still have an obvious control.
+
+     video         — the <video> element
+     stream        — the active MediaStream
+     sliderEl      — the <input type=range> element (optional)
+     labelEl       — an element whose textContent shows "1.0x" (optional)
+     wrapEl        — the container that shows/hides the slider (optional)
+
+   Returns a teardown() that removes listeners. Safe no-op on browsers
+   without zoom capability — wrapEl stays hidden, pinch just does nothing.
+   ==================================================================== */
+function _camZoomBind(video, stream, sliderEl, labelEl, wrapEl) {
+  const noop = () => {};
+  if (!stream || !video) return noop;
+  const track = stream.getVideoTracks && stream.getVideoTracks()[0];
+  if (!track || !track.getCapabilities) return noop;
+  let caps = {};
+  try { caps = track.getCapabilities() || {}; } catch(_) { caps = {}; }
+  if (!('zoom' in caps)) {
+    if (wrapEl) wrapEl.style.display = 'none';
+    return noop;
+  }
+  const zMin = caps.zoom.min || 1;
+  const zMax = Math.min(caps.zoom.max || 1, 5); // cap at 5x — anything higher is mush on phone glass
+  const zStep = caps.zoom.step || 0.1;
+  let cur = Math.max(zMin, Math.min(zMax, 1));
+  if (zMax <= zMin + 0.01) { // camera exposes zoom but has zero range
+    if (wrapEl) wrapEl.style.display = 'none';
+    return noop;
+  }
+  if (wrapEl) wrapEl.style.display = 'flex';
+  if (sliderEl) {
+    sliderEl.min = String(zMin);
+    sliderEl.max = String(zMax);
+    sliderEl.step = String(zStep);
+    sliderEl.value = String(cur);
+  }
+  const apply = (z) => {
+    z = Math.max(zMin, Math.min(zMax, z));
+    if (Math.abs(z - cur) < zStep / 2) return;
+    cur = z;
+    try { track.applyConstraints({ advanced: [{ zoom: z }] }); } catch(_) {}
+    if (sliderEl) sliderEl.value = String(z);
+    if (labelEl) labelEl.textContent = z.toFixed(1) + 'x';
+  };
+  const onSlider = () => apply(parseFloat(sliderEl.value));
+  if (sliderEl) sliderEl.addEventListener('input', onSlider, { passive: true });
+  // Pinch-to-zoom on the video element itself
+  let baseDist = 0, baseZoom = cur;
+  const dist = (t) => {
+    const dx = t[0].clientX - t[1].clientX;
+    const dy = t[0].clientY - t[1].clientY;
+    return Math.hypot(dx, dy);
+  };
+  const onStart = (e) => {
+    if (e.touches && e.touches.length === 2) {
+      baseDist = dist(e.touches);
+      baseZoom = cur;
+    }
+  };
+  const onMove = (e) => {
+    if (e.touches && e.touches.length === 2 && baseDist > 0) {
+      e.preventDefault();
+      const scale = dist(e.touches) / baseDist;
+      apply(baseZoom * scale);
+    }
+  };
+  const onEnd = () => { baseDist = 0; };
+  video.addEventListener('touchstart', onStart, { passive: true });
+  video.addEventListener('touchmove', onMove,  { passive: false });
+  video.addEventListener('touchend',  onEnd,  { passive: true });
+  video.addEventListener('touchcancel', onEnd, { passive: true });
+  // Initialize label
+  if (labelEl) labelEl.textContent = cur.toFixed(1) + 'x';
+  return function teardown() {
+    if (sliderEl) sliderEl.removeEventListener('input', onSlider);
+    video.removeEventListener('touchstart', onStart);
+    video.removeEventListener('touchmove',  onMove);
+    video.removeEventListener('touchend',   onEnd);
+    video.removeEventListener('touchcancel', onEnd);
+  };
+}
+
 async function openLiveCameraCapture(opts) {
   const { label = 'Take photo', sublabel = '', onCapture, onCancel } = opts || {};
   if (!onCapture) { console.warn('[live-cap] onCapture required'); return; }
@@ -17624,6 +17712,10 @@ async function openLiveCameraCapture(opts) {
       '<div style="position:absolute;bottom:0;left:0;right:0;padding:1rem 1.25rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:.75rem;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);pointer-events:auto">' +
         '<button id="liveCapShutter" aria-label="Capture" style="width:78px;height:78px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform=\'scale(.92)\'" ontouchend="this.style.transform=\'scale(1)\'"></button>' +
       '</div>' +
+      '<div id="liveCapZoomWrap" style="display:none;position:absolute;bottom:160px;left:0;right:0;padding:0 1.5rem;align-items:center;gap:.75rem;pointer-events:auto">' +
+        '<span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:32px;text-align:center" id="liveCapZoomLabel">1.0x</span>' +
+        '<input id="liveCapZoomSlider" type="range" min="1" max="3" step="0.1" value="1" style="flex:1;height:4px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#c47a00" />' +
+      '</div>' +
       '<div id="liveCapFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>';
     document.body.appendChild(ov);
     // Wire buttons once
@@ -17645,6 +17737,16 @@ async function openLiveCameraCapture(opts) {
     window._liveCapState.stream = stream;
     video.srcObject = stream;
     await video.play().catch(()=>{});
+    // Wire zoom (pinch + slider) once video is playing
+    try {
+      if (window._liveCapZoomTeardown) window._liveCapZoomTeardown();
+      window._liveCapZoomTeardown = _camZoomBind(
+        video, stream,
+        document.getElementById('liveCapZoomSlider'),
+        document.getElementById('liveCapZoomLabel'),
+        document.getElementById('liveCapZoomWrap')
+      );
+    } catch(_){}
     _liveCapStartQA();
   } catch(err) {
     console.warn('[live-cap] getUserMedia failed', err);
@@ -17661,6 +17763,8 @@ function _liveCapCancel() {
 
 function _liveCapTeardown() {
   _liveCapStopQA();
+  try { if (window._liveCapZoomTeardown) window._liveCapZoomTeardown(); } catch(_){}
+  window._liveCapZoomTeardown = null;
   const s = window._liveCapState;
   if (s && s.stream) { try { s.stream.getTracks().forEach(t => t.stop()); } catch(_){} }
   const ov = document.getElementById('liveCapOverlay');
@@ -18906,6 +19010,16 @@ async function startBulkRapid() {
     window._bulkRapidStream = stream;
     video.srcObject = stream;
     await video.play().catch(()=>{});
+    // Wire zoom (pinch + slider) once video is playing
+    try {
+      if (window._bulkRapidZoomTeardown) window._bulkRapidZoomTeardown();
+      window._bulkRapidZoomTeardown = _camZoomBind(
+        video, stream,
+        document.getElementById('bulkRapidZoomSlider'),
+        document.getElementById('bulkRapidZoomLabel'),
+        document.getElementById('bulkRapidZoomWrap')
+      );
+    } catch(_){}
     // Kick off the live QA analyzer once video has real dimensions.
     _bulkRapidStartQA();
   } catch(err) {
@@ -19115,6 +19229,14 @@ function _bulkRapidRenderQA(hint) {
 function closeBulkRapid() {
   // Discard the rapid session and return to mode picker.
   try { _bulkRapidStopQA(); } catch(_) {}
+  try { if (window._bulkRapidZoomTeardown) window._bulkRapidZoomTeardown(); } catch(_) {}
+  window._bulkRapidZoomTeardown = null;
+  // Stop the camera stream so the phone LED turns off.
+  try {
+    const s = window._bulkRapidStream;
+    if (s) s.getTracks().forEach(t => t.stop());
+  } catch(_){}
+  window._bulkRapidStream = null;
   (window._bulkQueue || []).forEach(q => { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} });
   window._bulkQueue = [];
   window._bulkMode  = null;
@@ -20709,6 +20831,11 @@ function _esc(s) {
         <button id="bulkRapidShutter" onclick="bulkRapidSnap()" aria-label="Capture" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'"></button>
         <button id="bulkRapidDoneBtn" onclick="bulkRapidDone()" style="width:70px;padding:.55rem .35rem;background:rgba(139,92,246,1);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.75rem;cursor:pointer;line-height:1.15;opacity:.5" disabled>Done ⚡</button>
       </div>
+      <!-- Zoom slider (hidden on browsers without zoom capability) -->
+      <div id="bulkRapidZoomWrap" style="display:none;position:absolute;bottom:160px;left:0;right:0;padding:0 1.5rem;align-items:center;gap:.75rem;pointer-events:auto">
+        <span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:32px;text-align:center" id="bulkRapidZoomLabel">1.0x</span>
+        <input id="bulkRapidZoomSlider" type="range" min="1" max="3" step="0.1" value="1" style="flex:1;height:4px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#8b5cf6" />
+      </div>
       <!-- Flash effect -->
       <div id="bulkRapidFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>
     </div>
@@ -21070,7 +21197,7 @@ function _esc(s) {
       • 40 AI Grades/mo · 100 ID scans/mo<br>
       • 15% off top-up packs<br>
       • <strong style="color:#fff">Bulk Grade tool</strong> (this one)<br>
-      • All 12 marketplaces unlocked<br>
+      • All 15 marketplaces unlocked<br>
       • COMC, Fanatics, Card Kingdom, CoolStuffInc buylists
     </div>
     <button onclick="closeBulkGrade();openPricingModal('bulk_grade_gate')" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">Upgrade to Pro Max — $19.99/mo</button>
