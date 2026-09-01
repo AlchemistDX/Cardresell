@@ -16741,7 +16741,9 @@ function openGradedScanGate() {
   // Always try to open the camera — server is the source of truth on credits.
   // If credits are actually 0, the server returns 402 and the gate modal opens then.
   // This avoids race conditions where _scanCredits hasn't loaded yet.
-  document.getElementById('scanFileInput').click();
+  // 2026-09-01: Route through the live camera overlay for consistency with
+  // the other scan entry points.
+  _startSingleScanCapture();
 }
 
 function closeScanGate(evt) {
