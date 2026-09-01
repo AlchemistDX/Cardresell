@@ -17767,17 +17767,21 @@ function _liveCapQATick() {
   const lapMean = lapSum / Math.max(1, lapN);
   const lapVar  = (lapSqSum / Math.max(1, lapN)) - lapMean*lapMean;
 
+  // 2026-08-31: readable-not-perfect — see the matching comment above the
+  // Rapid-Scan variant of this block. The old frame check fired on any
+  // bright surface behind the card. Grade capture needs the card readable,
+  // not pixel-aligned; the pipeline handles minor crop and rotation fine.
   let hint = null;
-  if (centerMean > 8 && borderMean > centerMean * 0.88) {
-    hint = { id: 'frame',  icon: '\uD83C\uDFAF', text: 'Card not in the frame' };
-  } else if (meanLuma < 42) {
+  if (meanLuma < 42) {
     hint = { id: 'dark',   icon: '\uD83C\uDF19', text: 'Too dark \u2014 more light please' };
-  } else if (meanLuma > 218) {
+  } else if (meanLuma > 220) {
     hint = { id: 'bright', icon: '\u2600\uFE0F', text: 'Too bright \u2014 ease off the light' };
-  } else if (hotCount > N * 0.012) {
+  } else if (hotCount > N * 0.020) {
     hint = { id: 'glare',  icon: '\u2728', text: 'Glare on the card \u2014 tilt slightly' };
-  } else if (lapVar < 55) {
+  } else if (lapVar < 40) {
     hint = { id: 'blur',   icon: '\uD83D\uDCA8', text: 'Blurry \u2014 hold steady' };
+  } else if (lapVar < 25 && (centerMean < 18 || Math.abs(centerMean - borderMean) < 3)) {
+    hint = { id: 'empty',  icon: '\uD83D\uDCF7', text: 'Point the camera at your card' };
   }
 
   const candId = hint ? hint.id : null;
@@ -18106,11 +18110,12 @@ async function analyzePhotoQuality(file) {
     const borderMean = borderN ? borderGrad / borderN : 0;
     const centerMean = centerN ? centerGrad / centerN : 1;
     stats.cardInFrame = 1 - Math.min(1, borderMean / (centerMean + 1e-6));
-    // Fire only when border activity is nearly as high as center activity — that's
-    // when the card is bleeding out of frame or the crop is way off.
-    if (borderMean > centerMean * 0.85 && borderMean > 8) {
-      warnings.push({ type: 'frame', msg: 'Card may be cropped — leave a little margin around all 4 sides' });
-    }
+    // 2026-08-31: removed the speculative "Card may be cropped" warning.
+    // The heuristic (border edge activity vs center) fires on bright-
+    // background photos of perfectly-framed cards. False positives eroded
+    // trust more than the rare real crop was worth. Grade pipeline handles
+    // small crops fine; if the card is actually gone the recognizer will
+    // low-confidence and refund the credit automatically.
     bmp.close && bmp.close();
   } catch(err) {
     // Never fail-fast on QA errors — just return no warnings.
@@ -19017,19 +19022,38 @@ function _bulkRapidQATick() {
   const lapMean = lapSum / Math.max(1, lapN);
   const lapVar  = (lapSqSum / Math.max(1, lapN)) - lapMean*lapMean;
 
-  // Decide which single hint to show. Priority order: framing > lighting > glare > blur.
-  // (Framing kills grades hardest; blur is often user-fixable by holding still.)
+  // 2026-08-31: readable-not-perfect rule.
+  // Old rule fired "Card not in the frame" whenever border luma > 88% of
+  // center luma. On a bright wood table the border luma is high whether
+  // or not the card is centered, so it fired on perfectly readable cards
+  // (user screenshots IMG_4046-4048). The ID pipeline handles rotated,
+  // off-center, and cropped cards fine \u2014 so the assistant should not
+  // demand pixel-perfect alignment. It only needs to warn when the photo
+  // will actually be unreadable: too dark, too bright, blown-out glare,
+  // heavy blur, or genuinely no card in the frame at all.
+  //
+  // "No card at all" = the frame is nearly uniform (very low Laplacian
+  // variance and very low luma range) which means we're staring at a
+  // blank surface, not a card.
+  //
+  // When none of those fire, we return null \u2192 the renderer shows a green
+  // "Looks good \u2014 tap the shutter" confirmation instead of hiding the bar.
   let hint = null;
-  if (centerMean > 8 && borderMean > centerMean * 0.88) {
-    hint = { id: 'frame', icon: '🎯', text: 'Card not in the frame' };
-  } else if (meanLuma < 42) {
-    hint = { id: 'dark',  icon: '🌙', text: 'Too dark — more light please' };
-  } else if (meanLuma > 218) {
-    hint = { id: 'bright',icon: '☀️', text: 'Too bright — ease off the light' };
-  } else if (hotCount > N * 0.012) {
-    hint = { id: 'glare', icon: '✨', text: 'Glare on the card — tilt slightly' };
-  } else if (lapVar < 55) {
-    hint = { id: 'blur',  icon: '💨', text: 'Blurry — hold steady' };
+  if (meanLuma < 42) {
+    hint = { id: 'dark',  icon: '🌙', text: 'Too dark \u2014 more light please' };
+  } else if (meanLuma > 220) {
+    hint = { id: 'bright',icon: '☀️', text: 'Too bright \u2014 ease off the light' };
+  } else if (hotCount > N * 0.020) {
+    // Raised from 1.2% to 2.0% \u2014 holo cards legitimately have small
+    // shiny spots that are not user-fixable glare.
+    hint = { id: 'glare', icon: '✨', text: 'Glare on the card \u2014 tilt slightly' };
+  } else if (lapVar < 40) {
+    // Lowered from 55 to 40 \u2014 tighter cameras produce lower Laplacian
+    // variance even on sharp images; 55 was firing on in-focus phone shots.
+    hint = { id: 'blur',  icon: '💨', text: 'Blurry \u2014 hold steady' };
+  } else if (lapVar < 25 && (centerMean < 18 || Math.abs(centerMean - borderMean) < 3)) {
+    // Genuine "no card visible" state: flat, low-detail frame.
+    hint = { id: 'empty', icon: '📷', text: 'Point the camera at your card' };
   }
 
   // Debounce: require 2 consecutive samples (~500ms) agreeing before we
@@ -19054,11 +19078,22 @@ function _bulkRapidRenderQA(hint) {
   const pill  = document.getElementById('bulkRapidQAPill');
   const frame = document.getElementById('bulkRapidFrame');
   if (!bar) return;
+  // 2026-08-31: When no hint fires, actively confirm the frame is good
+  // instead of hiding the bar. Users read silence as "the app isn't working"
+  // or worse, "the app hates my card." Explicit green confirmation removes
+  // that ambiguity and tells them the shutter is the next action.
   if (!hint) {
-    bar.style.display = 'none';
+    if (icon) icon.textContent = '\u2713'; // check mark
+    if (text) text.textContent = 'Looks good \u2014 tap the shutter';
+    bar.style.display = 'flex';
+    if (pill) {
+      pill.style.background  = 'rgba(34,197,94,.92)';   // green
+      pill.style.borderColor = 'rgba(134,239,172,.55)';
+      pill.style.color       = '#062611';
+    }
     if (frame) {
-      frame.style.borderColor = 'rgba(74,222,128,.85)'; // green
-      frame.style.boxShadow   = '0 0 0 9999px rgba(0,0,0,.35), 0 0 22px rgba(74,222,128,.35)';
+      frame.style.borderColor = 'rgba(74,222,128,.9)'; // green
+      frame.style.boxShadow   = '0 0 0 9999px rgba(0,0,0,.35), 0 0 22px rgba(74,222,128,.4)';
     }
     return;
   }
@@ -20900,6 +20935,18 @@ function _esc(s) {
     <!-- ==================== ID PANEL ==================== -->
     <div id="scanMenuPanelId" style="display:flex;flex-direction:column;gap:.55rem">
       <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;line-height:1.45">Identify + price cards. Uses <strong style="color:#fff">ID credits</strong>.</div>
+
+      <!-- Single Scan (2026-08-31) — collector on-ramp. One photo, one tap.
+           Uses the existing hidden #scanFileInput (native camera) so we don't
+           duplicate any capture code. Green treatment marks it as the default. -->
+      <button onclick="closeBulkModePicker();document.getElementById('scanFileInput').click()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.5);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(74,222,128,.9)'" onmouseout="this.style.borderColor='rgba(34,197,94,.5)'">
+        <div style="width:38px;height:38px;flex-shrink:0;background:rgba(34,197,94,.16);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.9rem;font-weight:800">Single Scan <span style="font-size:.55rem;background:rgba(74,222,128,.9);color:#062611;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">START HERE</span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Point, tap, see what it's worth. <strong style="color:rgba(74,222,128,.95)">1 ID credit</strong> · 1 photo · fastest for one card</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
 
       <!-- Bulk ID Scan -->
       <button onclick="closeBulkModePicker();openBulkScan()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
