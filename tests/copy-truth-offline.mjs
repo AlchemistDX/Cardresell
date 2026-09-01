@@ -132,17 +132,21 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 // BOTH were captioned "TCGPlayer market". The override is filled from a 3-rung
 // ladder (eBay median > PriceCharting > TCG market), so the caption has to name
 // the rung that actually won rather than whatever selectedCard.source was.
+// The rung labels now live where the rung is CHOSEN (_basisMeta), so the caption
+// cannot drift from the number: same assignment, same branch.
 {
-  const f = idx.indexOf('ovField.value = Number(bestPrice).toFixed(2)');
-  ok(f > 0, 'comps pipeline still fills the override from the ladder');
-  const region = idx.slice(f, f + 1800);
+  const f = idx.indexOf('let _basisMeta = null;');
+  ok(f > 0, 'the ladder records which rung it took');
+  const region = idx.slice(f, f + 2600);
   ok(/eBay sold median/.test(region),  'caption can name eBay sold median');
   ok(/PriceCharting guide value/.test(region), 'caption can name PriceCharting');
   ok(/TCGPlayer market/.test(region),  'caption can name TCGPlayer market');
   ok(/ebay\.count\} comps/.test(region),
      'the eBay caption discloses how many comps are behind the median');
-  ok(/priceSource\.textContent = _srcLabel/.test(region),
+  ok(idx.includes('priceSource.textContent = _srcLabel'),
      'the caption element is updated when the override is filled');
+  ok(/_srcLabel = \(window\._crBasis && window\._crBasis\.label\)/.test(idx),
+     'the caption reads the recorded rung label, not a float comparison');
 }
 
 // -- Icons and social preview (2026-09-01) ----------------------------------
@@ -216,11 +220,11 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   // currentPrices (see the condition-multiplier block below) rather than written
   // into the override, so the raw branch's first rung deliberately yields null.
   const rawBranch = ladder.slice(ladder.indexOf('Raw context'));
-  const iTcg  = rawBranch.indexOf('_tcgFreshVariant');
+  const iTcg  = rawBranch.indexOf('bestPrice = tcg.market');
   const iEbay = rawBranch.indexOf('bestPrice = ebay.median');
   const iPc   = rawBranch.indexOf('bestPrice = pc.median');
   ok(iTcg >= 0 && iEbay >= 0 && iPc >= 0, 'raw ladder keeps all three rungs');
-  ok(iTcg < iEbay, 'raw ladder checks the fresh TCG basis before eBay comps');
+  ok(iTcg < iEbay, 'raw ladder anchors on TCGplayer market before eBay comps');
   ok(iEbay < iPc, 'eBay comps still outrank the PriceCharting backstop when present');
 }
 
@@ -243,17 +247,62 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   ok(/_ovAutoFilled = false/.test(idx.slice(inp, inp + 400)),
      'typing in the override clears the auto-fill flag');
 
-  // Fresh tcgcsv becomes the display basis instead of a second override write.
-  ok(/currentPrices\[_k\] = Object\.assign/.test(idx),
-     'fresh tcg-price figures are injected into currentPrices as the basis');
-  ok(/window\._tcgFreshVariant/.test(idx), 'the injected variant is tracked');
+  // ONE basis: the ladder records it, the headline renders from it.
+  ok(/window\._crBasis = \{/.test(idx), 'the ladder records the basis it chose');
+  ok(!/_tcgFreshVariant/.test(idx),
+     'the dead currentPrices injection is gone (it matched printing names against condition keys)');
+  const upd = idx.indexOf('function updatePriceFromPrinting()');
+  const updBody = idx.slice(upd, upd + 2200);
+  ok(/window\._crBasis && window\._ovAutoFilled && !isGradedVariant\(key\)/.test(updBody),
+     'the headline renders from the basis when the system owns the number');
+  ok(/priceMain\.textContent = `\$\$\{\(b\.value \* m\)\.toFixed\(2\)\}`/.test(updBody),
+     'headline = basis x condition multiplier, the same product getEffectivePrice uses');
+  ok(/priceSource\.textContent = b\.label;[\s\S]{0,80}calc\(\);[\s\S]{0,20}return;/.test(updBody),
+     'the basis branch returns before the tail can relabel the caption from selectedCard.source');
   const rawB = idx.slice(idx.indexOf('Raw context'));
-  ok(rawB.indexOf('bestPrice = null;') < rawB.indexOf('bestPrice = ebay.median'),
-     'raw path does not double-book TCG market into the override');
+  ok(rawB.indexOf("_basisMeta = { label: 'TCGPlayer market'") < rawB.indexOf('bestPrice = ebay.median'),
+     'TCG market is the first raw rung and labels itself');
+  ok(!/bestPrice === \(ebay && ebay\.median\)/.test(idx),
+     'the caption no longer guesses the rung by float comparison');
 
   // Hand-computed: a $422.40 NM basis at Moderately Played (0.65) is $274.56.
   ok(Math.abs(422.40 * 0.65 - 274.56) < 0.005, 'MP multiplier fixture is 0.65');
   ok(/mp: 0\.65/.test(idx), 'MP multiplier in code is still 0.65');
+}
+
+// -- Single-decision venue unlock (2026-09-01) -----------------------------
+{
+  ok(/function startVenueUnlock\(source\)/.test(idx), 'startVenueUnlock exists');
+  const f = idx.indexOf('function startVenueUnlock(source)');
+  const body = idx.slice(f, f + 1200);
+  ok(/tier === 'free' \? 'pro' : 'pro_max'/.test(body), 'Free upgrades to Pro, Pro upgrades to Pro Max');
+  ok(/_pricingMode = 'monthly'/.test(body), 'an impulse unlock defaults to monthly, not annual');
+  ok(/startTierCheckout\(target\)/.test(body), 'it goes straight to checkout');
+
+  // The high-intent click must not reopen the 4-plan wall.
+  ok(!idx.includes("openPricingModal('calc_gate')"), 'the locked-venue card no longer opens the plan wall');
+  ok(idx.includes("openPricingModal('calc_gate_compare')"), 'a "Compare all plans" escape hatch still exists');
+  ok(!/openPricingModal && openPricingModal\('ranking_strip_unlock'\)/.test(idx),
+     'blurred ranking rows go to checkout, not the wall');
+
+  // The CTA number must be what the TARGET tier unlocks, not what is locked.
+  ok(/See \$\{_targetUnlockCount\} more venue/.test(idx),
+     'CTA counts what the target tier actually unlocks');
+  ok(!/See \$\{_lockedCount\} more venue/.test(idx),
+     'CTA does not count all locked venues');
+  ok(/_beyondCount > 0 \? ` · \+\$\{_beyondCount\} more on Pro Max`/.test(idx),
+     'venues beyond the target tier are disclosed, not implied as included');
+
+  // Hand-computed from the tier sets, independently of the page's own math:
+  // Free sees 2, Pro sees 9, Pro Max sees 15. A Free user has 13 locked, of
+  // which Pro unlocks 7 and Pro Max the remaining 6.
+  const FREE = ['ebay','tcgplayer'];
+  const PRO  = ['ebay','tcgplayer','poshmark','whatnot','mercari','manapool','cardsphere','cardmarket','cardnexus'];
+  const MAXP = PRO.concat(['comc','fanatics','cardkingdom','coolstuffinc','scg','tcgbulk']);
+  ok(FREE.length === 2 && PRO.length === 9 && MAXP.length === 15, 'tier venue counts are 2 / 9 / 15');
+  ok(PRO.filter(p => !FREE.includes(p)).length === 7, 'Pro adds exactly 7 venues over Free');
+  ok(MAXP.filter(p => !PRO.includes(p)).length === 6, 'Pro Max adds exactly 6 venues over Pro');
+  for (const pid of PRO) ok(idx.includes(`'${pid}'`), `PRO_PLATFORMS still lists ${pid}`);
 }
 
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');

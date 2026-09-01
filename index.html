@@ -5607,44 +5607,13 @@ async function fetchAndApplySoldComps(forceRefresh) {
   //   For a RAW request:
   //     eBay comps (≥2) > PC (raw/loose) > TCG market
   //   TCG stays as the always-there floor for raw — it's live market data.
-  // 2026-09-01 (launch gate): reconcile the DISPLAYED price with the price the
-  // payouts are computed from.
-  //
-  // The "Market Value" headline reads currentPrices[variant].market from the
-  // embedded per-variant feed (pokemontcg.io), while payouts read the override.
-  // Those are two different feeds for the same metric and they disagree — same
-  // Base Set 2 Charizard, same day: embedded $489.11 vs tcgcsv $422.40. So the
-  // headline said one thing and every payout row was computed from another.
-  //
-  // Fix: when /api/tcg-price returns a fresh figure for the variant the user is
-  // actually looking at, write it into currentPrices and re-render. The headline
-  // and getEffectivePrice() then read the SAME basis, the Low/Mid/High row gets
-  // refreshed too, and the condition multiplier keeps working because it is
-  // applied on top of the basis rather than baked into an override.
-  try {
-    if (tcg && tcg.market != null && tcg.variant && currentPrices) {
-      const _k = Object.keys(currentPrices).find(k => k === tcg.variant)
-              || Object.keys(currentPrices).find(k => k.toLowerCase() === String(tcg.variant).toLowerCase());
-      if (_k && !isGradedVariant(_k)) {
-        const _prev = currentPrices[_k] || {};
-        currentPrices[_k] = Object.assign({}, _prev, {
-          market: tcg.market,
-          low:  tcg.low  != null ? tcg.low  : _prev.low,
-          mid:  tcg.mid  != null ? tcg.mid  : _prev.mid,
-          high: tcg.high != null ? tcg.high : _prev.high,
-        });
-        window._tcgFreshVariant = _k;
-        if (printSelect && printSelect.value === _k) updatePriceFromPrinting();
-      }
-    }
-  } catch(_) {}
-
   const ovField = document.getElementById('priceOverride');
   const currentGraderPill = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const gradedRequest     = !!grade;
   const isRawContext      = currentGraderPill === 'no' && !gradedRequest;
   if (ovField && (isRawContext || gradedRequest) && (!ovField.value || forceRefresh)) {
     let bestPrice = null;
+    let _basisMeta = null;
     if (gradedRequest) {
       if (pc && pc.median != null && pc.source === 'pricecharting') {
         bestPrice = pc.median;
@@ -5668,22 +5637,29 @@ async function fetchAndApplySoldComps(forceRefresh) {
       //      anchor must not change when a stranger hits refresh.
       // eBay median is kept as the second rung so it takes over automatically if
       // comps ever come back, and PriceCharting remains the backstop.
-      // TCG market is NOT written into the override here — it was just injected
-      // into currentPrices above as the display basis, and getEffectivePrice()
-      // already falls through to that basis and applies the condition
-      // multiplier. Writing it here too would double-book the same number into
-      // a field that bypasses condition adjustment.
-      if (window._tcgFreshVariant && printSelect
-          && printSelect.value === window._tcgFreshVariant) {
-        bestPrice = null;
+      if (tcg && tcg.market != null) {
+        bestPrice = tcg.market;
+        _basisMeta = { label: 'TCGPlayer market', low: tcg.low, mid: tcg.mid, high: tcg.high };
       } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
+        _basisMeta = { label: `eBay sold median · ${ebay.count} comps` };
       } else if (pc && pc.median != null && pc.source === 'pricecharting') {
         bestPrice = pc.median;
+        _basisMeta = { label: 'PriceCharting guide value' };
       }
     }
     if (bestPrice != null) {
       ovField.value = Number(bestPrice).toFixed(2);
+      // The single basis. updatePriceFromPrinting() renders the headline from
+      // THIS, so "Market Value" and every payout row are guaranteed to be the
+      // same number times the same condition multiplier — no second feed.
+      window._crBasis = {
+        value: Number(bestPrice),
+        label: (_basisMeta && _basisMeta.label) || '',
+        low:  _basisMeta ? _basisMeta.low  : null,
+        mid:  _basisMeta ? _basisMeta.mid  : null,
+        high: _basisMeta ? _basisMeta.high : null,
+      };
       // Remember that WE filled this, not the user. A user-typed number is the
       // price they expect to actually sell at, so it must be used verbatim; a
       // system-filled number is a Near-Mint basis and has to be condition
@@ -5698,11 +5674,10 @@ async function fetchAndApplySoldComps(forceRefresh) {
       // "TCGPlayer market". The number moving is a data question; the caption
       // naming a source that did not produce it is just untrue, so fix that.
       try {
-        const _srcLabel =
-          (bestPrice === (ebay && ebay.median)) ? `eBay sold median · ${ebay.count} comps`
-          : (bestPrice === (pc && pc.median))   ? 'PriceCharting guide value'
-          : (bestPrice === (tcg && tcg.market)) ? 'TCGPlayer market'
-          : '';
+        // Was: guess the rung by float-comparing bestPrice against each source.
+        // Two feeds agreeing to the cent would mislabel it. The ladder now
+        // records which rung it took, so just read that.
+        const _srcLabel = (window._crBasis && window._crBasis.label) || '';
         if (_srcLabel && priceSource) {
           priceSource.textContent = _srcLabel;
           window._ovFilledBy = _srcLabel;
@@ -6179,8 +6154,8 @@ function loadCardUI(card) {
 
   // Clear price override on new card load
   if (priceOverride) priceOverride.value = '';
-  window._ovAutoFilled = false;   // new card: no system basis in the field yet
-  window._tcgFreshVariant = null; // and no fresh tcgcsv figure injected yet
+  window._ovAutoFilled = false;  // new card: no system basis in the field yet
+  window._crBasis = null;        // and no basis to render the headline from
 
   // Reset comps status
   _compsAbortCard = null;
@@ -6549,6 +6524,30 @@ function formatVariantName(v) {
 // ── Update price display from current printing selection ──
 function updatePriceFromPrinting() {
   const key = printSelect.value;
+  // 2026-09-01 (launch gate): when the price ladder produced the number that
+  // the payouts are computed from, the headline MUST render from that same
+  // number. Otherwise "Market Value" shows one feed (the embedded per-card
+  // price) while every payout row is computed from another — verified live as
+  // a $489.11 headline sitting above payouts derived from $272.56.
+  //
+  // This also fixes a second, sneakier bug: the tail of this function rewrote
+  // priceSource from selectedCard.source, so merely clicking a condition pill
+  // relabelled a PriceCharting-derived number as "TCGPriceLookup · Updated
+  // daily". The caption used to drift away from the truth on an unrelated click.
+  if (window._crBasis && window._ovAutoFilled && !isGradedVariant(key)) {
+    const b = window._crBasis;
+    const m = getCondMultiplier();
+    priceMain.textContent = `$${(b.value * m).toFixed(2)}`;
+    priceMain.style.color = 'var(--text)';
+    const rp = [];
+    if (b.low  != null && b.low  > 0) rp.push(`Low $${(b.low  * m).toFixed(2)}`);
+    if (b.mid  != null && b.mid  > 0) rp.push(`Mid $${(b.mid  * m).toFixed(2)}`);
+    if (b.high != null && b.high > 0) rp.push(`High $${(b.high * m).toFixed(2)}`);
+    priceRange.textContent = rp.join(' · ');
+    priceSource.textContent = b.label;
+    calc();
+    return;
+  }
   const p = currentPrices[key];
 
   if (!p || p.market == null) {
@@ -8261,7 +8260,7 @@ function calc() {
         const p = PLATFORMS[r.pid];
         const rowIdx = unlockedRank.length + idx + 1;
         const pct = Math.max(6, (r.netPayout / rankBest) * 100);
-        html += `<div class="payout-rank-row payout-rank-locked" role="listitem" onclick="(function(){ try{ window.trackEvent && window.trackEvent('ranking_locked_row_clicked', { source: 'ranking_strip' }); }catch(_){}; openPricingModal && openPricingModal('ranking_strip_unlock'); })()">
+        html += `<div class="payout-rank-row payout-rank-locked" role="listitem" onclick="(function(){ try{ window.trackEvent && window.trackEvent('ranking_locked_row_clicked', { source: 'ranking_strip' }); }catch(_){}; window.startVenueUnlock && window.startVenueUnlock('ranking_strip'); })()">
           <div class="payout-rank-rank">${rowIdx}</div>
           <div class="payout-rank-emoji">${p.emoji}</div>
           <div class="payout-rank-name">${p.name}</div>
@@ -8552,11 +8551,24 @@ function calc() {
     // Foreign-operated venues keep their flag even in the locked teaser list,
     // so a seller knows before paying that some of what they're unlocking is
     // a non-US company with its own currency and eligibility rules.
-    const _lockedNames = proOnlyResults
+    // 2026-09-01 (launch gate): the CTA must promise what the TARGET tier
+    // actually unlocks, not how many venues happen to be locked.
+    //
+    // proOnlyResults is every locked eligible venue — 13 of them for a Free
+    // user. But Pro only adds 7 (Free 2 -> Pro 9); the other 6 need Pro Max. So
+    // a button reading "See 13 more venues — $9.99/mo" was a straightforward
+    // false claim, and exactly the kind /accuracy exists to rule out.
+    const _targetVisible     = platformsForTier(_uTier === 'free' ? 'pro' : 'pro_max');
+    const _targetUnlocks     = proOnlyResults.filter(r => _targetVisible.has(r.pid));
+    const _targetUnlockCount = _targetUnlocks.length;
+    const _beyondCount       = proOnlyResults.length - _targetUnlockCount;
+    // Name the venues the money being asked for actually buys, and disclose the
+    // remainder as a higher tier rather than letting them read as included.
+    const _lockedNames = (_targetUnlocks.length ? _targetUnlocks : proOnlyResults)
       .map(r => PLATFORMS[r.pid].name + (CROSS_BORDER[r.pid]?.foreign ? ` ${CROSS_BORDER[r.pid].flag}` : ''))
-      .join(', ');
+      .join(', ') + (_beyondCount > 0 ? ` · +${_beyondCount} more on Pro Max` : '');
     html += `
-    <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="openPricingModal('calc_gate')">
+    <div class="plat-card" style="background:linear-gradient(135deg,rgba(196,122,0,.10),rgba(196,122,0,.05));border:1.5px solid rgba(196,122,0,.4);cursor:pointer;position:relative;overflow:hidden" onclick="startVenueUnlock('calc_gate_card')">
       <div class="plat-accent" style="background:linear-gradient(135deg,#b8860b,#f5c518)"></div>
       <div class="plat-hdr" style="margin-bottom:.3rem">
         <span class="plat-name">&#11088; ${_lockedLabel}</span>
@@ -8569,8 +8581,9 @@ function calc() {
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
-        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();openPricingModal('calc_gate')">Unlock ${_lockedCount} more marketplace${_lockedCount === 1 ? '' : 's'} — ${esc(_upgradePrice)}</button>
+        <button class="pro-gate-btn" style="font-size:.78rem;padding:.45rem 1.2rem;width:100%" onclick="event.stopPropagation();startVenueUnlock('calc_gate_btn')">See ${_targetUnlockCount} more venue${_targetUnlockCount === 1 ? '' : 's'} — ${esc(_upgradePrice)}</button>
         <div style="font-size:.66rem;color:var(--text-faint);margin-top:.35rem">${esc(_lockedNames)}</div>
+        <button type="button" style="background:none;border:0;padding:.3rem;margin-top:.15rem;font-size:.66rem;color:var(--text-faint);text-decoration:underline;cursor:pointer" onclick="event.stopPropagation();openPricingModal('calc_gate_compare')">Compare all plans</button>
       </div>
     </div>`;
 
@@ -16922,6 +16935,32 @@ function setPricingMode(mode) {
 // 2026-09-01 [SECURITY]: identity is proven via Firebase ID token in the
 // Authorization header. Body no longer sends email/userId — the server
 // derives them from the verified token.
+// 2026-09-01 (launch gate): single-decision venue unlock.
+//
+// Every locked-venue affordance — the teaser card, its button, and each blurred
+// ranking row — used to open the 4-plan pricing wall. At that exact moment the
+// visitor wants ONE thing: to see the payouts that are blurred in front of them.
+// Presenting four tiers, two billing intervals and a feature matrix instead is a
+// decision they did not ask to make, on the highest-intent click in the product.
+//
+// This sends them straight to checkout for the tier that actually unlocks what
+// they are looking at: Free -> Pro, Pro -> Pro Max. startTierCheckout() already
+// handles the not-signed-in case by stashing the intent and resuming after
+// sign-in, so anonymous visitors are not dropped.
+//
+// A quiet "compare all plans" link stays underneath, so this narrows the choice
+// without trapping anyone in a single option.
+function startVenueUnlock(source) {
+  const tier = (window._userTier || (window._isPro ? 'pro' : 'free'));
+  const target = tier === 'free' ? 'pro' : 'pro_max';
+  // Monthly is the honest default for an impulse unlock — do not commit someone
+  // to a year on the strength of one blurred row.
+  window._pricingMode = 'monthly';
+  try { window.trackEvent && window.trackEvent('venue_unlock_click', { source: source || 'unknown', target }); } catch(_) {}
+  startTierCheckout(target);
+}
+window.startVenueUnlock = startVenueUnlock;
+
 async function startTierCheckout(tier) {
   await window._waitForAuth();
   if (!window.googleUser) {
