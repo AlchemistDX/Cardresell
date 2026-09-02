@@ -681,6 +681,8 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .fee-basis{color:var(--text-muted);font-weight:400;font-size:.72rem;margin-left:.25rem}
 .fee-days-row{padding-top:.35rem;color:var(--text-muted);font-size:.72rem}
 .fee-days-row .fee-val{color:var(--text-muted);font-weight:500}
+.clamp-note{margin:-.35rem 0 .8rem;padding:.55rem .8rem;border:1px solid var(--divider);border-left:3px solid var(--amber);border-radius:var(--radius-md);background:var(--surface-2,var(--amber-bg));color:var(--text-dim,var(--text));font-size:.74rem;line-height:1.45}
+.clamp-note a{color:var(--accent,var(--text));text-decoration:underline}
 .warning-banner{margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--amber);border-radius:var(--radius-md);background:var(--amber-bg);color:var(--text);font-size:.76rem;line-height:1.45}
 .fee-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text-muted);padding:.15rem 0}
 .fee-val{font-family:var(--mono);font-size:.68rem;color:var(--red);flex-shrink:0;margin-left:.5rem}
@@ -5803,7 +5805,13 @@ async function fetchAndApplySoldComps(forceRefresh) {
       // comps ever come back, and PriceCharting remains the backstop.
       if (tcg && tcg.market != null) {
         bestPrice = tcg.market;
-        _basisMeta = { label: 'TCGPlayer market', low: tcg.low, mid: tcg.mid, high: tcg.high };
+        // Run the basis row through the same High clamp the price caption uses,
+        // so the basis can't carry an un-clamped High while the visible Low/Mid/
+        // High line shows a clamped one. `highClamped` is surfaced under the
+        // winner tile to explain that payout prices off Market, never High.
+        const _tcgC = (typeof _clampHigh === 'function') ? _clampHigh(tcg) : tcg;
+        _basisMeta = { label: 'TCGPlayer market', low: _tcgC.low, mid: _tcgC.mid, high: _tcgC.high,
+                       highClamped: !!_tcgC.highClamped };
       } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
         _basisMeta = { label: `eBay sold median · ${ebay.count} comps` };
@@ -5823,6 +5831,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
         low:  _basisMeta ? _basisMeta.low  : null,
         mid:  _basisMeta ? _basisMeta.mid  : null,
         high: _basisMeta ? _basisMeta.high : null,
+        highClamped: !!(_basisMeta && _basisMeta.highClamped),
       };
       // Remember that WE filled this, not the user. A user-typed number is the
       // price they expect to actually sell at, so it must be used verbatim; a
@@ -7906,10 +7915,18 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   else                       fvf = tierBoundary * baseRate + (total - tierBoundary) * 0.0235;
   if (ebayTopRated === 'yes') fvf *= 0.9;
   const rateLabel = (baseRate * 100).toFixed(2).replace(/\.?0+$/,'');
-  items.push({ l: `Final Value Fee (${rateLabel}% trading cards)`, a: fvf });
+  // `f` is the short rate signature used to build the visible fee formula
+  // ("13.25% + $0.40"). It is attached HERE, next to the arithmetic it
+  // describes, so the headline recipe can never drift from the math: the
+  // one-liner is assembled from these strings rather than hand-written copy.
+  items.push({ l: `Final Value Fee (${rateLabel}% trading cards)`, a: fvf, f: `${rateLabel}%` });
   const perOrder = total <= 10 ? 0.30 : 0.40;
-  items.push({ l: 'Per-order fee', a: perOrder });
-  if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100 });
+  items.push({ l: 'Per-order fee', a: perOrder, f: `$${perOrder.toFixed(2)}` });
+  if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100, f: `${ebayPromo}%` });
+  // Fee base disclosure: eBay bills the whole order. Tax is not modeled.
+  items.feeBase      = total;
+  items.feeBaseLabel = shipCharge > 0 ? 'item + shipping' : 'item';
+  items.taxNote      = true;
   return items;
 }
 
@@ -7934,10 +7951,15 @@ function feeTCGPlayer(price, shipCharge) {
   const rawCommission = base * 0.1075;                     // 10.75% Level 1–4 rate
   const commission    = Math.min(rawCommission, 75);       // $75 cap per item
   const processing    = base * 0.025 + 0.30;               // 2.5% + $0.30 processing
-  return [
-    { l: 'Marketplace commission (10.75%' + (rawCommission > 75 ? ', $75 cap' : '') + ')', a: commission },
-    { l: 'Payment processing (2.5% + $0.30)', a: processing }
+  const out = [
+    { l: 'Marketplace commission (10.75%' + (rawCommission > 75 ? ', $75 cap' : '') + ')', a: commission,
+      f: rawCommission > 75 ? '10.75% capped $75' : '10.75%' },
+    { l: 'Payment processing (2.5% + $0.30)', a: processing, f: '2.5% + $0.30' }
   ];
+  out.feeBase      = base;
+  out.feeBaseLabel = (shipCharge || 0) > 0 ? 'item + shipping' : 'item';
+  out.capFired     = rawCommission > 75;
+  return out;
 }
 
 // Poshmark — single-tier 2026 fee model (verified Aug 2026).
@@ -8392,9 +8414,19 @@ function calc() {
     const _cashLabels = /(cashout|cash-out|PayPal cashout|Store credit|Store-credit haircut|Check by mail)/i;
     const cashoutRow = p.feeItems.find(f => _cashLabels.test(f.l));
     const cashoutAmt = cashoutRow ? cashoutRow.a : 0;
+    // Visible fee formula, assembled from the `f` rate signatures the fee
+    // functions attach to their own line items. Because it is derived rather
+    // than written, the headline ("After 10.75% + 2.5% + $0.30") cannot state
+    // a rate the arithmetic below doesn't actually apply.
+    const feeFormula = p.feeItems.map(f => f.f).filter(Boolean).join(' + ');
     return { ...p, totalFees, netPayout, grossProfit, margin,
              priceUsed: price, priceLabel: _priceLabel,
              shipCharge: effectiveShipCharge, sellerShip: p.sellerShip,
+             feeFormula,
+             feeBase: p.feeItems.feeBase,
+             feeBaseLabel: p.feeItems.feeBaseLabel,
+             taxNote: !!p.feeItems.taxNote,
+             capFired: !!p.feeItems.capFired,
              cashoutAmt, daysToCash: daysToCashText(p.pid) };
   });
 
@@ -8440,10 +8472,25 @@ function calc() {
         <div class="winner-name">${PLATFORMS[bannerResult.pid].name}</div>
         ${hasCost
           ? `<div class="winner-sub">Profit: <strong style="color:${bannerResult.grossProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(bannerResult.grossProfit)}</strong> · Margin: ${bannerResult.margin.toFixed(1)}%</div>`
-          : `<div class="winner-sub">After all 2026 platform fees</div>`}
+          : `<div class="winner-sub">${
+              // Show the actual fee recipe instead of the vague "After all 2026
+              // platform fees". feeFormula is derived from the fee line items,
+              // so this states the rates that were really applied.
+              bannerResult.feeFormula
+                ? `After ${esc(bannerResult.feeFormula)}${bannerResult.sellerShip > 0 ? ` · ship ${fmt(bannerResult.sellerShip)}` : ''}`
+                : 'After all 2026 platform fees'
+            }</div>`}
       </div>
       <div class="winner-payout">${fmt(bannerResult.netPayout)}</div>
     </div>`;
+
+    // B5 / clamp disclosure. The High figure is clamped for display when a
+    // source returns an outlandish value. Payout is NEVER computed from High -
+    // it uses Market (or a price you typed) - so we say exactly that rather
+    // than implying the clamp changed the payout number above.
+    if (window._crBasis && window._crBasis.highClamped && !itemCost) {
+      html += `<div class="clamp-note" role="note">Payout uses ${esc(bannerResult.priceLabel || 'Market')} ${fmt(bannerResult.priceUsed)}, not the raw High — that source's High looked inflated, so we clamp it for display and never price off it. <a href="/accuracy#changelog">How the clamp works</a></div>`;
+    }
 
     // 2026-08-30: NEW — sorted net-payout ranking strip. Delivers the deck's
     // core positioning move: instead of one "winner" tile plus 12 detailed
@@ -8705,6 +8752,9 @@ function calc() {
         <div class="fee-recipe">
           <div class="fee-row fee-recipe-row"><span>Price used <span class="fee-basis">(${esc(r.priceLabel)})</span></span><span class="fee-val">${fmt(r.priceUsed)}</span></div>
           ${r.shipCharge > 0 ? `<div class="fee-row fee-recipe-row"><span>Buyer-paid shipping</span><span class="fee-val">${fmt(r.shipCharge)}</span></div>` : ''}
+          ${r.feeBase != null ? `<div class="fee-row fee-recipe-row"><span>Fee base <span class="fee-basis">(${esc(r.feeBaseLabel || 'item')})</span></span><span class="fee-val">${fmt(r.feeBase)}</span></div>` : ''}
+          ${r.taxNote ? `<div class="fee-row fee-recipe-row"><span>Buyer sales tax <span class="fee-basis">(not modeled)</span></span><span class="fee-val">${fmt(0)}</span></div>` : ''}
+          ${r.feeFormula ? `<div class="fee-row fee-recipe-row"><span>Fee formula</span><span class="fee-val">${esc(r.feeFormula)}</span></div>` : ''}
         </div>
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your ship-out cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}

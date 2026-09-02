@@ -196,5 +196,64 @@ assert('Locked upsell list flags foreign venues',
   /CROSS_BORDER\[r\.pid\]\?\.foreign/.test(src));
 
 
+// ── B1/B3/B4 (2026-09-02): the two free rows must be rebuildable on a phone ──
+// A stranger reads the expand, punches the same numbers into a calculator, and
+// must land on the same net. These pin the Base Set 2 Charizard first-run case
+// ($422.40 TCGplayer market, no buyer-paid shipping, no seller postage) plus
+// the derived fee-formula strings the winner tile and expand display.
+// Tolerance is a nickel per the work order; asserted here at one cent.
+const _feeEbayB = extractFn('feeEbay');
+const CHZ = 422.40;
+const netOf = (items, price, shipCharge, sellerShip) =>
+  price + shipCharge - items.reduce((s, f) => s + f.a, 0) - sellerShip;
+
+// Compare on the DISPLAYED cents: the UI formats to 2dp, so the raw
+// 366.132 is what a stranger sees as $366.13 and rebuilds on a calculator.
+const cents = n => (Math.round(n * 100) / 100).toFixed(2);
+
+const _tc = feeTCGPlayer(CHZ, 0);
+assert('Charizard TCGplayer net rebuilds to $366.13',
+  cents(netOf(_tc, CHZ, 0, 0)) === '366.13');
+eq('Charizard TCGplayer fee base is item-only when no buyer shipping', _tc.feeBase, CHZ);
+assert('TCGplayer fee formula reads "10.75% + 2.5% + $0.30"',
+  _tc.map(f => f.f).filter(Boolean).join(' + ') === '10.75% + 2.5% + $0.30');
+
+const _eb = _feeEbayB(CHZ, 0, 'none', 0, 'no');
+assert('Charizard eBay net rebuilds to $366.03',
+  cents(netOf(_eb, CHZ, 0, 0)) === '366.03');
+eq('Charizard eBay fee base is item + shipping + tax(0)', _eb.feeBase, CHZ);
+assert('eBay fee formula reads "13.25% + $0.40"',
+  _eb.map(f => f.f).filter(Boolean).join(' + ') === '13.25% + $0.40');
+
+// Default must be no store and NOT Top Rated - a Top Rated discount the user
+// hasn't earned would overstate every payout.
+assert('eBay default is no store, not Top Rated',
+  Math.abs(_eb[0].a - CHZ * 0.1325) < 0.005);
+
+// The cap must announce itself in the formula the moment it binds.
+assert('TCGplayer $75 cap appears in the formula when it fires',
+  /capped \$75/.test(feeTCGPlayer(1000, 0).map(f => f.f).join(' + ')) &&
+  !/capped/.test(feeTCGPlayer(100, 0).map(f => f.f).join(' + ')));
+
+// Both nets must respond to the shared inputs (work-order QA steps 5 and 6).
+assert('Raising price moves BOTH nets',
+  netOf(feeTCGPlayer(500, 0), 500, 0, 0) > netOf(_tc, CHZ, 0, 0) &&
+  netOf(_feeEbayB(500, 0, 'none', 0, 'no'), 500, 0, 0) > netOf(_eb, CHZ, 0, 0));
+assert('Seller postage reduces BOTH nets by exactly the postage',
+  Math.abs(netOf(_tc, CHZ, 0, 5) - (366.13 - 5)) < 0.01 &&
+  Math.abs(netOf(_eb, CHZ, 0, 5) - (366.03 - 5)) < 0.01);
+
+// The winner tile must render the DERIVED formula, never a hand-typed rate
+// string, and the vague old copy must be gone.
+assert('Winner tile renders the derived fee formula',
+  /winner-sub">\$\{[\s\S]{0,600}?bannerResult\.feeFormula/.test(src));
+assert('feeFormula is derived from the fee line items',
+  /const feeFormula = p\.feeItems\.map\(f => f\.f\)/.test(src));
+assert('Expand shows fee base and the not-modeled tax line',
+  /Fee base <span class="fee-basis">/.test(src) &&
+  /Buyer sales tax <span class="fee-basis">\(not modeled\)/.test(src));
+assert('Clamp note says payout prices off Market, not High',
+  /not the raw High/.test(src) && /highClamped/.test(src));
+
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
