@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CardResell — See the highest net payout across 15 venues, after fees</title>
   <meta name="description" content="Find out what your Pokémon, MTG, Yu-Gi-Oh!, Lorcana, One Piece, or sports card is really worth — and the best marketplace to sell it on. Free tier ranks eBay and TCGplayer by net payout after 2026 fees. Pro adds Whatnot, Poshmark, Mercari, Cardmarket, Mana Pool, Cardsphere &amp; CardNexus. Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk." />
+  <link rel="canonical" href="https://www.cardresell.org/">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Preconnect to card image CDNs so the first card render doesn't wait
@@ -497,7 +498,7 @@ select,.styled-select{width:100%;padding:.55rem .8rem;border:1px solid var(--bor
 select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 
 .pill-group{display:flex;gap:.375rem;flex-wrap:wrap}
-.pill{padding:.35rem .75rem;border-radius:99px;border:1px solid var(--border);background:var(--surface-2);font-size:.75rem;font-weight:500;color:var(--text-muted);cursor:pointer;transition:all var(--ease);white-space:nowrap}
+.pill{padding:.55rem .8rem;min-height:44px;border-radius:99px;border:1px solid var(--border);background:var(--surface-2);font-size:.75rem;font-weight:500;color:var(--text-muted);cursor:pointer;transition:all var(--ease);white-space:nowrap}
 .pill:hover{border-color:var(--gold);color:var(--text)}
 .pill.sel{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
 
@@ -643,16 +644,13 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .plat-card.bad-value .plat-payout{color:#f87171}
 
 .plat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.15rem;position:relative;overflow:hidden;transition:border-color var(--ease),box-shadow var(--ease),transform var(--ease);display:block;text-decoration:none;color:inherit;cursor:default}
-a.plat-card{cursor:pointer}
-a.plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
-a.plat-card:active{transform:translateY(0) scale(.98)}
 .plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .plat-card.best{border-color:var(--green);box-shadow:0 0 0 1px var(--green),var(--shadow-sm)}
 .plat-card.worst{opacity:.65}
-.plat-sell-badge{display:inline-flex;align-items:center;gap:.3rem;margin-top:.3rem;margin-bottom:.55rem;padding:.22rem .55rem .22rem .45rem;border-radius:99px;font-size:.68rem;font-weight:700;letter-spacing:.02em;background:var(--surface-off);color:var(--text-muted);border:1px solid var(--border);transition:all .15s;width:fit-content}
-a.plat-card:hover .plat-sell-badge{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
+.plat-sell-badge{display:inline-flex;align-items:center;gap:.3rem;margin-top:.3rem;margin-bottom:.55rem;padding:.38rem .65rem;border-radius:99px;font-size:.68rem;font-weight:700;letter-spacing:.02em;background:var(--surface-off);color:var(--text-muted);border:1px solid var(--border);transition:all .15s;width:fit-content;text-decoration:none}
+.plat-sell-badge:hover,.plat-sell-badge:focus-visible{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
 .plat-sell-arrow{font-size:.75rem;transition:transform .15s}
-a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
+.plat-sell-badge:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-accent{position:absolute;top:0;left:0;width:4px;height:100%;border-radius:14px 0 0 14px}
 .plat-hdr{display:flex;align-items:center;justify-content:space-between;padding-left:.45rem;margin-bottom:.75rem}
 .plat-name{font-size:.88rem;font-weight:700;letter-spacing:-.01em}
@@ -672,6 +670,7 @@ a.plat-card:hover .plat-sell-arrow{transform:translateX(3px)}
 .fee-basis{color:var(--text-muted);font-weight:400;font-size:.72rem;margin-left:.25rem}
 .fee-days-row{padding-top:.35rem;color:var(--text-muted);font-size:.72rem}
 .fee-days-row .fee-val{color:var(--text-muted);font-weight:500}
+.warning-banner{margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--amber);border-radius:var(--radius-md);background:var(--amber-bg);color:var(--text);font-size:.76rem;line-height:1.45}
 .fee-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text-muted);padding:.15rem 0}
 .fee-val{font-family:var(--mono);font-size:.68rem;color:var(--red);flex-shrink:0;margin-left:.5rem}
 .fee-total{border-top:1px solid var(--divider);margin-top:.3rem;padding-top:.3rem;font-size:.75rem;font-weight:600;color:var(--text)}
@@ -751,7 +750,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 /* ─── MY FLIPS NAV ─── */
 .view-tabs{display:flex;gap:.25rem;margin-bottom:1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.25rem;width:fit-content}
-.view-tab{padding:.4rem .95rem;border-radius:var(--radius-md);font-size:.78rem;font-weight:600;color:var(--text-muted);transition:all var(--ease);cursor:pointer;white-space:nowrap}
+.view-tab{padding:.55rem .95rem;min-height:44px;border:0;background:transparent;border-radius:var(--radius-md);font:inherit;font-size:.78rem;font-weight:600;color:var(--text-muted);transition:all var(--ease);cursor:pointer;white-space:nowrap}
 .view-tab:hover{color:var(--text)}
 .view-tab.active{background:var(--gold);color:#fff}
 
@@ -1713,7 +1712,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <!-- TCGPriceLookup API Key (hidden — key runs silently via window.CARDSELL_TPL_KEY) -->
   <div id="tplKeySection" style="display:none">
     <input type="password" id="tplKeyInput" autocomplete="off" spellcheck="false" />
-    <button id="tplRevealBtn"></button>
+<button id="tplRevealBtn" aria-label="Reveal TCGplayer listing details"></button>
     <div id="settingsStatus"><span class="status-dot inactive" id="statusDot"></span><span id="statusText"></span></div>
   </div>
 </div>
@@ -1721,10 +1720,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 <!-- VIEW TABS -->
 <div class="view-tabs" id="viewTabs">
-  <span class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</span>
-  <span class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</span>
-  <span class="view-tab" data-view="collection" onclick="switchView('collection')">📦 Collection</span>
-  <span class="view-tab" data-view="admin" id="adminTab" onclick="switchView('admin')" style="display:none">⚙ Admin</span>
+  <button type="button" class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</button>
+  <button type="button" class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</button>
+  <button type="button" class="view-tab" data-view="collection" onclick="switchView('collection')">📦 Collection</button>
+  <button type="button" class="view-tab" data-view="admin" id="adminTab" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
 </div>
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
@@ -2743,8 +2742,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Rule 1 -->
       <div class="pt-rule">
         <div class="pt-pair">
-          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_1_bright_even_light.webp" alt="Good example: bright even light on a card"><figcaption>DO</figcaption></figure>
-          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_1_glare_shadow.webp" alt="Bad example: glare hotspot and finger shadow on a card"><figcaption>DON'T</figcaption></figure>
+          <figure class="pt-do"><img loading="lazy" data-src="/photo-tips/photo_tips_do_1_bright_even_light.webp" alt="Good example: bright even light on a card"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" data-src="/photo-tips/photo_tips_dont_1_glare_shadow.webp" alt="Bad example: glare hotspot and finger shadow on a card"><figcaption>DON'T</figcaption></figure>
         </div>
         <div class="pt-rule-caption">
           <span class="pt-emoji">💡</span>
@@ -2758,8 +2757,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Rule 2 -->
       <div class="pt-rule">
         <div class="pt-pair">
-          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_2_raw_card.webp" alt="Good example: raw card outside any sleeve or holder"><figcaption>DO</figcaption></figure>
-          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_2_through_plastic.webp" alt="Bad example: card inside a plastic sleeve and toploader"><figcaption>DON'T</figcaption></figure>
+          <figure class="pt-do"><img loading="lazy" data-src="/photo-tips/photo_tips_do_2_raw_card.webp" alt="Good example: raw card outside any sleeve or holder"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" data-src="/photo-tips/photo_tips_dont_2_through_plastic.webp" alt="Bad example: card inside a plastic sleeve and toploader"><figcaption>DON'T</figcaption></figure>
         </div>
         <div class="pt-rule-caption">
           <span class="pt-emoji">📤</span>
@@ -2773,8 +2772,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Rule 3 -->
       <div class="pt-rule">
         <div class="pt-pair">
-          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_3_fills_frame.webp" alt="Good example: card fills the frame and is aligned straight"><figcaption>DO</figcaption></figure>
-          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_3_tilted_small.webp" alt="Bad example: card tilted and too small in the frame"><figcaption>DON'T</figcaption></figure>
+          <figure class="pt-do"><img loading="lazy" data-src="/photo-tips/photo_tips_do_3_fills_frame.webp" alt="Good example: card fills the frame and is aligned straight"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" data-src="/photo-tips/photo_tips_dont_3_tilted_small.webp" alt="Bad example: card tilted and too small in the frame"><figcaption>DON'T</figcaption></figure>
         </div>
         <div class="pt-rule-caption">
           <span class="pt-emoji">🎯</span>
@@ -2788,8 +2787,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Rule 4 -->
       <div class="pt-rule">
         <div class="pt-pair">
-          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_4_plain_background.webp" alt="Good example: card on a plain dark background"><figcaption>DO</figcaption></figure>
-          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_4_busy_background.webp" alt="Bad example: card on a cluttered desk with mug, keyboard, and papers"><figcaption>DON'T</figcaption></figure>
+          <figure class="pt-do"><img loading="lazy" data-src="/photo-tips/photo_tips_do_4_plain_background.webp" alt="Good example: card on a plain dark background"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" data-src="/photo-tips/photo_tips_dont_4_busy_background.webp" alt="Bad example: card on a cluttered desk with mug, keyboard, and papers"><figcaption>DON'T</figcaption></figure>
         </div>
         <div class="pt-rule-caption">
           <span class="pt-emoji">🧼</span>
@@ -2803,8 +2802,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       <!-- Rule 5 -->
       <div class="pt-rule">
         <div class="pt-pair">
-          <figure class="pt-do"><img loading="lazy" src="/photo-tips/photo_tips_do_5_sharp_focus.webp" alt="Good example: tack-sharp card photo with fine detail"><figcaption>DO</figcaption></figure>
-          <figure class="pt-dont"><img loading="lazy" src="/photo-tips/photo_tips_dont_5_blurry.webp" alt="Bad example: blurry out-of-focus card photo"><figcaption>DON'T</figcaption></figure>
+          <figure class="pt-do"><img loading="lazy" data-src="/photo-tips/photo_tips_do_5_sharp_focus.webp" alt="Good example: tack-sharp card photo with fine detail"><figcaption>DO</figcaption></figure>
+          <figure class="pt-dont"><img loading="lazy" data-src="/photo-tips/photo_tips_dont_5_blurry.webp" alt="Bad example: blurry out-of-focus card photo"><figcaption>DON'T</figcaption></figure>
         </div>
         <div class="pt-rule-caption">
           <span class="pt-emoji">🔍</span>
@@ -2834,32 +2833,32 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
       </style>
       <div class="pt-angle-grid">
         <figure class="pt-angle" style="margin:0">
-          <img loading="lazy" src="/photo-tips/photo_tips_angle_1_front.webp" alt="Reference: card front, centered and filling frame">
+          <img loading="lazy" data-src="/photo-tips/photo_tips_angle_1_front.webp" alt="Reference: card front, centered and filling frame">
           <span class="pt-angle-num">1</span>
           <div class="pt-angle-label">Front</div>
         </figure>
         <figure class="pt-angle" style="margin:0">
-          <img loading="lazy" src="/photo-tips/photo_tips_angle_2_back.webp" alt="Reference: card back, centered and filling frame">
+          <img loading="lazy" data-src="/photo-tips/photo_tips_angle_2_back.webp" alt="Reference: card back, centered and filling frame">
           <span class="pt-angle-num">2</span>
           <div class="pt-angle-label">Back</div>
         </figure>
         <figure class="pt-angle" style="margin:0">
-          <img loading="lazy" src="/photo-tips/photo_tips_angle_3_top_edge.webp" alt="Reference: top edge of card in sharp macro focus">
+          <img loading="lazy" data-src="/photo-tips/photo_tips_angle_3_top_edge.webp" alt="Reference: top edge of card in sharp macro focus">
           <span class="pt-angle-num">3</span>
           <div class="pt-angle-label">Top edge</div>
         </figure>
         <figure class="pt-angle" style="margin:0">
-          <img loading="lazy" src="/photo-tips/photo_tips_angle_4_bottom_edge.webp" alt="Reference: bottom edge of card in sharp macro focus">
+          <img loading="lazy" data-src="/photo-tips/photo_tips_angle_4_bottom_edge.webp" alt="Reference: bottom edge of card in sharp macro focus">
           <span class="pt-angle-num">4</span>
           <div class="pt-angle-label">Bottom edge</div>
         </figure>
         <figure class="pt-angle" style="margin:0">
-          <img loading="lazy" src="/photo-tips/photo_tips_angle_5_left_edge.webp" alt="Reference: left edge of card in sharp macro focus">
+          <img loading="lazy" data-src="/photo-tips/photo_tips_angle_5_left_edge.webp" alt="Reference: left edge of card in sharp macro focus">
           <span class="pt-angle-num">5</span>
           <div class="pt-angle-label">Left edge</div>
         </figure>
         <figure class="pt-angle" style="margin:0">
-          <img loading="lazy" src="/photo-tips/photo_tips_angle_6_right_edge.webp" alt="Reference: right edge of card in sharp macro focus">
+          <img loading="lazy" data-src="/photo-tips/photo_tips_angle_6_right_edge.webp" alt="Reference: right edge of card in sharp macro focus">
           <span class="pt-angle-num">6</span>
           <div class="pt-angle-label">Right edge</div>
         </figure>
@@ -3333,9 +3332,15 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
   // routes signed-out users into sign-in, so we now open the modal for
   // everyone once auth state has settled.
   const upgradeParam = (p.get('upgrade') || '').toLowerCase();
-  if (['pro','pro_max'].includes(upgradeParam)) {  // ultimate retired 2026-09-01
-    window._pendingUpgradeTier = upgradeParam;
-    try { sessionStorage.setItem('_pendingUpgradeTier', upgradeParam); } catch(_){}
+  if (['pro','pro_max','ultimate'].includes(upgradeParam)) {
+    const supportedTier = upgradeParam === 'ultimate' ? 'pro_max' : upgradeParam;
+    window._pendingUpgradeTier = supportedTier;
+    try { sessionStorage.setItem('_pendingUpgradeTier', supportedTier); } catch(_){}
+    if (upgradeParam === 'ultimate') {
+      setTimeout(() => {
+        try { showToast('Ultimate was retired. Pro Max now includes all 15 venues.', 'info'); } catch(_){}
+      }, 0);
+    }
     // 2026-09-01 (CR-013): /pricing appends &p=annual when the visitor picked
     // Annual. Carry it through the same deferred round-trip as the tier so the
     // modal opens on the interval they were actually quoted.
@@ -4997,16 +5002,25 @@ function attachDropHandlers(cardFactory) {
   if (!existingFooter && dropList.querySelectorAll('.drop-item').length > 0 && activeGame === 'pokemon') {
     const footer = document.createElement('div');
     footer.className = 'drop-see-all';
+    footer.setAttribute('role', 'button');
+    footer.setAttribute('tabindex', '0');
     footer.innerHTML = `<span>See all results as cards</span><span style="font-size:.8rem">&#8594;</span>`;
     footer.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);font-size:.82rem;font-weight:700;color:var(--gold);cursor:pointer;';
     footer.addEventListener('click', () => {
       dropList.classList.remove('open');
       openCatalog(searchInput.value.trim());
     });
+    footer.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        footer.click();
+      }
+    });
     dropList.appendChild(footer);
   }
 
   dropList.querySelectorAll('.drop-item').forEach(el => {
+    el.setAttribute('tabindex', '0');
     el.addEventListener('click', () => {
       const card = cardFactory(parseInt(el.dataset.idx));
       selectedCard = card;
@@ -5027,6 +5041,12 @@ function attachDropHandlers(cardFactory) {
       // a browsing hint in the dropdown; it is not fit to anchor payout math.
       // fetchAndApplySoldComps' documented ladder is now the single source.
       loadCardUI(card);
+    });
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        el.click();
+      }
     });
   });
 
@@ -5559,7 +5579,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
   // recommending they grade a card that's already graded.
   const _preFetchGrader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
   const gradeOppP = (_preFetchGrader === 'no' && !grade)
-    ? fetch('/api/grade-opportunity?' + tcgParams.toString() + (card.game ? '&game=' + encodeURIComponent(card.game) : ''), { signal: _clientController.signal })
+    ? fetch('/api/grade-opportunity?' + tcgParams.toString(), { signal: _clientController.signal })
         .then(r => r.ok ? r.json() : null).catch(() => null)
     : Promise.resolve(null);
 
@@ -7910,11 +7930,11 @@ function feeCardsphere(price) {
 // when withdrawing. International shipping from US typically adds $10-15
 // but we don't bake that in — the user's shipCost input handles it.
 //   Source: https://www.cardmarket.com/en/Policies/Fees
-function feeCardmarket(price) {
+function feeCardmarket(price, shipCharge) {
   // Cap the commission at ~$110 to match the €100/article ceiling.
   const rawCommission = price * 0.05;
   const commission    = Math.min(rawCommission, 110);
-  const currencyConv  = price * 0.03;
+  const currencyConv  = (price + (shipCharge || 0)) * 0.03;
   return [
     { l: 'Sales commission (5%, cap ~$110)', a: commission },
     { l: 'Currency conversion (3%)',         a: currencyConv }
@@ -8040,6 +8060,7 @@ function calc() {
       pid: 'poshmark',
       eligible: true,
       feeItems: feePoshmark(price),
+      buyerShippingRevenue: false,
       sellerShip: 0,
       note: 'Primarily clothing — lower card demand.'
     },
@@ -8047,6 +8068,7 @@ function calc() {
       pid: 'comc',
       eligible: true,
       feeItems: feeCOMC(price, comcService, isGraded, comcCashout),
+      buyerShippingRevenue: false,
       sellerShip: 0,
       note: isSports ? 'COMC accepts sports cards.' : (isYugioh || isMagic) ? 'COMC accepts MTG and Yu-Gi-Oh! cards alongside Pokémon.' : ''
     },
@@ -8054,6 +8076,7 @@ function calc() {
       pid: 'fanatics',
       eligible: true,
       feeItems: feeFanatics(price),
+      buyerShippingRevenue: false,
       // 2026-09-01: Fanatics is a ship-in venue — the seller mails the card to
       // the vault, which feeFanatics() already bills as a $5 inbound-ship line.
       // Also deducting shipCost (postage to a buyer) double-charged shipping on
@@ -8098,6 +8121,7 @@ function calc() {
       // MTG-only, buyer-offer model. Best fee at low-end but 10% cashout hurts.
       eligible: isMagic,
       feeItems: feeCardsphere(price),
+      buyerShippingRevenue: false,
       sellerShip: shipCost,
       note: isMagic
         ? 'MTG offer-driven marketplace — buyers post wants, you decide whether to fulfill. 3% + 10% cashout to PayPal.'
@@ -8109,7 +8133,7 @@ function calc() {
       // International shipping cost from US isn’t baked in — relies on user’s
       // sellerShip. Best for scarce cards with EU demand.
       eligible: !isSports,
-      feeItems: feeCardmarket(price),
+      feeItems: feeCardmarket(price, shipCharge),
       sellerShip: shipCost,
       note: isSports
         ? 'Cardmarket is TCG-only — not sports cards.'
@@ -8123,6 +8147,7 @@ function calc() {
       // (0.65) themselves — called out in the tile note + red flags.
       eligible: !isSports,
       feeItems: feeBuylist(price, PLATFORMS.cardkingdom.buylistRatio.cash),
+      buyerShippingRevenue: false,
       sellerShip: shipCost,
       note: isSports
         ? 'Card Kingdom buys TCG singles only, not sports cards.'
@@ -8132,6 +8157,7 @@ function calc() {
       pid: 'coolstuffinc',
       eligible: !isSports,
       feeItems: feeBuylist(price, PLATFORMS.coolstuffinc.buylistRatio.cash),
+      buyerShippingRevenue: false,
       sellerShip: shipCost,
       note: isSports
         ? 'CoolStuffInc buys TCG singles only, not sports cards.'
@@ -8146,6 +8172,7 @@ function calc() {
       // adds +30% (0.72) called out in tile notes.
       eligible: !isSports,
       feeItems: feeBuylist(price, PLATFORMS.scg.buylistRatio.cash),
+      buyerShippingRevenue: false,
       sellerShip: shipCost,
       note: isSports
         ? 'Star City Games buys TCG singles only, not sports cards.'
@@ -8172,6 +8199,7 @@ function calc() {
       // 10% TCG Bulk service fee comes out of the seller's proceeds on top of
       // the buyer's buylist haircut. https://tcgbulk.com/page/terms-of-service
       feeItems: feeBuylist(price, PLATFORMS.tcgbulk.buylistRatio.cash, 0.10),
+      buyerShippingRevenue: false,
       sellerShip: shipCost,
       note: isSports
         ? 'TCG Bulk is a TCG buylist aggregator, not sports cards.'
@@ -8190,8 +8218,9 @@ function calc() {
 
   const results = platforms.map(p => {
     if (!p.eligible) return { ...p, totalFees: null, netPayout: null, grossProfit: null, margin: null };
+    const effectiveShipCharge = p.buyerShippingRevenue === false ? 0 : shipCharge;
     const totalFees  = p.feeItems.reduce((s, f) => s + f.a, 0);
-    const netPayout  = price + shipCharge - totalFees - p.sellerShip;
+    const netPayout  = price + effectiveShipCharge - totalFees - p.sellerShip;
     const grossProfit = netPayout - itemCost;
     const margin     = price > 0 ? (grossProfit / price) * 100 : 0;
     // Per-row recipe fields so the tile is auditable end-to-end.
@@ -8204,14 +8233,14 @@ function calc() {
     const cashoutAmt = cashoutRow ? cashoutRow.a : 0;
     return { ...p, totalFees, netPayout, grossProfit, margin,
              priceUsed: price, priceLabel: _priceLabel,
-             shipCharge, sellerShip: p.sellerShip,
+             shipCharge: effectiveShipCharge, sellerShip: p.sellerShip,
              cashoutAmt, daysToCash: daysToCashText(p.pid) };
   });
 
   const eligible   = results.filter(r => r.eligible);
   eligible.sort((a, b) => sortMode === 'margin' ? b.margin - a.margin : b.netPayout - a.netPayout);
   // 2026-09-01: Stale-fee guardrail. After the payout sort, partition venues whose fee
-  // stamp is > 60 days old to the bottom of the eligible list, preserving relative order
+  // stamp is > 45 days old to the bottom of the eligible list, preserving relative order
   // within each partition. This means a stale venue can never become the #1 winner,
   // downstream `winner`, `bannerResult`, and `unlockedRank[0]` all pick from fresh venues
   // first. Stale venues still appear in the ranking, just never as the top recommendation.
@@ -8227,6 +8256,9 @@ function calc() {
   const maxPay     = winner?.netPayout ?? 1;
 
   let html = '';
+  if (_freshElig.length === 0 && eligible.length > 0) {
+    html += '<div class="warning-banner" role="status">All marketplace fee schedules are past the 45-day verification window. Rankings are shown for reference only until the next fee audit.</div>';
+  }
 
   // Winner banner
   // Free users see the best of their FREE platforms; Pro sees the true best across all.
@@ -8393,14 +8425,19 @@ function calc() {
       sub: 'Get an instant cash offer — no listing, no waiting' }
   ];
 
-  // Compute display rank across ALL eligible tiles (not per-section) so 1st is
-  // the true overall winner. Then render sections independently.
+  // Compute rank among the venues this tier can actually see. The previous
+  // implementation used the all-tier list, so a Free user's two visible cards
+  // were labeled "7th" and "8th" while the banner called one the best free
+  // payout. Keep locked upside in the ranking strip, but make tile badges
+  // truthful within the visible comparison.
   const _eligibleDisplay = displaySorted.filter(r => r.eligible);
+  const _displayWinner = _eligibleDisplay[0] || null;
+  const _displayWorst = _eligibleDisplay.length > 1 ? _eligibleDisplay[_eligibleDisplay.length - 1] : null;
 
   const renderTile = (r) => {
     const info   = PLATFORMS[r.pid];
-    const isWin  = r.eligible && winner && r.pid === winner.pid;
-    const isWrst = r.eligible && worst  && r.pid === worst.pid && eligible.length > 1;
+    const isWin  = r.eligible && _displayWinner && r.pid === _displayWinner.pid;
+    const isWrst = r.eligible && _displayWorst  && r.pid === _displayWorst.pid;
 
     let badgeHtml = '';
     if (!r.eligible) badgeHtml = `<span class="badge-na">N/A</span>`;
@@ -8409,7 +8446,7 @@ function calc() {
     else {
       // 2026-08-29: Extend rank badges past 5th so all 15 tiles show their place.
       // Ranks 1-5 keep the gold badge; 6-12 use a muted grey badge.
-      const rankIdx = eligible.indexOf(r);
+      const rankIdx = _eligibleDisplay.indexOf(r);
       const rankMap = ['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th'];
       const rank = rankMap[rankIdx];
       if (rank) {
@@ -8427,12 +8464,13 @@ function calc() {
 
     const cls = ['plat-card', isWin ? 'best' : '', isWrst ? 'worst' : '', !r.eligible ? 'worst' : '', isBadValue ? 'bad-value' : ''].filter(Boolean).join(' ');
 
-    // Build platform-specific sell URL (used to make card clickable)
+    // Keep the tile as a div. It contains source/methodology links and a
+    // Details button, so wrapping the entire tile in <a> creates invalid
+    // nested anchors. Browsers auto-close that outer anchor, ejecting the fee
+    // recipe and breaking the mobile Details control.
     const sellUrl = window._platSellUrls ? (window._platSellUrls[r.pid] || '') : '';
-    const cardTag  = sellUrl ? 'a' : 'div';
-    const cardHref = sellUrl ? ` href="${sellUrl}" target="_blank" rel="noopener"` : '';
     const sellBadge = sellUrl
-      ? `<div class="plat-sell-badge">Tap to sell here <span class="plat-sell-arrow">→</span></div>`
+      ? `<a class="plat-sell-badge" href="${esc(sellUrl)}" target="_blank" rel="noopener" aria-label="Open ${esc(info.name)} to sell this card">Sell on ${esc(info.name)} <span class="plat-sell-arrow">→</span></a>`
       : '';
 
     // 2026-08-15: effort/hassle transparency — shown as a colored badge under
@@ -8458,7 +8496,7 @@ function calc() {
       buylist:     '💰 Workflow: Buylist — instant offer, no listing'
     };
     const workflowText = info.workflow ? (workflowLabelMap[info.workflow] || '') : '';
-    const payoutText   = info.payoutTime ? `💰 Payout: ${esc(info.payoutTime)}` : '';
+    const payoutText   = info.payoutTime ? `💰 Payout schedule: ${esc(info.payoutTime)}` : '';
     // Positive framing pill — "here's where this platform shines" — rendered
     // just above the amber red-flag row so users see the sweet spot first.
     const bestForHtml  = info.bestFor ? `<div class="plat-bestfor">${esc(info.bestFor)}</div>` : '';
@@ -8482,7 +8520,7 @@ function calc() {
       return;
     }
 
-    html += `<${cardTag} class="${cls}"${cardHref}>
+    html += `<div class="${cls}">
       <div class="plat-accent" style="background:${info.color}"></div>
       <div class="plat-hdr">
         <span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>
@@ -8510,7 +8548,7 @@ function calc() {
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your ship-out cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Net after all deductions</span><span class="fee-val">${fmt(r.netPayout)}</span></div>
-        ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Days to cash</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
+        ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Estimated end-to-end cash time</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
         ${info.verified ? (() => {
           // 2026-09-01: pill color reflects staleness. >45d = amber + "Stale" text (venue also
           // demoted from #1 by the payout ranker); 31-45d = amber pill but still "Verified";
@@ -8529,7 +8567,7 @@ function calc() {
         <span class="toggle-text">Details</span>
         <span class="caret">▾</span>
       </button>
-    </${cardTag}>`;
+    </div>`;
   };
 
   // Emit each section as its own .plat-grid with a section header above it.
@@ -14261,6 +14299,10 @@ function _setPhotoTipsAlways(v){ try { v ? localStorage.setItem('cr_photoTips_al
 // the scan flow when the user taps "Got it — start scanning".
 function openPhotoTipsModal(pending) {
   window._photoTipsPending = pending === 'quick' || pending === 'deep' ? pending : null;
+  document.querySelectorAll('#photoTipsOverlay img[data-src]').forEach(img => {
+    img.src = img.dataset.src;
+    img.removeAttribute('data-src');
+  });
   // Sync "always show" checkbox with saved pref
   const cb = document.getElementById('photoTipsAutoShow');
   if (cb) cb.checked = _photoTipsAlways();
@@ -17006,7 +17048,10 @@ async function startTierCheckout(tier) {
   // with the same 15 venues as Pro Max. The Stripe prices are deactivated, so
   // any stale link would fail at Checkout anyway - fail here with an honest
   // message instead of a Stripe error page.
-  if (tier === 'ultimate') { tier = 'pro_max'; }
+  if (tier === 'ultimate') {
+    try { showToast('Ultimate was retired. Pro Max ($19.99/mo) now includes all 15 venues.', 'info'); } catch(_){}
+    tier = 'pro_max';
+  }
   await window._waitForAuth();
   if (!window.googleUser) {
     // 2026-09-01 (CR-013): re-stash the tier and interval so the deferred-open

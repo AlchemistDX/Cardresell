@@ -163,7 +163,7 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   const fs2 = await import('node:fs');
   const vj = JSON.parse(fs2.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const srcs = vj.routes.map(r => r.src);
-  const catchAll = srcs.indexOf('/(.*)');
+  const catchAll = vj.routes.findIndex(r => r.src === '/(.*)' && !r.continue);
   ok(catchAll > 0, 'catch-all route still exists');
   for (const [route, file, ct] of [
     ['/og-image.png', 'og-image.png', 'image/png'],
@@ -368,7 +368,10 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   ok(/"@type": "Offer", "name": "Pro Max \(monthly\)"/.test(pr2), 'Pro Max offer still in JSON-LD');
   ok(!/"@type": "Offer", "name": "Ultimate \(monthly\)"/.test(pr2), 'Ultimate offer removed from JSON-LD');
   const upTiers = idx.match(/\['pro','pro_max'(?:,'ultimate')?\]\.includes\(upgradeParam\)/);
-  ok(upTiers && !/ultimate/.test(upTiers[0]), 'the ?upgrade= router no longer accepts ultimate');
+  ok(upTiers && /ultimate/.test(upTiers[0]) &&
+     /upgradeParam === 'ultimate' \? 'pro_max' : upgradeParam/.test(idx) &&
+     /Ultimate was retired\. Pro Max now includes all 15 venues\./.test(idx),
+     'the ?upgrade=ultimate router safely remaps to Pro Max with disclosure');
 
   // Issue 5 - cancel copy points at the Stripe portal, not email
   ok(!/emailing <a href="mailto:will@cardresell\.org">will@cardresell\.org<\/a>/.test(pr2) ||

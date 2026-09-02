@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     // can't inflate the counter by spamming this endpoint.
     const secret = process.env.STATS_INCR_SECRET;
     const sent   = req.headers['x-stats-secret'] || '';
-    if (secret && sent !== secret) {
+    if (!secret || sent !== secret) {
       return res.status(401).json({ error: 'unauthorized' });
     }
     // Fire both increments — total and today. Don't await in parallel to

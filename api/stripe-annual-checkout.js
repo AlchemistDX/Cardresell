@@ -7,7 +7,7 @@
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 
-const ANNUAL_PRICE_ID = 'price_1TosPSFW2YZoedIZ5e0abG3y'; // $89.99/yr
+const ANNUAL_PRICE_FALLBACK = 'price_1TosPSFW2YZoedIZ5e0abG3y'; // $89.99/yr
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,7 +17,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) return res.status(503).json({ error: 'Payments not configured' });
+  const priceId = process.env.STRIPE_PRICE_ANNUAL_ID || ANNUAL_PRICE_FALLBACK;
+  if (!stripeKey || !priceId) return res.status(503).json({ error: 'Payments not configured' });
 
   // ── AUTH REQUIRED: derive identity from verified token ──
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
@@ -39,7 +40,7 @@ export default async function handler(req, res) {
   try {
     const params = new URLSearchParams();
     params.append('mode', 'subscription');
-    params.append('line_items[0][price]', ANNUAL_PRICE_ID);
+    params.append('line_items[0][price]', priceId);
     params.append('line_items[0][quantity]', '1');
     params.append('customer_email', email);
     params.append('success_url', `${origin}/?annual_success=1&session_id={CHECKOUT_SESSION_ID}`);

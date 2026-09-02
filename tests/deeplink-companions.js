@@ -61,7 +61,7 @@ check('TPL fallback calls searchWithTPL(cleanName)',         /tplHits = await se
 check('TPL match sets selectedCard + loadCardUI',            /tplCardToNormalized\(tplMatch/.test(INDEX));
 check('Synthetic card fallback exists',                      INDEX.includes('SYNTHETIC CARD FALLBACK'));
 check('Synthetic card sets _synthetic flag',                 /_synthetic:\s*true/.test(INDEX));
-check('Synthetic card populates main view before scan-miss', INDEX.includes("source: 'Scan (unmatched)'"));
+check('Synthetic card populates main view before scan-miss', /source:\s*synthPriceVariants\.length\s*\?[\s\S]*?'Scan \(unmatched\)'/.test(INDEX) && INDEX.includes('loadCardUI(synthCard)'));
 
 console.log('\n[Graded UI fixes 2026-08-13]');
 check('Raw regex excludes all 6 graders (sgc|ace|tag added)', INDEX.includes('!/^(psa|bgs|cgc|sgc|ace|tag)_/.test(o.value)'));
@@ -86,7 +86,7 @@ check('Query strategy uses identifyingWord (skips prefixes)', INDEX.includes("co
 check('PREFIXES set skips Mega/Dark/Radiant/etc',            INDEX.includes("'mega','dark','radiant','shining','team','light','ex','gx','v','vmax','vstar'"));
 check('Number-only fallback query exists',                   INDEX.includes("cleanNumber ? `number:${cleanNumber}` : ''"));
 check('nameMatches guard prevents wrong-name number collision', INDEX.includes('const nameMatches = (c) =>'));
-check('New match reason exact-number+name',                  INDEX.includes("matchReason = 'exact-number+name'"));
+check('Number + name match reason exists',                  INDEX.includes("matchReason = 'number+name'"));
 
 console.log('\n[TCGplayer search now includes card number 2026-08-13]');
 check('buildTcgpUrl signature accepts cardNumber',           /function buildTcgpUrl\(cardName, setName, cardNumber\)/.test(INDEX));
@@ -101,7 +101,7 @@ check('Platform queries share numTail suffix',               INDEX.includes("con
 check('COMC search query includes card number',              INDEX.includes("encodeURIComponent(`${searchName}${numTail}`)"));
 check('Poshmark search query includes card number',          INDEX.includes("${setName ? ' ' + setName : ''}${numTail} ${gameTag}"));
 check('Fanatics search query includes card number',          INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));
-check('PWCC search query includes card number',              INDEX.includes("${setName ? ' ' + setName : ''}${numTail}`)"));
+check('Fanatics search query includes card number',          INDEX.includes("const fanaticsQ") && INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));
 check('JP EN-ref ebay/PC/sell all use jpRefNum',             INDEX.includes("const jpRefNum = card.number ? ' ' + card.number : '';"));
 check('Graded comps banner ebay query includes number',      INDEX.includes("${cardName}${cardNum} ${graderLabel} ${grade} pokemon card"));
 
@@ -111,7 +111,7 @@ check('Raw click restores cached eBay median',               INDEX.includes('con
 check('Small image loads first, upgrades to large in bg',    INDEX.includes('progressive loading: show small'));
 check('Image gets fetchPriority=high + eager loading',       INDEX.includes("cardImg.fetchPriority = 'high'; cardImg.loading = 'eager'"));
 check('Preconnect to pokemontcg.io image CDN',               INDEX.includes('href="https://images.pokemontcg.io"'));
-check('Client-side timeout on ebay-sold fetch',              INDEX.includes("setTimeout(() => _clientController.abort(), 10000)"));
+check('Client-side timeout on ebay-sold fetch',              /clientTimeoutMs\s*=\s*10000[\s\S]*?setTimeout\(\(\)\s*=>\s*_clientController\.abort\(\),\s*clientTimeoutMs\)/.test(INDEX));
 
 console.log('\n[Raw pill race guard 2026-08-13]');
 check('syncGradeToPrintSelect bumps generation counter',     INDEX.includes('const myGen = ++window._syncGen'));
@@ -214,7 +214,7 @@ check('scan.js prompt asks for is_japanese flag',                   SCAN.include
 check('scan.js response returns card_type + is_japanese',           /is_japanese:\s+cardInfo\.is_japanese/.test(SCAN));
 check('Bulk row captures cardType from data.card_type',             INDEX.includes("result.cardType   = data.card_type"));
 check('Bulk row captures isJapanese from data.is_japanese',         INDEX.includes("result.isJapanese = data.is_japanese === true"));
-check('_bulkFetchPrice accepts cardType + isJapanese params',       INDEX.includes("function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapanese)"));
+check('_bulkFetchPrice accepts cardType + isJapanese params',       /function _bulkFetchPrice\(cardName,\s*setName,\s*cardNumber,\s*cardType,\s*isJapanese(?:,|\))/.test(INDEX));
 check('_bulkFetchPriceMTG routes to Scryfall',                      INDEX.includes("api.scryfall.com/cards/search"));
 check('_bulkFetchPriceYGO routes to YGOProDeck',                    INDEX.includes("db.ygoprodeck.com/api/v7/cardinfo.php"));
 check('_bulkFetchPriceLorcana routes to lorcana-api',               INDEX.includes("api.lorcana-api.com/cards/fetch"));

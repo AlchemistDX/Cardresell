@@ -59,6 +59,12 @@ export default async function handler(req, res) {
 
   const tier     = String(body.tier || '').toLowerCase();
   const interval = normalizeInterval(body.interval);
+  if (tier === 'ultimate') {
+    return res.status(400).json({
+      error: 'plan_retired',
+      message: 'Ultimate was retired. Choose Pro or Pro Max.',
+    });
+  }
 
   const priceEnv = TIER_PRICE_ENV[tier]?.[interval];
   if (!priceEnv) {

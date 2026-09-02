@@ -11,8 +11,8 @@
     { "src": "accuracy.html", "use": "@vercel/static" },
     { "src": "pricing.html", "use": "@vercel/static" },
     { "src": "manifest.json", "use": "@vercel/static" },
-    { "src": "config.js", "use": "@vercel/static" },
     { "src": "card-index.json", "use": "@vercel/static" },
+    { "src": "mtg-index.json", "use": "@vercel/static" },
     { "src": "robots.txt", "use": "@vercel/static" },
     { "src": "sitemap.xml", "use": "@vercel/static" },
     { "src": "public/photo-tips/*.webp", "use": "@vercel/static" },
@@ -20,10 +20,11 @@
     { "src": "public/favicon.ico", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/(.*)", "continue": true, "headers": { "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin", "X-Frame-Options": "SAMEORIGIN", "Permissions-Policy": "camera=(self), microphone=(), geolocation=()" } },
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
     { "src": "/grade/([A-Za-z0-9_-]+)", "dest": "/api/grade-share.js?id=$1" },
-    { "src": "/config.js", "dest": "/config.js" },
     { "src": "/card-index.json", "dest": "/card-index.json", "headers": { "Cache-Control": "public, max-age=86400, immutable" } },
+    { "src": "/mtg-index.json", "dest": "/mtg-index.json", "headers": { "Cache-Control": "public, max-age=86400, immutable" } },
     { "src": "/signin", "dest": "/signin.html" },
     { "src": "/terms", "dest": "/terms.html" },
     { "src": "/privacy", "dest": "/privacy.html" },

@@ -2633,7 +2633,7 @@ async function checkProStatus(stripeKey, kvUrl, kvToken, googleSub, email) {
   if (!stripeKey || !email) return false;
   try {
     const r = await fetch(
-      `https://api.stripe.com/v1/customers/search?query=email:"${email}"&limit=1`,
+      `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(email)}'&limit=1`,
       { headers: { Authorization: `Bearer ${stripeKey}` } }
     );
     if (!r.ok) return false;

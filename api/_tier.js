@@ -47,14 +47,14 @@ export const TIER_BENEFITS = {
 // hardcoded price ID list.
 export function priceIdToTier(priceId) {
   if (!priceId) return null;
-  const map = {
-    [process.env.STRIPE_PRICE_ID]:               'pro',
-    [process.env.STRIPE_PRICE_ANNUAL_ID]:        'pro',
-    [process.env.STRIPE_PRICE_PRO_MAX_MONTHLY]:  'pro_max',
-    [process.env.STRIPE_PRICE_PRO_MAX_ANNUAL]:   'pro_max',
-    [process.env.STRIPE_PRICE_ULTIMATE_MONTHLY]: 'ultimate',
-    [process.env.STRIPE_PRICE_ULTIMATE_ANNUAL]:  'ultimate',
-  };
+  const map = {};
+  const add = (id, tier) => { if (id) map[id] = tier; };
+  add(process.env.STRIPE_PRICE_ID,               'pro');
+  add(process.env.STRIPE_PRICE_ANNUAL_ID,        'pro');
+  add(process.env.STRIPE_PRICE_PRO_MAX_MONTHLY,  'pro_max');
+  add(process.env.STRIPE_PRICE_PRO_MAX_ANNUAL,   'pro_max');
+  add(process.env.STRIPE_PRICE_ULTIMATE_MONTHLY, 'ultimate');
+  add(process.env.STRIPE_PRICE_ULTIMATE_ANNUAL,  'ultimate');
   return map[priceId] || null;
 }
 
@@ -88,7 +88,7 @@ export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email) {
   if (!stripeKey || !email) return 'free';
   try {
     const custR = await fetch(
-      `https://api.stripe.com/v1/customers/search?query=email:"${email}"&limit=1`,
+      `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(email)}'&limit=1`,
       { headers: { Authorization: `Bearer ${stripeKey}` } }
     );
     if (!custR.ok) return 'free';

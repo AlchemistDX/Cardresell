@@ -1,6 +1,5 @@
-// /api/stripe-checkout — Create Stripe Checkout for Pro subscription ($4.99/mo)
-// POST body: { email, userId, name? }
-// Authorization: Bearer <firebase_or_google_id_token>  (optional — used if present, falls back to body email)
+// /api/stripe-checkout — Create Stripe Checkout for Pro subscription ($9.99/mo)
+// Authorization: Bearer <firebase_or_google_id_token> (required)
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 
@@ -11,28 +10,22 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const body = req.body || {};
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
-
-  let userEmail = body.email || '';
-  let userSub   = body.userId || '';
-  let userName  = body.name || '';
-
-  // Try to verify via Firebase or Google token if present — but fall back to body email if token is expired
-  if (idToken && idToken.length > 20) {
-    try {
-      const info = await verifyTokenFlexible(idToken);
-      // Trust the verified uid even when email is empty (legacy Google-linked
-      // Firebase accounts can be missing top-level email but still have a valid uid).
-      if (info.uid)   userSub   = info.uid;
-      if (info.email) userEmail = info.email;
-      if (info.name)  userName  = info.name;
-      // If token is expired or invalid, we still continue with body email below
-    } catch(e) { /* non-blocking — fall through to body email */ }
+  if (!idToken || idToken.length < 20) {
+    return res.status(401).json({ error: 'Sign in with Google first.' });
   }
+  let verified;
+  try {
+    verified = await verifyTokenFlexible(idToken);
+  } catch (e) {
+    return res.status(401).json({ error: 'Sign-in expired. Please sign in again.' });
+  }
+  const userEmail = verified?.email || '';
+  const userSub   = verified?.uid || '';
+  const userName  = verified?.name || '';
 
   // Must have an email to create a checkout session
-  if (!userEmail || !userEmail.includes('@')) {
+  if (!userSub || !userEmail || !userEmail.includes('@')) {
     return res.status(401).json({ error: 'Sign in with Google first.' });
   }
 

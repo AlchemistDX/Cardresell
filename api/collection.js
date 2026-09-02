@@ -104,7 +104,12 @@ export default async function handler(req, res) {
     };
 
     items.push(entry);
-    await writeCollection(kvUrl, kvToken, key, items);
+    try {
+      await writeCollection(kvUrl, kvToken, key, items);
+    } catch (e) {
+      console.error('collection save failed:', e.message);
+      return res.status(502).json({ error: 'save_failed', message: 'Could not save your collection. Please retry.' });
+    }
     return res.status(200).json({ ok: true, entry, count: items.length });
   }
 
@@ -118,7 +123,12 @@ export default async function handler(req, res) {
     if (filtered.length === before) {
       return res.status(404).json({ error: 'not_found' });
     }
-    await writeCollection(kvUrl, kvToken, key, filtered);
+    try {
+      await writeCollection(kvUrl, kvToken, key, filtered);
+    } catch (e) {
+      console.error('collection delete failed:', e.message);
+      return res.status(502).json({ error: 'save_failed', message: 'Could not remove this card. Please retry.' });
+    }
     return res.status(200).json({ ok: true, count: filtered.length });
   }
 
@@ -142,20 +152,17 @@ async function readCollection(kvUrl, kvToken, key) {
 }
 
 async function writeCollection(kvUrl, kvToken, key, items) {
-  try {
-    // Upstash REST: use POST /set/<key> with body containing the JSON string
-    const body = JSON.stringify(items);
-    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${kvToken}`,
-        'Content-Type': 'text/plain',
-      },
-      body,
-    });
-  } catch(e) {
-    console.error('writeCollection error:', e.message);
-  }
+  // Upstash REST: use POST /set/<key> with body containing the JSON string
+  const body = JSON.stringify(items);
+  const r = await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${kvToken}`,
+      'Content-Type': 'text/plain',
+    },
+    body,
+  });
+  if (!r.ok) throw new Error(`kv_write_failed:${r.status}`);
 }
 
 

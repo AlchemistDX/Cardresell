@@ -99,7 +99,12 @@ export default async function handler(req, res) {
       });
     }
 
-    await kvSet(kvUrl, kvToken, key, serialized);
+    try {
+      await kvSet(kvUrl, kvToken, key, serialized);
+    } catch (e) {
+      console.error('user-data save failed:', e.message);
+      return res.status(502).json({ error: 'save_failed', message: 'Could not save your data. Please retry.' });
+    }
     return res.status(200).json({
       ok: true,
       serverUpdatedAt: nowMs,
@@ -136,16 +141,13 @@ async function kvGet(kvUrl, kvToken, key) {
 }
 
 async function kvSet(kvUrl, kvToken, key, serialized) {
-  try {
-    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${kvToken}`,
-        'Content-Type': 'text/plain',
-      },
-      body: serialized,
-    });
-  } catch(e) {
-    console.error('user-data kvSet error:', e.message);
-  }
+  const r = await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${kvToken}`,
+      'Content-Type': 'text/plain',
+    },
+    body: serialized,
+  });
+  if (!r.ok) throw new Error(`kv_write_failed:${r.status}`);
 }

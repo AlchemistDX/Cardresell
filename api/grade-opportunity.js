@@ -73,11 +73,18 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  const name   = (req.query.name   || '').trim();
-  const set    = (req.query.set    || '').trim();
-  const number = (req.query.number || '').trim();
-  const rarity = (req.query.rarity || '').trim();
-  const game   = (req.query.game   || 'pokemon').trim().toLowerCase();
+  // Vercel/Node represents duplicate query parameters as arrays. Normalize
+  // every public string parameter so malformed or repeated parameters return
+  // a controlled response instead of crashing the serverless function.
+  const queryString = (value, fallback = '') => {
+    const normalized = Array.isArray(value) ? value[0] : value;
+    return String(normalized ?? fallback).trim();
+  };
+  const name   = queryString(req.query.name);
+  const set    = queryString(req.query.set);
+  const number = queryString(req.query.number);
+  const rarity = queryString(req.query.rarity);
+  const game   = queryString(req.query.game, 'pokemon').toLowerCase();
 
   const fetchedAt = new Date().toISOString();
 
