@@ -273,5 +273,92 @@ try {
         'swallowing data.error left the user staring at a broken shop');
 }
 
+/* ── 2026-09-02 · Venue system + Pro welcome ────────────────────────────────
+   The invariant: paying for a plan UNLOCKS venues, it does not switch them on.
+   A venue the seller never opted into must never be crowned best payout, and a
+   foreign venue must never win on a payout that omits transatlantic postage. */
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');   // strip our own comments
+
+  check('venue groups define all four jobs',
+        /VENUE_GROUPS\s*=/.test(code) &&
+        ['list', 'foreign', 'consign', 'cash'].every(k => new RegExp(`key:\\s*'${k}'`).test(code)));
+  check('default enabled venues are eBay + TCGplayer only',
+        /VENUE_DEFAULT_ENABLED\s*=\s*\[\s*'ebay'\s*,\s*'tcgplayer'\s*\]/.test(code),
+        'defaulting a paid tier to every venue is the whole bug this prevents');
+  check('eligibility requires applicable AND unlocked AND enabled AND requirement met',
+        /function venueEligible[\s\S]{0,320}?applicable[\s\S]{0,200}?venueUnlocked[\s\S]{0,200}?venueEnabled[\s\S]{0,200}?venueRequirementMet/.test(code));
+  check('Cardmarket is the venue gated on international postage',
+        /VENUE_REQUIRES\s*=\s*\{\s*cardmarket:\s*'intlShip'\s*\}/.test(code));
+  check('Cardmarket prices the transatlantic leg, not domestic postage',
+        /sellerShip:\s*intlShipCost\(\)\s*\|\|\s*shipCost/.test(code),
+        'reverting to shipCost is what let Cardmarket win at $388.61');
+  check('ranking derives eligibility through the venue engine',
+        /r\.eligible\s*=\s*venueEligible\(r\.pid,\s*r\.applicable\)/.test(code));
+  check('card applicability is preserved separately as `applicable`',
+        /applicable:\s*true/.test(code) && /applicable:\s*false/.test(code),
+        'the Pro upsell needs payouts for venues the plan has not unlocked');
+  check('Pro upsell counts plan-locked venues, not disabled ones',
+        /!_visible\.has\(r\.pid\)\s*&&\s*r\.applicable/.test(code),
+        'filtering on r.eligible rendered "0 More Platforms"');
+  check('cash-now venues are held out of the payout ranking',
+        /venueGroup\(r\.pid\)\s*!==\s*'cash'/.test(code));
+  check('cash-now venues still render in their own section',
+        /_cashRows/.test(code) && /\[\.\.\.eligible,\s*\.\.\._cashRows,\s*\.\.\.ineligible\]/.test(code),
+        'excluding them from `eligible` once made every buylist vanish');
+  check('the buylist section is named to match the Pro Max welcome copy',
+        /label:\s*'Cash now'/.test(code));
+  check('Cardsphere is not filed under the ~50c-on-the-dollar section',
+        /SECTION_OVERRIDES\s*=\s*\{\s*\}/.test(code),
+        'it is a ranked buyer-offer marketplace, not a store buylist');
+  check('only enabled venues render as tiles',
+        /_displayTierPlatforms\.has\(r\.pid\)\s*&&\s*venueEnabled\(r\.pid\)/.test(code));
+  check('a blocked venue explains itself',
+        /'Add shipping to rank'/.test(code));
+  check('the venue picker is reachable from the game row',
+        /id="venuesBtn"[\s\S]{0,160}openVenuePicker\(\)/.test(html));
+  check('locked picker rows route to Upgrade instead of toggling',
+        /vp-row locked[\s\S]{0,200}openTierModal/.test(html));
+  check('venue state can never be emptied to zero venues',
+        /function setVenueEnabled[\s\S]{0,400}?size/.test(code));
+
+  // Pro welcome
+  check('welcome modal carries the approved title verbatim',
+        /Thanks for supporting CardResell\./.test(html));
+  check('welcome body states the US-defaults rationale verbatim',
+        /so nothing foreign \(like Cardmarket\) can show as\s+best\s+payout by accident/.test(html));
+  check('Pro Max sees the Cash now paragraph',
+        /Those live on a <strong[^>]*>Cash now<\/strong> tab so a\s+store quote cannot beat TCGPlayer by accident/.test(html));
+  check('welcome offers exactly the three specified actions',
+        /Use recommended \(US\)/.test(html) && /Choose venues/.test(html) &&
+        /I&rsquo;ll do this later/.test(html));
+  check('every exit path marks the user onboarded',
+        /function proWelcomeUseRecommended[\s\S]{0,400}?_closeProWelcome/.test(code) &&
+        /function proWelcomeChooseVenues[\s\S]{0,300}?_closeProWelcome/.test(code) &&
+        /function proWelcomeLater[\s\S]{0,300}?_closeProWelcome/.test(code),
+        'a welcome you cannot dismiss is a trap; the default is already safe');
+  check('Escape dismisses the welcome',
+        /e\.key !== 'Escape'[\s\S]{0,320}?proWelcomeLater/.test(code));
+  check('welcome is gated on the paid venue tiers only',
+        /tier !== 'pro' && tier !== 'pro_max' && tier !== 'ultimate'/.test(code),
+        'buying scan credits unlocks no venues');
+  check('welcome waits for the resolved tier before rendering Pro vs Pro Max copy',
+        /_proWelcomePending/.test(code));
+  check('buying scan credits does not trigger the venue welcome',
+        !/scan_paid[\s\S]{0,600}?maybeShowProWelcome/.test(code));
+
+  // Pre-existing crash found during this work.
+  check('the post-render hook is actually defined',
+        /function _onCardResultShown\s*\(/.test(code),
+        'it was called at the end of every render but never defined');
+  check('the one-time venue tip does not point at a foreign venue',
+        /function _maybeShowVenueTip[\s\S]{0,600}?Whatnot or Mercari/.test(code) &&
+        !/function _maybeShowVenueTip[\s\S]{0,600}?Cardmarket/.test(code));
+  check('chips sync at the single state write point',
+        /function _persistVenues[\s\S]{0,500}?_syncVenueChipsSafe/.test(code),
+        'syncing only at the UI callsite let chips drift from persisted state');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

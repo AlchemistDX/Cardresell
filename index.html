@@ -419,6 +419,46 @@ img{display:block;max-width:100%;height:auto}
 .cat-pill{display:none!important;padding:.28rem .75rem;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:.73rem;font-weight:500;color:var(--text-muted);transition:all var(--ease);cursor:pointer;white-space:nowrap}
 .cat-pill:hover,.cat-pill.active{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600}
 .game-select-wrap{position:relative;display:inline-flex;align-items:center}
+/* 2026-09-02 Venue picker — the control that decides which venues may rank.
+   Sits next to the game dropdown because "which game" and "which venues" are
+   the two things that reshape the whole comparison. */
+.venues-btn{display:inline-flex;align-items:center;gap:.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.4rem .75rem;font-size:.8rem;font-weight:600;color:var(--text);cursor:pointer;transition:border-color var(--ease),background var(--ease);white-space:nowrap}
+.venues-btn:hover{border-color:var(--gold);color:var(--gold)}
+.venues-btn .vb-count{display:inline-flex;align-items:center;justify-content:center;min-width:1.15rem;height:1.15rem;padding:0 .28rem;border-radius:99px;background:var(--gold);color:#111;font-size:.66rem;font-weight:800;font-variant-numeric:tabular-nums}
+/* Chips: the at-a-glance answer to "what am I comparing?" */
+.venue-chips{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.5rem}
+.venue-chips:empty{display:none}
+.venue-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .55rem;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:.7rem;font-weight:600;color:var(--text-muted);white-space:nowrap}
+.venue-chip.warn{border-color:var(--gold-border);color:var(--gold)}
+.venue-chips .vc-edit{font-size:.7rem;font-weight:700;color:var(--text-faint);background:none;border:none;cursor:pointer;text-decoration:underline;padding:.22rem .2rem}
+.venue-chips .vc-edit:hover{color:var(--gold)}
+/* Picker body */
+.vp-body{max-height:min(62vh,30rem);overflow-y:auto;margin:-.25rem -.25rem .25rem;padding:.25rem}
+.vp-group{margin-top:1rem}
+.vp-group:first-child{margin-top:0}
+.vp-group-hdr{display:flex;align-items:baseline;gap:.45rem;padding-bottom:.4rem;border-bottom:1px dashed var(--border);margin-bottom:.5rem}
+.vp-group-hdr .vg-label{font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text)}
+.vp-group-hdr .vg-lock{font-size:.62rem;font-weight:700;color:var(--gold);letter-spacing:.04em}
+.vp-group-sub{font-size:.7rem;color:var(--text-muted);margin:-.3rem 0 .5rem;line-height:1.4}
+.vp-row{display:flex;align-items:flex-start;gap:.6rem;padding:.45rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:background var(--ease)}
+.vp-row:hover{background:var(--surface-2)}
+.vp-row input[type=checkbox]{margin-top:.15rem;width:1rem;height:1rem;accent-color:var(--gold);cursor:pointer;flex:0 0 auto}
+.vp-row .vr-main{flex:1;min-width:0}
+.vp-row .vr-name{font-size:.82rem;font-weight:700;color:var(--text);display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.vp-row .vr-note{font-size:.68rem;color:var(--text-faint);line-height:1.35;margin-top:.1rem}
+.vp-row.locked{opacity:.55;cursor:pointer}
+.vp-row.locked:hover{opacity:.8}
+.vr-badge{font-size:.6rem;font-weight:800;letter-spacing:.04em;padding:.1rem .35rem;border-radius:.25rem;background:var(--gold-hi);color:var(--gold);border:1px solid var(--gold-border);white-space:nowrap}
+.vp-ship{margin-top:.5rem;padding:.6rem .7rem;border:1px solid var(--gold-border);background:var(--gold-hi);border-radius:var(--radius-md)}
+.vp-ship label{display:block;font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:.3rem}
+.vp-ship input{width:100%;padding:.45rem .7rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);font-size:.85rem;color:var(--text);font-family:var(--mono);outline:none}
+.vp-ship input:focus{border-color:var(--gold)}
+.vp-ship .vs-help{font-size:.66rem;color:var(--text-muted);margin-top:.3rem;line-height:1.4}
+.vp-foot{display:flex;gap:.5rem;align-items:center;margin-top:1rem;flex-wrap:wrap}
+.vp-foot .vp-reset{background:none;border:none;color:var(--text-faint);font-size:.72rem;font-weight:700;text-decoration:underline;cursor:pointer;padding:.4rem 0}
+.vp-foot .vp-reset:hover{color:var(--gold)}
+.vp-foot .vp-spacer{flex:1}
+
 .game-select{appearance:none;-webkit-appearance:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.4rem 2rem .4rem .75rem;font-size:.8rem;font-weight:600;color:var(--text);cursor:pointer;transition:border-color var(--ease),background var(--ease);outline:none;min-width:160px}
 .game-select:focus,.game-select:hover{border-color:var(--gold);background:var(--gold-hi)}
 .game-select-arrow{position:absolute;right:.55rem;pointer-events:none;color:var(--text-muted)}
@@ -1996,7 +2036,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </select>
       <svg class="game-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
     </div>
+    <button type="button" id="venuesBtn" class="venues-btn" onclick="openVenuePicker()"
+            aria-label="Choose which sell venues to compare">
+      <span aria-hidden="true">🌐</span> Venues
+      <span class="vb-count" id="venuesCount">2</span>
+    </button>
   </div>
+  <div class="venue-chips" id="venueChips"></div>
   <div class="results-drop" style="display:none"></div>
 
 
@@ -3276,6 +3322,57 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </footer>
 
 <!-- ABOUT MODAL -->
+<!-- 2026-09-02 Venue picker. Grouped by JOB, not by name, because the job is
+     what decides whether a number is comparable. -->
+<!-- 2026-09-02 Pro welcome. One subject only: venues. Deliberately not a
+     product tour — grading, flips, Shop and Accuracy are explained elsewhere.
+     Every exit path marks proVenuesOnboarded so this can never trap anyone;
+     the default (eBay + TCGplayer) is already the safe state. -->
+<div class="modal-overlay" id="proWelcomeModal" onclick="if(event.target===this)proWelcomeLater()" style="z-index:10000">
+  <div class="modal-box" style="max-width:500px;position:relative" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
+    <button type="button" onclick="proWelcomeLater()" aria-label="Close"
+            style="position:absolute;top:.6rem;right:.75rem;background:none;border:none;font-size:1.35rem;line-height:1;color:var(--text-faint);cursor:pointer;padding:.15rem .35rem">&times;</button>
+    <div class="modal-title" id="pwTitle" style="margin-bottom:.75rem">Thanks for supporting CardResell.</div>
+    <div style="font-size:.83rem;line-height:1.6;color:var(--text-muted)">
+      <p style="margin:0 0 .7rem">You unlocked more venues. We left you on US defaults &mdash;
+        eBay and TCGPlayer &mdash; so nothing foreign (like Cardmarket) can show as
+        best payout by accident.</p>
+      <p style="margin:0 0 .7rem">Turn on Whatnot, Mercari, Poshmark, or the rest only if you
+        actually sell there. You can change this anytime under
+        <strong style="color:var(--text)">Venues</strong> (next to the game menu).</p>
+      <p style="margin:0 0 .7rem;display:none" id="pwMaxLine">You also unlocked consignment and
+        store buylists. Those live on a <strong style="color:var(--text)">Cash now</strong> tab so a
+        store quote cannot beat TCGPlayer by accident.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.1rem">
+      <button type="button" class="modal-save" onclick="proWelcomeUseRecommended()" style="width:100%;padding:.62rem 1.25rem">Use recommended (US)</button>
+      <button type="button" class="modal-cancel" onclick="proWelcomeChooseVenues()" style="width:100%;padding:.62rem 1rem">Choose venues</button>
+      <button type="button" onclick="proWelcomeLater()"
+              style="background:none;border:none;color:var(--text-faint);font-size:.76rem;font-weight:600;cursor:pointer;padding:.4rem;text-decoration:underline">I&rsquo;ll do this later</button>
+    </div>
+    <div style="font-size:.68rem;color:var(--text-faint);line-height:1.45;margin-top:.9rem;text-align:center">
+      Cancel anytime in Account &rarr; Manage billing. Failed scans still refund.
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="venueModal" onclick="if(event.target===this)closeVenuePicker()" style="z-index:9999">
+  <div class="modal-box" style="max-width:540px" role="dialog" aria-modal="true" aria-labelledby="vpTitle">
+    <div class="modal-title" id="vpTitle" style="margin-bottom:.35rem">Which venues should we compare?</div>
+    <div style="font-size:.74rem;color:var(--text-muted);line-height:1.45;margin-bottom:1rem">
+      Only venues you turn on can be ranked best payout. We start US sellers on
+      eBay + TCGplayer so an overseas marketplace can&rsquo;t win on a number that
+      leaves out postage.
+    </div>
+    <div class="vp-body" id="vpBody"></div>
+    <div class="vp-foot">
+      <button type="button" class="vp-reset" onclick="resetVenuesFromPicker()">Reset to recommended</button>
+      <span class="vp-spacer"></span>
+      <button type="button" class="modal-cancel" onclick="closeVenuePicker()">Done</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="aboutModal" onclick="if(event.target===this)this.classList.remove('open')" style="z-index:9999">
   <div class="modal-box" style="max-width:360px;text-align:center">
     <div style="font-size:1.5rem;margin-bottom:.5rem">🃏</div>
@@ -7966,6 +8063,389 @@ function platformsForTier(tier) {
   return FREE_PLATFORMS;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   VENUE SYSTEM (2026-09-02) — job groups, opt-in state, and the eligibility rule
+
+   Why this exists: "15 venues" is not 15 of the same thing. Before this, paying
+   for Pro switched every unlocked venue on at once, and the ranking sorted them
+   all on one axis — raw net payout. Measured at the $422.40 Charizard anchor,
+   that produced a banner reading "Best Pro Payout — Cardmarket — $388.61",
+   with TCGplayer at $366.13 and eBay at $366.03. Cardmarket's 5% commission is
+   genuinely the lowest of the 15, so the arithmetic was right and the advice was
+   wrong: the number is before postage from the US to Europe, so a seller in
+   Florida who followed it would mail a card across an ocean to chase $22 that
+   postage then eats.
+
+   Three words, kept deliberately distinct:
+     unlocked — the user's PLAN allows this venue        (platformsForTier)
+     enabled  — the user TURNED IT ON in the picker      (venueEnabled)
+     eligible — enabled + unlocked + required inputs met (venueEligible)
+
+   Only an eligible venue may be crowned best payout. A venue can be on and
+   still be barred from winning; it shows an "Add shipping to rank" badge and
+   sits in the ranking for reference. This mirrors the existing stale-fee
+   guardrail, which already keeps a >45-day fee stamp out of the #1 slot.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+// The four jobs. A venue does exactly one of them.
+const VENUE_GROUPS = [
+  { key: 'list',    label: 'List now',  icon: '🛠️',
+    sub: 'You photograph, list, and mail the card to a US buyer.' },
+  { key: 'foreign', label: 'Foreign',   icon: '🌐',
+    sub: 'Overseas marketplaces. Needs international postage to rank.' },
+  { key: 'consign', label: 'Consign',   icon: '📦',
+    sub: 'Mail a batch to a company that lists it for you. Slow cash.' },
+  { key: 'cash',    label: 'Cash now',  icon: '💰',
+    sub: 'Sell to a store outright — instant, usually ~50¢ on the dollar.' },
+];
+
+// Group assignment. Mana Pool and Cardsphere are MTG-focused but US-operated
+// and seller-shipped, so they are 'list', not 'foreign'.
+const VENUE_GROUP_OF = {
+  ebay: 'list', tcgplayer: 'list', whatnot: 'list', mercari: 'list',
+  poshmark: 'list', manapool: 'list', cardsphere: 'list',
+  cardmarket: 'foreign', cardnexus: 'foreign',
+  comc: 'consign', fanatics: 'consign',
+  cardkingdom: 'cash', coolstuffinc: 'cash', scg: 'cash', tcgbulk: 'cash',
+};
+function venueGroup(pid) { return VENUE_GROUP_OF[pid] || 'list'; }
+
+/* Venues that cannot rank until the user supplies a required input.
+   Cardmarket only. Its payout is EUR-denominated for a US seller and the card
+   physically crosses the Atlantic, so the number is meaningless until postage
+   is known.
+   CardNexus is deliberately NOT gated here even though it is French-domiciled
+   and grouped under Foreign. Per its own fee documentation (see CROSS_BORDER),
+   a US seller onboards into the North America region, lists and is paid in USD
+   at the 8% commission already modeled, and ships to North American buyers —
+   carts are region-locked, so there is no transatlantic leg to price. Gating it
+   on EU postage would invent a cost the source says a US seller does not pay.
+   It is off by default like everything else in Foreign, which is the real
+   protection. */
+const VENUE_REQUIRES = { cardmarket: 'intlShip' };
+
+const VENUE_DEFAULT_ENABLED = ['ebay', 'tcgplayer'];
+const _VENUE_LS_KEY = 'cr_venues_enabled';
+const _VENUE_SHIP_KEY = 'cr_intl_ship';
+
+function _allVenueIds() { return Object.keys(VENUE_GROUP_OF); }
+
+// Enabled set. Persisted per-device. Unknown ids are dropped so a renamed or
+// retired venue in storage cannot resurrect itself.
+function venuesEnabled() {
+  if (window._venuesEnabled instanceof Set) return window._venuesEnabled;
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(_VENUE_LS_KEY) || 'null'); } catch (_) {}
+  const valid = _allVenueIds();
+  const list = Array.isArray(stored) ? stored.filter(v => valid.includes(v)) : null;
+  window._venuesEnabled = new Set(list && list.length ? list : VENUE_DEFAULT_ENABLED);
+  return window._venuesEnabled;
+}
+function venueEnabled(pid) { return venuesEnabled().has(pid); }
+
+function setVenueEnabled(pid, on) {
+  const s = venuesEnabled();
+  if (on) s.add(pid); else s.delete(pid);
+  // Never let the user end up with nothing to compare.
+  if (s.size === 0) VENUE_DEFAULT_ENABLED.forEach(v => s.add(v));
+  _persistVenues();
+}
+function resetVenuesToRecommended() {
+  window._venuesEnabled = new Set(VENUE_DEFAULT_ENABLED);
+  _persistVenues();
+}
+function _syncVenueChipsSafe() { try { syncVenueChips(); } catch (_) {} }
+
+function _persistVenues() {
+  try { localStorage.setItem(_VENUE_LS_KEY, JSON.stringify([...venuesEnabled()])); } catch (_) {}
+  // Sync here, at the single write point, so the chips can never disagree with
+  // persisted state no matter which caller changed it.
+  _syncVenueChipsSafe();
+}
+
+// International postage the seller expects to pay, in USD. 0 / blank = unknown.
+function intlShipCost() {
+  if (typeof window._intlShip === 'number') return window._intlShip;
+  let v = 0;
+  try { v = parseFloat(localStorage.getItem(_VENUE_SHIP_KEY) || '0') || 0; } catch (_) {}
+  window._intlShip = v > 0 ? v : 0;
+  return window._intlShip;
+}
+function setIntlShipCost(v) {
+  const n = parseFloat(v);
+  window._intlShip = Number.isFinite(n) && n > 0 ? n : 0;
+  try { localStorage.setItem(_VENUE_SHIP_KEY, String(window._intlShip)); } catch (_) {}
+  // Postage changes whether Cardmarket may rank, so the chip's warning state
+  // depends on it.
+  _syncVenueChipsSafe();
+}
+
+function venueUnlocked(pid, tier) {
+  return platformsForTier(tier || window._userTier || (window._isPro ? 'pro' : 'free')).has(pid);
+}
+
+/* Has this venue's required input been supplied? Venues with no `requires` are
+   trivially satisfied. */
+function venueRequirementMet(pid) {
+  const req = VENUE_REQUIRES[pid];
+  if (!req) return true;
+  if (req === 'intlShip') return intlShipCost() > 0;
+  return true;
+}
+
+/* The single gate the ranking asks. `applicable` is the pre-existing per-card
+   check (right game, price available) that the results loop already computes —
+   we layer opt-in and required inputs on top of it rather than replacing it. */
+function venueEligible(pid, applicable, tier) {
+  return !!applicable && venueUnlocked(pid, tier) && venueEnabled(pid) && venueRequirementMet(pid);
+}
+
+/* Why a venue that is switched on still cannot win. Returns null when it can.
+   Used for the tile badge so the user sees a reason, not a silent demotion. */
+function venueBlockReason(pid) {
+  if (!venueEnabled(pid)) return null;
+  if (VENUE_REQUIRES[pid] === 'intlShip' && intlShipCost() <= 0) return 'Add shipping to rank';
+  return null;
+}
+
+/* ─── Venue picker UI ─────────────────────────────────────────────────────────
+   Renders VENUE_GROUPS as grouped checkboxes. Locked rows stay visible so the
+   user can see what a plan buys, but clicking one opens Upgrade instead of
+   switching it on. ─────────────────────────────────────────────────────────── */
+
+function _venueTier() { return window._userTier || (window._isPro ? 'pro' : 'free'); }
+
+// Which plan first unlocks a venue — drives the "PRO" / "PRO MAX" row badge.
+function venuePlanLabel(pid) {
+  if (FREE_PLATFORMS.has(pid))    return null;
+  if (PRO_PLATFORMS.has(pid))     return 'PRO';
+  if (PRO_MAX_PLATFORMS.has(pid)) return 'PRO MAX';
+  return null;
+}
+
+function renderVenuePicker() {
+  const body = document.getElementById('vpBody');
+  if (!body) return;
+  const tier = _venueTier();
+  let html = '';
+
+  VENUE_GROUPS.forEach(g => {
+    const pids = _allVenueIds().filter(pid => venueGroup(pid) === g.key);
+    if (!pids.length) return;
+    // Cheapest plan that unlocks anything in this group, for the header hint.
+    const allLocked = pids.every(pid => !venueUnlocked(pid, tier));
+    html += `<div class="vp-group">
+      <div class="vp-group-hdr">
+        <span aria-hidden="true">${g.icon}</span>
+        <span class="vg-label">${g.label}</span>
+        ${allLocked ? `<span class="vg-lock">Upgrade to unlock</span>` : ''}
+      </div>
+      <div class="vp-group-sub">${g.sub}</div>`;
+
+    pids.forEach(pid => {
+      const info     = PLATFORMS[pid] || {};
+      const unlocked = venueUnlocked(pid, tier);
+      const on       = venueEnabled(pid);
+      const plan     = venuePlanLabel(pid);
+      const needs    = VENUE_REQUIRES[pid] === 'intlShip';
+      const note     = needs
+        ? 'Payout excludes postage from the US. Enter international shipping below to let it rank.'
+        : (info.effortLabel || '');
+      if (!unlocked) {
+        html += `<div class="vp-row locked" role="button" tabindex="0"
+             onclick="closeVenuePicker();openTierModal&&openTierModal()"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+          <input type="checkbox" disabled aria-hidden="true">
+          <div class="vr-main">
+            <div class="vr-name">${info.emoji || ''} ${info.name || pid}
+              ${plan ? `<span class="vr-badge">${plan}</span>` : ''}</div>
+            <div class="vr-note">${note}</div>
+          </div>
+        </div>`;
+      } else {
+        html += `<label class="vp-row">
+          <input type="checkbox" ${on ? 'checked' : ''}
+                 onchange="onVenueToggle('${pid}', this.checked)">
+          <div class="vr-main">
+            <div class="vr-name">${info.emoji || ''} ${info.name || pid}</div>
+            <div class="vr-note">${note}</div>
+          </div>
+        </label>`;
+      }
+    });
+
+    // The postage field belongs to Foreign, right under the venues it unblocks.
+    if (g.key === 'foreign') {
+      const v = intlShipCost();
+      html += `<div class="vp-ship">
+        <label for="vpIntlShip">International postage you&rsquo;ll pay (USD)</label>
+        <input id="vpIntlShip" type="number" min="0" step="0.01" inputmode="decimal"
+               placeholder="e.g. 18.50" value="${v > 0 ? v.toFixed(2) : ''}"
+               oninput="onIntlShipInput(this.value)">
+        <div class="vs-help">Tracked international from the US usually runs $15&ndash;$30 for one card.
+          Cardmarket can&rsquo;t be ranked best payout until this is filled in.</div>
+      </div>`;
+    }
+    html += `</div>`;
+  });
+
+  body.innerHTML = html;
+}
+
+function onVenueToggle(pid, on) {
+  setVenueEnabled(pid, on);
+  syncVenueChips();
+  _rerenderVenueResults();
+}
+
+function onIntlShipInput(v) {
+  setIntlShipCost(v);
+  syncVenueChips();
+  _rerenderVenueResults();
+}
+
+function resetVenuesFromPicker() {
+  resetVenuesToRecommended();
+  renderVenuePicker();
+  syncVenueChips();
+  _rerenderVenueResults();
+  showToast && showToast('Back to US defaults — eBay + TCGplayer 🇺🇸');
+}
+
+function openVenuePicker() {
+  renderVenuePicker();
+  const m = document.getElementById('venueModal');
+  if (m) m.classList.add('open');
+  try { window.trackEvent && window.trackEvent('venue_picker_open', { tier: _venueTier() }); } catch (_) {}
+}
+function closeVenuePicker() {
+  const m = document.getElementById('venueModal');
+  if (m) m.classList.remove('open');
+}
+
+/* Chips under the search bar: the standing answer to "what am I comparing?".
+   A venue that is on but barred from ranking shows in gold with its reason, so
+   the user is never silently missing a venue they switched on. */
+function syncVenueChips() {
+  const wrap = document.getElementById('venueChips');
+  const btn  = document.getElementById('venuesCount');
+  const tier = _venueTier();
+  const on   = _allVenueIds().filter(pid => venueEnabled(pid) && venueUnlocked(pid, tier));
+  if (btn) btn.textContent = String(on.length);
+  if (!wrap) return;
+  if (!on.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = on.map(pid => {
+    const info = PLATFORMS[pid] || {};
+    const why  = venueBlockReason(pid);
+    return `<span class="venue-chip ${why ? 'warn' : ''}"${why ? ` title="${why}"` : ''}>${info.emoji || ''} ${info.name || pid}${why ? ` · ${why}` : ''}</span>`;
+  }).join('') + `<button type="button" class="vc-edit" onclick="openVenuePicker()">Edit</button>`;
+}
+
+// Re-run the comparison after a venue change. calc() is the same entry point
+// the price input uses, so a venue toggle costs no price re-fetch.
+function _rerenderVenueResults() {
+  try { if (typeof calc === 'function') calc(); }
+  catch (e) { console.warn('venue rerender failed', e); }
+}
+/* ─── Pro welcome ────────────────────────────────────────────────────────────
+   Fires once, after Stripe confirms a Pro/Pro Max upgrade. Every exit path —
+   including the X and Escape — marks the flag done, because the default venue
+   set is already the safe one. A modal that must be "completed" to leave would
+   be a trap with no upside. ───────────────────────────────────────────────── */
+
+const PRO_WELCOME_KEY = 'cr_pro_venues_onboarded';
+
+function proVenuesOnboarded() {
+  try { return localStorage.getItem(PRO_WELCOME_KEY) === '1'; } catch (_) { return false; }
+}
+function setProVenuesOnboarded() {
+  try { localStorage.setItem(PRO_WELCOME_KEY, '1'); } catch (_) {}
+}
+
+// Only paying venue tiers see this. Buying scan credits alone is not an upgrade
+// to venues, so it must not trigger the venue talk.
+function maybeShowProWelcome() {
+  const tier = _venueTier();
+  if (tier !== 'pro' && tier !== 'pro_max' && tier !== 'ultimate') return false;
+  if (proVenuesOnboarded()) return false;
+  const m = document.getElementById('proWelcomeModal');
+  if (!m) return false;
+  const maxLine = document.getElementById('pwMaxLine');
+  if (maxLine) maxLine.style.display = (tier === 'pro_max' || tier === 'ultimate') ? '' : 'none';
+  m.classList.add('open');
+  try { window.trackEvent && window.trackEvent('pro_welcome_shown', { tier }); } catch (_) {}
+  return true;
+}
+
+function _closeProWelcome() {
+  setProVenuesOnboarded();
+  const m = document.getElementById('proWelcomeModal');
+  if (m) m.classList.remove('open');
+}
+
+// 1. Primary. Explicitly re-assert the US default in case anything else touched
+//    the set, then confirm with a toast so the choice feels registered.
+function proWelcomeUseRecommended() {
+  resetVenuesToRecommended();
+  syncVenueChips();
+  _closeProWelcome();
+  _rerenderVenueResults();
+  showToast && showToast('Comparing eBay + TCGplayer. Add more under Venues anytime.');
+  try { window.trackEvent && window.trackEvent('pro_welcome_choice', { choice: 'recommended' }); } catch (_) {}
+}
+
+// 2. Secondary. Opens the picker with NOTHING pre-checked for them — they opt
+//    in. Turning on Cardmarket here still cannot make it best payout at $0
+//    postage; the engine enforces that independently of this modal.
+function proWelcomeChooseVenues() {
+  _closeProWelcome();
+  openVenuePicker();
+  try { window.trackEvent && window.trackEvent('pro_welcome_choice', { choice: 'choose' }); } catch (_) {}
+}
+
+// 3. Dismiss. Same safety as (1), minus the toast. Venues stay as they were.
+function proWelcomeLater() {
+  _closeProWelcome();
+  try { window.trackEvent && window.trackEvent('pro_welcome_choice', { choice: 'later' }); } catch (_) {}
+}
+
+/* Post-render hook. This was CALLED at the end of the results renderer but
+   never defined anywhere in the file, so every single card render threw an
+   uncaught ReferenceError. It is the last statement of that function, so
+   nothing downstream broke — which is exactly why it went unnoticed. Defining
+   it here both silences that and gives the venue tip its natural home. */
+const VENUE_TIP_KEY = 'cr_venue_tip_seen';
+
+function _onCardResultShown() {
+  try { syncVenueChips(); } catch (_) {}
+  try { _maybeShowVenueTip(); } catch (_) {}
+}
+
+/* One-time nudge toward the Venues button, per spec. Deliberately names
+   Whatnot and Mercari and NOT Cardmarket: pointing a new Pro user at a
+   foreign venue is how they end up with a payout that omits postage. */
+function _maybeShowVenueTip() {
+  const tier = _venueTier();
+  if (tier === 'free') return;
+  if (!proVenuesOnboarded()) return;          // welcome modal covers them first
+  try { if (localStorage.getItem(VENUE_TIP_KEY) === '1') return; } catch (_) { return; }
+  const btn = document.getElementById('venuesBtn');
+  if (!btn) return;
+  try { localStorage.setItem(VENUE_TIP_KEY, '1'); } catch (_) {}
+  if (typeof showToast === 'function') {
+    showToast('Sell on Whatnot or Mercari too? Turn them on under Venues.', 6000);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const pw = document.getElementById('proWelcomeModal');
+  if (pw && pw.classList.contains('open')) { proWelcomeLater(); return; }
+  const vm = document.getElementById('venueModal');
+  if (vm && vm.classList.contains('open')) closeVenuePicker();
+});
+
+
 // eBay Trading Cards fees — verified Aug 2026 from ebay.com/help/selling and
 // multiple 2026 secondary sources including pages.ebay.com/promo/2025/tc-singles/:
 //
@@ -8480,7 +8960,12 @@ function calc() {
       // sellerShip. Best for scarce cards with EU demand.
       eligible: !isSports,
       feeItems: feeCardmarket(price, shipCharge),
-      sellerShip: shipCost,
+      // 2026-09-02: was `shipCost` — US DOMESTIC postage on a card being mailed
+      // to Europe. That understated the real cost and is what let Cardmarket
+      // rank #1 at $388.61 against TCGplayer's $366.13. When the seller supplies
+      // international postage in the Venues picker we charge that instead; until
+      // they do, venueRequirementMet() bars this venue from winning.
+      sellerShip: intlShipCost() || shipCost,
       note: isSports
         ? 'Cardmarket is TCG-only — not sports cards.'
         : 'Europe’s biggest TCG marketplace. Great audience for scarce cards; international shipping from US is the tradeoff.'
@@ -8563,7 +9048,10 @@ function calc() {
       : (_basis && _basis.label) || 'Price entered';
 
   const results = platforms.map(p => {
-    if (!p.eligible) return { ...p, totalFees: null, netPayout: null, grossProfit: null, margin: null };
+    // `p.eligible` here is CARD APPLICABILITY only (right game, sellable). It is
+    // preserved as `applicable` because the Pro upsell needs payouts for venues
+    // the user has not unlocked or enabled. Opt-in gating is layered on below.
+    if (!p.eligible) return { ...p, applicable: false, totalFees: null, netPayout: null, grossProfit: null, margin: null };
     const effectiveShipCharge = p.buyerShippingRevenue === false ? 0 : shipCharge;
     const totalFees  = p.feeItems.reduce((s, f) => s + f.a, 0);
     const netPayout  = price + effectiveShipCharge - totalFees - p.sellerShip;
@@ -8582,7 +9070,7 @@ function calc() {
     // than written, the headline ("After 10.75% + 2.5% + $0.30") cannot state
     // a rate the arithmetic below doesn't actually apply.
     const feeFormula = p.feeItems.map(f => f.f).filter(Boolean).join(' + ');
-    return { ...p, totalFees, netPayout, grossProfit, margin,
+    return { ...p, applicable: true, totalFees, netPayout, grossProfit, margin,
              priceUsed: price, priceLabel: _priceLabel,
              shipCharge: effectiveShipCharge, sellerShip: p.sellerShip,
              feeFormula,
@@ -8593,7 +9081,20 @@ function calc() {
              cashoutAmt, daysToCash: daysToCashText(p.pid) };
   });
 
-  const eligible   = results.filter(r => r.eligible);
+  /* 2026-09-02 venue system. `results[].applicable` says the venue can carry
+     this card; `eligible` now additionally requires the user's plan to unlock
+     it, the user to have switched it on, and any required input to be present.
+     Only eligible venues reach `winner` / `bannerResult`, so a venue the seller
+     never opted into can no longer be crowned best payout.
+
+     Cash-now venues (store buylists) are held out of the payout ranking
+     entirely. A buylist pays roughly 50c on the dollar by design, so ranking it
+     on the same axis as a retail listing invites the opposite error — it looks
+     like a loss rather than a fast-cash option. They render in their own
+     section with their own framing. */
+  results.forEach(r => { r.eligible = venueEligible(r.pid, r.applicable); });
+  const _rankable  = results.filter(r => r.eligible && venueGroup(r.pid) !== 'cash');
+  const eligible   = _rankable.slice();
   eligible.sort((a, b) => sortMode === 'margin' ? b.margin - a.margin : b.netPayout - a.netPayout);
   // 2026-09-01: Stale-fee guardrail. After the payout sort, partition venues whose fee
   // stamp is > 45 days old to the bottom of the eligible list, preserving relative order
@@ -8606,7 +9107,15 @@ function calc() {
   eligible.length = 0;
   eligible.push(..._freshElig, ..._staleElig);
   const ineligible = results.filter(r => !r.eligible);
-  const sorted     = [...eligible, ...ineligible];
+  /* Cash-now venues are eligible but intentionally absent from `eligible`
+     (see the venue-ranking note above), so they are in neither list. They must
+     still be rendered — dropping them here made every store buylist disappear
+     from the page for Pro Max users. Sort them among themselves by payout and
+     append; the section renderer picks them up by pid, and because they never
+     enter `eligible` they can't be crowned winner. */
+  const _cashRows  = results.filter(r => r.eligible && venueGroup(r.pid) === 'cash')
+                            .sort((a, b) => b.netPayout - a.netPayout);
+  const sorted     = [...eligible, ..._cashRows, ...ineligible];
   const winner     = eligible[0];
   const worst      = eligible[eligible.length - 1];
   const maxPay     = winner?.netPayout ?? 1;
@@ -8778,22 +9287,36 @@ function calc() {
   // Change the sets, not this comment.
   // (PWCC merged into Fanatics Collect Jul 2024 — no longer a separate row.)
   const _displayTierPlatforms = platformsForTier(window._userTier || (window._isPro ? 'pro' : 'free'));
-  const displaySorted = sorted.filter(r => _displayTierPlatforms.has(r.pid));
+  // 2026-09-02: also require the venue to be switched on. Rendering an unlocked
+  // but disabled venue produced a tile with a blank payout, which read as a
+  // pricing failure rather than an off switch. Off venues live in the picker.
+  const displaySorted = sorted.filter(r => _displayTierPlatforms.has(r.pid) && venueEnabled(r.pid));
 
   // 2026-08-29: Partition tiles into 3 workflow sections so buylists
   // (flat 45-52% haircut, instant offer) don't rank next to listings
   // (10-14% + wait for a buyer). Cardsphere is routed to the buylist
   // section — its "instant credit / 10% cashout" model is buylist-like
   // even though its `workflow` field is 'list'.
-  const SECTION_OVERRIDES = { cardsphere: 'buylist' };
+  /* 2026-09-02: cardsphere override REMOVED. It used to render under the
+     buylist section, which now reads "Cash now — sell to a store outright,
+     usually ~50c on the dollar". That is false for Cardsphere: it is a
+     buyer-offer MTG marketplace at 3% + 10% cashout, it pays near market, and
+     the venue engine ranks it. Leaving it there would have put a ranked venue
+     under a header claiming a 50% haircut. It sits in `list` with its group. */
+  const SECTION_OVERRIDES = {};
   const sectionOf = (pid) => SECTION_OVERRIDES[pid] || PLATFORMS[pid].workflow || 'list';
   const sectionDefs = [
     { key: 'list',    label: 'List & ship yourself',       icon: '🛠️',
       sub: 'Photograph, list, and mail the card yourself' },
     { key: 'shipIn',  label: 'Ship-in / consignment',      icon: '📦',
       sub: 'Send cards to their warehouse; they list or auction' },
-    { key: 'buylist', label: 'Instant buylists',            icon: '💰',
-      sub: 'Get an instant cash offer — no listing, no waiting' }
+    /* 2026-09-02: renamed from "Instant buylists" to "Cash now" so the Pro Max
+       welcome copy ("Those live on a Cash now tab") describes something the
+       user can actually find. These venues are also held out of the payout
+       ranking — a ~50c-on-the-dollar quote is not comparable to a retail
+       listing, and ranking them together made fast cash look like a loss. */
+    { key: 'buylist', label: 'Cash now',                    icon: '💰',
+      sub: 'Sell to a store outright — instant offer, usually ~50¢ on the dollar' }
   ];
 
   // Compute rank among the venues this tier can actually see. The previous
@@ -8801,7 +9324,12 @@ function calc() {
   // were labeled "7th" and "8th" while the banner called one the best free
   // payout. Keep locked upside in the ranking strip, but make tile badges
   // truthful within the visible comparison.
-  const _eligibleDisplay = displaySorted.filter(r => r.eligible);
+  /* Cash-now venues are excluded here too. They are `eligible` (unlocked, on,
+     applicable) but they must not receive an ordinal rank badge or Best/Worst
+     label, because that ranks a ~50%-of-market store quote against retail
+     listings — Star City Games rendered as "10th", framing instant cash as a
+     failure rather than a different product. Their section stands alone. */
+  const _eligibleDisplay = displaySorted.filter(r => r.eligible && venueGroup(r.pid) !== 'cash');
   const _displayWinner = _eligibleDisplay[0] || null;
   const _displayWorst = _eligibleDisplay.length > 1 ? _eligibleDisplay[_eligibleDisplay.length - 1] : null;
 
@@ -8984,11 +9512,14 @@ function calc() {
   if (!window._isPro || (window._userTier && window._userTier !== 'pro_max' && window._userTier !== 'ultimate')) {
     const _uTier = window._userTier || (window._isPro ? 'pro' : 'free');
     const _visible = platformsForTier(_uTier);
-    const proOnlyResults = results.filter(r => !_visible.has(r.pid) && r.eligible);
+    // `applicable`, not `eligible`: a locked venue is by definition not eligible
+    // (the plan does not unlock it), so filtering on eligible emptied this list
+    // and the upsell rendered "0 More Platforms".
+    const proOnlyResults = results.filter(r => !_visible.has(r.pid) && r.applicable);
     proOnlyResults.sort((a, b) => b.netPayout - a.netPayout);
     // Compare Pro platforms against the best of the free tier (not just eBay),
     const bestFreePayout = Math.max(
-      ...results.filter(r => _visible.has(r.pid) && r.eligible).map(r => r.netPayout),
+      ...results.filter(r => _visible.has(r.pid) && r.applicable && venueEnabled(r.pid)).map(r => r.netPayout),
       0
     );
     const mightEarnMore = proOnlyResults[0] && proOnlyResults[0].netPayout > bestFreePayout;
@@ -17147,6 +17678,13 @@ async function checkProStatus() {
     window._freeIdLeft = d.idFreeLeft || 0;
     // Update tier-conditional UI (badge, etc.)
     if (typeof updateTierUI === 'function') { try { updateTierUI(window._userTier); } catch(e) {} }
+    // Unlocked set just changed, so the chip count and the queued Pro welcome
+    // both depend on this resolved tier.
+    try { syncVenueChips(); } catch (_) {}
+    if (window._proWelcomePending) {
+      window._proWelcomePending = false;
+      try { maybeShowProWelcome(); } catch (_) {}
+    }
     // Refresh the ID Scan / AI Grade button badges now that we have fresh counts.
     // Without this the ID Scan button label stays credit-less on the home screen
     // even when the user has plenty of credits.
@@ -17836,6 +18374,25 @@ function promptInline(label, defaultValue) {
     showToast('⭐ Welcome to CardResell Pro! 10 Estimated Grade Scans added.', 5000);
     // Clean URL
     history.replaceState({}, '', window.location.pathname);
+    /* 2026-09-02: queue the venue welcome rather than showing it here. At this
+       point we only know "is pro" — the pro_max distinction arrives with
+       /api/pro-status, and Pro Max gets an extra paragraph about the Cash now
+       tab. Firing now would show a Pro Max buyer the Pro copy. The fallback
+       timer covers pro-status never resolving, so the modal can't be lost. */
+    if (window._userTier) {
+      // Tier already resolved (cached pro-status) — show it now, no delay.
+      try { maybeShowProWelcome(); } catch (_) {}
+    } else {
+      window._proWelcomePending = true;
+      // Fallback if /api/pro-status never answers. Kept short: a thank-you that
+      // arrives six seconds late reads as a bug.
+      setTimeout(() => {
+        if (window._proWelcomePending) {
+          window._proWelcomePending = false;
+          try { maybeShowProWelcome(); } catch (_) {}
+        }
+      }, 2500);
+    }
   }
   if (params.get('scan_paid') === '1') {
     const sessionId = params.get('session_id') || '';
@@ -18151,6 +18708,9 @@ window.addEventListener('load', () => {
   initGoogleSignIn();  // sets up header button
   updateKeyStatus();
   updateProUI();
+  // Venue chips reflect persisted opt-in state, so they must paint on first
+  // load rather than waiting for the user to open the picker.
+  try { syncVenueChips(); } catch (_) {}
   // Restore the saved seller profile BEFORE any calc() runs, so the first
   // render already uses this seller's real rate rather than the Level 1-4
   // default and then silently changing under them.
