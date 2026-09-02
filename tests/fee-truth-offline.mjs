@@ -203,8 +203,16 @@ assert('Cardmarket flagged as a foreign operator', /cardmarket:[\s\S]*?foreign: 
 assert('CardNexus flagged as a foreign operator', /cardnexus:[\s\S]*?foreign: true/.test(cbBlock));
 assert('eBay discloses the 1.65% international fee', /1\.65% international fee/.test(cbBlock));
 assert('TCGplayer discloses the 3.5% international processing rate', /3\.5% \+ \$0\.30 on international/.test(cbBlock));
-assert('Cardmarket discloses EUR payout and US eligibility risk',
-  /paid in EUR/.test(cbBlock) && /may not be able to register/.test(cbBlock));
+// 2026-09-02: tightened from "eligibility risk" to the verified fact. This
+// check used to require the phrase "may not be able to register". The signup
+// form's country <select> was read directly: 32 options, all European, no
+// United States. Cardmarket's FAQ says a country absent from that list cannot
+// open an account, so the hedge understated a hard block and is now banned.
+assert('Cardmarket discloses EUR payout and the US registration block',
+  /paid in EUR/.test(cbBlock) &&
+  /cannot register/.test(cbBlock) &&
+  /32 European countries/.test(cbBlock) &&
+  !/may not be able to register/.test(cbBlock));
 assert('Cross-border block renders on the LOCKED (ineligible) tile',
   /plat-sub">\$\{r\.note\}<\/div>\s*\n\s*\$\{crossBorderHtml\(r\.pid\)\}/.test(src));
 assert('Cross-border block renders on the unlocked tile',

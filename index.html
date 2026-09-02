@@ -759,6 +759,22 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .plat-effort.eff-hard{background:rgba(248,113,113,.11);color:#f87171;border:1px solid rgba(248,113,113,.28)}
 .plat-effort.eff-hard .dot{background:#f87171}
 .plat-hassle{font-size:.66rem;color:var(--text-muted);padding-left:.45rem;margin:-.15rem .45rem .55rem 0;line-height:1.35}
+/* 2026-09-02: time-to-sell tag. Sits directly under the effort pill because
+   effort answers "how much work is this" and this answers "will it actually
+   sell" — a seller comparing payouts needs both before the number means
+   anything. `blocked` is red and deliberately louder than the rest: it is the
+   only tier where the venue does not accept the product at all. */
+.plat-speed{display:inline-flex;align-items:flex-start;gap:.3rem;font-size:.62rem;font-weight:700;letter-spacing:.03em;padding:.18rem .45rem;border-radius:.28rem;margin:0 .45rem .5rem;line-height:1.25;max-width:calc(100% - .9rem)}
+.plat-speed .sdot{width:.42rem;height:.42rem;border-radius:50%;display:inline-block;flex:0 0 auto;margin-top:.22rem}
+.plat-speed.sp-fast{background:rgba(34,197,94,.11);color:#4ade80;border:1px solid rgba(34,197,94,.28)}
+.plat-speed.sp-fast .sdot{background:#4ade80}
+.plat-speed.sp-instant{background:rgba(56,189,248,.11);color:#38bdf8;border:1px solid rgba(56,189,248,.28)}
+.plat-speed.sp-instant .sdot{background:#38bdf8}
+.plat-speed.sp-cadence,.plat-speed.sp-narrow{background:rgba(251,191,36,.11);color:#fbbf24;border:1px solid rgba(251,191,36,.28)}
+.plat-speed.sp-cadence .sdot,.plat-speed.sp-narrow .sdot{background:#fbbf24}
+.plat-speed.sp-blocked{background:rgba(248,113,113,.14);color:#f87171;border:1px solid rgba(248,113,113,.4)}
+.plat-speed.sp-blocked .sdot{background:#f87171}
+.plat-speed-why{font-size:.64rem;color:var(--text-muted);line-height:1.4;margin:-.2rem .45rem .55rem;padding-left:.05rem}
 /* Rules of Sale panel — shown per platform card. workflow + payout on top,
    pill row of red-flag warnings below. Uses amber→red so ship-in / consignment /
    audience-required cards read as "pay attention" without screaming. */
@@ -7800,13 +7816,13 @@ const PLATFORMS = {
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer fields customer service on your behalf, so most sales need no follow-up from you.',
     redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
   poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Sep 2026',
-    effort: 'medium', effortLabel: 'Medium · clothing-first, thin card audience',
+    effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
-    hassle: 'Fewer card buyers browsing — listings can sit for weeks.',
+    hassle: 'Cards are not a supported Poshmark category — there is no Trading Cards browse path, so card buyers are not shopping here.',
     bestFor: '💵 Best for cards under $15 — flat $2.95 fee (jumps to 20% at $15+)',
-    redFlags: ['👗 Clothing-first — tiny card audience', '📦 $5 packaging fee if the buyer picks Priority Mail (since Oct 2025)', '🇺🇸 US domestic only — no cross-border selling', '📬 You ship the card yourself', '⏳ Listings often sit for weeks'] },
+    redFlags: ['👗 Clothing-first — tiny card audience', '📦 $5 packaging fee if the buyer picks Priority Mail (since Oct 2025)', '🇺🇸 US domestic only — no cross-border selling', '📬 You ship the card yourself', '🚫 Listing risk — Poshmark policy says items outside its supported categories may not be sold'] },
   comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Sep 2026',
-    effort: 'hard',   effortLabel: 'Hard · ship-in service, weeks to list',
+    effort: 'hard',   effortLabel: 'Hard · ship-in service, they process and list it',
     workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
     bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
@@ -7872,12 +7888,21 @@ const PLATFORMS = {
     // can't realistically capture that number. International postage, ~3% FX
     // on USD withdrawal, and EU-baseline pricing all eat it. We surface the
     // region inline so the ranking isn't quietly misleading for US sellers.
+    // 2026-09-02: upgraded from a hedge to a fact. The registration form's
+    // country <select> was read directly: 32 options, every one European
+    // (EU + UK/CH/NO/IS/LI), no United States. Cardmarket's own FAQ says "if
+    // you cannot find your country in the list, you cannot open a user
+    // account." So the earlier "may not be able to register" was understating
+    // it — for a US seller this venue is not merely expensive, it is closed.
+    // Kept in the picker (non-US users exist and the fee model stays correct)
+    // but the tile now says so plainly instead of implying postage is the
+    // only obstacle. Source: https://www.cardmarket.com/en/Magic/Signup/Pro
     region: 'EU', regionNote: 'EU-based marketplace. Payout shown is before international shipping from the US and ~3% currency conversion on USD withdrawal.',
     effort: 'medium', effortLabel: 'Medium · EU-focused, all TCGs',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Europe’s biggest TCG marketplace — huge audience but you’re competing against EU sellers with lower baselines. International shipping from US matters.',
     bestFor: '💵 Best for scarce EU-demand cards — low 5% fee + massive audience',
-    redFlags: ['🌐 EU-based — international shipping from US', '💱 3% currency conversion (USD withdrawals)', '📬 You ship the card yourself', '💬 Some communication in German/French common'] },
+    redFlags: ['🚫 US sellers cannot register — the signup country list is 32 European countries only', '🌐 EU-based — international shipping from US', '💱 3% currency conversion (USD withdrawals)', '📬 You ship the card yourself', '💬 Some communication in German/French common'] },
   // Card Kingdom — buylist model, all TCGs. NO fees; instead the buylist offer
   // itself is 40–65% of retail comp price (they eat margin on resale). The
   // 30% store credit bonus is huge if you’re also a buyer.
@@ -8006,8 +8031,8 @@ const CROSS_BORDER = {
     text: 'Stored value is denominated in USD and Cardsphere charges no cross-border fee. Shipping abroad is entirely on you: you bear all shipping cost and all loss risk, and any currency conversion is borne by the card holder rather than the platform.',
     src: 'https://www.cardsphere.com/terms' },
   cardmarket: { flag: '🇩🇪', country: 'Germany', ccy: 'EUR', foreign: true,
-    text: 'Foreign venue. Operated by Sammelkartenmarkt GmbH & Co. KG, a German company. You are paid in EUR, and its 3% currency conversion fee is already deducted in the payout above. Seller activation requires a verified bank account in a supported country, so a US seller may not be able to register at all — confirm eligibility before planning around this number. Selling in from outside the EU also carries VAT duties: Cardmarket collects VAT below €150 (EU) and £135 (UK) and requires their IOSS number on the package; above those thresholds the VAT is yours to handle.',
-    src: 'https://help.cardmarket.com/en/TaxRequirements' },
+    text: 'Foreign venue. Operated by Sammelkartenmarkt GmbH & Co. KG, a German company. You are paid in EUR, and its 3% currency conversion fee is already deducted in the payout above. A US seller cannot register: the signup form’s country list offers 32 European countries (EU plus the UK, Switzerland, Norway, Iceland and Liechtenstein) and has no United States option, and Cardmarket states that if your country is not in the list you cannot open an account. Treat this payout as unreachable from the US unless you already hold an EU-registered account. Selling in from outside the EU also carries VAT duties: Cardmarket collects VAT below €150 (EU) and £135 (UK) and requires their IOSS number on the package; above those thresholds the VAT is yours to handle.',
+    src: 'https://www.cardmarket.com/en/Magic/Signup/Pro' },
   cardkingdom: { flag: '🇺🇸', country: 'US-operated', ccy: 'USD',
     text: 'US buyer in Monroe, WA — you ship to them, so there is no buyer-side border to cross. If you are shipping in from outside the US, the order must go Delivery Duties Paid; DDU packages are refused on arrival.',
     src: 'https://www.cardkingdom.com/purchasing/how_to_sell' },
@@ -8852,6 +8877,62 @@ function feeCardNexus(price, shipCharge) {
 // consignment, PayPal batching for buylists/offer venues, next-day payouts
 // where the venue clears fast. Wide ranges are honest here - the point of
 // the row is that COMC is not eBay.
+/* ── Time-to-SELL (demand depth), 2026-09-02 ────────────────────────────────
+   Separate axis from DAYS_TO_CASH below, which is the POST-SALE settlement
+   clock and only starts once a buyer exists. Reading DAYS_TO_CASH alone made
+   Poshmark [3,7] look exactly as fast as eBay [3,7]; the difference is that on
+   eBay the card sells, and Poshmark does not have a trading-card category.
+
+   Deliberately CATEGORICAL, not day-counts. Research across all 15 venues
+   found that NONE publishes an average days-to-sell or sell-through rate for
+   cards. The only numbers that exist anywhere are one seller's self-tracked
+   51-day COMC average (YouTube, anecdotal) and Whatnot's in-show auction
+   durations. Inventing "30-60 days" per venue would be stamping a lie, so each
+   tier states a STRUCTURAL fact that is sourced, and no tier claims a duration
+   it cannot support.
+
+     instant  — no listing-to-sale wait exists at all (buylists: they are the
+                buyer; sale is guaranteed on acceptance/receipt).
+     fast     — card-native or card-major demand, documented at scale.
+     cadence  — sells on the venue's schedule, not the market's.
+     narrow   — real card demand, but scoped: one game only, or unproven.
+     blocked  — the venue does not support cards as a category at all.
+
+   `why` must stay a sourced structural claim, never a guessed duration. */
+const SELL_SPEED = {
+  ebay:       { tier: 'fast',    label: 'Sells fast · deepest card demand',
+                why: '$2.62B of card singles sold here in 2025 — the largest card audience anywhere.' },
+  tcgplayer:  { tier: 'fast',    label: 'Sells fast · card-native buyers',
+                why: 'Purpose-built TCG singles marketplace; every visitor is already shopping for cards.' },
+  whatnot:    { tier: 'fast',    label: 'Sells fast · in-show, seconds to minutes',
+                why: 'Cards were the top two US categories of $8B+ 2025 sales; in-show auctions close in seconds to minutes. You must be in a live show.' },
+  mercari:    { tier: 'fast',    label: 'Card category supported',
+                why: 'Full Trading Cards subcategory tree plus card-only envelope shipping labels. Smaller card audience than eBay, but cards are a real category here.' },
+  poshmark:   { tier: 'blocked', label: 'Cards are not a Poshmark category',
+                why: 'Poshmark supports fashion, personal care, select home goods, pet items and electronics. Its policy says items outside those categories “may not be offered for sale.” Cards have no category, so listings get filed under buckets like “Electronics Other.”' },
+  comc:       { tier: 'cadence', label: 'Months on the shelf by design',
+                why: 'COMC waives storage fees for the first 90 days and charges monthly after — the fee schedule assumes a long sit. Add intake processing before it even lists.' },
+  fanatics:   { tier: 'cadence', label: 'Weekly auction cadence',
+                why: 'Submit by Wednesday 11:59pm PT for a Sunday close about 10 days out. Raw cards must be paid-graded first, and an unsold lot burns another cycle.' },
+  cardmarket: { tier: 'narrow',  label: 'EU marketplace · US signup limited',
+                why: 'Deepest card demand in Europe (500M+ offers, 2M+ buyers), but the signup country list is 32 European countries with no US option — verified on the registration form, so a US seller cannot open an account.' },
+  cardnexus:  { tier: 'narrow',  label: 'New · liquidity unproven',
+                why: 'Marketplace launched March 2026. Every published figure is supply-side (30M+ cards inventoried); no buyer count, order count, or sales volume has been released.' },
+  manapool:   { tier: 'narrow',  label: 'Magic only · smaller pool',
+                why: 'Built 100% for Magic — unusable for Pokemon or sports. Real volume ($4M+ gross, 1.2M cards) but orders of magnitude under eBay.' },
+  cardsphere: { tier: 'narrow',  label: 'Magic only · needs a standing offer',
+                why: 'Magic only. Instant if a buyer already has an offer on your card; open-ended if none exists. Payment releases when the receiver confirms, not when you ship.' },
+  cardkingdom:  { tier: 'instant', label: 'No wait · they are the buyer',
+                why: 'Buylist — price locked at submission, no listing and no waiting for a buyer. Magic only, and they may not be buying your card at all.' },
+  coolstuffinc: { tier: 'instant', label: 'No wait · they are the buyer',
+                why: 'Buylist — approved before you ship, so there is no listing-to-sale wait. They reserve the right to refuse a cart; played cards pay 75% of NM.' },
+  scg:          { tier: 'instant', label: 'No wait · they are the buyer',
+                why: 'Buylist — no listing step. Ship + Sell quotes after receipt and deducts a processing fee; no reply within 30 days is auto-processed.' },
+  tcgbulk:      { tier: 'instant', label: 'No wait · dealer buyers',
+                why: 'Directory of dealers buying outright, so no listing-to-sale wait. Each buyer sets minimum submissions and a monthly budget that can run out.' },
+};
+function sellSpeed(pid) { return SELL_SPEED[pid] || null; }
+
 const DAYS_TO_CASH = {
   ebay:        [3, 7],    tcgplayer:  [3, 7],     poshmark:   [3, 7],
   whatnot:     [1, 5],    mercari:    [3, 7],     comc:       [14, 45],
@@ -9439,6 +9520,14 @@ function calc() {
     const hassleHtml = info.hassle
       ? `<div class="plat-hassle">${info.hassle}</div>`
       : '';
+    /* Time-to-sell tag. The `why` line is always rendered with it — the tier
+       alone ("Sells fast") is an assertion, and the seller is entitled to the
+       reason before they trust it against a dollar figure. */
+    const _sp = sellSpeed(r.pid);
+    const speedHtml = _sp
+      ? `<div class="plat-speed sp-${_sp.tier}"><span class="sdot"></span><span>${esc(_sp.label)}</span></div>
+         <div class="plat-speed-why">${esc(_sp.why)}</div>`
+      : '';
     // 2026-08-19: Rules of Sale panel — payout time + red-flag pills for
     // ship-in, consignment, live-auction, and other things that a seller
     // needs to know BEFORE picking this platform.
@@ -9467,6 +9556,7 @@ function calc() {
         <div class="plat-accent" style="background:${info.color}"></div>
         <div class="plat-hdr"><span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>${badgeHtml}</div>
         ${effortHtml}
+        ${speedHtml}
         <div class="plat-payout" style="color:var(--text-faint)">—</div>
         <div class="plat-sub">${r.note}</div>
         ${crossBorderHtml(r.pid)}
@@ -9481,6 +9571,7 @@ function calc() {
         ${badgeHtml}
       </div>
       ${effortHtml}
+      ${speedHtml}
       <div class="plat-payout ${r.netPayout >= 0 ? 'pos' : 'neg'}">${fmt(r.netPayout)}</div>
       ${sellBadge}
       ${itemCost > 0
@@ -9505,7 +9596,7 @@ function calc() {
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your ship-out cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Net after all deductions</span><span class="fee-val">${fmt(r.netPayout)}</span></div>
-        ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Estimated end-to-end cash time</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
+        ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Payout time after it sells</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
         ${info.verified ? (() => {
           // 2026-09-01: pill color reflects staleness. >45d = amber + "Stale" text (venue also
           // demoted from #1 by the payout ranker); 31-45d = amber pill but still "Verified";

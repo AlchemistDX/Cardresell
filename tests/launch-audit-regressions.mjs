@@ -373,5 +373,104 @@ try {
         'syncing only at the UI callsite let chips drift from persisted state');
 }
 
+// ── Time-to-sell tag (2026-09-02) ───────────────────────────────────────────
+// The bug this locks: DAYS_TO_CASH gave Poshmark [3,7] — byte-identical to
+// eBay — under the label "Estimated end-to-end cash time". That clock is the
+// post-sale settlement window, so it silently assumed a buyer. Poshmark does
+// not have a trading-card category, so on the axis that actually matters it is
+// not eBay's equal. Velocity is now its own dimension.
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  check('the payout clock is not labelled end-to-end',
+        !/Estimated end-to-end cash time/.test(html) &&
+        /Payout time after it sells/.test(html),
+        'DAYS_TO_CASH starts once a buyer exists; it never measured listing-to-sale');
+  check('sell speed is a separate axis from effort and from DAYS_TO_CASH',
+        /const SELL_SPEED\s*=/.test(code) && /function sellSpeed/.test(code));
+  check('every venue has a sell-speed entry',
+        (() => {
+          const ids = [...code.matchAll(/^  (\w+):\s*\{ name:/gm)].map(m => m[1]);
+          const seg = code.slice(code.indexOf('const SELL_SPEED'),
+                                 code.indexOf('function sellSpeed'));
+          return ids.length >= 15 && ids.every(id => new RegExp('\\b' + id + ':\\s*\\{ tier:').test(seg));
+        })(),
+        'a missing entry renders a tile with a payout and no velocity context');
+  check('the tag renders above the payout figure, not below it',
+        /\$\{speedHtml\}\s*\n\s*<div class="plat-payout/.test(html),
+        'the seller should see whether it sells before they see the number');
+  check('every tier ships its sourced reason',
+        (() => {
+          const seg = code.slice(code.indexOf('const SELL_SPEED'),
+                                 code.indexOf('function sellSpeed'));
+          const tiers = seg.match(/tier:\s*'/g) || [];
+          const whys  = seg.match(/why:\s*'/g) || [];
+          return tiers.length === whys.length && tiers.length >= 15;
+        })(),
+        'a bare "Sells fast" is an assertion; the reason is what makes it checkable');
+
+  // No invented durations. Research across all 15 venues found that none
+  // publishes an average days-to-sell for cards, so any day-range in a tier
+  // label would be fabricated. Whatnot's "seconds to minutes" is the one
+  // allowed duration — it is the published in-show auction length.
+  check('no fabricated day-counts in the sell-speed labels',
+        (() => {
+          const seg = code.slice(code.indexOf('const SELL_SPEED'),
+                                 code.indexOf('function sellSpeed'));
+          return !/\d+\s*[-–]\s*\d+\s*(days?|weeks?|months?)/i.test(seg) &&
+                 !/(average|avg)[^']{0,24}\d+\s*days?/i.test(seg);
+        })(),
+        'no venue publishes a days-to-sell figure — inventing one stamps a lie');
+
+  // The same rule applies to the venue registry, not just SELL_SPEED. Effort
+  // labels, hassle lines and red-flag pills were the original home of guessed
+  // durations ("Listings often sit for weeks", "weeks to list") — unsourced,
+  // and precisely what the velocity axis was added to replace.
+  check('no guessed listing durations in effort labels, hassle lines or red flags',
+        (() => {
+          const seg = code.slice(code.indexOf('const PLATFORMS'),
+                                 code.indexOf('const FREE_PLATFORMS'));
+          const claims = [
+            ...(seg.match(/effortLabel:\s*'[^']*'/g) || []),
+            ...(seg.match(/hassle:\s*'[^']*'/g) || []),
+            ...(seg.match(/redFlags:\s*\[[^\]]*\]/g) || []),
+          ].join(' | ');
+          return !/(sit|sits|sitting|listings?)[^|]{0,40}(for )?(weeks|months)/i.test(claims) &&
+                 !/weeks to list/i.test(claims);
+        })(),
+        'no venue publishes a days-to-sell figure, so a duration here is invented');
+  check('effort no longer doubles as an audience-depth claim',
+        !/effortLabel:\s*'[^']*(thin|tiny) card audience/i.test(code),
+        'effort is workflow; audience depth belongs to SELL_SPEED');
+
+  // Poshmark is a category problem, not a speed problem.
+  check('Poshmark is flagged as having no card category at all',
+        /poshmark:\s*\{ tier: 'blocked'/.test(code) &&
+        /Cards are not a Poshmark category/.test(code),
+        'its policy excludes items outside supported categories');
+  check('Mercari is not lumped in with Poshmark',
+        /mercari:\s*\{ tier: 'fast'/.test(code),
+        'Mercari has a real Trading Cards tree and card-only shipping labels');
+
+  // The four buylists have no listing-to-sale clock to be slow on.
+  check('buylists are marked instant, never slow',
+        ['cardkingdom', 'coolstuffinc', 'scg', 'tcgbulk']
+          .every(id => new RegExp(id + ":\\s*\\{ tier: 'instant'").test(code)),
+        'they are the buyer — a "slow to sell" warning would be factually wrong');
+
+  // Cardmarket: verified against the live signup form's country <select>.
+  check('Cardmarket is flagged as closed to US sellers, not merely expensive',
+        /US sellers cannot register/.test(html) &&
+        /32 European countries/.test(html),
+        'the country list has no United States option');
+  check('the Cardmarket warning no longer hedges on eligibility',
+        !/may not be able to register at all/.test(html),
+        'the registration form was read directly: 32 options, none of them the US');
+  check('Cardmarket is a geography block, not a demand claim',
+        !/cardmarket[\s\S]{0,400}?(sells? slower|low demand|weak demand)/i.test(code),
+        'it has the deepest card demand in Europe — the blocker is access');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
