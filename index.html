@@ -681,6 +681,12 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .fee-basis{color:var(--text-muted);font-weight:400;font-size:.72rem;margin-left:.25rem}
 .fee-days-row{padding-top:.35rem;color:var(--text-muted);font-size:.72rem}
 .fee-days-row .fee-val{color:var(--text-muted);font-weight:500}
+.card-panel.card-swapping{position:relative}
+.card-panel.card-swapping .card-hero,.card-panel.card-swapping .price-block,.card-panel.card-swapping #cardNameBlock{opacity:.42;transition:opacity .12s ease}
+@media (prefers-reduced-motion:reduce){.card-panel.card-swapping .card-hero,.card-panel.card-swapping .price-block,.card-panel.card-swapping #cardNameBlock{transition:none}}
+.seller-profile-head{display:flex;flex-direction:column;gap:.15rem;padding-bottom:.1rem}
+.seller-profile-head strong{font-size:.82rem;letter-spacing:.01em;color:var(--text)}
+.seller-profile-head span{font-size:.72rem;line-height:1.35;color:var(--text-dim,var(--text))}
 .clamp-note{margin:-.35rem 0 .8rem;padding:.55rem .8rem;border:1px solid var(--divider);border-left:3px solid var(--amber);border-radius:var(--radius-md);background:var(--surface-2,var(--amber-bg));color:var(--text-dim,var(--text));font-size:.74rem;line-height:1.45}
 .clamp-note a{color:var(--accent,var(--text));text-decoration:underline}
 .warning-banner{margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--amber);border-radius:var(--radius-md);background:var(--amber-bg);color:var(--text);font-size:.76rem;line-height:1.45}
@@ -2353,6 +2359,19 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
         </button>
         <div class="adv-body" id="advBody">
           <div style="padding-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
+            <div class="seller-profile-head">
+              <strong>Your seller profile</strong>
+              <span>Saved on this device. Your level changes the rate, the per-order fee, and who pays postage.</span>
+            </div>
+            <div>
+              <div class="field-label" style="margin-top:0">TCGplayer Seller Level</div>
+              <select id="tcgLevel" onchange="calc()">
+                <option value="l14">Level 1&ndash;4 &mdash; 10.75% (default)</option>
+                <option value="pro">Pro, non-Direct &mdash; 9.25% + 2.5% Pro fee</option>
+                <option value="direct">Direct &mdash; 8.95%, no $0.30, you don&rsquo;t ship</option>
+                <option value="directpro">Direct + Pro &mdash; 8.95% + 2.5% Pro fee</option>
+              </select>
+            </div>
             <div>
               <div class="field-label" style="margin-top:0">eBay Store</div>
               <select id="ebayStore" onchange="calc()">
@@ -6311,6 +6330,8 @@ function loadSportsCardFromSearch(playerName) {
 })();
 
 function loadCardUI(card) {
+  // A real card is rendering now, so lift the swap placeholder.
+  try { _endCardSwap(true); } catch(_) {}
   // Show the Add to My Collection button whenever a card is loaded
   const _colBtn = document.getElementById('addCollectionBtn');
   if (_colBtn) _colBtn.style.display = '';
@@ -7574,6 +7595,49 @@ function toggleAdv() {
   document.getElementById('advBody').classList.toggle('open');
 }
 
+/* ── Seller profile persistence ──
+   These four selects describe WHO the seller is, not what they are pricing,
+   so they should outlive a single scan. Persisted to localStorage and
+   restored on load. Wrapped in try/catch because the /computer/a preview
+   iframe runs on an opaque origin where localStorage access throws. */
+const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo'];
+const SELLER_PROFILE_LS   = 'cr_seller_profile_v1';
+
+function saveSellerProfile() {
+  try {
+    const out = {};
+    SELLER_PROFILE_KEYS.forEach(k => {
+      const el = document.getElementById(k);
+      if (el) out[k] = el.value;
+    });
+    localStorage.setItem(SELLER_PROFILE_LS, JSON.stringify(out));
+  } catch (e) { /* opaque origin or storage disabled - profile just won't persist */ }
+}
+
+function loadSellerProfile() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(SELLER_PROFILE_LS) || 'null');
+  } catch (e) { return; }
+  if (!saved || typeof saved !== 'object') return;
+  SELLER_PROFILE_KEYS.forEach(k => {
+    const el = document.getElementById(k);
+    if (!el || !(k in saved)) return;
+    // Only accept a value the select actually offers, so a stale or tampered
+    // localStorage entry can never put the fee engine into an unknown tier.
+    const ok = Array.from(el.options).some(o => o.value === saved[k]);
+    if (ok) el.value = saved[k];
+  });
+}
+
+function initSellerProfile() {
+  loadSellerProfile();
+  SELLER_PROFILE_KEYS.forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.addEventListener('change', saveSellerProfile);
+  });
+}
+
 // ── Utility ──
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -7913,13 +7977,35 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   let fvf = 0;
   if (total <= tierBoundary) fvf = total * baseRate;
   else                       fvf = tierBoundary * baseRate + (total - tierBoundary) * 0.0235;
-  if (ebayTopRated === 'yes') fvf *= 0.9;
+  const trs = ebayTopRated === 'yes';
+  if (trs) fvf *= 0.9;
   const rateLabel = (baseRate * 100).toFixed(2).replace(/\.?0+$/,'');
+  // 2026-09-02: the rate signature must describe the rate ACTUALLY charged.
+  // Two things can move it off the headline rate: the Top Rated Seller 10%
+  // FVF discount, and the tier break where everything above the boundary
+  // drops to 2.35%. Previously `f` always printed baseRate, so a Top Rated
+  // seller saw "13.25%" on the recipe line while paying 11.93% -- the
+  // headline claimed a rate the math did not apply. Now, whenever either
+  // adjustment fires we publish the blended effective rate instead.
+  // For the Top Rated case we publish "13.25% \u221210% Top Rated" rather than a
+  // rounded effective rate: 13.25% less 10% is exactly 11.925%, which does not
+  // survive 2dp rounding (11.92% rebuilds two cents light on a $422 card).
+  // Stating the two exact operations keeps the row hand-rebuildable. Above the
+  // tier boundary the rate genuinely is a blend, so there we show the blend.
+  const tiered   = total > tierBoundary;
+  const effRate  = total > 0 ? fvf / total : baseRate;
+  const effLabel = (effRate * 100).toFixed(2).replace(/\.?0+$/,'');
   // `f` is the short rate signature used to build the visible fee formula
   // ("13.25% + $0.40"). It is attached HERE, next to the arithmetic it
   // describes, so the headline recipe can never drift from the math: the
   // one-liner is assembled from these strings rather than hand-written copy.
-  items.push({ l: `Final Value Fee (${rateLabel}% trading cards)`, a: fvf, f: `${rateLabel}%` });
+  items.push({
+    l: `Final Value Fee (${rateLabel}% trading cards`
+       + (trs ? ', \u221210% Top Rated' : '')
+       + (tiered ? `, 2.35% above $${tierBoundary.toLocaleString()}` : '') + ')',
+    a: fvf,
+    f: tiered ? `${effLabel}% effective`
+              : (trs ? `${rateLabel}% \u221210% Top Rated` : `${rateLabel}%`) });
   const perOrder = total <= 10 ? 0.30 : 0.40;
   items.push({ l: 'Per-order fee', a: perOrder, f: `$${perOrder.toFixed(2)}` });
   if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100, f: `${ebayPromo}%` });
@@ -7941,24 +8027,81 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
 // and the processing fee against the item price alone, which understated fees on
 // any sale where the buyer paid shipping.
 // Note: help.tcgplayer.com still publishes the pre-Feb-2026 10.25%/$50 numbers;
-// the seller blog announcement below is the current authority. Re-verified Sep 1, 2026.
-// Pro / Sync sellers pay 9.25% instead of 10.75% — not modeled here since the vast
-// majority of casual card flippers land in Level 1–4.
-// Source: https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
-// Feb 2026 change:  https://seller.tcgplayer.com/blog/important-changes-to-tcgplayer-direct-minimum-pricing-and-marketplace-fees
-function feeTCGPlayer(price, shipCharge) {
-  const base          = price + (shipCharge || 0);         // fees bill on item + shipping
-  const rawCommission = base * 0.1075;                     // 10.75% Level 1–4 rate
-  const commission    = Math.min(rawCommission, 75);       // $75 cap per item
-  const processing    = base * 0.025 + 0.30;               // 2.5% + $0.30 processing
+// the seller blog announcement below is the current authority. Re-verified Sep 2, 2026.
+//
+// 2026-09-02 SELLER PROFILE: seller level is now modeled, because the level
+// changes the rate, the per-order fee AND who pays postage. Official tier table:
+//
+//   Marketplace Seller (Level 1-4)      10.75%   no Pro fee   2.5% + $0.30
+//   Marketplace Seller (Pro, non-Direct) 9.25%   + 2.5% Pro   2.5% + $0.30
+//   Direct Seller (non-Pro)              8.95%   no Pro fee   2.5%  (no $0.30)
+//   Direct Seller (Pro)                  8.95%   + 2.5% Pro   2.5%  (no $0.30)
+//
+// Two Direct-only rules that a flat 10.75% model got badly wrong:
+//   1. The $0.30 transaction fee was REMOVED from all Direct orders on
+//      Jun 18, 2026. Only the 2.5% remains.
+//   2. Direct sellers do not ship to the buyer -- TCGplayer fulfills from its
+//      facility. Per-order postage is replaced by a per-item Direct fee:
+//      $1.12 flat above $2.49, or 50% of sale price at $2.49 and below.
+// So a Direct seller pays neither our ~$10.86 processing line nor the ~$5
+// postage line. Modeling everyone as Level 1-4 understated Direct net payout.
+//
+// The $75 cap applies to commission AND Pro fee COMBINED ("the commission and
+// Pro fee total is capped"), not to the commission alone -- so for Pro levels we
+// scale both lines down proportionally rather than capping only the commission.
+//
+// Sources:
+//   https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
+//   https://help.tcgplayer.com/hc/en-us/articles/360047732673-Fee-Calculation-Examples
+//   Feb 2026 rate/cap change: https://seller.tcgplayer.com/blog/important-changes-to-tcgplayer-direct-minimum-pricing-and-marketplace-fees
+//   Jun 2026 Direct change:   https://seller.tcgplayer.com/blog/simpler-and-more-predictable-fees-coming-for-tcgplayer-direct-june-18
+const TCG_LEVELS = {
+  l14:       { rate: 0.1075, pro: 0,     direct: false, label: 'Level 1\u20134' },
+  pro:       { rate: 0.0925, pro: 0.025, direct: false, label: 'Pro (non-Direct)' },
+  direct:    { rate: 0.0895, pro: 0,     direct: true,  label: 'Direct' },
+  directpro: { rate: 0.0895, pro: 0.025, direct: true,  label: 'Direct + Pro' }
+};
+
+function feeTCGPlayer(price, shipCharge, tcgLevel) {
+  const L    = TCG_LEVELS[tcgLevel] || TCG_LEVELS.l14;
+  const base = price + (shipCharge || 0);        // fees bill on item + shipping
+  const pct  = (L.rate * 100).toFixed(2).replace(/\.?0+$/,'');
+  // $75 cap covers commission + Pro fee together.
+  const rawCommission = base * L.rate;
+  const rawPro        = base * L.pro;
+  const rawCombined   = rawCommission + rawPro;
+  const capped        = rawCombined > 75;
+  const scale         = capped ? 75 / rawCombined : 1;
+  const commission    = rawCommission * scale;
+  const proFee        = rawPro * scale;
+  // Direct orders dropped the $0.30 transaction fee on Jun 18, 2026.
+  const processing    = base * 0.025 + (L.direct ? 0 : 0.30);
+
+  const capSuffix = L.pro > 0 ? `${pct}% + 2.5% Pro capped $75` : `${pct}% capped $75`;
   const out = [
-    { l: 'Marketplace commission (10.75%' + (rawCommission > 75 ? ', $75 cap' : '') + ')', a: commission,
-      f: rawCommission > 75 ? '10.75% capped $75' : '10.75%' },
-    { l: 'Payment processing (2.5% + $0.30)', a: processing, f: '2.5% + $0.30' }
+    { l: `Marketplace commission (${pct}%${capped ? ', $75 cap' : ''})`,
+      a: commission,
+      f: capped ? capSuffix : `${pct}%` }
   ];
+  if (L.pro > 0) {
+    out.push({ l: 'Pro fee (2.5%)', a: proFee, f: capped ? null : '2.5% Pro' });
+  }
+  out.push({ l: `Payment processing (2.5%${L.direct ? '' : ' + $0.30'})`,
+             a: processing,
+             f: L.direct ? '2.5%' : '2.5% + $0.30' });
+  if (L.direct) {
+    const lowValue = price <= 2.49;
+    out.push({
+      l: lowValue ? 'Direct per-item fee (50% at $2.49 and below)' : 'Direct per-item fee (flat)',
+      a: lowValue ? price * 0.50 : 1.12,
+      f: lowValue ? '50% item fee' : '$1.12' });
+  }
   out.feeBase      = base;
   out.feeBaseLabel = (shipCharge || 0) > 0 ? 'item + shipping' : 'item';
-  out.capFired     = rawCommission > 75;
+  out.capFired     = capped;
+  out.tcgLevel     = (TCG_LEVELS[tcgLevel] ? tcgLevel : 'l14');
+  out.tcgDirect    = L.direct;
+  out.tcgLevelLabel = L.label;
   return out;
 }
 
@@ -8206,6 +8349,8 @@ function calc() {
   const ebayStore     = document.getElementById('ebayStore').value;
   const ebayPromo     = parseInt(document.getElementById('ebayPromo').value) || 0;
   const ebayTopRated  = document.getElementById('ebayTopRated').value;
+  const tcgLevel      = document.getElementById('tcgLevel')?.value || 'l14';
+  const tcgIsDirect   = !!(TCG_LEVELS[tcgLevel] && TCG_LEVELS[tcgLevel].direct);
   const comcService   = document.getElementById('comcService').value;
   const comcCashout   = document.getElementById('comcCashout').value;
   const graderVal     = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
@@ -8225,19 +8370,26 @@ function calc() {
     {
       pid: 'tcgplayer',
       eligible: !isSports,   // TCGPlayer doesn’t carry sports cards
-      feeItems: feeTCGPlayer(price, shipCharge),
+      feeItems: feeTCGPlayer(price, shipCharge, tcgLevel),
       // 2026-09-01: Standard Level 1–4 marketplace sellers ship to the buyer
       // themselves; TCGplayer collects buyer-paid shipping and reimburses it,
       // but the seller still pays the real postage. Previously hardcoded to 0,
       // which overstated TCGplayer's net payout against every self-ship venue.
-      // (TCGplayer Direct, where TCGplayer fulfills, is a separate program and
-      // is not the default for casual flippers.)
-      sellerShip: shipCost,
+      // 2026-09-02: Direct sellers genuinely do NOT pay per-order postage --
+      // TCGplayer fulfills from its own facility and charges the per-item
+      // Direct fee instead. Charging them the self-ship postage on top of that
+      // would double-bill fulfillment, so postage drops to 0 on Direct levels.
+      sellerShip: tcgIsDirect ? 0 : shipCost,
+      // Surfaced so the renderer can swap the workflow badges to the Direct
+      // (ship-in) story instead of the default "you ship it yourself".
+      tcgDirect: tcgIsDirect,
       note: isSports
         ? 'TCGPlayer is for TCG singles only — not sports cards.'
-        : (isYugioh || isMagic)
-          ? 'Largest TCG marketplace for MTG & Yu-Gi-Oh! singles. You ship the card yourself.'
-          : 'Largest TCG marketplace for Pokémon singles. You ship the card yourself.'
+        : tcgIsDirect
+          ? 'TCGplayer Direct: they fulfill from their facility, so you pay the per-item Direct fee instead of postage and the $0.30 per-order fee.'
+          : (isYugioh || isMagic)
+            ? 'Largest TCG marketplace for MTG & Yu-Gi-Oh! singles. You ship the card yourself.'
+            : 'Largest TCG marketplace for Pokémon singles. You ship the card yourself.'
     },
     {
       pid: 'poshmark',
@@ -8643,7 +8795,25 @@ function calc() {
   const _displayWorst = _eligibleDisplay.length > 1 ? _eligibleDisplay[_eligibleDisplay.length - 1] : null;
 
   const renderTile = (r) => {
-    const info   = PLATFORMS[r.pid];
+    // TCGplayer Direct inverts the fulfillment story: TCGplayer ships from
+    // their facility, so the static "you ship the card yourself" workflow
+    // badges would contradict the Direct fee model rendered right below them.
+    // Shallow-override the display metadata for Direct only; PLATFORMS stays
+    // the untouched Level 1-4 baseline.
+    let info     = PLATFORMS[r.pid];
+    if (r.pid === 'tcgplayer' && r.tcgDirect) {
+      info = Object.assign({}, info, {
+        effortLabel: 'Easy \u00b7 you send inventory in, they ship and support it',
+        workflow: 'shipIn',
+        hassle: 'TCG-singles hub with built-in buyers. On Direct, TCGplayer '
+              + 'stores and ships the card and handles customer service, so you '
+              + 'pay the per-item Direct fee instead of postage.',
+        redFlags: ['\ud83d\udce6 You ship inventory in to TCGplayer first',
+                   '\ud83d\udcc5 Payouts twice a month, not per-sale',
+                   '\ud83c\udccf TCG cards only (no sports, no collectibles)',
+                   '\ud83d\udcb5 $0.40 minimum price on Direct listings']
+      });
+    }
     const isWin  = r.eligible && _displayWinner && r.pid === _displayWinner.pid;
     const isWrst = r.eligible && _displayWorst  && r.pid === _displayWorst.pid;
 
@@ -12739,10 +12909,87 @@ function _loadScannedJPCard(pending) {
 }
 
 // Fetch the exact scanned card from PokemonTCG.io by name + number and load it
+// ── Card-swap loading state (CR-022, 2026-09-02) ──────────────────────────────
+// _loadScannedCardExact sets #searchInput.value synchronously but only renders
+// the card after an awaited network fetch. Between those two points the panel
+// still showed the PREVIOUS card in full -- art, name, set, and market value --
+// so tapping a second Bulk ID Scan row read as "the search box says Lacey but
+// the app is showing me Single Strike Style Mustard at $1.57". Nothing was
+// actually miscomputed; the stale frame just outlived the selection. These two
+// helpers retire the outgoing card's visuals the instant a new one is chosen.
+function _beginCardSwap(name) {
+  try {
+    window._cardSwapPending = true;
+    const panel = document.querySelector('.card-panel');
+    if (panel) panel.classList.add('card-swapping');
+    // Name follows the selection immediately so the header can never disagree
+    // with the search box.
+    const nameEl = document.getElementById('cardNameEl');
+    if (nameEl && name) nameEl.textContent = name;
+    const metaEl = document.getElementById('cardMetaEl');
+    if (metaEl) metaEl.textContent = '';
+    // Drop the outgoing art and price outright -- a wrong picture and a wrong
+    // dollar figure are the two things a seller must never be shown.
+    //
+    // Bumping _imgGen is the load-bearing line. loadCardUI gates its async
+    // image callbacks on this generation counter, so the OUTGOING card's
+    // still-in-flight onload/onerror/large-upgrade closures all become stale
+    // here and stop writing to the DOM. Without the bump, hiding the wrapper
+    // does nothing: card A's onload lands ~200-400ms later and re-reveals the
+    // old art under the new card's name, which is the glitch itself.
+    window._imgGen = (window._imgGen || 0) + 1;
+    // Deliberately do NOT blank cardImg.src here: assigning '' resolves to the
+    // document URL, so the browser fires a bogus request for index.html as an
+    // image and the resulting error state suppressed the incoming card's
+    // reveal. Hiding the wrapper is enough, and loadCardUI blanks src itself.
+    const wrap = document.getElementById('cardImgWrap');
+    if (wrap) wrap.style.display = 'none';
+    const sportsPh = document.getElementById('sportsCardPh');
+    if (sportsPh) sportsPh.style.display = 'none';
+    const ph = document.getElementById('cardImgPh');
+    if (ph) ph.style.display = 'flex';
+    const phLabel = document.getElementById('cardImgPhLabel');
+    if (phLabel) phLabel.textContent = name ? `Loading ${name}\u2026` : 'Loading\u2026';
+    const pm = document.getElementById('priceMain');
+    if (pm) { pm.textContent = '\u2014'; pm.style.color = 'var(--text-faint)'; }
+    const pr = document.getElementById('priceRange');
+    if (pr) pr.textContent = '';
+  } catch (e) { console.warn('[cardSwap] begin failed', e); }
+}
+// rendered=true means loadCardUI took over and painted a real card. rendered
+// =false is the safety net for every lookup path that exits WITHOUT rendering
+// (pokemontcg.io miss, network failure, early return): without this the panel
+// would sit dimmed on "Loading Lacey..." forever.
+function _endCardSwap(rendered) {
+  try {
+    const panel = document.querySelector('.card-panel');
+    if (panel) panel.classList.remove('card-swapping');
+    if (!rendered && window._cardSwapPending) {
+      const phLabel = document.getElementById('cardImgPhLabel');
+      if (phLabel) phLabel.textContent = 'No card selected';
+    }
+    window._cardSwapPending = false;
+  } catch (e) {}
+}
+
+// Thin wrapper: the implementation below has ~6 exit points (fast path, TPL
+// fallback, synthetic card, miss panel, early returns). Rather than patch each
+// one, the finally here guarantees the swap placeholder is always retired.
 async function _loadScannedCardExact(pending) {
+  try {
+    return await _loadScannedCardExactImpl(pending);
+  } finally {
+    _endCardSwap(false);
+  }
+}
+
+async function _loadScannedCardExactImpl(pending) {
   const { name, number, setName, rarity, groundedId } = pending;
   const si = document.getElementById('searchInput');
   if (si) si.value = name;
+  // Retire the previous card's art/price in the same tick as the search box,
+  // so no frame ever pairs a new name with the old card. See _beginCardSwap.
+  _beginCardSwap(name);
   // 2026-08-21: track whether the synth-card fallback already rendered a
   // real price so we can skip the miss panel and avoid double-panels.
   let _synthCardLoadedWithPrice = false;
@@ -17882,6 +18129,10 @@ window.addEventListener('load', () => {
   initGoogleSignIn();  // sets up header button
   updateKeyStatus();
   updateProUI();
+  // Restore the saved seller profile BEFORE any calc() runs, so the first
+  // render already uses this seller's real rate rather than the Level 1-4
+  // default and then silently changing under them.
+  initSellerProfile();
   // Pre-populate settings inputs with saved values
 
   const tplInput = document.getElementById('tplKeyInput');

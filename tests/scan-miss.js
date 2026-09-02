@@ -34,8 +34,19 @@ console.log('\n[scan-miss regression checks]');
 
 // Isolate the _loadScannedCardExact function body so we don't cross-match
 // unrelated openCatalog calls elsewhere in the file.
-const fnStart = html.indexOf('async function _loadScannedCardExact');
-check('_loadScannedCardExact function still exists', fnStart >= 0);
+// 2026-09-02: the scan lookup logic lives in _loadScannedCardExactImpl; the
+// public _loadScannedCardExact is a thin try/finally wrapper that guarantees
+// the card-swap placeholder is retired on every exit path. Inspect the IMPL,
+// or these checks silently pass against the 5-line wrapper.
+const fnStart = html.indexOf('async function _loadScannedCardExactImpl');
+check('_loadScannedCardExactImpl function still exists', fnStart >= 0);
+check('_loadScannedCardExact still exists as the public entry point',
+      html.includes('async function _loadScannedCardExact(pending)'));
+check('the wrapper delegates to the impl',
+      /_loadScannedCardExactImpl\s*\(\s*pending\s*\)/.test(html));
+check('the wrapper always retires the card-swap placeholder',
+      /finally\s*\{\s*_endCardSwap\(false\);\s*\}/.test(html),
+      'a lookup that exits without rendering must not leave the panel dimmed on "Loading ..."');
 
 let fnBody = '';
 if (fnStart >= 0) {
@@ -97,6 +108,52 @@ check('Match reason is tracked (matchReason variable exists)',
       'matchReason tracking was added so we know HOW a card matched. Do not remove.');
 
 // Now check the standalone functions exist
+// ── CR-022: card-swap staleness (2026-09-02) ─────────────────────────────────
+// Bug: picking a second Bulk ID Scan row updated #searchInput synchronously but
+// the card panel kept the PREVIOUS card's art and market value until an awaited
+// fetch resolved, so one card's name sat above another card's picture and price.
+console.log('\n[card-swap staleness]');
+const beginStart = html.indexOf('function _beginCardSwap');
+let beginBody = '';
+if (beginStart >= 0) {
+  let d = 0, i = html.indexOf('{', beginStart), st = i;
+  for (; i < html.length; i++) {
+    if (html[i] === '{') d++;
+    else if (html[i] === '}') { d--; if (d === 0) { beginBody = html.slice(st, i + 1); break; } }
+  }
+}
+check('_beginCardSwap is defined', beginStart >= 0);
+check('_endCardSwap is defined', html.includes('function _endCardSwap'));
+
+// The generation bump is the load-bearing line: loadCardUI gates its async
+// image callbacks on window._imgGen, so without the bump the outgoing card's
+// onload lands a few hundred ms later and re-reveals the stale art.
+check('_beginCardSwap invalidates in-flight image callbacks via _imgGen',
+      /window\._imgGen\s*=\s*\(window\._imgGen\s*\|\|\s*0\)\s*\+\s*1/.test(beginBody),
+      'without bumping _imgGen the previous card\u2019s onload re-shows the old image');
+check('_beginCardSwap hides the outgoing card image',
+      /cardImgWrap[\s\S]{0,120}display\s*=\s*'none'/.test(beginBody));
+check('_beginCardSwap clears the outgoing market value',
+      /priceMain[\s\S]{0,160}textContent\s*=/.test(beginBody),
+      'a stale dollar figure under a new card name is the worst version of this bug');
+check('_beginCardSwap shows a loading placeholder naming the incoming card',
+      /cardImgPhLabel[\s\S]{0,160}Loading/.test(beginBody));
+// Regression guard: assigning src='' resolves to the document URL, so the
+// browser requests index.html as an image and the error state suppressed the
+// INCOMING card's reveal. Hiding the wrapper is sufficient.
+check('_beginCardSwap does not blank cardImg.src',
+      !/cardImg[\s\S]{0,40}\.src\s*=\s*''/.test(beginBody),
+      "src='' resolves to the page URL and suppresses the incoming card's reveal");
+
+// The swap must start in the SAME tick as the search-box write, before any await.
+const impl = html.slice(html.indexOf('async function _loadScannedCardExactImpl'));
+const preAwait = impl.slice(0, impl.search(/\bawait\b/));
+check('_beginCardSwap runs before the first await in the lookup',
+      /_beginCardSwap\s*\(/.test(preAwait),
+      'if it runs after an await, a stale frame is still visible');
+check('loadCardUI retires the swap placeholder when a real card renders',
+      /_endCardSwap\(true\)/.test(html));
+
 console.log('\n[scan-miss helpers]');
 check('_renderScanMissPanel function defined', /function\s+_renderScanMissPanel\s*\(/.test(html));
 check('_scanMissAdjustName function defined', /function\s+_scanMissAdjustName\s*\(/.test(html));

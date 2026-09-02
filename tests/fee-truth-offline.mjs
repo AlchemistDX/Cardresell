@@ -25,6 +25,21 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
+/** Pull a top-level `const NAME = { ... };` block out of index.html by brace matching.
+ *  Needed because the extracted fee functions are evaluated in isolation via
+ *  `new Function`, so module-level lookup tables they close over (TCG_LEVELS)
+ *  are not otherwise in scope. */
+function extractConst(name) {
+  const start = src.indexOf(`const ${name} = {`);
+  if (start === -1) throw new Error(`could not find const ${name} in index.html`);
+  let depth = 0, i = src.indexOf('{', start);
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth === 0) break; }
+  }
+  return src.slice(start, i + 1) + ';';
+}
+
 /** Pull a top-level `function name(...) { ... }` out of index.html by brace matching. */
 function extractFn(name) {
   const start = src.indexOf(`function ${name}(`);
@@ -37,7 +52,8 @@ function extractFn(name) {
   }
   const body = src.slice(open + 1, i);
   const sig = src.slice(src.indexOf('(', start) + 1, src.indexOf(')', start));
-  return new Function(...sig.split(',').map(s => s.trim()).filter(Boolean), body);
+  return new Function(...sig.split(',').map(s => s.trim()).filter(Boolean),
+                      extractConst('TCG_LEVELS') + '\n' + body);
 }
 
 const feeTCGPlayer = extractFn('feeTCGPlayer');
@@ -92,10 +108,11 @@ assert('feeTCGPlayer tolerates missing shipCharge', Number.isFinite(sum(feeTCGPl
 assert('feeMercari tolerates missing shipCharge', Number.isFinite(sum(feeMercari(100))));
 
 // ── Wiring: the calculator must pass shipping through and model ship-in correctly ──
-assert('TCGplayer wired with shipCharge', src.includes('feeTCGPlayer(price, shipCharge)'));
+assert('TCGplayer wired with shipCharge and seller level',
+  src.includes('feeTCGPlayer(price, shipCharge, tcgLevel)'));
 assert('Mercari wired with shipCharge', src.includes('feeMercari(price, shipCharge)'));
 assert('TCGplayer no longer hardcodes sellerShip 0',
-  !/feeTCGPlayer\(price, shipCharge\),[\s\S]{0,400}?sellerShip: 0/.test(src));
+  !/feeTCGPlayer\(price, shipCharge, tcgLevel\),[\s\S]{0,700}?sellerShip: 0,/.test(src));
 assert('Fanatics no longer double-charges shipping',
   /feeFanatics\(price\),[\s\S]{0,500}?sellerShip: 0/.test(src));
 
@@ -254,6 +271,79 @@ assert('Expand shows fee base and the not-modeled tax line',
   /Buyer sales tax <span class="fee-basis">\(not modeled\)/.test(src));
 assert('Clamp note says payout prices off Market, not High',
   /not the raw High/.test(src) && /highClamped/.test(src));
+
+
+// ═══ Scenario H: seller profile — TCGplayer level & eBay Top Rated (2026-09-02) ═══
+//
+// Published tier table (help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
+// and .../360047732673-Fee-Calculation-Examples):
+//   Level 1-4            10.75%  no Pro fee   2.5% + $0.30
+//   Pro (non-Direct)      9.25%  + 2.5% Pro   2.5% + $0.30
+//   Direct (non-Pro)      8.95%  no Pro fee   2.5%   (no $0.30)
+//   Direct + Pro          8.95%  + 2.5% Pro   2.5%   (no $0.30)
+// Direct also carries a per-item fee replacing postage: flat $1.12 above $2.49,
+// 50% of sale price at $2.49 and below (seller.tcgplayer.com Jun 18 2026 change).
+const P = 100;
+eq('TCG Level 1-4 = 10.75% + 2.5% + $0.30',
+   sum(feeTCGPlayer(P, 0, 'l14')), 10.75 + 2.50 + 0.30);
+eq('TCG Pro = 9.25% + 2.5% Pro + 2.5% + $0.30',
+   sum(feeTCGPlayer(P, 0, 'pro')), 9.25 + 2.50 + 2.50 + 0.30);
+// Direct drops the $0.30 entirely and adds the $1.12 per-item fee.
+eq('TCG Direct = 8.95% + 2.5% + $1.12, no $0.30',
+   sum(feeTCGPlayer(P, 0, 'direct')), 8.95 + 2.50 + 1.12);
+eq('TCG Direct+Pro = 8.95% + 2.5% Pro + 2.5% + $1.12',
+   sum(feeTCGPlayer(P, 0, 'directpro')), 8.95 + 2.50 + 2.50 + 1.12);
+
+assert('Direct level charges no $0.30 transaction fee',
+  !feeTCGPlayer(P, 0, 'direct').some(f => (f.f || '').includes('$0.30')));
+assert('Non-Direct level still charges the $0.30',
+  feeTCGPlayer(P, 0, 'l14').some(f => (f.f || '').includes('$0.30')));
+assert('Direct exposes tcgDirect so the caller can zero postage',
+  feeTCGPlayer(P, 0, 'direct').tcgDirect === true &&
+  feeTCGPlayer(P, 0, 'l14').tcgDirect === false);
+assert('calc() zeroes TCGplayer postage on Direct levels',
+  /sellerShip: tcgIsDirect \? 0 : shipCost/.test(src));
+
+// Low-value Direct rule: 50% of sale price at or below $2.49.
+eq('Direct per-item fee is 50% at $2.00',
+   sum(feeTCGPlayer(2, 0, 'direct')), 2 * 0.0895 + 2 * 0.025 + 1.00);
+assert('Direct per-item fee is flat $1.12 above $2.49',
+  feeTCGPlayer(3, 0, 'direct').some(f => f.f === '$1.12'));
+
+// The $75 cap covers commission AND Pro fee combined, not commission alone.
+eq('Pro cap applies to commission + Pro fee combined',
+   sum(feeTCGPlayer(1000, 0, 'pro')), 75 + 25.30);
+assert('capped Pro formula names both capped components',
+  /9\.25% \+ 2\.5% Pro capped \$75/.test(
+    feeTCGPlayer(1000, 0, 'pro').map(f => f.f).filter(Boolean).join(' + ')));
+
+// Unknown / tampered level must fall back to Level 1-4, never crash or free-ride.
+eq('unknown seller level falls back to Level 1-4',
+   sum(feeTCGPlayer(P, 0, 'bogus')), sum(feeTCGPlayer(P, 0, 'l14')));
+assert('unknown level reports itself as l14', feeTCGPlayer(P, 0, 'bogus').tcgLevel === 'l14');
+
+// Direct must genuinely beat Level 1-4 on the same card -- this is the whole
+// point of modeling the profile.
+assert('Direct nets more than Level 1-4 on the same card',
+  sum(feeTCGPlayer(CHZ, 0, 'direct')) < sum(feeTCGPlayer(CHZ, 0, 'l14')));
+
+// eBay Top Rated: the rate signature must state the EFFECTIVE rate, not the
+// headline rate. Before this fix a Top Rated seller saw "13.25%" while paying
+// 11.93%, i.e. the recipe line claimed a rate the math did not apply.
+const trsItems  = _feeEbayB(P, 0, 'none', 0, 'yes');
+const baseItems = _feeEbayB(P, 0, 'none', 0, 'no');
+eq('eBay Top Rated pays 13.25% less 10%', sum(trsItems), 13.25 * 0.9 + 0.40);
+assert('Top Rated formula states the discount, not a bare 13.25%',
+  trsItems.some(f => f.f === '13.25% \u221210% Top Rated') &&
+  !trsItems.some(f => f.f === '13.25%'));
+// Above the tier boundary the rate really is a blend, so the blend is shown.
+assert('above the $7,500 boundary the formula reports the blended rate',
+  _feeEbayB(9000, 0, 'none', 0, 'no').some(f => /% effective$/.test(f.f || '')));
+assert('non-Top-Rated formula still states the plain headline rate',
+  baseItems.some(f => f.f === '13.25%'));
+assert('Top Rated fee line discloses the discount',
+  trsItems.some(f => /Top Rated/.test(f.l)));
+
 
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
