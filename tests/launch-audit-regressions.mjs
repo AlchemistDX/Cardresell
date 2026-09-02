@@ -202,5 +202,76 @@ try {
   globalThis.fetch = originalFetch;
 }
 
+// ── CR-023: the shop refused money (2026-09-02) ──────────────────────────────
+// A paying Ultimate subscriber could not buy anything. Two independent faults:
+//   1. All three Stripe checkout endpoints 401'd when the verified token had no
+//      top-level `email` claim -- even though entitlement is keyed on
+//      metadata[google_sub] (the uid) and customer_email is only a prefill.
+//   2. The toast that reported the failure was 698px wide on a 390px phone
+//      (white-space:nowrap, no max-width), so it was clipped off both edges
+//      and the user could not read why checkout failed.
+{
+  const fs = await import('node:fs');
+  const rd = (f) => fs.readFileSync(new URL(f, import.meta.url), 'utf8');
+  const CHECKOUTS = [
+    '../api/stripe-id-checkout.js',
+    '../api/stripe-grade-checkout.js',
+    '../api/stripe-subscription-checkout.js',
+  ];
+
+  for (const f of CHECKOUTS) {
+    const src = rd(f);
+    const nm = f.split('/').pop();
+    check(`${nm}: does not refuse checkout over a missing email`,
+          !/missing an email/.test(src));
+    check(`${nm}: only prefills customer_email when it is a real address`,
+          /if \(userEmail && userEmail\.includes\('@'\)\) params\.set\('customer_email', userEmail\)/.test(src));
+    check(`${nm}: never sends an unconditional customer_email`,
+          !/^\s*customer_email:\s*userEmail,/m.test(src));
+    // Entitlement must stay keyed on the uid, not the email -- that is the
+    // whole reason dropping the prefill is safe.
+    check(`${nm}: still stamps metadata[google_sub] for entitlement`,
+          /metadata\[google_sub\]/.test(src));
+  }
+
+  const verifier = rd('../api/_verifyToken.js');
+  check('_verifyToken recovers an email from firebase.identities.email',
+        /identities\.email/.test(verifier) && /claimEmail/.test(verifier),
+        'tokens without a top-level email claim still carry provider emails here');
+
+  const html = rd('../index.html');
+  // Strip CSS comments first: the rule carries a comment explaining the old
+  // `white-space:nowrap` bug, and matching that prose would fail the check.
+  const toast = (html.match(/\.cs-toast\{[^}]*\}/) || [''])[0]
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  check('toast is not nowrap (long messages must wrap, not clip)',
+        !/white-space:\s*nowrap/.test(toast), toast.slice(0, 90));
+  check('toast explicitly wraps', /white-space:\s*normal/.test(toast));
+  check('toast is capped to the viewport width',
+        /max-width:\s*min\(92vw/.test(toast),
+        'an uncapped centered toast is clipped off BOTH edges on a phone');
+  // The credit pills silently sliced their own labels: locked to equal flex:1
+  // widths with overflow:hidden, "AI Grade · 1191 credits" lost its last
+  // characters and looked like a pluralization bug.
+  const pillRow = (html.match(/\.scan-sub-row\{[^}]*\}/) || [''])[0]
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const pillBtn = (html.match(/\.scan-sub-btn\{[^}]*\}/) || [''])[0]
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  check('credit pill row wraps instead of slicing labels',
+        /flex-wrap:\s*wrap/.test(pillRow), pillRow.slice(0, 90));
+  check('credit pills do not clip their own text',
+        !/overflow:\s*hidden/.test(pillBtn), pillBtn.slice(0, 120));
+  check('credit pills can grow to fit a 4-digit balance',
+        /min-width:\s*fit-content/.test(pillBtn));
+  // Guard the real pluralisation, so a future "fix" for the truncation
+  // symptom cannot quietly drop it.
+  check('credit labels pluralise from the count',
+        (html.match(/credit\$\{n !== 1 \? 's' : ''\}/g) || []).length >= 2);
+
+  check('tier checkout surfaces the server error instead of a generic retry',
+        /showToast\?\.\(msg \|\| 'Could not start checkout/.test(html),
+        'swallowing data.error left the user staring at a broken shop');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

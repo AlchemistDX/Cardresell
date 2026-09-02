@@ -83,9 +83,21 @@ async function verifyFirebaseToken(idToken) {
   const identities = payload.firebase?.identities || {};
   const appleVerified = provider === 'apple.com' || !!identities['apple.com'];
 
+  // 2026-09-02 (CR-023): some accounts -- observed on a legacy Google signup --
+  // carry no top-level `email` claim, even though the provider identity behind
+  // them clearly has one. Firebase also publishes verified provider emails in
+  // firebase.identities.email[], so recover from there before giving up.
+  // Without this, a paying user was told "your Google account is missing an
+  // email" and could not buy anything at all.
+  let claimEmail = payload.email || '';
+  if (!claimEmail) {
+    const idEmails = Array.isArray(identities.email) ? identities.email : [];
+    claimEmail = idEmails.find(e => typeof e === 'string' && e.includes('@')) || '';
+  }
+
   return {
     uid:   payload.sub,
-    email: payload.email || '',
+    email: claimEmail,
     name:  payload.name  || '',
     emailVerified: payload.email_verified === true || appleVerified,
     provider,

@@ -96,9 +96,13 @@ export default async function handler(req, res) {
   const userSub   = verified.uid;
   const userEmail = verified.email || '';
   const userName  = verified.name  || '';
-  if (!userEmail || !userEmail.includes('@')) {
-    return res.status(401).json({ error: 'Your Google account is missing an email. Please sign in again with a Google account that exposes email.' });
-  }
+  // 2026-09-02 (CR-023): we used to 401 here when the token carried no email.
+  // That refused the sale outright, and for no safety benefit: entitlement is
+  // keyed on metadata[google_sub] (the Firebase uid), never on the email, and
+  // the webhook reads customer_details.email -- which Stripe Checkout fills in
+  // from whatever the buyer types. customer_email is only a prefill. So when
+  // we have no email, omit the prefill and let Stripe collect it, rather than
+  // telling a paying user their account is broken.
 
   const origin  = (req.headers.origin || 'https://www.cardresell.org').replace(/\/$/, '');
   const success = `${origin}/?upgraded=1&tier=${tier}`;
@@ -111,7 +115,6 @@ export default async function handler(req, res) {
       'line_items[0][quantity]': '1',
       success_url: success,
       cancel_url: cancel,
-      customer_email: userEmail,
       'metadata[google_sub]': userSub,
       'metadata[user_name]': userName,
       'metadata[tier]': tier,
@@ -120,6 +123,9 @@ export default async function handler(req, res) {
       'subscription_data[metadata][tier]': tier,
       'subscription_data[metadata][interval]': interval,
     });
+    // Prefill the buyer's email only when we actually know it; an empty
+    // customer_email is rejected by Stripe as a malformed address.
+    if (userEmail && userEmail.includes('@')) params.set('customer_email', userEmail);
 
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',

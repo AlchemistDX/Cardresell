@@ -35,9 +35,13 @@ export default async function handler(req, res) {
   const userSub   = verified.uid;
   const userEmail = verified.email || '';
   const userName  = verified.name  || '';
-  if (!userEmail || !userEmail.includes('@')) {
-    return res.status(401).json({ error: 'Your Google account is missing an email. Please sign in again with a Google account that exposes email.' });
-  }
+  // 2026-09-02 (CR-023): we used to 401 here when the token carried no email.
+  // That refused the sale outright, and for no safety benefit: entitlement is
+  // keyed on metadata[google_sub] (the Firebase uid), never on the email, and
+  // the webhook reads customer_details.email -- which Stripe Checkout fills in
+  // from whatever the buyer types. customer_email is only a prefill. So when
+  // we have no email, omit the prefill and let Stripe collect it, rather than
+  // telling a paying user their account is broken.
 
   const priceMap = {
     '10': process.env.STRIPE_GRADE_SCAN_PRICE_10,
@@ -77,13 +81,15 @@ export default async function handler(req, res) {
       'line_items[0][quantity]': '1',
       success_url: success,
       cancel_url: cancel,
-      customer_email: userEmail,
       'metadata[google_sub]': userSub,
       'metadata[user_name]': userName,
       'metadata[type]': 'grade_scan',
       'metadata[tier]': tier,
       'metadata[credits]': String(creditsMap[tier]),
     });
+    // Prefill the buyer's email only when we actually know it; an empty
+    // customer_email is rejected by Stripe as a malformed address.
+    if (userEmail && userEmail.includes('@')) params.set('customer_email', userEmail);
     // Apply tier-based top-up discount if applicable
     if (couponId) {
       params.append('discounts[0][coupon]', couponId);

@@ -278,8 +278,14 @@ img{display:block;max-width:100%;height:auto}
 .search-btn:active{transform:scale(.97)}
 .search-btn:disabled{opacity:.5;cursor:not-allowed}
 /* Scanner sub-row — shown below search on mobile */
-.scan-sub-row{display:none;gap:.5rem;margin-top:.45rem}
-.scan-sub-btn{display:flex;align-items:center;gap:.3rem;padding:.48rem .5rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.73rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease);flex:1;justify-content:center;white-space:nowrap;overflow:hidden}
+/* 2026-09-02 (CR-023): flex-wrap so a 4-digit credit balance pushes a pill onto
+   a second line instead of being sliced. Previously the three pills were locked
+   to equal flex:1 widths (115px on a 390px phone) with overflow:hidden, so
+   "ID Scan \00b7 1189 credits" needed 128px and lost its last characters --
+   "AI Grade \00b7 1191 credits" rendered as "...1191 credit", which read as a
+   pluralization bug when it was really silent truncation. */
+.scan-sub-row{display:none;gap:.5rem;margin-top:.45rem;flex-wrap:wrap}
+.scan-sub-btn{display:flex;align-items:center;gap:.3rem;padding:.48rem .5rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.73rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease);flex:1 1 auto;min-width:fit-content;justify-content:center;white-space:nowrap}
 .scan-sub-btn.grade-sub{border-color:var(--gold-border);color:var(--gold)}
 .scan-sub-btn.bulk-sub{border-color:rgba(139,92,246,.4);color:rgba(139,92,246,1)}
 .scan-sub-btn.bulk-sub:hover{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.7);color:rgba(139,92,246,1)}
@@ -1056,7 +1062,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 #scanGradeCTA .sgc-sub{font-size:.73rem;color:rgba(255,255,255,.6);margin-bottom:.65rem;line-height:1.4}
 #scanGradeCTA .sgc-btns{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center}
 /* --- TOAST --- */
-.cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;white-space:nowrap}
+.cs-toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.65rem 1.25rem;font-size:.82rem;font-weight:600;color:var(--text);box-shadow:var(--shadow-lg);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;
+/* 2026-09-02 (CR-023): white-space:nowrap with no max-width made a long toast
+   698px wide on a 390px phone -- centered, so it was clipped off BOTH edges and
+   the message was unreadable. A real user hit a checkout error and could not
+   read what it said. Wrap instead, and never exceed the viewport. */
+white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center;line-height:1.35;overflow-wrap:anywhere}
 .cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   </style>
   <!-- SEO / Open Graph / Twitter Card -->
@@ -17567,7 +17578,18 @@ async function startTierCheckout(tier) {
     throw new Error(data.error || 'Checkout failed');
   } catch (e) {
     console.error('Tier checkout error:', e);
-    showToast?.('Could not start checkout. Please try again.');
+    // 2026-09-02 (CR-023): this used to replace every failure with a generic
+    // "try again", which hid the server's actual reason -- a real user sat on
+    // a broken checkout while the API was plainly reporting why. Show the
+    // server's message when we have one; "try again" is the last resort.
+    // 'Not signed in' is the one case we stay quiet on: it has already
+    // triggered the sign-in flow, so a toast would just be noise.
+    const msg = (e && e.message && e.message !== 'Not signed in') ? e.message : '';
+    if (e && e.message === 'Not signed in') {
+      /* sign-in already triggered above */
+    } else {
+      showToast?.(msg || 'Could not start checkout. Please try again.');
+    }
     if (btn) btn.disabled = false;
     if (span && originalHTML) span.innerHTML = originalHTML;
   }
