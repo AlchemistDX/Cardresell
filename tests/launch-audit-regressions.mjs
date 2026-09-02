@@ -95,6 +95,73 @@ check(
     vercel.includes('"X-Frame-Options": "SAMEORIGIN"')
 );
 
+/* ── CR-021: mobile shop reachability ────────────────────────────────────
+   The credit shop used to live only inside the gear settings panel, and the
+   <=480px media query set `.hdr .settings-btn{display:none!important}`. On a
+   phone in portrait that left NO route to buy ID scans or AI grades — a total
+   revenue block on the majority device. These checks pin the fix. */
+
+// Isolate the <=480px block so we only assert against mobile rules.
+const mobileBlock = (index.match(/@media\(max-width:480px\)\{[\s\S]*?\n\}/) || [''])[0];
+
+check(
+  'CR-021 mobile media query does not hide the settings button',
+  mobileBlock.length > 0 && !/\.hdr\s+\.settings-btn[^{]*\{[^}]*display:\s*none/.test(mobileBlock)
+);
+check(
+  'CR-021 header exposes an always-visible Shop button',
+  index.includes('id="shopBtn"') &&
+    index.includes('openShop(\'id\',\'header\')') &&
+    !/#shopBtn\s*\{[^}]*display:\s*none/.test(mobileBlock)
+);
+check(
+  'CR-021 shop modal exists with both credit tabs',
+  index.includes('id="shopOverlay"') &&
+    index.includes('id="shopTabId"') &&
+    index.includes('id="shopTabGrade"') &&
+    index.includes('function openShop(')
+);
+check(
+  'CR-021 shop lists all six credit packs at the canonical prices',
+  ["shopBuy('id','10')", "shopBuy('id','50')", "shopBuy('id','100')",
+   "shopBuy('grade','10')", "shopBuy('grade','25')", "shopBuy('grade','50')"]
+    .every(s => index.includes(s)) &&
+  ['$1.99', '$7.99', '$12.99', '$5.99', '$22.99'].every(s => index.includes(s))
+);
+check(
+  'CR-021 shop reuses the hardened Stripe checkout starters',
+  /function shopBuy\([\s\S]{0,260}startGradeScanCheckout\(qty\)[\s\S]{0,160}startIdScanCheckout\(qty\)/.test(index)
+);
+check(
+  'CR-021 ?packs= deep link opens the shop, not the pack-less plan modal',
+  index.includes("window.openShop(want, 'pricing_page_packs')") &&
+    !index.includes("window.openPricingModal('pricing_page_packs_' + want)")
+);
+check(
+  'CR-021 out-of-credit gates route to the shop rather than the plan modal',
+  index.includes("openShop('id', 'id_scan_402')") &&
+    index.includes("openShop('grade', 'grade_scan_402')") &&
+    index.includes("openShop('grade', 'grade_scan_gate')") &&
+    !index.includes("openPricingModal('id_scan_402')") &&
+    !index.includes("openPricingModal('grade_scan_402')") &&
+    !index.includes("openPricingModal('grade_scan_gate')")
+);
+check(
+  'CR-021 low-credit toasts point at Shop, not the hidden Settings gear',
+  !index.includes('top up anytime in Settings') &&
+    !index.includes('tap Settings to buy more') &&
+    index.includes('Shop to buy more')
+);
+check(
+  'CR-021 client stores the monthly ID allowance so balances are not understated',
+  index.includes('window._freeIdLeft = d.idFreeLeft || 0;')
+);
+check(
+  'CR-021 shop copy does not claim the monthly allowance rolls over',
+  index.includes('purchased credits never expire') &&
+    !index.includes('Credits never expire, and unused ones roll over every month')
+);
+
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => ({
   ok: true,

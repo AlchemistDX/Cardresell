@@ -249,7 +249,18 @@ img{display:block;max-width:100%;height:auto}
   .logo{min-width:0;flex-shrink:1}
   .logo-text{font-size:1rem;white-space:nowrap}
   .hdr-right{gap:.35rem;min-width:0;flex-shrink:0}
-  .hdr .settings-btn,.hdr .theme-btn{display:none!important}
+  /* 2026-09-02 (CR-021): the theme toggle is the only thing that may drop on
+     a narrow header. Settings must stay reachable — hiding it stranded users
+     with no route to billing or credits on a phone in portrait. */
+  .hdr .theme-btn{display:none!important}
+  .hdr .settings-btn{width:30px;height:30px;font-size:.85rem}
+  #shopBtn{padding:.32rem .5rem;font-size:.66rem;min-height:30px}
+  #shopBtn span{display:none}
+  /* The portrait header sits at exactly full width, so these two controls
+     can't grow to a 44px box without wrapping. Expand the HIT area instead:
+     inset:-7px yields a 44px touch target with zero layout cost. */
+  .hdr .settings-btn,#shopBtn{position:relative}
+  .hdr .settings-btn::after,#shopBtn::after{content:'';position:absolute;inset:-7px;border-radius:inherit}
   #getProBtn{padding:.38rem .58rem;font-size:.68rem}
   #googleSignInBtn{padding:.4rem .65rem!important;font-size:.72rem!important}
 }
@@ -919,6 +930,57 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pricing-close{display:flex;justify-content:center;margin-top:.5rem}
 .pricing-close-btn{padding:.45rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:99px;font-size:.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;transition:all .15s}
 .pricing-close-btn:hover{border-color:var(--text-muted);color:var(--text)}
+
+/* --- SHOP MODAL (credit packs) -----------------------------------------
+   2026-09-02 (CR-021): the credit shop used to live ONLY inside the gear
+   settings panel, and the gear is display:none below 480px. That made every
+   credit pack unbuyable on a phone in portrait — the exact device most scans
+   happen on. The plan modal never carried packs either, so /pricing's
+   ?packs= deep link landed on a subscription chooser with nothing to buy.
+   This modal is the single real storefront: header button, ?packs= deep link,
+   and every out-of-credits gate all route here. ---------------------------*/
+.shop-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:320;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.shop-overlay.open{opacity:1;pointer-events:auto}
+.shop-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.35rem 1.15rem 1.15rem;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);transform:translateY(10px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.shop-overlay.open .shop-box{transform:translateY(0)}
+.shop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:1rem}
+.shop-title{font-size:1.12rem;font-weight:800;letter-spacing:-.02em;color:var(--text)}
+.shop-sub{font-size:.75rem;color:var(--text-muted);line-height:1.45;margin-top:.2rem}
+.shop-x{position:relative;flex-shrink:0;width:38px;height:38px;min-height:38px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--border);border-radius:50%;color:var(--text-muted);font-size:1rem;cursor:pointer;line-height:1}
+.shop-x::after{content:'';position:absolute;inset:-3px;border-radius:50%}
+.shop-x:hover{color:var(--text);border-color:var(--text-muted)}
+.shop-bal{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.9rem}
+.shop-bal-card{padding:.6rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)}
+.shop-bal-lbl{font-size:.58rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)}
+.shop-bal-num{font-size:1.15rem;font-weight:900;color:var(--text);margin-top:.12rem;line-height:1}
+.shop-bal-sub{font-size:.6rem;color:var(--text-muted);margin-top:.18rem}
+.shop-tabs{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.25rem;gap:.15rem;margin-bottom:.9rem}
+.shop-tab{flex:1;min-height:44px;background:transparent;border:none;color:var(--text-muted);font-size:.78rem;font-weight:700;padding:.45rem .6rem;border-radius:99px;cursor:pointer;transition:all .15s;font-family:inherit}
+.shop-tab.active{background:var(--gold);color:#000;box-shadow:0 1px 6px rgba(212,175,55,.35)}
+.shop-panel{display:none}
+.shop-panel.active{display:block}
+.shop-packs{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+@media(max-width:430px){.shop-packs{grid-template-columns:1fr}}
+.shop-pack{position:relative;min-height:44px;padding:.7rem .55rem;background:var(--surface-2);border:1.5px solid var(--border);border-radius:var(--radius-md);color:var(--text);cursor:pointer;text-align:center;font-family:inherit;transition:border-color .15s,transform .12s}
+.shop-pack:hover{border-color:var(--gold)}
+.shop-pack:active{transform:scale(.98)}
+.shop-pack.feat{border-color:var(--gold-border)}
+.shop-pack-qty{font-size:.85rem;font-weight:800}
+.shop-pack-price{font-size:1.05rem;font-weight:900;color:var(--gold);margin-top:.15rem}
+.shop-pack-note{font-size:.6rem;color:var(--text-muted);margin-top:.2rem}
+.shop-pack-save{font-size:.6rem;color:#4ade80;font-weight:700;margin-top:.2rem}
+.shop-pack-badge{position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.55rem;font-weight:800;padding:.1rem .45rem;border-radius:99px;white-space:nowrap;letter-spacing:.03em}
+.shop-pack-badge.alt{background:linear-gradient(90deg,#c47a00,#f59e0b)}
+.shop-foot{margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:.5rem}
+.shop-foot-note{font-size:.68rem;color:var(--text-muted);line-height:1.5}
+.shop-alt-btn{width:100%;min-height:44px;padding:.55rem .8rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit;transition:border-color .15s}
+.shop-alt-btn:hover{border-color:var(--gold)}
+.shop-signin{padding:.7rem .8rem;background:rgba(196,122,0,.10);border:1px solid rgba(196,122,0,.4);border-radius:var(--radius-md);font-size:.74rem;color:var(--text);line-height:1.5;margin-bottom:.85rem}
+/* Header shop button — must stay reachable at EVERY width. */
+.shop-btn{display:flex;align-items:center;gap:.3rem;padding:.36rem .7rem;min-height:34px;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.72rem;font-weight:800;white-space:nowrap;cursor:pointer;font-family:inherit;transition:all .15s ease}
+.shop-btn:hover{background:var(--gold-hi);border-color:var(--gold)}
+.shop-btn:active{transform:scale(.96)}
+
 /* --- PRO GATE OVERLAY (blurs platform results for free users) --- */
 .pro-gate-overlay{position:relative;margin-top:-2rem;padding:2.5rem 1rem 1.5rem;display:flex;align-items:center;justify-content:center;background:linear-gradient(to bottom,transparent,var(--bg) 40%);border-radius:var(--radius-xl)}
 .pro-gate-inner{text-align:center;padding:1.5rem;max-width:320px}
@@ -1591,6 +1653,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
   Sign In
 </a>
+    <button id="shopBtn" class="shop-btn" onclick="openShop('id','header')" title="Buy ID scan and AI grade credits">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <span>Shop</span>
+    </button>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
     <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -2987,6 +3053,103 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 </div>
 
 <!-- TOAST -->
+<!-- ============ SHOP MODAL (credit packs) ============
+     2026-09-02 (CR-021): single storefront for one-time credit packs. Prices
+     here MUST stay in lockstep with /pricing.html's pack catalog, the gear
+     panel buy buttons, api/stripe-id-checkout.js and api/stripe-grade-checkout.js.
+     Do not edit one without the others. -->
+<div class="shop-overlay" id="shopOverlay" onclick="closeShop(event)" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+  <div class="shop-box" id="shopBox" onclick="event.stopPropagation()">
+    <div class="shop-head">
+      <div>
+        <div class="shop-title" id="shopTitle">&#128722; Shop</div>
+        <!-- 2026-09-02 (CR-021): copy must stay literally true. Purchased packs
+             are a standing KV counter (scans:<sub>:id_paid_left) so they DO
+             persist indefinitely. The plan allowance is keyed to a month stamp
+             (id_free_used_<stamp>) so it RESETS and does not roll over. Do not
+             reword this into a blanket "credits roll over" claim. -->
+        <div class="shop-sub">One-time packs — purchased credits never expire. Your monthly plan allowance resets each month.</div>
+      </div>
+      <button class="shop-x" onclick="closeShop()" aria-label="Close shop">&#10005;</button>
+    </div>
+
+    <div class="shop-bal">
+      <div class="shop-bal-card">
+        <div class="shop-bal-lbl">ID Scanner</div>
+        <div class="shop-bal-num" id="shopIdBal">&mdash;</div>
+        <div class="shop-bal-sub" id="shopIdSub">Sign in to check</div>
+      </div>
+      <div class="shop-bal-card">
+        <div class="shop-bal-lbl">AI Grader</div>
+        <div class="shop-bal-num" id="shopGradeBal">&mdash;</div>
+        <div class="shop-bal-sub" id="shopGradeSub">Sign in to check</div>
+      </div>
+    </div>
+
+    <div id="shopSignInNote" class="shop-signin" style="display:none">
+      You need to be signed in to buy credits so they attach to your account.
+      <a href="/signin" style="color:var(--gold);font-weight:800">Sign in</a> &mdash; verifying your email also unlocks 10 free ID scans + 1 AI Grade.
+    </div>
+
+    <div class="shop-tabs" role="tablist">
+      <button type="button" class="shop-tab active" id="shopTabId" role="tab" aria-selected="true" aria-controls="shopPanelId" onclick="shopSetTab('id')">ID Scans</button>
+      <button type="button" class="shop-tab" id="shopTabGrade" role="tab" aria-selected="false" aria-controls="shopPanelGrade" onclick="shopSetTab('grade')">AI Grades</button>
+    </div>
+
+    <div class="shop-panel active" id="shopPanelId" role="tabpanel" aria-labelledby="shopTabId">
+      <div class="shop-sub" style="margin-bottom:.6rem">Identify a card from a photo and pull live comps.</div>
+      <div class="shop-packs">
+        <button type="button" class="shop-pack" onclick="shopBuy('id','10')">
+          <div class="shop-pack-qty">10 scans</div>
+          <div class="shop-pack-price">$1.99</div>
+          <div class="shop-pack-note">$0.20 per scan</div>
+        </button>
+        <button type="button" class="shop-pack feat" onclick="shopBuy('id','50')">
+          <span class="shop-pack-badge">Popular</span>
+          <div class="shop-pack-qty">50 scans</div>
+          <div class="shop-pack-price">$7.99</div>
+          <div class="shop-pack-save">$0.16 each &middot; save 20%</div>
+        </button>
+        <button type="button" class="shop-pack" onclick="shopBuy('id','100')">
+          <span class="shop-pack-badge alt">Best value</span>
+          <div class="shop-pack-qty">100 scans</div>
+          <div class="shop-pack-price">$12.99</div>
+          <div class="shop-pack-save">$0.13 each &middot; save 35%</div>
+        </button>
+      </div>
+    </div>
+
+    <div class="shop-panel" id="shopPanelGrade" role="tabpanel" aria-labelledby="shopTabGrade">
+      <div class="shop-sub" style="margin-bottom:.6rem">AI condition estimate before you pay to submit for grading.</div>
+      <div class="shop-packs">
+        <button type="button" class="shop-pack" onclick="shopBuy('grade','10')">
+          <div class="shop-pack-qty">10 grades</div>
+          <div class="shop-pack-price">$5.99</div>
+          <div class="shop-pack-note">$0.60 per grade</div>
+        </button>
+        <button type="button" class="shop-pack feat" onclick="shopBuy('grade','25')">
+          <span class="shop-pack-badge">Popular</span>
+          <div class="shop-pack-qty">25 grades</div>
+          <div class="shop-pack-price">$12.99</div>
+          <div class="shop-pack-save">$0.52 each &middot; save 13%</div>
+        </button>
+        <button type="button" class="shop-pack" onclick="shopBuy('grade','50')">
+          <span class="shop-pack-badge alt">Best value</span>
+          <div class="shop-pack-qty">50 grades</div>
+          <div class="shop-pack-price">$22.99</div>
+          <div class="shop-pack-save">$0.46 each &middot; save 23%</div>
+        </button>
+      </div>
+    </div>
+
+    <div class="shop-foot">
+      <div class="shop-foot-note" id="shopTierNote">&#128161; Pro includes <strong style="color:var(--text)">15 grader + 30 ID scans every month</strong> and 10% off these packs. Pro Max includes 40 + 100 and 15% off.</div>
+      <button type="button" class="shop-alt-btn" onclick="shopOpenPlans()">&#11088; Compare monthly plans</button>
+      <button type="button" class="shop-alt-btn" id="shopBillingBtn" style="display:none" onclick="openBillingPortal()">&#128179; Manage billing &middot; cancel or update payment</button>
+    </div>
+  </div>
+</div>
+
 <div id="csToast" class="cs-toast"></div>
 
 <div class="modal-overlay" id="flipModal" onclick="closeFlipModal(event)">
@@ -3392,16 +3555,14 @@ window.CARDSELL_EPN_CAMPID = '5339158497';
       let want; try { want = sessionStorage.getItem('_pendingPacksFocus'); } catch(_){ want = packsParam; }
       if (!want) return;
       if (tries > 40) return; // 20s ceiling, same as the upgrade path
-      if (typeof window.openPricingModal === 'function' && window._authInitialized) {
+      // 2026-09-02 (CR-021): this used to open the PLAN modal and then scroll to
+      // #gradeCreditsBuy / #idCreditsBuy — elements that live inside the closed
+      // gear settings panel. So /pricing's "buy packs" links dumped users on a
+      // subscription chooser with no packs on it, and the scroll target was
+      // never visible. Route straight to the shop modal on the right tab.
+      if (typeof window.openShop === 'function' && window._authInitialized) {
         try { sessionStorage.removeItem('_pendingPacksFocus'); } catch(_){}
-        try { window.openPricingModal('pricing_page_packs_' + want); } catch(_){}
-        // Scroll the matching pack group into view once the modal has painted.
-        setTimeout(() => {
-          const el = document.getElementById(want === 'grade' ? 'gradeCreditsBuy' : 'idCreditsBuy');
-          if (el && typeof el.scrollIntoView === 'function') {
-            try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(_){ el.scrollIntoView(); }
-          }
-        }, 450);
+        try { window.openShop(want, 'pricing_page_packs'); } catch(_){}
         return;
       }
       setTimeout(() => pollForPacks(tries + 1), 500);
@@ -13343,11 +13504,12 @@ async function _pickScanCandidate(idx) {
     });
     const d = await r.json().catch(() => ({}));
     if (r.status === 402) {
-      // 2026-08-18: BUGFIX — legacy scan-gate modal shows stale pricing
-      // ("$1 credits" + Pro-only, no Pro Max / Ultimate). Route straight to
-      // the current 4-tier pricing modal instead.
+      // 2026-08-18: legacy scan-gate modal showed stale pricing.
+      // 2026-09-02 (CR-021): a 402 means "out of credits", so send the user to
+      // the shop (which can actually sell them credits) rather than the plan
+      // chooser, which carries no packs. The shop links on to plans.
       cancelScan();
-      openPricingModal('id_scan_402');
+      openShop('id', 'id_scan_402');
       return;
     }
     if (!r.ok || !d.ok) {
@@ -13685,12 +13847,11 @@ async function processScanImage(input) {
     }
 
     if (response.status === 402) {
-      // 2026-08-18: BUGFIX — route to the current 4-tier pricing modal
-      // instead of the legacy scan-gate (stale $1-credit + Pro-only copy).
+      // 2026-09-02 (CR-021): out of credits → shop, not the plan chooser.
       const spinner4 = document.getElementById('scanSpinner');
       if (spinner4) spinner4.style.display = 'none';
       cancelScan();
-      openPricingModal('id_scan_402');
+      openShop('id', 'id_scan_402');
       return;
     }
 
@@ -14198,9 +14359,12 @@ async function processScanImage(input) {
     if (!window._isPro) {
       const remaining = (window._idScanCredits || 0);
       if (remaining <= 3 && remaining > 0) {
-        setTimeout(() => showToast(remaining + ' ID scan credit' + (remaining===1?'':'s') + ' left — top up anytime in Settings ⚡', 'gold'), 1200);
+        // 2026-09-02 (CR-021): copy used to say "top up in Settings", but the
+        // Settings gear is hidden below 480px. Point at the Shop button, which
+        // is visible at every width.
+        setTimeout(() => showToast(remaining + ' ID scan credit' + (remaining===1?'':'s') + ' left — tap 🛒 Shop to top up ⚡', 'gold'), 1200);
       } else if (remaining === 0) {
-        setTimeout(() => showToast('Out of ID scan credits — tap Settings to buy more', 'gold'), 1200);
+        setTimeout(() => showToast('Out of ID scan credits — tap 🛒 Shop to buy more', 'gold'), 1200);
       }
     }
 
@@ -14240,10 +14404,9 @@ function openGradeScanGate() {
     openGradeTierPicker();
     return;
   }
-  // No credits — route to the current 4-tier pricing modal.
-  // 2026-08-18: BUGFIX — replaced legacy scanGateOverlay which showed stale
-  // "$9.99 Pro-only" copy without Pro Max / Ultimate tiers.
-  openPricingModal('grade_scan_gate');
+  // No credits — send them somewhere they can actually buy grades.
+  // 2026-09-02 (CR-021): was openPricingModal, which only sells subscriptions.
+  openShop('grade', 'grade_scan_gate');
 }
 
 // ── Grade tier picker (Quick vs Deep) ──
@@ -14699,10 +14862,9 @@ async function submitGradeScan(deepGrade) {
       return;
     }
     if (response.status === 402) {
-      // 2026-08-18: BUGFIX — route to current 4-tier pricing modal instead
-      // of the legacy grade scan-gate (still shows old $9.99-Pro-only copy).
+      // 2026-09-02 (CR-021): out of grade credits → shop, not the plan chooser.
       cancelScan();
-      openPricingModal('grade_scan_402');
+      openShop('grade', 'grade_scan_402');
       return;
     }
     if (!response.ok) {
@@ -16647,6 +16809,11 @@ window._isPro = false;
 window._freeScansLeft = 0;
 window._scanCredits = 0;   // paid grading scan credits
 window._idScanCredits = 0; // paid ID scan credits
+// 2026-09-02 (CR-021): pro-status has always returned idFreeLeft (the monthly
+// tier ID-scan allowance) but the client never stored it, so any "how many ID
+// scans do I have" surface could only see PAID credits and under-reported.
+// The shop balance card needs free + paid to match what the scanner enforces.
+window._freeIdLeft = 0;    // monthly tier ID scan allowance remaining
 
 // ── Check Pro status from server ──
 async function checkProStatus() {
@@ -16669,6 +16836,7 @@ async function checkProStatus() {
     window._freeScansLeft = d.freeScansLeft || 0;
     window._scanCredits = d.paidScansLeft || 0;
     window._idScanCredits = d.idPaidLeft || 0;
+    window._freeIdLeft = d.idFreeLeft || 0;
     // Update tier-conditional UI (badge, etc.)
     if (typeof updateTierUI === 'function') { try { updateTierUI(window._userTier); } catch(e) {} }
     // Refresh the ID Scan / AI Grade button badges now that we have fresh counts.
@@ -17107,6 +17275,98 @@ async function startTierCheckout(tier) {
     if (span && originalHTML) span.innerHTML = originalHTML;
   }
 }
+
+/* ── SHOP MODAL ─────────────────────────────────────────────────────────
+   2026-09-02 (CR-021): the only discoverable storefront. Before this, credit
+   packs lived exclusively inside the gear settings panel, which is hidden
+   below 480px — so on a phone in portrait there was no way to buy credits at
+   all. openShop() is now the single entry point used by the header button,
+   the ?packs= deep link, and every out-of-credits gate. */
+window._shopTab = 'id';
+function openShop(tab, source) {
+  const ov = document.getElementById('shopOverlay');
+  if (!ov) return;
+  shopSetTab(tab === 'grade' ? 'grade' : 'id');
+  ov.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  try { window.trackEvent?.('shop_open', { tab: window._shopTab, source: source || 'unknown' }); } catch(_){}
+  shopRefreshBalances();
+  // Focus the close control so keyboard and screen-reader users land inside.
+  setTimeout(() => { try { ov.querySelector('.shop-x')?.focus(); } catch(_){} }, 60);
+}
+function closeShop(evt) {
+  if (evt && evt.target && evt.target.id !== 'shopOverlay') return;
+  const ov = document.getElementById('shopOverlay');
+  if (!ov) return;
+  ov.classList.remove('open');
+  document.body.style.overflow = '';
+}
+function shopSetTab(tab) {
+  window._shopTab = (tab === 'grade') ? 'grade' : 'id';
+  const isGrade = window._shopTab === 'grade';
+  const tId = document.getElementById('shopTabId');
+  const tGr = document.getElementById('shopTabGrade');
+  const pId = document.getElementById('shopPanelId');
+  const pGr = document.getElementById('shopPanelGrade');
+  if (tId) { tId.classList.toggle('active', !isGrade); tId.setAttribute('aria-selected', String(!isGrade)); }
+  if (tGr) { tGr.classList.toggle('active', isGrade); tGr.setAttribute('aria-selected', String(isGrade)); }
+  if (pId) pId.classList.toggle('active', !isGrade);
+  if (pGr) pGr.classList.toggle('active', isGrade);
+}
+// Reuses the existing, already-hardened Stripe checkout starters so the shop
+// can never drift from the gear-panel prices or the server SKU map.
+function shopBuy(kind, qty) {
+  if (kind === 'grade') startGradeScanCheckout(qty);
+  else startIdScanCheckout(qty);
+}
+function shopOpenPlans() { closeShop(); openPricingModal('shop_compare_plans'); }
+function shopRefreshBalances() {
+  const signedIn = !!window.googleUser;
+  const note = document.getElementById('shopSignInNote');
+  if (note) note.style.display = signedIn ? 'none' : '';
+  const bill = document.getElementById('shopBillingBtn');
+  if (bill) bill.style.display = (signedIn && window._isPro) ? '' : 'none';
+  const idBal = document.getElementById('shopIdBal');
+  const grBal = document.getElementById('shopGradeBal');
+  const idSub = document.getElementById('shopIdSub');
+  const grSub = document.getElementById('shopGradeSub');
+  if (!signedIn) {
+    if (idBal) idBal.textContent = '—';
+    if (grBal) grBal.textContent = '—';
+    if (idSub) idSub.textContent = 'Sign in to check';
+    if (grSub) grSub.textContent = 'Sign in to check';
+    return;
+  }
+  const idc = Number(window._idScanCredits || 0) + Number(window._freeIdLeft || 0);
+  const grc = Number(window._scanCredits || 0) + Number(window._freeScansLeft || 0);
+  if (idBal) idBal.textContent = String(idc);
+  if (grBal) grBal.textContent = String(grc);
+  const tierLbl = window._userTier === 'pro_max' ? 'Pro Max' : (window._isPro ? 'Pro' : 'Free');
+  if (idSub) idSub.textContent = tierLbl + ' plan';
+  if (grSub) grSub.textContent = tierLbl + ' plan';
+  // Pull authoritative counts from the server, then repaint.
+  try {
+    if (typeof checkProStatus === 'function') {
+      Promise.resolve(checkProStatus()).then(() => {
+        const i = Number(window._idScanCredits || 0) + Number(window._freeIdLeft || 0);
+        const g = Number(window._scanCredits || 0) + Number(window._freeScansLeft || 0);
+        if (idBal) idBal.textContent = String(i);
+        if (grBal) grBal.textContent = String(g);
+        const t = window._userTier === 'pro_max' ? 'Pro Max' : (window._isPro ? 'Pro' : 'Free');
+        if (idSub) idSub.textContent = t + ' plan';
+        if (grSub) grSub.textContent = t + ' plan';
+        const b = document.getElementById('shopBillingBtn');
+        if (b) b.style.display = window._isPro ? '' : 'none';
+      }).catch(() => {});
+    }
+  } catch(_){}
+}
+// Esc closes the shop, matching the other overlays.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const ov = document.getElementById('shopOverlay');
+  if (ov && ov.classList.contains('open')) closeShop();
+});
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──
 function startScanCheckout() { openGradeScanModal(); }
@@ -18731,7 +18991,7 @@ function startSingleGradeFlow(mode) {
   const credits = (window._scanCredits || 0) + (window._freeScansLeft || 0);
   const needed = (mode === 'deep') ? 2 : 1;
   if (credits < needed) {
-    openPricingModal('grade_scan_gate');
+    openShop('grade', 'grade_scan_gate_tier'); // CR-021: was the plan chooser
     return;
   }
   if (mode === 'deep') {
