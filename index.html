@@ -3340,9 +3340,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <p style="margin:0 0 .7rem">Turn on Whatnot, Mercari, Poshmark, or the rest only if you
         actually sell there. You can change this anytime under
         <strong style="color:var(--text)">Venues</strong> (next to the game menu).</p>
+      <!-- 2026-09-02: spec copy said consignment "lives on a Cash now tab". After
+           consignment was pulled out of the ranking it has its own Ship-in
+           section and is not on the Cash now tab, so that sentence would send
+           people looking for something that isn't there. Meaning and cadence
+           kept; the location claim is now accurate. -->
       <p style="margin:0 0 .7rem;display:none" id="pwMaxLine">You also unlocked consignment and
-        store buylists. Those live on a <strong style="color:var(--text)">Cash now</strong> tab so a
-        store quote cannot beat TCGPlayer by accident.</p>
+        store buylists. Both sit in their own sections, out of
+        <strong style="color:var(--text)">Best Payout</strong>, so a store quote or a
+        weeks-long consignment payout cannot beat TCGPlayer by accident.</p>
     </div>
     <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:1.1rem">
       <button type="button" class="modal-save" onclick="proWelcomeUseRecommended()" style="width:100%;padding:.62rem 1.25rem">Use recommended (US)</button>
@@ -8124,6 +8130,24 @@ function venueGroup(pid) { return VENUE_GROUP_OF[pid] || 'list'; }
    protection. */
 const VENUE_REQUIRES = { cardmarket: 'intlShip' };
 
+/* Groups that are DELIBERATELY not ranked on payout. Both trade money for
+   something the payout number cannot express, so putting them on the same axis
+   as a retail listing misleads in opposite directions:
+
+     cash    — a store pays ~50c on the dollar today. Ranked against listings it
+               always looks like a loss, so fast cash reads as a mistake.
+     consign — COMC/Fanatics list it FOR you at retail with thinner fees, so the
+               raw payout can top every listing venue (COMC won at $395.63 vs
+               TCGplayer $366.13 at a $422.40 anchor). What that number hides is
+               weeks-to-months before the card sells and the cash lands. Crowning
+               it "Best Payout" tells a seller who wants money this week to pick
+               the slowest option on the page.
+
+   They still render, in their own sections, with their own framing — they are
+   excluded from `winner`, from the banner, and from ordinal rank badges. */
+const UNRANKED_VENUE_GROUPS = new Set(['cash', 'consign']);
+function venueRanked(pid) { return !UNRANKED_VENUE_GROUPS.has(venueGroup(pid)); }
+
 const VENUE_DEFAULT_ENABLED = ['ebay', 'tcgplayer'];
 const _VENUE_LS_KEY = 'cr_venues_enabled';
 const _VENUE_SHIP_KEY = 'cr_intl_ship';
@@ -9087,13 +9111,11 @@ function calc() {
      Only eligible venues reach `winner` / `bannerResult`, so a venue the seller
      never opted into can no longer be crowned best payout.
 
-     Cash-now venues (store buylists) are held out of the payout ranking
-     entirely. A buylist pays roughly 50c on the dollar by design, so ranking it
-     on the same axis as a retail listing invites the opposite error — it looks
-     like a loss rather than a fast-cash option. They render in their own
-     section with their own framing. */
+     Cash-now and consignment venues are held out of the payout ranking
+     entirely — see UNRANKED_VENUE_GROUPS for why each one distorts. They render
+     in their own sections with their own framing. */
   results.forEach(r => { r.eligible = venueEligible(r.pid, r.applicable); });
-  const _rankable  = results.filter(r => r.eligible && venueGroup(r.pid) !== 'cash');
+  const _rankable  = results.filter(r => r.eligible && venueRanked(r.pid));
   const eligible   = _rankable.slice();
   eligible.sort((a, b) => sortMode === 'margin' ? b.margin - a.margin : b.netPayout - a.netPayout);
   // 2026-09-01: Stale-fee guardrail. After the payout sort, partition venues whose fee
@@ -9107,15 +9129,14 @@ function calc() {
   eligible.length = 0;
   eligible.push(..._freshElig, ..._staleElig);
   const ineligible = results.filter(r => !r.eligible);
-  /* Cash-now venues are eligible but intentionally absent from `eligible`
-     (see the venue-ranking note above), so they are in neither list. They must
-     still be rendered — dropping them here made every store buylist disappear
-     from the page for Pro Max users. Sort them among themselves by payout and
-     append; the section renderer picks them up by pid, and because they never
-     enter `eligible` they can't be crowned winner. */
-  const _cashRows  = results.filter(r => r.eligible && venueGroup(r.pid) === 'cash')
+  /* Unranked venues are eligible but intentionally absent from `eligible`, so
+     they are in neither list. They must still be rendered — dropping them here
+     made every store buylist disappear from the page for Pro Max users. Sort
+     them among themselves by payout and append; the section renderer picks them
+     up by pid, and because they never enter `eligible` they can't win. */
+  const _unranked  = results.filter(r => r.eligible && !venueRanked(r.pid))
                             .sort((a, b) => b.netPayout - a.netPayout);
-  const sorted     = [...eligible, ..._cashRows, ...ineligible];
+  const sorted     = [...eligible, ..._unranked, ...ineligible];
   const winner     = eligible[0];
   const worst      = eligible[eligible.length - 1];
   const maxPay     = winner?.netPayout ?? 1;
@@ -9308,13 +9329,16 @@ function calc() {
   const sectionDefs = [
     { key: 'list',    label: 'List & ship yourself',       icon: '🛠️',
       sub: 'Photograph, list, and mail the card yourself' },
+    /* 2026-09-02: consignment is out of the payout ranking too, so the sub has
+       to carry the reason the payout can look better here. Thin fees minus the
+       weeks of float is the whole trade, and the payout figure alone hides the
+       second half of it. */
     { key: 'shipIn',  label: 'Ship-in / consignment',      icon: '📦',
-      sub: 'Send cards to their warehouse; they list or auction' },
-    /* 2026-09-02: renamed from "Instant buylists" to "Cash now" so the Pro Max
-       welcome copy ("Those live on a Cash now tab") describes something the
-       user can actually find. These venues are also held out of the payout
-       ranking — a ~50c-on-the-dollar quote is not comparable to a retail
-       listing, and ranking them together made fast cash look like a loss. */
+      sub: 'Send cards to their warehouse; they list or auction — often pays more than listing yourself, but weeks to months before the cash lands' },
+    /* 2026-09-02: renamed from "Instant buylists" to "Cash now" — the plain
+       name for what these are. Held out of the payout ranking: a
+       ~50c-on-the-dollar quote is not comparable to a retail listing, and
+       ranking them together made fast cash look like a loss. */
     { key: 'buylist', label: 'Cash now',                    icon: '💰',
       sub: 'Sell to a store outright — instant offer, usually ~50¢ on the dollar' }
   ];
@@ -9324,12 +9348,12 @@ function calc() {
   // were labeled "7th" and "8th" while the banner called one the best free
   // payout. Keep locked upside in the ranking strip, but make tile badges
   // truthful within the visible comparison.
-  /* Cash-now venues are excluded here too. They are `eligible` (unlocked, on,
-     applicable) but they must not receive an ordinal rank badge or Best/Worst
-     label, because that ranks a ~50%-of-market store quote against retail
-     listings — Star City Games rendered as "10th", framing instant cash as a
-     failure rather than a different product. Their section stands alone. */
-  const _eligibleDisplay = displaySorted.filter(r => r.eligible && venueGroup(r.pid) !== 'cash');
+  /* Unranked venues are excluded here too. They are `eligible` (unlocked, on,
+     applicable) but must not receive an ordinal rank badge or Best/Worst label,
+     because that ranks them against retail listings — Star City Games rendered
+     as "10th", framing instant cash as a failure rather than a different
+     product. Their sections stand alone. */
+  const _eligibleDisplay = displaySorted.filter(r => r.eligible && venueRanked(r.pid));
   const _displayWinner = _eligibleDisplay[0] || null;
   const _displayWorst = _eligibleDisplay.length > 1 ? _eligibleDisplay[_eligibleDisplay.length - 1] : null;
 

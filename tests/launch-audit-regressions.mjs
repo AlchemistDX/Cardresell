@@ -302,11 +302,17 @@ try {
   check('Pro upsell counts plan-locked venues, not disabled ones',
         /!_visible\.has\(r\.pid\)\s*&&\s*r\.applicable/.test(code),
         'filtering on r.eligible rendered "0 More Platforms"');
-  check('cash-now venues are held out of the payout ranking',
-        /venueGroup\(r\.pid\)\s*!==\s*'cash'/.test(code));
-  check('cash-now venues still render in their own section',
-        /_cashRows/.test(code) && /\[\.\.\.eligible,\s*\.\.\._cashRows,\s*\.\.\.ineligible\]/.test(code),
+  check('cash-now AND consignment are held out of the payout ranking',
+        /UNRANKED_VENUE_GROUPS\s*=\s*new Set\(\['cash',\s*'consign'\]\)/.test(code),
+        'COMC won outright at $395.63 vs TCGplayer $366.13 while taking weeks to pay');
+  check('ranking and rank badges both go through venueRanked()',
+        (code.match(/venueRanked\(r\.pid\)/g) || []).length >= 2);
+  check('unranked venues still render in their own sections',
+        /_unranked/.test(code) && /\[\.\.\.eligible,\s*\.\.\._unranked,\s*\.\.\.ineligible\]/.test(code),
         'excluding them from `eligible` once made every buylist vanish');
+  check('the consignment section states the float, not just the payout',
+        /weeks to months before the cash lands/.test(code),
+        'its payout can top every listing venue; the delay is the other half');
   check('the buylist section is named to match the Pro Max welcome copy',
         /label:\s*'Cash now'/.test(code));
   check('Cardsphere is not filed under the ~50c-on-the-dollar section',
@@ -328,8 +334,9 @@ try {
         /Thanks for supporting CardResell\./.test(html));
   check('welcome body states the US-defaults rationale verbatim',
         /so nothing foreign \(like Cardmarket\) can show as\s+best\s+payout by accident/.test(html));
-  check('Pro Max sees the Cash now paragraph',
-        /Those live on a <strong[^>]*>Cash now<\/strong> tab so a\s+store quote cannot beat TCGPlayer by accident/.test(html));
+  check('Pro Max is told consignment and buylists are both unranked',
+        /Both sit in their own sections, out of\s+<strong[^>]*>Best Payout<\/strong>, so a store quote or a\s+weeks-long consignment payout cannot beat TCGPlayer by accident/.test(html),
+        'the earlier copy pointed consignment at a Cash now tab it is not on');
   check('welcome offers exactly the three specified actions',
         /Use recommended \(US\)/.test(html) && /Choose venues/.test(html) &&
         /I&rsquo;ll do this later/.test(html));
