@@ -653,6 +653,12 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .plat-section-hdr{display:flex;align-items:center;gap:.5rem;padding:0 .1rem .55rem;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);border-bottom:1px dashed var(--border);margin-bottom:.75rem}
 .plat-section-hdr .sec-count{margin-left:auto;font-size:.62rem;color:var(--text-faint);letter-spacing:.02em;text-transform:none;font-weight:600}
 .plat-section-hdr .sec-icon{font-size:.85rem;line-height:1}
+/* 2026-09-02: sectionDefs carried a `sub` for every section but the renderer
+   never printed it, so all three explanations had been dead data since the
+   grouping shipped. The Ship-in and Cash now sections are the ones that most
+   need theirs -- they are excluded from Best Payout, and without the reason
+   stated the exclusion just looks like a missing feature. */
+.plat-section-sub{font-size:.7rem;color:var(--text-muted);line-height:1.45;margin:-.45rem 0 .75rem;padding:0 .1rem;max-width:60ch}
 
 /* Compact-mode toggle — hides the fee-block, hassle, bestFor, and redFlag details.
    Default: compact on mobile (≤600px), detailed on desktop.
@@ -769,7 +775,14 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .payout-rank-note{display:flex;gap:.4rem;align-items:flex-start;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--divider);font-size:.68rem;line-height:1.4;color:var(--text-muted)}
 .payout-rank-note b{color:#38bdf8;font-weight:800}
 .plat-flags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.3rem}
-.plat-flag{display:inline-flex;align-items:center;font-size:.6rem;font-weight:700;padding:.18rem .4rem;border-radius:.35rem;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.3);line-height:1.15;letter-spacing:.01em;white-space:nowrap}
+/* 2026-09-02: was white-space:nowrap. These pills carry fee CONDITIONS, and
+   .plat-card is overflow-x:hidden, so any pill longer than the tile was cut
+   off mid-word with no ellipsis and no scroll -- Fanatics' "12% seller fee
+   (not 6%) if you list at or above 120% of Card Ladder" ended at "Card La",
+   hiding the trigger for a fee twice the headline rate, and COMC's Enhanced
+   Security Fee lost its per-day terms. A pill that states a fee has to be
+   readable in full, so long ones now wrap instead of vanishing. */
+.plat-flag{display:inline-flex;align-items:flex-start;font-size:.6rem;font-weight:700;padding:.18rem .4rem;border-radius:.35rem;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.3);line-height:1.25;letter-spacing:.01em;white-space:normal;overflow-wrap:anywhere;max-width:100%}
 /* "Best for cards $X" pill — positive framing (green) so it reads as
    "this is the platform's sweet spot" not "warning". Sits above the amber
    red-flag row and hugs the same layout, distinct color signal. */
@@ -9527,6 +9540,7 @@ function calc() {
         <span>${secDef.label}</span>
         <span class="sec-count">${eligibleCount} available</span>
       </div>
+      ${secDef.sub ? `<div class="plat-section-sub">${secDef.sub}</div>` : ''}
       <div class="plat-grid ${density === 'compact' ? 'compact' : ''}">`;
     secTiles.forEach(renderTile);
     html += `</div></div>`;

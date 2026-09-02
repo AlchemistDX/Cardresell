@@ -313,6 +313,12 @@ try {
   check('the consignment section states the float, not just the payout',
         /weeks to months before the cash lands/.test(code),
         'its payout can top every listing venue; the delay is the other half');
+  check('fee-condition pills wrap instead of being clipped',
+        /\.plat-flag\{[^}]*white-space:normal/.test(html) && !/\.plat-flag\{[^}]*white-space:nowrap/.test(html),
+        '.plat-card is overflow-x:hidden, so a nowrap pill lost the end of the condition');
+  check('section subtitles are actually rendered',
+        /secDef\.sub \? `<div class="plat-section-sub">/.test(code),
+        'sectionDefs.sub was dead data -- defined for all 3 sections, never printed');
   check('the buylist section is named to match the Pro Max welcome copy',
         /label:\s*'Cash now'/.test(code));
   check('Cardsphere is not filed under the ~50c-on-the-dollar section',
