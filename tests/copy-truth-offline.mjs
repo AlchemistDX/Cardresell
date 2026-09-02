@@ -315,8 +315,26 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 {
   // Issue 1 - accuracy stamp and changelog
   const ac = fs.readFileSync('accuracy.html','utf8');
-  ok(/Last updated &middot; Sep 1, 2026|Last updated · Sep 1, 2026/.test(ac),
-     'accuracy header stamped Sep 1, 2026');
+  // The header date must be well-formed AND must equal the newest changelog
+  // entry. Pinning one literal date made this fail on every honest re-audit;
+  // the real invariant is that the stamp can't drift from the log that
+  // justifies it (bumping the date with no entry = stamping an unbacked claim).
+  const hdrDate = (ac.match(/Last updated (?:&middot;|·) ([A-Z][a-z]{2} \d{1,2}, \d{4})/) || [])[1];
+  ok(!!hdrDate, `accuracy header carries a well-formed date (got: ${hdrDate || 'none'})`);
+  const logDates = [...ac.matchAll(/changelog-date">([A-Z][a-z]{2} \d{1,2}, \d{4})</g)].map(m => m[1]);
+  const newestLog = logDates
+    .map(d => ({ d, t: Date.parse(d) }))
+    .sort((a, b) => b.t - a.t)[0];
+  ok(
+    !!newestLog && Date.parse(hdrDate) === newestLog.t,
+    `accuracy header date matches newest changelog entry (header=${hdrDate} newest=${newestLog?.d})`
+  );
+  // Changelog claims "newest first" - enforce it.
+  const logTimes = logDates.map(d => Date.parse(d));
+  ok(
+    logTimes.every((t, i) => i === 0 || logTimes[i - 1] >= t),
+    'dated changelog entries are ordered newest-first as the heading claims'
+  );
   ok(/We audit this page every release cycle/.test(ac),
      'accuracy header carries the audit-cadence promise');
   ok(/Poshmark, COMC and Fanatics&nbsp;Collect re-verified/.test(ac),
