@@ -176,17 +176,36 @@ function sportsCandidateAdmissible(prod, facets) {
   return true;
 }
 
-// Printings that carry a large scarcity premium over the ordinary copy.
-// Used to avoid pricing a common unlimited card as its scarce sibling.
+// Whether a PriceCharting product name denotes a NON-DEFAULT printing.
 //
-// 2026-09-03, second pass: the first version of this list only caught the
-// "1st Edition" family, so the correction fired on Mewtwo but not on the
-// other masks PriceCharting uses for the same underlying problem. After the
-// first fix shipped, 'Pikachu / Base Set / 58' stopped resolving to
-// [1st Edition] and started resolving to [E3 Red Cheeks] at $682.50 -- a
-// convention-exclusive promo, against ~$9 for the copy in a normal binder.
-// Same bug, different bracket. Hence the wider list.
-const PC_PREMIUM_RE = /\b(1st edition|first edition|shadowless|no rarity|staff|prerelease|pre-release|e3|red cheeks|yellow cheeks|promo|jumbo|misprint|error|gold star|crystal|autograph|signed|sample|demo|league|championship|world|winner)\b/i;
+// 2026-09-03, third pass. The first two versions of this were a list of
+// premium printing names, and the list lost twice in a row. Version one
+// caught only the "1st Edition" family, so 'Pikachu / Base Set / 58'
+// stopped resolving to [1st Edition] and started resolving to
+// [E3 Red Cheeks] at $682.50. Version two added E3 and a dozen friends, so
+// the same query moved to [PokeTour 1999] at $198.89 -- against roughly $9
+// for the copy in an ordinary binder. Every time we name the masks, the
+// query slides to a mask we did not name.
+//
+// So stop enumerating. PriceCharting's own naming convention is the signal:
+// the ordinary printing is bare ("Pikachu #58") and every variant carries a
+// bracketed qualifier ("Pikachu [PokeTour 1999] #58"). The bracket IS the
+// marker. Testing for the bracket covers every variant PriceCharting has
+// today and every one it adds later, without us maintaining a vocabulary.
+//
+// This is deliberately broad: it also catches cheap variants like
+// [Reverse Holo]. That is the correct behaviour -- the rule is not "avoid
+// expensive printings", it is "give the caller the printing they asked for",
+// and a caller who typed no qualifier is asking for the plain card.
+const PC_VARIANT_RE = /\[[^\]]+\]/;
+
+// Whether the CALLER asked for a variant. The user types free text, not
+// PriceCharting's bracket convention, so here we do have to recognise
+// wording. Under-matching is the safe direction: if we fail to spot that
+// the user asked for a 1st Edition, we hand back the plain card and the
+// number is low rather than wrong-by-20x.
+const PC_ASKED_VARIANT_RE = /\b(1st edition|first edition|shadowless|no rarity|staff|prerelease|pre-release|e3|red cheeks|yellow cheeks|poketour|jumbo|misprint|error|gold star|crystal|autograph|signed|sample|demo|league|championship|winner|reverse holo|cosmos holo)\b/i;
+
 
 // PriceCharting embeds the collector number in the product name as '#58'.
 // Returns the number as a bare string, or null when the name carries none.
@@ -265,7 +284,7 @@ export default async function handler(req, res) {
   const kvToken = process.env.KV_REST_API_TOKEN;
   // 2026-09-03: v2 -> v3 to invalidate cached [1st Edition] matches written
   // before the premium-printing correction shipped.
-  const cacheKey = `v4|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
+  const cacheKey = `v5|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -402,9 +421,9 @@ export default async function handler(req, res) {
       // (b) was missed by the first pass and is its own bug: 'Rayquaza /
       // EX Deoxys / 97' resolved to 'Rayquaza EX #102', a different card in
       // the same set, and we reported the disagreement as a price spread.
-      const askedPremium = PC_PREMIUM_RE.test(`${name} ${setStr}`);
+      const askedPremium = PC_ASKED_VARIANT_RE.test(`${name} ${setStr}`);
       const matchIsPremium = pc && pc.status === 'success' &&
-        PC_PREMIUM_RE.test(pc['product-name'] || '');
+        PC_VARIANT_RE.test(pc['product-name'] || '');
       const matchWrongNumber = pc && pc.status === 'success' &&
         !pcNumberMatches(number, pc['product-name']);
       if (pc && pc.status === 'success' &&
@@ -423,7 +442,7 @@ export default async function handler(req, res) {
           const plain = cands.find(p =>
             sameConsole(p) &&
             pcNumberMatches(number, p['product-name']) &&
-            (askedPremium || !PC_PREMIUM_RE.test(p['product-name'] || ''))
+            (askedPremium || !PC_VARIANT_RE.test(p['product-name'] || ''))
           ) || (matchWrongNumber ? cands.find(p =>
             sameConsole(p) && pcNumberMatches(number, p['product-name'])
           ) : null);

@@ -100,8 +100,8 @@ console.log('\n[Variant selection]');
 // ── PriceCharting premium correction (api/pricecharting.js) ──
 {
   const src = readFileSync(new URL('../api/pricecharting.js', import.meta.url), 'utf8');
-  check('PriceCharting demotes unrequested premium printings',
-        /PC_PREMIUM_RE/.test(src) && /_premiumCorrected/.test(src),
+  check('PriceCharting demotes unrequested variant printings',
+        /PC_VARIANT_RE/.test(src) && /_premiumCorrected/.test(src),
         "'Pikachu / Base Set / 58' resolved to [1st Edition] at $177.50 vs ~$9 unlimited");
 
   check('the correction only fires when the caller did not ask for it',
@@ -111,6 +111,38 @@ console.log('\n[Variant selection]');
   check('a failed correction keeps the original match',
         /catch \(e\) \{ \/\* keep the original match/.test(src),
         'the plural-endpoint lookup must not be able to fail the whole price');
+}
+
+console.log('\n[PriceCharting variant detection — structural, not enumerated]');
+{
+  const pc = readFileSync(new URL('../api/pricecharting.js', import.meta.url), 'utf8');
+
+  // The enumerated-denylist approach lost twice: version one caught only the
+  // "1st Edition" family and Pikachu #58 slid to [E3 Red Cheeks] ($682.50);
+  // version two added E3 and it slid again to [PokeTour 1999] ($198.89),
+  // against ~$9 for the plain card. Naming the masks is a losing game, so the
+  // rule is now structural: PriceCharting brackets every non-default
+  // printing, and we test for the bracket.
+  check('variant detection is the bracket, not a list of printing names',
+        /const PC_VARIANT_RE = \/\\\[\[\^\\\]\]\+\\\]\//.test(pc),
+        'an enumerated list only catches the masks we already lost to');
+
+  check('the old enumerated constant is gone',
+        !/PC_PREMIUM_RE/.test(pc),
+        'leaving it behind invites a future edit to reintroduce the list');
+
+  check('caller intent is matched separately from product naming',
+        /const PC_ASKED_VARIANT_RE/.test(pc),
+        'the user types "1st Edition", PriceCharting writes "[1st Edition]" -- ' +
+        'two different vocabularies, two different regexes');
+
+  check('a wrong collector number forces re-resolution',
+        /matchWrongNumber/.test(pc),
+        'Rayquaza/EX Deoxys/97 matched "Rayquaza EX #102" -- a different card');
+
+  check('the number filter is applied when picking the replacement',
+        /pcNumberMatches\(number, p\['product-name'\]\)/.test(pc),
+        'otherwise the correction can swap in a plain copy of the WRONG card');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
