@@ -35,7 +35,7 @@ const generated = path.join(here, '_pcfns.generated.mjs');
 fs.writeFileSync(
   generated,
   [grab('isSportsCategoryOk'), grab('sportsCandidateAdmissible'), grab('scoreSportsCandidate'),
-   grab('pcParallelOf'), grab('filterSportsParallel'),
+   grab('pcParallelOf'), grab('_parNorm'), grab('filterSportsParallel'),
    'export { isSportsCategoryOk, sportsCandidateAdmissible, scoreSportsCandidate, pcParallelOf, filterSportsParallel };'].join('\n')
 );
 

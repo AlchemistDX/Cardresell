@@ -248,18 +248,41 @@ function pcParallelOf(productName) {
 //     (unbracketed) candidates. If the card exists ONLY as parallels we cannot
 //     know which one they hold, so refuse rather than guess.
 // Returns { keep, reason }. `keep` empty means "no price".
+function _parNorm(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean).join(' ');
+}
+
 function filterSportsParallel(cands, wantParallel) {
   const want = String(wantParallel || '').trim().toLowerCase();
   if (want) {
-    const words = want.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-    const keep = cands.filter(p => {
-      const par = pcParallelOf(p['product-name']);
-      if (!par) return false; // base card is not the parallel they asked for
-      return words.every(w => par.includes(w));
+    const wantN = _parNorm(want);
+    const words = wantN.split(' ').filter(Boolean);
+
+    // 1) Exact bracket match wins outright.
+    const exact = cands.filter(p => _parNorm(pcParallelOf(p['product-name'])) === wantN);
+    if (exact.length) return { keep: exact, reason: null };
+
+    // 2) Supersets are NOT a match. A bracket that contains every word asked for
+    //    but names more of them is a DIFFERENT card, usually a much rarer one:
+    //    asking for [Silver Prizm] and being handed [Silver Prizm Fast Break]
+    //    is the exact quiet mispricing this filter exists to prevent. Refuse,
+    //    and name what PriceCharting actually has so the user can pick.
+    //    Word match is per-token, not substring, so 'gold' cannot match
+    //    'goldenrod'.
+    const supersets = cands.filter(p => {
+      const par = _parNorm(pcParallelOf(p['product-name']));
+      if (!par) return false;
+      const toks = par.split(' ');
+      return words.every(w => toks.includes(w));
     });
-    return keep.length
-      ? { keep, reason: null }
-      : { keep: [], reason: `no '${want}' parallel in PriceCharting for this card` };
+    if (supersets.length) {
+      const names = [...new Set(supersets.map(p => pcParallelOf(p['product-name'])).filter(Boolean))].slice(0, 6);
+      return {
+        keep: [],
+        reason: `no exact '${want}' parallel -- PriceCharting lists ${names.join(', ')}; pick the exact one`,
+      };
+    }
+    return { keep: [], reason: `no '${want}' parallel in PriceCharting for this card` };
   }
   const bare = cands.filter(p => !pcParallelOf(p['product-name']));
   if (bare.length) return { keep: bare, reason: null };
