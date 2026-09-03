@@ -207,5 +207,41 @@ console.log('\n[Quick Pricing — wiring]');
         /pricecharting: 'PriceCharting guide value'/.test(index));
 }
 
+// ---------------------------------------------------------------------------
+// 2026-09-03 (second defect, found by verifying on production): calc() has
+// several exit paths and only ONE of them refreshed Quick Pricing.
+//
+// The single renderQuickPricing() call sat at the very bottom of calc(), past
+// the free/Pro branch's early `return`. That branch is the one most accounts
+// take, so on those tiers the widget never re-rendered after a basis change --
+// the raw tiers and position bar stayed frozen under a graded headline even
+// though _qpBasis() was returning the correct graded basis. Fixing _qpBasis
+// alone was NOT enough; the render had to actually run.
+// ---------------------------------------------------------------------------
+{
+  const calcBody = index.slice(index.indexOf('function calc()'),
+                               index.indexOf('function setSort('));
+  const renders = (calcBody.match(/renderQuickPricing\(\)/g) || []).length;
+
+  check('calc() refreshes Quick Pricing on more than one exit path',
+        renders >= 3,
+        `only ${renders} renderQuickPricing() call(s) in calc() -- the free/Pro `
+        + 'early return and the no-price return each need their own');
+
+  check('the no-usable-price exit refreshes too',
+        /showIntro\(\);[\s\S]{0,400}?renderQuickPricing\(\)[\s\S]{0,40}?return;/.test(calcBody),
+        'otherwise the previous card\u2019s tiers linger under a new card');
+
+  const upfp = index.slice(index.indexOf('function updatePriceFromPrinting()'),
+                           index.indexOf('function isGradedVariant('));
+  check('updatePriceFromPrinting refreshes on every exit',
+        (upfp.match(/renderQuickPricing\(\)/g) || []).length >= 2,
+        'the printing/grade selector changes the BASIS, not a fee input');
+
+  check('the grade dropdown itself triggers a refresh',
+        /id="gradeSelect"[^>]*renderQuickPricing\(\)/.test(index),
+        'reported symptom was switching grades leaving the bar unchanged');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -2451,7 +2451,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
         <!-- Grade selector -->
         <div id="gradeRow" style="display:none;margin-top:.625rem">
-          <select id="gradeSelect" onchange="updateGradeLabel();syncGradeToPrintSelect()">
+          <select id="gradeSelect" onchange="updateGradeLabel();syncGradeToPrintSelect();try{renderQuickPricing()}catch(_){}">
             <option value="10" selected>Grade 10 / Gem Mint</option>
             <option value="9.5">Grade 9.5 (BGS Gem)</option>
             <option value="9">Grade 9 / Mint</option>
@@ -7293,6 +7293,7 @@ function updatePriceFromPrinting() {
     priceRange.textContent = rp.join(' · ');
     priceSource.textContent = b.label;
     calc();
+    try { renderQuickPricing(); } catch(_) {}
     return;
   }
   const p = currentPrices[key];
@@ -7338,6 +7339,10 @@ function updatePriceFromPrinting() {
     : (srcLabel.match(/Updated/i) ? srcLabel : `${srcLabel} · Updated daily`);
 
   calc();
+  // Belt-and-suspenders: the printing/grade selector is the one control that
+  // changes the BASIS rather than a fee input, so guarantee the widget follows
+  // it regardless of which branch calc() took.
+  try { renderQuickPricing(); } catch(_) {}
 }
 
 // ── Condition multipliers ──
@@ -9478,6 +9483,9 @@ function calc() {
   const price = getEffectivePrice();
   if (price <= 0) {
     showIntro();
+    // No usable price means no basis. Leaving the previous card's tiers up
+    // would attribute them to whatever is on screen now.
+    try { renderQuickPricing(); } catch(_) {}
     return;
   }
 
@@ -10350,6 +10358,15 @@ function calc() {
   }
 
     resultsArea.innerHTML = html;
+    _onCardResultShown();
+    // 2026-09-03: this branch (free + Pro) used to return here while the ONLY
+    // renderQuickPricing() call in calc() sat past the Pro Max / Ultimate
+    // blocks below. So on the tiers most people are on, Quick Pricing never
+    // re-rendered after a price change -- which is why switching grades left
+    // the raw Sell Now / Market / Top of Book tiles and the raw position bar
+    // frozen under a graded headline. Every exit path from calc() must
+    // refresh the widget, or the widget silently describes a stale price.
+    try { renderQuickPricing(); } catch(_) {}
     return;
   }
 

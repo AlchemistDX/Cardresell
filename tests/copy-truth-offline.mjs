@@ -263,8 +263,15 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'the headline renders from the basis when the system owns the number');
   ok(/priceMain\.textContent = `\$\$\{\(b\.value \* m\)\.toFixed\(2\)\}`/.test(updBody),
      'headline = basis x condition multiplier, the same product getEffectivePrice uses');
-  ok(/priceSource\.textContent = b\.label;[\s\S]{0,80}calc\(\);[\s\S]{0,20}return;/.test(updBody),
+  // Window widened 2026-09-03: the branch now also refreshes Quick Pricing
+  // before returning (calc()'s free/Pro exit did not, so the widget froze on
+  // a stale basis). The assertion's intent is unchanged -- this branch must
+  // still RETURN before the tail relabels the caption from selectedCard.source
+  // -- only the permitted gap between calc() and return; grew.
+  ok(/priceSource\.textContent = b\.label;[\s\S]{0,80}calc\(\);[\s\S]{0,140}return;/.test(updBody),
      'the basis branch returns before the tail can relabel the caption from selectedCard.source');
+  ok(/calc\(\);\s*try \{ renderQuickPricing\(\); \} catch\(_\) \{\}\s*return;/.test(updBody),
+     'the basis branch refreshes Quick Pricing before it returns');
   const rawB = idx.slice(idx.indexOf('Raw context'));
   ok(rawB.indexOf("_basisMeta = { label: 'TCGPlayer market'") < rawB.indexOf('bestPrice = ebay.median'),
      'TCG market is the first raw rung and labels itself');
