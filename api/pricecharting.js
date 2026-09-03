@@ -134,6 +134,31 @@ function isSportsCategoryOk(consoleName) {
   return good.test(c);
 }
 
+// Score one PriceCharting sports candidate against the facets we actually know.
+// Year is weighted highest: a 1986 Fleer Jordan and a 2003 Fleer Jordan are
+// different cards with a 100x price gap, so landing on the wrong year is worse
+// than landing on a slightly different parallel.
+function scoreSportsCandidate(prod, facets) {
+  const pn  = String(prod['product-name'] || '').toLowerCase();
+  const cn  = String(prod['console-name'] || '').toLowerCase();
+  const hay = pn + ' ' + cn;
+  let score = 0;
+  if (facets.year  && hay.includes(String(facets.year).toLowerCase()))  score += 40;
+  if (facets.brand && hay.includes(String(facets.brand).toLowerCase())) score += 25;
+  if (facets.sport && cn.includes(String(facets.sport).toLowerCase()))  score += 15;
+  if (facets.number) {
+    const n = String(facets.number).replace(/^#/, '').toLowerCase();
+    const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (n && new RegExp('#' + esc + '(\\b|$)').test(pn)) score += 30;
+  }
+  const tokens = String(facets.name || '').toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  if (tokens.length) {
+    const hits = tokens.filter(t => pn.includes(t)).length;
+    score += Math.round((hits / tokens.length) * 20);
+  }
+  return score;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -241,8 +266,51 @@ export default async function handler(req, res) {
     throw lastErr || new Error('PriceCharting failed after retries');
   }
 
+  // SPORTS resolution. PriceCharting's single-best-match endpoint reliably
+  // lands on Funko POP figures for player-name queries ("Tom Brady" -> Funko
+  // POP NFL, "Michael Jordan" -> POP Basketball), which the category guard then
+  // correctly rejected -- so every sports lookup returned a null price. Ask the
+  // plural endpoint for the full candidate list instead, drop everything that
+  // isn't a real sports-card category, and score the survivors on the facets we
+  // know. Then re-fetch the winner by id, because the plural endpoint does not
+  // return price fields.
+  async function resolveSportsProduct(query, facets) {
+    const listUrl = `https://www.pricecharting.com/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}`;
+    const list = await fetchPcWithRetry(listUrl);
+    const products = Array.isArray(list && list.products) ? list.products : [];
+    const seen = [...new Set(products.map(p => p['console-name']).filter(Boolean))].slice(0, 12);
+    const ok = products.filter(p => isSportsCategoryOk(p['console-name']));
+    if (!ok.length) return { product: null, seen };
+    ok.sort((a, b) => scoreSportsCandidate(b, facets) - scoreSportsCandidate(a, facets));
+    const best = ok[0];
+    if (!best || !best.id) return { product: null, seen };
+    const byId = await fetchPcWithRetry(
+      `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(best.id)}`
+    );
+    const full = (byId && byId.status === 'success' && byId.id) ? byId : null;
+    return { product: full, seen, candidateCount: ok.length };
+  }
+
   try {
-    const pc = await fetchPcWithRetry(url);
+    let pc;
+    if (game === 'sports') {
+      const resolved = await resolveSportsProduct(q, { name, year, brand, number, sport });
+      pc = resolved.product;
+      if (!pc) {
+        const data = {
+          median: null, avg: null, low: null, high: null, count: 0,
+          confidence: 'insufficient', confidenceScore: 0,
+          confidenceReasons: ['no sports-card match on PriceCharting'],
+          source: 'pricecharting',
+          candidateConsoles: resolved.seen,
+          fetchedAt, cacheAgeSec: 0,
+        };
+        await setCache(kvUrl, kvToken, cacheKey, data);
+        return res.status(200).json(data);
+      }
+    } else {
+      pc = await fetchPcWithRetry(url);
+    }
 
     if (pc.status !== 'success' || !pc.id) {
       const data = {
