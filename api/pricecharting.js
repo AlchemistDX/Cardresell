@@ -62,6 +62,17 @@ function parsePcPrices(pc) {
   };
 }
 
+// "silver prizm fast break" -> "Silver Prizm Fast Break". PriceCharting's
+// brackets are already human-readable; we only fix the casing pcParallelOf
+// lowercased, so the dropdown reads like the card does.
+function titleCaseParallel(par) {
+  return String(par || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 // Given a grade string ("PSA 10", "BGS 9.5", "raw"), return the price key
 // from parsePcPrices that best matches. Falls back with a widening ladder.
 function priceKeyForGrade(gradeStr) {
@@ -318,6 +329,37 @@ function scoreSportsCandidate(prod, facets) {
   return score;
 }
 
+// Build the standard price payload from a fully-fetched PriceCharting product.
+// Used by the pcid path so a directly-selected product returns exactly the same
+// shape the resolver path returns -- the client must not need to care which
+// route produced the number.
+function buildPricePayload(pc, { reasons, source, grade, fetchedAt }) {
+  const prices = parsePcPrices(pc);
+  const ladder = priceKeyForGrade(grade);
+  let pickedKey = null, picked = null;
+  for (const k of ladder) {
+    if (prices[k] != null) { pickedKey = k; picked = prices[k]; break; }
+  }
+  return {
+    median: picked, avg: picked, low: picked, high: picked,
+    count: picked == null ? 0 : 1,
+    confidence: picked == null ? 'insufficient' : 'high',
+    confidenceScore: picked == null ? 0 : 20,
+    confidenceReasons: picked == null
+      ? ['PriceCharting has no value for that grade on this product']
+      : reasons,
+    source,
+    productId: pc.id,
+    productName: pc['product-name'],
+    consoleName: pc['console-name'],
+    matchedPriceKey: pickedKey,
+    parallel: pcParallelOf(pc['product-name']),
+    url: `https://www.pricecharting.com/game/${encodeURIComponent(pc.id)}`,
+    prices,
+    fetchedAt, cacheAgeSec: 0,
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -334,7 +376,15 @@ export default async function handler(req, res) {
   const sport  = (req.query.sport  || '').trim();
   const brand  = (req.query.brand  || '').trim();
   const parallel = (req.query.parallel || '').trim();
-  if (!name) return res.status(400).json({ error: 'name required' });
+  // Sports parallels cannot be typed reliably -- "Silver" is both [Silver Prizm]
+  // and [Silver Prizm Fast Break], and the matcher (correctly) refuses that
+  // ambiguity. So the UI asks PriceCharting which parallels this card actually
+  // has and lets the user pick one, exactly like the Pokemon printing dropdown.
+  //   variants=1 -> list the real parallels for this card (1 upstream call)
+  //   pcid=<id>  -> price that exact product, no re-resolution, no ambiguity
+  const wantVariants = req.query.variants === '1' || req.query.variants === 'true';
+  const pcid = (req.query.pcid || '').trim();
+  if (!name && !pcid) return res.status(400).json({ error: 'name required' });
 
   const token = process.env.PRICECHARTING_API_TOKEN;
 
@@ -385,7 +435,7 @@ export default async function handler(req, res) {
   // bracket ([Silver Prizm Fast Break] for "Silver Prizm"), so every cached
   // sports answer written under the old matcher may name the wrong card. Code
   // changes do not invalidate KV on their own -- the key must move with them.
-  const cacheKey = `v7|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}`.toLowerCase();
+  const cacheKey = `v7|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -494,6 +544,89 @@ export default async function handler(req, res) {
       product: full, seen, candidateCount: pool.length,
       matchedParallel: pcParallelOf(best['product-name']),
     };
+  }
+
+  // ---- Mode: price one exact product by PriceCharting id ------------------
+  // The variant dropdown already knows precisely which product the user picked,
+  // so re-running fuzzy resolution here could only introduce error.
+  if (pcid) {
+    try {
+      const byId = await fetchPcWithRetry(
+        `${PC_HOST}/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(pcid)}`
+      );
+      const full = (byId && byId.status === 'success' && byId.id) ? byId : null;
+      if (!full) {
+        const data = {
+          median: null, confidence: 'insufficient', confidenceScore: 0,
+          confidenceReasons: ['PriceCharting has no product with that id'],
+          source: game === 'sports' ? 'sportscardspro' : 'pricecharting',
+          fetchedAt, cacheAgeSec: 0,
+        };
+        await setCache(kvUrl, kvToken, cacheKey, data);
+        return res.status(200).json(data);
+      }
+      const data = buildPricePayload(full, {
+        reasons: ['PriceCharting guide value', 'exact product selected'],
+        source: game === 'sports' ? 'sportscardspro' : 'pricecharting',
+        grade, fetchedAt,
+      });
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      return res.status(200).json(data);
+    } catch (e) {
+      return res.status(200).json({
+        median: null, confidence: 'insufficient', confidenceScore: 0,
+        confidenceReasons: ['pricecharting-error'], source: 'pricecharting-error',
+        fetchedAt, cacheAgeSec: 0,
+      });
+    }
+  }
+
+  // ---- Mode: list the parallels this card actually has ---------------------
+  // One upstream call. No prices: PriceCharting's plural endpoint does not
+  // return price fields, and pricing every parallel would cost one call per
+  // row at 1 req/sec. The UI prices the row the user selects, via pcid.
+  if (wantVariants && game === 'sports') {
+    try {
+      const listUrl = `${PC_HOST}/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
+      const list = await fetchPcWithRetry(listUrl);
+      const products = Array.isArray(list && list.products) ? list.products : [];
+      const facets = { name, year, brand, number, sport };
+      const ok = products.filter(p => sportsCandidateAdmissible(p, facets));
+      const seenIds = new Set();
+      const variants = [];
+      for (const prod of ok) {
+        if (!prod.id || seenIds.has(prod.id)) continue;
+        seenIds.add(prod.id);
+        const par = pcParallelOf(prod['product-name']);
+        variants.push({
+          id: String(prod.id),
+          parallel: par,                          // null == the base card
+          label: par ? titleCaseParallel(par) : 'Base card',
+          productName: prod['product-name'] || '',
+          consoleName: prod['console-name'] || '',
+        });
+      }
+      // Base card first, then parallels alphabetically -- a stable order the
+      // user can scan, rather than PriceCharting's arbitrary row order.
+      variants.sort((a, b) => {
+        if (!a.parallel && b.parallel) return -1;
+        if (a.parallel && !b.parallel) return 1;
+        return String(a.label).localeCompare(String(b.label));
+      });
+      const data = {
+        mode: 'variants', variants, count: variants.length,
+        source: 'sportscardspro',
+        candidateConsoles: [...new Set(products.map(p => p['console-name']).filter(Boolean))].slice(0, 12),
+        fetchedAt, cacheAgeSec: 0,
+      };
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      return res.status(200).json(data);
+    } catch (e) {
+      return res.status(200).json({
+        mode: 'variants', variants: [], count: 0,
+        source: 'pricecharting-error', fetchedAt, cacheAgeSec: 0,
+      });
+    }
   }
 
   try {
@@ -635,8 +768,14 @@ export default async function handler(req, res) {
     const data = {
       median: picked, avg: picked, low: picked, high: picked, count: 1,
       confidence, confidenceScore, confidenceReasons,
-      source: 'pricecharting', productId: pc.id, productName: pc['product-name'],
+      // 2026-09-03: sports values come from the sportscardspro guide, not the
+      // pricecharting one. Reporting 'pricecharting' here mislabeled every
+      // sports success -- the caption told the user to verify on a site that
+      // does not list the card.
+      source: game === 'sports' ? 'sportscardspro' : 'pricecharting',
+      productId: pc.id, productName: pc['product-name'],
       consoleName: pc['console-name'], matchedPriceKey: pickedKey,
+      parallel: pcParallelOf(pc['product-name']),
       url: `https://www.pricecharting.com/game/${encodeURIComponent(pc.id)}`,
       prices, // all grade tiers, so the client can render "Raw $12 · PSA 9 $45 · PSA 10 $180"
       fetchedAt, cacheAgeSec: 0,
