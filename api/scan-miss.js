@@ -66,15 +66,36 @@ export default async function handler(req, res) {
     rarity:  clip(body.rarity,   60),
     ua:      clip(body.ua,      200),
     at:      Number.isFinite(body.at) ? body.at : Date.now(),
+    // 2026-09-03: total-recognition-failure fields. The client's
+    // "Card not recognized" branch has no name/number by definition — that is
+    // exactly the failure we most need to see — so these carry the diagnosis.
+    reason:       clip(body.reason,       40),
+    scanReason:   clip(body.scanReason,  120),
+    retakeHint:   clip(body.retakeHint,  160),
+    modelUsed:    clip(body.modelUsed,    40),
+    fpBestGuess:  clip(body.fpBestGuess, 120),
+    fpBestId:     clip(body.fpBestId,     40),
+    game:         clip(body.game,         20),
+    fpBestDist:   Number.isFinite(body.fpBestDist)   ? body.fpBestDist   : null,
+    fpSecondDist: Number.isFinite(body.fpSecondDist) ? body.fpSecondDist : null,
   };
 
-  if (!payload.name && !payload.number) {
+  // 2026-09-03: previously this required name || number, which silently
+  // discarded every total-recognition failure. A payload carrying only a
+  // `reason` is now valid and is the highest-signal record we get.
+  if (!payload.name && !payload.number && !payload.reason) {
     // Nothing to log
     return res.status(204).end();
   }
 
   try {
-    const dedupKey = `${payload.name.toLowerCase()}|${payload.number}|${payload.setName.toLowerCase()}`;
+    // 2026-09-03: unrecognized misses have no name/number, so keying on those
+    // alone would collapse every total failure in the product into a single
+    // record. Fold the fastpath's best guess + reason in so distinct cards
+    // stay distinct while true repeats of the same card still dedup.
+    const dedupKey = payload.name || payload.number
+      ? `${payload.name.toLowerCase()}|${payload.number}|${payload.setName.toLowerCase()}`
+      : `${payload.reason}|${payload.fpBestId}|${payload.game}`;
     const key      = `scan-miss:${hashKey(dedupKey)}`;
 
     // Store the payload (overwrites if same card scanned again — we care

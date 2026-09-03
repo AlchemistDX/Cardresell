@@ -14870,7 +14870,12 @@ function _scanMissDismiss() {
 // us see WHICH cards keep missing (Chaos Rising, other new sets, OCR
 // misreads) so we can prioritize eBay Browse API integration for the
 // sets that need it most.
-function _logScanMiss(pending) {
+// 2026-09-03: `extra` carries the total-recognition-failure case. Until now
+// this function was called from exactly ONE site (the scan-miss panel, which
+// requires a card we DID identify by name), so "Card not recognized" — the
+// single most important failure to know about — logged nothing at all. Any
+// new failure branch in the scan flow MUST call this.
+function _logScanMiss(pending, extra) {
   try {
     const payload = {
       name:    pending?.name    || '',
@@ -14879,6 +14884,7 @@ function _logScanMiss(pending) {
       rarity:  pending?.rarity  || '',
       ua:      (navigator.userAgent || '').slice(0, 200),
       at:      Date.now(),
+      ...(extra || {}),
     };
     fetch('/api/scan-miss', {
       method: 'POST',
@@ -15192,7 +15198,12 @@ async function processScanImage(input) {
 
   // ── FAST PATH: try client-side pHash against 20k-card index ──
   // ~200-500ms end-to-end for a match, no /api/scan credit spent.
-  // Only fires for well-framed non-holo cards; otherwise falls through.
+  // 2026-09-03: the old claim here ("only fires for well-framed non-holo
+  // cards") understated the problem — a crop/index preprocessing mismatch
+  // meant it fired for essentially NOTHING. Now scores min(cropped, uncropped)
+  // against the index. Still falls through on near-duplicate arts where the
+  // gap rule refuses to guess, and on phone photos of full-art holos, which a
+  // 64-bit global hash genuinely cannot resolve.
   try {
     if (window.CardResellFastPath && typeof window.CardResellFastPath.scanFile === 'function') {
       statusEl.textContent = 'Matching against catalog\u2026';
@@ -15421,6 +15432,27 @@ async function processScanImage(input) {
       // Show a proper "unidentified" state with a hint, refund badge,
       // and "Not my card" button so the user knows we tried and failed
       // honestly — not that we returned a wrong answer.
+      // 2026-09-03: log the total miss. This branch was previously silent, so
+      // repeated real-world failures (e.g. Mega Greninja ex full-art) left no
+      // trace and could not be diagnosed. Record everything we know about WHY
+      // so the next occurrence is actionable: the fastpath's best guess and
+      // score, which model ran, and the server's own stated reason.
+      try {
+        const _fp = window._lastFastpathResult || null;
+        _logScanMiss(null, {
+          reason:      'unrecognized',
+          scanReason:  String(data && (data.reason || data.error) || '').slice(0, 120),
+          retakeHint:  String(data && data.retake_hint || '').slice(0, 160),
+          modelUsed:   String(data && data.model_used || '').slice(0, 40),
+          fpBestDist:  _fp && Number.isFinite(_fp.bestDist) ? _fp.bestDist : null,
+          fpSecondDist: _fp && Number.isFinite(_fp.secondDist) ? _fp.secondDist : null,
+          fpBestGuess: _fp && _fp.bestGuess
+            ? String(_fp.bestGuess.card_name + ' | ' + _fp.bestGuess.set_name + ' #' + _fp.bestGuess.card_number).slice(0, 120)
+            : '',
+          fpBestId:    _fp && _fp.bestGuess ? String(_fp.bestGuess.id || '').slice(0, 40) : '',
+          game:        String((typeof activeGame !== 'undefined' && activeGame) || '').slice(0, 20),
+        });
+      } catch(_) { /* logging must never break the failure UI */ }
       const hint = data.retake_hint || 'We couldn\u2019t identify this card. Try a sharper photo with the full card visible, no glare, on a plain background.';
       statusEl.innerHTML = '<span style="color:#fbbf24">\u26a0 Card not recognized</span>' +
         '<br><span style="font-size:.78rem;opacity:.75">' + esc(hint) + '</span>';
@@ -17434,9 +17466,25 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
 //   { hit: true,  card: {...}, distance: N, source: 'phash' }   ← use immediately
 //   { hit: false, reason: '...' }                                ← fall back to /api/scan
 //
-// Distance threshold: 12 Hamming bits out of 64 (both pHash + dHash combined = 128 bits).
-// pHash+dHash ≤ 12 empirically matches only the exact card (verified on non-holo test set).
-// Holo cards score > 20 due to shimmer; those fall through to LLM scan.
+// Scoring: hamming(pHash)*2 + hamming(dHash). pHash is weighted double because
+// it survives resampling far better — measured 2026-09-03, a rehash of an index
+// reference image reproduces its stored pHash near-exactly while dHash carries
+// ~13 bits of error (PIL Lanczos 9x8 in the seeder vs canvas bilinear here).
+//
+// Accept iff score <= 20 AND gap to second-best >= 6. Calibrated 2026-09-03 by
+// feeding the index its own reference images back through scanFile (n=30):
+// 26/30 accepted, 26 correct, 0 wrong. Recall plateaus flat from T=20 to T=48
+// with zero false accepts, so T=20 is the conservative end of the plateau.
+//
+// The 4 that fall through are near-duplicate arts (same illustration, different
+// rarity) where the gap rule correctly refuses to guess — those go to the LLM.
+//
+// HISTORY: this threshold was 12, which produced a 0% hit rate on the index's
+// OWN reference images. Cause: the 2026-08-21 detectCardBounds() auto-crop was
+// applied before hashing, but the index is built from UNCROPPED images, so
+// every stored hash was silently invalidated. Fixed by scoring min() over both
+// the cropped and uncropped hashes. If you change hashing or cropping here,
+// re-run tests/fastpath-calibration.mjs or this rots again the same way.
 
 (function() {
   'use strict';
@@ -17734,11 +17782,19 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     cropCanvas.height = bounds.h;
     cropCanvas.getContext('2d').drawImage(canvas, bounds.x, bounds.y, bounds.w, bounds.h, 0, 0, bounds.w, bounds.h);
 
-    // Compute hashes
+    // Compute hashes for BOTH the auto-cropped canvas and the raw uncropped
+    // canvas. tools/seed_set.py builds the index from raw uncropped card
+    // images, so a tight scan/screenshot matches the UNCROPPED hash, while a
+    // phone photo with table/hand background needs the CROPPED one. Scoring
+    // min() over both means we never have to guess which kind of input we got.
+    // Cost is one extra pair of hashes (~10ms) and one extra compare per
+    // index record; the NN loop is ~68ms over 32k records.
     const t1 = performance.now();
     const ph = computePHash(cropCanvas);
     const dh = computeDHash(cropCanvas);
-    console.log(`[fastpath] hashes computed in ${(performance.now()-t1).toFixed(0)}ms  pHash=${ph} dHash=${dh}`);
+    const phRaw = computePHash(canvas);
+    const dhRaw = computeDHash(canvas);
+    console.log(`[fastpath] hashes computed in ${(performance.now()-t1).toFixed(0)}ms  crop p=${ph} d=${dh}  raw p=${phRaw} d=${dhRaw}`);
 
     // Wait for index
     const idx = await indexPromise;
@@ -17750,9 +17806,13 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     const t2 = performance.now();
     let bestDist = 999, bestCard = null;
     let secondDist = 999;
+    let bestUsedRaw = false;
     for (const c of idx) {
-      const d = hamming(ph, c.p) * 2 + hamming(dh, c.d);
+      const dCrop = hamming(ph,    c.p) * 2 + hamming(dh,    c.d);
+      const dRaw  = hamming(phRaw, c.p) * 2 + hamming(dhRaw, c.d);
+      const d = dCrop < dRaw ? dCrop : dRaw;
       if (d < bestDist) {
+        bestUsedRaw = dRaw <= dCrop;
         secondDist = bestDist;
         bestDist = d;
         bestCard = c;
@@ -17762,8 +17822,11 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
     }
     console.log(`[fastpath] NN over ${idx.length} in ${(performance.now()-t2).toFixed(0)}ms — best=${bestDist} 2nd=${secondDist} → ${bestCard?.n} / ${bestCard?.s}`);
 
-    // Confidence: distance ≤ 12 AND gap to second best ≥ 6 → high confidence
-    const CONFIDENCE_MAX = 12;
+    // Confidence gate — see the calibration note at the top of this IIFE.
+    // Do NOT raise CONFIDENCE_MAX without re-running the calibration harness:
+    // a false accept shows the user a confidently WRONG card, which is worse
+    // than an honest "not recognized".
+    const CONFIDENCE_MAX = 20;
     const GAP_MIN = 6;
     const totalMs = (performance.now() - t0).toFixed(0);
     if (bestDist <= CONFIDENCE_MAX && (secondDist - bestDist) >= GAP_MIN) {
@@ -17775,6 +17838,10 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
         secondDistance: secondDist,
         totalMs,
         source: 'phash',
+        matchedOn: bestUsedRaw ? 'uncropped' : 'cropped',
+        // 2026-09-03: expose hashes on the HIT path too, so the rerank and
+        // telemetry paths can read them without re-hashing the image.
+        ph, dh, phRaw, dhRaw,
       };
     }
 
@@ -17784,7 +17851,8 @@ async function fallbackOCR(file, statusEl, resultEl, objectUrl) {
       reason: `best=${bestDist} gap=${secondDist-bestDist}`,
       bestGuess: enrichCard(bestCard),
       bestDist,
-      ph, dh,
+      secondDist,
+      ph, dh, phRaw, dhRaw,
       cropCanvas,
       totalMs,
     };
