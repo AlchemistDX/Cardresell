@@ -138,5 +138,74 @@ console.log('\n[Quick Pricing — wiring]');
         /setAttribute\('aria-expanded', String\(open\)\)/.test(index));
 }
 
+// ---------------------------------------------------------------------------
+// 2026-09-03: Quick Pricing must follow the GRADE selector.
+//
+// Reported with a screenshot: selecting PSA 10 repainted the headline to the
+// graded guide value ($161.25 on Cresselia #71) while Quick Pricing kept
+// showing $23.44 / $26.49 / $29.14 and the position bar stayed pinned to the
+// raw book -- the raw TCGplayer numbers, rendered underneath a graded price.
+//
+// renderQuickPricing() was firing correctly all along (calc() calls it, and
+// the graded tail of updatePriceFromPrinting() calls calc()). The defect was
+// that _qpBasis() returned window._crBasis -- the RAW ladder basis --
+// unconditionally, without consulting the grade selector.
+// ---------------------------------------------------------------------------
+{
+  const qpBasis = index.slice(index.indexOf('function _qpBasis()'),
+                              index.indexOf('function _qpTiers('));
+
+  check('_qpBasis checks the grade selector',
+        /isGradedVariant\(/.test(qpBasis),
+        '_qpBasis must branch on the selected printing being a graded slab');
+
+  check('_qpBasis reads the graded row, not the raw ladder basis',
+        /currentPrices\[_gk\]/.test(qpBasis),
+        'a graded selection must source its own price row');
+
+  // Compare CODE positions only -- the explanatory comment in _qpBasis names
+  // window._crBasis while describing the bug, which would fool a raw indexOf.
+  const qpBasisCode = qpBasis.replace(/\/\/[^\n]*/g, '');
+  check('the graded branch runs BEFORE the _crBasis shortcut',
+        qpBasisCode.indexOf('isGradedVariant(') < qpBasisCode.indexOf('window._crBasis'),
+        'if _crBasis is read first, every graded selection renders raw numbers');
+
+  check('the graded basis is tagged so the renderer can explain itself',
+        /graded:\s*true/.test(qpBasis));
+
+  // A slab has one guide value per grade (low == mid == market), so the tier
+  // builder collapses to a single tier. Rather than vanishing -- which reads
+  // as a glitch -- the panel keeps its heading and states why there is no
+  // spread to choose from. Fabricating a Sell Now / Top of Book around a
+  // single guide value would be inventing a listing book that does not exist.
+  check('a graded slab explains itself instead of silently vanishing',
+        /basis\.graded && tiers\.length < 2/.test(index) &&
+        /id="qpGradedNote"/.test(index));
+
+  check('the graded note hides the tiers AND the position bar',
+        /const showStrategy = \(on\) =>/.test(index) &&
+        /qpBarWrap/.test(index) &&
+        /showStrategy\(false\)/.test(index),
+        'leaving the bar visible on a slab re-creates the reported bug');
+
+  check('the strategy view is restored for non-graded prices',
+        /showStrategy\(true\)/.test(index));
+
+  check('the graded note never promises a timeline',
+        !/\b(days?|weeks?|hours?)\b/i.test(
+          (/note\.textContent = ([\s\S]*?);\n/.exec(index) || [,''])[1]),
+        'no venue publishes time-to-sell -- see audit/SELL_VELOCITY_RESEARCH.md');
+
+  // The headline caption must name the feed the NUMBER came from. The
+  // screenshot showed a PriceCharting graded value stamped "TCGPlayer market",
+  // which sends the user to verify $161.25 on a site that does not list it.
+  check('the headline caption is sourced from the rendered row',
+        /srcMap\[p\?\.source\]/.test(index),
+        'captioning from selectedCard.source mislabels graded prices');
+
+  check('pricecharting maps to an honest caption',
+        /pricecharting: 'PriceCharting guide value'/.test(index));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

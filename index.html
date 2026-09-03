@@ -559,6 +559,7 @@ img{display:block;max-width:100%;height:auto}
 .qp-info-panel p:last-child{margin-bottom:0}
 .qp-info-panel strong{color:var(--text);font-weight:700}
 .qp-info-caveat{padding-top:.38rem;border-top:1px solid var(--border);color:var(--text-faint)}
+.qp-graded-note{margin:0;font-size:.78rem;line-height:1.45;color:var(--text-faint)}
 
 .qp-tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}
 .qp-tier{display:flex;flex-direction:column;align-items:center;gap:.1rem;padding:.6rem .3rem;
@@ -2410,6 +2411,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
 
           <div class="qp-rows" id="qpRows"></div>
+
+          <!-- Shown INSTEAD of the tiers/bar when a graded slab is selected.
+               A slab is priced from a single guide value per grade, so there is
+               no active listing book to position against and no Sell Now /
+               Top of Book to offer. Saying that is better than vanishing. -->
+          <p class="qp-graded-note" id="qpGradedNote" style="display:none"></p>
         </div>
 
         <div class="sep"></div>
@@ -7039,6 +7046,39 @@ function formatVariantName(v) {
 window._qpSelected = null;   // which tier the user picked, so re-renders keep it
 
 function _qpBasis() {
+  // 2026-09-03: graded slabs FIRST, before the _crBasis shortcut below.
+  //
+  // Bug this fixes (reported with a screenshot): select PSA 10 on a card and
+  // the headline correctly repaints to the graded guide value ($161.25 on
+  // Cresselia #71), but Quick Pricing underneath kept showing $23.44 / $26.49
+  // / $29.14 and the position bar stayed pinned to the raw book. Those are the
+  // RAW TCGplayer numbers. `window._crBasis` holds the raw ladder basis, and
+  // this function returned it unconditionally, so every graded selection
+  // rendered a raw strategy widget under a graded headline -- two different
+  // cards' economics stacked in one panel.
+  //
+  // renderQuickPricing() was firing correctly the whole time (calc() calls it,
+  // and the graded tail of updatePriceFromPrinting() calls calc()). The render
+  // was never the problem; the basis it read was.
+  const _gk = (typeof printSelect !== 'undefined' && printSelect) ? printSelect.value : '';
+  if (typeof isGradedVariant === 'function' && isGradedVariant(_gk)) {
+    const gp = (typeof currentPrices !== 'undefined' && currentPrices) ? currentPrices[_gk] : null;
+    if (!gp || !(Number(gp.market) > 0)) return null;
+    // A slab is a single guide value: PriceCharting publishes one number per
+    // grade, so low == mid == market. _qpTiers() will therefore emit exactly
+    // one tier and renderQuickPricing() hides the panel -- which is the honest
+    // outcome. "Sell Now" and "Top of Book" describe positions in an active
+    // listing book; there is no such book behind a graded guide value, and
+    // inventing a spread around it would be a fabricated strategy.
+    return {
+      market: Number(gp.market),
+      low:  Number(gp.low) > 0 ? Number(gp.low) : null,
+      mid:  Number(gp.mid) > 0 ? Number(gp.mid) : null,
+      label: gp.label || '',
+      graded: true,
+    };
+  }
+
   // Prefer the basis the payout ladder is actually computed from, so the
   // widget can never disagree with the rows underneath it.
   const b = window._crBasis;
@@ -7106,10 +7146,52 @@ function renderQuickPricing() {
   const basis = _qpBasis();
   const tiers = basis ? _qpTiers(basis) : [];
 
+  const note    = document.getElementById('qpGradedNote');
+  const barWrap = document.getElementById('qpBarWrap');
+  const tiersEl = document.getElementById('qpTiers');
+  const rowsEl  = document.getElementById('qpRows');
+  const showStrategy = (on) => {
+    if (barWrap) barWrap.style.display = on ? '' : 'none';
+    if (tiersEl) tiersEl.style.display = on ? '' : 'none';
+    if (rowsEl)  rowsEl.style.display  = on ? '' : 'none';
+    if (note)    note.style.display    = on ? 'none' : '';
+    // The Info panel defines Sell Now / Market / Top of Book. With the tiers
+    // hidden there is nothing for it to define, so hide the button too and
+    // collapse the panel if the user had left it open.
+    const infoBtn = host.querySelector('.qp-info');
+    const infoPnl = document.getElementById('qpInfo');
+    if (infoBtn) infoBtn.style.display = on ? '' : 'none';
+    if (!on && infoPnl) {
+      infoPnl.style.display = 'none';
+      if (infoBtn) infoBtn.setAttribute('aria-expanded', 'false');
+    }
+  };
+
+  // 2026-09-03: a graded slab has ONE number per grade -- PriceCharting
+  // publishes a single guide value, so low == mid == market and there is no
+  // active listing book to position against. Previously this function read
+  // the raw ladder basis regardless of the grade selector, so selecting PSA 10
+  // left the raw Sell Now / Market / Top of Book tiers and the raw position
+  // bar sitting under a graded headline. Now _qpBasis() returns the graded
+  // row, which collapses to a single tier -- and rather than making the whole
+  // panel vanish (which reads as a glitch), we keep the heading and say why
+  // there is no strategy to choose from.
+  if (basis && basis.graded && tiers.length < 2) {
+    host.style.display = '';
+    showStrategy(false);
+    if (note) {
+      note.textContent = 'Graded slabs price off a single guide value per grade, '
+        + 'so there is no cheapest-listing spread to undercut. The payout rows below '
+        + 'are calculated from that value.';
+    }
+    return;
+  }
+
   // One tier is not a choice -- hide rather than dress up a single number as
   // a pricing strategy.
   if (!basis || tiers.length < 2) { host.style.display = 'none'; return; }
   host.style.display = '';
+  showStrategy(true);
 
   const cur = parseFloat(document.getElementById('priceOverride')?.value);
   const fmt = (n) => '$' + Number(n).toLocaleString('en-US',
@@ -7237,8 +7319,14 @@ function updatePriceFromPrinting() {
   if (clamped.high != null) parts.push(`High $${(clamped.high * condMult).toFixed(2)}`);
   priceRange.textContent = parts.join(' · ');
 
-  const srcMap = { TCGPlayer: 'TCGPlayer market', Scryfall: 'Scryfall · Updated daily', YGOProDeck: 'YGOProDeck · TCGPlayer data', Manual: 'Manual entry', 'eBay JP Comps': 'eBay JP sold listings', 'TCGPlayer (EN)': 'TCGPlayer market (EN version)', TCGPriceLookup: 'TCGPriceLookup' };
-  const srcLabel = srcMap[selectedCard?.source] || selectedCard?.source || '';
+  const srcMap = { TCGPlayer: 'TCGPlayer market', Scryfall: 'Scryfall · Updated daily', YGOProDeck: 'YGOProDeck · TCGPlayer data', Manual: 'Manual entry', 'eBay JP Comps': 'eBay JP sold listings', 'TCGPlayer (EN)': 'TCGPlayer market (EN version)', TCGPriceLookup: 'TCGPriceLookup', pricecharting: 'PriceCharting guide value', sportscardspro: 'PriceCharting guide value' };
+  // 2026-09-03: caption the row we actually rendered, not the card's search
+  // feed. Screenshot showed a PSA 10 headline of $161.25 -- a PriceCharting
+  // graded guide value -- stamped "TCGPlayer market · Updated 2026/09/03".
+  // The number was right and the attribution was wrong, which is the one
+  // combination a pricing tool cannot ship: it tells the user to go verify
+  // $161.25 on TCGplayer, where it does not exist.
+  const srcLabel = srcMap[p?.source] || srcMap[selectedCard?.source] || p?.source || selectedCard?.source || '';
   const updatedAt = selectedCard?.updatedAt || '';
   // 2026-08-16: prior version could render "TCGPriceLookup · Updated daily ·
   // Updated daily" when both the label AND updatedAt contained 'daily'. We
