@@ -691,5 +691,53 @@ try {
         'the venue is reference-only when blocked, not hidden');
 }
 
+
+// Part L — paying must never switch venues on for you (P0-3, verified 2026-09-03).
+// Browser-verified: landing on ?pro=1 as pro and as pro_max leaves the enabled
+// set at exactly ['ebay','tcgplayer'] and ranks 2 tiles; all five exits (Use
+// recommended / Choose venues / I'll do this later / X / Escape) leave it at 2;
+// the modal fires once; a lapsed subscriber with 15 stored venues still ranks
+// only 2. These checks pin the source-level invariants behind that.
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // The bug this whole item guards against is a bulk enable-everything call.
+  // Written as a scan over product code so ANY new bulk-enable trips it, not
+  // just the shapes we thought of.
+  const bulkEnable = /_allVenueIds\(\)[\s\S]{0,80}?setVenueEnabled\([^)]*,\s*true\s*\)/.test(code) ||
+                     /venuesEnabled\(\)\s*=\s*new Set\(_allVenueIds\(\)\)/.test(code) ||
+                     /_venuesEnabled\s*=\s*new Set\(_allVenueIds\(\)\)/.test(code);
+  check('no code path bulk-enables every venue',
+        !bulkEnable,
+        'paying for a plan unlocks venues; it must never switch them on');
+
+  check('the only writer of venue state is the picker toggle',
+        (code.match(/setVenueEnabled\(/g) || []).length === 2,
+        'one definition + one caller; a third caller means something else flips venues');
+
+  check('the recommended button RESETS rather than adds',
+        /function proWelcomeUseRecommended[\s\S]{0,200}?resetVenuesToRecommended\(\)/.test(code),
+        'adding to an existing set would let a stale 15-venue device stay at 15');
+  check('reset means exactly the recommended set, not a merge',
+        /function resetVenuesToRecommended[\s\S]{0,140}?=\s*new Set\(VENUE_DEFAULT_ENABLED\)/.test(code));
+
+  // A lapsed or downgraded subscriber keeps their stored picks in localStorage.
+  // Those must stay inert until the plan covers them again — enforced by the
+  // unlocked term inside venueEligible, not by rewriting their saved choices.
+  check('stored venues stay inert without the plan that unlocks them',
+        /function venueEligible[\s\S]{0,320}?venueUnlocked\(/.test(code),
+        'a downgraded device still has 15 venues in localStorage');
+  check('unknown or retired venue ids are dropped from storage',
+        /stored\)\s*\?\s*stored\.filter\(v => valid\.includes\(v\)\)/.test(code));
+
+  check('the welcome fires once and remembers it',
+        /PRO_WELCOME_KEY = 'cr_pro_venues_onboarded'/.test(code) &&
+        /function maybeShowProWelcome[\s\S]{0,260}?if \(proVenuesOnboarded\(\)\) return false/.test(code));
+  check('the welcome names eBay and TCGPlayer as the recommended pair',
+        /eBay and TCGPlayer/.test(html),
+        'the spec fixes the recommended set at these two');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
