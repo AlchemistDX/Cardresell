@@ -547,6 +547,19 @@ img{display:block;max-width:100%;height:auto}
 .price-override-label{font-size:.72rem;color:var(--text-muted);white-space:nowrap}
 /* ── Quick Pricing ─────────────────────────────────────────────────────── */
 .qp{margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)}
+/* Sports variant confirm strip — names the exact card before any dollar shows */
+.sports-confirm{margin-top:.85rem;padding:.7rem .8rem;border:1px solid var(--border);border-radius:.55rem;background:var(--bg-subtle,rgba(0,0,0,.02))}
+.sports-confirm.ok{border-left:3px solid var(--gold)}
+.sports-confirm.warn{border-left:3px solid #c2410c}
+.sports-confirm .sc-head{font-size:.78rem;font-weight:700;color:var(--text)}
+.sports-confirm .sc-body{font-size:.74rem;color:var(--text-muted);line-height:1.5;margin-top:.25rem}
+.sports-confirm .sc-rows{margin-top:.45rem;display:grid;gap:.18rem}
+.sports-confirm .sc-rows>div{display:flex;gap:.5rem;font-size:.74rem;line-height:1.45}
+.sports-confirm .sc-rows span{color:var(--text-muted);min-width:3.6rem;flex:0 0 auto}
+.sports-confirm .sc-rows strong{color:var(--text);font-weight:600;word-break:break-word}
+.sports-confirm .sc-foot{margin-top:.45rem;font-size:.72rem;color:var(--text-muted)}
+.sports-confirm .sc-foot a{color:var(--gold);font-weight:600;text-decoration:none}
+@media(max-width:480px){.sports-confirm .sc-rows>div{flex-direction:column;gap:.05rem}.sports-confirm .sc-rows span{min-width:0}}
 .qp-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.55rem}
 .qp-title{font-size:.95rem;font-weight:700;letter-spacing:-.01em}
 .qp-info{display:inline-flex;align-items:center;gap:.28rem;background:none;border:none;padding:.15rem .1rem;
@@ -2146,7 +2159,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div class="sports-form">
       <div class="sports-form-title">Sports Card Details <span style="font-weight:600;font-size:.72rem;color:var(--text-muted)">🛠️ under maintenance</span></div>
-      <div style="font-size:.74rem;color:var(--text-muted);line-height:1.5;margin:-.25rem 0 .6rem">We can’t pull a live sold comp automatically right now, so open a comp source below, then type the price you see into <strong>Override</strong> — the fee math and payout ranking are exact from there. Scanning a sports card still fills in the details for you.</div>
+      <div style="font-size:.74rem;color:var(--text-muted);line-height:1.5;margin:-.25rem 0 .6rem">Fill in the card, then <strong>pick your exact parallel</strong> from the list — we price that one product at the grade you chose, from the SportsCardsPro guide. Parallels of the same card can differ by many multiples, so nothing is priced until you pick one. No published value for your grade means you’ll see a comp link instead of a guess.</div>
       <div class="sports-grid">
         <div class="sports-field sports-full">
           <label for="sp_player">Player Name *</label>
@@ -2383,6 +2396,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
              claim. No venue publishes that data, so we would be inventing
              it. The tier names describe the PRICE, not a promised speed.
         ────────────────────────────────────────────────────────────────── -->
+        <div id="sportsConfirm" class="sports-confirm" style="display:none"></div>
         <div id="quickPricing" class="qp" style="display:none">
           <div class="qp-head">
             <span class="qp-title">Quick Pricing</span>
@@ -2422,7 +2436,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div class="sep"></div>
 
         <!-- Condition -->
-        <div class="field-label">Condition</div>
+        <div class="field-label" id="condLabel">Condition</div>
         <div class="pill-group" id="condPills">
           <span class="pill sel" data-cond="nm" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Near Mint</span>
           <span class="pill" data-cond="lp" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Light Play</span>
@@ -2433,12 +2447,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
         <!-- Printing -->
         <div class="field-label" id="printingLabel" style="margin-top:.875rem">Printing / Variant <span style="font-weight:400;color:var(--text-faint);font-size:.72rem">— raw prices; graded prices set below</span></div>
-        <select id="printingSelect" onchange="updatePriceFromPrinting();calc()">
+        <select id="printingSelect" onchange="_onPrintingChange()">
           <option value="">— select —</option>
         </select>
 
         <!-- Graded? -->
-        <div class="field-label" style="margin-top:.875rem">Graded Slab?</div>
+        <div class="field-label" id="gradedLabel" style="margin-top:.875rem">Graded Slab?</div>
         <div class="pill-group" id="gradedPills">
           <span class="pill sel" data-val="no" onclick="setPill(this,'gradedPills');toggleGrade();calc()">Raw / Ungraded</span>
           <span class="pill" data-val="psa" onclick="setPill(this,'gradedPills');toggleGrade();calc()">PSA</span>
@@ -4617,6 +4631,10 @@ function onGameSelectChange(game) {
   dropList.innerHTML = '';
   selectedCard = null;
   resetCardPanel();
+  // Sports hides the Condition / Graded Slab pills. Switching game does not
+  // load a card, so without this the pills stayed hidden on the way back to
+  // Pokemon until the user happened to load one.
+  try { _applySportsPriceControls({ game }); } catch(_) {}
 
   const isSports = game === 'sports';
   const isOther  = game === 'other';
@@ -6283,21 +6301,13 @@ function openEbayComps() {
   const ssi = document.getElementById('sportsSearchInput');
   if (ssi && player) ssi.value = player;
 
-  // Also load a sports card into the card panel
-  const emoji = SPORT_EMOJI[sport] || '🏆';
-  const sportCard = {
-    name: `${emoji} ${player || 'Sports Card'}`,
-    game: 'sports',
-    images: { small: '', large: '' },
-    setName: [year, brand].filter(Boolean).join(' '),
-    number: cardnum,
-    rarity: sport,
-    priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
-    source: 'Manual',
-    updatedAt: 'Enter via override',
-  };
+  // Also load a sports card into the card panel. Third copy of this literal
+  // until 2026-09-03; this one additionally passed a blank image instead of
+  // the scan photo the other two used, so opening comps wiped the card art.
+  const sportCard = _buildSportsCard(player || 'Sports Card');
   selectedCard = sportCard;
   loadCardUI(sportCard);
+  _loadSportsVariants(sportCard);
 }
 
 // ── Sports search (eBay sold comps) ──
@@ -6498,26 +6508,248 @@ function _sportsScanImageFor(playerName) {
   } catch (_) { return ''; }
 }
 
-function loadSportsCardFromSearch(playerName) {
+// 2026-09-03: ONE sports card builder.
+//
+// This existed as two byte-identical object literals (here and in the
+// ['sp_player',...] change handler), and both were missing fields the pricing
+// call actually reads: the fetch at the PriceCharting call site reads
+// card.year, card.sport and card.brand, but the literals only ever set
+// setName and rarity. So the price lookup for a form-built sports card went
+// out with year/sport/brand undefined -- the three facets that keep "Michael
+// Jordan" from matching a Funko POP. Consolidating removes the drift risk
+// that let one copy be fixed and the other not.
+function _buildSportsCard(playerName) {
   const year    = document.getElementById('sp_year')?.value?.trim() || '';
   const brand   = document.getElementById('sp_brand')?.value?.trim() || '';
   const cardnum = document.getElementById('sp_cardnum')?.value?.trim() || '';
   const sport   = document.getElementById('sp_sport')?.value || 'Baseball';
   const emoji   = SPORT_EMOJI[sport] || '🏆';
-  const _spImg  = _sportsScanImageFor(playerName);
-  const sportCard = {
+  const img     = _sportsScanImageFor(playerName);
+  return {
     name: `${emoji} ${playerName}`,
     game: 'sports',
-    images: { small: _spImg, large: _spImg },
+    images: { small: img, large: img },
     setName: [year, brand].filter(Boolean).join(' '),
     number: cardnum,
     rarity: sport,
-    priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
-    source: 'Manual',
-    updatedAt: 'Enter via override',
+    // Facets the pricing call needs. Previously absent.
+    year, sport, brand,
+    playerName,
+    priceVariants: [],   // filled from PriceCharting's real parallel list
+    source: 'PriceCharting',
+    updatedAt: 'Pick a variant',
   };
+}
+
+// ── Sports parallels: ask PriceCharting what this card actually is ────────
+//
+// Why a picker and not a text field: 2023 Prizm Wembanyama #136 has 71 listed
+// parallels, including [Silver], [Silver Pandora] and [Silver Prizm Fast
+// Break]. Typing "Silver" cannot identify one of those, and the values are not
+// close -- PSA 10 runs $3,075 / $3,081 / $1,953. The matcher refuses ambiguity
+// rather than guessing, so the honest fix is to show the real list and let the
+// user point at their card.
+//
+// One request per card. No prices in the list: PriceCharting's plural endpoint
+// returns none, and pricing 71 rows at 1 req/sec would take over a minute. We
+// price exactly the row the user picks, by product id.
+// Sports has ONE grade control: the Grade / Condition select in the sports
+// form. The card panel's Condition pills and Graded Slab pills are the Pokemon
+// controls, and leaving them visible for sports created two live lies:
+//
+//   * the Graded Slab row read "Raw / Ungraded" while the headline showed a
+//     PSA 10 guide value, because sp_grade and the pills are separate state
+//   * the Condition pills are not reset on card load and multiply the basis,
+//     so a stale "Mod. Play" would take 35% off a PriceCharting value that
+//     already priced the exact grade asked for -- and sp_grade encodes
+//     condition itself ("Raw - Excellent"), so it double-discounts
+//
+// So for sports we hide both and pin condition to Near Mint (multiplier 1.0).
+function _applySportsPriceControls(card) {
+  const c = card || selectedCard;
+  const isSports = c && c.game === 'sports';
+  const ids = ['condLabel', 'condPills', 'gradedLabel', 'gradedPills'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isSports ? 'none' : '';
+  });
+  const pl = document.getElementById('printingLabel');
+  if (pl) {
+    pl.innerHTML = isSports
+      ? `Parallel / Variant <span style="font-weight:400;color:var(--text-faint);font-size:.72rem">— priced at the grade you selected above</span>`
+      : `Printing / Variant <span style="font-weight:400;color:var(--text-faint);font-size:.72rem">— raw prices; graded prices set below</span>`;
+  }
+  if (isSports) {
+    // Pin the multiplier to 1.0 so a stale pill cannot scale a guide value.
+    document.querySelectorAll('#condPills .pill').forEach(x => x.classList.remove('sel'));
+    document.querySelector('#condPills .pill[data-cond="nm"]')?.classList.add('sel');
+    document.querySelectorAll('#gradedPills .pill').forEach(x => x.classList.remove('sel'));
+    document.querySelector('#gradedPills .pill[data-val="no"]')?.classList.add('sel');
+  }
+}
+
+async function _loadSportsVariants(card) {
+  const gen = ++window._spVarGen;
+  const sel = printSelect;
+  if (!sel) return;
+  _applySportsPriceControls();
+  if (!card.playerName) return;
+  sel.innerHTML = '<option value="">Loading variants…</option>';
+  _setSportsConfirm(null);
+  try {
+    const qp = new URLSearchParams({ game: 'sports', variants: '1', name: card.playerName });
+    if (card.year)   qp.set('year', card.year);
+    if (card.brand)  qp.set('brand', card.brand);
+    if (card.number) qp.set('number', card.number);
+    if (card.sport)  qp.set('sport', card.sport);
+    const r = await fetch('/api/pricecharting?' + qp.toString());
+    const d = await r.json();
+    // Stale-guard: the user may have edited a field while this was in flight.
+    if (gen !== window._spVarGen) return;
+    if (selectedCard !== card) return;
+    const vars = Array.isArray(d.variants) ? d.variants : [];
+    if (!vars.length) {
+      sel.innerHTML = '<option value="">No PriceCharting match — use Override</option>';
+      _setSportsConfirm({ none: true, card });
+      return;
+    }
+    window._spVariants = {};
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = vars.length === 1
+      ? 'Select the variant…'
+      : `Select the variant… (${vars.length} on PriceCharting)`;
+    sel.appendChild(ph);
+    vars.forEach(v => {
+      const key = 'sports_pc:' + v.id;
+      window._spVariants[key] = v;
+      const opt = document.createElement('option');
+      opt.value = key;
+      // Deliberately no price here -- we have not fetched one, and inventing a
+      // placeholder is how a wrong number gets believed.
+      opt.textContent = v.label;
+      sel.appendChild(opt);
+    });
+    sel.value = '';
+    // Nothing is priced until a variant is chosen, so show no dollars.
+    _setSportsConfirm({ pending: true, count: vars.length, card });
+  } catch (e) {
+    if (gen !== window._spVarGen) return;
+    sel.innerHTML = '<option value="">Couldn\'t load variants — use Override</option>';
+    _setSportsConfirm({ error: true, card });
+  }
+}
+window._spVarGen = 0;
+window._spVariants = {};
+
+// Price the exact product the user selected. pcid means no re-resolution, so
+// the card they picked is the card that gets priced.
+async function _priceSportsVariant(key) {
+  const v = window._spVariants[key];
+  if (!v) return;
+  const card = selectedCard;
+  const gen = ++window._spPriceGen;
+  const grade = document.getElementById('sp_grade')?.value || 'Raw/Ungraded';
+  const gradeParam = /^Raw/.test(grade) ? 'raw' : grade;
+  _setSportsConfirm({ loading: true, variant: v, card });
+  try {
+    const qp = new URLSearchParams({ game: 'sports', pcid: v.id, name: card.playerName || 'x', grade: gradeParam });
+    const r = await fetch('/api/pricecharting?' + qp.toString());
+    const d = await r.json();
+    if (gen !== window._spPriceGen || selectedCard !== card) return;
+    if (d.median == null) {
+      // Comps-or-silence: no value for this grade means no number, not a guess.
+      _setSportsConfirm({ noPrice: true, variant: v, card, reason: (d.confidenceReasons || [])[0] });
+      currentPrices[key] = { key, label: v.label, market: null, low: null, mid: null, high: null };
+      updatePriceFromPrinting();
+      return;
+    }
+    // PriceCharting publishes ONE guide value per grade, so low == mid == high.
+    // Rendering that as "Low $3075 · Mid $3075 · High $3075" dresses a single
+    // number up as a measured range -- the same fabricated spread that was
+    // removed from Quick Pricing for graded slabs. Leave the tiers null and
+    // the headline shows the value alone.
+    currentPrices[key] = {
+      key, label: v.label,
+      market: d.median, low: null, mid: null, high: null,
+    };
+    window._crBasis = {
+      value: d.median, low: null, mid: null, high: null,
+      label: `SportsCardsPro guide · ${v.productName}`,
+    };
+    window._ovAutoFilled = true;
+    if (priceOverride) priceOverride.value = d.median.toFixed(2);
+    _setSportsConfirm({ variant: v, card, data: d, grade });
+    updatePriceFromPrinting();
+    calc();
+  } catch (e) {
+    if (gen !== window._spPriceGen) return;
+    _setSportsConfirm({ error: true, variant: v, card });
+  }
+}
+window._spPriceGen = 0;
+
+// The confirm strip: names the exact card the number belongs to, and appears
+// BEFORE any dollar figure does. A sports value is only meaningful next to the
+// product it came from -- "$3,075" alone cannot be checked by the user.
+function _setSportsConfirm(state) {
+  const el = document.getElementById('sportsConfirm');
+  if (!el) return;
+  if (!state) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const wrap = (inner, tone) => {
+    el.style.display = 'block';
+    el.className = 'sports-confirm' + (tone ? ' ' + tone : '');
+    el.innerHTML = inner;
+  };
+  if (state.pending) {
+    wrap(`<div class="sc-head">Pick your exact variant</div>
+      <div class="sc-body">PriceCharting lists <strong>${state.count}</strong> version${state.count === 1 ? '' : 's'} of this card. Parallels can differ by many multiples, so choose the one you own — no price is shown until you do.</div>`);
+    return;
+  }
+  if (state.loading) {
+    wrap(`<div class="sc-head">Checking ${esc(state.variant.label)}…</div>`);
+    return;
+  }
+  if (state.none) {
+    wrap(`<div class="sc-head">No PriceCharting match</div>
+      <div class="sc-body">We couldn't find this card on the sports guide. Open a comp source below and type the price you see into <strong>Override</strong>.</div>`, 'warn');
+    return;
+  }
+  if (state.noPrice) {
+    wrap(`<div class="sc-head">No guide value at this grade</div>
+      <div class="sc-body">${esc(state.variant.productName)} — PriceCharting has no published value for ${esc(document.getElementById('sp_grade')?.value || '')}. Use a comp source below and <strong>Override</strong>.</div>`, 'warn');
+    return;
+  }
+  if (state.error) {
+    wrap(`<div class="sc-head">Lookup failed</div>
+      <div class="sc-body">Couldn't reach the price guide. Use a comp source below and <strong>Override</strong>.</div>`, 'warn');
+    return;
+  }
+  const d = state.data, v = state.variant;
+  const age = d.cacheAgeSec != null ? _spAgeLabel(d.cacheAgeSec) : 'just now';
+  wrap(`<div class="sc-head">Pricing this exact card</div>
+    <div class="sc-rows">
+      <div><span>Card</span><strong>${esc(v.productName)}</strong></div>
+      <div><span>Set</span><strong>${esc(v.consoleName || '—')}</strong></div>
+      <div><span>Variant</span><strong>${esc(v.label)}</strong></div>
+      <div><span>Grade</span><strong>${esc(state.grade)}</strong></div>
+      <div><span>Source</span><strong>SportsCardsPro guide · ${esc(age)}</strong></div>
+    </div>
+    <div class="sc-foot">Not your card? Change the variant above. <a href="${esc(d.url || '#')}" target="_blank" rel="noopener">Verify on PriceCharting →</a></div>`, 'ok');
+}
+
+function _spAgeLabel(sec) {
+  if (sec < 90) return 'fetched just now';
+  if (sec < 3600) return `fetched ${Math.round(sec / 60)}m ago`;
+  return `fetched ${Math.round(sec / 3600)}h ago`;
+}
+
+function loadSportsCardFromSearch(playerName) {
+  const sportCard = _buildSportsCard(playerName);
   selectedCard = sportCard;
   loadCardUI(sportCard);
+  _loadSportsVariants(sportCard);
 }
 
 
@@ -6532,27 +6764,32 @@ function loadSportsCardFromSearch(playerName) {
     });
   }
   document.getElementById(id)?.addEventListener('change', () => {
+    // A pending change event from the sports form can land AFTER the user has
+    // switched to another game (switching focus blurs the field, which fires
+    // the deferred change). That rebuilt a sports card into the panel and
+    // re-hid the Pokemon condition/slab pills, so leaving sports left the
+    // grade controls missing until a card was loaded. The sports form only
+    // gets to drive the panel while sports is the active game.
+    if (activeGame !== 'sports') return;
     const player  = document.getElementById('sp_player').value.trim();
     if (!player) return;
-    const year    = document.getElementById('sp_year').value.trim();
-    const brand   = document.getElementById('sp_brand').value.trim();
-    const cardnum = document.getElementById('sp_cardnum').value.trim();
-    const sport   = document.getElementById('sp_sport').value;
-    const emoji   = SPORT_EMOJI[sport] || '🏆';
-    const _spImg2 = _sportsScanImageFor(player);
-    const sportCard = {
-      name: `${emoji} ${player}`,
-      game: 'sports',
-      images: { small: _spImg2, large: _spImg2 },
-      setName: [year, brand].filter(Boolean).join(' '),
-      number: cardnum,
-      rarity: sport,
-      priceVariants: [{ key: 'manual', label: 'Manual / Override', market: null, low: null, mid: null, high: null }],
-      source: 'Manual',
-      updatedAt: 'Enter via override',
-    };
+    // Changing the GRADE does not change which card this is -- the parallel
+    // list is identical. Rebuilding the card here threw away the variant the
+    // user had already picked and sent them back to "Select the variant…",
+    // so pick Silver then switch PSA 10 -> PSA 9 and the price vanished.
+    // Re-price the same product instead.
+    if (id === 'sp_grade' && selectedCard && selectedCard.game === 'sports') {
+      const cur = printSelect && printSelect.value;
+      if (cur && cur.startsWith('sports_pc:')) {
+        delete currentPrices[cur];   // force a fetch at the new grade
+        _priceSportsVariant(cur);
+        return;
+      }
+    }
+    const sportCard = _buildSportsCard(player);
     selectedCard = sportCard;
     loadCardUI(sportCard);
+    _loadSportsVariants(sportCard);
   });
 });
 
@@ -6641,6 +6878,9 @@ function loadCardUI(card) {
   if (window._triggerSocialProof) window._triggerSocialProof();
   const isSports  = card.game === 'sports';
   const isJPCard  = card.game === 'pokemonjp';
+  // Show the right grade controls for this game (and restore them on the way
+  // back from sports, which hides the Pokemon condition/slab pills).
+  try { _applySportsPriceControls(card); } catch(_) {}
 
   // If this card was loaded via a scan, show grading CTA banner
   if (window._pendingScanBannerCard) {
@@ -7267,6 +7507,38 @@ function _qpEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// A sports variant option carries a PriceCharting product id but no price yet
+// (we deliberately do not price all 71 parallels). Selecting one fetches that
+// exact product; everything else keeps the original synchronous path.
+function _onPrintingChange() {
+  const key = printSelect.value;
+  if (key && key.startsWith('sports_pc:')) {
+    if (currentPrices[key] && currentPrices[key].market != null) {
+      const v = window._spVariants[key];
+      window._crBasis = {
+        value: currentPrices[key].market, low: null, mid: null, high: null,
+        label: `SportsCardsPro guide · ${v ? v.productName : key}`,
+      };
+      updatePriceFromPrinting(); calc();
+      return;
+    }
+    _priceSportsVariant(key);
+    return;
+  }
+  if (!key && selectedCard && selectedCard.game === 'sports') {
+    // Back to the placeholder: retract the number rather than leaving a stale
+    // price sitting under "Select the variant…".
+    window._crBasis = null; window._ovAutoFilled = false;
+    if (priceOverride) priceOverride.value = '';
+    _setSportsConfirm({ pending: true, count: Object.keys(window._spVariants || {}).length, card: selectedCard });
+    priceMain.textContent = '—';
+    priceRange.textContent = '';
+    calc();
+    return;
+  }
+  updatePriceFromPrinting(); calc();
 }
 
 function updatePriceFromPrinting() {

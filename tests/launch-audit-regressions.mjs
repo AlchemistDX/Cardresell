@@ -626,16 +626,41 @@ try {
   check('the sports game option is marked under maintenance',
         /<option value="sports">[^<]*\u{1F6E0}[^<]*under maintenance/iu.test(html),
         'users pick the game before they discover the limitation');
-  check('the sports form explains the manual-price step',
-        /can’t pull a live sold comp automatically/.test(html),
-        'the form must say why there is no automatic comp');
+  check('the sports form explains how pricing works',
+        /can’t pull a live sold comp automatically/.test(html) ||
+        /Pick your exact variant/.test(code),
+        'the form must say where the number comes from, or that there is none');
   check('the sports path is never described as a beta',
         !/beta/i.test(html),
         'product call: say under maintenance, not beta');
 
-  check('sports cards still build with a manual price variant',
-        (html.match(/key: 'manual', label: 'Manual \/ Override', market: null/g) || []).length >= 2,
-        'a null market is what keeps the tile from inventing a net payout');
+  // 2026-09-03: this used to require the literal
+  //   key: 'manual', label: 'Manual / Override', market: null
+  // to appear at least TWICE -- which pinned a copy-paste duplication rather
+  // than the property it was defending. The stated intent is "the tile must
+  // not invent a net payout", so assert that directly: a freshly built sports
+  // card carries no priced variant, and a price only arrives once the user has
+  // picked an exact PriceCharting product.
+  check('sports cards start with no priced variant',
+        /priceVariants: \[\],\s*\/\/ filled from PriceCharting's real parallel list/.test(code),
+        'an empty variant list is what keeps the tile from inventing a net payout');
+
+  check('sports cards are built in exactly one place',
+        (code.match(/function _buildSportsCard\(/g) || []).length === 1 &&
+        !/const sportCard = \{\s*name: `\$\{emoji\}/.test(code),
+        'two copies of the builder is how one gets fixed and the other does not');
+
+  check('the sports pricing facets the API reads are actually set',
+        /\/\/ Facets the pricing call needs\. Previously absent\.\s*\n\s*year, sport, brand,/.test(code),
+        'the API scores candidates on year/sport/brand; omitting them matched Funko POPs');
+
+  check('a sports price is only fetched for an exact product id',
+        /_priceSportsVariant/.test(code) && /game: 'sports', pcid: v\.id/.test(code),
+        'fuzzy re-resolution could price a different parallel than the one picked');
+
+  check('the variant confirm strip names the card before pricing it',
+        /id="sportsConfirm"/.test(html) && /Pick your exact variant/.test(code),
+        'a sports dollar figure is uncheckable without the product it came from');
 
   check('sports reuses the scan photo instead of a blank image',
         /_sportsScanImageFor/.test(code) &&
