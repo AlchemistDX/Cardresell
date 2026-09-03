@@ -98,7 +98,9 @@ check('Scan-miss passes number to buildTcgpUrl',             INDEX.includes("bui
 
 console.log('\n[Every card link now includes name + number 2026-08-13]');
 check('Platform queries share numTail suffix',               INDEX.includes("const numTail    = number ? ' ' + number : '';"));
-check('COMC search query includes card number',              INDEX.includes("encodeURIComponent(`${searchName}${numTail}`)"));
+// COMC no longer uses a querystring — its own search box emits
+// /Cards,=Charizard+4~2f102 — so the number now rides in comcPath.
+check('COMC search query includes card number',              INDEX.includes("const comcPath = `${searchName}${numTail}`") && INDEX.includes('comc.com/Cards,=${comcPath}'));
 check('Poshmark search query includes card number',          INDEX.includes("${setName ? ' ' + setName : ''}${numTail} ${gameTag}"));
 check('Fanatics search query includes card number',          INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));
 check('Fanatics search query includes card number',          INDEX.includes("const fanaticsQ") && INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));

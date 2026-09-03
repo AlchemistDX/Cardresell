@@ -708,6 +708,12 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 
 .plat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.15rem;position:relative;overflow:hidden;transition:border-color var(--ease),box-shadow var(--ease),transform var(--ease);display:block;text-decoration:none;color:inherit;cursor:default}
 .plat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+/* 2026-09-02: the whole tile is a tap target when the venue has a live link.
+   Previously only the small pill was tappable, so tapping the big card (the
+   obvious target on a phone) did nothing and the tile read as a flat image. */
+.plat-card[data-sell-url]{cursor:pointer}
+.plat-card[data-sell-url]:hover .plat-sell-badge{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
+.plat-card[data-sell-url]:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-card.best{border-color:var(--green);box-shadow:0 0 0 1px var(--green),var(--shadow-sm)}
 .plat-card.worst{opacity:.65}
 .plat-sell-badge{display:inline-flex;align-items:center;gap:.3rem;margin-top:.3rem;margin-bottom:.55rem;padding:.38rem .65rem;border-radius:99px;font-size:.68rem;font-weight:700;letter-spacing:.02em;background:var(--surface-off);color:var(--text-muted);border:1px solid var(--border);transition:all .15s;width:fit-content;text-decoration:none}
@@ -7443,6 +7449,28 @@ function getAffiliateLink(merchantKey) {
   return cfg.link_url || '';
 }
 
+// 2026-09-02: Whole-tile tap target for venue cards.
+// The sell CTA used to be the only clickable element, so tapping the large
+// tile — the natural target on a phone — did nothing at all. One delegated
+// listener opens the tile's venue link, while deferring to any real control
+// (link, button, input) the user actually pressed so the details toggle,
+// the sell pill, and the venue switches keep their own behavior.
+if (!window._platTileTapBound) {
+  window._platTileTapBound = true;
+  document.addEventListener('click', function (ev) {
+    const tile = ev.target.closest ? ev.target.closest('.plat-card[data-sell-url]') : null;
+    if (!tile) return;
+    // Let genuine interactive children handle their own click.
+    if (ev.target.closest('a,button,input,select,textarea,label,[role="button"]')) return;
+    // Never hijack a text selection drag.
+    const sel = window.getSelection && window.getSelection();
+    if (sel && String(sel).length > 0) return;
+    const url = tile.getAttribute('data-sell-url');
+    if (!url) return;
+    window.open(url, '_blank', 'noopener');
+  });
+}
+
 // Updates all the "Where to Sell" platform buttons for the currently loaded card
 function updateSellLinks(card) {
   if (!card) return;
@@ -7485,7 +7513,21 @@ function updateSellLinks(card) {
   // silently omitted so behavior for graded/singles-only sites like PWCC
   // stays sane when scan metadata is missing.
   const numTail    = number ? ' ' + number : '';
-  const comcQ      = encodeURIComponent(`${searchName}${numTail}`);
+  // COMC does NOT use a querystring. Its own search box emits
+  //   /Cards,=Charizard+4~2f102
+  // Spaces become '+' and a literal '/' becomes '~2f' (verified against the
+  // live search box 2026-09-02: 653 hits for Charizard, 1 exact hit for
+  // "Charizard 4/102"). The previous wildcard-path buy route returned HTTP 500
+  // "Runtime Error" because a literal asterisk is an invalid path segment.
+  // The bare Search endpoint is worse: it silently drops the query and dumps
+  // the user on the unfiltered 8.3M-listing catalog.
+  const comcPath = `${searchName}${numTail}`.trim()
+    .replace(/[^\w\s/.-]/g, ' ')      // drop punctuation COMC chokes on
+    .replace(/\//g, '~2f')            // slash has its own escape
+    .replace(/\s+/g, '+');            // spaces are literal plus signs
+  const comcUrl = comcPath
+    ? `https://www.comc.com/Cards,=${comcPath}`
+    : 'https://www.comc.com/Sell';
   const poshQ      = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail} ${gameTag}`);
   const fanaticsQ  = encodeURIComponent(`${searchName}${setName ? ' ' + setName : ''}${numTail}${isPokemon ? ' pokemon' : ''}`);
   // Whatnot: /search?query=<term> — verified 2026-08-21 in-browser. Path-
@@ -7522,35 +7564,44 @@ function updateSellLinks(card) {
   const cardsphereUrl = `https://www.cardsphere.com/`;
   // Star City Games — Sell Your Cards landing (Sell List + Ship + Sell).
   const scgUrl = `https://sellyourcards.starcitygames.com/`;
-  // CardNexus — no per-card sell deep link (sellers list from in-app inventory).
-  // Route to the seller onboarding walkthrough.
-  const cardnexusUrl = `https://cardnexus.com/en/how-it-works`;
+  // CardNexus — /en/search?q= is a real card search (verified 200, 2026-09-02),
+  // so send TCG scans straight to the card instead of the generic explainer.
+  // Non-TCG scans have nothing to match, so they get the walkthrough.
+  const cardnexusUrl = isTCGGame
+    ? `https://cardnexus.com/en/search?q=${encodeURIComponent(`${searchName}${numTail}`.trim())}`
+    : `https://cardnexus.com/en/how-it-works`;
   // TCG Bulk — aggregator app; sellers browse buyer offers in-app.
   const tcgbulkUrl = `https://tcgbulk.com/`;
-  // Mana Pool — MTG-only. Route to sell landing (MTG cards only; empty for
-  // non-MTG so the tile stays non-clickable for wrong-game scans).
-  // The bare /sell route 404s — Mana Pool's real seller onboarding page is /seller-info (verified 2026-09-02)
-  const manapoolUrl = isMagic ? `https://manapool.com/seller-info` : '';
+  // Mana Pool — MTG-only marketplace, so non-MTG scans still land on the
+  // seller page but get a "View on" label rather than a "Sell on" CTA.
+  // The bare /sell route 404s; real seller onboarding is /seller-info (verified 2026-09-02)
+  const manapoolUrl = `https://manapool.com/seller-info`;
 
   // Store URLs globally — calc() reads these to make cards clickable
   window._platSellUrls = {
     // ebaySellRaw already carries the EPN params (buildEbaySearchUrl wraps internally) —
     // re-wrapping here duplicated the whole campid block. Do NOT re-wrap.
     ebay:         ebaySellRaw,
-    tcgplayer:    isTCGGame ? tcgpUrl : '',
-    comc:         `https://www.comc.com/Cards/*/buy?q=${comcQ}`,
+    // Every venue resolves to a live page for EVERY game. Previously a
+    // wrong-game scan (e.g. a sports card) left 8 of 15 tiles with an empty
+    // string, so those tiles rendered no link at all and read as dead
+    // artwork. Venues that cannot take this particular card still get a real
+    // landing page, and renderTile labels those "View on X" instead of
+    // "Sell on X" so the CTA never implies an impossible sale.
+    tcgplayer:    isTCGGame ? tcgpUrl : 'https://www.tcgplayer.com/',
+    comc:         comcUrl,
     poshmark:     `https://poshmark.com/search?query=${poshQ}&type=listings`,
     fanatics:     `https://www.fanaticscollect.com/marketplace?q=${fanaticsQ}`,
     whatnot:      `https://www.whatnot.com/search?query=${whatnotQ}`,
     mercari:      `https://www.mercari.com/search/?keyword=${mercariQ}`,
     manapool:     manapoolUrl,
-    cardsphere:   isMagic ? cardsphereUrl : '',
-    cardmarket:   isTCGGame ? cardmarketUrl : '',
-    cardkingdom:  isTCGGame ? cardkingdomUrl : '',
-    coolstuffinc: isTCGGame ? coolstuffincUrl : '',
-    scg:          isTCGGame ? scgUrl : '',
-    cardnexus:    isTCGGame ? cardnexusUrl : '',
-    tcgbulk:      isTCGGame ? tcgbulkUrl : ''
+    cardsphere:   cardsphereUrl,
+    cardmarket:   cardmarketUrl,
+    cardkingdom:  cardkingdomUrl,
+    coolstuffinc: coolstuffincUrl,
+    scg:          scgUrl,
+    cardnexus:    cardnexusUrl,
+    tcgbulk:      tcgbulkUrl
   };
   // Upgrade TCGplayer URL to product-page deeplink if we have a card object.
   // This routes users to the EXACT product page where they tap "Sell Yours"
@@ -9508,8 +9559,15 @@ function calc() {
     // nested anchors. Browsers auto-close that outer anchor, ejecting the fee
     // recipe and breaking the mobile Details control.
     const sellUrl = window._platSellUrls ? (window._platSellUrls[r.pid] || '') : '';
+    // A venue that cannot take THIS card (wrong game, US sellers barred) still
+    // gets a live link, but calling it "Sell on X" would promise a sale that
+    // cannot happen. Ineligible venues say "View on X" instead.
+    const sellVerb  = r.eligible ? 'Sell on' : 'View on';
+    const sellAria  = r.eligible
+      ? `Open ${info.name} to sell this card`
+      : `Open ${info.name} (this card cannot be sold there)`;
     const sellBadge = sellUrl
-      ? `<a class="plat-sell-badge" href="${esc(sellUrl)}" target="_blank" rel="noopener" aria-label="Open ${esc(info.name)} to sell this card">Sell on ${esc(info.name)} <span class="plat-sell-arrow">→</span></a>`
+      ? `<a class="plat-sell-badge" href="${esc(sellUrl)}" target="_blank" rel="noopener" aria-label="${esc(sellAria)}">${sellVerb} ${esc(info.name)} <span class="plat-sell-arrow">→</span></a>`
       : '';
 
     // 2026-08-15: effort/hassle transparency — shown as a colored badge under
@@ -9556,19 +9614,20 @@ function calc() {
       : '';
 
     if (!r.eligible) {
-      html += `<div class="${cls}" style="opacity:.4">
+      html += `<div class="${cls}" style="opacity:.4"${sellUrl ? ` data-sell-url="${esc(sellUrl)}"` : ''}>
         <div class="plat-accent" style="background:${info.color}"></div>
         <div class="plat-hdr"><span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>${badgeHtml}</div>
         ${effortHtml}
         ${speedHtml}
         <div class="plat-payout" style="color:var(--text-faint)">—</div>
         <div class="plat-sub">${r.note}</div>
+        ${sellBadge}
         ${crossBorderHtml(r.pid)}
       </div>`;
       return;
     }
 
-    html += `<div class="${cls}">
+    html += `<div class="${cls}"${sellUrl ? ` data-sell-url="${esc(sellUrl)}"` : ''}>
       <div class="plat-accent" style="background:${info.color}"></div>
       <div class="plat-hdr">
         <span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>

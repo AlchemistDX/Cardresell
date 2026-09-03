@@ -35,14 +35,22 @@ check(
   index.includes('const rankIdx = _eligibleDisplay.indexOf(r);')
 );
 check(
+  // The tile is a tap target via a delegated listener, NOT an outer <a>.
+  // Wrapping the whole tile in an anchor would nest the sell link and the
+  // details toggle inside it, which is invalid HTML and breaks the toggle.
   'platform result tile is not an outer anchor',
   !index.includes('const cardTag  = sellUrl') &&
-    index.includes('html += `<div class="${cls}">')
+    !/html \+= `<a class="\$\{cls\}"/.test(index) &&
+    /html \+= `<div class="\$\{cls\}"/.test(index)
 );
 check(
+  // The pill must stay a real anchor with a real aria-label so keyboard and
+  // screen-reader users get a focusable destination, not just a div listener.
   'sell destination remains a dedicated accessible link',
   index.includes('<a class="plat-sell-badge"') &&
-    index.includes('aria-label="Open ${esc(info.name)} to sell this card"')
+    index.includes('aria-label="${esc(sellAria)}"') &&
+    /Open \$\{info\.name\} to sell this card/.test(index) &&
+    index.includes('target="_blank"') && index.includes('rel="noopener"')
 );
 check(
   'retired Ultimate deep links map to Pro Max with an honest message',
@@ -521,6 +529,68 @@ try {
   check('the eBay campaign id is still present exactly once per built URL',
         /campid=\$\{encodeURIComponent\(campId\)\}/.test(code),
         'dedupe must not strip EPN tracking — commission still has to attribute');
+}
+
+// ---------------------------------------------------------------------------
+// Part I — every venue tile must resolve to a live link, and the whole tile
+// must be tappable. Before this, 8 of 15 venues emitted '' for a wrong-game
+// scan, so those tiles rendered no CTA at all, and only the small pill was
+// clickable — tapping the large tile on a phone did nothing.
+// ---------------------------------------------------------------------------
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  check('no link to the COMC wildcard buy route',
+        !/comc\.com\/Cards\/\*\/buy/.test(html),
+        'that path returns HTTP 500 Server Error / Runtime Error');
+  check('no link to the COMC bare Search endpoint',
+        !/comc\.com\/Search\?q=/.test(html),
+        'it silently drops the query and dumps the user on the unfiltered catalog');
+  check('COMC search uses the live /Cards,= route',
+        /comc\.com\/Cards,=\$\{comcPath\}/.test(code),
+        'verified against COMC own search box: 653 hits for Charizard');
+  check('COMC query encodes slashes and spaces the way COMC does',
+        /'~2f'/.test(code) && /comcPath/.test(code),
+        '"Charizard 4/102" must become Charizard+4~2f102 or the search misses');
+  check('COMC falls back to a real seller page when the query is empty',
+        /comc\.com\/Sell'/.test(code),
+        'never emit a bare /Cards,= with nothing after the equals sign');
+
+  check('CardNexus uses its real card search for TCG scans',
+        /cardnexus\.com\/en\/search\?q=/.test(code),
+        'verified 200 Search Cards - CardNexus, better than the generic explainer');
+
+  for (const v of ['cardsphere', 'cardmarket', 'cardkingdom', 'coolstuffinc',
+                   'scg', 'cardnexus', 'tcgbulk', 'manapool']) {
+    check(v + ' never emits an empty sell URL',
+          !new RegExp(v + ": *[a-zA-Z]+ \\? [a-zA-Z]+Url : ''").test(code),
+          'an empty URL renders a tile with no CTA, which reads as dead artwork');
+  }
+  check('TCGplayer falls back to its homepage instead of an empty string',
+        /tcgplayer: *isTCGGame \? tcgpUrl : 'https:\/\/www\.tcgplayer\.com\/'/.test(code),
+        'sports scans still deserve a live link, just not a card-specific one');
+
+  check('ineligible venues say View on rather than Sell on',
+        /const sellVerb *= *r\.eligible \? 'Sell on' : 'View on'/.test(code),
+        'a live link must never promise a sale the venue cannot accept');
+  check('the ineligible tile branch still renders its sell badge',
+        /<div class="plat-sub">\$\{r\.note\}<\/div>\s*\$\{sellBadge\}/.test(html),
+        'this is the branch that previously dropped the CTA entirely');
+
+  check('venue tiles carry the data-sell-url hook',
+        (html.match(/data-sell-url="\$\{esc\(sellUrl\)\}"/g) || []).length >= 2,
+        'both the eligible and the ineligible tile branch need it');
+  check('tiles with a link get a pointer cursor',
+        /\.plat-card\[data-sell-url\]\{cursor:pointer\}/.test(html),
+        'cursor:default made the tile look unclickable');
+  check('a delegated listener opens the tile link',
+        /_platTileTapBound/.test(code) &&
+        /closest\('\.plat-card\[data-sell-url\]'\)/.test(code),
+        'tapping the large tile is the natural phone gesture');
+  check('the tile handler defers to real interactive children',
+        /closest\('a,button,input,select,textarea,label,\[role="button"\]'\)/.test(code),
+        'otherwise the details toggle and venue switches would open the venue');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

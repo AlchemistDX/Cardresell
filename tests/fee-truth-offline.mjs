@@ -213,8 +213,11 @@ assert('Cardmarket discloses EUR payout and the US registration block',
   /cannot register/.test(cbBlock) &&
   /32 European countries/.test(cbBlock) &&
   !/may not be able to register/.test(cbBlock));
+// The ineligible tile now also renders its sell badge between the note and
+// the cross-border block, so this asserts co-presence in that branch rather
+// than literal line adjacency. Cross-border disclosure must still appear.
 assert('Cross-border block renders on the LOCKED (ineligible) tile',
-  /plat-sub">\$\{r\.note\}<\/div>\s*\n\s*\$\{crossBorderHtml\(r\.pid\)\}/.test(src));
+  /plat-sub">\$\{r\.note\}<\/div>\s*\n\s*\$\{sellBadge\}\s*\n\s*\$\{crossBorderHtml\(r\.pid\)\}/.test(src));
 assert('Cross-border block renders on the unlocked tile',
   /\$\{redFlagsHtml\}\s*\n\s*\$\{crossBorderHtml\(r\.pid\)\}/.test(src));
 assert('Locked upsell list flags foreign venues',
