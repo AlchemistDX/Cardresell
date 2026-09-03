@@ -2129,7 +2129,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <option value="yugioh">Yu-Gi-Oh!</option>
         <option value="lorcana">Disney Lorcana</option>
         <option value="onepiece">One Piece TCG</option>
-        <option value="sports">Sports Cards 🛠️ (under maintenance)</option>
+        <option value="sports">Sports Cards</option>
         <option value="other">Other TCG</option>
       </select>
       <svg class="game-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
@@ -2158,7 +2158,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button id="sportsSearchBtn" class="sports-search-btn" onclick="doSportsSearch()">Search eBay</button>
     </div>
     <div class="sports-form">
-      <div class="sports-form-title">Sports Card Details <span style="font-weight:600;font-size:.72rem;color:var(--text-muted)">🛠️ under maintenance</span></div>
+      <div class="sports-form-title">Sports Card Details</div>
       <div style="font-size:.74rem;color:var(--text-muted);line-height:1.5;margin:-.25rem 0 .6rem">Fill in the card, then <strong>pick your exact parallel</strong> from the list — we price that one product at the grade you chose, from the SportsCardsPro guide. Parallels of the same card can differ by many multiples, so nothing is priced until you pick one. No published value for your grade means you’ll see a comp link instead of a guess.</div>
       <div class="sports-grid">
         <div class="sports-field sports-full">
@@ -2900,7 +2900,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="scan-gate-box">
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
     <div class="scan-gate-title" id="scanGateTitle">Card Identification Scanner</div>
-    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pokémon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is under maintenance.</div>
+    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pokémon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports cards too — scan one and pick your exact parallel for a graded guide price.</div>
     <div class="scan-gate-hint" id="scanGateHint" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:-.35rem;margin-bottom:.6rem;line-height:1.4">Tip: remove reflective sleeves &mdash; glare hides the card number.</div>
     <!-- Grade scan packs (shown only in grade mode) -->
     <div class="scan-gate-packs" id="scanGatePacksSection" style="display:none">
@@ -14292,9 +14292,28 @@ function _routeScannedSportsCard(pending) {
     const ssi = document.getElementById('sportsSearchInput');
     if (ssi) ssi.value = cleanName;
     setTimeout(() => { try { doSportsSearchLive(cleanName); } catch(e) {} }, 100);
+    // 2026-09-03: load the card panel + parallel picker directly.
+    // loadSportsCardFromSearch was only ever reached by clicking a comp source
+    // in the dropdown, and every one of those handlers ALSO opens an external
+    // tab. So a scanned sports card filled the form and then stopped: no card
+    // panel, no parallel list, no price unless the seller happened to open eBay
+    // first. Now a scan lands on "pick your exact parallel" like a typed lookup
+    // does, which is what makes the price reachable at all.
+    setTimeout(() => {
+      try {
+        if (activeGame === 'sports' && typeof loadSportsCardFromSearch === 'function') {
+          loadSportsCardFromSearch(cleanName);
+          // doSportsSearchLive leaves its comp-source dropdown open, which
+          // renders directly over the confirm strip and the parallel picker --
+          // the two things the seller now needs to see. Close it; the same
+          // comp links stay one click away on the loaded card.
+          try { document.getElementById('sportsDropList')?.classList.remove('open'); } catch (_) {}
+        }
+      } catch (e) { console.warn('[sports scan] panel load failed', e); }
+    }, 160);
   }
 
-  showToast('Sports card scanned — tap a comp source to see sold prices.', 'gold');
+  showToast('Sports card scanned — pick your exact parallel to price it.', 'gold');
 }
 
 // 2026-08-15: route a Japanese scan straight to the pokemonjp comps card
@@ -14647,6 +14666,45 @@ async function _loadScannedCardExactImpl(pending) {
     // 2026-08-18: rarity + set matching is STRONGER than loose number-only.
     // When we have both signals from the scan, prefer them over a same-number
     // wrong-set match (the exact bug from the Metang 094/086 report).
+    // 2026-09-03: rank candidates by how well their set matches the scanned
+    // set BEFORE any .find() runs.
+    //
+    // Every set test below is `.includes(scannedSet)`, a substring compare. So
+    // a scan reading set "Base" matched "Base Set 2" just as happily as "Base
+    // Set" -- and whichever the API happened to list first is what .find()
+    // returned. Right Pokemon, right number, wrong set, and for Charizard the
+    // gap between Base Set and Base Set 2 is most of the card's value.
+    //
+    // Substring matching stays (OCR rarely reads a full set name, and tightening
+    // it to equality would turn working scans into misses). Instead the array is
+    // pre-sorted so the closest set is the first thing .find() sees:
+    //   3 = set names are identical after normalising
+    //   2 = scanned set appears as a whole word ("Base" in "Base Set")
+    //   1 = substring only ("ase" in "Base")
+    // ties break toward the set with the fewest extra words, so "Base" prefers
+    // "Base Set" over "Base Set 2". Stable within a tier, so an equal-ranked
+    // group keeps the API's own ordering and nothing that matched before stops
+    // matching now -- it can only match something closer.
+    const setNorm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const wantSet = setNorm(setName);
+    const wantSetWords = wantSet ? wantSet.split(' ').filter(Boolean).length : 0;
+    const setScore = (c) => {
+      if (!wantSet) return 0;
+      const cs = setNorm(c.set?.name);
+      if (!cs) return 0;
+      if (cs === wantSet) return 3;
+      const esc = wantSet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp('(^| )' + esc + '( |$)').test(cs)) return 2;
+      return cs.includes(wantSet) ? 1 : 0;
+    };
+    if (wantSet && cards.length > 1) {
+      cards = cards
+        .map((c, i) => ({ c, i, s: setScore(c),
+                          d: Math.abs(setNorm(c.set?.name).split(' ').filter(Boolean).length - wantSetWords) }))
+        .sort((a, b) => (b.s - a.s) || (a.d - b.d) || (a.i - b.i))
+        .map(x => x.c);
+    }
+
     let match = null;
     let matchReason = null;
     // 1. Grounded by rarity + set + number — highest confidence
@@ -16526,7 +16584,7 @@ function _setScanGateMode(mode) {
   } else {
     if (icon)     icon.innerHTML   = '&#128247;';
     if (title)    title.textContent = 'Card Identification Scanner';
-    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pok\u00e9mon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is under maintenance.';
+    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pok\u00e9mon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports cards too — scan one and pick your exact parallel for a graded guide price.';
     const hint = document.getElementById('scanGateHint');
     if (hint) hint.style.display = '';
     if (packs)    packs.style.display    = 'none';

@@ -623,9 +623,23 @@ try {
         !/name="description"[^>]*or sports card is really worth/.test(html),
         'search snippets outlive the page and must not overpromise');
 
-  check('the sports game option is marked under maintenance',
-        /<option value="sports">[^<]*\u{1F6E0}[^<]*under maintenance/iu.test(html),
-        'users pick the game before they discover the limitation');
+  // 2026-09-03: markers REMOVED. Sports now returns a real graded guide price
+  // for an exact user-picked parallel, with the source and its age named on the
+  // confirm strip. The label had become the inaccurate part of the screen --
+  // it told sellers not to trust a number that is now the same class of number
+  // the TCG path shows. If sports pricing ever regresses to manual-only, this
+  // check is the thing to flip back, not the label to quietly re-add.
+  check('the sports game option no longer claims maintenance',
+        !/<option value="sports">[^<]*under maintenance/i.test(html) &&
+        !/<option value="sports">[^<]*\u{1F6E0}/u.test(html),
+        'sports prices for real now; the marker would be the lie');
+  check('the sports form title no longer claims maintenance',
+        !/sports-form-title"[^>]*>[\s\S]{0,240}?under maintenance/i.test(html));
+  check('the scan gate no longer says sports pricing is under maintenance',
+        !/sports pricing is under maintenance/i.test(html),
+        'both the static copy and the JS that rewrites it');
+  check('the word maintenance is gone from the sports surfaces',
+        !/under maintenance/i.test(html));
   check('the sports form explains how pricing works',
         /can’t pull a live sold comp automatically/.test(html) ||
         /Pick your exact variant/.test(code),
@@ -845,6 +859,52 @@ try {
   // Keep the reason on the page so this is not "simplified" back in.
   check('the Fennekin/Snorlax rationale is recorded at the removal site',
         /Fennekin/.test(index) && /Snorlax/.test(index));
+}
+
+// ── A scanned sports card must reach the parallel picker on its own ──
+// Before this, _routeScannedSportsCard filled the form and stopped. The only
+// callers of loadSportsCardFromSearch were comp-source click handlers in the
+// dropdown, and every one of them also window.open()s an external tab -- so
+// the card panel and the parallel list were unreachable unless the seller
+// happened to open eBay first. A scan that cannot produce a price is a scan
+// that charged a credit for nothing.
+{
+  const fnAt = index.indexOf('function _routeScannedSportsCard');
+  check('the scanned-sports route is still findable', fnAt > 0);
+  const body = index.slice(fnAt, index.indexOf('\nfunction ', fnAt + 10));
+  check('a scanned sports card loads the card panel itself',
+        /loadSportsCardFromSearch\(/.test(body),
+        'otherwise the parallel picker is only reachable via an external tab');
+  check('the scanned-sports panel load is guarded to the sports game',
+        /activeGame === 'sports'/.test(body),
+        'a deferred load must not fire after the user switches games');
+  check('the scan toast points at the parallel picker',
+        /pick your exact parallel to price it/.test(body),
+        'must not tell the user to tap a comp source that no longer prices it');
+}
+
+// ── Set matching must prefer the closest set, not the first substring hit ──
+// Every set test in the scanned-card matcher is `.includes(scannedSet)`, so a
+// scan reading "Base" matched "Base Set 2" as readily as "Base Set" and .find()
+// took whichever the API listed first. For Charizard that mistake is most of
+// the card's value.
+{
+  const fnAt = index.indexOf('async function _loadScannedCardExactImpl');
+  const start = index.indexOf('let match = null;', fnAt);
+  const pre = index.slice(fnAt, start);
+  check('candidates are ranked by set specificity before matching',
+        /setScore/.test(pre) && /\.sort\(/.test(pre),
+        'ranking must happen before the first .find(), not after');
+  check('an exact set-name match outranks a substring match',
+        /=== wantSet\) return 3/.test(pre));
+  check('a whole-word set match outranks a bare substring',
+        /return 2/.test(pre) && /includes\(wantSet\) \? 1 : 0/.test(pre));
+  check('ties prefer the set with the fewest extra words',
+        /wantSetWords/.test(pre),
+        '"Base" must prefer "Base Set" over "Base Set 2"');
+  check('the ranking sort is stable',
+        /\(a\.i - b\.i\)/.test(pre),
+        'equal-ranked candidates must keep API order so nothing stops matching');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
