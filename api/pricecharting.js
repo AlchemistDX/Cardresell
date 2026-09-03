@@ -238,7 +238,9 @@ export default async function handler(req, res) {
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
-  const cacheKey = `v2|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
+  // 2026-09-03: v2 -> v3 to invalidate cached [1st Edition] matches written
+  // before the premium-printing correction shipped.
+  const cacheKey = `v3|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {

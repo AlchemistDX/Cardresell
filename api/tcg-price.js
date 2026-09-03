@@ -54,7 +54,11 @@ export default async function handler(req, res) {
   // v5 added mid-preference for low-lister distortion, v6 replaces both
   // with a trimmed-weighted-mean across low/market/mid/high so the
   // headline price is always a proper average of non-outlier sales.
-  const cacheKey = `v6|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // 2026-09-03: bumped v6 -> v7 to invalidate every cached price at once.
+  // The old cache holds prices for 1st Edition / Shadowless / wrong-set matches
+  // written before the variant and set-mismatch fixes shipped. TTL is 30 min,
+  // so without this bump we'd wait half an hour with wrong numbers on prod.
+  const cacheKey = `v7|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
