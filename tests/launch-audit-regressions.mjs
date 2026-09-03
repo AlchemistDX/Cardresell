@@ -472,5 +472,56 @@ try {
         'it has the deepest card demand in Europe — the blocker is access');
 }
 
+// ---------------------------------------------------------------------------
+// Part H — dead outbound market links (audited 2026-09-02 in real Chromium).
+// Every URL banned here returned a genuine 404 with a "page not found" body.
+// Every URL required here was loaded and confirmed to render real content.
+// If a market moves a route again, fix the URL — do not delete the check.
+// ---------------------------------------------------------------------------
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');   // strip our own comments
+  check('no links to the retired cgccomics.com card-submit route',
+        !/cgccomics\.com\/cards\/submit/.test(html),
+        'CGC moved cards to cgccards.com; the old path 404s');
+  check('CGC submissions point at cgccards.com/submit/',
+        /cgccards\.com\/submit\//.test(html),
+        'verified 200, title "How To Submit | Card Submissions | CGC"');
+  check('no link to the dead acegrading.com/submit route',
+        !/acegrading\.com\/submit(?![\w-])/.test(html),
+        'it redirected to a "404 NOT FOUND" page');
+  check('Ace Grading points at its how-to-submit page',
+        /acegrading\.com\/how-to-submit/.test(html),
+        'verified 200 on the real submission guide');
+  check('no link to the dead poshmark.com/fee page',
+        !/poshmark\.com\/fee(?![\w-])/.test(html),
+        '"Page Not Found - Poshmark"');
+  check('Poshmark fee source points at the live support article',
+        /support\.poshmark\.com\/s\/article\/297755057/.test(html),
+        'that article states the $2.95 under-$15 / 20% structure the model uses');
+  check('no link to the dead manapool.com/sell route',
+        !/manapool\.com\/sell(?![\w-])/.test(html),
+        'Mana Pool 404s /sell; seller onboarding lives at /seller-info');
+  check('Mana Pool sell CTA points at /seller-info',
+        /manapool\.com\/seller-info/.test(html),
+        'verified 200, "Information for Sellers"');
+  check('no links to the dead fanaticscollect.com/search route',
+        !/fanaticscollect\.com\/search/.test(html),
+        'Fanatics Collect search returns 404 "Something Went Wrong"');
+  check('Fanatics search uses the /marketplace?q= route',
+        (html.match(/fanaticscollect\.com\/marketplace\?q=/g) || []).length >= 2,
+        'verified 200 with real result counts on both the comp and sell links');
+
+  // The eBay sell URL was double-wrapped: buildEbaySearchUrl already appends the
+  // EPN block, so re-wrapping it emitted campid/mkevt/customid twice per URL.
+  check('the eBay sell URL is not re-wrapped with affiliate params',
+        /ebay:\s*ebaySellRaw,/.test(code) &&
+        !/ebay:\s*buildEbayUrl\(ebaySellRaw\)/.test(code),
+        'buildEbaySearchUrl already returns an affiliate-tagged URL');
+  check('the eBay campaign id is still present exactly once per built URL',
+        /campid=\$\{encodeURIComponent\(campId\)\}/.test(code),
+        'dedupe must not strip EPN tracking — commission still has to attribute');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
