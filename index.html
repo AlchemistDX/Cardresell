@@ -545,6 +545,55 @@ img{display:block;max-width:100%;height:auto}
 .price-source{font-size:.65rem;color:var(--text-faint);margin-top:.15rem}
 .price-override{display:flex;align-items:center;gap:.4rem;margin-top:.4rem}
 .price-override-label{font-size:.72rem;color:var(--text-muted);white-space:nowrap}
+/* ── Quick Pricing ─────────────────────────────────────────────────────── */
+.qp{margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--border)}
+.qp-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.55rem}
+.qp-title{font-size:.95rem;font-weight:700;letter-spacing:-.01em}
+.qp-info{display:inline-flex;align-items:center;gap:.28rem;background:none;border:none;padding:.15rem .1rem;
+  font-size:.72rem;font-weight:600;color:var(--text-muted);cursor:pointer;border-radius:var(--radius-sm)}
+.qp-info:hover{color:var(--text)}
+.qp-info:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.qp-info-panel{margin:0 0 .6rem;padding:.6rem .7rem;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius-md);font-size:.72rem;line-height:1.5;color:var(--text-muted)}
+.qp-info-panel p{margin:0 0 .38rem}
+.qp-info-panel p:last-child{margin-bottom:0}
+.qp-info-panel strong{color:var(--text);font-weight:700}
+.qp-info-caveat{padding-top:.38rem;border-top:1px solid var(--border);color:var(--text-faint)}
+
+.qp-tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}
+.qp-tier{display:flex;flex-direction:column;align-items:center;gap:.1rem;padding:.6rem .3rem;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;text-align:center;min-width:0}
+.qp-tier:hover{border-color:var(--gold)}
+.qp-tier:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.qp-tier[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:var(--surface)}
+.qp-tier-amt{font-size:1rem;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}
+.qp-tier-label{font-size:.68rem;font-weight:600;opacity:.82;line-height:1.2;white-space:nowrap}
+.qp-tier[aria-pressed="true"] .qp-tier-label{opacity:.9}
+
+.qp-bar-wrap{margin:1.55rem 0 .5rem;position:relative}
+.qp-bar{position:relative;height:7px;border-radius:99px;overflow:visible}
+.qp-bar-fill{position:absolute;inset:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--qp-green) 0%,var(--qp-green) 58%,var(--qp-amber) 72%,var(--qp-red) 86%,var(--qp-red) 100%)}
+.qp-bar-tick{position:absolute;top:-4px;bottom:-4px;width:1.5px;background:var(--text);opacity:.5;border-radius:2px}
+.qp-bar-marker{position:absolute;top:50%;width:13px;height:13px;margin-left:-6.5px;
+  transform:translateY(-50%);border-radius:50%;background:var(--surface);
+  border:2.5px solid var(--text);box-shadow:0 1px 3px rgba(0,0,0,.22);transition:left .18s ease}
+:root{--qp-green:#128a4b;--qp-amber:#d9a412;--qp-red:#c8342a}
+[data-theme="dark"]{--qp-green:#1faa5e;--qp-amber:#e8b528;--qp-red:#e0483c}
+
+.qp-rows{margin-top:.7rem;display:flex;flex-direction:column;gap:.02rem}
+.qp-row{display:flex;align-items:baseline;gap:.5rem;padding:.36rem 0;font-size:.78rem}
+.qp-row+.qp-row{border-top:1px dashed var(--border)}
+.qp-row-k{color:var(--text-muted);white-space:nowrap}
+.qp-row-dots{flex:1;min-width:1rem;border-bottom:1px dashed var(--border);transform:translateY(-.22rem)}
+.qp-row-v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.qp-row-age{font-size:.66rem;font-weight:500;color:var(--text-faint);margin-left:.3rem}
+.qp-empty{font-size:.72rem;color:var(--text-faint);padding:.3rem 0}
+@media (max-width:420px){
+  .qp-tier-amt{font-size:.92rem}
+  .qp-tier-label{font-size:.64rem}
+}
 .price-input{font-family:var(--mono);width:100%;padding:.45rem .65rem .45rem 1.35rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:.88rem;outline:none;transition:border-color var(--ease)}
 .price-input:focus{border-color:var(--gold)}
 .price-input-wrap{position:relative;flex:1}
@@ -2318,6 +2367,49 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <div class="price-input-wrap">
             <input type="number" id="priceOverride" class="price-input" placeholder="your price" min="0" step="0.01" oninput="calc()" />
           </div>
+        </div>
+
+        <!-- ── Quick Pricing ─────────────────────────────────────────────
+             Three anchor prices from the TCGplayer ask book plus the last
+             sale figure. Every number here is a real data point, labelled
+             with what it actually is:
+
+               Sell Now    = undercut the cheapest active listing by $0.01
+               Market      = TCGplayer market price (from completed sales)
+               Top of Book = the median active listing (ask)
+
+             Deliberately absent: any "sells in N days" or sell-through
+             claim. No venue publishes that data, so we would be inventing
+             it. The tier names describe the PRICE, not a promised speed.
+        ────────────────────────────────────────────────────────────────── -->
+        <div id="quickPricing" class="qp" style="display:none">
+          <div class="qp-head">
+            <span class="qp-title">Quick Pricing</span>
+            <button type="button" class="qp-info" onclick="toggleQpInfo()"
+                    aria-label="What do these prices mean?" aria-expanded="false">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+              Info
+            </button>
+          </div>
+
+          <div id="qpInfo" class="qp-info-panel" style="display:none">
+            <p><strong>Sell Now</strong> undercuts the cheapest copy listed on TCGplayer right now, so yours is the first one a buyer sees.</p>
+            <p><strong>Market</strong> is TCGplayer&#8217;s market price, derived from completed sales &#8212; what copies have actually been selling for.</p>
+            <p><strong>Top of Book</strong> is the median active listing. Achievable, but you are waiting behind every cheaper copy.</p>
+            <p class="qp-info-caveat">These are prices, not timelines. No marketplace publishes how long a card takes to sell, so we don&#8217;t estimate it.</p>
+          </div>
+
+          <div class="qp-tiers" id="qpTiers" role="group" aria-label="Quick pricing options"></div>
+
+          <div class="qp-bar-wrap" id="qpBarWrap">
+            <div class="qp-bar" aria-hidden="true">
+              <div class="qp-bar-fill"></div>
+              <div class="qp-bar-tick" id="qpBarTick"></div>
+              <div class="qp-bar-marker" id="qpBarMarker"></div>
+            </div>
+          </div>
+
+          <div class="qp-rows" id="qpRows"></div>
         </div>
 
         <div class="sep"></div>
@@ -6552,6 +6644,8 @@ function loadCardUI(card) {
 
   // Clear price override on new card load
   if (priceOverride) priceOverride.value = '';
+  const _qpHost = document.getElementById('quickPricing');
+  if (_qpHost) _qpHost.style.display = 'none';
   window._ovAutoFilled = false;  // new card: no system basis in the field yet
   window._crBasis = null;        // and no basis to render the headline from
 
@@ -6920,6 +7014,179 @@ function formatVariantName(v) {
 }
 
 // ── Update price display from current printing selection ──
+// ── Quick Pricing ────────────────────────────────────────────────────────
+//
+// Three anchor prices derived from the TCGplayer ask book, plus the last-sale
+// figure, plus the cheapest active listing. The point of the widget is that a
+// seller picks a NUMBER and immediately sees the payout it produces, without
+// doing the fee arithmetic in their head.
+//
+// The honest-labelling problem this had to solve:
+//
+// StockX can say "Sell Faster" because it holds the order book and knows the
+// bid side. We do not have a bid side, and no marketplace we price against
+// publishes time-to-sell. So a tier called "Sell Faster" would be a promise we
+// cannot keep. Each tier here is named for WHERE THE PRICE SITS in the ask
+// book, which is a fact we can point at:
+//
+//   Sell Now     lowest active ask - $0.01   (your copy becomes the cheapest)
+//   Market       TCGplayer market price      (from completed sales)
+//   Top of Book  median active ask           (you queue behind cheaper copies)
+//
+// A tier is only rendered when its underlying number exists. Three tiers on a
+// card with one data point would be three restatements of the same figure
+// wearing different hats.
+window._qpSelected = null;   // which tier the user picked, so re-renders keep it
+
+function _qpBasis() {
+  // Prefer the basis the payout ladder is actually computed from, so the
+  // widget can never disagree with the rows underneath it.
+  const b = window._crBasis;
+  if (b && Number.isFinite(Number(b.value)) && Number(b.value) > 0) {
+    return {
+      market: Number(b.value),
+      low:  Number.isFinite(Number(b.low))  && Number(b.low)  > 0 ? Number(b.low)  : null,
+      mid:  Number.isFinite(Number(b.mid))  && Number(b.mid)  > 0 ? Number(b.mid)  : null,
+      label: b.label || '',
+    };
+  }
+  // Fall back to the selected printing's own numbers.
+  const p = (typeof currentPrices !== 'undefined' && currentPrices)
+    ? currentPrices[document.getElementById('printingSelect')?.value] : null;
+  if (p && Number.isFinite(Number(p.market)) && Number(p.market) > 0) {
+    return {
+      market: Number(p.market),
+      low:  Number.isFinite(Number(p.low)) && Number(p.low) > 0 ? Number(p.low) : null,
+      mid:  Number.isFinite(Number(p.mid)) && Number(p.mid) > 0 ? Number(p.mid) : null,
+      label: (selectedCard && selectedCard.source) || '',
+    };
+  }
+  return null;
+}
+
+function _qpTiers(basis) {
+  const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
+    ? getCondMultiplier() : 1;
+  const adj = (v) => v == null ? null : Math.round(v * condMult * 100) / 100;
+
+  const market = adj(basis.market);
+  const low    = adj(basis.low);
+  const mid    = adj(basis.mid);
+
+  const tiers = [];
+  // Undercut the cheapest ask. Only meaningful when the low ask is actually
+  // below market -- if low >= market the book is thin and "undercut" would
+  // mean asking MORE than the last sale, which is not a fast sale.
+  //
+  // The undercut has to be visible at the precision we DISPLAY, or the tier
+  // lies by rounding. Caught in QA on Umbreon VMAX: low ask $2450.00, a $0.01
+  // undercut is $2449.99, and since we drop cents above $100 the button read
+  // "Sell Now $2,450" directly above a "Lowest listing $2,450" row -- two
+  // different numbers rendered identically. So the step scales with the
+  // displayed precision: cents under $100 (where cents are shown), whole
+  // dollars above it (where they are not).
+  if (low != null && market != null && low < market) {
+    const step = low < 100 ? 0.01 : 1;
+    tiers.push({ id:'now', amt: Math.max(0.01, Math.round((low - step) * 100) / 100),
+                 label:'Sell Now', hint:'undercuts the cheapest listing' });
+  }
+  if (market != null) {
+    tiers.push({ id:'market', amt: market, label:'Market', hint:'recent completed sales' });
+  }
+  // Top of book only earns a slot when it is meaningfully above market.
+  if (mid != null && market != null && mid > market * 1.02) {
+    tiers.push({ id:'book', amt: mid, label:'Top of Book', hint:'median active listing' });
+  }
+  return tiers;
+}
+
+function renderQuickPricing() {
+  const host = document.getElementById('quickPricing');
+  if (!host) return;
+  const basis = _qpBasis();
+  const tiers = basis ? _qpTiers(basis) : [];
+
+  // One tier is not a choice -- hide rather than dress up a single number as
+  // a pricing strategy.
+  if (!basis || tiers.length < 2) { host.style.display = 'none'; return; }
+  host.style.display = '';
+
+  const cur = parseFloat(document.getElementById('priceOverride')?.value);
+  const fmt = (n) => '$' + Number(n).toLocaleString('en-US',
+    { minimumFractionDigits: n < 100 ? 2 : 0, maximumFractionDigits: n < 100 ? 2 : 0 });
+
+  // Tier buttons. Selected = whichever tier matches the current price field.
+  document.getElementById('qpTiers').innerHTML = tiers.map(t => {
+    const on = Number.isFinite(cur) && Math.abs(cur - t.amt) < 0.015;
+    return `<button type="button" class="qp-tier" aria-pressed="${on}"
+      title="${_qpEsc(t.hint)}" onclick="qpApply(${t.amt})">
+      <span class="qp-tier-amt">${fmt(t.amt)}</span>
+      <span class="qp-tier-label">${_qpEsc(t.label)}</span>
+    </button>`;
+  }).join('');
+
+  // Gradient bar. Scale runs from the cheapest tier to 1.08x the dearest so
+  // the dear end still has red to sit in.
+  const amts = tiers.map(t => t.amt);
+  const lo = Math.min(...amts), hi = Math.max(...amts) * 1.08;
+  const pct = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+  const mk = document.getElementById('qpBarMarker');
+  const tick = document.getElementById('qpBarTick');
+  const mktTier = tiers.find(t => t.id === 'market');
+  if (tick) {
+    if (mktTier) { tick.style.display=''; tick.style.left = pct(mktTier.amt) + '%'; }
+    else tick.style.display='none';
+  }
+  if (mk) {
+    const at = Number.isFinite(cur) ? cur : (mktTier ? mktTier.amt : amts[0]);
+    mk.style.left = pct(at) + '%';
+    mk.setAttribute('title', fmt(at));
+  }
+
+  // Reference rows. Both are real, and both are labelled for what they are.
+  const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
+    ? getCondMultiplier() : 1;
+  const rows = [];
+  if (basis.low != null) {
+    rows.push(['Lowest listing', fmt(Math.round(basis.low * condMult * 100) / 100), '']);
+  }
+  if (basis.market != null) {
+    rows.push(['Market price', fmt(Math.round(basis.market * condMult * 100) / 100),
+               basis.label ? _qpEsc(basis.label) : '']);
+  }
+  document.getElementById('qpRows').innerHTML = rows.map(([k, v, age]) =>
+    `<div class="qp-row"><span class="qp-row-k">${_qpEsc(k)}</span>
+     <span class="qp-row-dots"></span>
+     <span class="qp-row-v">${v}</span>${age ? `<span class="qp-row-age">${age}</span>` : ''}</div>`
+  ).join('');
+}
+
+// Applying a tier means the user has chosen a price deliberately, so it is
+// treated as a user-typed price (used verbatim, not condition-adjusted again).
+function qpApply(amt) {
+  const f = document.getElementById('priceOverride');
+  if (!f) return;
+  f.value = Number(amt).toFixed(2);
+  window._ovAutoFilled = false;
+  calc();
+  renderQuickPricing();
+}
+
+function toggleQpInfo() {
+  const el = document.getElementById('qpInfo');
+  const btn = document.querySelector('.qp-info');
+  if (!el) return;
+  const open = el.style.display === 'none';
+  el.style.display = open ? '' : 'none';
+  if (btn) btn.setAttribute('aria-expanded', String(open));
+}
+
+function _qpEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function updatePriceFromPrinting() {
   const key = printSelect.value;
   // 2026-09-01 (launch gate): when the price ladder produced the number that
@@ -6953,6 +7220,7 @@ function updatePriceFromPrinting() {
     priceMain.style.color = 'var(--text-faint)';
     priceRange.textContent = p ? 'No price data for this variant' : '';
     priceSource.textContent = '';
+    try { renderQuickPricing(); } catch(_) {}
     return;
   }
 
@@ -10061,6 +10329,7 @@ function calc() {
 
   resultsArea.innerHTML = html;
   _onCardResultShown();
+  try { renderQuickPricing(); } catch(_) {}
 }
 
 function setSort(m) {

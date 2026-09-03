@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   // The old cache holds prices for 1st Edition / Shadowless / wrong-set matches
   // written before the variant and set-mismatch fixes shipped. TTL is 30 min,
   // so without this bump we'd wait half an hour with wrong numbers on prod.
-  const cacheKey = `v7|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  const cacheKey = `v8|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -134,7 +134,7 @@ export default async function handler(req, res) {
       //   Elsa    (low $0.01 / mkt $0.07 / mid $0.15 / high $2.29) → $0.12
       //   Harpy   (low $0.02 / mkt $0.28 / mid $0.30 / high $3.98) → $0.29
       //   Normal  (low $1.00 / mkt $1.10 / mid $1.15 / high $1.30) → $1.14
-      const displayMarket = _trimmedMean({
+      const displayMarket = _headlinePrice({
         low: r.low, market: r.market, mid: r.mid, high: r.high,
       });
       const data = {
@@ -375,6 +375,58 @@ function _isSentinelPrice(n) {
 // it's the true median. Falls back to market when mid is unavailable.
 // Returns a positive Number rounded to 2 decimal places, or null if
 // there's no usable data.
+// Headline price.
+//
+// 2026-09-03: market price is now the headline, not a blend.
+//
+// TCGplayer gives us four numbers, and they are not the same kind of thing:
+//   marketPrice  -- derived from COMPLETED SALES. What the card actually sold for.
+//   lowPrice     -- cheapest ACTIVE LISTING (an ask)
+//   midPrice     -- median ACTIVE LISTING (an ask)
+//   highPrice    -- dearest ACTIVE LISTING (an ask)
+//
+// The old headline averaged marketPrice together with the ask statistics,
+// weighting mid double. That mixes units: it blends "what it sold for" with
+// "what people are hoping to get". Any card with a thick tail of cheap asks
+// gets dragged below its own sale price.
+//
+// Base Set 2 Charizard #4 (product 42479) is the worked example:
+//   market $500.12   low $309.48   mid $444.99   high $3000
+//   old headline = (444.99*2 + 500.12 + 309.48) / 4 = $424.90
+// We published $424.90 for a card whose own last-sale figure was $500.12 --
+// $75.22 under, on the exact card the audit started from. After eBay fees
+// that understates the payout by about $65.
+//
+// So: publish the sale price. Keep the blend only as a fallback for when
+// marketPrice is absent, and as a sanity valve when marketPrice is wildly
+// out of line with the ask book (stale or erroneous).
+//
+// The ask statistics are not thrown away -- they now feed Quick Pricing,
+// where an ask is exactly the right quantity to show.
+function _headlinePrice({ low, market, mid, high }) {
+  const num = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    if (_isSentinelPrice(n)) return null;
+    return n;
+  };
+  const M = num(market);
+  const D = num(mid);
+
+  // No sale price to trust -- fall back to the blend.
+  if (M == null) return _trimmedMean({ low, market, mid, high });
+
+  // Sanity valve: a sale price more than 3x above or below the median ask is
+  // almost certainly stale or a data error, not a real move. Fall back to the
+  // blend, which is noisy but bounded.
+  if (D != null && (M > D * 3 || M < D / 3)) {
+    return _trimmedMean({ low, market, mid, high });
+  }
+
+  return Math.round(M * 100) / 100;
+}
+
 function _trimmedMean({ low, market, mid, high }) {
   const num = (v) => {
     if (v == null) return null;

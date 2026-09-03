@@ -177,8 +177,33 @@ function sportsCandidateAdmissible(prod, facets) {
 }
 
 // Printings that carry a large scarcity premium over the ordinary copy.
-// Used to avoid pricing a common unlimited card as its 1st Edition sibling.
-const PC_PREMIUM_RE = /\b(1st edition|first edition|shadowless|no rarity|staff|prerelease|pre-release)\b/i;
+// Used to avoid pricing a common unlimited card as its scarce sibling.
+//
+// 2026-09-03, second pass: the first version of this list only caught the
+// "1st Edition" family, so the correction fired on Mewtwo but not on the
+// other masks PriceCharting uses for the same underlying problem. After the
+// first fix shipped, 'Pikachu / Base Set / 58' stopped resolving to
+// [1st Edition] and started resolving to [E3 Red Cheeks] at $682.50 -- a
+// convention-exclusive promo, against ~$9 for the copy in a normal binder.
+// Same bug, different bracket. Hence the wider list.
+const PC_PREMIUM_RE = /\b(1st edition|first edition|shadowless|no rarity|staff|prerelease|pre-release|e3|red cheeks|yellow cheeks|promo|jumbo|misprint|error|gold star|crystal|autograph|signed|sample|demo|league|championship|world|winner)\b/i;
+
+// PriceCharting embeds the collector number in the product name as '#58'.
+// Returns the number as a bare string, or null when the name carries none.
+function pcNumberOf(productName) {
+  const m = /#\s*([A-Za-z0-9]+)/.exec(String(productName || ''));
+  return m ? m[1].toLowerCase().replace(/^0+/, '') : null;
+}
+
+// Loose equality for collector numbers. '097' and '97' are the same card;
+// 'SV107' and '107' are not.
+function pcNumberMatches(requested, candidateName) {
+  const want = String(requested || '').trim().toLowerCase().replace(/^0+/, '');
+  if (!want) return true;               // caller gave no number -- nothing to check
+  const got = pcNumberOf(candidateName);
+  if (got == null) return true;         // candidate carries no number -- can't disprove
+  return got === want;
+}
 
 // Score one PriceCharting sports candidate against the facets we actually know.
 // Year is weighted highest: a 1986 Fleer Jordan and a 2003 Fleer Jordan are
@@ -240,7 +265,7 @@ export default async function handler(req, res) {
   const kvToken = process.env.KV_REST_API_TOKEN;
   // 2026-09-03: v2 -> v3 to invalidate cached [1st Edition] matches written
   // before the premium-printing correction shipped.
-  const cacheKey = `v3|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
+  const cacheKey = `v4|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -371,18 +396,37 @@ export default async function handler(req, res) {
       // ask the plural endpoint for the full candidate list and prefer a
       // plain printing. Falls through to the original match when no plain
       // candidate exists (genuinely 1st-Edition-only products).
+      // Two independent reasons to re-resolve:
+      //   a) the match is a premium printing the caller did not ask for
+      //   b) the match's collector number is not the one we asked for
+      // (b) was missed by the first pass and is its own bug: 'Rayquaza /
+      // EX Deoxys / 97' resolved to 'Rayquaza EX #102', a different card in
+      // the same set, and we reported the disagreement as a price spread.
       const askedPremium = PC_PREMIUM_RE.test(`${name} ${setStr}`);
-      if (!askedPremium && pc && pc.status === 'success' &&
-          PC_PREMIUM_RE.test(pc['product-name'] || '')) {
+      const matchIsPremium = pc && pc.status === 'success' &&
+        PC_PREMIUM_RE.test(pc['product-name'] || '');
+      const matchWrongNumber = pc && pc.status === 'success' &&
+        !pcNumberMatches(number, pc['product-name']);
+      if (pc && pc.status === 'success' &&
+          ((!askedPremium && matchIsPremium) || matchWrongNumber)) {
         try {
           const listUrl = `https://www.pricecharting.com/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
           const list = await fetchPcWithRetry(listUrl);
           const cands = Array.isArray(list && list.products) ? list.products : [];
-          const plain = cands.find(p =>
-            !PC_PREMIUM_RE.test(p['product-name'] || '') &&
+          // Same set, right number, and -- unless the caller asked for a
+          // premium printing -- a plain one. Number is the hard filter; a
+          // candidate with the wrong number is a different card, not a
+          // different printing, so it can never be the answer.
+          const sameConsole = (p) =>
             String(p['console-name'] || '').toLowerCase() ===
-              String(pc['console-name'] || '').toLowerCase()
-          );
+            String(pc['console-name'] || '').toLowerCase();
+          const plain = cands.find(p =>
+            sameConsole(p) &&
+            pcNumberMatches(number, p['product-name']) &&
+            (askedPremium || !PC_PREMIUM_RE.test(p['product-name'] || ''))
+          ) || (matchWrongNumber ? cands.find(p =>
+            sameConsole(p) && pcNumberMatches(number, p['product-name'])
+          ) : null);
           if (plain && plain.id) {
             const byId = await fetchPcWithRetry(
               `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(plain.id)}`
@@ -390,6 +434,7 @@ export default async function handler(req, res) {
             if (byId && byId.status === 'success' && byId.id) {
               pc = byId;
               pc._premiumCorrected = true;
+              if (matchWrongNumber) pc._numberCorrected = true;
             }
           }
         } catch (e) { /* keep the original match rather than failing the lookup */ }
