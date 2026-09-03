@@ -5670,7 +5670,15 @@ function maybeAutoSwitchGameFromScan(cardType, isJapanese) {
   return true;
 }
 
+// WITHDRAWN 2026-09-03 -- see the gradeOppP comment in the fetch path for the
+// full reasoning. Kept as a no-op rather than deleted so that every existing
+// call site stays valid while the feature is off the air. The guard is
+// unconditional and first: nothing below it can render.
 function renderGradeOpportunity(g) {
+  return '';
+}
+
+function _renderGradeOpportunity_withdrawn(g) {
   if (!g || g.recommendation === 'sell_raw') return '';
 
   const isGreen = g.recommendation === 'worth_grading';
@@ -5906,14 +5914,29 @@ async function fetchAndApplySoldComps(forceRefresh) {
     return d;
   });
 
-  // Grade opportunity: only meaningful for raw scans (currentGraderPill = 'no').
-  // If user is already viewing a specific graded price, skip — no point
-  // recommending they grade a card that's already graded.
-  const _preFetchGrader = document.querySelector('#gradedPills .pill.sel')?.dataset.val || 'no';
-  const gradeOppP = (_preFetchGrader === 'no' && !grade)
-    ? fetch('/api/grade-opportunity?' + tcgParams.toString(), { signal: _clientController.signal })
-        .then(r => r.ok ? r.json() : null).catch(() => null)
-    : Promise.resolve(null);
+  // Grade opportunity: WITHDRAWN 2026-09-03. Do not re-enable without a real
+  // graded price source AND a grade distribution.
+  //
+  // Why it was pulled: /api/grade-opportunity never looked up a graded price.
+  // It returned rawPrice * a hardcoded tier multiplier (4.0x in the $100-500
+  // band) and the UI labelled that invented number a "PSA 10 comp". On Base
+  // Set 2 Charizard that printed "PSA 10 comp $1700" while the real PSA 10
+  // market was $18-30k -- wrong by an order of magnitude, and wrong in the
+  // direction that talks a seller out of grading.
+  //
+  // Two things must land before any version of this ships again:
+  //   1. A graded price we can date. PriceCharting's API publishes only a
+  //      current blended guide value with no timestamp and no sales history,
+  //      so we cannot tell a fresh number from a two-year-old one. eBay sold
+  //      comps 403 from production, so api/ebay-sold.js cannot fill the gap.
+  //   2. A grade distribution. Assuming a PSA 10 is not conservative, it is
+  //      the ~1% branch -- pop 70 at PSA 10 against 1400 at PSA 9 and 3974 at
+  //      PSA 8 for this card. Any payoff figure has to be expected value
+  //      across grades, not the top of the ladder.
+  //
+  // Fixing only (1) makes this MORE dangerous, not less: a real PSA 10 price
+  // turns "$1700" into "$11695" and reads as a promise.
+  const gradeOppP = Promise.resolve(null);
 
   let tcg, ebay, pc, gradeOpp;
   try {

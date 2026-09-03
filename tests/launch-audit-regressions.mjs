@@ -25,10 +25,17 @@ function check(name, condition) {
 
 console.log('\n[Launch audit regressions]');
 
+// RETIRED 2026-09-03. This pinned the shape of the /api/grade-opportunity
+// fetch ("send game exactly once"). The tile it fed was withdrawn because the
+// endpoint never looked up a graded price -- it returned rawPrice * a
+// hardcoded multiplier and the UI called it a "PSA 10 comp". There is no
+// longer a call to constrain. Part M now asserts the opposite: that nothing
+// calls this endpoint at all. Kept as a note so the deletion is not read as
+// coverage quietly going missing.
 check(
-  'grade-opportunity client sends game exactly once',
-  index.includes("fetch('/api/grade-opportunity?' + tcgParams.toString(),") &&
-    !index.includes("tcgParams.toString() + (card.game ? '&game='")
+  'the duplicate-game bug this replaced cannot come back',
+  !index.includes("tcgParams.toString() + (card.game ? '&game='"),
+  'the double-game param shape must stay gone even with the fetch removed'
 );
 check(
   'visible payout ranks use the tier-filtered eligible list',
@@ -737,6 +744,43 @@ try {
   check('the welcome names eBay and TCGPlayer as the recommended pair',
         /eBay and TCGPlayer/.test(html),
         'the spec fixes the recommended set at these two');
+}
+
+
+// Part M — the fabricated grade-opportunity tile stays withdrawn (2026-09-03).
+// /api/grade-opportunity never looked up a graded price: it returned
+// rawPrice * a hardcoded tier multiplier and the UI called that a "PSA 10
+// comp". On Base Set 2 Charizard it printed $1700 against a real PSA 10
+// market of $18-30k. Off the air until a datable graded price AND a grade
+// distribution exist.
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  check('the grade-opportunity renderer is an unconditional no-op',
+        /function renderGradeOpportunity\(g\)\s*\{\s*return '';\s*\}/.test(code),
+        'the guard must be first and unconditional, not a branch');
+
+  check('the grade-opportunity endpoint is no longer called',
+        !/fetch\(\s*['"`]\/api\/grade-opportunity/.test(code),
+        'a withdrawn tile should not still cost a request');
+
+  // The invented figures must not reach the DOM from any other path.
+  check('no live caller renders the withdrawn payoff copy',
+        !/could be worth \$\$\{gradedEst\} graded[\s\S]{0,40}?(?!_withdrawn)/.test(
+          code.replace(/function _renderGradeOpportunity_withdrawn[\s\S]*?\n\}\n/, '')),
+        'the dead body is parked behind a _withdrawn name; nothing may call it');
+
+  check('the withdrawn body is parked, not deleted, and unreferenced',
+        /function _renderGradeOpportunity_withdrawn/.test(code) &&
+        (code.match(/_renderGradeOpportunity_withdrawn/g) || []).length === 1,
+        'exactly one occurrence = the definition, with no call sites');
+
+  // Keeps the next person from "fixing" this by swapping in a real PSA 10
+  // price, which makes it worse: $1700 becomes $11695 and reads as a promise.
+  check('the multiplier rationale is recorded next to the withdrawal',
+        /grade distribution/i.test(html) && /expected value/i.test(html),
+        'the reason must survive so this is not re-enabled naively');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

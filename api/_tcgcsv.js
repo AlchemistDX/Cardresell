@@ -404,10 +404,24 @@ export function bestPriceForProduct(priceMap) {
   if (!priceMap) return { market: null, variant: null };
   // Prefer Holofoil > Normal > Reverse Holofoil (holofoil is typically the
   // primary printing for modern rare/IR/SIR; normal for older sets/commons)
+  //
+  // 2026-09-03: Unlimited now outranks 1st Edition. It used to be the other
+  // way round, which meant a vintage card with both printings on one product
+  // record was always priced as 1st Edition. Neo Genesis Lugia #9 (product
+  // 86903) carries both subtypes:
+  //     1st Edition Holofoil  market $1085.03  low $2999.99  mid $7750.00
+  //     Unlimited Holofoil    market  $518.99  low  $498.74  mid  $535.91
+  // We returned $5,917 for it -- roughly 15x an unlimited copy. 1st Edition
+  // is a scarce, separately-identifiable printing: assuming it is the
+  // opposite of conservative, and it is the assumption that overstates.
+  // Unlimited is the safe default; a 1st Edition owner knows they have one
+  // and can say so.
   const order = [
     'Holofoil', 'Normal', 'Reverse Holofoil',
-    '1st Edition Holofoil', '1st Edition Normal', 'Unlimited Holofoil',
+    'Unlimited Holofoil', 'Unlimited Normal',
     'Foil', 'Cold Foil', 'Rainbow Foil',
+    // Premium printings last -- only reached when nothing else is priced.
+    '1st Edition Holofoil', '1st Edition Normal',
   ];
   for (const v of order) {
     const p = priceMap[v];
@@ -420,8 +434,13 @@ export function bestPriceForProduct(priceMap) {
       };
     }
   }
-  // Fallback to first available
-  for (const v of Object.keys(priceMap)) {
+  // Fallback to first available. Sort premium printings to the back here too,
+  // so an unrecognised subtype name can't reintroduce the 1st Edition bias
+  // that the ordered list above exists to prevent.
+  const _premium = /1st edition|shadowless|first edition|staff|prerelease/i;
+  const fallbackKeys = Object.keys(priceMap)
+    .sort((a, b) => (_premium.test(a) ? 1 : 0) - (_premium.test(b) ? 1 : 0));
+  for (const v of fallbackKeys) {
     const p = priceMap[v];
     if (p && (p.market > 0 || p.mid > 0)) {
       return {

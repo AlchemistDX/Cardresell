@@ -176,6 +176,10 @@ function sportsCandidateAdmissible(prod, facets) {
   return true;
 }
 
+// Printings that carry a large scarcity premium over the ordinary copy.
+// Used to avoid pricing a common unlimited card as its 1st Edition sibling.
+const PC_PREMIUM_RE = /\b(1st edition|first edition|shadowless|no rarity|staff|prerelease|pre-release)\b/i;
+
 // Score one PriceCharting sports candidate against the facets we actually know.
 // Year is weighted highest: a 1986 Fleer Jordan and a 2003 Fleer Jordan are
 // different cards with a 100x price gap, so landing on the wrong year is worse
@@ -352,6 +356,42 @@ export default async function handler(req, res) {
       }
     } else {
       pc = await fetchPcWithRetry(url);
+
+      // 2026-09-03: premium-printing correction.
+      // PriceCharting's single-best-match endpoint ranks the scarce printing
+      // first for vintage queries. "Pikachu / Base Set / 58" resolved to
+      // 'Pikachu [1st Edition] #58' at $177.50 while the unlimited copy the
+      // user almost certainly owns trades near $9. 'Mewtwo / Base Set / 10'
+      // resolved to '[1st Edition]' at $808.90. Both looked like our two price
+      // sources disagreeing by ~95%; in fact each was pricing a different card.
+      //
+      // If the caller did not ask for a premium printing but the match is one,
+      // ask the plural endpoint for the full candidate list and prefer a
+      // plain printing. Falls through to the original match when no plain
+      // candidate exists (genuinely 1st-Edition-only products).
+      const askedPremium = PC_PREMIUM_RE.test(`${name} ${setStr}`);
+      if (!askedPremium && pc && pc.status === 'success' &&
+          PC_PREMIUM_RE.test(pc['product-name'] || '')) {
+        try {
+          const listUrl = `https://www.pricecharting.com/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
+          const list = await fetchPcWithRetry(listUrl);
+          const cands = Array.isArray(list && list.products) ? list.products : [];
+          const plain = cands.find(p =>
+            !PC_PREMIUM_RE.test(p['product-name'] || '') &&
+            String(p['console-name'] || '').toLowerCase() ===
+              String(pc['console-name'] || '').toLowerCase()
+          );
+          if (plain && plain.id) {
+            const byId = await fetchPcWithRetry(
+              `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(plain.id)}`
+            );
+            if (byId && byId.status === 'success' && byId.id) {
+              pc = byId;
+              pc._premiumCorrected = true;
+            }
+          }
+        } catch (e) { /* keep the original match rather than failing the lookup */ }
+      }
     }
 
     if (pc.status !== 'success' || !pc.id) {

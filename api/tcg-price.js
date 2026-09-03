@@ -8,7 +8,7 @@
 // flaky text-search endpoint). Falls back to TCGplayer live search only
 // when tcgcsv can't resolve the card (e.g. brand-new sets not yet indexed).
 
-import { resolveCardPrice, resolveCardByName, gameToCategoryId } from './_tcgcsv.js';
+import { resolveCardPrice, resolveCardByName, gameToCategoryId, normalizeSetName } from './_tcgcsv.js';
 
 const CACHE_TTL_SEC = 30 * 60; // 30 min
 
@@ -298,6 +298,23 @@ export default async function handler(req, res) {
           }
         }
       } catch(e) {}
+    }
+
+    // 2026-09-03: honour the set the caller gave us.
+    // TCGplayer's fuzzy search accepts &setName= but does not treat it as a
+    // hard filter, so it will happily answer a modern-set query with a
+    // vintage product. `name=Charizard&set=Evolving Skies` came back as
+    // 'Base Set (Shadowless)' at $10,000 -- a real price for a card the user
+    // does not own. If the caller named a set and the winner belongs to a
+    // different one, report no match rather than a confident wrong number.
+    if (set && best.setName && normalizeSetName(best.setName) !== normalizeSetName(set)) {
+      return res.status(200).json({
+        market: null, low: null, mid: null, high: null,
+        source: 'tcgplayer-live', count: 0,
+        reason: 'set_mismatch',
+        requestedSet: set,
+        matchedSet: best.setName,
+      });
     }
 
     const data = {
