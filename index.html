@@ -4296,9 +4296,16 @@ async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
       // Full string fallback (e.g. both have "172/142")
       if (!match) match = cards.find(c => (c.number || '').replace(/\s/g,'') === number.replace(/\s/g,''));
     }
+    // TPL's search is fuzzy, so a query for one name can return others.
+    // Anything we fall back to below is chosen WITHOUT a number match, so
+    // restrict the pool to cards that actually share the requested name --
+    // otherwise the graded ladder can be filled in from a different card.
+    const _wantName = (name || '').toLowerCase().trim();
+    const sameName = cards.filter(c => (c.name || '').toLowerCase().trim() === _wantName);
+    const pool = sameName.length ? sameName : [];
     // Fallback: pick the rarest card with graded data
     if (!match) {
-      const withGraded = cards.filter(c => {
+      const withGraded = pool.filter(c => {
         const g = c.prices?.graded || {};
         return Object.keys(g).some(grader => Object.keys(g[grader] || {}).length > 0);
       });
@@ -4315,7 +4322,11 @@ async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
         match = withGraded[0];
       }
     }
-    if (!match) match = cards[0]; // last resort
+    // Last resort stays inside the same-name pool. Previously this was
+    // cards[0] over the raw fuzzy results, which could hand back a different
+    // card's graded prices; with no same-name candidate we return nothing and
+    // the graded rows simply stay empty.
+    if (!match) match = pool[0] || null;
 
     // Store the tplId on selectedCard for future lookups
     if (match && selectedCard) {
@@ -14680,20 +14691,36 @@ async function _loadScannedCardExactImpl(pending) {
       match = cards.find(c => numEq((c.number || '').split('/')[0], cleanNumber) && nameMatches(c));
       if (match) matchReason = 'number-before-slash+name';
     }
-    // 5. Only fall through to number-only match (no name filter) if we STILL
-    // have nothing.
-    if (!match && cleanNumber) {
-      match = cards.find(c => numEq(c.number, cleanNumber));
-      if (match) matchReason = 'number-only';
-    }
-    // 6. Rarity + set with no number (weakest — e.g. "Illustration Rare" in
-    // "Chaos Rising" — only usable when there's exactly ONE such card of the
-    // scanned name).
+    // 5. REMOVED 2026-09-03: number-only, name-blind match.
+    //
+    // This is the bug behind the Fennekin -> Snorlax report. The scanner did
+    // its job: it read "Fennekin" and number "080", and the panel even said
+    // "Loading Fennekin - 080". But no Fennekin printing has number 80, so
+    // every name-checked path above missed and this fallback matched purely on
+    // the number -- loading Snorlax (Flashfire #80), Snorlax's artwork, and a
+    // $4.72 price. A seller reading that screen has been told a different
+    // Pokemon is theirs, at a price that was never about their card.
+    //
+    // It also contradicted the note directly below, which claimed the
+    // silent-wrong-card path had been removed. It had not: this WAS that path.
+    //
+    // 6. Rarity + set with no number (weakest -- e.g. "Illustration Rare" in
+    // "Chaos Rising"). This ignored the scanned name too, so it could pick a
+    // same-rarity card from the same set with an unrelated name. It now
+    // requires nameMatches like every other path.
+    //
+    // If nothing confirms the scanned NAME, we render the scan-miss panel and
+    // refund the credit. A miss the seller can retry beats a confident wrong
+    // card.
     if (!match && rarity && setName) {
       const rl = rarity.toLowerCase();
       const sl = setName.toLowerCase();
-      match = cards.find(c => (c.rarity || '').toLowerCase() === rl && (c.set?.name || '').toLowerCase().includes(sl));
-      if (match) matchReason = 'rarity+set';
+      match = cards.find(c =>
+        (c.rarity || '').toLowerCase() === rl &&
+        (c.set?.name || '').toLowerCase().includes(sl) &&
+        nameMatches(c)
+      );
+      if (match) matchReason = 'rarity+set+name';
     }
     // NOTE: intentionally NOT falling back to cards[0]. That silent-wrong-card
     // path was the whole point of this fix. If we can't identify a confident

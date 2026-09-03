@@ -808,5 +808,44 @@ try {
         'the reason must survive so this is not re-enabled naively');
 }
 
+// ── Scanned-card identity: never load a card whose NAME we did not confirm ──
+// 2026-09-03 report: scan read "Fennekin" / "080" and the panel said "Loading
+// Fennekin - 080", then rendered Snorlax (Flashfire #80) at $4.72 with
+// Snorlax's art. No Fennekin printing has number 80, so every name-checked
+// path missed and a number-only, name-blind fallback matched on the digits
+// alone. Wrong Pokemon, wrong picture, wrong price, presented with confidence.
+{
+  // Anchor inside _loadScannedCardExactImpl. Do NOT anchor on the first
+  // 'let match = null;' in the file -- that one is fetchTPLGradedByNameNumber,
+  // whose candidates all come from a name query already.
+  const fnAt  = index.indexOf('async function _loadScannedCardExactImpl');
+  const start = index.indexOf('let match = null;', fnAt);
+  const end   = index.indexOf('NOTE: intentionally NOT falling back', start);
+  check('the scanned-card matcher block is still findable',
+        fnAt > 0 && start > fnAt && end > start);
+  const block = index.slice(start, end);
+
+  // Every candidate pick in this block must be name-constrained.
+  const finds = block.match(/match = cards\.find\([\s\S]*?\);/g) || [];
+  check('the scanned-card matcher still has candidate-picking branches',
+        finds.length >= 4);
+  const nameBlind = finds.filter(f => !f.includes('nameMatches(c)'));
+  check('every scanned-card match requires the scanned name',
+        nameBlind.length === 0,
+        nameBlind.length ? `name-blind branch(es):\n${nameBlind.join('\n---\n')}` : '');
+
+  // The specific fallback that produced Snorlax must stay gone.
+  check('the number-only match reason is gone',
+        !/matchReason = 'number-only'/.test(index));
+
+  // A miss must stay a miss -- no silent first-result fallback.
+  check('the matcher still refuses to fall through to cards[0]',
+        /intentionally NOT falling back to cards\[0\]/.test(index));
+
+  // Keep the reason on the page so this is not "simplified" back in.
+  check('the Fennekin/Snorlax rationale is recorded at the removal site',
+        /Fennekin/.test(index) && /Snorlax/.test(index));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
