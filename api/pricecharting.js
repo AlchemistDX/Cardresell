@@ -381,7 +381,11 @@ export default async function handler(req, res) {
   // before the premium-printing correction shipped.
   // 2026-09-03: v5 -> v6. The sports host fix changes the answer for every
   // sports key (cached nulls would otherwise mask it), and `parallel` is new.
-  const cacheKey = `v6|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}`.toLowerCase();
+  // 2026-09-03: v6 -> v7. The parallel matcher no longer accepts a superset
+  // bracket ([Silver Prizm Fast Break] for "Silver Prizm"), so every cached
+  // sports answer written under the old matcher may name the wrong card. Code
+  // changes do not invalidate KV on their own -- the key must move with them.
+  const cacheKey = `v7|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {

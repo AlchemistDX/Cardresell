@@ -111,10 +111,10 @@ const hostChecks = [
    !/`https:\/\/www\.pricecharting\.com\/api\//.test(src)],
   ['every API call uses PC_HOST',
    (src.match(/\$\{PC_HOST\}\/api\//g) || []).length >= 5],
-  ['cache key bumped past v5',
-   /const cacheKey = `v6\|/.test(src)],
+  ['cache key bumped past v6',
+   /const cacheKey = `v7\|/.test(src)],
   ['parallel is part of the cache key',
-   /const cacheKey = `v6\|[^`]*\$\{parallel\}/.test(src)],
+   /const cacheKey = `v7\|[^`]*\$\{parallel\}/.test(src)],
 ];
 for (const [label, ok] of hostChecks) {
   if (ok) { pass++; console.log(`  PASS  ${label}`); }
