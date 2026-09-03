@@ -6,3 +6,4 @@ config.js
 !.env.example
 .vercel
 tools/__pycache__/
+_pcfns.generated.mjs

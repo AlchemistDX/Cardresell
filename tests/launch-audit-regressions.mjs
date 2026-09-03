@@ -593,5 +593,46 @@ try {
         'otherwise the details toggle and venue switches would open the venue');
 }
 
+
+// Part J — sports honesty (2026-09-03).
+// Sports cards cannot be priced automatically: PriceCharting's API does not
+// reliably resolve them (it ranks Funko POP and Marvel/Star Wars sets above the
+// real card), so the sports path is manual-price-only and is labelled beta.
+// These checks stop the marketing copy from drifting back to claiming the
+// sports path prices cards the way the TCG path does.
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  check('hero copy no longer claims sports card search',
+        !/Search any[^<]*sports card/.test(html),
+        'the hero must not advertise a lookup the sports path cannot perform');
+  check('intro copy no longer claims sports card search',
+        !/Find any[^<]*sports card/.test(html),
+        'same claim, second placement');
+  check('meta description no longer claims sports pricing',
+        !/name="description"[^>]*or sports card is really worth/.test(html),
+        'search snippets outlive the page and must not overpromise');
+
+  check('the sports game option is marked work-in-progress',
+        /<option value="sports">[^<]*beta/i.test(html),
+        'users pick the game before they discover the limitation');
+  check('the sports form explains the manual-price step',
+        /Sports pricing is still in progress/.test(html),
+        'the form must say why there is no automatic comp');
+
+  check('sports cards still build with a manual price variant',
+        (html.match(/key: 'manual', label: 'Manual \/ Override', market: null/g) || []).length >= 2,
+        'a null market is what keeps the tile from inventing a net payout');
+
+  check('sports reuses the scan photo instead of a blank image',
+        /_sportsScanImageFor/.test(code) &&
+        /window\._sportsScanImageUrl/.test(code),
+        'sports has no image CDN, so the user photo is the only real picture');
+  check('the scan photo is keyed to the player it depicts',
+        /want !== own\) return ''/.test(code),
+        'otherwise a previous scan leaks onto an unrelated card');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

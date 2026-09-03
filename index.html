@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CardResell — See the highest net payout across 15 venues, after fees</title>
-  <meta name="description" content="Find out what your Pokémon, MTG, Yu-Gi-Oh!, Lorcana, One Piece, or sports card is really worth — and the best marketplace to sell it on. Free tier ranks eBay and TCGplayer by net payout after 2026 fees. Pro adds Whatnot, Poshmark, Mercari, Cardmarket, Mana Pool, Cardsphere &amp; CardNexus. Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk." />
+  <meta name="description" content="Find out what your Pokémon, MTG, Yu-Gi-Oh!, Lorcana or One Piece card is really worth — and the best marketplace to sell it on. Free tier ranks eBay and TCGplayer by net payout after 2026 fees. Pro adds Whatnot, Poshmark, Mercari, Cardmarket, Mana Pool, Cardsphere &amp; CardNexus. Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk." />
   <link rel="canonical" href="https://www.cardresell.org/">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -2066,7 +2066,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <option value="yugioh">Yu-Gi-Oh!</option>
         <option value="lorcana">Disney Lorcana</option>
         <option value="onepiece">One Piece TCG</option>
-        <option value="sports">Sports Cards</option>
+        <option value="sports">Sports Cards 🛠️ (beta — manual price)</option>
         <option value="other">Other TCG</option>
       </select>
       <svg class="game-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
@@ -2095,7 +2095,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button id="sportsSearchBtn" class="sports-search-btn" onclick="doSportsSearch()">Search eBay</button>
     </div>
     <div class="sports-form">
-      <div class="sports-form-title">Sports Card Details</div>
+      <div class="sports-form-title">Sports Card Details 🛠️ <span style="font-weight:600;font-size:.72rem;color:var(--text-muted)">beta</span></div>
+      <div style="font-size:.74rem;color:var(--text-muted);line-height:1.5;margin:-.25rem 0 .6rem">Sports pricing is still in progress. We can’t pull a live comp automatically yet, so open a comp source below, then type the price you see into <strong>Override</strong> — the fee math and payout ranking are exact from there.</div>
       <div class="sports-grid">
         <div class="sports-field sports-full">
           <label for="sp_player">Player Name *</label>
@@ -2518,7 +2519,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div class="intro-state" style="text-align:left;padding:1.5rem 1.25rem">
       <!-- headline -->
       <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold)">maximum profit</span></div>
-      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, Magic, Yu-Gi-Oh, Lorcana, or sports card — see exact fees &amp; payouts across every platform.</div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, Magic, Yu-Gi-Oh, Lorcana or One Piece card — see exact fees &amp; payouts across every platform.</div>
 
       <!-- Feature bullets -->
       <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.25rem">
@@ -2786,7 +2787,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="scan-gate-box">
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
     <div class="scan-gate-title" id="scanGateTitle">Card Identification Scanner</div>
-    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.</div>
+    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pokémon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is still in beta.</div>
     <div class="scan-gate-hint" id="scanGateHint" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:-.35rem;margin-bottom:.6rem;line-height:1.4">Tip: remove reflective sleeves &mdash; glare hides the card number.</div>
     <!-- Grade scan packs (shown only in grade mode) -->
     <div class="scan-gate-packs" id="scanGatePacksSection" style="display:none">
@@ -6359,16 +6360,33 @@ function doSportsSearch() {
   doSportsSearchLive(q);
 }
 
+// Sports cards have no image CDN behind them — PriceCharting and eBay don't
+// expose one the way Limitless does for Pokémon — so the sports tile always
+// rendered a permanent grey placeholder. When the card arrived via a scan we
+// already hold the best possible picture of it: the user's own photo.
+// _routeScannedSportsCard records both the photo and the player it belongs to,
+// and we hand it back ONLY for that player, so a photo can never leak onto a
+// different card the user types in afterwards.
+function _sportsScanImageFor(playerName) {
+  try {
+    const want = _stripEmoji(String(playerName || '')).trim().toLowerCase();
+    const own  = String(window._sportsScanPlayer || '').trim().toLowerCase();
+    if (!want || !own || want !== own) return '';
+    return window._sportsScanImageUrl || '';
+  } catch (_) { return ''; }
+}
+
 function loadSportsCardFromSearch(playerName) {
   const year    = document.getElementById('sp_year')?.value?.trim() || '';
   const brand   = document.getElementById('sp_brand')?.value?.trim() || '';
   const cardnum = document.getElementById('sp_cardnum')?.value?.trim() || '';
   const sport   = document.getElementById('sp_sport')?.value || 'Baseball';
   const emoji   = SPORT_EMOJI[sport] || '🏆';
+  const _spImg  = _sportsScanImageFor(playerName);
   const sportCard = {
     name: `${emoji} ${playerName}`,
     game: 'sports',
-    images: { small: '', large: '' },
+    images: { small: _spImg, large: _spImg },
     setName: [year, brand].filter(Boolean).join(' '),
     number: cardnum,
     rarity: sport,
@@ -6399,10 +6417,11 @@ function loadSportsCardFromSearch(playerName) {
     const cardnum = document.getElementById('sp_cardnum').value.trim();
     const sport   = document.getElementById('sp_sport').value;
     const emoji   = SPORT_EMOJI[sport] || '🏆';
+    const _spImg2 = _sportsScanImageFor(player);
     const sportCard = {
       name: `${emoji} ${player}`,
       game: 'sports',
-      images: { small: '', large: '' },
+      images: { small: _spImg2, large: _spImg2 },
       setName: [year, brand].filter(Boolean).join(' '),
       number: cardnum,
       rarity: sport,
@@ -9984,7 +10003,7 @@ function showIntro() {
     resultsArea.innerHTML = `<div class="intro-state">
       <div class="intro-icon">🃏</div>
       <div class="intro-h">Search for a card to get started</div>
-      <p class="intro-p">Find any Pokémon, Magic, Yu-Gi-Oh!, or sports card and see exactly where to sell it for maximum profit.</p>
+      <p class="intro-p">Find any Pokémon, Magic, Yu-Gi-Oh!, Lorcana or One Piece card and see exactly where to sell it for maximum profit.</p>
     </div>`;
     return;
   }
@@ -13479,6 +13498,14 @@ function _routeScannedSportsCard(pending) {
 
   // Fire the sports search so comp buttons render immediately.
   const cleanName = _stripEmoji(name || '');
+
+  // Remember the scan photo alongside the player it depicts, so the sports card
+  // shows the user's own image instead of a grey placeholder. Keyed by player
+  // so it is dropped the moment they look up someone else.
+  try {
+    window._sportsScanImageUrl = window._lastScanImageDataUrl || '';
+    window._sportsScanPlayer   = cleanName.trim();
+  } catch (_) {}
   if (cleanName && typeof doSportsSearchLive === 'function') {
     // Mirror the player name into the sports search input — emoji-free so it
     // never gets typed into eBay's _nkw.
@@ -15671,7 +15698,7 @@ function _setScanGateMode(mode) {
   } else {
     if (icon)     icon.innerHTML   = '&#128247;';
     if (title)    title.textContent = 'Card Identification Scanner';
-    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices.';
+    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pok\u00e9mon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is still in beta.';
     const hint = document.getElementById('scanGateHint');
     if (hint) hint.style.display = '';
     if (packs)    packs.style.display    = 'none';

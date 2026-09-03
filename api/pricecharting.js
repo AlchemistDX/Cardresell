@@ -129,9 +129,51 @@ function isSportsCategoryOk(consoleName) {
   // Reject known bad matches
   const bad = /funko|pop\!|amiibo|figure|figurine|action figure|plush|comic|manga|dvd|blu-ray|game boy|nintendo|playstation|xbox|sega|atari|arcade|book|magazine|poster|jersey|autograph book/;
   if (bad.test(c)) return false;
+  // 2026-09-03: entertainment/licensed sets ship under the SAME brand names as
+  // sports cards -- "Marvel 2025 Topps Chrome", "Star Wars 2025 Topps Chrome",
+  // "2019 Panini Fortnite", "2025 Bowman GPK NBA", "Topps Garbage Pail Kids x
+  // MLB". The old brand-keyword check waved all of these through, so a Tom
+  // Brady lookup could resolve to a Star Wars sketch card and report its $50 as
+  // a Brady comp. Reject the franchise regardless of brand.
+  const franchise = /marvel|star wars|garbage pail|\bgpk\b|fortnite|disney|pokemon|yu-gi-oh|magic the gathering|lorcana|one piece|wacky packages|mars attacks|stranger things|harry potter|halo|call of duty|minecraft|walking dead/;
+  if (franchise.test(c)) return false;
   // Require positive signal of "sports card"
   const good = /card|fleer|topps|panini|bowman|upper deck|donruss|score|leaf|pro set|stadium club|skybox|prizm|select|optic|chrome|mosaic|contenders|hoops|absolute/;
   return good.test(c);
+}
+
+// Hard admission test for a sports candidate, applied BEFORE scoring.
+// Scoring alone is a popularity contest -- it picks the least-bad row even when
+// every row is wrong. These are the facts that must actually agree, and when
+// nothing clears the bar we return no price rather than a confident wrong one.
+function sportsCandidateAdmissible(prod, facets) {
+  const pn = String(prod['product-name'] || '').toLowerCase();
+  const cn = String(prod['console-name'] || '').toLowerCase();
+  if (!isSportsCategoryOk(cn)) return false;
+
+  // 1) The console must name the sport we're actually pricing. PriceCharting
+  //    sports consoles read "1986 Fleer Basketball", "2000 Bowman Football".
+  if (facets.sport) {
+    const s = String(facets.sport).toLowerCase();
+    if (/basketball|football|baseball|hockey|soccer/.test(s) && !cn.includes(s)) return false;
+  }
+
+  // 2) The release year must appear. A 1986 Fleer Jordan and a 2003 Fleer
+  //    Jordan differ by ~100x, so a year mismatch is not a near miss.
+  if (facets.year && !(cn + ' ' + pn).includes(String(facets.year))) return false;
+
+  // 3) The player's surname must appear as a whole word in the product name.
+  //    This is what separates "Michael Jordan" from "Michael B. Jordan".
+  const tokens = String(facets.name || '').toLowerCase()
+    .replace(/[^a-z\s.]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 2 && !/^(jr|sr|the|iii)\.?$/.test(t));
+  if (tokens.length) {
+    const surname = tokens[tokens.length - 1].replace(/\.$/, '');
+    const esc = surname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!new RegExp('(^|[^a-z])' + esc + '([^a-z]|$)').test(pn)) return false;
+  }
+  return true;
 }
 
 // Score one PriceCharting sports candidate against the facets we actually know.
@@ -279,7 +321,7 @@ export default async function handler(req, res) {
     const list = await fetchPcWithRetry(listUrl);
     const products = Array.isArray(list && list.products) ? list.products : [];
     const seen = [...new Set(products.map(p => p['console-name']).filter(Boolean))].slice(0, 12);
-    const ok = products.filter(p => isSportsCategoryOk(p['console-name']));
+    const ok = products.filter(p => sportsCandidateAdmissible(p, facets));
     if (!ok.length) return { product: null, seen };
     ok.sort((a, b) => scoreSportsCandidate(b, facets) - scoreSportsCandidate(a, facets));
     const best = ok[0];
