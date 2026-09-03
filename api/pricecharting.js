@@ -224,6 +224,52 @@ function pcNumberMatches(requested, candidateName) {
   return got === want;
 }
 
+// Extract the bracketed parallel/variant qualifier from a PriceCharting product
+// name. "Luka Doncic [Silver Prizm] #280" -> "silver prizm"; a bare
+// "Luka Doncic #280" -> null (that IS the base card).
+function pcParallelOf(productName) {
+  const m = /\[([^\]]+)\]/.exec(String(productName || ''));
+  return m ? m[1].trim().toLowerCase() : null;
+}
+
+// Sports parallels are where a lookup goes quietly, catastrophically wrong.
+// 2018 Panini Prizm Luka #280 exists as the base card AND as [Silver Prizm],
+// [Pink Ice Prizm], [White Sparkle Prizm], and ~35 more, spanning three orders
+// of magnitude. The old code scored all of them identically -- every facet
+// (player, year, brand, number, sport) matches on every one -- so the winner
+// was whichever row PriceCharting happened to return first. That is how a
+// Wembanyama [Silver] becomes a base-card price, or vice versa.
+//
+// Rules, in the honest direction:
+//   * Caller named a parallel  -> the candidate's bracket must contain every
+//     word of it. Nothing matches => refuse. Do NOT fall back to the base card,
+//     because "Silver Prizm" priced as base is a wrong number, not a rough one.
+//   * Caller named no parallel -> they mean the plain card. Keep only bare
+//     (unbracketed) candidates. If the card exists ONLY as parallels we cannot
+//     know which one they hold, so refuse rather than guess.
+// Returns { keep, reason }. `keep` empty means "no price".
+function filterSportsParallel(cands, wantParallel) {
+  const want = String(wantParallel || '').trim().toLowerCase();
+  if (want) {
+    const words = want.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+    const keep = cands.filter(p => {
+      const par = pcParallelOf(p['product-name']);
+      if (!par) return false; // base card is not the parallel they asked for
+      return words.every(w => par.includes(w));
+    });
+    return keep.length
+      ? { keep, reason: null }
+      : { keep: [], reason: `no '${want}' parallel in PriceCharting for this card` };
+  }
+  const bare = cands.filter(p => !pcParallelOf(p['product-name']));
+  if (bare.length) return { keep: bare, reason: null };
+  const seen = [...new Set(cands.map(p => pcParallelOf(p['product-name'])).filter(Boolean))].slice(0, 6);
+  return {
+    keep: [],
+    reason: `card exists only as parallels (${seen.join(', ')}) -- specify which one`,
+  };
+}
+
 // Score one PriceCharting sports candidate against the facets we actually know.
 // Year is weighted highest: a 1986 Fleer Jordan and a 2003 Fleer Jordan are
 // different cards with a 100x price gap, so landing on the wrong year is worse
@@ -264,9 +310,35 @@ export default async function handler(req, res) {
   const year   = (req.query.year   || '').trim();
   const sport  = (req.query.sport  || '').trim();
   const brand  = (req.query.brand  || '').trim();
+  const parallel = (req.query.parallel || '').trim();
   if (!name) return res.status(400).json({ error: 'name required' });
 
   const token = process.env.PRICECHARTING_API_TOKEN;
+
+  // 2026-09-03: PriceCharting serves its guides from TWO hosts, and this was
+  // the entire reason sports pricing returned nothing, ever.
+  //
+  //   pricecharting.com   -> video games, Pokemon/TCG, comics, coins, Funko
+  //   sportscardspro.com  -> the sports-card guide (sister site, same account,
+  //                          same 40-char token, documented same API paths)
+  //
+  // Every sports lookup queried the pricecharting.com host, whose catalog holds
+  // no sports cards at all. The candidate list came back as Funko POP figures,
+  // Garbage Pail Kids and Marvel inserts; the category guard correctly rejected
+  // all of them; the endpoint returned a null price. The guard was right and the
+  // scoring was right -- we were asking the wrong catalog.
+  //
+  // Verified 2026-09-03 with the docs' public demo token:
+  //   pricecharting.com/api/products?q=1986+fleer+jordan
+  //     -> 100 products, ZERO sports categories
+  //   sportscardspro.com/api/products?q=1986+fleer+jordan
+  //     -> "Basketball Cards 1986 Fleer" / "Michael Jordan #57" as hit #1
+  //
+  // Display links stay on pricecharting.com: /game/<id> 301-redirects to the
+  // right public page for sports ids too, and sportscardspro.com 403s bots.
+  const PC_HOST = (game === 'sports')
+    ? 'https://www.sportscardspro.com'
+    : 'https://www.pricecharting.com';
   const fetchedAt = new Date().toISOString();
 
   // Emergency stopgap: if the key isn't configured yet, return a graceful
@@ -284,7 +356,9 @@ export default async function handler(req, res) {
   const kvToken = process.env.KV_REST_API_TOKEN;
   // 2026-09-03: v2 -> v3 to invalidate cached [1st Edition] matches written
   // before the premium-printing correction shipped.
-  const cacheKey = `v5|${game}|${name}|${setStr}|${number}|${year}|${grade}`.toLowerCase();
+  // 2026-09-03: v5 -> v6. The sports host fix changes the answer for every
+  // sports key (cached nulls would otherwise mask it), and `parallel` is new.
+  const cacheKey = `v6|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -323,7 +397,7 @@ export default async function handler(req, res) {
     if (gameHint && !name.toLowerCase().includes(gameHint)) qParts.push(gameHint);
   }
   const q = qParts.join(' ');
-  const url = `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
+  const url = `${PC_HOST}/api/product?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
 
   // 2026-08-30: retry with backoff on transient PC upstream failures.
   // Root cause found in grade_price_audit_2026-08-30: at even 4 req/s the PC
@@ -367,34 +441,47 @@ export default async function handler(req, res) {
   // know. Then re-fetch the winner by id, because the plural endpoint does not
   // return price fields.
   async function resolveSportsProduct(query, facets) {
-    const listUrl = `https://www.pricecharting.com/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}`;
+    const listUrl = `${PC_HOST}/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(query)}`;
     const list = await fetchPcWithRetry(listUrl);
     const products = Array.isArray(list && list.products) ? list.products : [];
     const seen = [...new Set(products.map(p => p['console-name']).filter(Boolean))].slice(0, 12);
     const ok = products.filter(p => sportsCandidateAdmissible(p, facets));
     if (!ok.length) return { product: null, seen };
-    ok.sort((a, b) => scoreSportsCandidate(b, facets) - scoreSportsCandidate(a, facets));
-    const best = ok[0];
+
+    // Parallel discipline BEFORE scoring. Every facet we score on is identical
+    // across a card's parallels, so scoring cannot separate them -- it would
+    // just return whichever row came back first.
+    const par = filterSportsParallel(ok, facets.parallel);
+    if (!par.keep.length) {
+      return { product: null, seen, parallelReason: par.reason };
+    }
+    const pool = par.keep;
+    pool.sort((a, b) => scoreSportsCandidate(b, facets) - scoreSportsCandidate(a, facets));
+    const best = pool[0];
     if (!best || !best.id) return { product: null, seen };
     const byId = await fetchPcWithRetry(
-      `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(best.id)}`
+      `${PC_HOST}/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(best.id)}`
     );
     const full = (byId && byId.status === 'success' && byId.id) ? byId : null;
-    return { product: full, seen, candidateCount: ok.length };
+    return {
+      product: full, seen, candidateCount: pool.length,
+      matchedParallel: pcParallelOf(best['product-name']),
+    };
   }
 
   try {
     let pc;
     if (game === 'sports') {
-      const resolved = await resolveSportsProduct(q, { name, year, brand, number, sport });
+      const resolved = await resolveSportsProduct(q, { name, year, brand, number, sport, parallel });
       pc = resolved.product;
       if (!pc) {
         const data = {
           median: null, avg: null, low: null, high: null, count: 0,
           confidence: 'insufficient', confidenceScore: 0,
-          confidenceReasons: ['no sports-card match on PriceCharting'],
-          source: 'pricecharting',
+          confidenceReasons: [resolved.parallelReason || 'no sports-card match on PriceCharting'],
+          source: 'sportscardspro',
           candidateConsoles: resolved.seen,
+          parallelRefused: !!resolved.parallelReason,
           fetchedAt, cacheAgeSec: 0,
         };
         await setCache(kvUrl, kvToken, cacheKey, data);
@@ -429,7 +516,7 @@ export default async function handler(req, res) {
       if (pc && pc.status === 'success' &&
           ((!askedPremium && matchIsPremium) || matchWrongNumber)) {
         try {
-          const listUrl = `https://www.pricecharting.com/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
+          const listUrl = `${PC_HOST}/api/products?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
           const list = await fetchPcWithRetry(listUrl);
           const cands = Array.isArray(list && list.products) ? list.products : [];
           // Same set, right number, and -- unless the caller asked for a
@@ -448,7 +535,7 @@ export default async function handler(req, res) {
           ) : null);
           if (plain && plain.id) {
             const byId = await fetchPcWithRetry(
-              `https://www.pricecharting.com/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(plain.id)}`
+              `${PC_HOST}/api/product?t=${encodeURIComponent(token)}&id=${encodeURIComponent(plain.id)}`
             );
             if (byId && byId.status === 'success' && byId.id) {
               pc = byId;
