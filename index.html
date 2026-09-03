@@ -2066,7 +2066,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <option value="yugioh">Yu-Gi-Oh!</option>
         <option value="lorcana">Disney Lorcana</option>
         <option value="onepiece">One Piece TCG</option>
-        <option value="sports">Sports Cards 🛠️ (beta — manual price)</option>
+        <option value="sports">Sports Cards 🛠️ (under maintenance)</option>
         <option value="other">Other TCG</option>
       </select>
       <svg class="game-select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
@@ -2095,8 +2095,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button id="sportsSearchBtn" class="sports-search-btn" onclick="doSportsSearch()">Search eBay</button>
     </div>
     <div class="sports-form">
-      <div class="sports-form-title">Sports Card Details 🛠️ <span style="font-weight:600;font-size:.72rem;color:var(--text-muted)">beta</span></div>
-      <div style="font-size:.74rem;color:var(--text-muted);line-height:1.5;margin:-.25rem 0 .6rem">Sports pricing is still in progress. We can’t pull a live comp automatically yet, so open a comp source below, then type the price you see into <strong>Override</strong> — the fee math and payout ranking are exact from there.</div>
+      <div class="sports-form-title">Sports Card Details <span style="font-weight:600;font-size:.72rem;color:var(--text-muted)">🛠️ under maintenance</span></div>
+      <div style="font-size:.74rem;color:var(--text-muted);line-height:1.5;margin:-.25rem 0 .6rem">We can’t pull a live sold comp automatically right now, so open a comp source below, then type the price you see into <strong>Override</strong> — the fee math and payout ranking are exact from there. Scanning a sports card still fills in the details for you.</div>
       <div class="sports-grid">
         <div class="sports-field sports-full">
           <label for="sp_player">Player Name *</label>
@@ -2787,7 +2787,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="scan-gate-box">
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
     <div class="scan-gate-title" id="scanGateTitle">Card Identification Scanner</div>
-    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pokémon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is still in beta.</div>
+    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pokémon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is under maintenance.</div>
     <div class="scan-gate-hint" id="scanGateHint" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:-.35rem;margin-bottom:.6rem;line-height:1.4">Tip: remove reflective sleeves &mdash; glare hides the card number.</div>
     <!-- Grade scan packs (shown only in grade mode) -->
     <div class="scan-gate-packs" id="scanGatePacksSection" style="display:none">
@@ -15698,7 +15698,7 @@ function _setScanGateMode(mode) {
   } else {
     if (icon)     icon.innerHTML   = '&#128247;';
     if (title)    title.textContent = 'Card Identification Scanner';
-    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pok\u00e9mon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is still in beta.';
+    if (sub)      sub.innerHTML    = 'Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pok\u00e9mon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports scanning works; sports pricing is under maintenance.';
     const hint = document.getElementById('scanGateHint');
     if (hint) hint.style.display = '';
     if (packs)    packs.style.display    = 'none';

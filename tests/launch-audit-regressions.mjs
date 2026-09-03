@@ -597,7 +597,8 @@ try {
 // Part J — sports honesty (2026-09-03).
 // Sports cards cannot be priced automatically: PriceCharting's API does not
 // reliably resolve them (it ranks Funko POP and Marvel/Star Wars sets above the
-// real card), so the sports path is manual-price-only and is labelled beta.
+// real card), so the sports path is manual-price-only and is labelled as being
+// under maintenance (never "beta" — product call 2026-09-03).
 // These checks stop the marketing copy from drifting back to claiming the
 // sports path prices cards the way the TCG path does.
 {
@@ -614,12 +615,15 @@ try {
         !/name="description"[^>]*or sports card is really worth/.test(html),
         'search snippets outlive the page and must not overpromise');
 
-  check('the sports game option is marked work-in-progress',
-        /<option value="sports">[^<]*beta/i.test(html),
+  check('the sports game option is marked under maintenance',
+        /<option value="sports">[^<]*\u{1F6E0}[^<]*under maintenance/iu.test(html),
         'users pick the game before they discover the limitation');
   check('the sports form explains the manual-price step',
-        /Sports pricing is still in progress/.test(html),
+        /can’t pull a live sold comp automatically/.test(html),
         'the form must say why there is no automatic comp');
+  check('the sports path is never described as a beta',
+        !/beta/i.test(html),
+        'product call: say under maintenance, not beta');
 
   check('sports cards still build with a manual price variant',
         (html.match(/key: 'manual', label: 'Manual \/ Override', market: null/g) || []).length >= 2,
