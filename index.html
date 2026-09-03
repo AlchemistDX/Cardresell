@@ -8240,7 +8240,20 @@ function venueGroup(pid) { return VENUE_GROUP_OF[pid] || 'list'; }
    on EU postage would invent a cost the source says a US seller does not pay.
    It is off by default like everything else in Foreign, which is the real
    protection. */
-const VENUE_REQUIRES = { cardmarket: 'intlShip' };
+/* 2026-09-03: postage alone was not enough. With $18.50 entered, Cardmarket was
+   crowned BEST PAYOUT at $370.11 over TCGplayer's $366.13 — on the same tile
+   that says, from our own check of their registration form, that a US seller
+   cannot open an account. A winner the seller cannot actually sell on is not a
+   winner. So Cardmarket now needs BOTH the postage AND an explicit confirmation
+   that the user holds an EU-registered account. Both default to unmet, so the
+   crown can only land there if the seller has said they can ship and can sell. */
+const VENUE_REQUIRES = { cardmarket: ['intlShip', 'cmAccount'] };
+
+// Normalized to an array so a venue can carry more than one prerequisite.
+function venueRequirements(pid) {
+  const r = VENUE_REQUIRES[pid];
+  return !r ? [] : (Array.isArray(r) ? r : [r]);
+}
 
 /* Groups that are DELIBERATELY not ranked on payout. Both trade money for
    something the payout number cannot express, so putting them on the same axis
@@ -8299,6 +8312,24 @@ function _persistVenues() {
   _syncVenueChipsSafe();
 }
 
+/* Does the seller hold an EU-registered Cardmarket account? Cardmarket's own
+   signup form lists 32 European countries and no United States, so for most US
+   sellers this is false and the venue stays reference-only. Opt-in, per-device,
+   defaults to false — we never assume access we cannot verify. */
+const _VENUE_CM_ACCT_KEY = 'cr_cm_account';
+function cmAccountConfirmed() {
+  if (typeof window._cmAccount === 'boolean') return window._cmAccount;
+  let v = false;
+  try { v = localStorage.getItem(_VENUE_CM_ACCT_KEY) === '1'; } catch (_) {}
+  window._cmAccount = v;
+  return v;
+}
+function setCmAccountConfirmed(on) {
+  window._cmAccount = !!on;
+  try { localStorage.setItem(_VENUE_CM_ACCT_KEY, on ? '1' : '0'); } catch (_) {}
+  _syncVenueChipsSafe();
+}
+
 // International postage the seller expects to pay, in USD. 0 / blank = unknown.
 function intlShipCost() {
   if (typeof window._intlShip === 'number') return window._intlShip;
@@ -8323,10 +8354,11 @@ function venueUnlocked(pid, tier) {
 /* Has this venue's required input been supplied? Venues with no `requires` are
    trivially satisfied. */
 function venueRequirementMet(pid) {
-  const req = VENUE_REQUIRES[pid];
-  if (!req) return true;
-  if (req === 'intlShip') return intlShipCost() > 0;
-  return true;
+  return venueRequirements(pid).every(req => {
+    if (req === 'intlShip')  return intlShipCost() > 0;
+    if (req === 'cmAccount') return cmAccountConfirmed();
+    return true;
+  });
 }
 
 /* The single gate the ranking asks. `applicable` is the pre-existing per-card
@@ -8340,7 +8372,33 @@ function venueEligible(pid, applicable, tier) {
    Used for the tile badge so the user sees a reason, not a silent demotion. */
 function venueBlockReason(pid) {
   if (!venueEnabled(pid)) return null;
-  if (VENUE_REQUIRES[pid] === 'intlShip' && intlShipCost() <= 0) return 'Add shipping to rank';
+  const reqs = venueRequirements(pid);
+  // Postage first: it is the cheaper thing to fix and the one most users hit.
+  if (reqs.includes('intlShip')  && intlShipCost() <= 0)   return 'Add shipping to rank';
+  if (reqs.includes('cmAccount') && !cmAccountConfirmed()) return 'Needs an EU account to rank';
+  return null;
+}
+
+/* Are all of a venue's prerequisites met EXCEPT the named one? Used to tell
+   "we cannot compute this number yet" (missing postage) apart from "we computed
+   it, you just told us you cannot sell there" (missing account). */
+function venueRequirementsMetExcept(pid, skip) {
+  return venueRequirements(pid).every(req => {
+    if (req === skip)        return true;
+    if (req === 'intlShip')  return intlShipCost() > 0;
+    if (req === 'cmAccount') return cmAccountConfirmed();
+    return true;
+  });
+}
+
+/* Short form of the same reason, sized for the tile's rank-badge slot. The tile
+   previously showed a bare "N/A", which reads as "we have no number for this"
+   when the truth is "we have a number and you told us not to trust it yet".
+   Kept to two words so it cannot overflow the badge. */
+function venueBlockBadge(pid) {
+  const why = venueBlockReason(pid);
+  if (why === 'Add shipping to rank')        return 'Needs postage';
+  if (why === 'Needs an EU account to rank') return 'Needs EU acct';
   return null;
 }
 
@@ -8383,9 +8441,9 @@ function renderVenuePicker() {
       const unlocked = venueUnlocked(pid, tier);
       const on       = venueEnabled(pid);
       const plan     = venuePlanLabel(pid);
-      const needs    = VENUE_REQUIRES[pid] === 'intlShip';
+      const needs    = venueRequirements(pid).includes('intlShip');
       const note     = needs
-        ? 'Payout excludes postage from the US. Enter international shipping below to let it rank.'
+        ? 'Needs postage and an EU-registered account below before it can rank.'
         : (info.effortLabel || '');
       if (!unlocked) {
         html += `<div class="vp-row locked" role="button" tabindex="0"
@@ -8420,6 +8478,18 @@ function renderVenuePicker() {
                oninput="onIntlShipInput(this.value)">
         <div class="vs-help">Tracked international from the US usually runs $15&ndash;$30 for one card.
           Cardmarket can&rsquo;t be ranked best payout until this is filled in.</div>
+      </div>
+      <div class="vp-ship">
+        <label class="vp-row" style="padding-left:0">
+          <input type="checkbox" id="vpCmAccount" ${cmAccountConfirmed() ? 'checked' : ''}
+                 onchange="onCmAccountToggle(this.checked)">
+          <div class="vr-main">
+            <div class="vr-name">I have an EU-registered Cardmarket account</div>
+            <div class="vr-note">Cardmarket&rsquo;s signup form lists 32 European countries and no United States,
+              so most US sellers cannot open one. Leave this off and Cardmarket still shows its payout
+              for reference &mdash; it just can&rsquo;t be crowned best payout.</div>
+          </div>
+        </label>
       </div>`;
     }
     html += `</div>`;
@@ -8436,6 +8506,12 @@ function onVenueToggle(pid, on) {
 
 function onIntlShipInput(v) {
   setIntlShipCost(v);
+  syncVenueChips();
+  _rerenderVenueResults();
+}
+
+function onCmAccountToggle(on) {
+  setCmAccountConfirmed(on);
   syncVenueChips();
   _rerenderVenueResults();
 }
@@ -9549,7 +9625,13 @@ function calc() {
     const isWrst = r.eligible && _displayWorst  && r.pid === _displayWorst.pid;
 
     let badgeHtml = '';
-    if (!r.eligible) badgeHtml = `<span class="badge-na">N/A</span>`;
+    if (!r.eligible) {
+      // Say WHY it cannot rank when we know. A bare N/A looks like missing data.
+      const blockBadge = venueEnabled(r.pid) ? venueBlockBadge(r.pid) : null;
+      badgeHtml = blockBadge
+        ? `<span class="badge-na" title="${esc(venueBlockReason(r.pid) || '')}">${blockBadge}</span>`
+        : `<span class="badge-na">N/A</span>`;
+    }
     else if (isWin)  badgeHtml = `<span class="badge-best">Best</span>`;
     else if (isWrst) badgeHtml = `<span class="badge-worst">Lowest</span>`;
     else {
@@ -9633,12 +9715,30 @@ function calc() {
       : '';
 
     if (!r.eligible) {
+      /* A blocked venue shows — for its payout, because for most of them (wrong
+         game, card not carried) there is genuinely no number to show.
+
+         One exception: when the venue is blocked ONLY because the seller has not
+         confirmed account access, and the fee inputs are all present, the payout
+         is fully computed and true. Hiding it there would hide the very number
+         the seller needs to decide whether the account is worth opening —
+         $370.11 on Cardmarket against $366.13 on TCGplayer. So we show it,
+         greyed, explicitly labelled reference, and still barred from the crown.
+         Postage-blocked stays —, since without postage the net is not knowable. */
+      const _refOk  = r.applicable && venueBlockReason(r.pid) &&
+                      venueRequirementsMetExcept(r.pid, 'cmAccount') &&
+                      Number.isFinite(r.netPayout) && r.netPayout > 0;
+      const payoutHtml = _refOk
+        ? `<div class="plat-payout" style="color:var(--text-muted)">${fmt(r.netPayout)}
+             <span style="display:block;font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint)">For reference · not ranked</span>
+           </div>`
+        : `<div class="plat-payout" style="color:var(--text-faint)">—</div>`;
       html += `<div class="${cls}" style="opacity:.4"${sellUrl ? ` data-sell-url="${esc(sellUrl)}"` : ''}>
         <div class="plat-accent" style="background:${info.color}"></div>
         <div class="plat-hdr"><span class="plat-name">${info.emoji} ${info.name}${info.region ? `<span class="plat-region" title="${esc(info.regionNote||'')}">${esc(info.region)}</span>` : ''}</span>${badgeHtml}</div>
         ${effortHtml}
         ${speedHtml}
-        <div class="plat-payout" style="color:var(--text-faint)">—</div>
+        ${payoutHtml}
         <div class="plat-sub">${r.note}</div>
         ${sellBadge}
         ${crossBorderHtml(r.pid)}

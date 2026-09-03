@@ -297,8 +297,9 @@ try {
         'defaulting a paid tier to every venue is the whole bug this prevents');
   check('eligibility requires applicable AND unlocked AND enabled AND requirement met',
         /function venueEligible[\s\S]{0,320}?applicable[\s\S]{0,200}?venueUnlocked[\s\S]{0,200}?venueEnabled[\s\S]{0,200}?venueRequirementMet/.test(code));
-  check('Cardmarket is the venue gated on international postage',
-        /VENUE_REQUIRES\s*=\s*\{\s*cardmarket:\s*'intlShip'\s*\}/.test(code));
+  check('Cardmarket is gated on BOTH postage and an EU account',
+        /VENUE_REQUIRES\s*=\s*\{\s*cardmarket:\s*\[\s*'intlShip',\s*'cmAccount'\s*\]\s*\}/.test(code),
+        'postage alone let it win at $370.11 on a tile that says a US seller cannot register');
   check('Cardmarket prices the transatlantic leg, not domestic postage',
         /sellerShip:\s*intlShipCost\(\)\s*\|\|\s*shipCost/.test(code),
         'reverting to shipCost is what let Cardmarket win at $388.61');
@@ -636,6 +637,58 @@ try {
   check('the scan photo is keyed to the player it depicts',
         /want !== own\) return ''/.test(code),
         'otherwise a previous scan leaks onto an unrelated card');
+}
+
+
+// Part K — Cardmarket may not be crowned on access we cannot verify (2026-09-03).
+// Entering $18.50 postage used to make Cardmarket BEST at $370.11 over
+// TCGplayer's $366.13, on the same tile whose own note says Cardmarket's signup
+// form offers 32 European countries and no US option, so a US seller cannot
+// register. The payout was right; the crown was not. Cardmarket now needs an
+// explicit EU-account confirmation on top of postage.
+{
+  const html = index;
+  const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  check('the EU-account confirmation defaults to false',
+        /function cmAccountConfirmed\(\)[\s\S]{0,220}?let v = false/.test(code),
+        'we must never assume access to a venue the seller cannot register for');
+  check('the confirmation is read from its own storage key',
+        /_VENUE_CM_ACCT_KEY = 'cr_cm_account'/.test(code) &&
+        /getItem\(_VENUE_CM_ACCT_KEY\) === '1'/.test(code),
+        'it must not piggyback on the postage key or the venue-enabled set');
+
+  check('requirements are evaluated as a list, all of which must pass',
+        /venueRequirements\(pid\)\.every\(/.test(code),
+        'a single-value check silently ignored the second requirement');
+  check('the account requirement is wired into requirementMet',
+        /req === 'cmAccount'\s*\)\s*return cmAccountConfirmed\(\)/.test(code),
+        'without this the array is decorative and the crown still lands');
+
+  check('a missing account produces its own block reason',
+        /Needs an EU account to rank/.test(code),
+        'the seller must be told which of the two prerequisites is missing');
+  check('the tile says why it cannot rank instead of a bare N/A',
+        /venueBlockBadge\(r\.pid\)/.test(code) &&
+        /badge-na[^`]*\$\{blockBadge\}/.test(code),
+        'N/A reads as missing data when the truth is an unmet prerequisite');
+  check('the block badge stays short enough for the badge slot',
+        /return 'Needs postage'/.test(code) && /return 'Needs EU acct'/.test(code),
+        'long strings overflow the rank-badge pill');
+
+  check('the picker exposes the EU-account checkbox',
+        /id="vpCmAccount"/.test(html) &&
+        /onCmAccountToggle\(this\.checked\)/.test(html),
+        'the gate is only fair if the seller can clear it');
+  check('toggling the account re-renders the ranking',
+        /function onCmAccountToggle[\s\S]{0,200}?_rerenderVenueResults\(\)/.test(code),
+        'a stale crown after toggling would contradict the new state');
+  check('the picker explains the US signup limitation next to the checkbox',
+        /32 European countries and no United States/.test(html),
+        'the seller needs the reason, not just a switch');
+  check('Cardmarket still shows its payout when unconfirmed',
+        /still shows its payout\s*\n?\s*for reference/.test(html),
+        'the venue is reference-only when blocked, not hidden');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
