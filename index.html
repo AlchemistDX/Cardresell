@@ -1416,9 +1416,53 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     window._enableAuthDebug = () => { try { sessionStorage.setItem('_authDebug','1'); location.reload(); } catch(e) {} };
     window._disableAuthDebug = () => { try { sessionStorage.removeItem('_authDebug'); document.getElementById('_authDebugPanel')?.remove(); } catch(e) {} };
 
+    // Everything that identifies the signed-in user, cleared in one place.
+    // Previously the sign-out path and the "no user was ever set" path each had
+    // their own partial copy of this list, and the sign-out path was never
+    // reached at all (see the null branch below), so a signed-out browser kept
+    // window.googleUser -- and therefore kept getUserKey() resolving to the
+    // previous account's UID-scoped collection. (Privacy, 2026-09-04.)
+    function _clearAuthIdentity() {
+      _currentAuthUid = null;
+      window.googleUser = null;
+      window._googleIdToken = null;
+      window._userEmail = '';
+      window._googleSub = '';
+      window._userSub = '';
+      clearInterval(window._tokenRefreshInterval);
+      clearInterval(window._verifyPollInterval);
+      // A debounced push scheduled while signed in must not fire against the
+      // old account after we've dropped the token.
+      try { window._cancelUserDataSync && window._cancelUserDataSync(); } catch(e) {}
+      try {
+        localStorage.removeItem('lastAuthUid');
+        sessionStorage.removeItem('verifyBannerDismissed');
+      } catch(e) {}
+      try { const b = document.getElementById('emailVerifyBanner'); if (b) b.remove(); } catch(e) {}
+      try { document.getElementById('googleSignInBtn').style.display = 'flex'; } catch(e) {}
+      try { document.getElementById('googleUserBtn').style.display = 'none'; } catch(e) {}
+      try { window._resolveAuthGrace && window._resolveAuthGrace(); } catch(e) {}
+      // Re-render so the previous account's cards leave the screen. getUserKey()
+      // now resolves to the anonymous scope, so this shows anon data (or empty),
+      // never the signed-out user's.
+      try { window._maybeRerenderCollection && window._maybeRerenderCollection(true); } catch(e) {}
+      try { if (document.getElementById('flipsView')?.classList.contains('active')) window.renderFlipsView?.(); } catch(e) {}
+      try { _updateCollectionSignInWall?.(); } catch(e) {}
+      try { _updateFlipsSignInWall?.(); } catch(e) {}
+      try { updateProUI?.(); } catch(e) {}
+      window._authInitialized = true;
+    }
+    // signOut() sets this so the null callback below is treated as authoritative
+    // instead of being written off as a token-refresh artifact.
+    window._signOutIntent = false;
+    // signOut() calls this directly so clearing does not depend on Firebase
+    // firing the null callback. Idempotent -- safe if the callback also runs.
+    window._clearAuthIdentityNow = _clearAuthIdentity;
+
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         _currentAuthUid = user.uid;
+        window._signOutIntent = false;
         // Firebase's top-level user.email can be empty when the account was linked oddly
         // or the Google provider didn't return an email claim. Fall back to providerData.
         let effectiveEmail = user.email || '';
@@ -1600,37 +1644,26 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           }
         } catch(_){}
       } else {
-        // ONLY clear state if no valid user was ever set this session
-        // Prevents token-refresh null callbacks from wiping an active session
-        if (_currentAuthUid) {
-          // A real user was set — ignore this null callback (token refresh artifact)
-          // Firebase will fire again with the user shortly
+        // A null callback is ambiguous: Firebase emits one transiently during
+        // token refresh, and one for a genuine sign-out. Guessing wrong in
+        // either direction is bad -- wipe an active session, or keep a
+        // signed-out user's identity and collection on screen.
+        //
+        // The old code resolved it by ignoring EVERY null once a uid was set,
+        // which meant a real sign-out never cleared anything: window.googleUser
+        // survived, so getUserKey() kept resolving to the previous account and
+        // their collection stayed readable and editable on a shared browser.
+        //
+        // Now signOut() announces its intent, so a deliberate sign-out is
+        // authoritative and a bare null with an active uid is still ignored.
+        if (_currentAuthUid && !window._signOutIntent) {
           window._authInitialized = true;
           _updateAuthDebug('AUTH NULL (ignored, kept uid=' + _currentAuthUid.slice(0,8) + ')');
           return;
         }
-        _updateAuthDebug('AUTH NULL (no user)');
-        window.googleUser = null;
-        window._googleIdToken = null;
-        window._userEmail = '';
-        window._googleSub = '';
-        window._userSub = '';
-        clearInterval(window._tokenRefreshInterval);
-        // Clear sign-in tracking so next sign-in re-prompts the verify banner
-        try {
-          localStorage.removeItem('lastAuthUid');
-          sessionStorage.removeItem('verifyBannerDismissed');
-        } catch(e) {}
-        try { const b = document.getElementById('emailVerifyBanner'); if (b) b.remove(); } catch(e) {}
-        try { document.getElementById('googleSignInBtn').style.display = 'flex'; } catch(e) {}
-        try { document.getElementById('googleUserBtn').style.display = 'none'; } catch(e) {}
-        // Drop the post-signin grace period — Firebase confirmed no user, show the button.
-        try { window._resolveAuthGrace && window._resolveAuthGrace(); } catch(e) {}
-        // Anon users keep their local collection visible even on sign-out (wall stays off).
-        try { _updateCollectionSignInWall?.(); } catch(e) {}
-        try { _updateFlipsSignInWall?.(); } catch(e) {}
-        updateProUI?.();
-        window._authInitialized = true;
+        _updateAuthDebug(window._signOutIntent ? 'AUTH NULL (sign-out)' : 'AUTH NULL (no user)');
+        window._signOutIntent = false;
+        _clearAuthIdentity();
       }
     });
   </script>
@@ -13272,7 +13305,18 @@ async function _refetchCardMeta(entryId) {
   // scan photo) AND a positive market price. Nothing to fix.
   const imgIsScan = !p.img || String(p.img).startsWith('data:') || String(p.img).startsWith('blob:');
   const needsImg  = imgIsScan;
-  const needsPrice = !(p.currentValue != null && p.currentValue > 0);
+  // A slab's value is a published guide value for one grader+grade. Every price
+  // this function can reach (pokemontcg.io tcgplayer prices, /api/tcg-price)
+  // is a RAW market price, so filling a slab's empty price from here labels a
+  // raw number with a grade. That is exactly what happened to an ACE 10 Base
+  // Set Charizard: it came out of this path holding raw $366.25 and kept its
+  // ACE 10 badge. Slabs must only be priced by _fetchGradedPriceForEntry, which
+  // reads the grade-specific field and returns null when the grade is not
+  // published (ACE 10 among them). An absent value is correct there; a raw one
+  // is not. Image + product-link backfill is still safe -- card art and the
+  // product page are the same regardless of grade.
+  const isSlab = !!(p.grader && p.grade);
+  const needsPrice = !isSlab && !(p.currentValue != null && p.currentValue > 0);
   if (!needsImg && !needsPrice) return false;
 
   // Pull card number from either the persisted p.number or the "Set · #NUM"
@@ -14341,13 +14385,32 @@ function shareReferralLink() {
   }
 }
 
-function signOut() {
+// Sign-out has to actually sign out. Two things were wrong before:
+//   1. The null auth callback ignored every null once a uid was set, so nothing
+//      was ever cleared -- window.googleUser survived and getUserKey() kept
+//      resolving to the signed-out account's UID-scoped collection.
+//   2. The failure was invisible: fbSignOut()'s rejection went to console only,
+//      so a failed sign-out looked identical to a successful one.
+async function signOut() {
   const name = window.googleUser?.name || 'your account';
   if (!window.confirm('Sign out of ' + name + '?')) return;
-  if (window._fbSignOut) {
-    window._fbSignOut().catch(e => console.error(e));
+  // Announce intent BEFORE calling Firebase, so the null callback it triggers is
+  // treated as authoritative rather than as a token-refresh artifact.
+  window._signOutIntent = true;
+  try {
+    if (window._fbSignOut) await window._fbSignOut();
+  } catch (e) {
+    console.error('sign-out failed', e);
+    window._signOutIntent = false;
+    try { showToast('Could not sign out \u2014 check your connection and try again', 'error'); } catch(_) {}
+    return;   // still signed in; do NOT clear local identity or we'd show a
+              // signed-out UI over a live session.
   }
-  // onAuthStateChanged handler will clear state automatically
+  // Clear immediately rather than waiting on the callback. Firebase normally
+  // fires it, but a swallowed/late callback used to leave the previous user's
+  // data on screen; clearing here makes sign-out synchronous from the user's
+  // point of view. The callback is idempotent, so a later fire is harmless.
+  try { window._clearAuthIdentityNow && window._clearAuthIdentityNow(); } catch(_) {}
 }
 
 
@@ -19785,6 +19848,11 @@ function _scheduleUserDataSync() {
   // 1.5s debounce — covers rapid multi-save flows (bulk scan, refresh prices)
   _userDataSyncTimer = setTimeout(_pushUserData, 1500);
 }
+// Sign-out cancels any debounced push. _pushUserData also re-checks the token,
+// so a fired-but-stale timer is harmless; this just avoids the pointless call.
+window._cancelUserDataSync = function () {
+  if (_userDataSyncTimer) { clearTimeout(_userDataSyncTimer); _userDataSyncTimer = null; }
+};
 async function _pushUserData() {
   if (_userDataSyncing) return;
   if (!window.googleUser || !window._googleIdToken) return;
@@ -24029,6 +24097,10 @@ async function _bulkScanOne(item, rowId, isRetry) {
     // and raise JPEG quality to 0.90 so small MTG text stays legible.
     // Bumped maxPx 1000→1200 for the same reason — Ximilar handles it fine.
     const imageBase64 = await compressImage(item.file, 1200, { skipCrop: true, quality: 0.90 });
+    // Set by bulkRetryRow from the row's previous scan id. The server validates
+    // it (ownership, 1h TTL, not already refunded, one retry per scan) before
+    // waiving the credit, so a forged value just gets charged normally.
+    const retryOfId = (isRetry && item.retryOf) ? String(item.retryOf) : '';
     // Keep a tiny (~350px) compressed base64 as a persistent thumbnail
     // fallback if pokemontcg.io doesn't return an image (rare cards, API
     // timeouts, mis-identified sets). Stored as a data: URL so it survives
@@ -24049,6 +24121,7 @@ async function _bulkScanOne(item, rowId, isRetry) {
         mimeType: 'image/jpeg',
         email: window.googleUser?.email || window._userEmail || '',
         googleSub: window.googleUser?.sub || window._googleSub || '',
+        ...(retryOfId ? { retry_of: retryOfId } : {}),
       })
     });
 
@@ -24097,6 +24170,10 @@ async function _bulkScanOne(item, rowId, isRetry) {
       result.error = em;
     } else {
       const data = await resp.json();
+      // Keep the server's scan id on the row. A retry of this row sends it as
+      // `retry_of` so /api/scan can grant the free retry the button promises;
+      // without it the retry was just another billed scan of the same photo.
+      result.scanId = data.scan_id || '';
       if (data.card_name) {
         result.success    = true;
         result.cardName   = data.card_name   || '';
@@ -24388,7 +24465,11 @@ async function bulkRetryRow(rowId) {
     row.style.opacity = '';
   }
 
-  const item = { file: oldResult.file, objectUrl: oldResult.objectUrl };
+  // Carry the previous attempt's scan id so the server can waive the credit for
+  // this retry. If the row never got one (e.g. an outright miss, which is
+  // auto-refunded server-side anyway), retryOf is empty and the scan is billed
+  // normally rather than silently claiming a free one.
+  const item = { file: oldResult.file, objectUrl: oldResult.objectUrl, retryOf: oldResult.scanId || '' };
 
   if (!item.file) {
     showToast('Original photo unavailable — please rescan this card.', 'info');

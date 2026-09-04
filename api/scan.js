@@ -785,7 +785,46 @@ export default async function handler(req, res) {
   // "not my card" button. We ONLY log successful identify responses so the id
   // is never claimable if the credit was already refunded on the server side.
   const scanId = _shortId();
-  if (hasKV) {
+
+  // ── Free retry (2026-09-04) ────────────────────────────────────────────────
+  // The bulk scanner's button says "Retry (free)" and the client code even
+  // commented "Retry is free", but nothing ever told the server: a retry was an
+  // ordinary /api/scan POST, so it debited a second credit for the same photo.
+  //
+  // A client-supplied "this is a retry" flag can't be trusted -- it would be
+  // unlimited free scanning. So the exemption is earned against a real prior
+  // scan record, which the client can only name if it actually performed that
+  // scan:
+  //   - `scan:<retry_of>` must exist. Those records carry a 1h TTL and are only
+  //     written for scans that actually consumed a credit, so an outright miss
+  //     (already auto-refunded) can't be double-dipped.
+  //   - the record's uid must match this caller (no retrying someone else's id).
+  //   - the record must not have been refunded already -- otherwise "refund the
+  //     credit" plus "free retry" would yield two scans for zero credits.
+  //   - one free retry per original scan, marked on the record before we
+  //     proceed, so a replayed retry_of falls through to the normal debit.
+  // Retry-of-a-retry is not free: a granted retry writes no new claimable
+  // record, and a second bad result has the "Not my card" refund path.
+  const retryOf = typeof (req.body || {}).retry_of === 'string' ? req.body.retry_of.trim() : '';
+  let freeRetry = false;
+  if (hasKV && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
+    try {
+      const prior = await getKVJson(kvUrl, kvToken, `scan:${retryOf}`);
+      if (prior && prior.uid === key && !prior.retry_used) {
+        const refunded = await getKVJson(kvUrl, kvToken, `scan_refund:${retryOf}`);
+        if (!refunded) {
+          // Burn the entitlement first. If the scan then fails downstream the
+          // user has lost nothing (no credit was taken), so there is no refund
+          // to make and nothing to unwind.
+          prior.retry_used = true;
+          await setKVWithTTL(kvUrl, kvToken, `scan:${retryOf}`, JSON.stringify(prior), 3600);
+          freeRetry = true;
+        }
+      }
+    } catch (e) { /* non-fatal: fall through and charge normally */ }
+  }
+
+  if (hasKV && !freeRetry) {
     const tier       = await getUserTier(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
     const isPro      = isPaidTier(tier); // any paid tier gets monthly grants
 
@@ -2500,6 +2539,20 @@ Respond ONLY with valid JSON, no explanation:
 function getMonthStamp() {
   const d = new Date();
   return `${d.getUTCFullYear()}_${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// Reads a JSON-encoded KV value. Mirrors the helper in scan-refund.js so the
+// free-retry check can read the same `scan:<id>` / `scan_refund:<id>` records
+// that endpoint writes. Returns null when absent or unparseable.
+async function getKVJson(kvUrl, kvToken, key) {
+  try {
+    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${kvToken}` }
+    });
+    const d = await r.json();
+    if (!d.result) return null;
+    try { return JSON.parse(d.result); } catch(e) { return null; }
+  } catch(e) { return null; }
 }
 
 async function getKVInt(kvUrl, kvToken, key) {
