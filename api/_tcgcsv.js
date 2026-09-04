@@ -279,6 +279,31 @@ export function rarityScore(candRarity, targetRarity) {
 // Strip only the TRAILING " - N/M" collector-number suffix used by Pokemon
 // (e.g. "Ampharos - 090/086"). Do NOT strip subtitles that are part of the
 // card name (Lorcana "Elsa - Snow Queen", One Piece "Portgas.D.Ace - Fire").
+// 2026-09-03: canonical card-name comparison for Pokemon identity checks.
+// Strips only catalog decoration -- the collector suffix and bracketed or
+// parenthesised qualifiers -- then normalises punctuation and case. Anything
+// left must match exactly, which is what stops "Mew" matching "Mew ex".
+function _canonicalCardName(name) {
+  return stripCollectorSuffix(String(name || ''))
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    // Apostrophes are DELETED, not spaced: the catalog writes "Farfetch'd"
+    // while a scan or a typed query often gives "Farfetchd", and spacing would
+    // make those two different names and lose a real match.
+    .replace(/['\u2019\u02bc`]/g, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// Sealed product must never satisfy a request for a single card. Measured case:
+// a name-only "Professor's Research" resolved to the Professor Juniper
+// collection box.
+function _isSealedProductName(name) {
+  return /\b(box|collection|bundle|tin|deck|pack|case|blister|display|elite trainer|etb|premium)\b/i
+    .test(String(name || ''));
+}
+
 function stripCollectorSuffix(name) {
   return String(name || '').replace(/\s+-\s+\d+[a-z]?\/\d+[a-z]?\s*(\([^)]*\))?\s*$/i, '').trim();
 }
@@ -493,6 +518,7 @@ export async function resolveCardPrice({ kvUrl, kvToken, setName, cardName, card
 export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, rarity, categoryId, game, maxGroupsToScan }) {
   const cat = categoryId || gameToCategoryId(game);
   if (!cardName) return { ok: false, reason: 'no_name', categoryId: cat };
+  const isPokemon = cat === 3;
 
   const groups = await getGroups(kvUrl, kvToken, cat);
   if (!groups?.length) return { ok: false, reason: 'no_groups', categoryId: cat };
@@ -518,6 +544,28 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
       if (r.status !== 'fulfilled') continue;
       const product = pickProduct(r.value.products, cardName, cardNumber, rarity, game);
       if (product) {
+        // 2026-09-03: Pokemon requires the FULL canonical card name.
+        //
+        // pickProduct matches loosely, and the ranking below then picks the
+        // highest market price among whatever matched. On Pokemon that combined
+        // into a product substituter, measured on 17 name-only lookups:
+        //   "Pikachu" -> Pikachu & Zekrom GX   605.6x the real Base Set Pikachu
+        //   "Mew"     -> Mew ex                995.8x the real Mew
+        //   "Iono"    -> a different Iono        0.008x
+        // Median absolute multiplicative error 11.14x, in BOTH directions, so
+        // no numeric "premium penalty" can repair it -- the failure is identity,
+        // not magnitude. "Mew" is simply not "Mew ex", and a seller told their
+        // Mew is worth $3,166 has been handed someone else's card.
+        //
+        // Decorations only get stripped: the collector suffix, and bracketed or
+        // parenthesised qualifiers like "(Full Art)" / "[Professor Juniper]".
+        // Everything else must match, so "Charizard" no longer widens to
+        // "Charizard V" or "Charizard ex".
+        if (isPokemon) {
+          if (_canonicalCardName(product.name) !== _canonicalCardName(cardName)) continue;
+          // A card lookup must never resolve to sealed product.
+          if (_isSealedProductName(product.name)) continue;
+        }
         // 2026-08-19: attach group name so YGO promo penalty can look it up
         const groupMeta = groups.find(g => g.groupId === r.value.groupId);
         allMatches.push({ product, groupId: r.value.groupId, groupName: groupMeta?.name || '' });
@@ -528,6 +576,30 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
   }
 
   if (!allMatches.length) return { ok: false, reason: 'no_product_match', categoryId: cat };
+
+  // 2026-09-03: with no collector number to disambiguate, several sets can each
+  // hold a legitimately different card of the same name at wildly different
+  // values. Ranking them by market price picks the most expensive one, which is
+  // a guess presented as a valuation. Say we cannot tell instead, so the caller
+  // asks for a set/number rather than showing a confident wrong number.
+  // A number narrows it honestly, so this only guards the name-only case.
+  if (isPokemon && !cardNumber) {
+    const groupsSeen = [...new Set(allMatches.map(m => m.groupId))];
+    if (groupsSeen.length > 1) {
+      return {
+        ok: false,
+        reason: 'ambiguous_printing',
+        categoryId: cat,
+        candidateCount: allMatches.length,
+        candidateGroups: groupsSeen.length,
+        candidates: allMatches.slice(0, 6).map(m => ({
+          productId: m.product?.productId ?? null,
+          name: m.product?.name || '',
+          setName: m.groupName || '',
+        })),
+      };
+    }
+  }
 
   // Fetch prices for each candidate's group in parallel, pick highest-market card.
   const uniqueGroupIds = [...new Set(allMatches.map(m => m.groupId))];
@@ -545,6 +617,10 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
   //            so a $50 base printing beats a $5000 tournament prize.
   let bestMatch = null;
   let bestGroupId = null;
+  // 2026-09-03: carry the real group name out. Name-only responses were
+  // returning an empty setName, so the UI showed a price with no set beside it
+  // -- the one field that tells a seller whether it is even their card.
+  let bestGroupName = '';
   let bestScore = -Infinity;
   for (const { product, groupId, groupName } of allMatches) {
     const priceMap = priceMapsByGroup[groupId]?.[product.productId] || null;
@@ -571,6 +647,7 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
       bestScore = composite;
       bestMatch = product;
       bestGroupId = groupId;
+      bestGroupName = groupName || '';
     }
   }
 
@@ -578,6 +655,7 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
   if (!bestMatch) {
     bestMatch = allMatches[0].product;
     bestGroupId = allMatches[0].groupId;
+    bestGroupName = allMatches[0].groupName || '';
   }
 
   const priceMap = priceMapsByGroup[bestGroupId]?.[bestMatch.productId] || null;
@@ -587,6 +665,7 @@ export async function resolveCardByName({ kvUrl, kvToken, cardName, cardNumber, 
     ok: true,
     categoryId: cat,
     groupId: bestGroupId,
+    groupName: bestGroupName,
     product: bestMatch,
     market: best.market,
     low: best.low,

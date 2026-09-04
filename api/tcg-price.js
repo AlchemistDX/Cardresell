@@ -58,7 +58,12 @@ export default async function handler(req, res) {
   // The old cache holds prices for 1st Edition / Shadowless / wrong-set matches
   // written before the variant and set-mismatch fixes shipped. TTL is 30 min,
   // so without this bump we'd wait half an hour with wrong numbers on prod.
-  const cacheKey = `v8|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // v9 (2026-09-03): headline selection changed -- the ask-blend fallback that
+  // turned a $1,000 Market into a $19,800 headline is gone, and Pokemon
+  // name-only lookups now refuse ambiguous printings. A code change does NOT
+  // invalidate KV, so the key must move with the pricing logic or every cached
+  // entry keeps serving the old, wrong number.
+  const cacheKey = `v9|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -148,12 +153,16 @@ export default async function handler(req, res) {
         variant: r.variant,
         productId: r.product?.productId ?? null,
         cardName: r.product?.name ?? name,
-        setName: r.product?.setName ?? set,
+        // 2026-09-03: prefer the resolver's real group name. products.json has
+        // no setName field, so name-only lookups were returning an empty set.
+        setName: r.groupName || r.product?.setName || set || null,
         imageUrl: r.imageUrl || null,
         url: r.tcgplayerUrl || (r.product?.productId ? `https://www.tcgplayer.com/product/${r.product.productId}` : null),
         fetchedAt: new Date().toISOString(),
         cacheAgeSec: 0,
       };
+      const _div = _marketAskDivergence({ market: r.market, mid: r.mid });
+      if (_div) data.marketAskDivergence = _div;
       _clampHighPriceInPlace(data);
       await setCache(kvUrl, kvToken, cacheKey, data);
       _incrSearchStats(kvUrl, kvToken);
@@ -417,14 +426,57 @@ function _headlinePrice({ low, market, mid, high }) {
   // No sale price to trust -- fall back to the blend.
   if (M == null) return _trimmedMean({ low, market, mid, high });
 
-  // Sanity valve: a sale price more than 3x above or below the median ask is
-  // almost certainly stale or a data error, not a real move. Fall back to the
-  // blend, which is noisy but bounded.
-  if (D != null && (M > D * 3 || M < D / 3)) {
-    return _trimmedMean({ low, market, mid, high });
-  }
-
+  // 2026-09-03 REMOVED: the "sanity valve" that fell back to the ask blend
+  // whenever Market disagreed with the median ask by more than 3x.
+  //
+  // The valve assumed a big Market/ask gap means Market is stale or erroneous.
+  // On thin vintage books the opposite is true: there ARE no recent sales, so a
+  // few holdout asks sit far above the last real transaction, and the valve then
+  // published those asks as if they were a sale price.
+  //
+  // Worked example, EX Dragon Frontiers Charizard Star #100 (product 84198).
+  // TCGCSV for that product:
+  //     marketPrice $1,000.00   low $18,500   mid $20,000   high $39,500
+  // The valve fired, and the blend returned $19,800 -- a 1% undercut of the
+  // median ASK. Production served $19,800 for a card whose only actual-sales
+  // figure was $1,000. That is a 19.8x overstatement handed to a seller as a
+  // valuation, and it is the single largest error this audit found.
+  //
+  // Market and asks are different quantities and one must never be relabelled
+  // as the other. We publish the sale price when we have one. Where the two
+  // disagree sharply we say so (see marketAskDivergence in the payload) instead
+  // of quietly swapping in a number that answers a different question.
+  //
+  // The blend remains the fallback for when marketPrice is genuinely absent,
+  // which is the one case where an ask is the best available signal.
   return Math.round(M * 100) / 100;
+}
+
+// Reports a sharp disagreement between the completed-sales Market and the
+// median active ask. This used to silently rewrite the headline; now it is
+// disclosed so the UI can warn instead of guessing which side is right.
+// Deliberately returns null (not a thrown error) when either side is missing --
+// absence of an ask book is not a divergence.
+function _marketAskDivergence({ market, mid }) {
+  const num = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    if (_isSentinelPrice(n)) return null;
+    return n;
+  };
+  const M = num(market);
+  const D = num(mid);
+  if (M == null || D == null) return null;
+  const ratio = M / D;
+  if (ratio <= 3 && ratio >= 1 / 3) return null;
+  return {
+    market: Math.round(M * 100) / 100,
+    medianAsk: Math.round(D * 100) / 100,
+    ratio: Math.round(ratio * 1000) / 1000,
+    // Which way the book leans, so copy does not have to recompute it.
+    direction: ratio > 1 ? 'sales_above_asks' : 'asks_above_sales',
+  };
 }
 
 function _trimmedMean({ low, market, mid, high }) {

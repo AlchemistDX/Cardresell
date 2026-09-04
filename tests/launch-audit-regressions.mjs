@@ -907,5 +907,105 @@ try {
         'equal-ranked candidates must keep API order so nothing stops matching');
 }
 
+// ── Price integrity: an ask book is never published as a sale price ────────
+// Audit 2026-09-03. api/tcg-price.js had a "sanity valve" that fell back to the
+// ask blend whenever Market disagreed with the median ask by more than 3x. On
+// thin vintage books there are no recent sales, so holdout asks sit far above
+// the last real transaction and the valve published those asks as Market.
+// EX Dragon Frontiers Charizard Star #100 (product 84198) is the worked case:
+// TCGCSV gave marketPrice $1,000 / low $18,500 / mid $20,000 / high $39,500 and
+// production served a $19,800 headline -- 19.8x the only actual-sales number.
+{
+  const tcgPrice = fs.readFileSync(path.join(root, 'api/tcg-price.js'), 'utf8');
+  const fnAt = tcgPrice.indexOf('function _headlinePrice');
+  const fnEnd = tcgPrice.indexOf('function _trimmedMean');
+  const headline = tcgPrice.slice(fnAt, fnEnd);
+
+  check('_headlinePrice is findable', fnAt !== -1 && fnEnd > fnAt);
+  check('the ask-blend sanity valve is gone',
+        !/M > D \* 3 \|\| M < D \/ 3/.test(headline),
+        'a >3x Market/ask gap must not swap in the blend');
+  check('the blend survives only as the no-Market fallback',
+        (headline.match(/_trimmedMean/g) || []).length === 1
+          && /No sale price to trust/.test(headline),
+        'an absent marketPrice is the one case where an ask is the best signal');
+  check('a present Market is returned unchanged',
+        /return Math\.round\(M \* 100\) \/ 100;/.test(headline));
+  check('the $1,000 -> $19,800 case is documented in code',
+        /19,?800/.test(headline) && /84198/.test(headline),
+        'the worked example must stay next to the code it explains');
+
+  check('sharp Market/ask disagreement is disclosed instead of hidden',
+        /function _marketAskDivergence/.test(tcgPrice)
+          && /marketAskDivergence/.test(tcgPrice),
+        'removing the valve must not also remove the signal');
+  check('divergence is reported, not silently applied',
+        /data\.marketAskDivergence = _div/.test(tcgPrice));
+
+  check('the TCG cache key moved with the pricing change',
+        /`v9\|\$\{game\}/.test(tcgPrice) && !/`v8\|\$\{game\}/.test(tcgPrice),
+        'a code change does NOT invalidate KV -- stale entries would keep serving $19,800');
+
+  check('the high clamp is the 3x the docs now describe',
+        /_HIGH_CAP_MULT = 3\.0/.test(tcgPrice));
+}
+
+// ── Price integrity: a name-only lookup never substitutes another card ─────
+// Measured on 17 name-only Pokemon lookups: median absolute multiplicative
+// error 11.14x, in both directions. "Pikachu" resolved to Pikachu & Zekrom GX
+// (605.6x) and "Mew" to Mew ex (995.8x), because pickProduct matched loosely and
+// the ranking then took the highest market price among whatever matched. The
+// failure is identity, not magnitude, so no numeric penalty can repair it.
+{
+  const tcgcsv = fs.readFileSync(path.join(root, 'api/_tcgcsv.js'), 'utf8');
+
+  check('Pokemon name matching requires the full canonical name',
+        /function _canonicalCardName/.test(tcgcsv)
+          && /_canonicalCardName\(product\.name\) !== _canonicalCardName\(cardName\)\) continue/.test(tcgcsv),
+        '"Mew" must not widen to "Mew ex"');
+  check('only catalog decoration is stripped before comparing',
+        /\\\(\[\^\)\]\*\\\)/.test(tcgcsv) && /stripCollectorSuffix/.test(tcgcsv),
+        'parentheticals and collector suffixes yes; the rest of the name no');
+  check('apostrophes are deleted rather than spaced',
+        /Farfetch/.test(tcgcsv),
+        '"Farfetch\'d" and "Farfetchd" must stay the same card');
+  check('sealed product cannot answer a card request',
+        /function _isSealedProductName/.test(tcgcsv)
+          && /_isSealedProductName\(product\.name\)\) continue/.test(tcgcsv));
+  check('collection boxes are treated as sealed',
+        /box\|collection\|bundle\|tin\|deck\|pack/.test(tcgcsv));
+
+  check('an ambiguous name-only Pokemon lookup refuses to guess',
+        /reason: 'ambiguous_printing'/.test(tcgcsv),
+        'ranking several sets by price presents a guess as a valuation');
+  check('ambiguity is only raised when no number narrows it',
+        /isPokemon && !cardNumber/.test(tcgcsv),
+        'a collector number disambiguates honestly');
+  check('the refusal names its candidates',
+        /candidates: allMatches\.slice/.test(tcgcsv),
+        'the caller needs to prompt for a set, so it needs the options');
+
+  check('the resolver returns the real group name',
+        /groupName: bestGroupName/.test(tcgcsv),
+        'name-only responses were returning an empty setName');
+}
+
+// ── /accuracy must describe the clamp the code actually applies ────────────
+// Commit 005b683 shipped a universal 3x display clamp; 1607fa1 then documented
+// 4x with a max(4 x Market, 1.5 x Low) formula that was never implemented, and
+// claimed payout is calculated from High when it is calculated from Market.
+{
+  const accuracy = fs.readFileSync(path.join(root, 'accuracy.html'), 'utf8');
+  check('no unimplemented 4x clamp formula is documented',
+        !/max\(4 ?(&times;|×) ?Market/.test(accuracy) && !/4(&times;|×) ?Market/.test(accuracy),
+        'do not stamp a lie: the code clamps at 3x');
+  check('/accuracy states the real 3x clamp',
+        /3 ?(&times;|×) ?Market/.test(accuracy));
+  check('/accuracy no longer says payout is calculated from High',
+        !/Net Payout is calculated against a clamped/.test(accuracy));
+  check('/accuracy states payout comes from Market Value',
+        /Net Payout is calculated from Market Value/.test(accuracy));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

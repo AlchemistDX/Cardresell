@@ -40,9 +40,20 @@ console.log('\n[Headline price]');
         /if \(M == null\) return _trimmedMean\(/.test(code),
         'cards without a market price still need a number');
 
-  check('a market price wildly off the ask book falls back to the blend',
-        /M > D \* 3 \|\| M < D \/ 3/.test(code),
-        'the sanity valve catches stale or erroneous market prices');
+  // 2026-09-03 REVERSED. This used to assert the ask-blend fallback fired when
+  // Market disagreed with the median ask by >3x. The audit showed the valve's
+  // premise is wrong on thin vintage books: there are no recent sales, so
+  // holdout asks sit far above the last real transaction and the valve
+  // published those asks as a sale price. Product 84198 (Charizard Star #100)
+  // served a $19,800 headline off a $1,000 marketPrice. Market and asks are
+  // different quantities; the gap is now disclosed, not substituted.
+  check('a market/ask disagreement no longer swaps in the ask blend',
+        !/M > D \* 3 \|\| M < D \/ 3/.test(code),
+        'publishing the ask book as Market overstated one card by 19.8x');
+
+  check('the market/ask gap is surfaced instead of silently applied',
+        /_marketAskDivergence/.test(code),
+        'removing the valve must not also remove the warning signal');
 }
 
 console.log('\n[Quick Pricing — honest labelling]');
