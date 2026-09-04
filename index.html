@@ -20499,7 +20499,18 @@ async function checkProStatus() {
     const r = await fetch('/api/pro-status' + refParam, {
       headers: { 'Authorization': 'Bearer ' + window._googleIdToken }
     });
+    if (r.status === 401) {
+      // 2026-09-04: the endpoint now distinguishes "expired session" from
+      // "free account". Don't overwrite tier or credit state with zeros --
+      // that told paying users they had nothing. Drop the dead token and ask
+      // for a fresh sign-in instead.
+      window._googleIdToken = null;
+      window._sessionExpired = true;
+      try { showToast('Your session expired. Sign in again to see your plan and credits.', 'info'); } catch (_) {}
+      return;
+    }
     if (!r.ok) return;
+    window._sessionExpired = false;
     const d = await r.json();
     window._isPro = d.isPro === true;
     window._userTier = d.tier || (d.isPro ? 'pro' : 'free');
@@ -22804,16 +22815,25 @@ function openBulkGrade(mode) {
   _bulkGradeShowSection('intro');
 }
 
+// Every slot on a Bulk Grade queue item that can hold an object URL.
+// Deep Grade adds four edge photos per card; the old cleanup only knew about
+// front and back, so a 10-card deep session leaked 40 blobs — enough to
+// matter on mobile Safari, which holds the full decoded image alive.
+const _BULK_GRADE_URL_SLOTS = ['front', 'back', 'topEdge', 'bottomEdge', 'leftEdge', 'rightEdge'];
+
+function _bulkGradeRevokeItem(item) {
+  if (!item) return;
+  if (item.objectUrl) { try { URL.revokeObjectURL(item.objectUrl); } catch(_){} }
+  for (const k of _BULK_GRADE_URL_SLOTS) {
+    const slot = item[k];
+    if (slot && slot.objectUrl) { try { URL.revokeObjectURL(slot.objectUrl); } catch(_){} }
+  }
+}
+
 function _bulkGradeRevokeAllUrls() {
   try {
-    (window._bulkGradeQueue || []).forEach(q => {
-      if (q && q.objectUrl) { try { URL.revokeObjectURL(q.objectUrl); } catch(_){} }
-      if (q && q.front && q.front.objectUrl) { try { URL.revokeObjectURL(q.front.objectUrl); } catch(_){} }
-      if (q && q.back  && q.back.objectUrl)  { try { URL.revokeObjectURL(q.back.objectUrl);  } catch(_){} }
-    });
-    (window._bulkGradeResults || []).forEach(r => {
-      if (r && r.objectUrl) { try { URL.revokeObjectURL(r.objectUrl); } catch(_){} }
-    });
+    (window._bulkGradeQueue || []).forEach(_bulkGradeRevokeItem);
+    (window._bulkGradeResults || []).forEach(_bulkGradeRevokeItem);
   } catch(_){}
 }
 
@@ -23010,7 +23030,15 @@ function processBulkGradeFiles(input) {
     cards.push(item);
   }
   let selected = cards;
-  if (cards.length > cap) { selected = cards.slice(0, cap); truncated = true; }
+  if (cards.length > cap) {
+    // Release the blobs for the cards we are dropping — they were created in
+    // the loop above and would otherwise never be revoked.
+    cards.slice(cap).forEach(_bulkGradeRevokeItem);
+    selected = cards.slice(0, cap);
+    truncated = true;
+  }
+  // A second pick replaces the queue outright; free the previous one first.
+  (window._bulkGradeQueue || []).forEach(_bulkGradeRevokeItem);
   window._bulkGradeQueue = selected;
   count = selected.length;
   needCredits = (mode === 'deep') ? count * 2 : count;
@@ -23242,6 +23270,9 @@ async function _bulkGradeOne(item, rowId, mode) {
         mimeType: 'image/jpeg',
         mode: 'grade',
         deepGrade: isDeep,
+        // Declares this as the Pro Max batch workflow so the server can verify
+        // the entitlement rather than trusting the client-side gate.
+        bulkGrade: true,
         email: window.googleUser?.email || window._userEmail || '',
         googleSub: window.googleUser?.sub || window._googleSub || '',
       };
@@ -23260,6 +23291,14 @@ async function _bulkGradeOne(item, rowId, mode) {
       if (resp.status === 402) {
         result.error = 'Out of grade credits';
         showToast('Ran out of grade credits mid-batch. Completed cards saved.', 'info');
+        return 'STOP';
+      } else if (resp.status === 403) {
+        // Server rejected the entitlement. Stop the batch rather than burning
+        // through every remaining card on a request that cannot succeed.
+        let em = 'Bulk Grade requires Pro Max.';
+        try { const e = await resp.json(); em = e.error || em; } catch(_){}
+        result.error = em;
+        showToast(em, 'info');
         return 'STOP';
       } else if (resp.status === 401) {
         result.error = 'Auth expired';

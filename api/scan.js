@@ -688,6 +688,11 @@ export default async function handler(req, res) {
   // Deep Grade = 6-photo PSA-style inspection (front + back + 4 edges), costs 2 credits.
   // Only applies to grade mode; ignored otherwise.
   const isDeepGrade    = isGradeMode && deepGrade === true;
+  // Bulk Grade is a Pro Max benefit. The client gate reads window._userTier,
+  // which anyone can set in DevTools, so the entitlement is enforced here too.
+  // Single-card grading is unaffected: only requests that declare bulkGrade
+  // are checked.
+  const isBulkGrade    = isGradeMode && (req.body || {}).bulkGrade === true;
   const gradeCost      = isDeepGrade ? 2 : 1;
 
   // Pull edge photos early so we can validate BEFORE deducting any credits
@@ -827,6 +832,15 @@ export default async function handler(req, res) {
   if (hasKV && !freeRetry) {
     const tier       = await getUserTier(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
     const isPro      = isPaidTier(tier); // any paid tier gets monthly grants
+
+    // Entitlement check runs BEFORE any credit is debited, so a rejected
+    // request costs the user nothing.
+    if (isBulkGrade && tier !== 'pro_max' && tier !== 'ultimate') {
+      return res.status(403).json({
+        error: 'Bulk Grade requires Pro Max.',
+        requiresTier: 'pro_max',
+      });
+    }
 
     // 2026-08-20: Recurring monthly free grant for VERIFIED free users only.
     // Bots that skip email verification get 0 credits. Verified free users

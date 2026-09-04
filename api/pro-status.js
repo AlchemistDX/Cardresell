@@ -31,7 +31,16 @@ export default async function handler(req, res) {
     emailVerified  = !!tokenInfo.emailVerified;
     signInProvider = tokenInfo.provider || '';
   } catch(e) {
-    return res.status(200).json({ isPro: false, status: 'none', freeScansLeft: 0, paidScansLeft: 0, emailVerified: false });
+    // 2026-09-04: this used to return HTTP 200 with a free/zero-credit body,
+    // so an expired session was indistinguishable from a genuine free account:
+    // the client happily overwrote tier and credit state with zeros and told a
+    // paying user they had nothing. /api/scan already returns 401 here. Match
+    // it, so the client can prompt a re-sign-in instead of lying about the
+    // account.
+    return res.status(401).json({
+      error: 'Session expired. Sign in again.',
+      sessionExpired: true,
+    });
   }
 
   if (!userSub) {
