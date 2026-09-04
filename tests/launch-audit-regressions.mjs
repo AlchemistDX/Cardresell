@@ -943,7 +943,13 @@ try {
         /data\.marketAskDivergence = _div/.test(tcgPrice));
 
   check('the TCG cache key moved with the pricing change',
-        /`v10\|\$\{game\}/.test(tcgPrice) && !/`v[89]\|\$\{game\}/.test(tcgPrice),
+        // v11 (2026-09-03, later): the schema grew a cardNumber field so the
+        // identity-check audit could verify TCG's number. Entries written
+        // before that deploy have no cardNumber, so leaving them live would
+        // keep the audit reporting indeterminate. Rotate so every fresh
+        // response carries the new field. Keep the old versions asserted-
+        // absent as a permanent list.
+        /`v11\|\$\{game\}/.test(tcgPrice) && !/`v(?:[89]|10)\|\$\{game\}/.test(tcgPrice),
         'a code change does NOT invalidate KV -- stale entries would keep serving $19,800');
 
   check('the high clamp is the 3x the docs now describe',

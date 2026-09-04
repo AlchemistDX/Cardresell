@@ -64,6 +64,12 @@ export default async function handler(req, res) {
   // invalidate KV, so the key must move with the pricing logic or every cached
   // entry keeps serving the old, wrong number.
   //
+  // v11 (2026-09-03, later): the response schema grew a cardNumber field so
+  // qa/price_integrity_audit.mjs can verify TCG's collector number as part of
+  // identity. Entries written under v10 have no cardNumber, and letting them
+  // survive would keep the audit reporting indeterminate on every cached row
+  // -- the whole point of promoting the audit was to STOP crediting checks
+  // we did not perform. Rotate so every fresh response carries the new field.
   // v10 (2026-09-03, same day): 562149f closed a fallback loophole in the live
   // TCGplayer search that had allowed the resolver's rejected identities to be
   // resurrected -- so during the ~15 minutes between 592dd00 and 562149f a
@@ -71,7 +77,7 @@ export default async function handler(req, res) {
   // caught "Iono" served as "Iono Premium Tournament Collection Display" at
   // $318.12 with cacheAgeSec 796 under the fresh v9 key. Rotate to v10 so the
   // 17-minute remainder of that TTL does not keep serving the bad number.
-  const cacheKey = `v10|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  const cacheKey = `v11|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
