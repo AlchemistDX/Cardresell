@@ -189,9 +189,16 @@ console.log('\n[Quick Pricing — wiring]');
   // as a glitch -- the panel keeps its heading and states why there is no
   // spread to choose from. Fabricating a Sell Now / Top of Book around a
   // single guide value would be inventing a listing book that does not exist.
+  // 2026-09-04: the gate was `basis.graded && tiers.length < 2`. Once the
+  // derived band became universal a slab HAS three tiers, so that gate stopped
+  // matching and the graded branch (which draws the grade ladder) was skipped
+  // entirely. Graded now takes the branch unconditionally.
   check('a graded slab explains itself instead of silently vanishing',
-        /basis\.graded && tiers\.length < 2/.test(index) &&
+        /if \(basis && basis\.graded\) \{/.test(index) &&
         /id="qpGradedNote"/.test(index));
+  check('the graded branch is not gated on the tier count',
+        !/basis\.graded && tiers\.length < 2/.test(index),
+        'a slab has three derived tiers, so a <2 gate skips the ladder');
 
   check('the graded note hides the tiers AND the position bar',
         /const showStrategy = \(on\) =>/.test(index) &&

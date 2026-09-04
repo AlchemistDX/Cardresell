@@ -5905,11 +5905,16 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
   // Row 2b: cross-source disagreement (Sol rec #3). Placed directly under the
   // two rows it names, so the seller reads TCG, then PC, then the fact that
   // they disagree -- rather than discovering it after the payout math.
-  const _disagree = _sourceDisagreement({ tcg, pc });
-  if (_disagree) {
-    const _bl = (window._crBasis && window._crBasis.label) || '';
-    parts.push(_renderSourceDisagreement(_disagree, _bl));
-  }
+  // Withdrawn 2026-09-04 at the owner's direction: the disclosure fired on
+  // homepage cards and read as a defect in the app rather than a fact about
+  // the feeds. Detection (_sourceDisagreement) is deliberately KEPT and still
+  // exercised by tests -- only the render is withdrawn, so the signal can be
+  // put back or routed somewhere quieter without rebuilding it.
+  //
+  // What this costs, recorded on purpose: when the two feeds disagree by more
+  // than 50% the seller now sees only the basis we picked, with no hint that
+  // the other source says something very different. The two numbers are still
+  // both rendered above, and neither is averaged into the other.
 
   // Row 3: eBay sold comps overlay (only when we actually got comps)
   if (ebay && ebay.count >= 2 && ebay.median != null) {
@@ -7763,24 +7768,28 @@ function _qpBasis() {
 // available, this function should be deleted, not tuned.
 const _QP_DERIVED_SPREAD = 0.15;
 function _qpDerivedBand(basis) {
-  if (!basis || !basis.graded) return null;
+  if (!basis) return null;
   const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
     ? getCondMultiplier() : 1;
   const comp = (basis.market != null && isFinite(basis.market) && basis.market > 0)
     ? basis.market * condMult : null;
   if (comp == null) return null;
-  // Only derive when there is genuinely nothing to measure. If a real spread
-  // exists we must use it -- a made-up band must never displace real data.
-  const lo = basis.low, hi = basis.mid;
-  const haveReal = lo != null && hi != null && isFinite(lo) && isFinite(hi) && hi > lo;
-  if (haveReal) return null;
+  // Applies to raw cards too, as of 2026-09-04. The measured alternative was
+  // NOT a better spread: basis.low/mid are ACTIVE LISTING asks across ALL
+  // conditions, so "Sell Now" undercut the cheapest ask on the page -- which
+  // on a Base Set Charizard was a $125 heavily-played copy. That produced
+  // huge, wrong-direction gaps: a fast-sale price anchored to a beat-up card
+  // while the comp described a Near Mint one. A symmetric band around the
+  // comp is an estimate and says so, but it never quotes a different card's
+  // condition back at the seller.
   const r = (v) => Math.round(v * 100) / 100;
   const s = _QP_DERIVED_SPREAD;
   return [
     { id:'dnow',    amt: r(comp * (1 - s)), label:'Sell Now',
       hint:`estimated — ${Math.round(s*100)}% under comp for a fast sale`, derived:true },
     { id:'dmarket', amt: r(comp),           label:'Comp',
-      hint:'PriceCharting guide value for this grade', derived:true },
+      hint: basis.graded ? 'PriceCharting guide value for this grade'
+                         : 'recent completed sales', derived:true },
     { id:'dpatient',amt: r(comp * (1 + s)), label:'Patient',
       hint:`estimated — +${Math.round(s*100)}% if you can wait`, derived:true },
   ];
@@ -7822,6 +7831,13 @@ function _qpTiers(basis) {
   const market = adj(basis.market);
   const low    = adj(basis.low);
   const mid    = adj(basis.mid);
+
+  // Owner directive 2026-09-04: use the derived band for EVERY card, not just
+  // slabs. See _qpDerivedBand for why the "measured" path below was worse than
+  // an honest estimate. The old logic stays as a fallback for the case the band
+  // cannot cover at all -- no comp to build a band around.
+  const _band = _qpDerivedBand(basis);
+  if (_band) return _band;
 
   const tiers = [];
   // Undercut the cheapest ask. Only meaningful when the low ask is actually
@@ -7874,9 +7890,14 @@ function _qpTiers(basis) {
 //     population data.
 const _QP_LADDER_PSA = [
   { pc: 'raw',      label: 'Raw'      },
-  { pc: 'grade_7',  label: 'PSA 7'    },
-  { pc: 'grade_8',  label: 'PSA 8'    },
-  { pc: 'grade_9',  label: 'PSA 9'    },
+  // NOT "PSA 7/8/9". PriceCharting documents these fields as "Graded 7 or 7.5
+  // / 8 or 8.5 / 9 by a grading company" -- grader-agnostic, and 7 and 8 are
+  // each two grades blended into one number. Only manual-only-price is
+  // PSA-specific ("Graded 10 by PSA grading service"). Same mislabel class as
+  // the 9.5: we were stamping one grader's name on every grader's data.
+  { pc: 'grade_7',  label: 'Grade 7'  },
+  { pc: 'grade_8',  label: 'Grade 8'  },
+  { pc: 'grade_9',  label: 'Grade 9'  },
   // No 9.5 rung. PSA does not issue one, so PriceCharting's generic "Grade
   // 9.5" column is a BGS/CGC number -- putting it between PSA 9 and PSA 10
   // mixes two graders' scales on one axis and invents an intermediate step
@@ -8054,7 +8075,11 @@ function renderQuickPricing() {
   // row, which collapses to a single tier -- and rather than making the whole
   // panel vanish (which reads as a glitch), we keep the heading and say why
   // there is no strategy to choose from.
-  if (basis && basis.graded && tiers.length < 2) {
+  // Graded selections always take this branch. It used to be gated on the
+  // tiers collapsing to fewer than two, which was true only while a slab had
+  // no band to show; now _qpTiers returns three derived tiers for a slab too,
+  // so that gate would skip the branch and the grade ladder would never draw.
+  if (basis && basis.graded) {
     host.style.display = '';
     showStrategy(false);
 
@@ -8111,7 +8136,26 @@ function renderQuickPricing() {
   // raw selection, where its grade axis would be describing a different thing
   // from the strategy bar directly above it. When a derived band is active we
   // are still ON a slab, so the ladder stays.
-  if (!_bandActive) {
+  // Raw cards now run on the same derived band. Flag it so the disclosure
+  // caption stays up and the payout rows stay down -- those rows read
+  // "Lowest listing", and Sell Now is no longer derived from that listing, so
+  // showing them side by side would imply a link that no longer exists.
+  if (basis && !basis.graded && tiers.some(t => t && t.derived)) {
+    _bandActive = true;
+    if (note) {
+      note.style.display = '';
+      note.textContent = 'Estimated band. Comp is recent completed sales; Sell Now and '
+        + 'Patient are calculated as '
+        + String(Math.round(_QP_DERIVED_SPREAD * 100)) + '% either side of it — not '
+        + 'observed sales. Active listings are skipped on purpose: they mix every '
+        + 'condition, so the cheapest ask is often a beat-up copy of your card.';
+    }
+  }
+
+  // Tear the ladder down unless we are on a slab. A derived band alone is no
+  // longer a reason to keep it -- raw cards get a band too, and a grade axis
+  // over a raw selection describes a different thing from the bar above it.
+  if (!(_bandActive && basis && basis.graded)) {
     const _ladHost = document.getElementById('qpLadder');
     if (_ladHost) { _ladHost.style.display = 'none'; _ladHost.innerHTML = ''; }
   }
@@ -8151,7 +8195,9 @@ function renderQuickPricing() {
   const pct = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
   const mk = document.getElementById('qpBarMarker');
   const tick = document.getElementById('qpBarTick');
-  const mktTier = tiers.find(t => t.id === 'market');
+  // 'dmarket' is the derived band's comp tier. Matching only 'market' left the
+  // comp tick undrawn on every card once the band became universal.
+  const mktTier = tiers.find(t => t.id === 'market' || t.id === 'dmarket');
   if (tick) {
     if (mktTier) { tick.style.display=''; tick.style.left = pct(mktTier.amt) + '%'; }
     else tick.style.display='none';

@@ -1104,9 +1104,11 @@ try {
   // that disagree by 76% produces a number neither source would defend.
   check('a source-disagreement disclosure exists',
         /function _renderSourceDisagreement\(/.test(idx));
-  check('the disagreement disclosure is actually rendered',
-        /parts\.push\(_renderSourceDisagreement\(/.test(idx),
-        'a helper nobody calls discloses nothing');
+  // 2026-09-04: render withdrawn at the owner's direction. Detection is kept,
+  // so this now asserts the ABSENCE of the call -- the inverse of what it
+  // originally checked. See the band block below.
+  check('the disagreement disclosure render stays withdrawn',
+        !/parts\.push\(_renderSourceDisagreement\(/.test(idx));
   check('the disclosure names both values rather than blending them',
         /Not averaged/i.test(idx),
         'the user must see which source said what');
@@ -1467,9 +1469,13 @@ try {
 {
   const band = index.slice(index.indexOf('function _qpDerivedBand'),
                            index.indexOf('function _qpTiers'));
-  check('band: refuses non-graded basis', /!basis\.graded\)\s*return null/.test(band));
-  check('band: refuses when a real spread exists',
-        /haveReal/.test(band) && /if\s*\(haveReal\)\s*return null/.test(band));
+  // 2026-09-04: both of these contracts were deliberately reversed. The band
+  // is now universal (raw included) and intentionally takes precedence over
+  // basis.low/mid, because those are active-listing asks across ALL
+  // conditions -- the cheapest one is frequently a heavily-played copy.
+  check('band: accepts a non-graded basis', /if \(!basis\) return null;/.test(band));
+  check('band: no longer defers to the active-listing spread',
+        !/haveReal/.test(band));
   check('band: refuses without a comp', /if\s*\(comp == null\)\s*return null/.test(band));
   check('band: spread is the single named constant',
         /const _QP_DERIVED_SPREAD = 0\.15;/.test(index) &&
@@ -1479,15 +1485,21 @@ try {
         !/\*\s*0\.85|\*\s*1\.15/.test(band));
 }
 {
-  const rqp = index.slice(index.indexOf('function renderQuickPricing'),
-                          index.indexOf('function renderQuickPricing') + 6000);
+  // Bound to the real end of the function. A fixed 6000-char window silently
+  // stopped covering the assertions below as soon as comments were added
+  // above them, so three checks failed on the slice rather than on the code.
+  const _rs = index.indexOf('function renderQuickPricing');
+  const rqp = index.slice(_rs, index.indexOf('\nfunction ', _rs + 10));
   check('band: disclosure says not observed sales', /not observed sales/.test(rqp));
   check('band: disclosure survives showStrategy(true)',
         /_bandActive && note\) note\.style\.display = ''/.test(rqp));
   check('band: payout rows stay hidden under a derived band',
         /_bandActive && rowsEl\) rowsEl\.style\.display = 'none'/.test(rqp));
-  check('band: ladder is not torn down under a derived band',
-        /if \(!_bandActive\) \{[\s\S]{0,200}qpLadder/.test(rqp));
+  // Tightened 2026-09-04: a derived band alone no longer keeps the ladder,
+  // since raw cards get a band too and a grade axis over a raw selection
+  // describes something different from the strategy bar above it.
+  check('band: ladder survives only on a slab',
+        /if \(!\(_bandActive && basis && basis\.graded\)\) \{[\s\S]{0,200}qpLadder/.test(rqp));
 }
 // PSA issues half grades 1.5-8.5 and NO 9.5. Labelling PriceCharting's generic
 // "Grade 9.5" column as "PSA 9.5" invents a grade that cannot exist on a slab.
@@ -1540,6 +1552,41 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
   const sgc = index.slice(index.indexOf('  sgc: ['), index.indexOf('  ace: ['));
   ['7.5','6.5','5.5','4.5','3.5','2.5','1.5'].forEach(g =>
     check(`SGC scale has half grade ${g}`, sgc.includes(`v: '${g}'`)));
+}
+
+// ---- Derived band is universal; disagreement render withdrawn (2026-09-04) ----
+{
+  const t = index.slice(index.indexOf('function _qpTiers'),
+                        index.indexOf('// \u2500\u2500 Grade ladder'));
+  check('band: _qpTiers delegates to the derived band first',
+        /const _band = _qpDerivedBand\(basis\);\n  if \(_band\) return _band;/.test(t));
+  const d = index.slice(index.indexOf('function _qpDerivedBand'),
+                        index.indexOf('function _gmSyncGrades'));
+  check('band: no longer restricted to graded', /if \(!basis\) return null;/.test(d));
+  check('band: no longer defers to active-listing low/mid',
+        !/const haveReal/.test(d) && !/if \(haveReal\) return null/.test(d));
+  check('band: spread stays in one named constant',
+        /_QP_DERIVED_SPREAD/.test(d) && !/0\.15/.test(d));
+  check('band: comp tick matches the derived id too',
+        /t\.id === 'market' \|\| t\.id === 'dmarket'/.test(index));
+  check('band: raw cards disclose the band and keep payout rows down',
+        /!basis\.graded && tiers\.some\(t => t && t\.derived\)/.test(index));
+  check('band: ladder only survives on a slab',
+        /if \(!\(_bandActive && basis && basis\.graded\)\) \{/.test(index));
+  // Withdrawn render, detection deliberately retained.
+  check('disagreement render is not called', !/parts\.push\(_renderSourceDisagreement/.test(index));
+  check('disagreement detection is retained', /function _sourceDisagreement/.test(index));
+}
+// PriceCharting's 7/8/9 fields are grader-agnostic, so must not carry a grader name.
+{
+  const _ps = index.indexOf('const _QP_LADDER_PSA');
+  const lad = index.slice(_ps, index.indexOf('\n];', _ps));
+  ['PSA 7','PSA 8','PSA 9'].forEach(l =>
+    check(`ladder does not mislabel a generic grade as "${l}"`, !lad.includes(`'${l}'`)));
+  ['Grade 7','Grade 8','Grade 9'].forEach(l =>
+    check(`ladder labels the generic grade "${l}"`, lad.includes(`'${l}'`)));
+  check('PSA 10 keeps its grader name (manual-only-price is PSA-specific)',
+        lad.includes("'PSA 10'"));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
