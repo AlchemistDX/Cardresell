@@ -1504,5 +1504,43 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
     check(`PSA scale has half grade ${g}`, psa.includes(`v: '${g}'`)));
 }
 
+// ---- A 9.5 rung must never appear on a PSA ladder (2026-09-04) ----
+{
+  // Bound to the array literal itself. A slice running to _QP_LADDER_SOLO
+  // swallows the _QP_LADDER_95 declaration and the check fails on its own
+  // fixture rather than on the ladder.
+  const _ps = index.indexOf('const _QP_LADDER_PSA');
+  const lad = index.slice(_ps, index.indexOf('\n];', _ps));
+  check('PSA ladder has no 9.5 rung', !/pc: 'grade_95'/.test(lad));
+  check('PSA ladder ends at psa_10', /pc: 'psa_10'/.test(lad));
+  check('9.5 rung exists for graders that issue one',
+        /const _QP_LADDER_95 = \{ pc: 'grade_95'/.test(index));
+  const fn = index.slice(index.indexOf('function _qpGradeLadder'),
+                         index.indexOf('function _qpRenderLadder'));
+  check('solo grader ladders include the 9.5 rung', /_QP_LADDER_95, _QP_LADDER_SOLO\[selKey\]/.test(fn));
+  check('selecting the 9.5 variant yields a raw->9.5 axis',
+        /selKey === 'psa_9_5'/.test(fn) && /_QP_LADDER_PSA\[0\], _QP_LADDER_95\]/.test(fn));
+}
+// ---- Grading Monitor cannot record an impossible grader/grade pair ----
+{
+  const fn = index.slice(index.indexOf('function _gmSyncGrades'),
+                         index.indexOf('function _qpTiers'));
+  check('gm: options are driven by GRADE_SCALES', /GRADE_SCALES\[grader\]/.test(fn));
+  check('gm: options are hidden, never deleted',
+        /o\.hidden = !ok/.test(fn) && !/\.remove\(\)/.test(fn));
+  check('gm: legacy value is preserved via keepVal', /keepVal && o\.value === keepVal/.test(fn));
+  check('gm: invalidated selection is cleared', /cur\.hidden\) sel\.value = ''/.test(fn));
+  check('gm: grader change re-syncs', /id="gmGradeGrader" onchange="try\{_gmSyncGrades\(\)\}/.test(index));
+  check('gm: sync runs before a saved grade is assigned',
+        index.indexOf("_gmSyncGrades(String(entry.grade") <
+        index.indexOf("document.getElementById('gmGrade').value       = entry.grade"));
+}
+// SGC grades in half points all the way down.
+{
+  const sgc = index.slice(index.indexOf('  sgc: ['), index.indexOf('  ace: ['));
+  ['7.5','6.5','5.5','4.5','3.5','2.5','1.5'].forEach(g =>
+    check(`SGC scale has half grade ${g}`, sgc.includes(`v: '${g}'`)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

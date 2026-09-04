@@ -2905,7 +2905,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div id="gmGradeReceivedRow" style="display:none">
       <label>Final Grade Received</label>
       <div style="display:flex;gap:.5rem;align-items:center">
-        <select id="gmGradeGrader" style="flex:1;padding:.5rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem">
+        <select id="gmGradeGrader" onchange="try{_gmSyncGrades()}catch(_){}" style="flex:1;padding:.5rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem">
           <option value="PSA">PSA</option><option value="BGS">BGS</option><option value="CGC">CGC</option><option value="SGC">SGC</option>
         </select>
         <select id="gmGrade" style="flex:1;padding:.5rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);font-size:.85rem">
@@ -7786,6 +7786,34 @@ function _qpDerivedBand(basis) {
   ];
 }
 
+// Restrict the Grading Monitor's "Final Grade Received" list to grades the
+// SELECTED grader actually issues. The markup ships one static option list, so
+// before this you could record a PSA 9.5 -- a slab that cannot exist, since
+// PSA's half grades stop at 8.5 and the 9 -> 10 jump is undivided. Recording
+// one poisons the ROI math, because the payout it gets compared against is
+// PriceCharting's generic "Grade 9.5" column, which is a BGS/CGC number.
+//
+// Options are HIDDEN, never deleted, and `keepVal` pins a legacy value so
+// reopening an old record cannot silently blank a grade the user really typed.
+function _gmSyncGrades(keepVal) {
+  const grader = (document.getElementById('gmGradeGrader')?.value || 'PSA').toLowerCase();
+  const sel    = document.getElementById('gmGrade');
+  if (!sel) return;
+  const scale = (typeof GRADE_SCALES !== 'undefined') ? GRADE_SCALES[grader] : null;
+  if (!scale) return;
+  const allowed = new Set(scale.map(g => String(g.v)));
+  [...sel.options].forEach(o => {
+    if (!o.value) return;                       // the "— select —" placeholder
+    const ok = allowed.has(o.value) || (keepVal && o.value === keepVal);
+    o.hidden = !ok;
+    o.disabled = !ok;
+  });
+  // If the grader change just invalidated the current selection, clear it
+  // rather than leaving a hidden-but-selected impossible grade in place.
+  const cur = sel.selectedOptions[0];
+  if (cur && cur.value && cur.hidden) sel.value = '';
+}
+
 function _qpTiers(basis) {
   const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
     ? getCondMultiplier() : 1;
@@ -7849,10 +7877,15 @@ const _QP_LADDER_PSA = [
   { pc: 'grade_7',  label: 'PSA 7'    },
   { pc: 'grade_8',  label: 'PSA 8'    },
   { pc: 'grade_9',  label: 'PSA 9'    },
-  // Not "PSA 9.5" -- PSA issues no such grade. Generic 9.5 (BGS/CGC).
-  { pc: 'grade_95', label: 'Grade 9.5' },
+  // No 9.5 rung. PSA does not issue one, so PriceCharting's generic "Grade
+  // 9.5" column is a BGS/CGC number -- putting it between PSA 9 and PSA 10
+  // mixes two graders' scales on one axis and invents an intermediate step
+  // that a PSA submission can never land on. Renaming it "Grade 9.5" was not
+  // enough: the row still read as a rung on the PSA ladder.
   { pc: 'psa_10',   label: 'PSA 10'   },
 ];
+// The 9.5 rung, for the graders that actually issue one.
+const _QP_LADDER_95 = { pc: 'grade_95', label: 'Grade 9.5' };
 // Graders PriceCharting publishes only a single 10 for. The ladder is then
 // raw -> that 10, which is a two-point axis but still a real one.
 const _QP_LADDER_SOLO = {
@@ -7878,9 +7911,14 @@ function _qpGradeLadder(selKey) {
   const selPc = _QP_KEY_TO_PC[selKey];
   if (!selPc) return null;
 
+  // BGS/CGC/SGC issue a 9.5, so their ladder gets the rung PSA's cannot have.
+  // Selecting the 9.5 variant itself yields a raw -> 9.5 axis rather than
+  // splicing it into the PSA scale.
   const scale = _QP_LADDER_SOLO[selKey]
-    ? [_QP_LADDER_PSA[0], _QP_LADDER_SOLO[selKey]]
-    : _QP_LADDER_PSA;
+    ? [_QP_LADDER_PSA[0], _QP_LADDER_95, _QP_LADDER_SOLO[selKey]]
+    : (selKey === 'psa_9_5'
+        ? [_QP_LADDER_PSA[0], _QP_LADDER_95]
+        : _QP_LADDER_PSA);
 
   const num = (v) => (v != null && isFinite(v) && Number(v) > 0) ? Number(v) : null;
   const points = scale
@@ -9158,12 +9196,21 @@ const GRADE_SCALES = {
     { v: '9',   label: 'SGC 9 — Mint' },
     { v: '8.5', label: 'SGC 8.5' },
     { v: '8',   label: 'SGC 8 — NM-Mint' },
+    // SGC grades in half-point increments the whole way down, so the scale
+    // was missing seven real grades a user could genuinely receive back.
+    { v: '7.5', label: 'SGC 7.5' },
     { v: '7',   label: 'SGC 7 — NM' },
+    { v: '6.5', label: 'SGC 6.5' },
     { v: '6',   label: 'SGC 6' },
+    { v: '5.5', label: 'SGC 5.5' },
     { v: '5',   label: 'SGC 5' },
+    { v: '4.5', label: 'SGC 4.5' },
     { v: '4',   label: 'SGC 4' },
+    { v: '3.5', label: 'SGC 3.5' },
     { v: '3',   label: 'SGC 3' },
+    { v: '2.5', label: 'SGC 2.5' },
     { v: '2',   label: 'SGC 2' },
+    { v: '1.5', label: 'SGC 1.5' },
     { v: '1',   label: 'SGC 1' },
   ],
   ace: [
@@ -11898,6 +11945,7 @@ function openGradingModal(editId) {
   document.getElementById('gmDateSent').value = new Date().toISOString().slice(0,10);
   document.getElementById('gmGrader').value = 'PSA';
   document.getElementById('gmGrade').value = '';
+  _gmSyncGrades();
   document.getElementById('gmHasGrade').checked = false;
   document.getElementById('gmGradeReceivedRow').style.display = 'none';
 
@@ -11916,6 +11964,12 @@ function openGradingModal(editId) {
         document.getElementById('gmHasGrade').checked = true;
         document.getElementById('gmGradeReceivedRow').style.display = '';
         document.getElementById('gmGradeGrader').value = entry.gradeGrader || entry.grader || 'PSA';
+        // Filter BEFORE assigning, and pass the stored grade through as
+        // keepVal: a record saved before this filter existed may hold a
+        // combination we now consider impossible (e.g. PSA 9.5). Hiding the
+        // option would silently blank a real saved grade, so a legacy value
+        // stays selectable on the record that already has it.
+        _gmSyncGrades(String(entry.grade || ''));
         document.getElementById('gmGrade').value       = entry.grade || '';
         document.getElementById('gmSalePrice').value   = entry.salePrice || '';
       }
