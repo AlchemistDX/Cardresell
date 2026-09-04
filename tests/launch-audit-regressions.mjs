@@ -1463,5 +1463,46 @@ try {
     !/parts\.push\(`Low \$\$\{/.test(idx) && !/rp\.push\(`Low \$\$\{/.test(idx));
 }
 
+// ---- Derived strategy band for slabs + PSA 9.5 does not exist (2026-09-04) ----
+{
+  const band = index.slice(index.indexOf('function _qpDerivedBand'),
+                           index.indexOf('function _qpTiers'));
+  check('band: refuses non-graded basis', /!basis\.graded\)\s*return null/.test(band));
+  check('band: refuses when a real spread exists',
+        /haveReal/.test(band) && /if\s*\(haveReal\)\s*return null/.test(band));
+  check('band: refuses without a comp', /if\s*\(comp == null\)\s*return null/.test(band));
+  check('band: spread is the single named constant',
+        /const _QP_DERIVED_SPREAD = 0\.15;/.test(index) &&
+        /comp \* \(1 - s\)/.test(band) && /comp \* \(1 \+ s\)/.test(band));
+  check('band: tiers are flagged derived', (band.match(/derived:true/g) || []).length === 3);
+  check('band: no hardcoded 0.85/1.15 literals',
+        !/\*\s*0\.85|\*\s*1\.15/.test(band));
+}
+{
+  const rqp = index.slice(index.indexOf('function renderQuickPricing'),
+                          index.indexOf('function renderQuickPricing') + 6000);
+  check('band: disclosure says not observed sales', /not observed sales/.test(rqp));
+  check('band: disclosure survives showStrategy(true)',
+        /_bandActive && note\) note\.style\.display = ''/.test(rqp));
+  check('band: payout rows stay hidden under a derived band',
+        /_bandActive && rowsEl\) rowsEl\.style\.display = 'none'/.test(rqp));
+  check('band: ladder is not torn down under a derived band',
+        /if \(!_bandActive\) \{[\s\S]{0,200}qpLadder/.test(rqp));
+}
+// PSA issues half grades 1.5-8.5 and NO 9.5. Labelling PriceCharting's generic
+// "Grade 9.5" column as "PSA 9.5" invents a grade that cannot exist on a slab.
+// Scoped to LABEL STRINGS, not prose: the comments explaining why PSA has no
+// 9.5 legitimately contain the characters "PSA 9.5".
+check('no "PSA 9.5" rendered label anywhere',
+      !/label:\s*'[^']*PSA 9\.5/.test(index) && !/>\s*PSA 9\.5\s*</.test(index));
+check('9.5 ladder rung is grader-neutral', /pc: 'grade_95', label: 'Grade 9\.5'/.test(index));
+check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceCharting\)/.test(index));
+{
+  const psa = index.slice(index.indexOf('  psa: ['), index.indexOf('  bgs: ['));
+  check('PSA scale has no 9.5 entry', !/v: '9\.5'/.test(psa));
+  ['8.5','7.5','6.5','5.5','4.5','3.5','2.5','1.5'].forEach(g =>
+    check(`PSA scale has half grade ${g}`, psa.includes(`v: '${g}'`)));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

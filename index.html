@@ -6564,7 +6564,11 @@ async function fetchAndApplySoldComps(forceRefresh) {
         grade_7:  { key: 'psa_7',  label: 'PSA 7 (PriceCharting)'  },
         grade_8:  { key: 'psa_8',  label: 'PSA 8 (PriceCharting)'  },
         grade_9:  { key: 'psa_9',  label: 'PSA 9 (PriceCharting)'  },
-        grade_95: { key: 'psa_9_5',label: 'PSA 9.5 (PriceCharting)'},
+        // PriceCharting's "Grade 9.5" column is grader-agnostic. PSA does not
+        // issue a 9.5 (its half grades stop at 8.5), so labelling this "PSA
+        // 9.5" invents a grade that cannot exist on a slab. BGS and CGC both
+        // issue 9.5, so the rung is real -- just not PSA's.
+        grade_95: { key: 'psa_9_5',label: 'Grade 9.5 — BGS/CGC (PriceCharting)'},
         psa_10:   { key: 'psa_10', label: 'PSA 10 (PriceCharting)' },
         bgs_10:   { key: 'bgs_10', label: 'BGS 10 (PriceCharting)' },
         cgc_10:   { key: 'cgc_10', label: 'CGC 10 (PriceCharting)' },
@@ -7744,6 +7748,44 @@ function _qpBasis() {
   return null;
 }
 
+// Derived strategy band for a slab.
+//
+// A graded card has no listing book we can read: PriceCharting publishes ONE
+// guide value per grade, and api/ebay-sold.js -- which would give a genuine
+// measured spread -- returns 403 from production. So there is no observed low
+// or high to position an ask between.
+//
+// Rather than show nothing, we derive a band from the comp: -15% is what you
+// give up to sell immediately, +15% is what patience is worth. These are NOT
+// measured market values and must never be presented as if they were. The
+// caption says so, the ids are prefixed `d`, and the payout rows stay hidden
+// because those imply a real book. If a measured spread ever becomes
+// available, this function should be deleted, not tuned.
+const _QP_DERIVED_SPREAD = 0.15;
+function _qpDerivedBand(basis) {
+  if (!basis || !basis.graded) return null;
+  const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
+    ? getCondMultiplier() : 1;
+  const comp = (basis.market != null && isFinite(basis.market) && basis.market > 0)
+    ? basis.market * condMult : null;
+  if (comp == null) return null;
+  // Only derive when there is genuinely nothing to measure. If a real spread
+  // exists we must use it -- a made-up band must never displace real data.
+  const lo = basis.low, hi = basis.mid;
+  const haveReal = lo != null && hi != null && isFinite(lo) && isFinite(hi) && hi > lo;
+  if (haveReal) return null;
+  const r = (v) => Math.round(v * 100) / 100;
+  const s = _QP_DERIVED_SPREAD;
+  return [
+    { id:'dnow',    amt: r(comp * (1 - s)), label:'Sell Now',
+      hint:`estimated — ${Math.round(s*100)}% under comp for a fast sale`, derived:true },
+    { id:'dmarket', amt: r(comp),           label:'Comp',
+      hint:'PriceCharting guide value for this grade', derived:true },
+    { id:'dpatient',amt: r(comp * (1 + s)), label:'Patient',
+      hint:`estimated — +${Math.round(s*100)}% if you can wait`, derived:true },
+  ];
+}
+
 function _qpTiers(basis) {
   const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
     ? getCondMultiplier() : 1;
@@ -7807,7 +7849,8 @@ const _QP_LADDER_PSA = [
   { pc: 'grade_7',  label: 'PSA 7'    },
   { pc: 'grade_8',  label: 'PSA 8'    },
   { pc: 'grade_9',  label: 'PSA 9'    },
-  { pc: 'grade_95', label: 'PSA 9.5'  },
+  // Not "PSA 9.5" -- PSA issues no such grade. Generic 9.5 (BGS/CGC).
+  { pc: 'grade_95', label: 'Grade 9.5' },
   { pc: 'psa_10',   label: 'PSA 10'   },
 ];
 // Graders PriceCharting publishes only a single 10 for. The ladder is then
@@ -7937,7 +7980,11 @@ function renderQuickPricing() {
   const host = document.getElementById('quickPricing');
   if (!host) return;
   const basis = _qpBasis();
-  const tiers = basis ? _qpTiers(basis) : [];
+  let tiers = basis ? _qpTiers(basis) : [];
+  // Set when the graded branch substitutes a derived band. The shared renderer
+  // below then must NOT tear down the grade ladder or re-hide the caption that
+  // discloses the band is estimated.
+  let _bandActive = false;
 
   const note    = document.getElementById('qpGradedNote');
   const barWrap = document.getElementById('qpBarWrap');
@@ -7981,28 +8028,52 @@ function renderQuickPricing() {
     const _selKey = (typeof printSelect !== 'undefined' && printSelect) ? printSelect.value : '';
     const _ladder = _qpGradeLadder(_selKey);
     const _ladHost = document.getElementById('qpLadder');
+    let _drewLadder = false;
     if (_ladder && _ladHost) {
       _qpRenderLadder(_ladder, _ladHost);
       _ladHost.style.display = '';
-      if (note) note.style.display = 'none';
+      _drewLadder = true;
+    } else if (_ladHost) {
+      _ladHost.style.display = 'none'; _ladHost.innerHTML = '';
+    }
+
+    // A slab has no listing book, but the seller still has to pick a number.
+    // Derive a band off the comp and label it as derived. The payout rows stay
+    // hidden: they describe undercutting a real book, which does not exist here.
+    const _band = _qpDerivedBand(basis);
+    if (_band) {
+      tiers = _band;
+      _bandActive = true;
+      showStrategy(true);
+      if (rowsEl) rowsEl.style.display = 'none';
+      if (note) {
+        note.style.display = '';
+        note.textContent = 'Estimated band. A slab has one published guide value per '
+          + 'grade and no listing book, so Sell Now and Patient are calculated as '
+          + String(Math.round(_QP_DERIVED_SPREAD * 100)) + '% either side of the comp — '
+          + 'not observed sales. Check recent completed sales before you list.';
+      }
+    } else {
+      if (note) note.style.display = _drewLadder ? 'none' : '';
+      if (_drewLadder) return;
+    }
+    if (!_band) {
+      // No ladder and no comp to derive from. Fall back to saying why.
+      if (note) {
+        note.textContent = 'Graded slabs price off a single guide value per grade, '
+          + 'so there is no cheapest-listing spread to undercut. The payout rows below '
+          + 'are calculated from that value.';
+      }
       return;
     }
-    if (_ladHost) { _ladHost.style.display = 'none'; _ladHost.innerHTML = ''; }
-
-    // No ladder available (PriceCharting has not answered for this card, or it
-    // publishes only the one grade the user picked). Fall back to saying why.
-    if (note) {
-      note.textContent = 'Graded slabs price off a single guide value per grade, '
-        + 'so there is no cheapest-listing spread to undercut. The payout rows below '
-        + 'are calculated from that value.';
-    }
-    return;
+    // Band is active -- fall through to the shared tier renderer below.
   }
 
   // Leaving the graded branch: tear the ladder down so it cannot linger over a
   // raw selection, where its grade axis would be describing a different thing
-  // from the strategy bar directly above it.
-  {
+  // from the strategy bar directly above it. When a derived band is active we
+  // are still ON a slab, so the ladder stays.
+  if (!_bandActive) {
     const _ladHost = document.getElementById('qpLadder');
     if (_ladHost) { _ladHost.style.display = 'none'; _ladHost.innerHTML = ''; }
   }
@@ -8012,6 +8083,14 @@ function renderQuickPricing() {
   if (!basis || tiers.length < 2) { host.style.display = 'none'; return; }
   host.style.display = '';
   showStrategy(true);
+  // showStrategy(true) hides the caption, but a derived band REQUIRES its
+  // disclosure to stay on screen -- the whole point is that these numbers are
+  // estimated. Restore it.
+  if (_bandActive && note) note.style.display = '';
+  // Same for the payout rows: showStrategy(true) turns them back on, but they
+  // read "Lowest listing" / "Market price" off a listing book that does not
+  // exist for a slab. Keep them down.
+  if (_bandActive && rowsEl) rowsEl.style.display = 'none';
 
   const cur = parseFloat(document.getElementById('priceOverride')?.value);
   const fmt = (n) => '$' + Number(n).toLocaleString('en-US',
@@ -9028,6 +9107,17 @@ const GRADE_SCALES = {
     { v: '2',   label: 'PSA 2 — Good' },
     { v: '1.5', label: 'PSA 1.5 — Fair' },
     { v: '1',   label: 'PSA 1 — Poor' },
+    // PSA issues half grades from 1.5 through 8.5 and NO 9.5 -- the jump from
+    // 9 to 10 is deliberately undivided. Do not add a PSA 9.5 rung: that is
+    // the single most common way to misprice a slab, because the generic
+    // "Grade 9.5" figure published by price guides is a BGS/CGC number.
+    { v: '8.5', label: 'PSA 8.5 — NM-Mint+' },
+    { v: '7.5', label: 'PSA 7.5 — NM+' },
+    { v: '6.5', label: 'PSA 6.5 — EX-MT+' },
+    { v: '5.5', label: 'PSA 5.5 — EX+' },
+    { v: '4.5', label: 'PSA 4.5 — VG-EX+' },
+    { v: '3.5', label: 'PSA 3.5 — VG+' },
+    { v: '2.5', label: 'PSA 2.5 — Good+' },
   ],
   bgs: [
     { v: '10p', label: 'BGS 10 Pristine — Black Label' },
