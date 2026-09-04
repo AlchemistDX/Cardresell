@@ -63,7 +63,15 @@ export default async function handler(req, res) {
   // name-only lookups now refuse ambiguous printings. A code change does NOT
   // invalidate KV, so the key must move with the pricing logic or every cached
   // entry keeps serving the old, wrong number.
-  const cacheKey = `v9|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  //
+  // v10 (2026-09-03, same day): 562149f closed a fallback loophole in the live
+  // TCGplayer search that had allowed the resolver's rejected identities to be
+  // resurrected -- so during the ~15 minutes between 592dd00 and 562149f a
+  // handful of v9 entries got written by the still-broken path. Prod verify
+  // caught "Iono" served as "Iono Premium Tournament Collection Display" at
+  // $318.12 with cacheAgeSec 796 under the fresh v9 key. Rotate to v10 so the
+  // 17-minute remainder of that TTL does not keep serving the bad number.
+  const cacheKey = `v10|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 

@@ -943,7 +943,7 @@ try {
         /data\.marketAskDivergence = _div/.test(tcgPrice));
 
   check('the TCG cache key moved with the pricing change',
-        /`v9\|\$\{game\}/.test(tcgPrice) && !/`v8\|\$\{game\}/.test(tcgPrice),
+        /`v10\|\$\{game\}/.test(tcgPrice) && !/`v[89]\|\$\{game\}/.test(tcgPrice),
         'a code change does NOT invalidate KV -- stale entries would keep serving $19,800');
 
   check('the high clamp is the 3x the docs now describe',
