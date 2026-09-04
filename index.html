@@ -2439,9 +2439,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
 
           <div id="qpInfo" class="qp-info-panel" style="display:none">
-            <p><strong>Sell Now</strong> undercuts the cheapest copy listed on TCGplayer right now, so yours is the first one a buyer sees.</p>
-            <p><strong>Market</strong> is TCGplayer&#8217;s market price, derived from completed sales &#8212; what copies have actually been selling for.</p>
-            <p><strong>Top of Book</strong> is the median active listing. Achievable, but you are waiting behind every cheaper copy.</p>
+            <p><strong>Sell Now</strong> is an estimate 15% below the displayed comp.</p>
+            <p><strong>Comp</strong> is the displayed source value for this card, condition, and grade.</p>
+            <p><strong>Patient</strong> is an estimate 15% above the displayed comp.</p>
+            <p class="qp-info-caveat">Sell Now and Patient are calculated, not observed sales. Active listings are skipped because they mix conditions and the cheapest ask is often a beat-up copy.</p>
             <p class="qp-info-caveat">These are prices, not timelines. No marketplace publishes how long a card takes to sell, so we don&#8217;t estimate it.</p>
           </div>
 
@@ -8150,7 +8151,7 @@ function renderQuickPricing() {
     _bandActive = true;
     if (note) {
       note.style.display = '';
-      note.textContent = 'Estimated band. Comp is recent completed sales; Sell Now and '
+      note.textContent = 'Estimated band. Comp is the displayed source value; Sell Now and '
         + 'Patient are calculated as '
         + String(Math.round(_QP_DERIVED_SPREAD * 100)) + '% either side of it — not '
         + 'observed sales. Active listings are skipped on purpose: they mix every '
@@ -8180,7 +8181,14 @@ function renderQuickPricing() {
   // exist for a slab. Keep them down.
   if (_bandActive && rowsEl) rowsEl.style.display = 'none';
 
-  const cur = parseFloat(document.getElementById('priceOverride')?.value);
+  // Marker uses the same condition-adjusted value the headline and band use.
+  // Previously read priceOverride directly, so switching NM->MP left the
+  // marker at 100% while the tiles moved to the MP band -- a visible
+  // contradiction. When the user typed an explicit price, _ovAutoFilled=false
+  // and getEffectivePrice() returns that verbatim, so this stays honest.
+  const cur = (typeof getEffectivePrice === 'function')
+    ? Number(getEffectivePrice())
+    : parseFloat(document.getElementById('priceOverride')?.value);
   const fmt = (n) => '$' + Number(n).toLocaleString('en-US',
     { minimumFractionDigits: n < 100 ? 2 : 0, maximumFractionDigits: n < 100 ? 2 : 0 });
 
@@ -8520,8 +8528,16 @@ async function syncGradeToPrintSelect() {
     const ovField = document.getElementById('priceOverride');
     if (ovField) { ovField.value = ''; ovField.style.borderColor = ''; }
 
-    // Build the variant key (replace dots with underscores, e.g. 9.5 → 9_5)
-    const targetKey = `${grader}_${grade}`.replace(/\./g, '_');
+    // Build the variant key (replace dots with underscores, e.g. 9.5 -> 9_5).
+    // PriceCharting publishes ONE grader-agnostic 9.5 row (box-only-price).
+    // The historical internal key is psa_9_5 (kept, because _QP_KEY_TO_PC and
+    // the whole graded pipeline are wired to it) even though PSA itself does
+    // not issue 9.5. So graders that DO issue 9.5 (BGS/CGC/SGC) must route
+    // there rather than to a nonexistent bgs_9_5/cgc_9_5/sgc_9_5, otherwise
+    // syncGradeToPrintSelect's same-grader fallback silently picks the 10.
+    const targetKey = (grade === '9.5' && /^(bgs|cgc|sgc)$/.test(grader))
+      ? 'psa_9_5'
+      : `${grader}_${grade}`.replace(/\./g, '_');
     // Graded variants no longer appear in the visible printSelect dropdown
     // (see rebuildPrintSelect / initial variants.forEach). Ensure a hidden
     // option exists in the DOM for the current graded key so
@@ -8608,7 +8624,9 @@ async function syncGradeToPrintSelect() {
           ...tplFiltered,
         ];
         rebuildPrintSelect(selectedCard.priceVariants);
-        const targetKey2 = `${grader}_${grade}`.replace(/\./g, '_');
+        const targetKey2 = (grade === '9.5' && /^(bgs|cgc|sgc)$/.test(grader))
+          ? 'psa_9_5'
+          : `${grader}_${grade}`.replace(/\./g, '_');
         const g2 = currentPrices[targetKey2];
         const fbKey2 = !g2 && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
         const fb2 = fbKey2 ? currentPrices[fbKey2] : null;
@@ -12648,6 +12666,13 @@ function renderCollectionView() {
 // The server now returns a trimmed, sanity-filtered median directly — no need
 // to re-compute client-side. Falls back to null if confidence is insufficient.
 async function _fetchEbayPriceForEntry(p) {
+  // A generic eBay sold query is card + number only -- no grader, no grade.
+  // Refreshing a saved slab through it can replace its guide value with a
+  // raw-condition eBay median (Base Set Charizard PSA 10 = $13k slab guide
+  // vs $897 raw TCG comp). Refuse the refresh instead of guessing. A
+  // grade-aware refresh path (PriceCharting by persisted grader+grade at
+  // 1 req/s) is the correct fix; keep the saved slab value until then.
+  if (p && p.grader && p.grade) return null;
   // Build query: card name + card number (stripped from set field like "Charizard · #4")
   const numMatch = (p.set || '').match(/#(\S+)/);
   const cardNum  = numMatch ? numMatch[1].replace(/^0+/, '') : '';

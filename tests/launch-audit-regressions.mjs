@@ -1621,5 +1621,74 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
   check('PSA scale still has no 9.5', !psa.includes("v: '9.5'"));
 }
 
+// ---- 9.5 routes to the generic PriceCharting row (2026-09-04 Sol audit) ----
+// PriceCharting publishes ONE 9.5 field (box-only-price). PSA does not issue
+// 9.5, so the internal key is psa_9_5 -- shared. If syncGradeToPrintSelect
+// builds bgs_9_5 / cgc_9_5 / sgc_9_5 the same-grader fallback picks the 10
+// and the user sees a wrong dollar value (Charizard BGS 9.5 -> $17,103
+// instead of $7,290.69). BOTH targetKey sites in syncGradeToPrintSelect must
+// perform the redirect.
+{
+  const redirects = (index.match(/grade === '9\.5' && \/\^\(bgs\|cgc\|sgc\)\$\/\.test\(grader\)/g) || []).length;
+  check('both 9.5 -> psa_9_5 redirects exist (was BGS/CGC/SGC 9.5 showing the 10 value)', redirects === 2);
+  check('no naked `${grader}_${grade}` targetKey slips through in syncGradeToPrintSelect',
+        (index.match(/const targetKey2? = `\$\{grader\}_\$\{grade\}`/g) || []).length === 0);
+}
+
+// ---- Info panel reflects the derived-band model (2026-09-04 Sol audit) ----
+// The visible qpInfo dialog is what tells sellers what each tile MEANS.
+// Post-universal-band it must describe Sell Now / Comp / Patient, not the
+// retired Sell Now / Market / Top of Book model.
+{
+  const info = index.slice(index.indexOf('<div id="qpInfo"'),
+                           index.indexOf('</div>', index.indexOf('<div id="qpInfo"')));
+  check('qpInfo defines Sell Now as 15% below comp',
+        /<strong>Sell Now<\/strong> is an estimate 15% below/.test(info));
+  check('qpInfo defines Comp as the displayed source value',
+        /<strong>Comp<\/strong> is the displayed source value/.test(info));
+  check('qpInfo defines Patient as 15% above comp',
+        /<strong>Patient<\/strong> is an estimate 15% above/.test(info));
+  check('qpInfo no longer says Sell Now undercuts the cheapest listing',
+        !/undercuts the cheapest/.test(info));
+  check('qpInfo no longer names Top of Book', !/Top of Book/.test(info));
+  check('qpInfo no longer defines Market as a tier', !/<strong>Market<\/strong>/.test(info));
+}
+
+// ---- The band caption stops claiming completed-sales as universal (Sol) ----
+{
+  check('band caption says Comp is the displayed source value',
+        index.includes("'Estimated band. Comp is the displayed source value; Sell Now and '"));
+  check('band caption does not say completed sales anymore',
+        !index.includes("'Estimated band. Comp is recent completed sales; Sell Now and '"));
+}
+
+// ---- Marker uses the condition-adjusted price (2026-09-04 Sol audit) ----
+// Was `parseFloat(priceOverride.value)` -- unaffected by condition switches --
+// while headline/tiers used getEffectivePrice(), so switching NM->MP pinned
+// the marker at 100% while the tiles slid to the MP band. Now both agree.
+{
+  // Slicing this function is fragile because it contains nested arrow
+  // functions. Assert against the file directly: exactly one place uses
+  // getEffectivePrice() for `cur`, and the old blind priceOverride read is
+  // gone from renderQuickPricing (two other callers keep parseFloat -- the
+  // fee calculator at :10822 gates on _ovAutoFilled=false, and the offline
+  // audit harness at :20684 does the same).
+  check('renderQuickPricing marker consults getEffectivePrice',
+        /const cur = \(typeof getEffectivePrice === 'function'\)/.test(index));
+  check('renderQuickPricing marker no longer parses priceOverride blindly',
+        (index.match(/const cur = parseFloat\(document\.getElementById\('priceOverride'\)\?\.value\);/g) || []).length === 0);
+}
+
+// ---- Portfolio slab refresh refuses generic eBay overwrites (Sol audit) ----
+// _fetchEbayPriceForEntry has no grader/grade in the query. Refreshing a slab
+// through it can replace its guide value with a raw-condition median. Refuse
+// until a grade-aware refresh path exists.
+{
+  const fe = index.slice(index.indexOf('async function _fetchEbayPriceForEntry'),
+                         index.indexOf('async function refreshCollectionPrices'));
+  check('slab refresh short-circuits before generic eBay query',
+        /if \(p && p\.grader && p\.grade\) return null;/.test(fe));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
