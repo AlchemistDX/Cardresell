@@ -596,6 +596,36 @@ img{display:block;max-width:100%;height:auto}
 :root{--qp-green:#128a4b;--qp-amber:#d9a412;--qp-red:#c8342a}
 [data-theme="dark"]{--qp-green:#1faa5e;--qp-amber:#e8b528;--qp-red:#e0483c}
 
+/* Grade-ladder bar (graded selections). Deliberately NOT the green-amber-red
+   ramp used by .qp-bar-fill: that ramp encodes "cheap and quick" through to
+   "overpriced", which is a judgement about an ask. The ladder axis is value by
+   grade, where the top end is simply worth more -- painting PSA 10 red would
+   read as a warning it is not. Neutral gold ramp instead. */
+.qp-lad-wrap{margin:.15rem 0 .1rem}
+.qp-lad-title{font-size:.72rem;font-weight:700;letter-spacing:.02em;
+  text-transform:uppercase;opacity:.62;margin-bottom:.85rem}
+.qp-lad-bar{position:relative;height:7px;border-radius:99px;overflow:visible;
+  background:linear-gradient(90deg,var(--qp-lad-lo) 0%,var(--qp-lad-hi) 100%)}
+.qp-lad-tick{position:absolute;top:-3px;bottom:-3px;width:1.5px;border-radius:2px;
+  background:var(--text);opacity:.34}
+.qp-lad-tick.is-sel{opacity:0}
+.qp-lad-marker{position:absolute;top:50%;width:13px;height:13px;margin-left:-6.5px;
+  transform:translateY(-50%);border-radius:50%;background:var(--surface);
+  border:2.5px solid var(--gold);box-shadow:0 1px 3px rgba(0,0,0,.22);transition:left .18s ease}
+.qp-lad-ends{display:flex;justify-content:space-between;gap:.5rem;margin-top:.6rem;
+  font-size:.68rem;opacity:.66;font-variant-numeric:tabular-nums}
+.qp-lad-rows{margin-top:.9rem}
+.qp-lad-rows .qp-row.is-sel{font-weight:700}
+.qp-lad-rows .qp-row.is-sel .qp-row-v{color:var(--gold)}
+.qp-lad-rows .qp-row.is-sel em{font-style:normal;font-size:.64rem;font-weight:600;
+  opacity:.6;margin-left:.3rem;text-transform:uppercase;letter-spacing:.03em}
+.qp-lad-foot{margin:.7rem 0 0;font-size:.68rem;line-height:1.45;opacity:.62}
+.qp-lad-src{color:var(--gold);text-decoration:none;font-weight:600}
+.qp-lad-src:hover{text-decoration:underline}
+.qp-lad-warn{margin:.4rem 0 0;font-size:.68rem;line-height:1.45;color:var(--qp-amber)}
+:root{--qp-lad-lo:#c9c2b0;--qp-lad-hi:#d4a72c}
+[data-theme="dark"]{--qp-lad-lo:#4a453a;--qp-lad-hi:#e8bf45}
+
 .qp-rows{margin-top:.7rem;display:flex;flex-direction:column;gap:.02rem}
 .qp-row{display:flex;align-items:baseline;gap:.5rem;padding:.36rem 0;font-size:.78rem}
 .qp-row+.qp-row{border-top:1px dashed var(--border)}
@@ -2431,6 +2461,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
                no active listing book to position against and no Sell Now /
                Top of Book to offer. Saying that is better than vanishing. -->
           <p class="qp-graded-note" id="qpGradedNote" style="display:none"></p>
+
+          <!-- Grade-ladder bar. Shown for graded selections in place of the
+               strategy bar above: a slab has no listing book to position an
+               ask inside, but it does have a real published spread across
+               grades. Populated by _qpRenderLadder(). -->
+          <div id="qpLadder" style="display:none"></div>
         </div>
 
         <div class="sep"></div>
@@ -6458,6 +6494,28 @@ async function fetchAndApplySoldComps(forceRefresh) {
         sgc_10:   { key: 'sgc_10', label: 'SGC 10 (PriceCharting)' },
       };
       window.currentPrices = window.currentPrices || {};
+
+      // Stash the WHOLE PriceCharting price object, not just the grades we
+      // mirror into variants. The grade-ladder bar needs PC's own raw value as
+      // the floor of the ladder even when a TCGplayer raw price already won
+      // the raw pill (the `hasRaw` branch below then skips injecting PC raw as
+      // a variant, so it would otherwise be unreachable). Building the ladder
+      // from one source end-to-end is the point: PC raw -> PC PSA 10 is a
+      // like-for-like comparison, whereas TCG raw -> PC PSA 10 silently mixes
+      // a completed-sales price with a blended guide value and would overstate
+      // or understate the step depending on which way the two feeds disagree.
+      //
+      // Tagged with the card identity so a stale ladder can never paint onto
+      // the next card: async PC responses can land after the user has moved on.
+      window._crPCLadder = {
+        prices: pc.prices,
+        url: pc.url || null,
+        cacheAgeSec: pc.cacheAgeSec ?? null,
+        productName: pc.productName || null,
+        forName: (selectedCard && selectedCard.name) || null,
+        forSet:  (selectedCard && selectedCard.setName) || null,
+      };
+
       Object.entries(PC_TO_KEY).forEach(([pcKey, m]) => {
         const v = pc.prices[pcKey];
         if (v == null || !isFinite(v) || v <= 0) return;
@@ -7158,6 +7216,7 @@ function loadCardUI(card) {
   if (_qpHost) _qpHost.style.display = 'none';
   window._ovAutoFilled = false;  // new card: no system basis in the field yet
   window._crBasis = null;        // and no basis to render the headline from
+  window._crPCLadder = null;     // and no grade ladder until PC answers for THIS card
 
   // Reset comps status
   _compsAbortCard = null;
@@ -7510,6 +7569,7 @@ function resetCardPanel() {
   jpLinksPanel.style.display = 'none';
   const gcb = document.getElementById('gradedCompsBanner');
   if (gcb) gcb.style.display = 'none';
+  window._crPCLadder = null;
   currentPrices = {};
   printSelect.innerHTML = '<option value="">— select —</option>';
   showIntro();
@@ -7643,6 +7703,149 @@ function _qpTiers(basis) {
   return tiers;
 }
 
+// ── Grade ladder ───────────────────────────────────────────────────────────
+// The position bar above answers "where does my ask sit in the active listing
+// book". A graded slab has no listing book -- PriceCharting publishes one
+// guide value per grade -- so that bar genuinely cannot be drawn, and the old
+// behaviour was to hide it. But the bar vanishing on every PSA selection reads
+// as a broken widget, and there IS a real spread to show: the grade ladder
+// itself. Raw $366 -> PSA 9 $3,137 -> PSA 10 $13,156 on a Base Set Charizard
+// are all published, all for the same card, all from the same source.
+//
+// Rules this obeys, so the bar never implies more than the data supports:
+//   * One source. Every point comes from the SAME PriceCharting response.
+//     No TCGplayer raw price is spliced in as the floor, because a
+//     completed-sales price and a blended guide value are different
+//     measurements and the step between them would not be a grading step.
+//   * One grader. Selecting BGS 10 builds raw -> BGS 10, not the PSA ladder,
+//     so we never imply a BGS 9 value PriceCharting does not publish.
+//   * Published points only. Grades absent from the feed are absent from the
+//     bar; nothing is interpolated between them.
+//   * It is a VALUE axis, not a probability. It shows what each grade is
+//     worth, and says nothing about the odds of achieving that grade -- that
+//     is the grade-upside question that stays withdrawn for want of licensed
+//     population data.
+const _QP_LADDER_PSA = [
+  { pc: 'raw',      label: 'Raw'      },
+  { pc: 'grade_7',  label: 'PSA 7'    },
+  { pc: 'grade_8',  label: 'PSA 8'    },
+  { pc: 'grade_9',  label: 'PSA 9'    },
+  { pc: 'grade_95', label: 'PSA 9.5'  },
+  { pc: 'psa_10',   label: 'PSA 10'   },
+];
+// Graders PriceCharting publishes only a single 10 for. The ladder is then
+// raw -> that 10, which is a two-point axis but still a real one.
+const _QP_LADDER_SOLO = {
+  bgs_10: { pc: 'bgs_10', label: 'BGS 10' },
+  cgc_10: { pc: 'cgc_10', label: 'CGC 10' },
+  sgc_10: { pc: 'sgc_10', label: 'SGC 10' },
+};
+// variant key -> the PriceCharting field it was sourced from.
+const _QP_KEY_TO_PC = {
+  psa_7: 'grade_7', psa_8: 'grade_8', psa_9: 'grade_9',
+  psa_9_5: 'grade_95', psa_10: 'psa_10',
+  bgs_10: 'bgs_10', cgc_10: 'cgc_10', sgc_10: 'sgc_10',
+};
+
+function _qpGradeLadder(selKey) {
+  const L = window._crPCLadder;
+  if (!L || !L.prices) return null;
+  // Identity guard: an in-flight PriceCharting response for the previous card
+  // must never paint a ladder onto the card now on screen.
+  if (selectedCard && L.forName && L.forName !== selectedCard.name) return null;
+  if (selectedCard && L.forSet  && L.forSet  !== selectedCard.setName) return null;
+
+  const selPc = _QP_KEY_TO_PC[selKey];
+  if (!selPc) return null;
+
+  const scale = _QP_LADDER_SOLO[selKey]
+    ? [_QP_LADDER_PSA[0], _QP_LADDER_SOLO[selKey]]
+    : _QP_LADDER_PSA;
+
+  const num = (v) => (v != null && isFinite(v) && Number(v) > 0) ? Number(v) : null;
+  const points = scale
+    .map(s => ({ label: s.label, amt: num(L.prices[s.pc]), pc: s.pc }))
+    .filter(p => p.amt != null);
+
+  // A single point cannot be positioned against anything.
+  if (points.length < 2) return null;
+  if (!points.some(p => p.pc === selPc)) return null;
+
+  return {
+    points,
+    selPc,
+    url: L.url,
+    cacheAgeSec: L.cacheAgeSec,
+    // Ladders normally rise with grade, but the feed is the authority: if a
+    // published value breaks monotonicity we show it as published rather than
+    // reordering or hiding it. Sorting would misrepresent which grade is which.
+    monotonic: points.every((p, i) => i === 0 || p.amt >= points[i - 1].amt),
+  };
+}
+
+function _qpRenderLadder(ladder, hostEl) {
+  const fmt = (n) => '$' + Number(n).toLocaleString('en-US',
+    { minimumFractionDigits: n < 100 ? 2 : 0, maximumFractionDigits: n < 100 ? 2 : 0 });
+  const pts = ladder.points;
+  const lo = pts[0].amt;
+  const hi = pts[pts.length - 1].amt;
+  const span = Math.max(hi - lo, 1e-9);
+  // Linear on value. A log axis would space the grades more evenly and look
+  // tidier, but it would visually shrink exactly the jump that matters most
+  // (PSA 9 -> PSA 10 is often the majority of the whole range) and overstate
+  // the small ones. The bunching at the low end is the honest shape of the
+  // data: on vintage cards most of the value really is in the top grade.
+  // Inset the usable track so the first and last tick sit fully inside the bar
+  // instead of being sliced in half by the rounded ends. PAD is in percent and
+  // must clear half the marker width (13px / ~340px track) at phone widths.
+  const PAD = 3.2;
+  const pct = (v) => PAD + (Math.max(0, Math.min(1, (v - lo) / span)) * (100 - 2 * PAD));
+
+  const ticks = pts.map(p => {
+    const on = p.pc === ladder.selPc;
+    return `<div class="qp-lad-tick${on ? ' is-sel' : ''}" style="left:${pct(p.amt)}%"
+      title="${_qpEsc(p.label)} — ${_qpEsc(fmt(p.amt))}"></div>`;
+  }).join('');
+
+  const sel = pts.find(p => p.pc === ladder.selPc);
+  const marker = `<div class="qp-lad-marker" style="left:${pct(sel.amt)}%"
+    title="${_qpEsc(sel.label)} — ${_qpEsc(fmt(sel.amt))}"></div>`;
+
+  // Endpoint labels only. Labelling all six collides badly on a phone, and the
+  // per-grade values are listed in the rows underneath anyway.
+  const ends = `<div class="qp-lad-ends">
+      <span>${_qpEsc(pts[0].label)} ${_qpEsc(fmt(lo))}</span>
+      <span>${_qpEsc(pts[pts.length - 1].label)} ${_qpEsc(fmt(hi))}</span>
+    </div>`;
+
+  const rows = pts.map(p => {
+    const on = p.pc === ladder.selPc;
+    return `<div class="qp-row${on ? ' is-sel' : ''}">
+      <span class="qp-row-k">${_qpEsc(p.label)}${on ? ' <em>selected</em>' : ''}</span>
+      <span class="qp-row-dots"></span>
+      <span class="qp-row-v">${_qpEsc(fmt(p.amt))}</span>
+    </div>`;
+  }).join('');
+
+  const src = ladder.url
+    ? `<a href="${_qpEsc(ladder.url)}" target="_blank" rel="noopener noreferrer" class="qp-lad-src">PriceCharting guide values ↗</a>`
+    : 'PriceCharting guide values';
+
+  const warn = ladder.monotonic ? '' :
+    `<p class="qp-lad-warn">One published value is lower than the grade below it. Shown as published — not reordered.</p>`;
+
+  hostEl.innerHTML =
+    `<div class="qp-lad-wrap">
+       <div class="qp-lad-title">Value by grade</div>
+       <div class="qp-lad-bar">${ticks}${marker}</div>
+       ${ends}
+     </div>
+     <div class="qp-rows qp-lad-rows">${rows}</div>
+     <p class="qp-lad-foot">${src}. These are what each grade is worth — not the
+       odds of receiving it. Grading outcome is not predicted here.</p>
+     ${warn}`;
+}
+
 function renderQuickPricing() {
   const host = document.getElementById('quickPricing');
   if (!host) return;
@@ -7682,12 +7885,39 @@ function renderQuickPricing() {
   if (basis && basis.graded && tiers.length < 2) {
     host.style.display = '';
     showStrategy(false);
+
+    // 2026-09-03: the strategy bar still cannot be drawn for a slab -- there is
+    // no listing book to position an ask inside. But hiding everything made the
+    // whole widget disappear the moment a user checked a PSA grade, which reads
+    // as a bug. Replace it with the one real spread a slab does have: the grade
+    // ladder. Same card, same source, published values only.
+    const _selKey = (typeof printSelect !== 'undefined' && printSelect) ? printSelect.value : '';
+    const _ladder = _qpGradeLadder(_selKey);
+    const _ladHost = document.getElementById('qpLadder');
+    if (_ladder && _ladHost) {
+      _qpRenderLadder(_ladder, _ladHost);
+      _ladHost.style.display = '';
+      if (note) note.style.display = 'none';
+      return;
+    }
+    if (_ladHost) { _ladHost.style.display = 'none'; _ladHost.innerHTML = ''; }
+
+    // No ladder available (PriceCharting has not answered for this card, or it
+    // publishes only the one grade the user picked). Fall back to saying why.
     if (note) {
       note.textContent = 'Graded slabs price off a single guide value per grade, '
         + 'so there is no cheapest-listing spread to undercut. The payout rows below '
         + 'are calculated from that value.';
     }
     return;
+  }
+
+  // Leaving the graded branch: tear the ladder down so it cannot linger over a
+  // raw selection, where its grade axis would be describing a different thing
+  // from the strategy bar directly above it.
+  {
+    const _ladHost = document.getElementById('qpLadder');
+    if (_ladHost) { _ladHost.style.display = 'none'; _ladHost.innerHTML = ''; }
   }
 
   // One tier is not a choice -- hide rather than dress up a single number as

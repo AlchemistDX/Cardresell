@@ -1211,5 +1211,77 @@ try {
         'the tombstone must point somewhere real');
 }
 
+// ── Grade-ladder bar keeps its four load-bearing constraints ───────────
+// Shipped 2026-09-03 because the whole Quick Pricing panel used to vanish the
+// moment a user checked a PSA grade. A slab has no listing book, so the ask-
+// placement bar genuinely cannot be drawn -- the ladder shows the one real
+// spread a slab does have. Each check below pins a rule that, if broken,
+// turns an honest value axis into a misleading claim.
+{
+  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const ladStart = idx.indexOf('function _qpGradeLadder');
+  const ladEnd = idx.indexOf('function renderQuickPricing');
+  const lad = ladStart > -1 && ladEnd > ladStart ? idx.slice(ladStart, ladEnd) : '';
+  const tables = idx.slice(idx.indexOf('_QP_LADDER_PSA'), ladStart > -1 ? ladStart : undefined);
+
+  check('the grade ladder exists at all', lad.length > 200,
+        'the graded branch depends on it; without it the panel goes blank again');
+
+  // 1. SINGLE SOURCE. The tempting bug is to use the TCGplayer raw price as the
+  // ladder floor because it is already on screen. That would compare a
+  // completed-sales price against PriceCharting guide values -- on Base Set
+  // Charizard those two differ by 2.45x, so the raw -> PSA 7 step would be a
+  // pure cross-source artifact rather than a real grading gain.
+  check('every ladder point comes from the stashed PriceCharting response',
+        /_crPCLadder/.test(lad) && !/currentPrices\[/.test(lad),
+        'splicing a TCG raw price into a PC ladder fabricates the first step');
+  check('the ladder floor is PriceCharting own raw value',
+        /'raw'/.test(tables),
+        'the floor must be PC raw, not whatever won the headline price');
+
+  // 2. GRADER SCOPED. PriceCharting publishes a full PSA ladder but only a
+  // single bgs_10 / cgc_10 / sgc_10. Showing the PSA ladder under a BGS
+  // selection would invent BGS 7/8/9 values that do not exist anywhere.
+  check('non-PSA graders get a solo ladder, not the PSA one',
+        /_QP_LADDER_SOLO/.test(idx) && /bgs_10/.test(tables)
+          && /cgc_10/.test(tables) && /sgc_10/.test(tables),
+        'a BGS 10 pick must never render PSA 7/8/9 rungs');
+
+  // 3. IDENTITY GUARDED. A stale ladder outliving a card change would label
+  // one card's grade values with another card's name.
+  check('the ladder is discarded when the selected card changes',
+        /forName/.test(lad) && /forSet/.test(lad),
+        'stale grade values reattaching to a new card is the worst failure here');
+  check('the stash is cleared on new card load and on reset',
+        (idx.match(/_crPCLadder\s*=\s*null/g) || []).length >= 2,
+        'one clear site is not enough -- both load and reset must drop it');
+
+  // 4. NOT A PROBABILITY. Same objection that withdrew grade upside: a value
+  // axis must not read as the odds of hitting the grade at the top of it.
+  check('the ladder disclaims any grading-odds reading',
+        /odds of receiving it/.test(idx)
+          && /Grading outcome is not predicted here/.test(idx),
+        'without this line a value ladder reads as an expected outcome');
+  check('the ladder cites PriceCharting as the source on screen',
+        /PriceCharting guide values/.test(idx),
+        'unsourced grade values are what the freshness contract forbids');
+
+  // Published points only -- no interpolation to fill a grade PC omits.
+  check('the ladder interpolates nothing',
+        !/interpolat/i.test(lad),
+        'a made-up mid-grade value would be indistinguishable from a real one');
+
+  // The ladder must not reuse the cheap/overpriced ramp: on a grade axis a red
+  // top end would warn the user against the most valuable outcome.
+  check('the ladder uses its own neutral ramp, not the strategy ramp',
+        /--qp-lad-lo/.test(idx) && /--qp-lad-hi/.test(idx),
+        'green-amber-red encodes ask quality, wrong semantics for a grade axis');
+
+  // Out-of-range published values are shown as published, never reordered.
+  check('a non-monotonic ladder is disclosed rather than silently sorted',
+        /monotonic/.test(lad) && /not reordered/.test(idx),
+        'quietly sorting a published value would misstate the source');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
