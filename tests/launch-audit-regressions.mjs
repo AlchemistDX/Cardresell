@@ -1673,8 +1673,13 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
   // gone from renderQuickPricing (two other callers keep parseFloat -- the
   // fee calculator at :10822 gates on _ovAutoFilled=false, and the offline
   // audit harness at :20684 does the same).
+  // 2026-09-04b: getEffectivePrice() returns 0 (finite!) when there is no
+  // usable price, which would pin the marker to 0%. `cur` now requires a
+  // POSITIVE effective price before it is trusted.
   check('renderQuickPricing marker consults getEffectivePrice',
-        /const cur = \(typeof getEffectivePrice === 'function'\)/.test(index));
+        /const _eff = \(typeof getEffectivePrice === 'function'\) \? Number\(getEffectivePrice\(\)\) : NaN;/.test(index));
+  check('marker treats non-positive effective price as absent',
+        /const cur = \(Number\.isFinite\(_eff\) && _eff > 0\)/.test(index));
   check('renderQuickPricing marker no longer parses priceOverride blindly',
         (index.match(/const cur = parseFloat\(document\.getElementById\('priceOverride'\)\?\.value\);/g) || []).length === 0);
 }
@@ -1684,10 +1689,96 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 // through it can replace its guide value with a raw-condition median. Refuse
 // until a grade-aware refresh path exists.
 {
+  // Anchor to the NEXT function, not to refreshCollectionPrices -- the
+  // grade-aware helpers now sit between the two, which would widen this
+  // slice over code it isn't meant to assert on.
   const fe = index.slice(index.indexOf('async function _fetchEbayPriceForEntry'),
-                         index.indexOf('async function refreshCollectionPrices'));
+                         index.indexOf('function _pcKeyForGrade'));
   check('slab refresh short-circuits before generic eBay query',
         /if \(p && p\.grader && p\.grade\) return null;/.test(fe));
+}
+
+// ---- Grade-aware portfolio refresh (2026-09-04) -------------------------
+// Slabs refresh from the PriceCharting field for their exact grader+grade;
+// raw cards keep the eBay sold path. Neither may be priced off the other's
+// source. Verified live: Base Set Charizard BGS 9.5 = $7,290.69 while
+// BGS 10 = $17,103 -- mapping 9.5 to a grader key would 2.3x the value.
+{
+  const gk = index.slice(index.indexOf('function _pcKeyForGrade'),
+                         index.indexOf('async function _fetchGradedPriceForEntry'));
+  check('9.5 maps to the grader-agnostic grade_95 column',
+        /return \/\^\(bgs\|cgc\|sgc\)\$\/\.test\(g\) \? 'grade_95' : null;/.test(gk));
+  check('PSA 9.5 is unmapped (PSA issues no 9.5)', /\bpsa\b/.test(gk) && !/psa_9_5/.test(gk));
+  check('each grader has its own 10 field',
+        /psa: 'psa_10', bgs: 'bgs_10', cgc: 'cgc_10', sgc: 'sgc_10'/.test(gk));
+  check('grade 8 and 8.5 share one column', /n === '8' \|\| n === '8\.5'/.test(gk));
+  check('grade 7 and 7.5 share one column', /n === '7' \|\| n === '7\.5'/.test(gk));
+  check('grades 6.5 and below map to nothing (PC publishes none)',
+        /return null; \/\/ 6\.5 and below/.test(gk));
+
+  const gf = index.slice(index.indexOf('async function _fetchGradedPriceForEntry'),
+                         index.indexOf('async function _fetchPriceForEntry'));
+  check('graded refresh calls the pricecharting endpoint',
+        /fetch\('\/api\/pricecharting\?'/.test(gf));
+  check('graded refresh rejects a non-pricecharting payload',
+        /d\.source !== 'pricecharting'/.test(gf));
+  check('graded refresh refuses sports (identity not persisted)',
+        /if \(rawGame === 'sports'\) return null;/.test(gf));
+  check('graded refresh rejects non-positive values',
+        /Number\.isFinite\(v\) && v > 0/.test(gf));
+
+  const disp = index.slice(index.indexOf('async function _fetchPriceForEntry'),
+                           index.indexOf('async function refreshCollectionPrices'));
+  check('dispatcher routes slabs to the graded path',
+        /if \(p && p\.grader && p\.grade\) return await _fetchGradedPriceForEntry\(p\);/.test(disp));
+  check('dispatcher routes raw to the eBay path',
+        /return await _fetchEbayPriceForEntry\(p\);/.test(disp));
+
+  // Both refresh callers must use the dispatcher, never the raw path directly.
+  check('no caller bypasses the dispatcher',
+        (index.match(/await _fetchEbayPriceForEntry\(p\)/g) || []).length === 1);
+  check('bulk + single refresh both use the dispatcher',
+        (index.match(/await _fetchPriceForEntry\(p\)/g) || []).length === 2);
+  check('bulk refresh paces PriceCharting at 1 req/sec',
+        /if \(isSlab && pcCalls > 0\) await new Promise\(r => setTimeout\(r, 1100\)\);/.test(index));
+  check('refresh toast no longer claims eBay as the only source',
+        !/refreshed from eBay sold data/.test(index));
+}
+
+// ---- A chosen tier survives a condition change (2026-09-04) -------------
+// qpApply used to write a bare number, making a tile choice indistinguishable
+// from a hand-typed price. Switching Mod.Played -> Heavy Play then left the
+// $583 MP price in the box while tiles repainted to the HP band, pinning the
+// marker at 100% with no tile selected. Now the tier id is remembered and
+// re-derived; a HAND-TYPED price is still never moved.
+{
+  check('qpApply records which tier was chosen',
+        /window\._qpChosenTier = tierId \|\| null;/.test(index));
+  check('tiles pass their id to qpApply',
+        /onclick="qpApply\(\$\{t\.amt\}, '\$\{_qpEsc\(t\.id\)\}'\)"/.test(index));
+  check('all five condition pills re-derive the chosen tier',
+        (index.match(/_qpReapplyChosenTier\(\);calc\(\)/g) || []).length === 5);
+  check('typing by hand abandons the tier choice',
+        /window\._qpChosenTier = null;\n  const rawEl/.test(index));
+  check('a new card clears the tier choice',
+        /window\._qpChosenTier = null;   \/\/ and no tier chosen for it yet/.test(index));
+  check('a fresh system basis clears the tier choice',
+        (index.match(/window\._qpChosenTier = null;   \/\/ new basis/g) || []).length === 1);
+  const ra = index.slice(index.indexOf('function _qpReapplyChosenTier'),
+                         index.indexOf('function toggleQpInfo'));
+  check('re-apply is a no-op when no tier was chosen', /if \(!id\) return;/.test(ra));
+  check('re-apply looks the tier up by id', /tiers\.find\(x => x\.id === id\)/.test(ra));
+}
+
+// ---- Condition scales the source basis unconditionally (2026-09-04) -----
+// The `_ovAutoFilled !== false` gate dropped condMult to 1 after a tile
+// click, so the band snapped back to Near-Mint under the chosen price.
+// _crBasis.value is always a feed number, so there is nothing to double-apply.
+{
+  check('no condMult site still gates on _ovAutoFilled',
+        (index.match(/window\._ovAutoFilled !== false && typeof getCondMultiplier/g) || []).length === 0);
+  check('all three condMult sites read the multiplier directly',
+        (index.match(/const condMult = \(typeof getCondMultiplier === 'function'\) \? getCondMultiplier\(\) : 1;/g) || []).length === 3);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

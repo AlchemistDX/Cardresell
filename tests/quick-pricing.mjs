@@ -135,10 +135,25 @@ console.log('\n[Quick Pricing — wiring]');
         /try \{ renderQuickPricing\(\); \} catch\(_\) \{\}/.test(index),
         'the selected-tier highlight tracks the price field');
 
-  check('applying a tier marks the price as user-chosen',
-        /window\._ovAutoFilled = false;[\s\S]{0,40}calc\(\);/.test(
-          index.slice(index.indexOf('function qpApply('), index.indexOf('function toggleQpInfo('))),
-        'a deliberately chosen price must be used verbatim, not re-adjusted for condition');
+  // Anchor the slice to the next function (_qpReapplyChosenTier now sits
+  // between qpApply and toggleQpInfo) and assert ORDER rather than character
+  // distance -- the old /[\s\S]{0,40}/ window broke the moment a comment or
+  // an extra assignment was added between the flag and the recalc.
+  {
+    const qa = index.slice(index.indexOf('function qpApply('),
+                           index.indexOf('function _qpReapplyChosenTier'));
+    check('applying a tier marks the price as user-chosen',
+          qa.indexOf('window._ovAutoFilled = false;') !== -1 &&
+          qa.indexOf('calc();') > qa.indexOf('window._ovAutoFilled = false;'),
+          'a deliberately chosen price must be used verbatim, not re-adjusted for condition');
+
+    // 2026-09-04: the tier ID must be recorded BEFORE calc() runs, so a
+    // condition change can re-derive the same strategy at the new condition.
+    check('applying a tier records which tier it was',
+          qa.indexOf('window._qpChosenTier = tierId || null;') !== -1 &&
+          qa.indexOf('calc();') > qa.indexOf('window._qpChosenTier = tierId || null;'),
+          'without the id, a tile choice goes stale when the condition changes');
+  }
 
   check('the widget uses its own escaper',
         /function _qpEsc\(/.test(index) &&

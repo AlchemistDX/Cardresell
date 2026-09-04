@@ -2476,11 +2476,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <!-- Condition -->
         <div class="field-label" id="condLabel">Condition</div>
         <div class="pill-group" id="condPills">
-          <span class="pill sel" data-cond="nm" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Near Mint</span>
-          <span class="pill" data-cond="lp" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Light Play</span>
-          <span class="pill" data-cond="mp" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Mod. Play</span>
-          <span class="pill" data-cond="hp" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Heavy Play</span>
-          <span class="pill" data-cond="dmg" onclick="setPill(this,'condPills');updatePriceFromPrinting();calc()">Damaged</span>
+          <span class="pill sel" data-cond="nm" onclick="setPill(this,'condPills');updatePriceFromPrinting();_qpReapplyChosenTier();calc()">Near Mint</span>
+          <span class="pill" data-cond="lp" onclick="setPill(this,'condPills');updatePriceFromPrinting();_qpReapplyChosenTier();calc()">Light Play</span>
+          <span class="pill" data-cond="mp" onclick="setPill(this,'condPills');updatePriceFromPrinting();_qpReapplyChosenTier();calc()">Mod. Play</span>
+          <span class="pill" data-cond="hp" onclick="setPill(this,'condPills');updatePriceFromPrinting();_qpReapplyChosenTier();calc()">Heavy Play</span>
+          <span class="pill" data-cond="dmg" onclick="setPill(this,'condPills');updatePriceFromPrinting();_qpReapplyChosenTier();calc()">Damaged</span>
         </div>
 
         <!-- Printing -->
@@ -6501,6 +6501,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
       // system-filled number is a Near-Mint basis and has to be condition
       // adjusted like any other basis. See getEffectivePrice().
       window._ovAutoFilled = true;
+      // A fresh system basis just landed in the field, so any earlier tier
+      // choice is void -- it was picked against the previous basis.
+      window._qpChosenTier = null;
       // 2026-09-01 (launch gate): name the rung that actually produced this
       // number. Before this, the caption under the price kept whatever
       // updatePriceFromPrinting() had written from selectedCard.source — so a
@@ -7093,6 +7096,7 @@ async function _priceSportsVariant(key) {
       label: `SportsCardsPro guide · ${v.productName}`,
     };
     window._ovAutoFilled = true;
+    window._qpChosenTier = null;   // new basis -> previous tier choice is void
     if (priceOverride) priceOverride.value = d.median.toFixed(2);
     _setSportsConfirm({ variant: v, card, data: d, grade });
     updatePriceFromPrinting();
@@ -7308,6 +7312,7 @@ function loadCardUI(card) {
   const _qpHost = document.getElementById('quickPricing');
   if (_qpHost) _qpHost.style.display = 'none';
   window._ovAutoFilled = false;  // new card: no system basis in the field yet
+  window._qpChosenTier = null;   // and no tier chosen for it yet
   window._crBasis = null;        // and no basis to render the headline from
   window._crPCLadder = null;     // and no grade ladder until PC answers for THIS card
 
@@ -7776,8 +7781,16 @@ function _qpBasis() {
 const _QP_DERIVED_SPREAD = 0.15;
 function _qpDerivedBand(basis) {
   if (!basis) return null;
-  const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
-    ? getCondMultiplier() : 1;
+  // Condition scales the SOURCE basis, always. The old gate here was
+  // `_ovAutoFilled !== false ? getCondMultiplier() : 1`, which dropped the
+  // multiplier to 1 the moment the user clicked a tile -- so on a Moderately
+  // Played card the whole band snapped back to Near-Mint values underneath the
+  // price they had just chosen. _crBasis.value is a feed number (bestPrice),
+  // never the user's typed price, so there is nothing here to double-apply.
+  // _ovAutoFilled belongs only in getEffectivePrice(), which is what protects
+  // a user-typed price from being re-multiplied. getCondMultiplier() already
+  // returns 1.0 for graded slabs, so slabs stay unscaled.
+  const condMult = (typeof getCondMultiplier === 'function') ? getCondMultiplier() : 1;
   const comp = (basis.market != null && isFinite(basis.market) && basis.market > 0)
     ? basis.market * condMult : null;
   if (comp == null) return null;
@@ -7831,8 +7844,16 @@ function _gmSyncGrades(keepVal) {
 }
 
 function _qpTiers(basis) {
-  const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
-    ? getCondMultiplier() : 1;
+  // Condition scales the SOURCE basis, always. The old gate here was
+  // `_ovAutoFilled !== false ? getCondMultiplier() : 1`, which dropped the
+  // multiplier to 1 the moment the user clicked a tile -- so on a Moderately
+  // Played card the whole band snapped back to Near-Mint values underneath the
+  // price they had just chosen. _crBasis.value is a feed number (bestPrice),
+  // never the user's typed price, so there is nothing here to double-apply.
+  // _ovAutoFilled belongs only in getEffectivePrice(), which is what protects
+  // a user-typed price from being re-multiplied. getCondMultiplier() already
+  // returns 1.0 for graded slabs, so slabs stay unscaled.
+  const condMult = (typeof getCondMultiplier === 'function') ? getCondMultiplier() : 1;
   const adj = (v) => v == null ? null : Math.round(v * condMult * 100) / 100;
 
   const market = adj(basis.market);
@@ -8186,8 +8207,14 @@ function renderQuickPricing() {
   // marker at 100% while the tiles moved to the MP band -- a visible
   // contradiction. When the user typed an explicit price, _ovAutoFilled=false
   // and getEffectivePrice() returns that verbatim, so this stays honest.
-  const cur = (typeof getEffectivePrice === 'function')
-    ? Number(getEffectivePrice())
+  // getEffectivePrice() returns 0 -- not NaN -- when there is no usable price
+  // (no override, and currentPrices[printSelect.value].market == null). Zero is
+  // finite, so a bare Number() pinned the marker to 0% and deselected every
+  // tier, where the old parseFloat produced NaN and correctly fell back to the
+  // comp tick. Treat a non-positive price as absent.
+  const _eff = (typeof getEffectivePrice === 'function') ? Number(getEffectivePrice()) : NaN;
+  const cur = (Number.isFinite(_eff) && _eff > 0)
+    ? _eff
     : parseFloat(document.getElementById('priceOverride')?.value);
   const fmt = (n) => '$' + Number(n).toLocaleString('en-US',
     { minimumFractionDigits: n < 100 ? 2 : 0, maximumFractionDigits: n < 100 ? 2 : 0 });
@@ -8196,7 +8223,7 @@ function renderQuickPricing() {
   document.getElementById('qpTiers').innerHTML = tiers.map(t => {
     const on = Number.isFinite(cur) && Math.abs(cur - t.amt) < 0.015;
     return `<button type="button" class="qp-tier" aria-pressed="${on}"
-      title="${_qpEsc(t.hint)}" onclick="qpApply(${t.amt})">
+      title="${_qpEsc(t.hint)}" onclick="qpApply(${t.amt}, '${_qpEsc(t.id)}')">
       <span class="qp-tier-amt">${fmt(t.amt)}</span>
       <span class="qp-tier-label">${_qpEsc(t.label)}</span>
     </button>`;
@@ -8223,8 +8250,16 @@ function renderQuickPricing() {
   }
 
   // Reference rows. Both are real, and both are labelled for what they are.
-  const condMult = (window._ovAutoFilled !== false && typeof getCondMultiplier === 'function')
-    ? getCondMultiplier() : 1;
+  // Condition scales the SOURCE basis, always. The old gate here was
+  // `_ovAutoFilled !== false ? getCondMultiplier() : 1`, which dropped the
+  // multiplier to 1 the moment the user clicked a tile -- so on a Moderately
+  // Played card the whole band snapped back to Near-Mint values underneath the
+  // price they had just chosen. _crBasis.value is a feed number (bestPrice),
+  // never the user's typed price, so there is nothing here to double-apply.
+  // _ovAutoFilled belongs only in getEffectivePrice(), which is what protects
+  // a user-typed price from being re-multiplied. getCondMultiplier() already
+  // returns 1.0 for graded slabs, so slabs stay unscaled.
+  const condMult = (typeof getCondMultiplier === 'function') ? getCondMultiplier() : 1;
   const rows = [];
   if (basis.low != null) {
     rows.push(['Lowest listing', fmt(Math.round(basis.low * condMult * 100) / 100), '']);
@@ -8242,13 +8277,39 @@ function renderQuickPricing() {
 
 // Applying a tier means the user has chosen a price deliberately, so it is
 // treated as a user-typed price (used verbatim, not condition-adjusted again).
-function qpApply(amt) {
+function qpApply(amt, tierId) {
   const f = document.getElementById('priceOverride');
   if (!f) return;
   f.value = Number(amt).toFixed(2);
   window._ovAutoFilled = false;
+  // Remember WHICH tier was chosen, not just the number it happened to be.
+  // A tile click is a choice of strategy ("sell fast", "hold out") and that
+  // strategy still means something after the condition changes -- but the
+  // dollar amount does not. Without this, picking Comp on a Mod. Played card
+  // and then switching to Heavy Play left the $583 MP price sitting in the
+  // box while the tiles repainted to the HP band ($343/$404/$464), so the
+  // marker pinned to 100% and no tile read as selected. Set BEFORE calc()
+  // because the input listener that clears it fires on user typing only.
+  window._qpChosenTier = tierId || null;
   calc();
   renderQuickPricing();
+}
+
+// Re-apply the user's chosen tier after the condition changes, so a strategy
+// choice survives a condition change but a hand-typed price never gets moved.
+function _qpReapplyChosenTier() {
+  const id = window._qpChosenTier;
+  if (!id) return;                       // nothing chosen, or user typed over it
+  const f = document.getElementById('priceOverride');
+  if (!f) return;
+  const basis = (typeof _qpBasis === 'function') ? _qpBasis() : null;
+  if (!basis) return;
+  const tiers = (typeof _qpTiers === 'function') ? _qpTiers(basis) : null;
+  if (!tiers || !tiers.length) return;
+  const t = tiers.find(x => x.id === id);
+  if (!t || !(Number(t.amt) > 0)) return;
+  f.value = Number(t.amt).toFixed(2);
+  window._ovAutoFilled = false;
 }
 
 function toggleQpInfo() {
@@ -8287,7 +8348,7 @@ function _onPrintingChange() {
   if (!key && selectedCard && selectedCard.game === 'sports') {
     // Back to the placeholder: retract the number rather than leaving a stale
     // price sitting under "Select the variant…".
-    window._crBasis = null; window._ovAutoFilled = false;
+    window._crBasis = null; window._ovAutoFilled = false; window._qpChosenTier = null;
     if (priceOverride) priceOverride.value = '';
     _setSportsConfirm({ pending: true, count: Object.keys(window._spVariants || {}).length, card: selectedCard });
     priceMain.textContent = '—';
@@ -12666,12 +12727,10 @@ function renderCollectionView() {
 // The server now returns a trimmed, sanity-filtered median directly — no need
 // to re-compute client-side. Falls back to null if confidence is insufficient.
 async function _fetchEbayPriceForEntry(p) {
-  // A generic eBay sold query is card + number only -- no grader, no grade.
-  // Refreshing a saved slab through it can replace its guide value with a
-  // raw-condition eBay median (Base Set Charizard PSA 10 = $13k slab guide
-  // vs $897 raw TCG comp). Refuse the refresh instead of guessing. A
-  // grade-aware refresh path (PriceCharting by persisted grader+grade at
-  // 1 req/s) is the correct fix; keep the saved slab value until then.
+  // Raw entries only. A generic eBay sold query is card + number -- no grader,
+  // no grade -- so running a slab through it can replace a $13k PSA 10 guide
+  // value with an $897 raw median. Slabs route to _fetchGradedPriceForEntry
+  // via the _fetchPriceForEntry dispatcher below; this stays the raw path.
   if (p && p.grader && p.grade) return null;
   // Build query: card name + card number (stripped from set field like "Charizard · #4")
   const numMatch = (p.set || '').match(/#(\S+)/);
@@ -12686,6 +12745,71 @@ async function _fetchEbayPriceForEntry(p) {
   return data.median;
 }
 
+// ── Grade-aware refresh for a saved slab ───────────────────────────────────
+// A slab's value is a published guide value for ONE grader+grade, so refreshing
+// it means re-reading that exact field -- not searching sold listings. Maps the
+// persisted grader/grade onto PriceCharting's field names.
+//
+// PriceCharting only publishes 7 and up, and only breaks out a GRADER at the
+// 10 (manual-only=PSA 10, bgs-10, condition-17=CGC 10, condition-18=SGC 10).
+// Below that the columns are "graded N by a grading company" -- grader-agnostic
+// and, at 7 and 8, each blending two grades. Return null rather than substitute
+// a neighbouring grade: a stale-but-correct saved value beats a fresh wrong one.
+function _pcKeyForGrade(grader, grade) {
+  const g = String(grader || '').toLowerCase().trim();
+  const n = String(grade   || '').trim();
+  if (!g || !n) return null;
+  if (n === '10') {
+    // ACE and TAG 10s have no PriceCharting field at all.
+    return ({ psa: 'psa_10', bgs: 'bgs_10', cgc: 'cgc_10', sgc: 'sgc_10' })[g] || null;
+  }
+  if (n === '9.5') {
+    // One grader-agnostic 9.5 column. PSA does not issue a 9.5.
+    return /^(bgs|cgc|sgc)$/.test(g) ? 'grade_95' : null;
+  }
+  if (n === '9')                 return 'grade_9';
+  if (n === '8' || n === '8.5')  return 'grade_8';
+  if (n === '7' || n === '7.5')  return 'grade_7';
+  return null; // 6.5 and below: PriceCharting publishes nothing.
+}
+
+async function _fetchGradedPriceForEntry(p) {
+  if (!p || !p.card) return null;
+  const key = _pcKeyForGrade(p.grader, p.grade);
+  if (!key) return null;
+  const rawGame = String(p.game || 'pokemon').toLowerCase();
+  // Sports routes to sportscardspro and needs sport/brand/year to resolve a
+  // product. Those are not persisted on a portfolio entry, so a lookup here
+  // would be a guess at the card's identity. Keep the saved value.
+  if (rawGame === 'sports') return null;
+  const num = String(
+    p.number || (((p.set || '').match(/#(\S+)/) || [])[1]) || ''
+  ).replace(/^0+/, '');
+  const qs = new URLSearchParams({
+    name: p.card,
+    // Japanese cards live under the pokemon game on PriceCharting.
+    game: rawGame === 'pokemonjp' ? 'pokemon' : (rawGame || 'pokemon'),
+  });
+  if (num) qs.set('number', num);
+  // p.set is a display string that can carry a " · #4" suffix; strip it.
+  const setName = String(p.set || '').replace(/\s*·.*$/, '').trim();
+  if (setName) qs.set('set', setName);
+  const res = await fetch('/api/pricecharting?' + qs.toString());
+  if (!res.ok) return null;
+  const d = await res.json();
+  if (!d || d.source !== 'pricecharting' || !d.prices) return null;
+  const v = Number(d.prices[key]);
+  return (Number.isFinite(v) && v > 0) ? v : null;
+}
+
+// Single entry point for "what is this portfolio entry worth now". Routes a
+// slab to its published guide value and a raw card to sold comps, so neither
+// can ever be priced off the other's source.
+async function _fetchPriceForEntry(p) {
+  if (p && p.grader && p.grade) return await _fetchGradedPriceForEntry(p);
+  return await _fetchEbayPriceForEntry(p);
+}
+
 async function refreshCollectionPrices() {
   const btn = document.getElementById('colRefreshBtn');
   if (btn) { btn.disabled = true; btn.textContent = '↻ Refreshing…'; }
@@ -12697,13 +12821,20 @@ async function refreshCollectionPrices() {
   }
 
   let updated = 0;
+  // PriceCharting's API terms cap us at 1 request/second. Slab rows go through
+  // that endpoint, so pace them. Raw rows hit our own eBay proxy and don't need
+  // the wait -- only sleep after a call that actually went to PriceCharting.
+  let pcCalls = 0;
   for (const p of port) {
     if (!p.card) continue;
+    const isSlab = !!(p.grader && p.grade);
+    if (isSlab && pcCalls > 0) await new Promise(r => setTimeout(r, 1100));
     // Show inline spinner on the row if visible
     const rowValEl = document.getElementById('colVal_' + p.id);
     if (rowValEl) rowValEl.innerHTML = '<span style="opacity:.4;font-size:.72rem">refreshing…</span>';
     try {
-      const price = await _fetchEbayPriceForEntry(p);
+      const price = await _fetchPriceForEntry(p);
+      if (isSlab) pcCalls++;
       if (price !== null) {
         p.currentValue   = price;
         p.lastRefreshed  = new Date().toISOString();
@@ -12719,7 +12850,10 @@ async function refreshCollectionPrices() {
   renderCollectionView();
 
   if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh Prices'; }
-  if (updated > 0) showToast(updated + ' card price' + (updated>1?'s':'') + ' refreshed from eBay sold data.', 'success');
+  // Don't name a single source in the toast: slabs refresh from PriceCharting
+  // guide values and raw cards from eBay sold comps, so "refreshed from eBay
+  // sold data" was wrong for any collection holding a graded card.
+  if (updated > 0) showToast(updated + ' card price' + (updated>1?'s':'') + ' refreshed.', 'success');
   else showToast('Could not fetch updated prices right now. Try again later.', 'info');
 }
 
@@ -12733,7 +12867,7 @@ async function refreshSingleCardPrice(id) {
   const valEl = document.getElementById('colVal_' + id);
   if (valEl) valEl.innerHTML = '<span style="opacity:.4;font-size:.72rem">…</span>';
   try {
-    const price = await _fetchEbayPriceForEntry(p);
+    const price = await _fetchPriceForEntry(p);
     if (price !== null) {
       p.currentValue  = price;
       p.lastRefreshed = new Date().toISOString();
@@ -12741,7 +12875,14 @@ async function refreshSingleCardPrice(id) {
       renderCollectionView();
       showToast('Price updated for ' + (p.card || 'card') + ' 📊', 'success');
     } else {
-      showToast('No eBay sales found for this card.', 'info');
+      // A slab that can't refresh has NO published value for its grader+grade
+      // (e.g. a CGC 8.5, or an ACE/TAG 10) -- it is not an absence of sales.
+      showToast(
+        (p.grader && p.grade)
+          ? 'No published guide value for ' + String(p.grader).toUpperCase() + ' ' + p.grade + ' on this card.'
+          : 'No eBay sales found for this card.',
+        'info'
+      );
       if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
     }
   } catch(e) {
@@ -20705,6 +20846,9 @@ document.getElementById('priceOverride')?.addEventListener('input', () => {
   // User typed: this is now their expected sale price, so drop the auto-fill
   // flag and stop applying the condition multiplier on top of it.
   window._ovAutoFilled = false;
+  // Typing by hand abandons the tier choice: from here the number is theirs
+  // and must not be re-derived when the condition changes.
+  window._qpChosenTier = null;
   const rawEl = document.getElementById('roiRawPrice');
   const ov = parseFloat(document.getElementById('priceOverride')?.value);
   if (rawEl) rawEl.textContent = ov > 0 ? '$' + ov.toFixed(2) : '—';
