@@ -1,6 +1,6 @@
 // /api/tcg-price — Reliable TCGplayer prices for any card
 // GET ?name=Charizard&set=Base+Set&number=4&rarity=Holo+Rare
-// Returns: { market, low, mid, high, source, productId, url, cardName, setName }
+// Returns: { market, low, mid, high, source, productId, url, cardName, cardNumber, setName }
 //
 // 2026-08-16 rewrite: routes tcgcsv.com FIRST (source of truth for TCGplayer
 // pricing — same underlying data, but as a static daily-refreshed catalog
@@ -181,6 +181,14 @@ export default async function handler(req, res) {
         variant: r.variant,
         productId: r.product?.productId ?? null,
         cardName: r.product?.name ?? name,
+        // 2026-09-03: echo the collector number the resolver actually matched.
+        // It was parsed from extendedData all along but never returned, so the
+        // price-integrity audit could not verify card identity on the
+        // TCGplayer side -- every row scored "indeterminate" on number. An
+        // audit that cannot see the number cannot tell a genuine source
+        // disagreement from a printing substitution, which is the one
+        // distinction it exists to make. Returning it costs nothing.
+        cardNumber: r.product?.number || null,
         // 2026-09-03: prefer the resolver's real group name. products.json has
         // no setName field, so name-only lookups were returning an empty set.
         setName: r.groupName || r.product?.setName || set || null,
@@ -394,6 +402,18 @@ export default async function handler(req, res) {
       source: 'tcgplayer-live',
       productId,
       cardName: best.productName,
+      // The live search result carries no discrete number field -- TCGplayer
+      // embeds the collector number in the product name ("Charizard - 4/102",
+      // "Iono #185"). Parse it out so the response still reports an observable
+      // number for identity auditing. Stays null when the name contains none;
+      // a null reads as "could not verify", which is the truth here, and is
+      // never scored as a match.
+      // Allows an alphabetic prefix: Scarlet & Violet promos number as
+      // "SV049/SV122", so a digits-only pattern silently missed every one.
+      cardNumber: best.number
+        || (/(?:^|[\s\-#])([A-Za-z]{0,3}\d+[a-z]?)\s*\/\s*[A-Za-z]{0,3}\d+/i.exec(String(best.productName || ''))?.[1])
+        || (/#\s*([A-Za-z]{0,3}\d+[a-z]?)\b/.exec(String(best.productName || ''))?.[1])
+        || null,
       setName: best.setName,
       url: productId ? `https://www.tcgplayer.com/product/${productId}` : null,
       fetchedAt: new Date().toISOString(),

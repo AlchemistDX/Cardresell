@@ -1040,5 +1040,157 @@ try {
           && /reason: 'no_valid_match'/.test(live));
 }
 
+// ── Freshness contract: no invented refresh cadence ────────────────────
+// The per-variant caption used to append "Updated daily" to any source label
+// that did not already mention a date. Nothing verified that cadence for any
+// source it was applied to -- least of all PriceCharting, which publishes no
+// as-of date at all, and which supplies the graded (PSA 10 / BGS 10) guide
+// values. The most expensive numbers in the app carried a fabricated
+// freshness promise.
+{
+  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+
+  check('there is exactly one price-caption renderer',
+        (idx.match(/function _renderPriceCaption\(/g) || []).length === 1,
+        'three independent formatters made three different claims');
+
+  // Scryfall is the ONE source whose daily cadence is published:
+  // "Scryfall syncs prices from each of our affiliates every 24 hours."
+  const dailyClaims = idx.split('\n')
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => /Updated daily/.test(l) && !/^\s*\/\//.test(l));
+  check('the only live "Updated daily" claim is the documented Scryfall one',
+        dailyClaims.length === 1 && /Scryfall/.test(dailyClaims[0][1]),
+        `unverified cadence claims at lines ${dailyClaims.map(d => d[0]).join(', ')}`);
+  check('the Scryfall cadence claim cites its source',
+        /where-do-scryfall-prices-come-from/.test(idx),
+        'a cadence claim needs a citation, not a habit');
+
+  check('no fallback appends a daily cadence to an unknown source',
+        !/`\$\{srcLabel\} · Updated daily`/.test(idx),
+        'this was the line that stamped PriceCharting graded values');
+
+  check('the caption reports our own retrieval age',
+        /retrieved \$\{_ageStr\(/.test(idx));
+  check('an undated source is labelled as undated',
+        /datedBySource === false/.test(idx) && /no price date/.test(idx),
+        'silence about a missing date reads as a fresh price');
+  check('a real feed date outranks a retrieval age',
+        /if \(updatedAt && updatedAt !== 'Enter via override'\)/.test(idx)
+          && /\} else if \(cacheAgeSec != null\)/.test(idx),
+        'never show both -- they answer different questions');
+
+  // ── PriceCharting citation travels with every PC-sourced price ──
+  // A guide value the seller cannot click through to is a number they have to
+  // take on faith. Every PC-injected row carries its source URL.
+  const pcRowUrls = (idx.match(/source: 'pricecharting',\s*\n(?:.*\n){0,6}?\s*url:\s*pc\.url/g) || []).length;
+  const pcRowsTotal = (idx.match(/source: 'pricecharting',/g) || []).length;
+  check('every PriceCharting-sourced row carries its source url',
+        pcRowUrls >= 3 && pcRowUrls === pcRowsTotal,
+        `${pcRowUrls}/${pcRowsTotal} pricecharting rows have a url`);
+  check('the caption renders the source as a link when a url exists',
+        /rel="noopener"[^`]*\$\{label\}/.test(idx));
+
+  // ── Cross-source disagreement is disclosed, never averaged ──
+  // Sol's audit: median TCG-vs-PC spread 75.9% on vintage against 7.8% on
+  // modern, identity confirmed on all 30 rows, so the spread is real
+  // disagreement rather than printing substitution. Averaging two sources
+  // that disagree by 76% produces a number neither source would defend.
+  check('a source-disagreement disclosure exists',
+        /function _renderSourceDisagreement\(/.test(idx));
+  check('the disagreement disclosure is actually rendered',
+        /parts\.push\(_renderSourceDisagreement\(/.test(idx),
+        'a helper nobody calls discloses nothing');
+  check('the disclosure names both values rather than blending them',
+        /Not averaged/i.test(idx),
+        'the user must see which source said what');
+  check('the disclosure refuses to claim a Near Mint basis',
+        /Near Mint/.test(idx) && /_renderSourceDisagreement/.test(idx),
+        'no condition-level SKUs exist in either feed; see Sol audit');
+}
+
+// ── The price-integrity audit checks identity, not set names ───────────
+// Every earlier audit's "match sanity" column compared set names only. Two
+// feeds can agree on "Base Set" while holding 1st Edition vs Unlimited, or a
+// holo vs a reverse holo -- a several-hundred-percent price difference that
+// would be reported as a source disagreement rather than the resolver bug it
+// is. The permanent harness checks name + set + number per source.
+{
+  const auditPath = path.join(root, 'qa/price_integrity_audit.mjs');
+  check('the price-integrity audit is committed to the repo',
+        fs.existsSync(auditPath),
+        'a one-off script in /home/user is not a regression guard');
+  const audit = fs.readFileSync(auditPath, 'utf8');
+
+  check('identity is a three-part check per source',
+        /function identityOf\(/.test(audit)
+          && /name:\s*name == null/.test(audit)
+          && /set:\s*set\s*== null/.test(audit)
+          && /number: num\s*== null/.test(audit));
+  check('a missing field is indeterminate, never a match',
+        /vals\.includes\(null\) \? 'indeterminate'/.test(audit)
+          && /'mismatch'/.test(audit),
+        'crediting an unobserved check is how a harness starts lying');
+  check('the headline spread is computed on identity-exact rows only',
+        /spreadOnIdentityExact/.test(audit)
+          && /bothExact = comparableRows\.filter/.test(audit),
+        'mixing substitutions into a spread average misattributes the cause');
+  check('the audit exits non-zero on an identity mismatch',
+        /process\.exit\(summary\.identity\.anyMismatchN > 0 \? 1 : 0\)/.test(audit));
+  check('the audit reports variant alignment separately from identity',
+        /variantAlignment/.test(audit) && /holofoil.*NOT/s.test(audit),
+        'holo vs non-holo is price-bearing and must stay flagged');
+  check('the PriceCharting rate limit is respected and documented',
+        /sleep\(1100\)/.test(audit) && /1 req\/sec|1 request\/sec/.test(audit),
+        'their terms bind us to one request per second');
+
+  // The audit can only check the number because the API now returns it.
+  const tcgPrice2 = fs.readFileSync(path.join(root, 'api/tcg-price.js'), 'utf8');
+  check('the price endpoint echoes the resolved collector number',
+        /cardNumber: r\.product\?\.number/.test(tcgPrice2),
+        'without it the TCG side of every identity check is blind');
+  check('the live fallback parses a number from the product name',
+        /cardNumber: best\.number/.test(tcgPrice2)
+          && /\[A-Za-z\]\{0,3\}\\d\+/.test(tcgPrice2),
+        'SV/TG promos number as SV049/SV122; digits-only missed them all');
+}
+
+// ── Grade upside stays withdrawn until both inputs are real ────────────
+// P0-C asked for gem-rate weighting so grade upside became an EV rather than
+// a best case. The 2026-09-03 research concluded no honest number exists yet:
+// within the single 1999 Pokemon Game set, PSA 10 rates span 0.6% (Charizard-
+// Holo, 679/107,255) to 14.7% -- so any era or set baseline applied to a
+// specific card is off by up to ~18x. The correct ship was nothing.
+{
+  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+
+  check('renderGradeOpportunity still renders nothing',
+        /function renderGradeOpportunity\(g\) \{\s*\n\s*return '';\s*\n\}/.test(idx),
+        'a best-case slab figure must not come back without licensed pop data');
+  // (An earlier block already asserts the withdrawn body is parked and
+  // unreferenced by counting its identifier; not duplicated here.)
+  check('the gradeOpp feed is still a resolved null',
+        /const gradeOppP = Promise\.resolve\(null\)/.test(idx));
+
+  // The tombstone has to carry the reasoning and the re-entry conditions,
+  // otherwise the next person re-adds a gem-rate multiplier believing it is
+  // the obvious missing piece.
+  check('the tombstone records the intra-set spread that kills a multiplier',
+        /0\.6%/.test(idx) && /107,255/.test(idx) && /24x/.test(idx),
+        'without the numbers this reads as a stylistic preference');
+  check('the tombstone cites its population source',
+        /gemrate\.com\/item-details-advanced/.test(idx));
+  check('the tombstone states both re-entry conditions',
+        /licensed to display/.test(idx) && /real sale DATE/.test(idx),
+        'a withdrawal with no re-entry test is just a deletion');
+  check('the tombstone rules out a headline EV even with licensed data',
+        /true of no actual outcome/.test(idx),
+        'the objection is to the shape of the number, not only the data');
+  check('the research file backing the decision exists',
+        fs.existsSync(path.join(root, '..', 'audit/GEM_RATE_RESEARCH_2026-09-03.md'))
+          || /GEM_RATE_RESEARCH_2026-09-03/.test(idx),
+        'the tombstone must point somewhere real');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

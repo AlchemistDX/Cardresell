@@ -139,14 +139,24 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 {
   const f = idx.indexOf('let _basisMeta = null;');
   ok(f > 0, 'the ladder records which rung it took');
-  const region = idx.slice(f, f + 2600);
+  // Window widened 2026-09-03 (P0-D): each rung now also records cacheAgeSec,
+  // sourceUrl and datedBySource, plus the comment explaining why a PC rung
+  // reports no date. The three rung labels must still all live in the ladder
+  // -- that is the assertion -- but they sit further apart now.
+  const region = idx.slice(f, f + 5200);
   ok(/eBay sold median/.test(region),  'caption can name eBay sold median');
   ok(/PriceCharting guide value/.test(region), 'caption can name PriceCharting');
   ok(/TCGPlayer market/.test(region),  'caption can name TCGPlayer market');
   ok(/ebay\.count\} comps/.test(region),
      'the eBay caption discloses how many comps are behind the median');
-  ok(idx.includes('priceSource.textContent = _srcLabel'),
+  // 2026-09-03: all caption writes now go through _renderPriceCaption, which
+  // also renders the source link and retrieval age. The intent is unchanged:
+  // the caption element must be updated from the recorded rung label.
+  ok(/_renderPriceCaption\(priceSource, \{\s*label: _srcLabel/.test(idx),
      'the caption element is updated when the override is filled');
+  ok(/function _renderPriceCaption\(/.test(idx)
+       && !/priceSource\.textContent = (?:_srcLabel|b\.label)/.test(idx),
+     'no caption write bypasses the single renderer');
   ok(/_srcLabel = \(window\._crBasis && window\._crBasis\.label\)/.test(idx),
      'the caption reads the recorded rung label, not a float comparison');
   ok(/window\._crBasis && window\._ovAutoFilled[\s\S]{0,90}updatePriceFromPrinting\(\);/.test(idx),
@@ -268,8 +278,10 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   // a stale basis). The assertion's intent is unchanged -- this branch must
   // still RETURN before the tail relabels the caption from selectedCard.source
   // -- only the permitted gap between calc() and return; grew.
-  ok(/priceSource\.textContent = b\.label;[\s\S]{0,80}calc\(\);[\s\S]{0,140}return;/.test(updBody),
+  ok(/_renderPriceCaption\(priceSource, \{[\s\S]{0,220}calc\(\);[\s\S]{0,140}return;/.test(updBody),
      'the basis branch returns before the tail can relabel the caption from selectedCard.source');
+  ok(/_renderPriceCaption\(priceSource, \{\s*\n\s*label: b\.label/.test(updBody),
+     'the basis branch captions from the basis it just rendered the price from');
   ok(/calc\(\);\s*try \{ renderQuickPricing\(\); \} catch\(_\) \{\}\s*return;/.test(updBody),
      'the basis branch refreshes Quick Pricing before it returns');
   const rawB = idx.slice(idx.indexOf('Raw context'));

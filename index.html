@@ -5595,18 +5595,150 @@ function _clampHigh(row) {
   return row;
 }
 
+// ── Freshness contract ──────────────────────────────────────────────────
+// Every price this app shows names its source and says how old it is. Two
+// distinct facts get conflated if you are not careful, so they are kept apart:
+//
+//   RETRIEVED  when WE fetched the number. We always know this.
+//   AS OF      when the SOURCE determined the number. We rarely know this.
+//
+// TCGplayer market is computed from completed sales and moves continuously, so
+// "retrieved 5 min ago" is a fair proxy for freshness. PriceCharting's API
+// publishes a current blended guide value with NO timestamp and no sales
+// history (verified against their API docs), so a PC number retrieved one
+// minute ago may reflect sales from last week or last year and we cannot tell
+// which. Labelling that "5 min ago" full stop would imply a currency we have
+// not established, so PC rows say "retrieved" and carry an explicit note.
+function _ageStr(cacheAgeSec) {
+  const a = Number(cacheAgeSec) || 0;
+  if (a < 60)   return 'just now';
+  if (a < 3600) return `${Math.round(a / 60)} min ago`;
+  if (a < 86400) return `${Math.round(a / 3600)} hr ago`;
+  return `${Math.round(a / 86400)} d ago`;
+}
+
+// PriceCharting publishes no as-of date. Say so once, where the number is,
+// rather than letting a retrieval timestamp pass for a price date.
+const _PC_NO_ASOF_TIP = 'PriceCharting publishes a current blended guide value with no as-of date and no sales history, so we can date when we retrieved it but not when the price was set.';
+
+// ── Cross-source disagreement (Sol audit rec #3, 2026-09-03) ────────────
+// The audit measured a median 75.9% TCGplayer-vs-PriceCharting spread on
+// vintage cards against 7.8% on modern ones, with identity confirmed on 30/30
+// sampled cards -- so the spread is real disagreement about value, not the app
+// pricing the wrong printing. Three things follow, and all three are honesty
+// constraints rather than preferences:
+//
+//   1. Do NOT average them. The mean of two numbers that disagree by 4x is a
+//      third number that no source will stand behind, and it reads as more
+//      certain than either input.
+//   2. Do NOT relabel. The audit could not decompose condition, shipping,
+//      currency, or finish from these feeds -- TCGCSV has no condition-level
+//      SKUs and PC's raw figure is an ungraded/loose blend, not a wear grade.
+//      So the app cannot honestly call its TCGCSV basis "Near Mint."
+//   3. DO show both, named. A seller looking at a $500 card where one source
+//      says $500 and the other says $2,000 needs to know that before they
+//      list, and which number the payout used.
+//
+// Thresholds. Modern noise sits near 7.8%, vintage disagreement near 75.9%, so
+// a gate at +/-50% (ratio outside [1/1.5, 1.5]) clears routine feed jitter and
+// still surfaces the vintage cases the audit was about. The dollar floor keeps
+// penny commons -- where a 3x ratio is two cents against six -- from firing a
+// scary-looking disclosure over nothing actionable.
+const _DISAGREE_RATIO = 1.5;
+const _DISAGREE_MIN_USD = 20;
+
+function _sourceDisagreement({ tcg, pc }) {
+  const t = tcg && Number(tcg.market) > 0 ? Number(tcg.market) : null;
+  const p = (pc && pc.source === 'pricecharting' && Number(pc.median) > 0)
+    ? Number(pc.median) : null;
+  if (t == null || p == null) return null;
+  if (Math.max(t, p) < _DISAGREE_MIN_USD) return null;
+  const ratio = t / p;
+  if (ratio <= _DISAGREE_RATIO && ratio >= 1 / _DISAGREE_RATIO) return null;
+  const spreadPct = Math.round(Math.abs(t - p) / Math.min(t, p) * 100);
+  return {
+    tcg: t, pc: p, ratio: Math.round(ratio * 100) / 100, spreadPct,
+    higher: t > p ? 'tcg' : 'pc',
+    tcgUrl: tcg.url || null,
+    pcUrl: pc.url || null,
+  };
+}
+
+function _renderSourceDisagreement(d, basisLabel) {
+  if (!d) return '';
+  const hi = d.higher === 'tcg' ? 'TCGplayer' : 'PriceCharting';
+  const tcgLink = d.tcgUrl
+    ? `<a href="${d.tcgUrl}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">TCGplayer ↗</a>`
+    : 'TCGplayer';
+  const pcLink = d.pcUrl
+    ? `<a href="${d.pcUrl}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">PriceCharting ↗</a>`
+    : 'PriceCharting';
+  // Name the basis so the seller knows which of the two numbers the payout
+  // rows below were computed from. Silence here is what makes a disclosure
+  // feel like a warning with no action attached.
+  const usedNote = basisLabel
+    ? `<div style="opacity:.75;font-size:.68rem;width:100%;margin-top:.2rem">Payout below uses <strong style="color:var(--text)">${basisLabel}</strong>. Check both before you list.</div>`
+    : '';
+  return (
+    `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.35rem;font-size:.78rem;line-height:1.45;` +
+      `background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:.4rem .55rem">` +
+      `<span class="trust-pill" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.6);color:#fbbf24;font-weight:800;font-size:.66rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">Sources disagree</span>` +
+      `<span style="opacity:.9">${hi} is <strong style="color:var(--text)">${d.spreadPct}%</strong> higher</span>` +
+      `<span style="width:100%;margin-top:.15rem">` +
+        `${tcgLink} <strong style="color:var(--text)">$${d.tcg.toFixed(2)}</strong>` +
+        `<span style="opacity:.5"> vs </span>` +
+        `${pcLink} <strong style="color:var(--text)">$${d.pc.toFixed(2)}</strong>` +
+      `</span>` +
+      `<span style="opacity:.72;font-size:.68rem;width:100%">` +
+        `Not averaged — these are two different measurements. TCGplayer market comes from completed sales on one marketplace; PriceCharting publishes a blended ungraded guide value across marketplaces. ` +
+        `Neither is condition-graded, so neither is a Near Mint quote.` +
+      `</span>` +
+      usedNote +
+    `</div>`
+  );
+}
+
+// ── The one price caption ───────────────────────────────────────────────
+// Every headline price gets its caption from here. Three separate formatters
+// used to write this element and they made different claims about the same
+// number -- one appended "Updated daily" to anything without an explicit date,
+// including PriceCharting graded guide values whose refresh cadence we have
+// never established. That is a fabricated freshness claim on the most
+// expensive numbers in the app (a PSA 10 slab), so it is gone.
+//
+// What may be claimed, and on whose authority:
+//   source name   we know which rung produced the number
+//   link          we know the page it came from, so cite it
+//   retrieved Xm  we know when WE fetched it
+//   no price date shown when the source publishes no as-of date (PriceCharting)
+//   Updated <d>   ONLY when the feed handed us a real date string
+function _renderPriceCaption(el, { label, url, cacheAgeSec, datedBySource, updatedAt }) {
+  if (!el) return;
+  if (!label) { el.textContent = ''; return; }
+  const bits = [];
+  bits.push(url
+    ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${label} \u2197</a>`
+    : label);
+  // A real date from the feed beats a retrieval age -- it is the stronger
+  // claim and the one the user actually wants. Only one of the two renders.
+  if (updatedAt && updatedAt !== 'Enter via override') {
+    bits.push(`<span style="opacity:.65">Updated ${updatedAt}</span>`);
+  } else if (cacheAgeSec != null) {
+    bits.push(`<span style="opacity:.65">retrieved ${_ageStr(cacheAgeSec)}</span>`);
+  }
+  if (datedBySource === false) {
+    bits.push(`<span class="trust-info" title="${_PC_NO_ASOF_TIP}" style="opacity:.65;cursor:help">no price date \u24d8</span>`);
+  }
+  el.innerHTML = bits.join('<span style="opacity:.35"> \u00b7 </span>');
+}
+
 function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
   tcg = _clampHigh(tcg);
   const parts = [];
 
   if (tcg && tcg.market != null && tcg.market > 0) {
     const src = tcg.source === 'tcgplayer-live' ? 'TCGplayer Live' : 'TCGplayer';
-    const cacheAgeSec = tcg.cacheAgeSec || 0;
-    const ageStr = cacheAgeSec < 60
-      ? 'just now'
-      : cacheAgeSec < 3600
-        ? `${Math.round(cacheAgeSec / 60)} min ago`
-        : `${Math.round(cacheAgeSec / 3600)} hr ago`;
+    const ageStr = _ageStr(tcg.cacheAgeSec);
     const rangeStr = (tcg.low != null && tcg.high != null && tcg.low !== tcg.high)
       ? ` · range <strong style="color:var(--text)">$${Number(tcg.low).toFixed(2)}–$${Number(tcg.high).toFixed(2)}</strong>`
       : '';
@@ -5617,7 +5749,7 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
         `<strong style="color:var(--gold)">$${Number(tcg.market).toFixed(2)}</strong>` +
         ` · ${tcgUrl}` +
         rangeStr +
-        ` <span style="opacity:.6;font-size:.68rem">· ${ageStr}</span>` +
+        ` <span style="opacity:.6;font-size:.68rem">· retrieved ${ageStr}</span>` +
       `</div>`
     );
   }
@@ -5639,6 +5771,11 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
     const matched = pc.productName
       ? ` <span style="opacity:.6;font-size:.68rem">· ${pc.productName}</span>`
       : '';
+    // Freshness contract: PriceCharting is retrieved-dated, never as-of dated.
+    // Their API returns a current blended guide value with no timestamp, so
+    // "retrieved" is the only honest verb available for this row.
+    const pcAge = ` <span style="opacity:.6;font-size:.68rem">· retrieved ${_ageStr(pc.cacheAgeSec)}</span>`;
+    const pcNoAsOf = ` <span class="trust-info" title="${_PC_NO_ASOF_TIP}" style="opacity:.6;font-size:.68rem;cursor:help">no price date ⓘ</span>`;
     parts.push(
       `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.3rem;font-size:.78rem;line-height:1.4">` +
         `<span class="trust-pill" style="background:${pill.bg};border:1px solid ${pill.border};color:${pill.color};font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">${pill.label}</span>` +
@@ -5646,8 +5783,19 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
         ` <strong style="color:var(--gold)">$${Number(pc.median).toFixed(2)}</strong>` +
         ` · ${pcUrl}` +
         matched +
+        pcAge +
+        pcNoAsOf +
       `</div>`
     );
+  }
+
+  // Row 2b: cross-source disagreement (Sol rec #3). Placed directly under the
+  // two rows it names, so the seller reads TCG, then PC, then the fact that
+  // they disagree -- rather than discovering it after the payout math.
+  const _disagree = _sourceDisagreement({ tcg, pc });
+  if (_disagree) {
+    const _bl = (window._crBasis && window._crBasis.label) || '';
+    parts.push(_renderSourceDisagreement(_disagree, _bl));
   }
 
   // Row 3: eBay sold comps overlay (only when we actually got comps)
@@ -5663,11 +5811,7 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
       insufficient: { bg: 'rgba(148,163,184,.15)',border: 'rgba(148,163,184,.55)',color: '#94a3b8', label: 'Sparse' },
     };
     const pill = pillMap[conf] || pillMap.insufficient;
-    const ageStr = cacheAgeSec < 60
-      ? 'just now'
-      : cacheAgeSec < 3600
-        ? `${Math.round(cacheAgeSec / 60)} min ago`
-        : `${Math.round(cacheAgeSec / 3600)} hr ago`;
+    const ageStr = _ageStr(cacheAgeSec);
     const rangeStr = (ebay.low != null && ebay.high != null && ebay.low !== ebay.high)
       ? ` · range <strong style="color:var(--text)">$${Number(ebay.low).toFixed(2)}–$${Number(ebay.high).toFixed(2)}</strong>`
       : '';
@@ -5684,7 +5828,7 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
         ` · median <strong style="color:var(--text)">$${Number(ebay.median).toFixed(2)}</strong>` +
         rangeStr +
         ` · ${ebayUrl}` +
-        ` <span style="opacity:.55;font-size:.68rem">· ${ageStr}</span>` +
+        ` <span style="opacity:.55;font-size:.68rem">· retrieved ${ageStr}</span>` +
         outlierTip +
         (reasons ? `<span style="opacity:.6;font-size:.68rem;width:100%;margin-top:.15rem">${reasons}</span>` : '') +
       `</div>`
@@ -5802,6 +5946,56 @@ function maybeAutoSwitchGameFromScan(cardType, isJapanese) {
 // full reasoning. Kept as a no-op rather than deleted so that every existing
 // call site stays valid while the feature is off the air. The guard is
 // unconditional and first: nothing below it can render.
+// ── Grade upside: WITHDRAWN, and the conditions to bring it back ────────
+// Withdrawn because it showed a best-case number (raw price vs PSA 10 guide
+// value) as if it were an expected outcome. P0-C was to re-weight it by gem
+// rate so it became an EV rather than a best case. Research on 2026-09-03
+// concluded that no honest version of that number is available today, and
+// that even with paid data an EV would be the wrong shape. Full findings:
+// audit/GEM_RATE_RESEARCH_2026-09-03.md
+//
+// Why not just multiply by a gem rate:
+//   Within the SINGLE 1999 Pokemon Game set, PSA 10 rates run 0.6% for
+//   Charizard-Holo (679 of 107,255) up to 14.7% -- a 24x intra-set spread.
+//   The set-level rate is 11%; the published PSA Pokemon-wide rate is ~50%,
+//   inflated by 2020s cards that are ~77% of submissions. Applying an era or
+//   set baseline to a vintage Charizard overstates its gem probability by
+//   roughly 18x. An era rate is legitimate ONLY as labelled set-level
+//   context, never as the multiplier inside a dollar figure.
+//   https://www.gemrate.com/item-details-advanced?grader=psa&year=1999&category=tcg-cards&set_name=Pokemon+Game
+//
+// Why not an EV even once pop data is licensed:
+//   1. Population counts past SUBMISSIONS, so they are survivorship-biased
+//      toward cards people already believed would grade well. GemRate shows
+//      1999 Charizard-Holo at 0.6% all-time against 0.1% over the trailing
+//      30 days -- the historical rate is not a stable forward probability.
+//   2. Per-grade price samples are thin. A representative PSA 10 series
+//      carries count 84 with confidence reported as "low".
+//   3. An EV collapses a 0.3%-probability $12k branch and a 17.6%-probability
+//      $670 branch into a single number that is true of no actual outcome.
+//      Show the branches; let the seller weigh them.
+//
+// Re-enable ONLY when BOTH exist, and then as a per-grade table (grade /
+// population / share / dated price) with NO single headline figure:
+//   (a) a real per-card grade distribution we are licensed to display.
+//       PSA's /pop/GetPSASpecPopulation returns Grade1..Grade10 but is keyed
+//       on specID with no card search, capped at 100 calls/day, and its end
+//       user agreement is login-gated so display rights are unconfirmed.
+//       GemRate documents /v1/cards/{id}/population with gem_rate and real
+//       card search, but keys are sales-gated. CGC, BGS and SGC publish no
+//       first-party API at all.
+//   (b) a per-grade price carrying a real sale DATE. PriceCharting explicitly
+//       does not support historic sales, and its graded guide values are
+//       undated -- which is why they render a "no price date" marker. eBay
+//       Marketplace Insights exposes lastSoldDate over 90 days but is Limited
+//       Release with no approval guarantee.
+//
+// Until then this renders nothing. An empty section is honest; a confident
+// wrong dollar figure on a slab decision is not. The previous implementation
+// is preserved verbatim in the withdrawn helper directly below, so the markup
+// is not lost -- it is intentionally never called. (Not named here: a
+// regression asserts that identifier appears exactly once in this file, so
+// only its definition may mention it.)
 function renderGradeOpportunity(g) {
   return '';
 }
@@ -6103,8 +6297,19 @@ async function fetchAndApplySoldComps(forceRefresh) {
     if (gradedRequest) {
       if (pc && pc.median != null && pc.source === 'pricecharting') {
         bestPrice = pc.median;
+        // 2026-09-03: this rung set no _basisMeta, so a graded headline filled
+        // from PriceCharting inherited whatever label the previous render left
+        // behind. Name the source that produced the number.
+        _basisMeta = { label: 'PriceCharting guide value',
+                       cacheAgeSec: pc.cacheAgeSec ?? null,
+                       sourceUrl: pc.url || null,
+                       datedBySource: false };
       } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
+        _basisMeta = { label: `eBay sold median · ${ebay.count} comps`,
+                       cacheAgeSec: ebay.cacheAgeSec ?? null,
+                       sourceUrl: ebay.searchUrl || null,
+                       datedBySource: true };
       }
     } else {
       // Raw context — 2026-09-01: TCGplayer market now leads, ahead of both eBay
@@ -6131,13 +6336,24 @@ async function fetchAndApplySoldComps(forceRefresh) {
         // winner tile to explain that payout prices off Market, never High.
         const _tcgC = (typeof _clampHigh === 'function') ? _clampHigh(tcg) : tcg;
         _basisMeta = { label: 'TCGPlayer market', low: _tcgC.low, mid: _tcgC.mid, high: _tcgC.high,
-                       highClamped: !!_tcgC.highClamped };
+                       highClamped: !!_tcgC.highClamped,
+                       cacheAgeSec: tcg.cacheAgeSec ?? null,
+                       sourceUrl: tcg.url || null,
+                       // TCGplayer market is derived from completed sales, so a
+                       // retrieval age is a fair freshness signal for it.
+                       datedBySource: true };
       } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
-        _basisMeta = { label: `eBay sold median · ${ebay.count} comps` };
+        _basisMeta = { label: `eBay sold median · ${ebay.count} comps`,
+                       cacheAgeSec: ebay.cacheAgeSec ?? null,
+                       sourceUrl: ebay.searchUrl || null,
+                       datedBySource: true };
       } else if (pc && pc.median != null && pc.source === 'pricecharting') {
         bestPrice = pc.median;
-        _basisMeta = { label: 'PriceCharting guide value' };
+        _basisMeta = { label: 'PriceCharting guide value',
+                       cacheAgeSec: pc.cacheAgeSec ?? null,
+                       sourceUrl: pc.url || null,
+                       datedBySource: false };
       }
     }
     if (bestPrice != null) {
@@ -6152,6 +6368,14 @@ async function fetchAndApplySoldComps(forceRefresh) {
         mid:  _basisMeta ? _basisMeta.mid  : null,
         high: _basisMeta ? _basisMeta.high : null,
         highClamped: !!(_basisMeta && _basisMeta.highClamped),
+        // Freshness contract: the caption under the headline names the source
+        // AND how old it is. Carrying these on the basis means the caption can
+        // never disagree with the row it was derived from.
+        cacheAgeSec: _basisMeta ? (_basisMeta.cacheAgeSec ?? null) : null,
+        sourceUrl:   _basisMeta ? (_basisMeta.sourceUrl   || null) : null,
+        // PriceCharting publishes no as-of date; TCGplayer market is computed
+        // from completed sales. The caption needs to know which it is holding.
+        datedBySource: _basisMeta ? !!_basisMeta.datedBySource : false,
       };
       // Remember that WE filled this, not the user. A user-typed number is the
       // price they expect to actually sell at, so it must be used verbatim; a
@@ -6172,7 +6396,23 @@ async function fetchAndApplySoldComps(forceRefresh) {
         // records which rung it took, so just read that.
         const _srcLabel = (window._crBasis && window._crBasis.label) || '';
         if (_srcLabel && priceSource) {
-          priceSource.textContent = _srcLabel;
+          // Freshness contract (P0-D): the caption states the source, links to
+          // it, and says how old the number is. Previously it printed the
+          // source name alone, so a figure retrieved four hours ago was
+          // indistinguishable from one retrieved four seconds ago.
+          //
+          // "retrieved" not "as of": for PriceCharting we genuinely do not
+          // know when the price was set (no timestamp in their API), and for
+          // TCGplayer we know when we fetched their computed market price, not
+          // the date of the last sale behind it. Either way the verb we can
+          // defend is the one about our own fetch.
+          const _b = window._crBasis || {};
+          _renderPriceCaption(priceSource, {
+            label: _srcLabel,
+            url: _b.sourceUrl,
+            cacheAgeSec: _b.cacheAgeSec,
+            datedBySource: _b.datedBySource,
+          });
           window._ovFilledBy = _srcLabel;
         }
         // Repaint the headline off the basis we just recorded. Without this the
@@ -6232,6 +6472,12 @@ async function fetchAndApplySoldComps(forceRefresh) {
           mid:    v,
           high:   v,
           source: 'pricecharting',
+          // Citation travels with the price. Every PriceCharting-sourced
+          // number in this app must be clickable back to the page it came
+          // from, so a seller can check the guide value themselves.
+          url:    pc.url || null,
+          cacheAgeSec: pc.cacheAgeSec ?? null,
+          datedBySource: false,
         };
         // Also mirror into selectedCard.priceVariants so any downstream code
         // that iterates variants (fee audit, portfolio, etc.) sees it.
@@ -6243,6 +6489,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
             market: v,
             low: v, mid: v, high: v,
             source: 'pricecharting',
+            url: pc.url || null,
+            cacheAgeSec: pc.cacheAgeSec ?? null,
+            datedBySource: false,
           };
           if (idx >= 0) selectedCard.priceVariants[idx] = row;
           else selectedCard.priceVariants.push(row);
@@ -6261,6 +6510,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
             label: 'PriceCharting raw',
             market: rawKey, low: rawKey, mid: rawKey, high: rawKey,
             source: 'pricecharting',
+            url: pc.url || null,
+            cacheAgeSec: pc.cacheAgeSec ?? null,
+            datedBySource: false,
           });
           currentPrices['holofoil'] = selectedCard.priceVariants[0];
         }
@@ -7574,7 +7826,10 @@ function updatePriceFromPrinting() {
     if (b.mid  != null && b.mid  > 0) rp.push(`Mid $${(b.mid  * m).toFixed(2)}`);
     if (b.high != null && b.high > 0) rp.push(`High $${(b.high * m).toFixed(2)}`);
     priceRange.textContent = rp.join(' · ');
-    priceSource.textContent = b.label;
+    _renderPriceCaption(priceSource, {
+      label: b.label, url: b.sourceUrl,
+      cacheAgeSec: b.cacheAgeSec, datedBySource: b.datedBySource,
+    });
     calc();
     try { renderQuickPricing(); } catch(_) {}
     return;
@@ -7603,6 +7858,11 @@ function updatePriceFromPrinting() {
   if (clamped.high != null) parts.push(`High $${(clamped.high * condMult).toFixed(2)}`);
   priceRange.textContent = parts.join(' · ');
 
+  // Scryfall's "Updated daily" is a verified claim, not a guess: their FAQ
+  // states "Scryfall syncs prices from each of our affiliates every 24 hours."
+  // https://scryfall.com/docs/faqs/where-do-scryfall-prices-come-from-7
+  // Every other cadence claim in this map was removed 2026-09-03 because no
+  // equivalent published statement backs it.
   const srcMap = { TCGPlayer: 'TCGPlayer market', Scryfall: 'Scryfall · Updated daily', YGOProDeck: 'YGOProDeck · TCGPlayer data', Manual: 'Manual entry', 'eBay JP Comps': 'eBay JP sold listings', 'TCGPlayer (EN)': 'TCGPlayer market (EN version)', TCGPriceLookup: 'TCGPriceLookup', pricecharting: 'PriceCharting guide value', sportscardspro: 'PriceCharting guide value' };
   // 2026-09-03: caption the row we actually rendered, not the card's search
   // feed. Screenshot showed a PSA 10 headline of $161.25 -- a PriceCharting
@@ -7617,9 +7877,23 @@ function updatePriceFromPrinting() {
   // now strip any trailing 'Updated ...' from the label and only append
   // updatedAt once here.
   const cleanLabel = srcLabel.replace(/\s*·\s*Updated [^·]*$/i, '');
-  priceSource.textContent = updatedAt && updatedAt !== 'Enter via override'
-    ? `${cleanLabel} · Updated ${updatedAt}`
-    : (srcLabel.match(/Updated/i) ? srcLabel : `${srcLabel} · Updated daily`);
+  // 2026-09-03 (P0-D): the old else-branch appended "Updated daily" to any
+  // label that did not already mention a date. Nothing verified that cadence.
+  // PriceCharting-sourced graded rows -- the PSA 10 numbers, the most
+  // consequential figures in the app -- were carrying a daily-refresh promise
+  // we have no basis for, on a feed that publishes no as-of date at all.
+  // Now: cite the source, date our own retrieval, and say plainly when the
+  // source does not date its price.
+  _renderPriceCaption(priceSource, {
+    label: cleanLabel || srcLabel,
+    url: p?.url || null,
+    cacheAgeSec: p?.cacheAgeSec ?? null,
+    // Only PriceCharting-derived rows are known to be undated. Leave others
+    // undefined so they render no claim either way.
+    datedBySource: (p?.source === 'pricecharting' || p?.source === 'sportscardspro')
+      ? false : (p?.datedBySource === false ? false : undefined),
+    updatedAt,
+  });
 
   calc();
   // Belt-and-suspenders: the printing/grade selector is the one control that
