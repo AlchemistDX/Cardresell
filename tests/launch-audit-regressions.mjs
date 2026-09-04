@@ -1589,5 +1589,37 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
         lad.includes("'PSA 10'"));
 }
 
+// ---- No grader name on grader-agnostic PriceCharting fields (2026-09-04) ----
+{
+  const m = index.slice(index.indexOf('const PC_TO_KEY'), index.indexOf('};', index.indexOf('const PC_TO_KEY')));
+  ['PSA 7','PSA 8','PSA 9'].forEach(l =>
+    check(`variant label does not claim "${l}"`, !m.includes(`'${l} (PriceCharting)'`)));
+  check('variant labels say any grader for 7/8/9',
+        (m.match(/any grader \(PriceCharting\)/g) || []).length === 3);
+  check('variant 9.5 stays BGS/CGC', m.includes('Grade 9.5 — BGS/CGC'));
+  check('the 10s keep their grader names (PC breaks those out per grader)',
+        ["PSA 10","BGS 10","CGC 10","SGC 10"].every(l => m.includes(`'${l} (PriceCharting)'`)));
+  // Internal keys must NOT be renamed -- syncKey and _QP_KEY_TO_PC are wired to them.
+  check('internal psa_* keys are untouched',
+        /key: 'psa_7'/.test(m) && /key: 'psa_9_5'/.test(m));
+
+  const g = index.slice(index.indexOf('  const grades = ['), index.indexOf('  ];', index.indexOf('  const grades = [')));
+  ['PSA 7','PSA 8','PSA 9'].forEach(l =>
+    check(`horizontal ladder subtitle does not claim "${l}"`, !g.includes(`sub: '${l}'`)));
+  check('horizontal ladder subtitles say Any grader',
+        (g.match(/sub: 'Any grader'/g) || []).length === 3);
+  check('horizontal ladder 10 keeps PSA', /sub: 'PSA 10'/.test(g));
+  check('horizontal ladder syncKeys are unchanged',
+        /syncKey: 'psa:7'/.test(g) && /syncKey: 'bgs:9\.5'/.test(g));
+}
+// The GRADER scales themselves must stay COMPLETE -- these are real grades a
+// real slab can carry, unlike PriceCharting's blended columns.
+{
+  const psa = index.slice(index.indexOf('  psa: ['), index.indexOf('  bgs: ['));
+  ['10','9','8.5','8','7.5','7','6.5','6','5.5','5','4.5','4','3.5','3','2.5','2','1.5','1'].forEach(v =>
+    check(`PSA scale keeps grade ${v}`, psa.includes(`v: '${v}'`)));
+  check('PSA scale still has no 9.5', !psa.includes("v: '9.5'"));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

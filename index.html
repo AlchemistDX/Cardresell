@@ -6566,9 +6566,15 @@ async function fetchAndApplySoldComps(forceRefresh) {
     try {
       const PC_TO_KEY = {
         // PC field key -> currentPrices/priceVariants key + label
-        grade_7:  { key: 'psa_7',  label: 'PSA 7 (PriceCharting)'  },
-        grade_8:  { key: 'psa_8',  label: 'PSA 8 (PriceCharting)'  },
-        grade_9:  { key: 'psa_9',  label: 'PSA 9 (PriceCharting)'  },
+        // Grader-agnostic, per PriceCharting's own API docs: "Graded 7 or 7.5
+        // / 8 or 8.5 / 9 by a grading company". So 7 and 8 each BLEND two
+        // grades into one number, and none of the three is PSA-specific --
+        // only manual-only-price ("Graded 10 by PSA") is. The internal keys
+        // stay psa_* because syncKey/_QP_KEY_TO_PC are wired to them; only the
+        // user-visible label changes.
+        grade_7:  { key: 'psa_7',  label: 'Grade 7 — any grader (PriceCharting)' },
+        grade_8:  { key: 'psa_8',  label: 'Grade 8 — any grader (PriceCharting)' },
+        grade_9:  { key: 'psa_9',  label: 'Grade 9 — any grader (PriceCharting)' },
         // PriceCharting's "Grade 9.5" column is grader-agnostic. PSA does not
         // issue a 9.5 (its half grades stop at 8.5), so labelling this "PSA
         // 9.5" invents a grade that cannot exist on a slab. BGS and CGC both
@@ -14210,10 +14216,15 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
   // switches the pricing UI to that grader/grade combo.
   const grades = [
     { key: 'raw',      label: 'Raw',    sub: 'Ungraded',    price: raw,             isGrade: 0,   syncKey: 'raw'  },
-    { key: 'grade_7',  label: '7',      sub: 'PSA 7',       price: p.grade_7  || 0, isGrade: 7,   syncKey: 'psa:7'  },
-    { key: 'grade_8',  label: '8',      sub: 'PSA 8',       price: p.grade_8  || 0, isGrade: 8,   syncKey: 'psa:8'  },
-    { key: 'grade_9',  label: '9',      sub: 'PSA 9',       price: p.grade_9  || 0, isGrade: 9,   syncKey: 'psa:9'  },
-    { key: 'grade_95', label: '9.5',    sub: 'BGS 9.5',     price: p.grade_95 || 0, isGrade: 9.5, syncKey: 'bgs:9.5' },
+    // Subtitles say which GRADER the number covers, and PriceCharting only
+    // breaks out a grader at the 10. Below that the columns are "graded N by a
+    // grading company", so stamping PSA on them claimed a precision the feed
+    // does not have. syncKey still picks a concrete grader for the UI to
+    // switch to -- that is a selection default, not a claim about the price.
+    { key: 'grade_7',  label: '7',      sub: 'Any grader',  price: p.grade_7  || 0, isGrade: 7,   syncKey: 'psa:7'  },
+    { key: 'grade_8',  label: '8',      sub: 'Any grader',  price: p.grade_8  || 0, isGrade: 8,   syncKey: 'psa:8'  },
+    { key: 'grade_9',  label: '9',      sub: 'Any grader',  price: p.grade_9  || 0, isGrade: 9,   syncKey: 'psa:9'  },
+    { key: 'grade_95', label: '9.5',    sub: 'BGS/CGC',     price: p.grade_95 || 0, isGrade: 9.5, syncKey: 'bgs:9.5' },
     { key: 'psa_10',   label: '10',     sub: 'PSA 10',      price: p.psa_10   || 0, isGrade: 10,  syncKey: 'psa:10' },
   ];
 
