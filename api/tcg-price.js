@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     // Name-only fallback if set-scoped resolve missed or no set given.
     // Skip for MTG — too many sets (2000+); Scryfall handles MTG.
     if ((!r || !r.ok || r.market == null) && !set && categoryId !== 1) {
-      r = await resolveCardByName({
+      const rByName = await resolveCardByName({
         kvUrl, kvToken, categoryId, game,
         cardName: name,
         cardNumber: number,
@@ -117,6 +117,26 @@ export default async function handler(req, res) {
           categoryId === 85 ? 60 :
           40,
       });
+      // 2026-09-03: an explicit refusal must not be papered over by the live
+      // fuzzy fallback below. If the resolver saw several sets and said it
+      // could not tell them apart, tell the caller so they can prompt for a
+      // set instead of getting an arbitrary high-scoring fuzzy match.
+      if (rByName && rByName.reason === 'ambiguous_printing') {
+        const data = {
+          market: null, low: null, mid: null, high: null,
+          source: 'tcgcsv', game, categoryId,
+          reason: 'ambiguous_printing',
+          candidateCount: rByName.candidateCount,
+          candidateGroups: rByName.candidateGroups,
+          candidates: rByName.candidates,
+          fetchedAt: new Date().toISOString(),
+          cacheAgeSec: 0,
+        };
+        await setCache(kvUrl, kvToken, cacheKey, data);
+        _incrSearchStats(kvUrl, kvToken);
+        return res.status(200).json(data);
+      }
+      r = rByName;
     }
 
     // 2026-08-19: Guard against TCGplayer's $99,999 "no data" sentinel.
@@ -258,9 +278,33 @@ export default async function handler(req, res) {
     const specialKeywords = ['illustration', 'special', 'secret', 'hyper', 'rainbow', 'ultra', 'full art', 'alt art', 'gold', 'shiny', 'v-max', 'vstar', 'v union', 'trainer gallery'];
     const isSpecial = specialKeywords.some(kw => rarityLo.includes(kw));
 
+    // 2026-09-03: same identity discipline as the tcgcsv resolver -- a
+    // name-only lookup must not resolve to a sealed collection or a differently
+    // named card. "Iono" (name only, no set) came back as "Iono Premium
+    // Tournament Collection Display" through this fuzzy path, because the
+    // scorer awards +5 for a substring hit and +50 for a number substring,
+    // with no equality gate anywhere.
+    const _canon = v => String(v || '')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/['\u2019\u02bc`]/g, '')
+      .replace(/[^a-z0-9]+/gi, ' ')
+      .trim()
+      .toLowerCase();
+    const _sealed = v => /\b(box|collection|bundle|tin|deck|pack|case|blister|display|elite trainer|etb|premium)\b/i.test(String(v || ''));
+    const _targetCanon = _canon(name);
+
     const scored = results.map(r => {
       const productName = (r.productName || '').toLowerCase();
       const rSetName    = (r.setName || '').toLowerCase();
+      // Filter first, score second. If a result cannot legitimately answer
+      // the request, no scoring boost can rehabilitate it.
+      if (categoryId === 3) {
+        if (_sealed(r.productName)) return { r, score: -1 };
+        // stripCollectorSuffix-style trim: "- 185/193" and "- 3/70 (#39 ...)"
+        const pnStripped = productName.replace(/\s*-\s*\d+\/\d+.*$/, '');
+        if (_canon(pnStripped) !== _targetCanon) return { r, score: -1 };
+      }
       let score = 0;
       if (setLower && rSetName.includes(setLower)) score += 100;
       if (isSpecial) {
@@ -281,7 +325,14 @@ export default async function handler(req, res) {
       return { r, score };
     });
     scored.sort((a, b) => b.score - a.score);
-    let best = scored[0].r;
+    const passing = scored.filter(x => x.score > 0);
+    if (!passing.length) {
+      return res.status(200).json({
+        market: null, low: null, mid: null, high: null,
+        source: 'tcgplayer-live', count: 0, reason: 'no_valid_match',
+      });
+    }
+    let best = passing[0].r;
     const productId = best.productId ? Math.round(best.productId) : null;
     let market = best.marketPrice || null;
     let low = best.lowPrice || null;

@@ -1007,5 +1007,38 @@ try {
         /Net Payout is calculated from Market Value/.test(accuracy));
 }
 
+// ── The live TCGplayer fallback cannot resurrect a rejected identity ────
+// The tcgcsv resolver's guards ("Mew" != "Mew ex", no sealed product) are
+// bypassed if the code falls through to the fuzzy live TCGplayer search,
+// which scores by substring hits and has no equality gate. Prod verify
+// 2026-09-03: "Iono" (name-only) came back as "Iono Premium Tournament
+// Collection Display" through this fallback -- $318 for a sealed product,
+// not the card. Same discipline must live in both paths.
+{
+  const tcgPrice = fs.readFileSync(path.join(root, 'api/tcg-price.js'), 'utf8');
+
+  check('ambiguous_printing short-circuits before the live fallback',
+        /rByName\.reason === 'ambiguous_printing'/.test(tcgPrice)
+          && /reason: 'ambiguous_printing'/.test(tcgPrice),
+        'refusing to guess must not become guessing via a different path');
+
+  const liveStart = tcgPrice.indexOf('// ── FALLBACK: live TCGplayer search');
+  const liveEnd = tcgPrice.indexOf('async function priceFromScryfall');
+  const live = tcgPrice.slice(liveStart, liveEnd);
+
+  check('live fallback rejects sealed product for Pokemon',
+        /categoryId === 3/.test(live) && /_sealed\(r\.productName\)/.test(live),
+        'the fuzzy path had no equality gate');
+  check('live fallback requires an exact canonical name for Pokemon',
+        /_canon\(pnStripped\) !== _targetCanon/.test(live));
+  check('the live fallback strips a trailing collector suffix before comparing',
+        /pnStripped = productName\.replace/.test(live)
+          && /_canon\(pnStripped\)/.test(live),
+        'products list "- 185/193" after the name; strip it, then compare');
+  check('rejected rows are filtered before picking a winner',
+        /const passing = scored\.filter/.test(live)
+          && /reason: 'no_valid_match'/.test(live));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
