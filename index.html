@@ -12129,6 +12129,7 @@ function saveFlipEntry() {
     const cardIsJP = cardGame === 'pokemonjp';
     port.push({
       id: Date.now(),
+      updatedAt: Date.now(), // beats any older tombstone for a re-added id
       card: cardName,
       set: setName,
       buyPrice,
@@ -12148,7 +12149,9 @@ function saveFlipEntry() {
       rarity:     cardRarity,
       isJapanese: cardIsJP,
     });
-    savePortData(port);
+    // Keep the modal open if the browser refused the write, so the user can
+    // retry or export instead of losing the card silently.
+    if (!savePortData(port)) { _reportStorageFailure(); return; }
     window.trackEvent?.('collection_add', {
       source: 'single',
       graded: !!(savedGrader && savedGrade),
@@ -12171,8 +12174,8 @@ function saveFlipEntry() {
       setTimeout(() => openPricingModal('flips_cap'), 200);
       return;
     }
-    flips.push({ id: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, profit, platform, date });
-    saveFlipsData(flips);
+    flips.push({ id: Date.now(), updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, profit, platform, date });
+    if (!saveFlipsData(flips)) { _reportStorageFailure(); return; }
     // Warn free users when they're 1 flip away from the cap
     if (!window._isPro && flips.length === 9) {
       setTimeout(() => showToast('1 flip slot left on the free plan — Pro unlocks unlimited tracking 📊', 'gold'), 400);
@@ -12199,7 +12202,7 @@ function loadGradingData() {
   try { return JSON.parse(localStorage.getItem(getUserKey('grading_log')) || '[]'); } catch(e) { return []; }
 }
 function saveGradingData(d) {
-  try { localStorage.setItem(getUserKey('grading_log'), JSON.stringify(d)); } catch(e) {}
+  return _lsWrite(getUserKey('grading_log'), JSON.stringify(d));
 }
 
 let _gradingEditId = null; // null = new entry, number = editing existing
@@ -12284,7 +12287,7 @@ function saveGradingEntry() {
   } else {
     data.push({ id: Date.now(), card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice });
   }
-  saveGradingData(data);
+  if (!saveGradingData(data)) { _reportStorageFailure(); return; }
   document.getElementById('gradingModal').classList.remove('open');
   renderGradingLog();
 }
@@ -12427,6 +12430,7 @@ function renderGradingReport(data, reportWrap) {
 // ── Delete helpers ──
 function deleteFlip(id) {
   const flips = loadFlipsData().filter(f => f.id !== id);
+  _addTombstones('flips', id); // before the save, so a failed write still records intent
   saveFlipsData(flips);
   renderFlipsView();
 }
@@ -12528,6 +12532,7 @@ function _fdmDeleteFlip() {
 }
 function deletePort(id) {
   const port = loadPortData().filter(p => p.id !== id);
+  _addTombstones('portfolio', id);
   savePortData(port);
   renderFlipsView();
 }
@@ -12609,6 +12614,14 @@ function clearCollection() {
     if (!confirm('Really clear everything? This cannot be undone. Tap OK to erase, Cancel to keep your data.')) return;
     // Clear the three user-scoped keys. localStorage.removeItem is safer than
     // setItem('[]') because it also cleans up if the key was orphaned.
+    // Tombstone every id first. The empty POST below is authoritative only
+    // while this device's clientUpdatedAt stays ahead of the server's clock;
+    // tombstones make the deletion stick regardless of clock skew, and teach
+    // any other signed-in device about it on its next pull.
+    try {
+      _addTombstones('portfolio', port.map(x => x && x.id));
+      _addTombstones('flips',     flips.map(x => x && x.id));
+    } catch(e) {}
     try { localStorage.removeItem(getUserKey('portfolio')); } catch(e) {}
     try { localStorage.removeItem(getUserKey('flips')); } catch(e) {}
     try { localStorage.removeItem(getUserKey('grading_log')); } catch(e) {}
@@ -12629,7 +12642,7 @@ function clearCollection() {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + window._googleIdToken,
           },
-          body: JSON.stringify({ portfolio: [], flips: [], clientUpdatedAt: Date.now() }),
+          body: JSON.stringify({ portfolio: [], flips: [], tombstones: loadTombstones(), clientUpdatedAt: Date.now() }),
         });
       } catch(e) { /* offline / network issue — next save attempt will retry */ }
     })();
@@ -12949,6 +12962,48 @@ async function _fetchPriceForEntry(p) {
   return await _fetchEbayPriceForEntry(p);
 }
 
+/* ── Merge-at-commit for long price refreshes (2026-09-04) ──
+   refreshCollectionPrices() loaded the whole portfolio, awaited network calls
+   for up to minutes (slabs are paced at 1 req/s), then wrote that stale array
+   back with savePortData(port). Anything the user did in another tab meanwhile
+   was overwritten by the snapshot taken before the refresh began. The audit
+   reproduced it with two tabs: tab B deleted id 1 and added id 3 while tab A
+   refreshed; the final state was ids 1 and 2 -- the deleted row resurrected
+   and the newly added row lost.
+
+   Instead of writing the stale array, re-read the newest snapshot at commit
+   time and graft ONLY the freshly fetched price fields onto rows that still
+   exist. Rows added during the refresh survive because we start from the
+   latest array; rows deleted during the refresh stay deleted because we never
+   reinsert an id that is no longer there. */
+const _PRICE_REFRESH_FIELDS = ['currentValue','lastRefreshed','img','imageUrl','tcgplayerUrl'];
+
+function _commitPortfolioRefresh(refreshedRows) {
+  const fresh = new Map();
+  for (const r of (refreshedRows || [])) if (r && r.id != null) fresh.set(String(r.id), r);
+  const latest = loadPortData();
+  let grafted = 0;
+  const merged = latest.map(row => {
+    if (!row || row.id == null) return row;
+    const f = fresh.get(String(row.id));
+    if (!f) return row; // added in another tab during the refresh — leave alone
+    const out = Object.assign({}, row);
+    let touched = false;
+    for (const field of _PRICE_REFRESH_FIELDS) {
+      if (f[field] !== undefined && f[field] !== row[field]) { out[field] = f[field]; touched = true; }
+    }
+    if (touched) { out.updatedAt = Date.now(); grafted++; }
+    return out;
+  });
+  // Rows we refreshed that no longer exist locally = deleted mid-refresh.
+  // We deliberately do NOT reinsert them.
+  const liveIds = new Set(latest.filter(r => r && r.id != null).map(r => String(r.id)));
+  let dropped = 0;
+  for (const id of fresh.keys()) if (!liveIds.has(id)) dropped++;
+  const ok = savePortData(merged);
+  return { ok, grafted, dropped };
+}
+
 async function refreshCollectionPrices() {
   const btn = document.getElementById('colRefreshBtn');
   if (btn) { btn.disabled = true; btn.textContent = '↻ Refreshing…'; }
@@ -12982,7 +13037,9 @@ async function refreshCollectionPrices() {
     } catch(e) { /* skip */ }
   }
 
-  savePortData(port);
+  // Merge onto the newest snapshot rather than writing our pre-refresh copy.
+  const commit = _commitPortfolioRefresh(port);
+  if (!commit.ok) _reportStorageFailure();
   const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   const lastEl = document.getElementById('colLastUpdated');
   if (lastEl) lastEl.textContent = 'Updated ' + now;
@@ -13010,7 +13067,9 @@ async function refreshSingleCardPrice(id) {
     if (price !== null) {
       p.currentValue  = price;
       p.lastRefreshed = new Date().toISOString();
-      savePortData(port);
+      // Same race as the bulk refresh: this awaited a network call, so commit
+      // against the latest snapshot instead of our stale `port` array.
+      if (!_commitPortfolioRefresh([p]).ok) _reportStorageFailure();
       renderCollectionView();
       showToast('Price updated for ' + (p.card || 'card') + ' 📊', 'success');
     } else {
@@ -13463,7 +13522,8 @@ async function _refetchCardMeta(entryId) {
   }
 
   if (changed) {
-    savePortData(port);
+    // Awaited image/price lookups above, so merge rather than clobber.
+    if (!_commitPortfolioRefresh([p]).ok) _reportStorageFailure();
   }
   return changed;
 }
@@ -13501,6 +13561,7 @@ function _ccmRemoveCard() {
   } else {
     // Fallback if deletePortEntry isn't defined — handle inline.
     const port = loadPortData().filter(x => x.id !== window._ccmCurrentId);
+    _addTombstones('portfolio', window._ccmCurrentId);
     savePortData(port);
     renderCollectionView();
   }
@@ -13514,6 +13575,7 @@ function deletePortEntry(entryId) {
   const port = loadPortData();
   const next = port.filter(x => x.id !== entryId);
   if (next.length === port.length) return;
+  _addTombstones('portfolio', entryId);
   savePortData(next);
   renderCollectionView();
   if (typeof showToast === 'function') showToast('Card removed from collection');
@@ -13718,6 +13780,7 @@ function confirmMarkSold() {
   const date   = new Date().toISOString().slice(0,10);
   flips.push({
     id: Date.now(),
+    updatedAt: Date.now(),
     card: p.card,
     set: p.set || '',
     buyPrice,
@@ -13737,10 +13800,13 @@ function confirmMarkSold() {
     number:   p.number || '',
     source:   'collection_sold' // trace where this flip came from for future analytics
   });
-  saveFlipsData(flips);
+  // If the flip did not persist, do NOT remove the card from the Collection --
+  // that would destroy the row and record nothing in its place.
+  if (!saveFlipsData(flips)) { _reportStorageFailure(); return; }
 
   // Remove from Collection.
-  savePortData(port.filter(x => x.id !== entryId));
+  _addTombstones('portfolio', entryId); // sold cards must not sync back from another device
+  if (!savePortData(port.filter(x => x.id !== entryId))) _reportStorageFailure();
 
   // Close modal + toast.
   document.getElementById('markSoldModal').classList.remove('open');
@@ -20038,19 +20104,140 @@ function loadUserData() {
 }
 
 // Override storage helpers to be user-scoped when signed in
+// ── Durable localStorage writes (2026-09-04) ──
+// savePortData / saveFlipsData / saveGradingData used to swallow every storage
+// exception and return nothing, so a full-quota device silently discarded the
+// write while the caller closed its modal and re-rendered as if the save had
+// succeeded. The audit forced QuotaExceededError on the portfolio key, clicked
+// Save, and observed: stored portfolio null, modal closed, no error shown --
+// the card was simply gone. Every writer now goes through _lsWrite, which
+// reports success so callers can keep the modal open and tell the truth.
+window._lastStorageFailure = null;
+
+function _lsWrite(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    // Safari private mode and Firefox use different names/codes for "full".
+    const name = (e && e.name) || '';
+    const code = e && e.code;
+    const isQuota = name === 'QuotaExceededError'
+      || name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      || code === 22 || code === 1014;
+    window._lastStorageFailure = { key, quota: isQuota, at: Date.now(), message: (e && e.message) || String(e) };
+    try { console.error('[storage] write failed for', key, e); } catch(_) {}
+    return false;
+  }
+}
+
+// Human-readable reason for the most recent failed write. Callers surface this
+// instead of pretending the save worked.
+function storageFailureMessage() {
+  const f = window._lastStorageFailure;
+  if (f && f.quota) return 'Your browser storage is full, so this could not be saved. Export your Collection as CSV, then clear some space and try again.';
+  return 'Your browser blocked this save, so it was not stored. If you are in private browsing, try a normal window.';
+}
+
+// Report a failed write once, consistently, from any save path.
+function _reportStorageFailure() {
+  try { showToast(storageFailureMessage(), 'error'); } catch(_) {}
+  try { window.trackEvent?.('storage_write_failed', { quota: !!(window._lastStorageFailure||{}).quota }); } catch(_) {}
+  return false;
+}
+
+/* ── Deletion tombstones (2026-09-04) ──
+   _pullUserData() unions the remote snapshot with the local one by id. Set
+   union is not a conflict-resolution strategy for deletion: a single-row
+   delete only wrote the shorter local array, so the next pull unioned the
+   still-remote row straight back in and the card returned from the dead. The
+   server compounded it -- /api/user-data ran its own _mergeById on POST, so a
+   shorter array never removed anything server-side either.
+
+   Fix: record a tombstone {id -> deletedAt} per collection when a row is
+   deleted, ship tombstones with every push, and apply them on both sides of
+   the sync. A row survives a tombstone only if its own updatedAt is NEWER
+   than the deletedAt, which is what makes delete-then-re-add work. Rows with
+   no updatedAt at all (written before this change) lose to the tombstone: an
+   explicit user deletion is better evidence than an unknown row age.
+
+   Tombstones are compacted after the retention window so the blob cannot grow
+   without bound. */
+const _TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+const _TOMBSTONE_MAX    = 500;                      // hard cap per collection
+
+function loadTombstones() {
+  try {
+    const t = JSON.parse(localStorage.getItem(getUserKey('tombstones')) || '{}');
+    return {
+      portfolio: (t && typeof t.portfolio === 'object' && t.portfolio) || {},
+      flips:     (t && typeof t.flips     === 'object' && t.flips)     || {},
+    };
+  } catch(e) { return { portfolio: {}, flips: {} }; }
+}
+
+function _saveTombstones(t) {
+  return _lsWrite(getUserKey('tombstones'), JSON.stringify(_compactTombstones(t)));
+}
+
+// Drop tombstones past the retention window, then trim the oldest if we are
+// still over the cap. Returns a new object; does not mutate the input.
+function _compactTombstones(t, nowMs) {
+  const now = nowMs || Date.now();
+  const out = { portfolio: {}, flips: {} };
+  for (const kind of ['portfolio','flips']) {
+    const src = (t && t[kind]) || {};
+    let entries = Object.keys(src)
+      .map(id => [id, Number(src[id]) || 0])
+      .filter(([, at]) => at > 0 && (now - at) < _TOMBSTONE_TTL_MS);
+    if (entries.length > _TOMBSTONE_MAX) {
+      entries.sort((a, b) => b[1] - a[1]);          // newest first
+      entries = entries.slice(0, _TOMBSTONE_MAX);
+    }
+    for (const [id, at] of entries) out[kind][id] = at;
+  }
+  return out;
+}
+
+// Mark ids as deleted. `kind` is 'portfolio' or 'flips'.
+function _addTombstones(kind, ids) {
+  if (kind !== 'portfolio' && kind !== 'flips') return false;
+  const list = (Array.isArray(ids) ? ids : [ids]).filter(id => id != null);
+  if (!list.length) return true;
+  const t = loadTombstones();
+  const now = Date.now();
+  for (const id of list) t[kind][String(id)] = now;
+  return _saveTombstones(t);
+}
+
+// Filter rows the user has deleted. A row survives only when its own
+// updatedAt beats the tombstone.
+function _applyTombstones(rows, marks) {
+  if (!Array.isArray(rows) || !marks) return Array.isArray(rows) ? rows : [];
+  return rows.filter(row => {
+    if (!row || row.id == null) return false;
+    const deletedAt = Number(marks[String(row.id)]) || 0;
+    if (!deletedAt) return true;
+    const rowAt = Number(row.updatedAt) || 0;
+    return rowAt > deletedAt;
+  });
+}
+
 function loadFlipsData() {
   try { return JSON.parse(localStorage.getItem(getUserKey('flips')) || '[]'); } catch(e) { return []; }
 }
 function saveFlipsData(data) {
-  try { localStorage.setItem(getUserKey('flips'), JSON.stringify(data)); } catch(e) {}
+  const ok = _lsWrite(getUserKey('flips'), JSON.stringify(data));
   _scheduleUserDataSync(); // 2026-08-19: propagate to cloud so other devices see it
+  return ok;
 }
 function loadPortData() {
   try { return JSON.parse(localStorage.getItem(getUserKey('portfolio')) || '[]'); } catch(e) { return []; }
 }
 function savePortData(data) {
-  try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(data)); } catch(e) {}
+  const ok = _lsWrite(getUserKey('portfolio'), JSON.stringify(data));
   _scheduleUserDataSync(); // 2026-08-19: propagate to cloud so other devices see it
+  return ok;
 }
 
 // ── Cross-device sync (2026-08-19) ──
@@ -20087,13 +20274,17 @@ async function _pushUserData() {
   try {
     const portfolio = loadPortDataRaw();
     const flips     = loadFlipsDataRaw();
+    // Ship tombstones so the server can drop deleted rows too. Without them
+    // /api/user-data's own _mergeById kept resurrecting anything the client
+    // had removed, and the next pull handed it straight back.
+    const tombstones = loadTombstones();
     await fetch('/api/user-data', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + window._googleIdToken,
       },
-      body: JSON.stringify({ portfolio, flips, clientUpdatedAt: Date.now() }),
+      body: JSON.stringify({ portfolio, flips, tombstones, clientUpdatedAt: Date.now() }),
     });
   } catch(e) { /* offline / network issue — next save will retry */ }
   finally { _userDataSyncing = false; }
@@ -20120,12 +20311,19 @@ async function _pullUserData() {
     const remoteFlips = Array.isArray(remote.flips)     ? remote.flips     : [];
     const localPort   = loadPortDataRaw();
     const localFlips  = loadFlipsDataRaw();
+    // Merge the server's tombstones with ours first, so a delete performed on
+    // another device is honoured here even though this device never saw it.
+    const localMarks  = loadTombstones();
+    const remoteMarks = (remote && typeof remote.tombstones === 'object' && remote.tombstones) || {};
+    const marks = _mergeTombstones(localMarks, remoteMarks);
+    try { _saveTombstones(marks); } catch(e) {}
     // Union by id — favours the local row if id collides (user just added
-    // it on this device; the server copy may be older).
-    const mergedPort  = _unionById(remotePort,  localPort);
-    const mergedFlips = _unionById(remoteFlips, localFlips);
-    try { localStorage.setItem(getUserKey('portfolio'), JSON.stringify(mergedPort));  } catch(e) {}
-    try { localStorage.setItem(getUserKey('flips'),     JSON.stringify(mergedFlips)); } catch(e) {}
+    // it on this device; the server copy may be older) — then subtract
+    // anything either side has deleted. Union alone resurrected deleted rows.
+    const mergedPort  = _applyTombstones(_unionById(remotePort,  localPort),  marks.portfolio);
+    const mergedFlips = _applyTombstones(_unionById(remoteFlips, localFlips), marks.flips);
+    _lsWrite(getUserKey('portfolio'), JSON.stringify(mergedPort));
+    _lsWrite(getUserKey('flips'),     JSON.stringify(mergedFlips));
     // Push merged result back so the server also has the union.
     _scheduleUserDataSync();
     // Refresh visible views so newly-pulled cards render immediately.
@@ -20144,6 +20342,52 @@ function _unionById(a, b) {
   // to hold fresh price/refresh state.
   for (const row of (b || [])) if (row && row.id != null) map.set(String(row.id), row);
   return Array.from(map.values());
+}
+
+/* ── Cross-tab reconciliation (2026-09-04) ──
+   The `storage` event fires in every OTHER tab of the same origin when one tab
+   writes. Without it, a second tab kept rendering the pre-change snapshot and
+   its next save wrote that stale view back. Merge-at-commit in
+   _commitPortfolioRefresh is what actually makes concurrent edits safe; this
+   listener is the UI half, so the other tab stops showing data it no longer
+   has. Do not rely on the listener alone for conflict safety -- it is
+   advisory, best-effort, and never fires in the tab that made the change. */
+window.addEventListener('storage', (e) => {
+  try {
+    if (!e || !e.key) return;
+    if (e.key === getUserKey('portfolio')) {
+      try { _maybeRerenderCollection(true); } catch(_) {}
+    } else if (e.key === getUserKey('flips')) {
+      const v = document.getElementById('flipsView');
+      if (v && v.classList.contains('active')) { try { renderFlipsView(); } catch(_) {} }
+    } else if (e.key === getUserKey('tombstones')) {
+      // Another tab deleted something. Re-apply marks locally so this tab
+      // does not push a snapshot that reinstates the deleted rows.
+      const marks = loadTombstones();
+      const port  = _applyTombstones(loadPortData(),  marks.portfolio);
+      const flips = _applyTombstones(loadFlipsData(), marks.flips);
+      _lsWrite(getUserKey('portfolio'), JSON.stringify(port));
+      _lsWrite(getUserKey('flips'),     JSON.stringify(flips));
+      try { _maybeRerenderCollection(true); } catch(_) {}
+    }
+  } catch(_) { /* advisory only */ }
+});
+
+// Combine two tombstone sets, keeping the LATEST deletedAt per id. A delete is
+// sticky: if either device recorded it, the row stays deleted unless the row
+// itself was re-added afterwards (checked via updatedAt in _applyTombstones).
+function _mergeTombstones(a, b) {
+  const out = { portfolio: {}, flips: {} };
+  for (const kind of ['portfolio','flips']) {
+    const src = [((a||{})[kind])||{}, ((b||{})[kind])||{}];
+    for (const m of src) {
+      for (const id of Object.keys(m)) {
+        const at = Number(m[id]) || 0;
+        if (at > (out[kind][id] || 0)) out[kind][id] = at;
+      }
+    }
+  }
+  return _compactTombstones(out);
 }
 
 
@@ -23214,6 +23458,7 @@ function saveBulkGradeToCollection() {
       const gradeLabel = finalG != null ? 'PSA ' + finalG.toFixed(1) + ' (AI est)' : 'AI graded';
       flips.push({
         id: 'bulk_grade_' + Date.now() + '_' + added,
+        updatedAt: Date.now(),
         cardName: r.cardName || 'Unknown card',
         setName: [r.setName, r.cardNumber, gradeLabel].filter(Boolean).join(' · '),
         buyPrice: 0,
@@ -24931,6 +25176,7 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     for (let q = 0; q < qty; q++) {
       port.push({
         id: Date.now() + added + Math.floor(Math.random() * 1000),
+        updatedAt: Date.now(),
         card: r.cardName,
         set: setStr,
         buyPrice,
@@ -24951,7 +25197,8 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
       added++;
     }
   });
-  savePortData(port);
+  const bulkSaveOk = savePortData(port);
+  if (!bulkSaveOk) _reportStorageFailure();
   window.trackEvent?.('bulk_scan_save', {
     added,
     // If price fetch missed and we saved as "Price not fetched", capture that
@@ -24965,7 +25212,10 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     const verified  = JSON.parse(localStorage.getItem(verifyKey) || '[]');
     if (!Array.isArray(verified) || verified.length < port.length) {
       console.warn('Portfolio write verification failed:', verifyKey, 'expected', port.length, 'got', verified.length);
-      showToast('Save issue detected — tap Refresh to retry.', 'info');
+      // Name the actual cause when we know it. A quota rejection is not a
+      // "tap Refresh" problem -- retrying writes the same oversized blob.
+      if (!bulkSaveOk) showToast(storageFailureMessage(), 'error');
+      else showToast('Save issue detected — tap Refresh to retry.', 'info');
     }
   } catch(e) { /* non-fatal */ }
   _maybeRerenderCollection(true);
