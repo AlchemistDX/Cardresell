@@ -5771,7 +5771,7 @@ function _sourceDisagreement({ tcg, pc }) {
   return {
     tcg: t, pc: p, ratio: Math.round(ratio * 100) / 100, spreadPct,
     higher: t > p ? 'tcg' : 'pc',
-    tcgUrl: tcg.url || null,
+    tcgUrl: _tcgpCondUrl(tcg.url) || null,
     pcUrl: pc.url || null,
   };
 }
@@ -5854,7 +5854,8 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
     const rangeStr = (tcg.low != null && tcg.high != null && tcg.low !== tcg.high)
       ? ` · range <strong style="color:var(--text)">$${Number(tcg.low).toFixed(2)}–$${Number(tcg.high).toFixed(2)}</strong>`
       : '';
-    const tcgUrl = tcg.url ? `<a href="${tcg.url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${src} ↗</a>` : src;
+    const _tu = _tcgpCondUrl(tcg.url);
+    const tcgUrl = _tu ? `<a href="${_tu}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${src} ↗</a>` : src;
     parts.push(
       `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .55rem;line-height:1.4">` +
         `<span class="trust-pill" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.55);color:#4ade80;font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">Market price</span>` +
@@ -8137,11 +8138,7 @@ function updatePriceFromPrinting() {
     const m = getCondMultiplier();
     priceMain.textContent = `$${(b.value * m).toFixed(2)}`;
     priceMain.style.color = 'var(--text)';
-    const rp = [];
-    if (b.low  != null && b.low  > 0) rp.push(`Low $${(b.low  * m).toFixed(2)}`);
-    if (b.mid  != null && b.mid  > 0) rp.push(`Mid $${(b.mid  * m).toFixed(2)}`);
-    if (b.high != null && b.high > 0) rp.push(`High $${(b.high * m).toFixed(2)}`);
-    priceRange.textContent = rp.join(' · ');
+    priceRange.textContent = _rangeParts(b.low, b.mid, b.high, m).join(' · ');
     _renderPriceCaption(priceSource, {
       label: b.label, url: b.sourceUrl,
       cacheAgeSec: b.cacheAgeSec, datedBySource: b.datedBySource,
@@ -8168,11 +8165,8 @@ function updatePriceFromPrinting() {
 
   // 2026-08-30: clamp outlandish high before display (see _clampHigh comment)
   const clamped = (typeof _clampHigh === 'function') ? _clampHigh(p) : p;
-  const parts = [];
-  if (clamped.low  != null) parts.push(`Low $${(clamped.low  * condMult).toFixed(2)}`);
-  if (clamped.mid  != null) parts.push(`Mid $${(clamped.mid  * condMult).toFixed(2)}`);
-  if (clamped.high != null) parts.push(`High $${(clamped.high * condMult).toFixed(2)}`);
-  priceRange.textContent = parts.join(' · ');
+  priceRange.textContent =
+    _rangeParts(clamped.low, clamped.mid, clamped.high, condMult).join(' · ');
 
   // Scryfall's "Updated daily" is a verified claim, not a guess: their FAQ
   // states "Scryfall syncs prices from each of our affiliates every 24 hours."
@@ -8599,6 +8593,70 @@ function buildEbayUrl(url) {
   return `${url}${sep}mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid=${encodeURIComponent(campId)}&toolid=${encodeURIComponent(tool)}&mkevt=1&customid=${encodeURIComponent(cust)}`;
 }
 
+// 2026-09-04: a "range" whose ends are the same number is not a range.
+//
+// PriceCharting publishes ONE guide value per grade. updatePriceFromPrinting
+// already nulls low/mid/high on the graded branch, but a user screenshot at
+// PSA 10 still showed "Low $11690.84 . Mid $11690.84 . High $11690.84", so a
+// second path is populating them. Rather than hunt every writer, refuse to
+// RENDER a degenerate range: a single number repeated three times reads as a
+// measured spread and invites a seller to believe there is room to move.
+//
+// Only collapses when the values are indistinguishable at the precision we
+// print -- a real $0.01 spread still renders. Hoisted, so the render paths
+// above this definition can call it.
+function _rangeParts(low, mid, high, mult) {
+  const m = Number(mult) || 1;
+  const px = (v) => (v == null || !(Number(v) > 0)) ? null : (Number(v) * m).toFixed(2);
+  const lo = px(low), md = px(mid), hi = px(high);
+  const seen = [lo, md, hi].filter(v => v != null);
+  if (!seen.length) return [];
+  if (seen.every(v => v === seen[0])) return [];
+  const out = [];
+  if (lo != null) out.push(`Low $${lo}`);
+  if (md != null) out.push(`Mid $${md}`);
+  if (hi != null) out.push(`High $${hi}`);
+  return out;
+}
+
+// 2026-09-04: condition-pin every outbound TCGplayer link.
+//
+// Bug this fixes (user-reported): the headline price is a Near Mint basis --
+// TCGCSV's marketPrice is the completed-sale price for a NM copy -- but the
+// link under it opened an UNFILTERED product page, which TCGplayer sorts by
+// price ascending. On Base Set 2 Charizard that put a $125 Heavily Played
+// copy at the top of a page reached from a $500.12 headline. The number was
+// not wrong; the link was pointing at a different condition than the number
+// described, so the two read as a contradiction.
+//
+// Pinning Condition=Near Mint makes the destination match the basis we quote.
+// Language=English pins the other axis that silently changes price -- a
+// Japanese printing is a different market, not a cheaper copy of this one.
+//
+// This is a DISPLAY-side fix only. It does not touch low/mid/high, which come
+// from TCGCSV and still span conditions -- see _renderPriceCaption for how
+// that is disclosed. Do not read this as making the range NM-only.
+//
+// Applied as a URL normalizer rather than a suffix on our own builders,
+// because the link the user actually clicked is NOT built here: it arrives as
+// `tcg.url` from api/_tcgcsv.js / api/tcg-price.js. Patching only the client
+// builders would have left the reported bug live. Every tcgplayer.com URL we
+// render goes through this, whatever built it.
+//
+// Declared as a hoisted function, not a const, so it is safe to call from
+// render paths that appear earlier in the file than this definition.
+function _tcgpCondUrl(url) {
+  if (!url) return url;
+  const s = String(url);
+  // Only touch first-party TCGplayer destinations. An affiliate-wrapped link
+  // carries its real target percent-encoded in ?u=, so appending here would
+  // land outside that payload and be dropped -- wrap AFTER pinning, never
+  // before. Callers that wrap must pass the bare URL in.
+  if (!/^https?:\/\/(www\.)?tcgplayer\.com\//i.test(s)) return s;
+  if (/[?&]Condition=/i.test(s)) return s;
+  return s + (s.includes('?') ? '&' : '?') + 'Condition=Near+Mint&Language=English';
+}
+
 // Wraps a TCGPlayer target URL through Impact's affiliate redirect (when approved).
 // Impact.com deep-link format:
 //   https://partner.tcgplayer.com/c/<partner_id>/<campaign_id>/<ad_id>?subId1=<subid>&u=<encoded_target>
@@ -8622,13 +8680,14 @@ function buildTcgpUrl(cardName, setName, cardNumber) {
   const parts = [_stripEmoji(cardName || ''), _stripEmoji(setName || ''), num].filter(Boolean);
   const q = encodeURIComponent(parts.join(' '));
   const base = `https://www.tcgplayer.com/search/all/product?q=${q}&view=grid`;
-  return wrapTcgpAffiliate(base);
+  return wrapTcgpAffiliate(_tcgpCondUrl(base));
 }
 
 // Wraps ANY TCGPlayer URL (product page, seller page, etc.) through the
 // affiliate redirect. Use this for buy-side links on card detail pages.
 function buildTcgpProductUrl(productId) {
-  return wrapTcgpAffiliate(`https://www.tcgplayer.com/product/${encodeURIComponent(productId)}`);
+  return wrapTcgpAffiliate(
+    _tcgpCondUrl(`https://www.tcgplayer.com/product/${encodeURIComponent(productId)}`));
 }
 
 // Extracts the TCGplayer product ID from PokemonTCG.io's `card.tcgplayer.url`

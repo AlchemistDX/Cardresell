@@ -1418,5 +1418,50 @@ try {
         'PriceCharting refreshes daily; caching longer serves yesterday as today');
 }
 
+
+// ── 2026-09-04: condition-pinned TCG links + degenerate-range collapse ──────
+{
+  const idx = index;
+
+  // _tcgpCondUrl must exist and pin BOTH axes that silently change price.
+  check('TCG link normalizer pins Near Mint + English',
+    /function _tcgpCondUrl\(url\)[\s\S]{0,700}?Condition=Near\+Mint&Language=English/.test(idx));
+
+  // It must not touch affiliate-wrapped links: the real target lives
+  // percent-encoded inside ?u=, so appending outside it is silently dropped.
+  check('TCG link normalizer only rewrites first-party tcgplayer.com',
+    /function _tcgpCondUrl\(url\)[\s\S]{0,700}?\^https\?:\\\/\\\/\(www\\\.\)\?tcgplayer\\\.com\\\//.test(idx));
+
+  // An explicit condition already on the URL wins over our default.
+  check('TCG link normalizer respects an explicit Condition',
+    /function _tcgpCondUrl\(url\)[\s\S]{0,700}?\[\?&\]Condition=/.test(idx));
+
+  // The user-reported link is `tcg.url` from the API, NOT our own builder.
+  // These two render sites are the ones that were actually broken.
+  check('Source-disagreement panel condition-pins its TCG link',
+    /tcgUrl:\s*_tcgpCondUrl\(tcg\.url\)/.test(idx));
+  check('Market-price caption condition-pins its TCG link',
+    /const _tu = _tcgpCondUrl\(tcg\.url\);/.test(idx));
+
+  // Both client-side builders route through the normalizer too.
+  check('buildTcgpUrl condition-pins before affiliate wrapping',
+    /wrapTcgpAffiliate\(_tcgpCondUrl\(base\)\)/.test(idx));
+  check('buildTcgpProductUrl condition-pins before affiliate wrapping',
+    /wrapTcgpAffiliate\(\s*_tcgpCondUrl\(`https:\/\/www\.tcgplayer\.com\/product\//.test(idx));
+
+  // Degenerate range collapse: a single number repeated is not a spread.
+  check('_rangeParts collapses an all-equal range',
+    /function _rangeParts\(low, mid, high, mult\)[\s\S]{0,600}?if \(seen\.every\(v => v === seen\[0\]\)\) return \[\];/.test(idx));
+
+  // Both headline range writers must go through it — a raw .push of
+  // `Low $` back into priceRange would reintroduce the PSA 10 triple.
+  check('Basis headline range routes through _rangeParts',
+    /priceRange\.textContent = _rangeParts\(b\.low, b\.mid, b\.high, m\)/.test(idx));
+  check('Clamped headline range routes through _rangeParts',
+    /_rangeParts\(clamped\.low, clamped\.mid, clamped\.high, condMult\)/.test(idx));
+  check('No hand-rolled Low/Mid/High range writer survives',
+    !/parts\.push\(`Low \$\$\{/.test(idx) && !/rp\.push\(`Low \$\$\{/.test(idx));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
