@@ -990,7 +990,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .flip-table td{padding:.7rem .875rem;border-bottom:1px solid var(--divider);color:var(--text-muted);vertical-align:middle}
 .flip-table tr:last-child td{border-bottom:none}
 .flip-table tbody tr:hover td{background:var(--surface-off)}
-.ft-card{font-weight:600;color:var(--text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ft-card{font-weight:600;color:var(--text);max-width:18rem;white-space:normal;overflow-wrap:anywhere;line-height:1.3}
+/* 2026-09-04: the card name used to be clipped at 160px with an ellipsis, so
+   "Bulbasaur (Mega Evolution Stamped Illustration Rare Promotional Variant)"
+   read as "Bulbasaur (Mega Evoluti...)" -- two different variants with very
+   different values looked identical. Wrap instead of truncating. */
+.ft-set{font-size:.72rem;color:var(--text-muted);min-width:9rem;overflow-wrap:anywhere;line-height:1.35}
 .ft-mono{font-family:var(--mono);font-size:.75rem}
 .ft-profit{font-family:var(--mono);font-weight:700;font-size:.8rem}
 .ft-profit.pos{color:var(--green)}
@@ -1062,6 +1067,26 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pricing-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1.1rem}
 @media(max-width:820px){.pricing-cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.pricing-cards{grid-template-columns:1fr}}
+/* 2026-09-04 (audit SOL-PLAT-009): measured at 375px, most header and action
+   controls were well under the 44x44 minimum -- Shop and Settings were 30x30,
+   the promo close was 20x20, Details was 34.8x14. Icon-only controls keep
+   their glyph size and gain a transparent hit box instead of growing. */
+@media(max-width:480px){
+  /* Shop and Settings are excluded: CR-021 already gives them a 44px touch
+     target via an inset:-7px ::after hit box, because the portrait header is
+     exactly full width and they cannot grow to a 44px box without wrapping.
+     Applying min-height here stretched the 30x30 square into a 30x44
+     rectangle and skewed that hit box. */
+  .hdr button:not(.settings-btn):not(#shopBtn),.hdr a{min-height:44px;padding-inline:.7rem}
+  .scan-sub-btn{min-height:44px;padding-block:.5rem}
+  .game-select{min-height:44px}
+  .venues-btn{min-height:44px;padding-block:.55rem}
+  .vc-edit{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  #tryExampleBtn{min-height:44px;padding-inline:.9rem}
+  .promo-banner-close,.pricing-close,.pricing-close-btn,.auth-modal-close,.modal-close{
+    min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center
+  }
+}
 
 /* Monthly/Annual pill toggle */
 .pricing-toggle{display:flex;justify-content:center;margin:0 auto 1rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:.25rem;width:fit-content;gap:.15rem}
@@ -1748,6 +1773,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
        that noise (real analytics still works when properly enabled). -->
   <script>
     (function() {
+      // 2026-09-04: this probe used to fire during initial parse, competing
+      // with the shell on a slow connection for a request that usually aborts.
+      // Defer it until the page has actually loaded -- analytics is never
+      // urgent enough to delay interaction readiness.
+      function _loadInsights() {
       try {
         fetch('/_vercel/insights/script.js', { method: 'HEAD' })
           .then(r => {
@@ -1761,6 +1791,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           })
           .catch(() => {});
       } catch(e) {}
+      }
+      if (document.readyState === 'complete') setTimeout(_loadInsights, 0);
+      else window.addEventListener('load', () => setTimeout(_loadInsights, 0), { once: true });
     })();
   </script>
   <script>
@@ -2143,7 +2176,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <input type="file" id="bulkGradeInput" accept="image/jpeg,image/png,image/webp,image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <input type="file" id="bulkGradeCameraInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <!-- Scan status modal -->
-  <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div id="scanOverlay" role="dialog" aria-modal="true" aria-label="Card scanner" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- Preview image -->
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
       <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,160px);text-align:center">
@@ -2156,7 +2189,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div id="scanSpinner" style="display:none;flex-direction:column;align-items:center;gap:.6rem">
       <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite"></div>
     </div>
-    <div id="scanStatus" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
+    <div id="scanStatus" aria-live="polite" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
     <!-- Grading affiliate CTA — shown after scan when card is raw or grader detected -->
     <div id="scanGradeCTA">
@@ -3245,10 +3278,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <!-- ============================================================
      PRICING / SHOP MODAL
      ============================================================ -->
-<div class="pricing-overlay" id="pricingOverlay" onclick="closePricingModal(event)">
+<div class="pricing-overlay" id="pricingOverlay" onclick="closePricingModal(event)"
+     role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1">
   <div class="pricing-box" id="pricingBox">
     <div class="pricing-header">
-      <div class="pricing-title">&#11088; Choose your plan</div>
+      <div class="pricing-title" id="pricingTitle">&#11088; Choose your plan</div>
       <div class="pricing-sub">Cancel anytime &middot; All paid tiers include monthly scans + discounted top-ups</div>
     </div>
 
@@ -3260,7 +3294,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
     <!-- 2026-08-20: Annual-mode value banner — shown only when Annual is active. -->
     <div id="pricingAnnualBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;color:#fde68a;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600">
-      🎁 <strong style="color:var(--gold)">Best value:</strong> pay yearly, get <strong>3 months free</strong> on every tier · same scans, same features, one payment.
+      🎁 <strong style="color:var(--gold)">Best value:</strong> pay yearly and <strong>save about 25%</strong> on every tier · same scans, same features, one payment.
     </div>
 
     <!-- 2026-08-20: Sign-up bonus banner — shown to unverified free users only. -->
@@ -3300,7 +3334,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div class="plan-badge">MOST POPULAR</div>
         <div class="plan-name">Pro</div>
         <div class="plan-price"><sup>$</sup><span data-price-monthly="9" data-price-annual="89">9</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
-        <div class="plan-annual-note">Just $7.50/mo &middot; 3 months free</div>
+        <div class="plan-annual-note">Just $7.50/mo &middot; save about 25%</div>
         <div class="plan-value">Everyday reseller</div>
         <div class="plan-value-sub">Pays for itself in 1–2 flips</div>
         <ul class="plan-features">
@@ -3323,7 +3357,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div class="plan-badge">BEST VALUE</div>
         <div class="plan-name">Pro Max</div>
         <div class="plan-price"><sup>$</sup><span data-price-monthly="19" data-price-annual="179">19</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
-        <div class="plan-annual-note">Just $15/mo &middot; 3 months free</div>
+        <div class="plan-annual-note">Just $15/mo &middot; save about 25%</div>
         <div class="plan-value">Serious flipper</div>
         <div class="plan-value-sub">Serious flipper — 40 grades &amp; 100 IDs / mo</div>
         <ul class="plan-features">
@@ -12870,7 +12904,7 @@ function renderCollectionView() {
           return `<tr class="col-row" onclick="openCollectionCardDetail(${p.id})" style="cursor:pointer">
             <td>${thumbCell}</td>
             <td><div class="ft-card" title="${esc2(p.card)}${_hasGrade ? ' — ' + esc2(_gradeLabel) : ''}">${cardNameHtml}</div></td>
-            <td style="font-size:.72rem;color:var(--text-muted)">${esc2(p.set||'—')}</td>
+            <td class="ft-set">${esc2(p.set||'—')}</td>
             <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
             <td class="ft-mono" style="color:var(--gold)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
@@ -15506,6 +15540,7 @@ function _clearScanAutoAdvance() {
 function cancelScan() {
   _clearScanAutoAdvance();
   document.getElementById('scanOverlay').style.display = 'none';
+  _dialogClosed('scanOverlay');
   const spinner5 = document.getElementById('scanSpinner');
   if (spinner5) spinner5.style.display = 'none';
   _setScanBtns('scanning');
@@ -17050,6 +17085,7 @@ async function processScanImage(input) {
   const prevImg  = document.getElementById('scanPreviewImg');
 
   overlay.style.display = 'flex';
+  _dialogOpened('scanOverlay');
   resultEl.textContent = '';
   statusEl.textContent = 'Identifying card\u2026';
 
@@ -18116,6 +18152,7 @@ async function processGradeImage(input) {
   const prevImg  = document.getElementById('scanPreviewImg');
 
   overlay.style.display = 'flex';
+  _dialogOpened('scanOverlay');
   resultEl.textContent = '';
 
   const frontUrl = URL.createObjectURL(file);
@@ -20675,6 +20712,7 @@ function updateScanBtnCredits() {
 function openPricingModal(source) {
   const overlay = document.getElementById('pricingOverlay');
   if (overlay) overlay.classList.add('open');
+  _dialogOpened('pricingOverlay');
   // 2026-08-20: instrument every pricing-modal open with its trigger source.
   // This is the primary conversion-funnel event — we track WHICH prompt got
   // the user to see pricing (grade_result_cta, id_scan_402, flips_cap, etc.).
@@ -20764,6 +20802,7 @@ function _freeTierCTA() {
 function closePricingModal(evt) {
   if (evt && evt.target !== document.getElementById('pricingOverlay')) return;
   document.getElementById('pricingOverlay')?.classList.remove('open');
+  _dialogClosed('pricingOverlay');
 }
 
 // ── Stripe checkout — fetch URL then navigate current tab (iOS Safari safe) ──
@@ -21070,6 +21109,102 @@ document.addEventListener('keydown', (e) => {
   const ov = document.getElementById('shopOverlay');
   if (ov && ov.classList.contains('open')) closeShop();
 });
+
+
+/* =========================================================
+   DIALOG A11Y — 2026-09-04 (audit SOL-PLAT-006)
+   The overlays were visual-only containers: no role, no label, Escape did
+   nothing, and Tab walked straight through the page behind the modal (a live
+   keyboard pass found 10 of 14 focus stops sitting behind the visible
+   pricing modal). One shared lifecycle covers all four.
+   ========================================================= */
+const _DIALOGS = {
+  pricingOverlay:  () => closePricingModal(),
+  scanOverlay:     () => cancelScan(),
+  bulkScanOverlay: () => closeBulkScan(),
+  bulkGradeOverlay:() => closeBulkGrade(),
+};
+// Remembers which element opened each dialog so focus can go back there.
+window._dialogOpener = window._dialogOpener || {};
+
+function _dialogIsOpen(el) {
+  if (!el) return false;
+  // pricing uses a class; the scan/bulk overlays use inline display.
+  if (el.classList && el.classList.contains('pricing-overlay')) return el.classList.contains('open');
+  return el.style.display !== 'none' && el.style.display !== '';
+}
+
+// The topmost open dialog wins Escape, so Bulk Grade opened over pricing
+// closes itself first rather than closing the thing underneath it.
+function _topOpenDialog() {
+  let best = null, bestZ = -1;
+  for (const id of Object.keys(_DIALOGS)) {
+    const el = document.getElementById(id);
+    if (!_dialogIsOpen(el)) continue;
+    const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
+    if (z >= bestZ) { best = el; bestZ = z; }
+  }
+  return best;
+}
+
+const _FOCUSABLE = 'a[href],area[href],input:not([disabled]),select:not([disabled]),' +
+  'textarea:not([disabled]),button:not([disabled]),iframe,object,embed,' +
+  '[tabindex]:not([tabindex="-1"]),[contenteditable="true"]';
+
+function _dialogFocusables(el) {
+  if (!el) return [];
+  return Array.from(el.querySelectorAll(_FOCUSABLE)).filter(n => {
+    if (n.disabled || n.getAttribute('aria-hidden') === 'true') return false;
+    // Skip anything inside a hidden section — the overlays keep several
+    // display:none panels mounted at once.
+    if (n.closest('[style*="display:none"],[style*="display: none"]')) return false;
+    const r = n.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+}
+
+// Call when a dialog opens: records the opener and moves focus inside.
+function _dialogOpened(id) {
+  try {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = document.activeElement;
+    if (prev && prev !== document.body && !el.contains(prev)) window._dialogOpener[id] = prev;
+    const targets = _dialogFocusables(el);
+    (targets[0] || el).focus({ preventScroll: true });
+  } catch (_) {}
+}
+
+// Call when a dialog closes: returns focus to whatever opened it, so a
+// keyboard user does not get dumped at the top of the document.
+function _dialogClosed(id) {
+  try {
+    const prev = window._dialogOpener[id];
+    delete window._dialogOpener[id];
+    if (prev && document.body.contains(prev) && typeof prev.focus === 'function') {
+      prev.focus({ preventScroll: true });
+    }
+  } catch (_) {}
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' && e.key !== 'Tab') return;
+  const el = _topOpenDialog();
+  if (!el) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    try { _DIALOGS[el.id](); } catch (_) {}
+    return;
+  }
+  // Tab: cycle within the dialog instead of escaping to the page behind it.
+  const f = _dialogFocusables(el);
+  if (!f.length) { e.preventDefault(); el.focus({ preventScroll: true }); return; }
+  const first = f[0], last = f[f.length - 1];
+  const active = document.activeElement;
+  if (!el.contains(active)) { e.preventDefault(); (e.shiftKey ? last : first).focus({ preventScroll: true }); return; }
+  if (e.shiftKey && active === first) { e.preventDefault(); last.focus({ preventScroll: true }); }
+  else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus({ preventScroll: true }); }
+}, true);
 
 // ── Start per-scan checkout (legacy — now opens grade scan modal) ──
 function startScanCheckout() { openGradeScanModal(); }
@@ -22422,7 +22557,7 @@ async function openLiveCameraCapture(opts) {
       '</div>' +
       '<div id="liveCapZoomWrap" style="display:none;position:absolute;right:16px;top:50%;transform:translateY(-50%);flex-direction:column;align-items:center;gap:.5rem;pointer-events:auto">' +
         '<span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:36px;text-align:center" id="liveCapZoomLabel">1.0x</span>' +
-        '<input id="liveCapZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="-webkit-appearance:slider-vertical;appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#c47a00" />' +
+        '<input id="liveCapZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#c47a00" />' +
       '</div>' +
       '<div id="liveCapFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>';
     document.body.appendChild(ov);
@@ -22756,6 +22891,7 @@ function openBulkGrade(mode) {
   const ov = document.getElementById('bulkGradeOverlay');
   if (!ov) return;
   ov.style.display = 'flex';
+  _dialogOpened('bulkGradeOverlay');
 
   // Update header subtitle to reflect chosen mode.
   const subtitle = document.getElementById('bulkGradeSubtitle');
@@ -22840,6 +22976,7 @@ function _bulkGradeRevokeAllUrls() {
 function closeBulkGrade() {
   const ov = document.getElementById('bulkGradeOverlay');
   if (ov) ov.style.display = 'none';
+  _dialogClosed('bulkGradeOverlay');
   const detail = document.getElementById('bulkGradeDetail');
   if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
   window._bulkGradeProcessing = false;
@@ -23579,7 +23716,11 @@ function saveBulkGradeToCollection() {
 
   try {
     // Reuse existing flips storage. Each row becomes a graded flip entry.
-    const flips = JSON.parse(localStorage.getItem('flips') || '[]');
+    // 2026-09-04: this used to read/write localStorage['flips'] directly. Every
+    // other data helper goes through getUserKey('flips') -> cardsell_<uid>_flips,
+    // so a paid Bulk Grade batch reported "Saved N graded cards" and then wrote
+    // to a key no renderer reads. Use the scoped helpers.
+    const flips = loadFlipsData();
     const now = new Date().toISOString().slice(0, 10);
     let added = 0;
     for (const r of results) {
@@ -23602,11 +23743,14 @@ function saveBulkGradeToCollection() {
       });
       added++;
     }
-    localStorage.setItem('flips', JSON.stringify(flips));
+    saveFlipsData(flips);
     showToast('✓ Saved ' + added + ' graded cards to Collection', 'gold');
     try { window.trackEvent && window.trackEvent('bulk_grade_saved', { count: String(added) }); } catch(_){}
-    // Refresh collection UI if the render fn exists.
-    try { if (typeof renderFlips === 'function') renderFlips(); } catch(_) {}
+    // Refresh collection UI. renderFlips has never existed under that name --
+    // the real renderer is renderFlipsView -- so the saved rows only appeared
+    // after a reload.
+    try { if (typeof renderFlipsView === 'function') renderFlipsView(); } catch(_) {}
+    try { _maybeRerenderCollection(true); } catch(_) {}
   } catch(err) {
     console.warn('[bulk-grade] save failed', err);
     showToast('⚠️ Could not save to Collection. Try again.');
@@ -23644,6 +23788,7 @@ function openBulkScan() {
   // Show overlay in mode-picker state
   const ov = document.getElementById('bulkScanOverlay');
   ov.style.display = 'flex';
+  _dialogOpened('bulkScanOverlay');
   _bulkShowSection('modePicker');
   document.getElementById('bulkScanSubtitle').textContent = '1 credit per card';
 }
@@ -23701,6 +23846,7 @@ function _bulkUpdatePackTracker() {
 function closeBulkScan() {
   const ov = document.getElementById('bulkScanOverlay');
   ov.style.display = 'none';
+  _dialogClosed('bulkScanOverlay');
   window._bulkProcessing = false;
   window._bulkPaused     = false;
   // Clean up object URLs
@@ -25652,7 +25798,7 @@ function _esc(s) {
   <!-- ═══════════════════════════════════════════════════════════════
        BULK SCAN OVERLAY
        ═══════════════════════════════════════════════════════════════ -->
-  <div id="bulkScanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;flex-direction:column;overflow:hidden">
+  <div id="bulkScanOverlay" role="dialog" aria-modal="true" aria-label="Bulk scan" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;flex-direction:column;overflow:hidden">
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
       <div>
@@ -25724,7 +25870,7 @@ function _esc(s) {
       <!-- Zoom slider (vertical, right side - hidden on browsers without zoom capability) -->
       <div id="bulkRapidZoomWrap" style="display:none;position:absolute;right:16px;top:50%;transform:translateY(-50%);flex-direction:column;align-items:center;gap:.5rem;pointer-events:auto">
         <span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:36px;text-align:center" id="bulkRapidZoomLabel">1.0x</span>
-        <input id="bulkRapidZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="-webkit-appearance:slider-vertical;appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#8b5cf6" />
+        <input id="bulkRapidZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#8b5cf6" />
       </div>
       <!-- Flash effect -->
       <div id="bulkRapidFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>
@@ -25746,7 +25892,7 @@ function _esc(s) {
       <!-- Progress bar -->
       <div style="padding:.75rem 1.25rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
-          <span id="bulkProgressLabel" style="font-size:.78rem;color:rgba(255,255,255,.6)">Scanning 1 of 5…</span>
+          <span id="bulkProgressLabel" aria-live="polite" style="font-size:.78rem;color:rgba(255,255,255,.6)">Scanning 1 of 5…</span>
           <span id="bulkProgressCredits" style="font-size:.72rem;color:rgba(255,255,255,.35)"></span>
         </div>
         <div style="height:4px;background:#1a1a1a;border-radius:99px;overflow:hidden">
@@ -26064,7 +26210,7 @@ function _esc(s) {
      Grades up to 25 cards in one session via /api/scan?mode=grade
      with concurrency=2 (Ximilar sync grader is ~3-8s per call).
      ===================================================================== -->
-<div id="bulkGradeOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:300;flex-direction:column;overflow:hidden">
+<div id="bulkGradeOverlay" role="dialog" aria-modal="true" aria-label="Bulk grade" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:300;flex-direction:column;overflow:hidden">
   <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
     <div>
@@ -26152,7 +26298,7 @@ function _esc(s) {
     <!-- Progress -->
     <div style="margin-bottom:.75rem;flex-shrink:0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.35rem">
-        <div id="bulkGradeProgressLabel" style="font-size:.85rem;font-weight:700;color:#fff">Grading 0 of 0…</div>
+        <div id="bulkGradeProgressLabel" aria-live="polite" style="font-size:.85rem;font-weight:700;color:#fff">Grading 0 of 0…</div>
         <div id="bulkGradeProgressCredits" style="font-size:.7rem;color:var(--text-muted)"></div>
       </div>
       <div style="height:6px;background:#1e1e1e;border-radius:99px;overflow:hidden">
