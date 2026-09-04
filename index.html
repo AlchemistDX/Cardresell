@@ -3491,6 +3491,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <option value="Other">Other</option>
         </select>
       </div>
+      <div class="modal-field modal-full" id="mCostsField">
+        <label>Costs ($) <span style="font-weight:400;opacity:.6">— optional, subtracted from profit</span></label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem">
+          <input type="number" id="mFees" placeholder="Fees" step="0.01" min="0" aria-label="Platform fees in dollars" />
+          <input type="number" id="mShipCost" placeholder="Shipping" step="0.01" min="0" aria-label="Shipping cost in dollars" />
+          <input type="number" id="mGradingCost" placeholder="Grading" step="0.01" min="0" aria-label="Grading cost in dollars" />
+        </div>
+      </div>
       <div class="modal-field">
         <label>Date</label>
         <input type="date" id="mDate" />
@@ -3768,6 +3776,40 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </select>
       </div>
     </div>
+
+    <!-- 2026-09-04: costs that turn a gross spread into a real number. The
+         Flip Log used to compute profit as sellPrice - buyPrice and had
+         nowhere to record fees, shipping or grading, so a $100 buy / $150 sale
+         that actually broke even after $20 fees, $5 shipping and $25 grading
+         was logged as +$50.00 / +50.0%. All three are optional and default to
+         0, so leaving them blank reproduces the old arithmetic exactly. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem;margin-bottom:.6rem">
+      <div>
+        <label for="msFees" style="display:block;font-size:.62rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem">Fees</label>
+        <div style="display:flex;align-items:center;background:#0f0f0f;border:1px solid #232323;border-radius:8px;overflow:hidden">
+          <span style="padding:0 .4rem;font-size:.82rem;color:rgba(255,255,255,.5)">$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" id="msFees" inputmode="decimal" oninput="_msUpdateProfitPreview()"
+            style="background:transparent;border:none;color:#fff;font-size:.85rem;flex:1;min-width:0;padding:.45rem .2rem .45rem 0;outline:none;-moz-appearance:textfield">
+        </div>
+      </div>
+      <div>
+        <label for="msShipCost" style="display:block;font-size:.62rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem">Shipping</label>
+        <div style="display:flex;align-items:center;background:#0f0f0f;border:1px solid #232323;border-radius:8px;overflow:hidden">
+          <span style="padding:0 .4rem;font-size:.82rem;color:rgba(255,255,255,.5)">$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" id="msShipCost" inputmode="decimal" oninput="_msUpdateProfitPreview()"
+            style="background:transparent;border:none;color:#fff;font-size:.85rem;flex:1;min-width:0;padding:.45rem .2rem .45rem 0;outline:none;-moz-appearance:textfield">
+        </div>
+      </div>
+      <div>
+        <label for="msGradingCost" style="display:block;font-size:.62rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem">Grading</label>
+        <div style="display:flex;align-items:center;background:#0f0f0f;border:1px solid #232323;border-radius:8px;overflow:hidden">
+          <span style="padding:0 .4rem;font-size:.82rem;color:rgba(255,255,255,.5)">$</span>
+          <input type="number" min="0" step="0.01" placeholder="0.00" id="msGradingCost" inputmode="decimal" oninput="_msUpdateProfitPreview()"
+            style="background:transparent;border:none;color:#fff;font-size:.85rem;flex:1;min-width:0;padding:.45rem .2rem .45rem 0;outline:none;-moz-appearance:textfield">
+        </div>
+      </div>
+    </div>
+    <div style="font-size:.62rem;color:var(--text-faint);margin:-.3rem 0 .7rem;line-height:1.4">Platform fees, shipping you paid, and grading cost. Leave blank if none.</div>
 
     <div id="msProfitPreview" style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;text-align:center;padding:.5rem;background:#0a0a0a;border-radius:8px;border:1px dashed #1f1f1f">Enter a sold price to see profit</div>
 
@@ -7532,6 +7574,13 @@ function loadCardUI(card) {
   // there returned unrelated Grand Archive results (see IMG_3717). For sports,
   // hide TCGplayer button, widen eBay button to full width, and swap the tip.
   const isSportsCard = card && card.game === 'sports';
+  // _clearCardDerivedSurfaces() disables both list buttons on every card swap
+  // so a stale href cannot list the wrong card. This card is real and about to
+  // get correct hrefs, so undo that neutralisation here -- otherwise the
+  // buttons stay dimmed and unclickable for the rest of the session.
+  for (const _b of [ebayListBtn, tcgpListBtn]) {
+    if (_b) { _b.removeAttribute('aria-disabled'); _b.style.pointerEvents = ''; _b.style.opacity = ''; }
+  }
   if (ebayListBtn) {
     ebayListBtn.href = buildEbaySearchUrl(card.name, card.number);
     // resetCardPanel() sets this to display:none. Clear the inline style so the
@@ -11931,6 +11980,8 @@ function addCurrentCardToCollection() {
   if (title) title.textContent = 'Add Card to Collection';
   if (sellField) sellField.style.display = 'none';
   if (platField) platField.style.display = 'none';
+  const costField = document.getElementById('mCostsField');
+  if (costField) costField.style.display = 'none';
   // Set today's date
   document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
   // Pre-fill card info
@@ -11988,6 +12039,10 @@ function openAddFlip(mode) {
   title.textContent = mode === 'hold' ? 'Add Card to Portfolio' : 'Log a Flip';
   if (sellField) sellField.style.display = mode === 'hold' ? 'none' : '';
   if (platField) platField.style.display = mode === 'hold' ? 'none' : '';
+  // Fees/shipping/grading only apply to a completed sale, so they follow the
+  // same show/hide rule as sell price and platform.
+  const costField = document.getElementById('mCostsField');
+  if (costField) costField.style.display = mode === 'hold' ? 'none' : '';
   // Set today's date
   document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
   // Pre-fill from selected card if available
@@ -12023,7 +12078,8 @@ function closeFlipModal(e) {
 }
 
 function clearModal() {
-  ['mCardName','mSetName','mBuyPrice','mSellPrice','mCurrentValue'].forEach(id => {
+  ['mCardName','mSetName','mBuyPrice','mSellPrice','mCurrentValue',
+   'mFees','mShipCost','mGradingCost'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -12102,7 +12158,12 @@ function saveFlipEntry() {
     // Log flip
     const sellPrice = parseFloat(document.getElementById('mSellPrice').value) || 0;
     const platform  = document.getElementById('mPlatform').value;
-    const profit    = sellPrice - buyPrice;
+    // 2026-09-04: net of fees/shipping/grading, matching the Mark-as-sold path.
+    const _gc = (id) => Math.max(0, parseFloat((document.getElementById(id)||{}).value) || 0);
+    const fees         = _gc('mFees');
+    const shippingCost = _gc('mShipCost');
+    const gradingCost  = _gc('mGradingCost');
+    const profit    = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost }).net;
     const flips = loadFlipsData();
     // Free users capped at 10 flips (bumped from 5, 2026-08-20)
     if (!window._isPro && flips.length >= 10) {
@@ -12110,7 +12171,7 @@ function saveFlipEntry() {
       setTimeout(() => openPricingModal('flips_cap'), 200);
       return;
     }
-    flips.push({ id: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, profit, platform, date });
+    flips.push({ id: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, profit, platform, date });
     saveFlipsData(flips);
     // Warn free users when they're 1 flip away from the cap
     if (!window._isPro && flips.length === 9) {
@@ -12384,11 +12445,14 @@ function openFlipDetail(flipId) {
   const graderNames = { psa: 'PSA', bgs: 'BGS', cgc: 'CGC', ace: 'ACE', tag: 'TAG', sgc: 'SGC' };
   const b = Number(f.buyPrice) || 0;
   const s = Number(f.sellPrice) || 0;
-  const pr = Number(f.profit) || (s - b);
+  const _fn = _flipNetOf(f);
+  const pr = (f.profit != null) ? (Number(f.profit) || 0) : _fn.net;
   // When there's no cost basis, ROI is undefined — don't render a
   // misleading "+0.0%". Show “— no cost basis” instead.
-  const hasCost = b > 0;
-  const roi = hasCost ? (pr / b) * 100 : 0;
+  // 2026-09-04: basis is total cash deployed (buy + fees + shipping +
+  // grading), matching the Flip Log row and _flipNetOf().
+  const hasCost = _fn.basis > 0;
+  const roi = hasCost ? (pr / _fn.basis) * 100 : 0;
   const roiColor = pr >= 0 ? '#4ade80' : '#f87171';
 
   // Image — same fallback ladder as the Collection modal.
@@ -12472,8 +12536,15 @@ function deletePort(id) {
 function exportFlips() {
   const flips = loadFlipsData();
   if (!flips.length) return;
-  const rows = [['Date','Card','Set','Buy Price','Sell Price','Profit','Platform']];
-  flips.forEach(f => rows.push([f.date, f.card, f.set||'', f.buyPrice.toFixed(2), f.sellPrice.toFixed(2), f.profit.toFixed(2), f.platform]));
+  const rows = [['Date','Card','Set','Buy Price','Sell Price','Fees','Shipping','Grading','Net Profit','Platform']];
+  flips.forEach(f => {
+    // Export the cost components too — a bare net profit column cannot be
+    // reconciled against a marketplace statement without them.
+    const c = _flipNetOf(f);
+    rows.push([f.date, f.card, f.set||'', c.buyPrice.toFixed(2), c.sellPrice.toFixed(2),
+               c.fees.toFixed(2), c.shippingCost.toFixed(2), c.gradingCost.toFixed(2),
+               (f.profit != null ? Number(f.profit) : c.net).toFixed(2), f.platform]);
+  });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
@@ -13460,6 +13531,49 @@ function deletePortEntry(entryId) {
    Data shape written to flips localStorage (matches saveFlipEntry):
      { id, card, set, buyPrice, sellPrice, profit, platform, date }
    ========================================================= */
+/* =========================================================
+   _flipNetOf(f) — the ONE definition of what a flip earned.
+   Added 2026-09-04. Before this, profit was computed inline in three
+   places as `sellPrice - buyPrice`, the flip record had no fee/shipping/
+   grading fields, and the Flip Log reported a gross spread while the
+   product framed it as money made. A $100 buy sold for $150 that cost
+   $20 in fees, $5 shipping and $25 grading — an exact break-even —
+   rendered +$50.00 and +50.0%.
+
+   Model:
+     net   = sellPrice - buyPrice - fees - shippingCost - gradingCost
+     basis = buyPrice + fees + shippingCost + gradingCost   (total cash out)
+     roi   = net / basis                                    (null if basis = 0)
+
+   Basis is total cash deployed, not just the purchase price, so ROI answers
+   "what did every dollar I put into this flip return". When no extra costs
+   are recorded, basis collapses to buyPrice and the result is byte-identical
+   to the old arithmetic — which is what keeps legacy flips (written before
+   these fields existed) honest instead of retroactively wrong. We do NOT
+   invent fees for historical rows.
+
+   Costs are clamped at >= 0: a negative fee would silently inflate profit.
+   ========================================================= */
+function _flipNetOf(f) {
+  const n = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : 0; };
+  const pos = (v) => Math.max(0, n(v));
+  const sellPrice    = n(f && f.sellPrice);
+  const buyPrice     = n(f && f.buyPrice);
+  const fees         = pos(f && f.fees);
+  const shippingCost = pos(f && f.shippingCost);
+  const gradingCost  = pos(f && f.gradingCost);
+  const net   = sellPrice - buyPrice - fees - shippingCost - gradingCost;
+  const basis = buyPrice + fees + shippingCost + gradingCost;
+  return {
+    sellPrice, buyPrice, fees, shippingCost, gradingCost,
+    net,
+    basis,
+    // No cost basis -> ROI is undefined, not 0%. Callers render "-".
+    roiPct: basis > 0 ? (net / basis) * 100 : null,
+    hasCosts: (fees + shippingCost + gradingCost) > 0,
+  };
+}
+
 window._markSoldEntryId = null; // the p.id we're marking as sold
 
 function openMarkSoldModal(entryId) {
@@ -13505,28 +13619,54 @@ function openMarkSoldModal(entryId) {
   // Reset profit preview
   const prev = document.getElementById('msProfitPreview');
   if (prev) prev.innerHTML = 'Enter a sold price to see profit';
+  // Clear the cost inputs too. These are per-flip, so carrying the previous
+  // card's fees into the next sale would silently misprice it.
+  for (const id of ['msFees','msShipCost','msGradingCost']) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  }
 
   document.getElementById('markSoldModal').classList.add('open');
 
   // Wire live profit preview — rebind each open so we don't stack listeners.
-  const recompute = () => {
-    const sell = parseFloat((document.getElementById('msSellPrice')||{}).value) || 0;
-    const buy  = parseFloat((document.getElementById('msBuyPrice')||{}).value) || 0;
-    const pv   = document.getElementById('msProfitPreview');
-    if (!pv) return;
-    if (sell <= 0) { pv.innerHTML = 'Enter a sold price to see profit'; pv.style.color = 'var(--text-muted)'; return; }
-    const profit = sell - buy;
-    const color  = profit >= 0 ? '#4ade80' : '#f87171';
-    const sign   = profit >= 0 ? '+' : '−';
-    const pct    = buy > 0 ? Math.abs(profit / buy * 100) : 0;
-    pv.innerHTML = `<span style="color:${color};font-weight:800">${sign}$${Math.abs(profit).toFixed(2)}</span>` +
-      (buy > 0 ? `<span style="color:${color};opacity:.75;margin-left:.35rem;font-weight:700">(${sign}${pct.toFixed(1)}%)</span>` : '') +
-      `<span style="display:block;font-size:.65rem;color:var(--text-muted);margin-top:.15rem;font-weight:400">${profit >= 0 ? 'Profit' : 'Loss'} on this flip</span>`;
-  };
-  ['msSellPrice','msBuyPrice'].forEach(id => {
+  ['msSellPrice','msBuyPrice','msFees','msShipCost','msGradingCost'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.oninput = recompute;
+    if (el) el.oninput = _msUpdateProfitPreview;
   });
+}
+
+// Live preview for the Mark-as-sold modal. Promoted from an inline closure to a
+// named global on 2026-09-04 so the fee/shipping/grading inputs can call it
+// directly and so the preview cannot drift from what confirmMarkSold() stores —
+// both now go through _flipNetOf().
+function _msUpdateProfitPreview() {
+  const pv = document.getElementById('msProfitPreview');
+  if (!pv) return;
+  const g = (id) => Math.max(0, parseFloat((document.getElementById(id)||{}).value) || 0);
+  const sell = g('msSellPrice');
+  if (sell <= 0) {
+    pv.innerHTML = 'Enter a sold price to see profit';
+    pv.style.color = 'var(--text-muted)';
+    return;
+  }
+  const r = _flipNetOf({
+    sellPrice: sell, buyPrice: g('msBuyPrice'),
+    fees: g('msFees'), shippingCost: g('msShipCost'), gradingCost: g('msGradingCost'),
+  });
+  const color = r.net >= 0 ? '#4ade80' : '#f87171';
+  const sign  = r.net >= 0 ? '+' : '\u2212';
+  // Name the costs that were actually subtracted, so the number is auditable
+  // rather than a figure the user has to trust.
+  const parts = [];
+  if (r.fees > 0)        parts.push(`$${r.fees.toFixed(2)} fees`);
+  if (r.shippingCost > 0) parts.push(`$${r.shippingCost.toFixed(2)} shipping`);
+  if (r.gradingCost > 0)  parts.push(`$${r.gradingCost.toFixed(2)} grading`);
+  const breakdown = parts.length
+    ? `after ${parts.join(' + ')}`
+    : (r.net >= 0 ? 'Profit' : 'Loss') + ' on this flip';
+  pv.innerHTML = `<span style="color:${color};font-weight:800">${sign}$${Math.abs(r.net).toFixed(2)}</span>` +
+    (r.roiPct !== null ? `<span style="color:${color};opacity:.75;margin-left:.35rem;font-weight:700">(${r.roiPct >= 0 ? '+' : '\u2212'}${Math.abs(r.roiPct).toFixed(1)}%)</span>` : '') +
+    `<span style="display:block;font-size:.65rem;color:var(--text-muted);margin-top:.15rem;font-weight:400">${breakdown}</span>`;
 }
 
 // One-tap fill from the "current market" hint.
@@ -13567,7 +13707,14 @@ function confirmMarkSold() {
     return;
   }
 
-  const profit = sellPrice - buyPrice;
+  // 2026-09-04: profit is now NET of fees, shipping and grading. We store the
+  // components alongside it so the Flip Log can show its work and so `profit`
+  // never has to be re-derived from fields a caller might forget to pass.
+  const _g = (id) => Math.max(0, parseFloat((document.getElementById(id)||{}).value) || 0);
+  const fees         = _g('msFees');
+  const shippingCost = _g('msShipCost');
+  const gradingCost  = _g('msGradingCost');
+  const profit = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost }).net;
   const date   = new Date().toISOString().slice(0,10);
   flips.push({
     id: Date.now(),
@@ -13575,6 +13722,9 @@ function confirmMarkSold() {
     set: p.set || '',
     buyPrice,
     sellPrice,
+    fees,
+    shippingCost,
+    gradingCost,
     profit,
     platform,
     date,
@@ -13748,11 +13898,19 @@ function renderFlipsView() {
         '<th style="width:32px"></th>' +
       '</tr></thead><tbody>' +
       sorted.map(f => {
-        const b = num(f.buyPrice), s = num(f.sellPrice), pr = num(f.profit);
+        const b = num(f.buyPrice), s = num(f.sellPrice);
+        // 2026-09-04: ROI now divides by TOTAL cash deployed (buy + fees +
+        // shipping + grading), not the purchase price alone, so a flip whose
+        // costs exceeded its spread can no longer show a positive return.
+        // `pr` still reads the stored profit, which is written net at save
+        // time; legacy rows have no cost fields, so basis collapses to
+        // buyPrice and they render exactly as they always did.
+        const _fn = _flipNetOf(f);
+        const pr = (f && f.profit != null) ? num(f.profit) : _fn.net;
         // No cost basis → ROI is undefined; render "—" instead of a
         // misleading "+0.0%". (E.g. cards added at $0 as gifts/finds.)
-        const hasCost = b > 0;
-        const roi = hasCost ? (pr / b) * 100 : 0;
+        const hasCost = _fn.basis > 0;
+        const roi = hasCost ? (pr / _fn.basis) * 100 : 0;
         const roiColor = pr >= 0 ? '#4ade80' : '#f87171';
         // Thumbnail — mirror the Collection cell: 40x56, card-back placeholder
         // if no image was captured (e.g. legacy flips logged before this
@@ -15591,9 +15749,74 @@ function _loadScannedJPCard(pending) {
 // the app is showing me Single Strike Style Mustard at $1.57". Nothing was
 // actually miscomputed; the stale frame just outlived the selection. These two
 // helpers retire the outgoing card's visuals the instant a new one is chosen.
+// 2026-09-04: every surface DOWNSTREAM of the card that _beginCardSwap was not
+// clearing. The original fix retired the art, name, price and miss panel, which
+// covered the two loudest lies but not the quiet ones. A real A -> Back -> B
+// walk still showed Minun's venue payouts ($38.55 / $38.45) and Minun's Quick
+// Pricing band ($38.06 / $44.78 / $51.50) sitting under "Loading Bulbasaur...",
+// plus Minun's eBay/TCGplayer "list it" hrefs, which would have listed the
+// wrong card. All of these are rendered from selectedCard by calc() /
+// renderQuickPricing() and are only ever OVERWRITTEN on a successful render --
+// so any path that fails, misses, or is merely slow leaves the previous card's
+// numbers on screen attached to the new card's name.
+//
+// Teardown, not recomputation: we cannot compute B's payouts yet (no price for
+// it), and showing nothing is the only honest state between two cards.
+function _clearCardDerivedSurfaces() {
+  try {
+    // Venue payout ranking. Written by calc() at two exit points; neither runs
+    // until a price exists for the incoming card.
+    const ra = document.getElementById('resultsArea');
+    if (ra) ra.innerHTML = '<div class="intro-state" style="padding:1.25rem">'
+      + '<div class="intro-p" style="color:var(--text-muted)">Loading payouts\u2026</div></div>';
+
+    // Quick Pricing: hide the whole block rather than blanking its children, so
+    // a half-populated band can never flash. renderQuickPricing() re-shows it
+    // when the incoming card has a real basis.
+    const qp = document.getElementById('quickPricing');
+    if (qp) qp.style.display = 'none';
+    for (const id of ['qpTiers', 'qpRows', 'qpLadder']) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '';
+    }
+    const qpNote = document.getElementById('qpGradedNote');
+    if (qpNote) { qpNote.textContent = ''; qpNote.style.display = 'none'; }
+    // A tier chosen for the outgoing card must not be re-applied to the
+    // incoming one -- that is how a Heavy Play price lands on a NM card.
+    window._qpChosenTier = null;
+
+    // "List on eBay / TCGplayer" hrefs are built from the outgoing card's name
+    // and number. Left in place they are a one-tap path to listing the WRONG
+    // card, so neutralise them until the incoming card rebuilds them.
+    for (const id of ['ebayListBtn', 'tcgpListBtn']) {
+      const a = document.getElementById(id);
+      if (a) {
+        a.setAttribute('href', '#');
+        a.setAttribute('aria-disabled', 'true');
+        a.style.pointerEvents = 'none';
+        a.style.opacity = '.45';
+      }
+    }
+
+    // Graded-comps banner and eBay comp status both name the outgoing card.
+    const gcb = document.getElementById('gradedCompsBanner');
+    if (gcb) gcb.style.display = 'none';
+    const ecs = document.getElementById('ebayCompsStatus');
+    if (ecs) ecs.style.display = 'none';
+
+    // The override box holds a price the user typed (or a tile wrote) for the
+    // OUTGOING card. Carrying it over silently reprices the incoming card:
+    // Minun's $38.06 became Bulbasaur's basis on the real swap path.
+    const ov = document.getElementById('priceOverride');
+    if (ov) ov.value = '';
+    window._ovAutoFilled = false;
+  } catch (e) { console.warn('[cardSwap] derived-surface clear failed', e); }
+}
+
 function _beginCardSwap(name) {
   try {
     window._cardSwapPending = true;
+    _clearCardDerivedSurfaces();
     const panel = document.querySelector('.card-panel');
     if (panel) panel.classList.add('card-swapping');
     // Name follows the selection immediately so the header can never disagree
@@ -15652,6 +15875,10 @@ function _endCardSwap(rendered) {
     if (!rendered && window._cardSwapPending) {
       const phLabel = document.getElementById('cardImgPhLabel');
       if (phLabel) phLabel.textContent = 'No card selected';
+      // _clearCardDerivedSurfaces() parked the payout ranking on "Loading
+      // payouts...". Nothing rendered, so nothing will ever displace it; hand
+      // the area back to the intro copy instead of a spinner that never ends.
+      try { if (typeof showIntro === 'function') showIntro(); } catch (e) {}
     }
     window._cardSwapPending = false;
   } catch (e) {}
@@ -23058,9 +23285,15 @@ function _bulkUpdatePackTracker() {
   trackerEl.style.display = '';
 
   const results = window._bulkResults || [];
+  // 2026-09-04: qty was ignored here, so a row marked x3 contributed ONE card's
+  // market price to "recovered so far". Every other surface in this flow
+  // (cost split, the row pill, the save) multiplies by qty, so the tracker was
+  // the only place three copies counted as one -- it under-reported recovery
+  // and told users they were further from break-even than they actually were.
   const total = results.reduce((s, r) => {
     const p = (r && r.success && typeof r.marketPrice === 'number') ? r.marketPrice : 0;
-    return s + (p > 0 ? p : 0);
+    const qty = (r && r.qty && r.qty > 1) ? r.qty : 1;
+    return s + (p > 0 ? p * qty : 0);
   }, 0);
   const pct = Math.min(100, (total / cost) * 100);
   const fmt = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
@@ -24363,6 +24596,14 @@ function _bulkUpdateRow(rowId, result) {
       <span style="color:#f87171;font-size:.9rem;flex-shrink:0">✗</span>`;
     row.style.opacity = '.55';
   }
+  // 2026-09-04: the Pack Recovery tracker only refreshed while the batch was
+  // still scanning, so every AFTER-THE-FACT edit left it stale: correcting a
+  // price, fixing a misread name, changing condition or qty, or a successful
+  // retry all changed the recovered total while the bar kept showing the old
+  // one. Every one of those paths repaints through here, so this is the single
+  // place that cannot be forgotten. Guarded because _bulkUpdateRow also runs
+  // mid-scan before the tracker element exists.
+  try { _bulkUpdatePackTracker(); } catch (e) {}
 }
 
 /* ── Condition picker ── */
@@ -24502,6 +24743,9 @@ function bulkRemoveResult(rowId) {
   const successCount = window._bulkResults.filter(r => r.success).length;
   document.getElementById('bulkSummaryLine').textContent =
     successCount + ' card' + (successCount!==1?'s':'') + ' ready to add to Collection';
+  // Removing a row drops its value out of the recovered total. This path does
+  // not go through _bulkUpdateRow (the row is gone), so refresh explicitly.
+  try { _bulkUpdatePackTracker(); } catch (e) {}
 }
 
 /* ── Save flow ── */
@@ -24651,12 +24895,15 @@ function confirmBulkCostSave() {
     const total = parseFloat((document.getElementById('bulkPackCostInput')||{}).value) || 0;
     const nSlots = successful.reduce((s,r) => s + (r.qty && r.qty > 1 ? r.qty : 1), 0);
     const perSlot = nSlots > 0 ? (total / nSlots) : 0;
-    // _bulkSaveToCollection multiplies out qty internally, so the per-index cost
-    // should be perSlot × qty so each individual saved copy ends up at perSlot.
-    successful.forEach((r, i) => {
-      const qty = r.qty && r.qty > 1 ? r.qty : 1;
-      costs[i] = perSlot * qty;
-    });
+    // 2026-09-04: this used to store perSlot × qty "because
+    // _bulkSaveToCollection multiplies out qty internally". It does not -- it
+    // pushes qty SEPARATE entries and assigns the full costs[i] to each one, so
+    // a qty-3 row was booked at perSlot × qty per copy = perSlot × qty² total.
+    // A $120 box split across 12 slots with one ×3 row recorded $90 of cost for
+    // that row instead of $30, inflating basis and understating every downstream
+    // profit number. Store the PER-COPY cost, which is what both the hint
+    // ("= $10.00 each") and the row pill ("$30.00 (3×$10.00)") already promise.
+    successful.forEach((r, i) => { costs[i] = perSlot; });
   } else {
     successful.forEach((r, i) => {
       const inp = document.getElementById('bulkCost_' + i);
