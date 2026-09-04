@@ -622,6 +622,7 @@ img{display:block;max-width:100%;height:auto}
 .qp-lad-foot{margin:.7rem 0 0;font-size:.68rem;line-height:1.45;opacity:.62}
 .qp-lad-src{color:var(--gold);text-decoration:none;font-weight:600}
 .qp-lad-src:hover{text-decoration:underline}
+.qp-lad-age{opacity:.72}
 .qp-lad-warn{margin:.4rem 0 0;font-size:.68rem;line-height:1.45;color:var(--qp-amber)}
 :root{--qp-lad-lo:#c9c2b0;--qp-lad-hi:#d4a72c}
 [data-theme="dark"]{--qp-lad-lo:#4a453a;--qp-lad-hi:#e8bf45}
@@ -7906,6 +7907,16 @@ function _qpRenderLadder(ladder, hostEl) {
     ? `<a href="${_qpEsc(ladder.url)}" target="_blank" rel="noopener noreferrer" class="qp-lad-src">PriceCharting guide values ↗</a>`
     : 'PriceCharting guide values';
 
+  // 2026-09-04: the ladder carried a source link but no retrieval age, so the
+  // grade values were the one place on the page you could not tell how old a
+  // number was. Same freshness contract as the main price row -- when we
+  // fetched it, plus the explicit marker that PriceCharting publishes no
+  // as-of date. Reuses _ageStr / _PC_NO_ASOF_TIP rather than a second format.
+  const age = (typeof ladder.cacheAgeSec === 'number' && isFinite(ladder.cacheAgeSec))
+    ? ` <span class="qp-lad-age">· retrieved ${_qpEsc(_ageStr(ladder.cacheAgeSec))}</span>`
+    : '';
+  const noAsOf = ` <span class="qp-lad-age trust-info" title="${_PC_NO_ASOF_TIP}" style="cursor:help">no price date \u24d8</span>`;
+
   const warn = ladder.monotonic ? '' :
     `<p class="qp-lad-warn">One published value is lower than the grade below it. Shown as published — not reordered.</p>`;
 
@@ -7916,7 +7927,7 @@ function _qpRenderLadder(ladder, hostEl) {
        ${ends}
      </div>
      <div class="qp-rows qp-lad-rows">${rows}</div>
-     <p class="qp-lad-foot">${src}. These are what each grade is worth — not the
+     <p class="qp-lad-foot">${src}${age}${noAsOf}. These are what each grade is worth — not the
        odds of receiving it. Grading outcome is not predicted here.</p>
      ${warn}`;
 }

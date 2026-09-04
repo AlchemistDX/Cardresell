@@ -1347,5 +1347,76 @@ try {
         'over-applying the TPL helper would blank the MTG set label instead');
 }
 
+// ── The grade ladder must carry the same freshness contract as the price row ──
+// 2026-09-04: the ladder linked PriceCharting but showed no retrieval age, so
+// the graded values were the one place on the page where you could not tell
+// how old a number was. cacheAgeSec was stashed and then never rendered.
+// P0-D says every published number carries source + retrieval age + an explicit
+// undated marker; the ladder was exempt by omission, not by design.
+{
+  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const lad = idx.slice(idx.indexOf('function _qpRenderLadder'),
+                        idx.indexOf('function _qpRenderLadder') + 4000);
+
+  check('the ladder renders its retrieval age',
+        /retrieved \$\{_qpEsc\(_ageStr\(ladder\.cacheAgeSec\)\)\}/.test(lad),
+        'a grade value with no age is indistinguishable from a stale one');
+
+  // Assert on the noAsOf DECLARATION itself, not on a loose slice -- a window
+  // that spills into neighbouring code will match "no price date" from the
+  // main price row and pass while the ladder marker is gone.
+  const noAsOfDecl = (idx.match(/const noAsOf = [^\n]*\n/) || [''])[0];
+  check('the ladder carries the no-price-date marker',
+        /_PC_NO_ASOF_TIP/.test(noAsOfDecl) && /no price date/.test(noAsOfDecl)
+          && /\$\{noAsOf\}/.test(lad),
+        'PriceCharting publishes no as-of date and the ladder must say so');
+
+  check('the ladder reuses the shared age formatter',
+        /_ageStr\(/.test(lad) && !/function _ageStr/.test(lad),
+        'a second age format would drift from the main price row');
+
+  check('the age is omitted rather than faked when unknown',
+        /typeof ladder\.cacheAgeSec === 'number' && isFinite\(ladder\.cacheAgeSec\)/.test(lad),
+        'a missing age must render nothing, never "retrieved 0 min ago"');
+
+  check('freshness reaches the ladder from the stash',
+        /cacheAgeSec: pc\.cacheAgeSec \?\? null/.test(idx)
+          && /cacheAgeSec: L\.cacheAgeSec/.test(idx),
+        'the stamp is only honest if the number actually flows through');
+
+  const api = fs.readFileSync(path.join(root, 'api/pricecharting.js'), 'utf8');
+
+  // The mapping everything rests on. PriceCharting serves Pokemon grades
+  // through legacy *videogame* field names, so the names carry no hint of
+  // which grade they mean and a reorder would be invisible. Verified
+  // 2026-09-04 against the live table header order on game/641807:
+  //   Ungraded | Grade 7 | Grade 8 | Grade 9 | Grade 9.5 | PSA 10
+  //   319.23   | 454.79  | 672.69  | 1456.94 | 1603.00   | 11690.84
+  // matched our parsed raw/grade_7/grade_8/grade_9/grade_95/psa_10 exactly.
+  // A correct number under the wrong grade label is the worst failure here:
+  // nothing looks broken.
+  const PC_FIELD_FOR_GRADE = [
+    ['raw',      'loose-price'],
+    ['grade_7',  'cib-price'],
+    ['grade_8',  'new-price'],
+    ['grade_9',  'graded-price'],
+    ['grade_95', 'box-only-price'],
+    ['psa_10',   'manual-only-price'],
+  ];
+  for (const [gradeKey, pcField] of PC_FIELD_FOR_GRADE) {
+    check(`${gradeKey} still reads PriceCharting's ${pcField}`,
+          new RegExp(`${gradeKey}:\\s*p\\(pc\\['${pcField}'\\]\\)`).test(api),
+          'verified against the live PriceCharting column order 2026-09-04');
+  }
+  check('the PriceCharting cache TTL stays at or below one day',
+        (() => {
+          const m = api.match(/CACHE_TTL_SEC\s*=\s*([0-9*\s]+);/);
+          if (!m) return false;
+          // eslint-disable-next-line no-eval
+          return eval(m[1]) <= 24 * 60 * 60;
+        })(),
+        'PriceCharting refreshes daily; caching longer serves yesterday as today');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
