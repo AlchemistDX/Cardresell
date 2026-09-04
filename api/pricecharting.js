@@ -235,6 +235,64 @@ function pcNumberMatches(requested, candidateName) {
   return got === want;
 }
 
+// The card name PriceCharting's product name carries, with catalog decoration
+// removed: bracketed qualifiers ('[1st Edition]') and the trailing '#4'.
+// 'Charizard [1st Edition] #4' -> 'charizard'.
+function pcNameOf(productName) {
+  return String(productName || '')
+    .replace(/\[[^\]]*\]/g, ' ')      // drop [1st Edition], [Silver Prizm], ...
+    .replace(/#\s*[A-Za-z0-9]+/g, ' ') // drop the collector number
+    .replace(/\([^)]*\)/g, ' ')        // drop (Stamped), (Cosmos Holo), ...
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')      // Farfetch'd / Mr. Mime / Ho-Oh
+    .split(/\s+/).filter(Boolean).join(' ');
+}
+
+// Whole-token containment in either direction. Deliberately LENIENT: the job
+// is to catch a categorically different card, not to police catalog wording.
+// 'charizard' vs 'charizard ex'      -> match (one contains the other)
+// 'miraidon'  vs 'vitality band'     -> NO match (different card entirely)
+//
+// 2026-09-04: added because the endpoint previously admitted any product the
+// search returned and then labelled it 'exact product match'. A request for
+// Miraidon #197 (SV Black Star Promos) was answered with Vitality Band #197
+// at $0.23 — a confident price for a card the seller does not own.
+function pcNameMatches(requested, candidateName) {
+  const want = pcNameOf(requested);
+  const got  = pcNameOf(candidateName);
+  if (!want || !got) return true;   // nothing to compare -- cannot disprove
+  if (want === got) return true;
+  const pad = s => ' ' + s + ' ';
+  return pad(got).includes(pad(want)) || pad(want).includes(pad(got));
+}
+
+// The whole admission decision, as one pure function so it can be executed by
+// a test instead of pattern-matched in source. A guard asserted only by its
+// text keeps passing when the `if` around it is neutered -- caught by mutation
+// testing on 2026-09-04, which is why this is a function and not inline code.
+//
+// Returns an array of human-readable reasons to REFUSE, or null to admit.
+// NOTE: takes a plain object and destructures in the BODY, deliberately. The
+// test harness extracts helpers by brace-matching from the first '{' after the
+// function name, so a destructured parameter list ends the capture at the
+// signature and silently ships a truncated function.
+function pcIdentityRejection(opts) {
+  const { game, pcid, name, number, productName } = opts || {};
+  // Sports identity is enforced upstream by filterSportsParallel +
+  // isSportsCategoryOk, and sports product names carry no comparable card name.
+  if (String(game || '').toLowerCase() === 'sports') return null;
+  // An explicit product id means the caller chose this exact product.
+  if (pcid) return null;
+  const reasons = [];
+  if (!pcNameMatches(name, productName)) {
+    reasons.push(`name mismatch: asked '${name}', got '${productName}'`);
+  }
+  if (!pcNumberMatches(number, productName)) {
+    reasons.push(`number mismatch: asked '${number}', got '${productName}'`);
+  }
+  return reasons.length ? reasons : null;
+}
+
 // Extract the bracketed parallel/variant qualifier from a PriceCharting product
 // name. "Luka Doncic [Silver Prizm] #280" -> "silver prizm"; a bare
 // "Luka Doncic #280" -> null (that IS the base card).
@@ -435,7 +493,9 @@ export default async function handler(req, res) {
   // bracket ([Silver Prizm Fast Break] for "Silver Prizm"), so every cached
   // sports answer written under the old matcher may name the wrong card. Code
   // changes do not invalidate KV on their own -- the key must move with them.
-  const cacheKey = `v7|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
+  // v8 (2026-09-04): identity guard changes WHICH product may be priced, so
+  // every v7 entry that admitted a mismatched card must be invalidated.
+  const cacheKey = `v8|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -732,6 +792,40 @@ export default async function handler(req, res) {
       };
       await setCache(kvUrl, kvToken, cacheKey, data);
       return res.status(200).json(data);
+    }
+
+    // IDENTITY GUARD (2026-09-04) — the product we are about to price must
+    // actually be the card that was asked for. PriceCharting's search returns
+    // a best-effort row, and the code below used to hand it to
+    // confidenceForPc({hasExactMatch: true}) unconditionally, which is how a
+    // Miraidon #197 request came back as 'Vitality Band #197, exact product
+    // match, $0.23'. A wrong number presented confidently is worse than no
+    // number, so refuse instead.
+    //
+    // Sports is exempt: player/brand/parallel identity is already enforced by
+    // filterSportsParallel + isSportsCategoryOk, and sports product names do
+    // not carry the card name in a comparable form.
+    // `pcid` means the caller named an exact PriceCharting product id, so the
+    // choice is theirs and the name is allowed to differ from our search text.
+    {
+      const why = pcIdentityRejection({
+        game, pcid, name, number, productName: pc['product-name'],
+      });
+      if (why) {
+        const data = {
+          median: null, avg: null, low: null, high: null, count: 0,
+          confidence: 'insufficient', confidenceScore: 0,
+          confidenceReasons: why,
+          reason: 'identity_mismatch',
+          source: 'pricecharting',
+          rejectedProductName: pc['product-name'],
+          rejectedConsoleName: pc['console-name'],
+          requestedName: name, requestedNumber: number,
+          fetchedAt, cacheAgeSec: 0,
+        };
+        await setCache(kvUrl, kvToken, cacheKey, data);
+        return res.status(200).json(data);
+      }
     }
 
     const prices     = parsePcPrices(pc);

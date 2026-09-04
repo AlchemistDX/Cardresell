@@ -22,8 +22,19 @@ const src = fs.readFileSync(path.join(here, '..', 'api', 'pricecharting.js'), 'u
 function grab(name) {
   const i = src.indexOf('function ' + name + '(');
   if (i < 0) throw new Error('pricecharting.js no longer defines ' + name);
+  // Start brace-matching AFTER the parameter list. Scanning from the first '{'
+  // grabs a destructured signature -- `function f({ a, b })` captured just
+  // `function f({ a, b }` and shipped a truncated helper, which surfaced only
+  // as "Unexpected token 'export'" from the generated module (2026-09-04).
+  let p = 0, parenEnd = -1;
+  for (let k = src.indexOf('(', i); k < src.length; k++) {
+    if (src[k] === '(') p++;
+    else if (src[k] === ')') { p--; if (!p) { parenEnd = k; break; } }
+  }
+  if (parenEnd < 0) throw new Error('unbalanced parens in signature of ' + name);
+  const start = src.indexOf('{', parenEnd);
+  if (start < 0) throw new Error('no body found for ' + name);
   let depth = 0;
-  const start = src.indexOf('{', i);
   for (let k = start; k < src.length; k++) {
     if (src[k] === '{') depth++;
     else if (src[k] === '}') { depth--; if (!depth) return src.slice(i, k + 1); }
@@ -36,10 +47,15 @@ fs.writeFileSync(
   generated,
   [grab('isSportsCategoryOk'), grab('sportsCandidateAdmissible'), grab('scoreSportsCandidate'),
    grab('pcParallelOf'), grab('_parNorm'), grab('filterSportsParallel'),
-   'export { isSportsCategoryOk, sportsCandidateAdmissible, scoreSportsCandidate, pcParallelOf, filterSportsParallel };'].join('\n')
+   grab('pcNumberOf'), grab('pcNumberMatches'), grab('pcNameOf'), grab('pcNameMatches'),
+   grab('pcIdentityRejection'),
+   'export { isSportsCategoryOk, sportsCandidateAdmissible, scoreSportsCandidate, pcParallelOf, filterSportsParallel, pcNameMatches, pcNumberMatches, pcIdentityRejection };'].join('\n')
 );
 
-const { sportsCandidateAdmissible, pcParallelOf, filterSportsParallel } = await import(
+const {
+  sportsCandidateAdmissible, pcParallelOf, filterSportsParallel,
+  pcNameMatches, pcNumberMatches, pcIdentityRejection,
+} = await import(
   'file://' + generated + '?v=' + Date.now()
 );
 
@@ -111,10 +127,18 @@ const hostChecks = [
    !/`https:\/\/www\.pricecharting\.com\/api\//.test(src)],
   ['every API call uses PC_HOST',
    (src.match(/\$\{PC_HOST\}\/api\//g) || []).length >= 5],
+  // 2026-09-04: pinning one literal version made this check fail the very
+  // bump it exists to demand (v7 -> v8 for the identity guard). Assert the
+  // current version AND that every superseded one is absent, so the check
+  // still catches a missing bump but survives a legitimate one.
   ['cache key bumped past v6',
-   /const cacheKey = `v7\|/.test(src)],
+   /const cacheKey = `v8\|/.test(src) && !/const cacheKey = `v[1-7]\|/.test(src)],
   ['parallel is part of the cache key',
-   /const cacheKey = `v7\|[^`]*\$\{parallel\}/.test(src)],
+   /const cacheKey = `v\d+\|[^`]*\$\{parallel\}/.test(src)],
+  // The identity guard reaches the response path at all.
+  ['identity mismatch is refused, not priced',
+   /reason: 'identity_mismatch'/.test(src)
+     && /pcIdentityRejection\(\{/.test(src)],
 ];
 for (const [label, ok] of hostChecks) {
   if (ok) { pass++; console.log(`  PASS  ${label}`); }
@@ -159,6 +183,82 @@ const parCases = [
                                         return r.keep.length === 0 && /only as parallels/.test(r.reason); }],
 ];
 for (const [label, fn] of parCases) {
+  let ok = false;
+  try { ok = fn(); } catch (e) { ok = false; }
+  if (ok) { pass++; console.log(`  PASS  ${label}`); }
+  else { fail++; console.log(`> FAIL  ${label}`); }
+}
+
+// ---------------------------------------------------------------------------
+// IDENTITY DISCIPLINE (2026-09-04)
+// PriceCharting's search always returns *something*. The endpoint used to hand
+// that something straight to confidenceForPc({hasExactMatch:true}), so a
+// request for Miraidon #197 came back as "Vitality Band #197, exact product
+// match, $0.23". A confident price for a card the seller does not own is worse
+// than no price at all.
+//
+// These EXECUTE pcIdentityRejection. An earlier version of this block only
+// grepped for `reason: 'identity_mismatch'` and kept passing when the guard's
+// `if` was replaced with `if (false)`.
+// ---------------------------------------------------------------------------
+const rej = (o) => pcIdentityRejection(o) !== null;   // true = refused
+const pokemon = (name, number, productName) =>
+  rej({ game: 'pokemon', pcid: '', name, number, productName });
+
+const idCases = [
+  // The reported bug, exactly.
+  ['Miraidon #197 refuses Vitality Band #197',
+   () => pokemon('Miraidon', '197', 'Vitality Band #197') === true],
+  ['Miraidon #197 refuses Miraidon #013 (right name, wrong card)',
+   () => pokemon('Miraidon', '197', 'Miraidon #013') === true],
+  ['Bulbasaur refuses a Stellar Crown #143 substitution',
+   () => pokemon('Bulbasaur', '133', 'Bulbasaur #143') === true],
+  ['a different card entirely is refused',
+   () => pokemon('Charizard', '4', 'Blastoise #4') === true],
+
+  // The guard must not become a wrecking ball. These all still price.
+  ['the plain card is admitted',
+   () => pokemon('Charizard', '4', 'Charizard #4') === false],
+  ['bracketed printings are admitted',
+   () => pokemon('Charizard', '4', 'Charizard [1st Edition] #4') === false
+      && pokemon('Charizard', '4', 'Charizard [Shadowless] #4') === false],
+  ['parenthetical qualifiers are admitted',
+   () => pokemon('Umbreon VMAX', '215', 'Umbreon VMAX (Alternate Art) #215') === false],
+  ['leading zeros are not a mismatch',
+   () => pokemon('Okidogi ex', '90', 'Okidogi ex #090') === false],
+  ['slashed numbering is admitted',
+   () => pokemon('Charizard', '4', 'Charizard #4/102') === false],
+  ['punctuated names survive normalisation',
+   () => pokemon('Farfetch\u2019d', '27', "Farfetch'd #27") === false
+      && pokemon('Mr. Mime', '122', 'Mr. Mime #122') === false
+      && pokemon('Ho-Oh', '130', 'Ho-Oh #130') === false],
+  ['a name-only lookup (no number given) still prices',
+   () => pokemon('Charizard', '', 'Charizard #4') === false],
+  ['a candidate with no number cannot be disproved, so it prices',
+   () => pokemon('Charizard', '4', 'Charizard') === false],
+
+  // Evolution lines are different cards at the same number.
+  ['Charizard V does not accept Charizard VMAX',
+   () => pokemon('Charizard V', '17', 'Charizard VMAX #17') === true],
+
+  // Documented exemptions.
+  ['sports is exempt (parallel logic owns identity there)',
+   () => rej({ game: 'sports', pcid: '', name: 'Luka Doncic',
+               number: '280', productName: 'Totally Different #280' }) === false],
+  ['an explicit product id is the caller\u2019s choice, not ours to veto',
+   () => rej({ game: 'pokemon', pcid: '12345', name: 'Miraidon',
+               number: '197', productName: 'Vitality Band #197' }) === false],
+
+  // Refusals must explain themselves.
+  ['a refusal names what was asked and what came back',
+   () => {
+     const why = pcIdentityRejection({ game: 'pokemon', pcid: '', name: 'Miraidon',
+                                       number: '197', productName: 'Vitality Band #197' });
+     return Array.isArray(why) && why.length > 0
+            && /Miraidon/.test(why.join(' ')) && /Vitality Band/.test(why.join(' '));
+   }],
+];
+for (const [label, fn] of idCases) {
   let ok = false;
   try { ok = fn(); } catch (e) { ok = false; }
   if (ok) { pass++; console.log(`  PASS  ${label}`); }

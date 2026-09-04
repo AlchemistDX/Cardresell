@@ -12,6 +12,20 @@ import { resolveCardPrice, resolveCardByName, gameToCategoryId, normalizeSetName
 
 const CACHE_TTL_SEC = 30 * 60; // 30 min
 
+// Collector-number admission, as a pure function so tests can execute it
+// rather than pattern-match the source. Text-only assertions kept passing when
+// the enclosing `if` was neutered (mutation test, 2026-09-04).
+//
+// true  = REFUSE (caller named a number, resolver reports a different one)
+// false = admit. Silence on either side is admissible: a null number means
+//         "cannot verify", not "verified wrong".
+function tcgNumberMismatch(requested, resolved) {
+  const want = String(requested || '').trim().toLowerCase().replace(/^0+/, '');
+  const got  = String(resolved  || '').trim().toLowerCase().replace(/^0+/, '');
+  if (!want || !got) return false;
+  return want !== got;
+}
+
 async function getCached(kvUrl, kvToken, key) {
   if (!kvUrl || !kvToken) return null;
   try {
@@ -77,7 +91,10 @@ export default async function handler(req, res) {
   // caught "Iono" served as "Iono Premium Tournament Collection Display" at
   // $318.12 with cacheAgeSec 796 under the fresh v9 key. Rotate to v10 so the
   // 17-minute remainder of that TTL does not keep serving the bad number.
-  const cacheKey = `v11|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // v12 (2026-09-04): the identity guard changes WHICH product may be priced
+  // (a number mismatch is now refused instead of returned), so v11 entries
+  // written under the permissive scorer must not be served.
+  const cacheKey = `v12|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -159,6 +176,29 @@ export default async function handler(req, res) {
     // stabilizes). Passing it through as if it were a real market price
     // makes the app look broken — caught in bulk-scan test 2026-08-19
     // where a One Piece Luffy card showed "$99,999.00" as the market price.
+    // (guard for that sentinel is the `if` immediately below)
+
+    // IDENTITY GUARD (2026-09-04) — same rule as the live-search path below.
+    // The tcgcsv resolver also falls back to a best-effort product, which is
+    // how a Cresselia #071 (Shrouded Fable) request came back as Great
+    // Encounters #2 at $18.70 instead of $26.49. If the caller named a number
+    // and the resolved product reports a different one, refuse. Silence on
+    // either side stays admissible.
+    if (tcgNumberMismatch(number, r?.product?.number)) {
+      const data = {
+        market: null, low: null, mid: null, high: null,
+        source: 'tcgcsv', game, count: 0,
+        reason: 'number_mismatch',
+        requestedNumber: number,
+        matchedNumber: r.product.number,
+        matchedName: r.product?.name || null,
+        fetchedAt: new Date().toISOString(), cacheAgeSec: 0,
+      };
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      return res.status(200).json(data);
+    }
+
+    // Sentinel guard: TCGplayer publishes 99999 to mean "no data".
     if (r && r.ok && r.market != null && !_isSentinelPrice(r.market)) {
       // 2026-08-19: Trimmed-mean pricing. TCGcsv gives us four price points
       // (low / market / mid / high). Any single one can mislead:
@@ -386,6 +426,28 @@ export default async function handler(req, res) {
       } catch(e) {}
     }
 
+    // IDENTITY GUARD (2026-09-04) — the scorer above admits any product whose
+    // score clears zero, and a bare name substring is worth 10 on its own. So
+    // a request for Miraidon #197 was answered with Miraidon #013 at $5.99:
+    // right name, wrong card. When the caller told us a collector number and
+    // the winner reports a different one, that is a substitution, not a match.
+    // Silence on the number (either side) stays admissible — it reads as
+    // "cannot verify", which is the truth, and the set guard below still runs.
+    const _bestNumber = best.number
+      || (/(?:^|[\s\-#])([A-Za-z]{0,3}\d+[a-z]?)\s*\/\s*[A-Za-z]{0,3}\d+/i.exec(String(best.productName || ''))?.[1])
+      || (/#\s*([A-Za-z]{0,3}\d+[a-z]?)\b/.exec(String(best.productName || ''))?.[1])
+      || null;
+    if (tcgNumberMismatch(number, _bestNumber)) {
+      return res.status(200).json({
+        market: null, low: null, mid: null, high: null,
+        source: 'tcgplayer-live', count: 0,
+        reason: 'number_mismatch',
+        requestedNumber: number,
+        matchedNumber: _bestNumber,
+        matchedName: best.productName || null,
+      });
+    }
+
     // 2026-09-03: honour the set the caller gave us.
     // TCGplayer's fuzzy search accepts &setName= but does not treat it as a
     // hard filter, so it will happily answer a modern-set query with a
@@ -416,10 +478,11 @@ export default async function handler(req, res) {
       // never scored as a match.
       // Allows an alphabetic prefix: Scarlet & Violet promos number as
       // "SV049/SV122", so a digits-only pattern silently missed every one.
-      cardNumber: best.number
-        || (/(?:^|[\s\-#])([A-Za-z]{0,3}\d+[a-z]?)\s*\/\s*[A-Za-z]{0,3}\d+/i.exec(String(best.productName || ''))?.[1])
-        || (/#\s*([A-Za-z]{0,3}\d+[a-z]?)\b/.exec(String(best.productName || ''))?.[1])
-        || null,
+      // Computed once above as _bestNumber, where the identity guard also
+      // reads it. Sharing the value keeps the number we REPORT identical to
+      // the number we CHECKED -- two copies of this parse could drift, and a
+      // guard that inspects a different number than it publishes is worthless.
+      cardNumber: _bestNumber,
       setName: best.setName,
       url: productId ? `https://www.tcgplayer.com/product/${productId}` : null,
       fetchedAt: new Date().toISOString(),

@@ -7948,6 +7948,45 @@ const _QP_KEY_TO_PC = {
   psa_9_5: 'grade_95', psa_10: 'psa_10',
   bgs_10: 'bgs_10', cgc_10: 'cgc_10', sgc_10: 'sgc_10',
 };
+// The inverse: PriceCharting field -> internal variant key.
+const _QP_PC_TO_KEY = Object.fromEntries(
+  Object.entries(_QP_KEY_TO_PC).map(([k, v]) => [v, k])
+);
+
+// CANONICAL grader+grade -> PriceCharting field mapping. Single source of
+// truth: _pcKeyForGrade (portfolio refresh) and _pcVariantKeyForGrade (card
+// page) both delegate here so the two surfaces can never drift apart.
+//
+// PriceCharting publishes ONE grader-agnostic column for 7/8/9/9.5 and
+// separate columns only for the 10s. Returning null means "PriceCharting
+// publishes nothing for this pair" — callers must then keep the saved value
+// or say so, and must NEVER substitute a neighbouring grade.
+function _pcGradeFieldFor(grader, grade) {
+  const g = String(grader || '').toLowerCase().trim();
+  const n = String(grade   || '').trim();
+  if (!g || !n) return null;
+  if (n === '10') {
+    // ACE and TAG 10s have no PriceCharting field at all.
+    return ({ psa: 'psa_10', bgs: 'bgs_10', cgc: 'cgc_10', sgc: 'sgc_10' })[g] || null;
+  }
+  if (n === '9.5') {
+    // One grader-agnostic 9.5 column. PSA does not issue a 9.5.
+    return /^(bgs|cgc|sgc)$/.test(g) ? 'grade_95' : null;
+  }
+  if (n === '9')                 return 'grade_9';
+  if (n === '8' || n === '8.5')  return 'grade_8';
+  if (n === '7' || n === '7.5')  return 'grade_7';
+  return null; // 6.5 and below: PriceCharting publishes nothing.
+}
+
+// Card-page form: the internal currentPrices/printSelect variant key.
+// 2026-09-04: replaces a same-grader `startsWith(grader + '_')` fallback that
+// silently resolved e.g. BGS 9 -> bgs_10, rendering Base Set Charizard's
+// $17,103.00 ten in place of the $3,136.61 grade-9 guide value.
+function _pcVariantKeyForGrade(grader, grade) {
+  const field = _pcGradeFieldFor(grader, grade);
+  return field ? (_QP_PC_TO_KEY[field] || null) : null;
+}
 
 function _qpGradeLadder(selKey) {
   const L = window._crPCLadder;
@@ -8594,11 +8633,15 @@ async function syncGradeToPrintSelect() {
     // The historical internal key is psa_9_5 (kept, because _QP_KEY_TO_PC and
     // the whole graded pipeline are wired to it) even though PSA itself does
     // not issue 9.5. So graders that DO issue 9.5 (BGS/CGC/SGC) must route
-    // there rather than to a nonexistent bgs_9_5/cgc_9_5/sgc_9_5, otherwise
-    // syncGradeToPrintSelect's same-grader fallback silently picks the 10.
-    const targetKey = (grade === '9.5' && /^(bgs|cgc|sgc)$/.test(grader))
-      ? 'psa_9_5'
-      : `${grader}_${grade}`.replace(/\./g, '_');
+    // there rather than to a nonexistent bgs_9_5/cgc_9_5/sgc_9_5.
+    // Prefer a native grader-specific key if one genuinely exists (TPL can
+    // supply e.g. a real bgs_9), otherwise use the canonical PriceCharting
+    // column for this grader+grade. Never a neighbouring grade.
+    const nativeKey = `${grader}_${grade}`.replace(/\./g, '_');
+    const pcVariantKey = _pcVariantKeyForGrade(grader, grade);
+    const targetKey = currentPrices[nativeKey]
+      ? nativeKey
+      : (pcVariantKey || nativeKey);
     // Graded variants no longer appear in the visible printSelect dropdown
     // (see rebuildPrintSelect / initial variants.forEach). Ensure a hidden
     // option exists in the DOM for the current graded key so
@@ -8617,13 +8660,15 @@ async function syncGradeToPrintSelect() {
       return opt;
     }
     const graded = currentPrices[targetKey];
-    const fallbackKey = !graded && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
-    const fallback = fallbackKey ? currentPrices[fallbackKey] : null;
-    if (graded || fallback) {
+    // 2026-09-04: NO same-grader fallback. Falling back to any key starting
+    // with `${grader}_` resolved BGS 9 -> bgs_10 (Charizard $17,103 instead of
+    // $3,136.61), CGC 8.5 -> cgc_10, SGC 7.5 -> sgc_10. Substituting a
+    // different GRADE is not a source fallback, it is a wrong number.
+    if (graded) {
       // 2026-08-30 stale-gen guard on the graded fast path (see note above).
       if (myGen !== window._syncGen) return;
-      const useKey = graded ? targetKey : fallbackKey;
-      const useLabel = (graded || fallback).label;
+      const useKey = targetKey;
+      const useLabel = graded.label;
       // Purge ALL other hidden graded options before adding this one — the
       // dropdown should only ever have zero or one hidden graded entry so
       // it never accumulates 'PSA 8', 'PSA 9', 'BGS 10' as the user browses.
@@ -8685,17 +8730,18 @@ async function syncGradeToPrintSelect() {
           ...tplFiltered,
         ];
         rebuildPrintSelect(selectedCard.priceVariants);
-        const targetKey2 = (grade === '9.5' && /^(bgs|cgc|sgc)$/.test(grader))
-          ? 'psa_9_5'
-          : `${grader}_${grade}`.replace(/\./g, '_');
+        const nativeKey2 = `${grader}_${grade}`.replace(/\./g, '_');
+        const pcVariantKey2 = _pcVariantKeyForGrade(grader, grade);
+        const targetKey2 = currentPrices[nativeKey2]
+          ? nativeKey2
+          : (pcVariantKey2 || nativeKey2);
         const g2 = currentPrices[targetKey2];
-        const fbKey2 = !g2 && Object.keys(currentPrices).find(k => k.startsWith(grader + '_'));
-        const fb2 = fbKey2 ? currentPrices[fbKey2] : null;
-        if (g2 || fb2) {
+        // 2026-09-04: no same-grader fallback here either (see note above).
+        if (g2) {
           // 2026-08-30 stale-gen guard — async TPL fetch may have raced
           if (myGen !== window._syncGen) return;
-          const useKey2 = g2 ? targetKey2 : fbKey2;
-          const useLbl2 = (g2 || fb2).label;
+          const useKey2 = targetKey2;
+          const useLbl2 = g2.label;
           // Purge ALL other hidden graded options first (see pruneStaleGradedOptions note)
           pruneStaleGradedOptions(useKey2);
           if (!Array.from(printSelect.options).find(o => o.value === useKey2)) {
@@ -12755,22 +12801,11 @@ async function _fetchEbayPriceForEntry(p) {
 // Below that the columns are "graded N by a grading company" -- grader-agnostic
 // and, at 7 and 8, each blending two grades. Return null rather than substitute
 // a neighbouring grade: a stale-but-correct saved value beats a fresh wrong one.
+// Portfolio refresh form: the PriceCharting response field to read.
+// Delegates to _pcGradeFieldFor so this and the card page's
+// _pcVariantKeyForGrade can never disagree about which grade a slab maps to.
 function _pcKeyForGrade(grader, grade) {
-  const g = String(grader || '').toLowerCase().trim();
-  const n = String(grade   || '').trim();
-  if (!g || !n) return null;
-  if (n === '10') {
-    // ACE and TAG 10s have no PriceCharting field at all.
-    return ({ psa: 'psa_10', bgs: 'bgs_10', cgc: 'cgc_10', sgc: 'sgc_10' })[g] || null;
-  }
-  if (n === '9.5') {
-    // One grader-agnostic 9.5 column. PSA does not issue a 9.5.
-    return /^(bgs|cgc|sgc)$/.test(g) ? 'grade_95' : null;
-  }
-  if (n === '9')                 return 'grade_9';
-  if (n === '8' || n === '8.5')  return 'grade_8';
-  if (n === '7' || n === '7.5')  return 'grade_7';
-  return null; // 6.5 and below: PriceCharting publishes nothing.
+  return _pcGradeFieldFor(grader, grade);
 }
 
 async function _fetchGradedPriceForEntry(p) {

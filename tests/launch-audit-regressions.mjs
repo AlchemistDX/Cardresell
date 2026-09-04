@@ -949,8 +949,52 @@ try {
         // keep the audit reporting indeterminate. Rotate so every fresh
         // response carries the new field. Keep the old versions asserted-
         // absent as a permanent list.
-        /`v11\|\$\{game\}/.test(tcgPrice) && !/`v(?:[89]|10)\|\$\{game\}/.test(tcgPrice),
+        // 2026-09-04: v11 -> v12 with the identity guard (a number mismatch is
+        // now refused instead of priced). Assert the CURRENT version and that
+        // every superseded one is gone, rather than pinning one literal --
+        // pinning is why this check failed the bump it exists to require.
+        /`v12\|\$\{game\}/.test(tcgPrice)
+          && !/`v(?:[89]|10|11)\|\$\{game\}/.test(tcgPrice),
         'a code change does NOT invalidate KV -- stale entries would keep serving $19,800');
+
+  // Identity guard — EXECUTED, not pattern-matched. An earlier version of this
+  // block asserted the presence of `reason: 'number_mismatch'` and passed
+  // happily when the enclosing `if` was replaced with `if (false)`. Mutation
+  // testing caught that on 2026-09-04. Run the real predicate instead.
+  {
+    const src = tcgPrice.slice(tcgPrice.indexOf('function tcgNumberMismatch'));
+    let end = 0, d = 0;
+    for (let i = src.indexOf('{'); i < src.length; i++) {
+      if (src[i] === '{') d++;
+      else if (src[i] === '}') { d--; if (!d) { end = i + 1; break; } }
+    }
+    const mismatch = new Function(
+      src.slice(0, end) + '\nreturn tcgNumberMismatch;')();
+
+    check('a wrong collector number is refused (Miraidon #197 vs #013)',
+          mismatch('197', '013') === true,
+          'right name + wrong number returned $5.99 for a card the seller does not own');
+    check('Cresselia #071 does not accept Great Encounters #2',
+          mismatch('071', '2') === true);
+    check('leading zeros are not a mismatch (#90 == #090)',
+          mismatch('90', '090') === false && mismatch('090', '90') === false);
+    check('an identical number is admitted',
+          mismatch('197', '197') === false);
+    check('an unverifiable number stays admissible, not refused',
+          mismatch('', '197') === false
+            && mismatch('197', '') === false
+            && mismatch('197', null) === false
+            && mismatch(null, null) === false,
+          'null means "cannot verify"; refusing there would break every name-only lookup');
+    check('alphanumeric promo numbers compare correctly',
+          mismatch('SV049', 'sv049') === false && mismatch('SV049', 'SV050') === true);
+
+    check('both price paths route through the shared number guard',
+          (tcgPrice.match(/tcgNumberMismatch\(number,/g) || []).length === 2,
+          'tcgcsv and live-search must both refuse, not just one');
+    check('a refused number reports why',
+          (tcgPrice.match(/reason: 'number_mismatch'/g) || []).length === 2);
+  }
 
   check('the high clamp is the 3x the docs now describe',
         /_HIGH_CAP_MULT = 3\.0/.test(tcgPrice));
@@ -1171,7 +1215,11 @@ try {
         /cardNumber: r\.product\?\.number/.test(tcgPrice2),
         'without it the TCG side of every identity check is blind');
   check('the live fallback parses a number from the product name',
-        /cardNumber: best\.number/.test(tcgPrice2)
+        // The parse now lives in _bestNumber (computed once, shared by the
+        // identity guard and the response) instead of being inlined at the
+        // cardNumber key. Assert the parse exists and is still reported.
+        /const _bestNumber = best\.number/.test(tcgPrice2)
+          && /cardNumber: _bestNumber/.test(tcgPrice2)
           && /\[A-Za-z\]\{0,3\}\\d\+/.test(tcgPrice2),
         'SV/TG promos number as SV049/SV122; digits-only missed them all');
 }
@@ -1629,8 +1677,22 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 // instead of $7,290.69). BOTH targetKey sites in syncGradeToPrintSelect must
 // perform the redirect.
 {
-  const redirects = (index.match(/grade === '9\.5' && \/\^\(bgs\|cgc\|sgc\)\$\/\.test\(grader\)/g) || []).length;
-  check('both 9.5 -> psa_9_5 redirects exist (was BGS/CGC/SGC 9.5 showing the 10 value)', redirects === 2);
+  // 2026-09-04: the inline `grade === '9.5' && /^(bgs|cgc|sgc)$/` redirect at
+  // each targetKey site was replaced by a single canonical helper,
+  // _pcVariantKeyForGrade, that both sites call. Counting the old literal now
+  // measures nothing. Assert the helper exists, that BOTH sites use it, and
+  // that no site still builds a same-grader fallback key.
+  const swap = index.slice(index.indexOf('function syncGradeToPrintSelect'),
+                           index.indexOf('function syncGradeToPrintSelect') + 12000);
+  check('both targetKey sites route through the canonical grade mapper',
+        (swap.match(/_pcVariantKeyForGrade\(/g) || []).length === 2,
+        'one site left on the old inline logic is one site that can drift');
+  check('the canonical grade mapper is defined once',
+        (index.match(/function _pcVariantKeyForGrade\(/g) || []).length === 1);
+  check('no same-grader startsWith fallback survives in syncGradeToPrintSelect',
+        !/startsWith\(\s*`?\$\{?grader\}?_/.test(swap)
+          && !/fallbackKey/.test(swap),
+        "startsWith(grader+'_') is what resolved BGS 9 to bgs_10 at $17,103");
   check('no naked `${grader}_${grade}` targetKey slips through in syncGradeToPrintSelect',
         (index.match(/const targetKey2? = `\$\{grader\}_\$\{grade\}`/g) || []).length === 0);
 }
@@ -1704,17 +1766,85 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 // source. Verified live: Base Set Charizard BGS 9.5 = $7,290.69 while
 // BGS 10 = $17,103 -- mapping 9.5 to a grader key would 2.3x the value.
 {
-  const gk = index.slice(index.indexOf('function _pcKeyForGrade'),
-                         index.indexOf('async function _fetchGradedPriceForEntry'));
+  // 2026-09-04: these used to regex the body of _pcKeyForGrade. That made the
+  // test a copy of the implementation -- it broke the moment the function was
+  // refactored to delegate to _pcGradeFieldFor, even though every mapping was
+  // unchanged. Execute the real functions instead, so the checks describe
+  // BEHAVIOUR and survive any refactor that keeps the behaviour.
+  function _grabFn(name) {
+    const i = index.indexOf(`function ${name}(`);
+    if (i < 0) throw new Error(`_pcKeyForGrade regression: ${name} is gone`);
+    let d = 0, k = index.indexOf('{', i);
+    for (; k < index.length; k++) {
+      if (index[k] === '{') d++;
+      else if (index[k] === '}') { d--; if (!d) break; }
+    }
+    return index.slice(i, k + 1);
+  }
+  const _mapSrc = index.match(/const _QP_KEY_TO_PC = \{[\s\S]*?\};/)[0]
+    + '\nconst _QP_PC_TO_KEY = Object.fromEntries(Object.entries(_QP_KEY_TO_PC).map(([k, v]) => [v, k]));\n'
+    + _grabFn('_pcGradeFieldFor') + '\n'
+    + _grabFn('_pcVariantKeyForGrade') + '\n'
+    + _grabFn('_pcKeyForGrade') + '\n'
+    + 'return { _pcGradeFieldFor, _pcVariantKeyForGrade, _pcKeyForGrade, _QP_KEY_TO_PC };';
+  const M = new Function(_mapSrc)();
+
+  // The live Base Set Charizard board, confirmed against the API 2026-09-04.
+  const PC = { raw: 366.25, grade_7: 787.5, grade_8: 1160.22, grade_9: 3136.61,
+               grade_95: 7290.69, psa_10: 13156.09, bgs_10: 17103,
+               cgc_10: 4597.84, sgc_10: 7894 };
+  const field = (gr, g) => M._pcKeyForGrade(gr, g);
+  const dollars = (gr, g) => { const f = field(gr, g); return f ? PC[f] : null; };
+
   check('9.5 maps to the grader-agnostic grade_95 column',
-        /return \/\^\(bgs\|cgc\|sgc\)\$\/\.test\(g\) \? 'grade_95' : null;/.test(gk));
-  check('PSA 9.5 is unmapped (PSA issues no 9.5)', /\bpsa\b/.test(gk) && !/psa_9_5/.test(gk));
+        field('bgs', '9.5') === 'grade_95'
+          && field('cgc', '9.5') === 'grade_95'
+          && field('sgc', '9.5') === 'grade_95');
+  check('PSA 9.5 is unmapped (PSA issues no 9.5)', field('psa', '9.5') === null);
   check('each grader has its own 10 field',
-        /psa: 'psa_10', bgs: 'bgs_10', cgc: 'cgc_10', sgc: 'sgc_10'/.test(gk));
-  check('grade 8 and 8.5 share one column', /n === '8' \|\| n === '8\.5'/.test(gk));
-  check('grade 7 and 7.5 share one column', /n === '7' \|\| n === '7\.5'/.test(gk));
+        field('psa', '10') === 'psa_10' && field('bgs', '10') === 'bgs_10'
+          && field('cgc', '10') === 'cgc_10' && field('sgc', '10') === 'sgc_10');
+  check('grade 8 and 8.5 share one column',
+        field('psa', '8') === 'grade_8' && field('psa', '8.5') === 'grade_8');
+  check('grade 7 and 7.5 share one column',
+        field('psa', '7') === 'grade_7' && field('psa', '7.5') === 'grade_7');
   check('grades 6.5 and below map to nothing (PC publishes none)',
-        /return null; \/\/ 6\.5 and below/.test(gk));
+        field('psa', '6.5') === null && field('bgs', '6') === null
+          && field('cgc', '5.5') === null && field('sgc', '1') === null);
+
+  // The actual money bug this block exists to prevent: a non-10 grade must
+  // never resolve to that grader's 10. BGS 9 showed $17,103 instead of
+  // $3,136.61 (+445%) until 2026-09-04.
+  check('a non-10 grade never resolves to the grader 10 column',
+        !['bgs', 'cgc', 'sgc', 'psa'].some(gr =>
+          ['7', '7.5', '8', '8.5', '9', '9.5'].some(g => /_10$/.test(field(gr, g) || ''))),
+        'BGS 9 -> bgs_10 was a +445% overstatement on Base Set Charizard');
+  check('Charizard BGS 9 prices at the grade_9 row, not the BGS 10 row',
+        dollars('bgs', '9') === 3136.61 && dollars('bgs', '9') !== 17103);
+  check('Charizard CGC 8.5 prices at grade_8, not cgc_10',
+        dollars('cgc', '8.5') === 1160.22 && dollars('cgc', '8.5') !== 4597.84);
+  check('Charizard SGC 7.5 prices at grade_7, not sgc_10',
+        dollars('sgc', '7.5') === 787.5 && dollars('sgc', '7.5') !== 7894);
+  check('Charizard BGS 9.5 stays at the shared 9.5 row',
+        dollars('bgs', '9.5') === 7290.69);
+  check('ACE and TAG 10s have no PriceCharting column at all',
+        field('ace', '10') === null && field('tag', '10') === null);
+
+  // The card page and the portfolio refresh must never disagree about which
+  // grade a slab maps to -- that divergence is what produced the bug.
+  {
+    let agree = true;
+    for (const gr of ['psa', 'bgs', 'cgc', 'sgc', 'ace', 'tag']) {
+      for (const g of ['1', '5.5', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10']) {
+        const key = M._pcVariantKeyForGrade(gr, g);
+        const fld = M._pcKeyForGrade(gr, g);
+        const viaKey = key ? M._QP_KEY_TO_PC[key] : null;
+        if ((viaKey || null) !== (fld || null)) agree = false;
+      }
+    }
+    check('card page and portfolio refresh agree on every grader x grade', agree,
+          'two mappings that can drift is how the wrong-grade bug survived');
+  }
 
   const gf = index.slice(index.indexOf('async function _fetchGradedPriceForEntry'),
                          index.indexOf('async function _fetchPriceForEntry'));
