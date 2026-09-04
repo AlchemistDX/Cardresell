@@ -1146,6 +1146,19 @@ try {
   check('the audit reports variant alignment separately from identity',
         /variantAlignment/.test(audit) && /holofoil.*NOT/s.test(audit),
         'holo vs non-holo is price-bearing and must stay flagged');
+  // Prod audit 2026-09-03 flagged all 4 vintage Star cards as identity
+  // mismatches -- TCG names them "Charizard Star", PC names them
+  // "Charizard [Gold Star]". Both correct. The harness must recognise this
+  // as a naming convention rather than a substitution, or Star rows keep
+  // dropping out of the identity-exact denominator and the spread number
+  // over-corrects.
+  check('the audit folds "[Gold Star]" into "Star"',
+        /gold star/i.test(audit) && /'star'/.test(audit),
+        'four 2004-2007 vintage cards mismatch without this fold');
+  check('the audit strips mechanic parentheticals from card names',
+        /delta species/.test(audit) && /reverse holo/.test(audit),
+        'TCG appends the mechanic; PC does not');
+
   check('the PriceCharting rate limit is respected and documented',
         /sleep\(1100\)/.test(audit) && /1 req\/sec|1 request\/sec/.test(audit),
         'their terms bind us to one request per second');

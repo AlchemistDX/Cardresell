@@ -107,12 +107,30 @@ const qs = o => new URLSearchParams(
 // ── Normalisers ────────────────────────────────────────────────────────────
 // Each one exists because a real feed pair differed only in that dimension.
 
-// "Charizard ★" vs "Charizard Star"; "Mew [Reverse Holo]"; "Charizard (Shadowless)";
-// "Iono - 185/193"; "Professor's Research" with a curly apostrophe.
+// "Charizard ★" vs "Charizard Star" vs "Charizard [Gold Star]";
+// "Mew [Reverse Holo]"; "Charizard (Shadowless)"; "Iono - 185/193";
+// "Professor's Research" with a curly apostrophe; "Charizard Star (Delta
+// Species)" -- TCG appends the mechanic name, PC does not.
+//
+// A note on [Gold Star]: TCGplayer names 2004-2007 Gold Star cards
+// "<Pokemon> Star", PriceCharting names them "<Pokemon> [Gold Star]". Both
+// are correct products; the bracket removal makes them one canonical form.
+// Without this fold every high-value Star card in the sample scored as an
+// identity mismatch even though both feeds were priced against the same
+// slab. That is the specific noise the harness is trying to filter out --
+// a genuine substitution (Iono card vs Iono display box) is loud, a naming
+// convention difference between two catalogues is not.
 const normName = s => String(s || '')
   .toLowerCase()
   .normalize('NFKD')
+  // Bracket contents that are widely-used equivalents. "Gold Star" is the
+  // TCG term for the star-mechanic subset; the bracket is a PriceCharting
+  // habit, not a distinct printing.
+  .replace(/\[gold star\]/g, 'star')
   .replace(/[\u2605\u2606]/g, 'star')
+  // Strip mechanic parentheticals: "Charizard Star (Delta Species)" from
+  // TCG then matches "Charizard [Gold Star]" from PC once both foldings run.
+  .replace(/\((?:delta species|holo|reverse holo|shadowless|1st edition|unlimited)\)/g, ' ')
   .replace(/\[[^\]]+\]/g, ' ')
   .replace(/\([^)]*\)/g, ' ')
   .replace(/[\u2019\u02bc'`]/g, '')
