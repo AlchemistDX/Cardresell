@@ -15514,6 +15514,17 @@ function _beginCardSwap(name) {
     // does nothing: card A's onload lands ~200-400ms later and re-reveals the
     // old art under the new card's name, which is the glitch itself.
     window._imgGen = (window._imgGen || 0) + 1;
+    // 2026-09-04: retire the "MARKET PRICE — RAW" (#scanMissPanel) block too.
+    // It was only cleared at the top of a fresh single scan, so tapping card A
+    // from a bulk sheet (A misses → panel renders A's price) and then tapping
+    // card B (B resolves normally, so no NEW panel is built and the old one is
+    // never displaced) left A's panel on screen underneath B's art and name:
+    // Minun #194's photo/title above "Bulbasaur (Mega Evolution Stamped) #133
+    // — Raw NM $20.28". Showing one card's picture over another card's dollar
+    // figure is the worst thing this app can do to a seller, so the panel dies
+    // in the same tick as the art and price, on EVERY swap path.
+    const _stalePanel = document.getElementById('scanMissPanel');
+    if (_stalePanel && _stalePanel.parentNode) _stalePanel.parentNode.removeChild(_stalePanel);
     // Deliberately do NOT blank cardImg.src here: assigning '' resolves to the
     // document URL, so the browser fires a bogus request for index.html as an
     // image and the resulting error state suppressed the incoming card's
@@ -16259,6 +16270,14 @@ function _renderScanMissPanel(pending) {
 // original panel in place.
 async function _enrichMissPanelWithPriceCharting(panel, info) {
   if (!panel || !info || !info.name) return;
+  // 2026-09-04: snapshot the card generation this enrichment belongs to.
+  // isConnected alone is not enough: it only catches the case where a NEWER
+  // panel displaced this one. If the next card resolves normally no new panel
+  // is built, so a still-in-flight PriceCharting call for the PREVIOUS card
+  // stayed "connected" and wrote that card's price beside the new card's art.
+  // _beginCardSwap bumps _imgGen on every swap, so comparing against it after
+  // the await is what actually makes this write card-scoped.
+  const _pcGenSnap = window._imgGen || 0;
   // Only enrich for TCG cards — sports has its own PC path elsewhere and
   // we don't want two overlapping renders.
   const game = (info.cardType || 'pokemon').toLowerCase();
@@ -16286,6 +16305,8 @@ async function _enrichMissPanelWithPriceCharting(panel, info) {
   // Panel may have been dismissed while we were fetching — check both
   // that our reference is still in the DOM and that its id is intact.
   if (!panel.isConnected || panel.id !== 'scanMissPanel') return;
+  // The user may have moved to a different card while we were fetching.
+  if ((window._imgGen || 0) !== _pcGenSnap) return;   // stale — belongs to a retired card
 
   const price = Number(pc.median);
   const priceStr = price >= 100 ? '$' + price.toFixed(0) : '$' + price.toFixed(2);
@@ -23653,7 +23674,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
                 const d = await r2.json();
                 if (d && d.market > 0) {
                   return { marketPrice: d.market, variant: 'tcgplayer_live',
-                           imageUrl: card.images?.small || card.images?.large || d.image || null,
+                           imageUrl: card.images?.small || card.images?.large || d.imageUrl || d.image || null,
                            tcgplayerUrl: card.tcgplayer?.url || null,
                            matchedSet: card.set?.name || null, matchedNumber: card.number || null,
                            prices: priceMap };
@@ -23684,7 +23705,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
       if (r.ok) {
         const d = await r.json();
         if (d && d.market > 0) {
-          return { marketPrice: d.market, variant: 'tcgplayer_live', imageUrl: d.image || '', tcgplayerUrl: '' };
+          return { marketPrice: d.market, variant: 'tcgplayer_live', imageUrl: d.imageUrl || d.image || '', tcgplayerUrl: d.url || '' };
         }
       }
     } catch(e) {}
@@ -23706,7 +23727,39 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
       cards = await _bulkFetchPokemonCards(q, 7000);
       if (cards && cards.length) break;
     }
-    if (!cards || !cards.length) return null;
+    // 2026-09-04: pokemontcg.io is the ONLY source consulted before this point,
+    // and it is not reliable enough to be a single point of failure: a control
+    // probe of 8 identical `name:"Mantyke"` queries returned HTTP 500 five
+    // times (62%). When it flaked, this line returned null and the bulk row
+    // rendered "Price unavailable" WITH NO THUMBNAIL — while /api/tcg-price
+    // held both (Minun #194 $44.78, Cresselia #071 $26.49, Ivysaur #134
+    // $19.64, Bulbasaur #133 $20.87, each with an imageUrl). Because the
+    // failure is random per-request, the same 8-card batch produced a
+    // DIFFERENT set of blank rows on every run, which is why this read as an
+    // intermittent "misfire" rather than a missing-card bug.
+    //
+    // Fall back to /api/tcg-price (tcgcsv) before giving up. Only a real
+    // no-data answer from BOTH sources may render "Price unavailable".
+    if (!cards || !cards.length) {
+      try {
+        const rFb = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${cleanRarity ? '&rarity=' + encodeURIComponent(cleanRarity) : ''}`, { signal: AbortSignal.timeout(7000) });
+        if (rFb.ok) {
+          const d = await rFb.json();
+          if (d && d.market > 0) {
+            return {
+              marketPrice: d.market,
+              variant: d.variant || 'tcgplayer_live',
+              imageUrl: d.imageUrl || d.image || null,
+              tcgplayerUrl: d.url || null,
+              matchedSet: d.setName || null,
+              matchedNumber: d.cardNumber || null,
+              prices: {},
+            };
+          }
+        }
+      } catch(_) {}
+      return null;
+    }
 
     // 2026-08-15: score by (number match × 10) + set match. When "Mega Lucario EX"
     // returns a regular #55, a full-art #113, and a secret rare #179 all from
@@ -23791,7 +23844,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
             return {
               marketPrice: d.market,
               variant: 'tcgplayer_live',
-              imageUrl: best.images?.small || best.images?.large || d.image || null,
+              imageUrl: best.images?.small || best.images?.large || d.imageUrl || d.image || null,
               tcgplayerUrl: best.tcgplayer?.url || null,
               matchedSet: best.set?.name || null,
               matchedNumber: best.number || null,
@@ -24568,6 +24621,14 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
 async function bulkOpenCardInLookup(rowId) {
   const r = _bulkFindResult(rowId);
   if (!r || !r.success) { showToast('Card not identified yet.'); return; }
+
+  // 2026-09-04: close the search results dropdown before switching cards.
+  // _loadScannedCardExactImpl assigns si.value directly, which does NOT close
+  // an already-open dropdown, so a list of sealed "ME01: Mega Evolution"
+  // booster-box rows (each "No price") stayed floating over the Bulbasaur
+  // detail view. Harmless-looking, but it makes a resolved single card read as
+  // an unpriced product list.
+  try { if (typeof closeSearchModal === 'function') closeSearchModal(); } catch(_) {}
 
   // ── PAUSE (don't destroy) so user can return ──
   const ov = document.getElementById('bulkScanOverlay');
