@@ -2128,20 +2128,20 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </div>
   <!-- Camera scan overlay -->
   <!-- Hidden file input — opens native camera on mobile -->
-  <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
-  <input type="file" id="gradeFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
-  <input type="file" id="gradeBackFileInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
+  <input type="file" id="scanFileInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
+  <input type="file" id="gradeFileInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
+  <input type="file" id="gradeBackFileInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
   <!-- Deep Grade edge photo inputs — optional, up to 4 edges -->
-  <input type="file" id="gradeEdgeTopInput"    accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'top')" />
-  <input type="file" id="gradeEdgeBottomInput" accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'bottom')" />
-  <input type="file" id="gradeEdgeLeftInput"   accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'left')" />
-  <input type="file" id="gradeEdgeRightInput"  accept="image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'right')" />
+  <input type="file" id="gradeEdgeTopInput"    accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'top')" />
+  <input type="file" id="gradeEdgeBottomInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'bottom')" />
+  <input type="file" id="gradeEdgeLeftInput"   accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'left')" />
+  <input type="file" id="gradeEdgeRightInput"  accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'right')" />
   <!-- Bulk scan file inputs -->
-  <input type="file" id="bulkUploadInput" accept="image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
+  <input type="file" id="bulkUploadInput" accept="image/jpeg,image/png,image/webp,image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
   <!-- Bulk GRADE upload input (Pro Max / Ultimate only). Grades up to 25 cards -->
   <!-- in one session via /api/scan?mode=grade with concurrency=2 (Ximilar-safe). -->
-  <input type="file" id="bulkGradeInput" accept="image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
-  <input type="file" id="bulkGradeCameraInput" accept="image/*" capture="environment" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
+  <input type="file" id="bulkGradeInput" accept="image/jpeg,image/png,image/webp,image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
+  <input type="file" id="bulkGradeCameraInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <!-- Scan status modal -->
   <div id="scanOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- Preview image -->
@@ -16978,9 +16978,60 @@ function dismissGradingCta() {
   hideGradingCtaBanner();
 }
 
+/* ═══════════════════════════════════════════════════════════
+   PHOTO INPUT VALIDATION (2026-09-04)
+   accept="image/*" is a picker HINT, not a gate: HEIC sails straight
+   through it on browsers that cannot decode HEIC, PDFs arrive via drag-drop
+   and programmatic flows, and a 20MB photo is decoded at full size before
+   downsampling. compressImage() leans on HTMLImageElement, so an
+   undecodable file surfaced as a stuck "Identifying card…" with no honest
+   recovery state. Gate the file BEFORE we spend a credit or a decode.
+   ═══════════════════════════════════════════════════════════ */
+const SCAN_MAX_BYTES  = 15 * 1024 * 1024;
+const SCAN_MIME_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
+function _validateScanFile(file) {
+  if (!file) return 'No photo selected.';
+  if (file.size > SCAN_MAX_BYTES) {
+    return 'That photo is ' + (file.size / 1048576).toFixed(1) + ' MB. Please use one under 15 MB.';
+  }
+  const type = String(file.type || '').toLowerCase();
+  if (SCAN_MIME_TYPES.has(type)) return '';
+  // Name-based fallback: some Android pickers hand us an empty file.type.
+  const name = String(file.name || '').toLowerCase();
+  if (!type && /\.(jpe?g|png|webp)$/.test(name)) return '';
+  if (type === 'image/heic' || type === 'image/heif' || /\.hei[cf]$/.test(name)) {
+    return 'HEIC photos cannot be read here. In iPhone Settings › Camera › Formats, pick "Most Compatible", or export the photo as JPEG.';
+  }
+  if (type === 'application/pdf' || /\.pdf$/.test(name)) {
+    return 'That is a PDF, not a photo. Please choose a JPEG, PNG, or WebP image.';
+  }
+  return 'Unsupported photo format. Please use JPEG, PNG, or WebP.';
+}
+
+// Split a FileList into the files we can actually decode and a per-file
+// reason for the rest, so multi-file flows can proceed with the good ones
+// instead of failing the whole batch.
+function _partitionScanFiles(files) {
+  const okFiles = [], rejected = [];
+  for (const f of (files || [])) {
+    const err = _validateScanFile(f);
+    if (err) rejected.push({ file: f, name: (f && f.name) || 'photo', error: err });
+    else okFiles.push(f);
+  }
+  return { okFiles, rejected };
+}
+
 async function processScanImage(input) {
   const file = input.files[0];
   if (!file) return;
+
+  const fileError = _validateScanFile(file);
+  if (fileError) {
+    if (typeof showToast === 'function') showToast(fileError, 'info');
+    input.value = '';
+    return;
+  }
 
   if (!window.googleUser) { openScanner(); return; }
 
@@ -17082,8 +17133,19 @@ async function processScanImage(input) {
       window._lastPhotoQC = qc; // for debug
     }
   } catch (qcErr) {
-    console.warn('[processScanImage] photo QC failed non-fatally:', qcErr);
-    // On QC failure, don't block the user — fall through to the scan.
+    // 2026-09-04: this used to warn and fall through to /api/scan, which meant
+    // a device where canvas/ImageBitmap/QC breaks could submit a photo we were
+    // never able to validate — quietly voiding the "rejected before you're
+    // charged" guarantee. Fail closed instead: no credit is spent on a photo
+    // we could not read.
+    console.warn('[processScanImage] photo QC failed:', qcErr);
+    statusEl.innerHTML = '<span style="color:#f87171;font-weight:700">We could not read this photo</span>';
+    resultEl.innerHTML = '<div style="font-size:.85rem;color:rgba(255,255,255,.7);margin-bottom:.75rem">Use a JPEG, PNG, or WebP photo and try again. No credit was used.</div>' +
+      '<button onclick="cancelScan();setTimeout(()=>_startSingleScanCapture(),100)" style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Retake photo</button>';
+    try { _setScanBtns('error'); } catch(_) {}
+    try { URL.revokeObjectURL(objectUrl); } catch(_) {}
+    try { if (window.va) va('track', 'photo_qc_error'); } catch(_) {}
+    return;
   }
 
   // ── FAST PATH: try client-side pHash against 20k-card index ──
@@ -18030,6 +18092,13 @@ async function processGradeImage(input) {
   const file = input.files[0];
   if (!file) return;
 
+  const fileError = _validateScanFile(file);
+  if (fileError) {
+    if (typeof showToast === 'function') showToast(fileError, 'info');
+    input.value = '';
+    return;
+  }
+
   if (!window.googleUser) { openGradeScanGate(); return; }
 
   if (!window._googleIdToken) {
@@ -18067,6 +18136,13 @@ async function processGradeImage(input) {
 async function processGradeBack(input) {
   const file = input.files[0];
   if (!file) return;
+
+  const fileError = _validateScanFile(file);
+  if (fileError) {
+    if (typeof showToast === 'function') showToast(fileError, 'info');
+    input.value = '';
+    return;
+  }
 
   const statusEl = document.getElementById('scanStatus');
   const resultEl = document.getElementById('scanResult');
@@ -18139,6 +18215,13 @@ function showDeepGradeEdgeUI() {
 async function processGradeEdge(input, edgeKey) {
   const file = input.files[0];
   if (!file) return;
+
+  const fileError = _validateScanFile(file);
+  if (fileError) {
+    if (typeof showToast === 'function') showToast(fileError, 'info');
+    input.value = '';
+    return;
+  }
   window._gradeEdges = window._gradeEdges || {};
   const b64 = await compressImage(file, 1000);
   window._gradeEdges[edgeKey] = b64;
@@ -22886,8 +22969,15 @@ function startBulkGradeCamera() {
 }
 
 function processBulkGradeFiles(input) {
-  const files = Array.from(input.files || []);
+  const allFiles = Array.from(input.files || []);
   input.value = '';
+  if (!allFiles.length) return;
+
+  const { okFiles: files, rejected } = _partitionScanFiles(allFiles);
+  if (rejected.length) {
+    const extra = rejected.length > 1 ? ' (' + rejected.length + ' photos skipped)' : '';
+    if (typeof showToast === 'function') showToast(rejected[0].error + extra, 'info');
+  }
   if (!files.length) return;
 
   const mode = window._bulkGradeMode || 'quick';
@@ -23960,9 +24050,18 @@ function startBulkUpload() {
 }
 
 function processBulkUploadFiles(input) {
-  const files = Array.from(input.files || []);
-  if (!files.length) return;
+  const allFiles = Array.from(input.files || []);
+  if (!allFiles.length) return;
   input.value = '';
+
+  // Drop what we cannot decode BEFORE the credit-confirm screen quotes a
+  // price, so the user is never asked to pay for photos we will fail on.
+  const { okFiles: files, rejected } = _partitionScanFiles(allFiles);
+  if (rejected.length) {
+    const extra = rejected.length > 1 ? ' (' + rejected.length + ' photos skipped)' : '';
+    if (typeof showToast === 'function') showToast(rejected[0].error + extra, 'info');
+  }
+  if (!files.length) return;
 
   window._bulkQueue = files.map(f => ({ file: f, objectUrl: URL.createObjectURL(f) }));
 
@@ -24201,7 +24300,20 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   if (type === 'yugioh' || type === 'ygo') return _bulkFetchPriceYGO(cleanName);
   if (type === 'lorcana') return _bulkFetchPriceLorcana(cleanName, cleanNumber, setName, cleanRarity);
   if (type === 'onepiece') return _bulkFetchPriceOnePiece(cleanName, cleanNumber, setName, cleanRarity);
-  if (type === 'sports') return null;   // Sports cards route through eBay only — no card DB.
+  if (type === 'sports') {
+    // 2026-09-04: this returned bare null, so the row rendered the generic
+    // "Price unavailable" — indistinguishable from "we looked and found
+    // nothing". No lookup runs at all here: sports has no card database, and
+    // the priced route is the detail view's sportscardspro/eBay search. Say
+    // that, instead of implying an empty result.
+    return {
+      marketPrice: null,
+      variant: '',
+      imageUrl: '',
+      tcgplayerUrl: '',
+      unavailableReason: 'Sports pricing lives in the card details — tap 🔍 for live comps.'
+    };
+  }
   // Pokemon Japan (isJapanese=true) goes through tcgcsv catalog 85 first.
   if (isJapanese) {
     const jp = await _bulkFetchPricePokemonJP(cleanName, cleanNumber, setName, cleanRarity);
@@ -24656,6 +24768,7 @@ async function _bulkScanOne(item, rowId, isRetry) {
         result.success    = true;
         result.cardName   = data.card_name   || '';
         result.setName    = data.set_name    || '';
+        result.setCode    = data.set_code    || ''; // 2026-09-04: was dropped, so bulk-saved rows had no set identity
         result.cardNumber = data.card_number || '';
         result.rarity     = data.rarity      || '';
         result.cardType   = data.card_type   || 'pokemon'; // 'pokemon'|'mtg'|'yugioh'|'lorcana'|'onepiece'|'sports'
@@ -24671,6 +24784,8 @@ async function _bulkScanOne(item, rowId, isRetry) {
           result.priceVariant = priceInfo.variant;
           result.imageUrl     = priceInfo.imageUrl;
           result.tcgplayerUrl = priceInfo.tcgplayerUrl;
+          // Why there is no price, when the fetcher knows (e.g. sports).
+          result.unavailableReason = priceInfo.unavailableReason || '';
         }
       } else {
         result.error = 'Could not identify card';
@@ -24792,6 +24907,25 @@ function _bulkFindResult(rowId) {
   return (window._bulkResults || []).find(r => r.rowId === rowId);
 }
 
+/* Map a row's failure to advice that is actually true for that failure.
+   Every row used to read "Try a clearer photo", including rows that failed
+   because the network dropped, the session expired, we were rate-limited, or
+   the response was malformed — none of which the photo can fix. */
+function _bulkErrorHint(error) {
+  const e = String(error || '').toLowerCase();
+  // Parse errors read "Unexpected token <", so match the parse shape first
+  // rather than letting the bare word "token" claim it for auth.
+  if (/json|parse|unexpected token|malformed/.test(e))  return 'We got a bad response — retry this row.';
+  if (/auth|401|sign in|signin|id token|expired/.test(e)) return 'Sign in again to finish this batch.';
+  if (/too many|429|rate/.test(e))                      return 'We hit a rate limit — retry in a moment.';
+  if (/credit/.test(e))                                 return 'Out of credits — top up to scan the rest.';
+  if (/network|offline|fetch|connection|dns/.test(e))    return 'Check your connection, then retry.';
+  if (/timeout|timed out|abort/.test(e))                return 'The request timed out — retry this row.';
+  if (/server|500|502|503|504/.test(e))                 return 'Our scanner is having trouble — retry shortly.';
+  // The genuinely photo-shaped failures: no identification came back.
+  return 'Try a clearer photo with the full card visible.';
+}
+
 function _bulkUpdateRow(rowId, result) {
   const row = document.getElementById(rowId);
   if (!row) return;
@@ -24805,7 +24939,7 @@ function _bulkUpdateRow(rowId, result) {
       ? `<span style="color:var(--gold);font-weight:700">$${result.marketPrice.toFixed(2)}</span>` +
         (result.priceVariant ? `<span style="color:rgba(255,255,255,.35);font-size:.68rem"> · ${_esc(formatVariantName(result.priceVariant))}</span>` : '') +
         ` <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`
-      : `<span style="color:rgba(255,255,255,.3)">Price unavailable</span> <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`;
+      : `<span style="color:rgba(255,255,255,.3)">${_esc(result.unavailableReason || 'Price unavailable')}</span> <button onclick="bulkEditPrice('${rowId}')" title="Enter price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`;
     const setStr = [result.setName, result.cardNumber ? '#' + result.cardNumber : ''].filter(Boolean).join(' ');
     const cond = result.condition || 'NM';
 
@@ -24835,7 +24969,7 @@ function _bulkUpdateRow(rowId, result) {
       <img src="${_esc(result.objectUrl || '')}" style="width:44px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;opacity:.4" alt="Card" />
       <div style="flex:1;min-width:0">
         <div style="font-size:.78rem;color:rgba(255,255,255,.35)">${_esc(result.error || 'Could not identify')}</div>
-        <div style="font-size:.68rem;color:rgba(255,255,255,.2);margin-top:.1rem">Try a clearer photo</div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.2);margin-top:.1rem">${_esc(_bulkErrorHint(result.error))}</div>
         ${retryBtn}
       </div>
       <span style="color:#f87171;font-size:.9rem;flex-shrink:0">✗</span>`;
@@ -25180,7 +25314,9 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
         card: r.cardName,
         set: setStr,
         buyPrice,
-        currentValue: r.marketPrice || null,
+        // 2026-09-04: `r.marketPrice || null` turned a legitimate $0.00 comp
+        // into "no price". Only null/undefined mean "not fetched".
+        currentValue: (typeof r.marketPrice === 'number') ? r.marketPrice : null,
         condition: r.condition || 'NM',
         addedDate: today,
         source: 'bulk-scan',
@@ -25192,7 +25328,25 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
         // "List on TCGplayer" work as well as the single-add path.
         number: r.cardNumber || '',
         tcgplayerUrl: r.tcgplayerUrl || '',
-        lastRefreshed: r.marketPrice ? new Date().toISOString() : null
+        // 2026-09-04: bulk-save dropped every identity field the single-add
+        // path persists, so a bulk-added card opened "View full card" with no
+        // game context and re-priced through a wildcard text search -- the
+        // exact failure that made a Lorcana "Hades 74" come back as a Pokemon
+        // Inkay. Carry the same set the scanner already handed us.
+        game:       r.cardType === 'pokemonjp' ? 'pokemonjp' : (r.cardType || ''),
+        cardType:   r.cardType === 'pokemonjp' ? 'pokemon'   : (r.cardType || ''),
+        setCode:    r.setCode || '',
+        groundedId: r.groundedId || '',
+        rarity:     r.rarity || '',
+        isJapanese: r.isJapanese === true,
+        // Bulk ID has no grade picker, so these are honestly empty rather than
+        // absent -- the Collection renderer branches on presence.
+        grader: null,
+        grade:  null,
+        // Sports-only identity, used by the detail view's comp search.
+        sport: r.sport || '',
+        year:  r.year || '',
+        lastRefreshed: (typeof r.marketPrice === 'number') ? new Date().toISOString() : null
       });
       added++;
     }
