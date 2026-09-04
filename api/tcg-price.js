@@ -19,9 +19,29 @@ const CACHE_TTL_SEC = 30 * 60; // 30 min
 // true  = REFUSE (caller named a number, resolver reports a different one)
 // false = admit. Silence on either side is admissible: a null number means
 //         "cannot verify", not "verified wrong".
+// 2026-09-04 (Minun #194): TCGCSV stores the printed number in full form,
+// "194/182", while the scanner reports the numerator alone, "194". Comparing
+// the raw strings called that a mismatch and threw away a correct, exactly
+// matched product -- /api/tcg-price answered `number_mismatch` with
+// matchedName "Minun - 194/182", which IS the requested card. That removed the
+// fallback the bulk scanner relies on when pokemontcg.io flakes.
+//
+// Normalise to the numerator: within one set the numerator is unique, so
+// dropping the "/total" denominator cannot merge two different cards. Letter
+// prefixes ("TG03", "SWSH194") and suffixes ("179a") are preserved, because
+// those DO distinguish separate cards.
+function tcgNormalizeNumber(v) {
+  return String(v || '')
+    .trim()
+    .toLowerCase()
+    .split('/')[0]        // "194/182" -> "194"; "tg03/tg30" -> "tg03"
+    .replace(/^0+(?=\d)/, '')  // "093" -> "93", but "0" stays "0"
+    .trim();
+}
+
 function tcgNumberMismatch(requested, resolved) {
-  const want = String(requested || '').trim().toLowerCase().replace(/^0+/, '');
-  const got  = String(resolved  || '').trim().toLowerCase().replace(/^0+/, '');
+  const want = tcgNormalizeNumber(requested);
+  const got  = tcgNormalizeNumber(resolved);
   if (!want || !got) return false;
   return want !== got;
 }

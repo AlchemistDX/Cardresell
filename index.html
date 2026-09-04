@@ -24281,6 +24281,32 @@ const BULK_CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 const BULK_CONDITION_LABELS = { NM: 'Near Mint', LP: 'Lightly Played', MP: 'Moderately Played', HP: 'Heavily Played', DMG: 'Damaged' };
 const BULK_VARIANT_PRIORITY = ['holofoil', 'reverseHolofoil', 'normal', 'firstEditionHolofoil', 'firstEditionNormal', 'firstEdition'];
 
+// 2026-09-04 (Minun #194 misfire): a bulk row showed the scanner's identity
+// ("Minun - Paradox Rift #194") next to a price and thumbnail belonging to a
+// completely different card (POP Series 3 #4, $50.00, 2006 art). The match
+// step took the top-scored candidate unconditionally, so when every candidate
+// scored ZERO -- wrong number, wrong set, wrong rarity -- the sort was stable
+// and the first arbitrary printing won. A row that corroborates nothing about
+// the scanned card must not be shown as that card.
+//
+// Corroboration means the candidate agrees with the scanner on the number or
+// on the set. Rarity alone is not enough: "Illustration Rare" is shared by
+// hundreds of cards and would have re-admitted a wrong printing. When the
+// scanner gave us neither a number nor a set there is nothing to contradict,
+// so the candidate is allowed through.
+function _bulkCandidateCorroborated(cand, targetSetName, targetNumber) {
+  const wantNum = String(targetNumber || '').replace(/^0+/, '').toLowerCase().trim();
+  const wantSet = String(targetSetName || '').trim();
+  if (!wantNum && !wantSet) return true;
+  if (wantNum) {
+    const cn = String(cand?.number || '').replace(/^0+/, '').toLowerCase().trim();
+    // "179a" vs "179" is the same card with a variant suffix; accept it.
+    if (cn && (cn === wantNum || cn.replace(/[a-z]/g, '') === wantNum)) return true;
+  }
+  if (wantSet && _bulkSetMatchScore(cand?.set?.name, wantSet) >= 2) return true;
+  return false;
+}
+
 function _bulkSetMatchScore(candidateSetName, targetSetName) {
   const a = (candidateSetName || '').toLowerCase().trim();
   const b = (targetSetName || '').toLowerCase().trim();
@@ -24303,7 +24329,11 @@ async function _bulkFetchPokemonCards(q, timeoutMs) {
   // backoff — this recovers the vast majority of these transient failures
   // and keeps the scanned card's proper image + market price instead of
   // silently falling back to the user's raw photo.
-  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=10&select=id,name,set,number,rarity,images,tcgplayer`;
+  // 2026-09-04 (Minun #194): pageSize was 10. `name:"Minun"` returns 20
+  // printings and Paradox Rift #194 is the LAST one, so the correct card was
+  // truncated out of the candidate list before scoring ever ran and the row
+  // rendered POP Series 3 #4 ($50.00, 2006 art) instead. Ask for the full set.
+  const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=250&select=id,name,set,number,rarity,images,tcgplayer`;
   const attempt = async () => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs || 7000);
@@ -24596,8 +24626,16 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // returning zero matches (e.g. AI mis-read the number, or the card uses
     // an alphanumeric suffix like "179a"). Falling through to name-only
     // recovers the image + price for the vast majority of these.
+    // 2026-09-04 (Minun #194): probing pokemontcg.io six times per form, every
+    // form flaked about a third of the time, and the number query sometimes
+    // returned an empty HTTP 200 -- indistinguishable from "no such card", so
+    // the code fell through to the bare-name query and matched the wrong
+    // printing. Add a set-scoped query in between: it is far more selective
+    // than name-only, and it still answers when the number query comes back
+    // empty. The bare-name query stays last as the widest net.
     const queries = [];
     if (cleanNumber) queries.push(`name:"${cleanName}" number:"${cleanNumber}"`);
+    if (setName) queries.push(`name:"${cleanName}" set.name:"${String(setName).replace(/"/g, '')}"`);
     queries.push(`name:"${cleanName}"`);
 
     let cards = null;
@@ -24655,8 +24693,18 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
       if (!targetNumRaw) return 0;
       const cn = String(cand.number || '').replace(/^0+/, '').toLowerCase();
       if (!cn) return 0;
-      if (cn === targetNumRaw) return 10;                // exact
-      if (cn.replace(/[a-z]/g,'') === targetNumRaw) return 8; // "179a" vs "179"
+      // 2026-09-04: these were 10 and 8, BELOW the rarity weight of 15. That
+      // let a rarity guess beat the printed card number: scanning Okidogi ex
+      // #90 (Special Illustration Rare, $22.63) while the scanner reported
+      // "Double Rare" selected Shrouded Fable #36 ($0.89), because #36 scored
+      // 0+3+15=18 against #90's 10+3+0=13. The number is printed on the card
+      // in plain digits; the rarity is inferred from the art treatment, so the
+      // number is the more trustworthy signal and must dominate. Rarity still
+      // decides between candidates that share a number -- base Crobat #93 vs
+      // Illustration Rare Crobat #093 both score 30 here and are separated by
+      // rarity, which is the case the rarity weight was added for.
+      if (cn === targetNumRaw) return 30;                // exact
+      if (cn.replace(/[a-z]/g,'') === targetNumRaw) return 24; // "179a" vs "179"
       return 0;
     }
     function _rarityScore(cand) {
@@ -24680,6 +24728,38 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
                  .sort((x, y) => y.score - x.score);
     const best = cards[0].c;
     if (!best) return null;
+
+    // Guard the winner. Before this check the top candidate was accepted even
+    // when it agreed with nothing, which is exactly how a Paradox Rift scan
+    // rendered a POP Series 3 price and image.
+    if (!_bulkCandidateCorroborated(best, setName, cleanNumber)) {
+      try {
+        const rMis = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${cleanRarity ? '&rarity=' + encodeURIComponent(cleanRarity) : ''}`, { signal: AbortSignal.timeout(7000) });
+        if (rMis.ok) {
+          const dMis = await rMis.json();
+          if (dMis && dMis.market > 0) {
+            return {
+              marketPrice: dMis.market,
+              variant: dMis.variant || 'tcgplayer_live',
+              imageUrl: dMis.imageUrl || null,
+              tcgplayerUrl: dMis.url || null,
+              matchedSet: dMis.setName || null,
+              matchedNumber: dMis.cardNumber || null,
+              prices: {},
+            };
+          }
+        }
+      } catch (_) {}
+      // Deliberately no price and no image: showing another card's money and
+      // artwork under this card's name is worse than showing neither.
+      return {
+        marketPrice: null,
+        variant: '',
+        imageUrl: '',
+        tcgplayerUrl: '',
+        unavailableReason: 'Couldn\u2019t confirm this exact printing \u2014 tap \uD83D\uDD0D for live comps.'
+      };
+    }
 
     const prices = best.tcgplayer?.prices || {};
     const priceMap = {};

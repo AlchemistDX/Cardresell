@@ -962,14 +962,34 @@ try {
   // happily when the enclosing `if` was replaced with `if (false)`. Mutation
   // testing caught that on 2026-09-04. Run the real predicate instead.
   {
-    const src = tcgPrice.slice(tcgPrice.indexOf('function tcgNumberMismatch'));
-    let end = 0, d = 0;
-    for (let i = src.indexOf('{'); i < src.length; i++) {
-      if (src[i] === '{') d++;
-      else if (src[i] === '}') { d--; if (!d) { end = i + 1; break; } }
-    }
+    // 2026-09-04: tcgNumberMismatch was refusing "194" against TCGCSV's
+    // "194/182" -- the same card -- which killed the bulk scanner's fallback
+    // and let a wrong printing render. It now delegates to
+    // tcgNormalizeNumber, so both functions have to be extracted or the
+    // predicate throws ReferenceError.
+    const grab = (sig) => {
+      const src = tcgPrice.slice(tcgPrice.indexOf(sig));
+      let d = 0;
+      for (let i = src.indexOf('{'); i < src.length; i++) {
+        if (src[i] === '{') d++;
+        else if (src[i] === '}') { d--; if (!d) return src.slice(0, i + 1); }
+      }
+      return '';
+    };
+    const normSrc = grab('function tcgNormalizeNumber');
+    const mismSrc = grab('function tcgNumberMismatch');
+    check('the number normaliser is present', normSrc.length > 0);
+    check('the number guard is present', mismSrc.length > 0);
     const mismatch = new Function(
-      src.slice(0, end) + '\nreturn tcgNumberMismatch;')();
+      normSrc + '\n' + mismSrc + '\nreturn tcgNumberMismatch;')();
+
+    // The Minun regression itself: the printed number and the full "n/total"
+    // form are the same card and must not be refused.
+    check('a numerator matches the printed "n/total" form',
+          mismatch('194', '194/182') === false,
+          'refusing this threw away a correct, exactly-matched product');
+    check('a different card in the same set is still refused',
+          mismatch('194', '61/182') === true);
 
     check('a wrong collector number is refused (Miraidon #197 vs #013)',
           mismatch('197', '013') === true,
