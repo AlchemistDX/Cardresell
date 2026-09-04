@@ -290,6 +290,24 @@ function pcIdentityRejection(opts) {
   if (!pcNumberMatches(number, productName)) {
     reasons.push(`number mismatch: asked '${number}', got '${productName}'`);
   }
+  // Sealed-product guard. The individual matchers deliberately admit a
+  // candidate whose name carries no number token ("cannot disprove"), because
+  // PriceCharting sometimes omits the number in real card rows. But when the
+  // caller specified a number and the candidate is something like "League
+  // Battle Deck: Miraidon Ex" or "Booster Box" -- no number AND clear sealed-
+  // product wording -- admitting it is wrong. Prod, 2026-09-04:
+  //   Miraidon #197 -> "League Battle Deck: Miraidon Ex" at $20.98.
+  // The name matched (Miraidon is a whole token in both) and the number was
+  // unverifiable, so the composite admitted it. Refuse when we asked for a
+  // specific number, the candidate reports none, and the product wording is
+  // sealed / non-single.
+  const want = String(number || '').trim();
+  if (want && pcNumberOf(productName) == null) {
+    const s = String(productName || '').toLowerCase();
+    if (/\b(?:booster\s*(?:box|bundle|pack)|elite\s*trainer\s*box|etb|league\s*battle\s*deck|battle\s*deck|theme\s*deck|starter\s*deck|premium\s*collection|collection\s*box|tin(?:\s*box)?|blister|three[- ]pack|3[- ]pack)\b/.test(s)) {
+      reasons.push(`caller asked for card #${want} but got a sealed product ('${productName}')`);
+    }
+  }
   return reasons.length ? reasons : null;
 }
 
@@ -495,7 +513,7 @@ export default async function handler(req, res) {
   // changes do not invalidate KV on their own -- the key must move with them.
   // v8 (2026-09-04): identity guard changes WHICH product may be priced, so
   // every v7 entry that admitted a mismatched card must be invalidated.
-  const cacheKey = `v8|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
+  const cacheKey = `v9|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {

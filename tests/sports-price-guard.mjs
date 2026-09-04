@@ -132,7 +132,7 @@ const hostChecks = [
   // current version AND that every superseded one is absent, so the check
   // still catches a missing bump but survives a legitimate one.
   ['cache key bumped past v6',
-   /const cacheKey = `v8\|/.test(src) && !/const cacheKey = `v[1-7]\|/.test(src)],
+   /const cacheKey = `v9\|/.test(src) && !/const cacheKey = `v[1-8]\|/.test(src)],
   ['parallel is part of the cache key',
    /const cacheKey = `v\d+\|[^`]*\$\{parallel\}/.test(src)],
   // The identity guard reaches the response path at all.
@@ -240,6 +240,56 @@ const idCases = [
   // Evolution lines are different cards at the same number.
   ['Charizard V does not accept Charizard VMAX',
    () => pokemon('Charizard V', '17', 'Charizard VMAX #17') === true],
+
+  // Sealed-product guard: the caller asked for a specific card number and the
+  // resolved candidate has no number AND clear sealed-product wording. Prod
+  // returned Miraidon #197 as "League Battle Deck: Miraidon Ex" at $20.98.
+  ['sealed "League Battle Deck" refused when a card number was asked',
+   () => pokemon('Miraidon', '197', 'League Battle Deck: Miraidon Ex') === true],
+  ['a Booster Box is not a card',
+   () => pokemon('Ho-Oh', '130', 'Booster Box') === true
+      && pokemon('Charizard', '4', 'Base Set Booster Box') === true],
+  ['Elite Trainer Box, ETB, Tin, Blister all refused',
+   () => pokemon('Pikachu', '58', 'Base Set Elite Trainer Box') === true
+      && pokemon('Pikachu', '58', 'Silver Tempest ETB') === true
+      && pokemon('Charizard', '4', 'Charizard Tin') === true
+      && pokemon('Pikachu', '58', '3-Pack Blister') === true],
+  ['Theme Deck / Starter Deck / Premium Collection refused',
+   () => pokemon('Charizard', '4', 'Blackout Theme Deck') === true
+      && pokemon('Pikachu', '58', 'Base Set Starter Deck') === true
+      && pokemon('Mew', '151', 'Mew Premium Collection') === true],
+
+  // The sealed guard only fires when a number was asked AND the candidate
+  // reports no number. These paths must stay open.
+  ['a legitimate card without a number in its listing still prices',
+   () => pokemon('Charizard', '4', 'Charizard') === false],
+  // If the sealed guard fires when it should not, this admits its true purpose
+  // by refusing a plain single card whose product name happens to CARRY a
+  // number, or a name-only search where no number was even asked.
+  ['sealed guard leaves numbered cards alone (Charizard #4)',
+   () => pokemon('Charizard', '4', 'Charizard #4') === false],
+  ['sealed guard leaves bracketed variants alone (1st Edition #4)',
+   () => pokemon('Charizard', '4', 'Charizard [1st Edition] #4') === false],
+  ['sealed guard does not fire on name-only lookups',
+   () => pokemon('Charizard', '', 'Charizard') === false],
+  // Word-boundary discipline. Dropping the \b would let "booster" match
+  // inside "turbooster" and "box" match inside "boxelder", flagging cards
+  // whose names contain sealed keywords as substrings. Asserted structurally
+  // -- an outcome test can't distinguish a \b-guarded match from a substring
+  // one when the surrounding regex still catches the same real cases.
+  ['sealed keywords are guarded by word boundaries',
+   () => /\\b\(\?:booster\\s\*\(\?:box\|bundle\|pack\)/.test(src)],
+  // Sealed guard only fires when a number was requested. This candidate does
+  // fail the name check ("Miraidon" is not in "Miraidon Base Set Etb") -- the
+  // point is that pcIdentityRejection's SEALED clause is not what refuses it.
+  ['name-only search does not trip the sealed clause',
+   () => {
+     const why = pcIdentityRejection({ game: 'pokemon', pcid: '', name: 'Miraidon',
+                                       number: '', productName: 'Miraidon Base Set' });
+     return why === null; // "Miraidon" matches, no number asked -> admit
+   }],
+  ['a numbered sealed listing does not need this guard (number check fires)',
+   () => pokemon('Charizard', '4', 'Charizard Box #99') === true],
 
   // Documented exemptions.
   ['sports is exempt (parallel logic owns identity there)',
