@@ -4214,6 +4214,80 @@ async function injectPokemonImages(cards, gameSlug) {
   });
 }
 
+// 2026-09-03: the upstream search does not honour a set name in the query.
+// "Charizard Base Set" came back with Base Set 2 (#004/130) ranked ABOVE Base
+// Set (#004/102), so the first dropdown row -- and anything that auto-picks
+// row 0 -- silently loaded the wrong Charizard. Every downstream price was
+// then correct for a card the user had not asked for, which is the worst kind
+// of wrong: nothing on screen looks broken.
+//
+// Re-rank locally on the set hint. This ONLY reorders; it never drops a row,
+// so a set hint we fail to parse can at worst leave the upstream order alone.
+// 2026-09-03: TPL nests the set as c.set.name -- there is NO c.set_name on a
+// TPL row. Every dropdown that read c.set_name therefore printed an EMPTY set
+// label, which is how "Charizard Base Set" could quietly load Base Set 2: the
+// one field that would have shown the user the difference was blank. Scryfall
+// and the scan API DO return a flat set_name, so this helper is applied only
+// on TPL rows and those call sites are left alone.
+function _tplSetName(c) {
+  if (!c) return '';
+  return c.set_name || (c.set && c.set.name) || '';
+}
+
+function _setHintScore(queryHint, setName) {
+  const norm = (s) => String(s || '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const hint = norm(queryHint);
+  const set  = norm(setName);
+  if (!hint || !set) return 0;
+
+  if (set === hint) return 100;              // "base set" -> Base Set
+
+  // Whole-token prefix. "base set" prefixes "base set 2", but must score
+  // BELOW an exact hit or Base Set 2 keeps winning. Longer tail = weaker.
+  if (set.startsWith(hint + ' ')) {
+    const extra = set.slice(hint.length).trim().split(' ').length;
+    return Math.max(50, 70 - extra * 5);
+  }
+  // Hint carries the longer name ("base set 2" typed, set is "Base Set") --
+  // a real but weaker signal than the two above.
+  if (hint.startsWith(set + ' ')) return 45;
+  if (set.includes(hint)) return 40;
+
+  // Fall back to token overlap so "team rocket" still beats an unrelated set.
+  const hv = hint.split(' '), sv = new Set(set.split(' '));
+  const hits = hv.filter(t => sv.has(t)).length;
+  return hits ? Math.round((hits / hv.length) * 30) : 0;
+}
+
+function _rankTplBySetHint(rows, q) {
+  if (!Array.isArray(rows) || rows.length < 2) return rows;
+  const norm = (s) => String(s || '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const nq = norm(q);
+  if (!nq) return rows;
+
+  // The set hint is whatever the query says beyond the matched card name. Use
+  // the LONGEST card name that the query actually contains, so "Charizard ex"
+  // is not mistaken for "Charizard" and its " ex" treated as a set.
+  let name = '';
+  for (const c of rows) {
+    const n = norm(c && c.name);
+    if (n && nq.includes(n) && n.length > name.length) name = n;
+  }
+  const hint = (name ? nq.replace(name, ' ') : nq).replace(/\s+/g, ' ').trim();
+  // No hint means the user typed a bare card name -- upstream relevance order
+  // is as good as anything we could invent, so leave it untouched.
+  if (!hint) return rows;
+
+  // Decorate-sort-undecorate keeps ties in upstream order (Array#sort is only
+  // guaranteed stable in modern engines; the index tiebreak makes it explicit).
+  return rows
+    .map((c, i) => ({ c, i, s: _setHintScore(hint, c && (c.set_name || (c.set && c.set.name))) }))
+    .sort((a, b) => (b.s - a.s) || (a.i - b.i))
+    .map(x => x.c);
+}
+
 async function searchWithTPL(q, gameSlug) {
   if (!window.tplApiKey) return null;
   try {
@@ -4222,7 +4296,8 @@ async function searchWithTPL(q, gameSlug) {
     const r = await fetch(url);
     if (!r.ok) return null;
     const json = await r.json();
-    return (json.data && json.data.length) ? json.data : null;
+    if (!(json.data && json.data.length)) return null;
+    return _rankTplBySetHint(json.data, q);
   } catch(e) {
     console.warn('TPL search error:', e);
     return null;
@@ -5044,7 +5119,7 @@ async function searchPokemonJP(q) {
         <div class="drop-thumb-ph">🃏</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL JP</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL JP</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`);
@@ -5163,7 +5238,7 @@ async function searchMTG(q) {
         <div class="drop-thumb-ph">✨</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5263,7 +5338,7 @@ async function searchLorcana(q) {
         ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
         </div>
         ${nmPrice!==null?`<span class="drop-price">$${nmPrice.toFixed(2)}</span>`:`<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5347,7 +5422,7 @@ async function searchOnePiece(q) {
         ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">⚓</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name||'')}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
         </div>
         ${nmPrice!==null?`<span class="drop-price">$${nmPrice.toFixed(2)}</span>`:`<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5389,7 +5464,7 @@ async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
       ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">${emoji}</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
-        <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+        <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
       </div>
       ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
     </div>`;
@@ -5416,7 +5491,7 @@ async function searchYugioh(q) {
         <div class="drop-thumb-ph">🐉</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set_name || '')}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`;

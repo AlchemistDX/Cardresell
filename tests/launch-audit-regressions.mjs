@@ -1283,5 +1283,69 @@ try {
         'quietly sorting a published value would misstate the source');
 }
 
+// ── Set-hint ranking + the TPL set-name field shape ───────────────────
+// 2026-09-03: "Charizard Base Set" loaded Base Set 2 (#004/130). Two bugs
+// compounded. (a) The upstream search ignores a set name in the query and
+// ranked Base Set 2 above Base Set, and row 0 is what gets auto-picked.
+// (b) Every TPL dropdown read c.set_name, which does not exist on a TPL row
+// (the set is nested at c.set.name), so the set label was blank -- removing
+// the one cue that would have shown the user the wrong card. Downstream
+// prices were all internally consistent, just for a card nobody asked for.
+{
+  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+
+  check('the set-hint ranker exists and is applied to TPL search results',
+        /function _rankTplBySetHint/.test(idx)
+          && /return _rankTplBySetHint\(json\.data, q\)/.test(idx),
+        'ranking that is never called cannot fix row 0');
+
+  // Exact set match MUST outrank a longer set that merely starts with the
+  // hint, or Base Set 2 wins again -- this is the entire bug.
+  check('an exact set match scores above a longer prefix match',
+        /if \(set === hint\) return 100/.test(idx)
+          && /Math\.max\(50, 70 - extra \* 5\)/.test(idx),
+        'exact must beat prefix or "Base Set" keeps loading Base Set 2');
+
+  // Reordering only. A ranker that filters could hide the right card entirely.
+  check('the ranker never drops rows',
+        !/\.filter\(/.test(idx.slice(idx.indexOf('function _rankTplBySetHint'),
+                                    idx.indexOf('async function searchWithTPL'))),
+        'a mis-parsed hint must degrade to upstream order, not to fewer results');
+
+  // A bare card name has no hint; inventing an order there would be worse
+  // than upstream relevance.
+  check('a bare card name leaves upstream order untouched',
+        /if \(!hint\) return rows/.test(idx),
+        'with no set hint there is nothing to rank on');
+
+  // "Charizard ex" must not be read as card "Charizard" + set "ex".
+  check('the longest matching card name wins when deriving the hint',
+        /n\.length > name\.length/.test(idx),
+        'otherwise "Charizard ex" treats " ex" as a set hint');
+
+  check('ties keep upstream order via an explicit index tiebreak',
+        /\(b\.s - a\.s\) \|\| \(a\.i - b\.i\)/.test(idx),
+        'unstable ties would reshuffle equal-scoring rows run to run');
+
+  // The field-shape fix.
+  check('a TPL set-name helper exists and reads the nested set',
+        /function _tplSetName/.test(idx) && /c\.set && c\.set\.name/.test(idx),
+        'c.set_name alone is always empty on a TPL row');
+  check('no TPL dropdown still reads a bare c.set_name',
+        !/TPL[^\n]*$/m.test('') && (() => {
+          // Every line that renders a TPL badge must not read a bare c.set_name.
+          const bad = idx.split('\n').filter(l =>
+            />TPL( JP)?</.test(l) && /c\.set_name/.test(l) && !/_tplSetName|c\.set\?\.name|c\.set &&/.test(l));
+          return bad.length === 0;
+        })(),
+        'a blank set label is what let the wrong Charizard through unnoticed');
+
+  // Scryfall and the scan API DO return a flat set_name -- the helper must
+  // not have been sprayed over those call sites.
+  check('the Scryfall path still reads its own flat set_name',
+        /setName: c\.set_name \|\| '',/.test(idx),
+        'over-applying the TPL helper would blank the MTG set label instead');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
