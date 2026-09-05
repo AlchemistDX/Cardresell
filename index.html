@@ -19,7 +19,7 @@
   <style>
 /* ─── SETTINGS PANEL ─── */
 /* ─── SCAN BUTTON ─── */
-.scan-btn{display:flex;align-items:center;gap:.4rem;padding:.55rem .85rem;background:var(--surface);border:1.5px solid var(--gold-border);border-radius:var(--radius-lg);font-size:.82rem;font-weight:700;color:var(--gold);white-space:nowrap;transition:all var(--ease);cursor:pointer}
+.scan-btn{display:flex;align-items:center;gap:.4rem;padding:.55rem .85rem;background:var(--surface);border:1.5px solid var(--gold-border);border-radius:var(--radius-lg);font-size:.82rem;font-weight:700;color:var(--gold-text);white-space:nowrap;transition:all var(--ease);cursor:pointer}
 .scan-btn:hover{background:var(--gold-hi);border-color:var(--gold)}
 .scan-btn:active{transform:scale(.97)}
 /* ─── SELL BUTTON ─── */
@@ -57,7 +57,7 @@
 .settings-panel{overflow:hidden;max-height:0;transition:max-height .3s cubic-bezier(.16,1,.3,1),opacity .25s ease;opacity:0;pointer-events:none}
 .settings-panel.open{max-height:80vh;overflow-y:auto;opacity:1;pointer-events:auto;-webkit-overflow-scrolling:touch}
 .settings-inner{background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--radius-lg);padding:1.1rem 1.25rem;margin-bottom:1.25rem;box-shadow:var(--shadow-md)}
-.settings-title{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.875rem}
+.settings-title{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.875rem}
 .settings-row{display:flex;gap:.5rem;align-items:stretch;margin-bottom:.75rem}
 .settings-input{flex:1;padding:.55rem .8rem;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);font-size:.83rem;font-family:var(--mono);outline:none;transition:border-color var(--ease)}
 .settings-input:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
@@ -67,14 +67,14 @@
 .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .status-dot.active{background:#4daa5e;box-shadow:0 0 0 3px rgba(77,170,94,.2)}
 .status-dot.inactive{background:var(--text-faint)}
-.settings-link{font-size:.75rem;color:var(--gold);text-decoration:none;font-weight:600}
+.settings-link{font-size:.75rem;color:var(--gold-text);text-decoration:none;font-weight:600}
 .settings-link:hover{text-decoration:underline}
 .settings-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-muted);background:var(--surface);transition:all var(--ease);font-size:.95rem}
-.settings-btn:hover{background:var(--surface-off);color:var(--gold)}
-.settings-btn.active{border-color:var(--gold);color:var(--gold);background:var(--gold-hi)}
+.settings-btn:hover{background:var(--surface-off);color:var(--gold-text)}
+.settings-btn.active{border-color:var(--gold);color:var(--gold-text);background:var(--gold-hi)}
 .badge-fulldb{font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:.2rem .55rem;border-radius:99px;background:var(--green-bg);color:var(--green);border:1px solid color-mix(in srgb,var(--green) 35%,transparent);display:none}
 .badge-fulldb.visible{display:inline}
-.tpl-lock-indicator{display:none;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;color:var(--gold);background:rgba(196,122,0,.1);border:1px solid var(--gold-border);border-radius:.4rem;padding:.25rem .55rem;white-space:nowrap;pointer-events:none}
+.tpl-lock-indicator{display:none;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;color:var(--gold-text);background:rgba(196,122,0,.1);border:1px solid var(--gold-border);border-radius:.4rem;padding:.25rem .55rem;white-space:nowrap;pointer-events:none}
 .tpl-lock-indicator.visible{display:flex}
 
 /* ─── TOKENS ─── */
@@ -91,6 +91,7 @@
   --text-inv:      #f8f7f4;
 
   --gold:          #c47a00;
+  --gold-text:     #8a5200;
   --gold-h:        #a36400;
   --gold-hi:       #fff3d6;
   --gold-border:   rgba(196,122,0,.28);
@@ -124,6 +125,7 @@
   --text-inv:      #18160f;
 
   --gold:          #e8a020;
+  --gold-text:     #e8a020;
   --gold-h:        #f0b030;
   --gold-hi:       #261c06;
   --gold-border:   rgba(232,160,32,.3);
@@ -235,9 +237,9 @@ img{display:block;max-width:100%;height:auto}
 .hdr{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 0 1.75rem;border-bottom:1px solid var(--divider);margin-bottom:1.75rem}
 .logo{display:flex;align-items:center;gap:.55rem}
 .logo-text{font-size:1.15rem;font-weight:800;letter-spacing:-.025em}
-.logo-text span{color:var(--gold)}
+.logo-text span{color:var(--gold-text)}
 .hdr-right{display:flex;align-items:center;gap:.75rem}
-.badge{font-size:.65rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:.2rem .55rem;border-radius:99px;background:var(--gold-hi);color:var(--gold);border:1px solid var(--gold-border)}
+.badge{font-size:.65rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:.2rem .55rem;border-radius:99px;background:var(--gold-hi);color:var(--gold-text);border:1px solid var(--gold-border)}
 .theme-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-muted);background:var(--surface);transition:all var(--ease)}
 .theme-btn:hover{background:var(--surface-off);color:var(--text)}
 /* Keep the conversion-critical Upgrade + Sign In controls readable on phones.
@@ -286,11 +288,11 @@ img{display:block;max-width:100%;height:auto}
    pluralization bug when it was really silent truncation. */
 .scan-sub-row{display:none;gap:.5rem;margin-top:.45rem;flex-wrap:wrap}
 .scan-sub-btn{display:flex;align-items:center;gap:.3rem;padding:.48rem .5rem;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.73rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease);flex:1 1 auto;min-width:fit-content;justify-content:center;white-space:nowrap}
-.scan-sub-btn.grade-sub{border-color:var(--gold-border);color:var(--gold)}
+.scan-sub-btn.grade-sub{border-color:var(--gold-border);color:var(--gold-text)}
 .scan-sub-btn.bulk-sub{border-color:rgba(139,92,246,.4);color:rgba(139,92,246,1)}
 .scan-sub-btn.bulk-sub:hover{background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.7);color:rgba(139,92,246,1)}
 @keyframes spin{to{transform:rotate(360deg)}}
-.scan-sub-btn:hover{background:var(--gold-hi);border-color:var(--gold);color:var(--gold)}
+.scan-sub-btn:hover{background:var(--gold-hi);border-color:var(--gold);color:var(--gold-text)}
 @media(max-width:820px){
   .search-row .scan-inline{display:none!important}
   .scan-sub-row{display:flex!important}
@@ -405,7 +407,7 @@ img{display:block;max-width:100%;height:auto}
 /* Pagination bar */
 .catalog-pagination{display:flex;align-items:center;justify-content:center;gap:.75rem;padding:.75rem 1rem;flex-shrink:0;border-top:1px solid var(--border);background:var(--surface)}
 .catalog-pg-btn{display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.5rem 1.1rem;background:var(--surface-2);border:1.5px solid var(--border);border-radius:var(--radius-lg);font-size:.82rem;font-weight:700;color:var(--text-muted);cursor:pointer;transition:all var(--ease)}
-.catalog-pg-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold)}
+.catalog-pg-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold-text)}
 .catalog-pg-btn:disabled{opacity:.3;cursor:not-allowed}
 .catalog-pg-info{font-size:.78rem;color:var(--text-muted);font-weight:600;min-width:90px;text-align:center}
 .catalog-coming-soon{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;gap:.75rem}
@@ -423,22 +425,22 @@ img{display:block;max-width:100%;height:auto}
    Sits next to the game dropdown because "which game" and "which venues" are
    the two things that reshape the whole comparison. */
 .venues-btn{display:inline-flex;align-items:center;gap:.4rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.4rem .75rem;font-size:.8rem;font-weight:600;color:var(--text);cursor:pointer;transition:border-color var(--ease),background var(--ease);white-space:nowrap}
-.venues-btn:hover{border-color:var(--gold);color:var(--gold)}
+.venues-btn:hover{border-color:var(--gold);color:var(--gold-text)}
 .venues-btn .vb-count{display:inline-flex;align-items:center;justify-content:center;min-width:1.15rem;height:1.15rem;padding:0 .28rem;border-radius:99px;background:var(--gold);color:#111;font-size:.66rem;font-weight:800;font-variant-numeric:tabular-nums}
 /* Chips: the at-a-glance answer to "what am I comparing?" */
 .venue-chips{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.5rem}
 .venue-chips:empty{display:none}
 .venue-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .55rem;border-radius:99px;border:1px solid var(--border);background:var(--surface);font-size:.7rem;font-weight:600;color:var(--text-muted);white-space:nowrap}
-.venue-chip.warn{border-color:var(--gold-border);color:var(--gold)}
+.venue-chip.warn{border-color:var(--gold-border);color:var(--gold-text)}
 .venue-chips .vc-edit{font-size:.7rem;font-weight:700;color:var(--text-faint);background:none;border:none;cursor:pointer;text-decoration:underline;padding:.22rem .2rem}
-.venue-chips .vc-edit:hover{color:var(--gold)}
+.venue-chips .vc-edit:hover{color:var(--gold-text)}
 /* Picker body */
 .vp-body{max-height:min(62vh,30rem);overflow-y:auto;margin:-.25rem -.25rem .25rem;padding:.25rem}
 .vp-group{margin-top:1rem}
 .vp-group:first-child{margin-top:0}
 .vp-group-hdr{display:flex;align-items:baseline;gap:.45rem;padding-bottom:.4rem;border-bottom:1px dashed var(--border);margin-bottom:.5rem}
 .vp-group-hdr .vg-label{font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text)}
-.vp-group-hdr .vg-lock{font-size:.62rem;font-weight:700;color:var(--gold);letter-spacing:.04em}
+.vp-group-hdr .vg-lock{font-size:.62rem;font-weight:700;color:var(--gold-text);letter-spacing:.04em}
 .vp-group-sub{font-size:.7rem;color:var(--text-muted);margin:-.3rem 0 .5rem;line-height:1.4}
 .vp-row{display:flex;align-items:flex-start;gap:.6rem;padding:.45rem .5rem;border-radius:var(--radius-md);cursor:pointer;transition:background var(--ease)}
 .vp-row:hover{background:var(--surface-2)}
@@ -448,15 +450,15 @@ img{display:block;max-width:100%;height:auto}
 .vp-row .vr-note{font-size:.68rem;color:var(--text-faint);line-height:1.35;margin-top:.1rem}
 .vp-row.locked{opacity:.55;cursor:pointer}
 .vp-row.locked:hover{opacity:.8}
-.vr-badge{font-size:.6rem;font-weight:800;letter-spacing:.04em;padding:.1rem .35rem;border-radius:.25rem;background:var(--gold-hi);color:var(--gold);border:1px solid var(--gold-border);white-space:nowrap}
+.vr-badge{font-size:.6rem;font-weight:800;letter-spacing:.04em;padding:.1rem .35rem;border-radius:.25rem;background:var(--gold-hi);color:var(--gold-text);border:1px solid var(--gold-border);white-space:nowrap}
 .vp-ship{margin-top:.5rem;padding:.6rem .7rem;border:1px solid var(--gold-border);background:var(--gold-hi);border-radius:var(--radius-md)}
-.vp-ship label{display:block;font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:.3rem}
+.vp-ship label{display:block;font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.3rem}
 .vp-ship input{width:100%;padding:.45rem .7rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);font-size:.85rem;color:var(--text);font-family:var(--mono);outline:none}
 .vp-ship input:focus{border-color:var(--gold)}
 .vp-ship .vs-help{font-size:.66rem;color:var(--text-muted);margin-top:.3rem;line-height:1.4}
 .vp-foot{display:flex;gap:.5rem;align-items:center;margin-top:1rem;flex-wrap:wrap}
 .vp-foot .vp-reset{background:none;border:none;color:var(--text-faint);font-size:.72rem;font-weight:700;text-decoration:underline;cursor:pointer;padding:.4rem 0}
-.vp-foot .vp-reset:hover{color:var(--gold)}
+.vp-foot .vp-reset:hover{color:var(--gold-text)}
 .vp-foot .vp-spacer{flex:1}
 
 .game-select{appearance:none;-webkit-appearance:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.4rem 2rem .4rem .75rem;font-size:.8rem;font-weight:600;color:var(--text);cursor:pointer;transition:border-color var(--ease),background var(--ease);outline:none;min-width:160px}
@@ -558,7 +560,7 @@ img{display:block;max-width:100%;height:auto}
 .sports-confirm .sc-rows span{color:var(--text-muted);min-width:3.6rem;flex:0 0 auto}
 .sports-confirm .sc-rows strong{color:var(--text);font-weight:600;word-break:break-word}
 .sports-confirm .sc-foot{margin-top:.45rem;font-size:.72rem;color:var(--text-muted)}
-.sports-confirm .sc-foot a{color:var(--gold);font-weight:600;text-decoration:none}
+.sports-confirm .sc-foot a{color:var(--gold-text);font-weight:600;text-decoration:none}
 @media(max-width:480px){.sports-confirm .sc-rows>div{flex-direction:column;gap:.05rem}.sports-confirm .sc-rows span{min-width:0}}
 .qp-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.55rem}
 .qp-title{font-size:.95rem;font-weight:700;letter-spacing:-.01em}
@@ -616,11 +618,11 @@ img{display:block;max-width:100%;height:auto}
   font-size:.68rem;opacity:.66;font-variant-numeric:tabular-nums}
 .qp-lad-rows{margin-top:.9rem}
 .qp-lad-rows .qp-row.is-sel{font-weight:700}
-.qp-lad-rows .qp-row.is-sel .qp-row-v{color:var(--gold)}
+.qp-lad-rows .qp-row.is-sel .qp-row-v{color:var(--gold-text)}
 .qp-lad-rows .qp-row.is-sel em{font-style:normal;font-size:.64rem;font-weight:600;
   opacity:.6;margin-left:.3rem;text-transform:uppercase;letter-spacing:.03em}
 .qp-lad-foot{margin:.7rem 0 0;font-size:.68rem;line-height:1.45;opacity:.62}
-.qp-lad-src{color:var(--gold);text-decoration:none;font-weight:600}
+.qp-lad-src{color:var(--gold-text);text-decoration:none;font-weight:600}
 .qp-lad-src:hover{text-decoration:underline}
 .qp-lad-age{opacity:.72}
 .qp-lad-warn{margin:.4rem 0 0;font-size:.68rem;line-height:1.45;color:var(--qp-amber)}
@@ -718,7 +720,7 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 
 /* 2026-08-30: Share ranking button below payout-rank strip. */
 .payout-share-btn{margin-top:.65rem;width:100%;padding:.5rem;background:transparent;border:1px dashed var(--divider);border-radius:var(--radius-md);color:var(--text-muted);font-size:.72rem;font-weight:700;cursor:pointer;transition:all var(--ease);-webkit-tap-highlight-color:transparent}
-.payout-share-btn:hover{border-color:var(--gold);color:var(--gold)}
+.payout-share-btn:hover{border-color:var(--gold);color:var(--gold-text)}
 .payout-rank-delta{font-family:var(--mono);font-size:.7rem;color:var(--text-muted);min-width:52px;text-align:right}
 @media(max-width:520px){.payout-rank-row{grid-template-columns:18px 20px minmax(70px,90px) 1fr auto;gap:.4rem;font-size:.72rem}.payout-rank-delta{display:none}.payout-rank-amt{font-size:.78rem;min-width:56px}}
 .payout-rank-locked{cursor:pointer;opacity:.72}
@@ -732,7 +734,7 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .sort-btns{display:flex;gap:.3rem}
 .sort-btn{padding:.28rem .6rem;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--surface);font-size:.7rem;font-weight:500;color:var(--text-muted);transition:all var(--ease)}
 .sort-btn:hover{border-color:var(--gold);color:var(--text)}
-.sort-btn.active{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
+.sort-btn.active{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold-text)}
 
 /* platform grid */
 .plat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.875rem}
@@ -806,12 +808,12 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
    Previously only the small pill was tappable, so tapping the big card (the
    obvious target on a phone) did nothing and the tile read as a flat image. */
 .plat-card[data-sell-url]{cursor:pointer}
-.plat-card[data-sell-url]:hover .plat-sell-badge{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
+.plat-card[data-sell-url]:hover .plat-sell-badge{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold-text)}
 .plat-card[data-sell-url]:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-card.best{border-color:var(--green);box-shadow:0 0 0 1px var(--green),var(--shadow-sm)}
 .plat-card.worst{opacity:.65}
 .plat-sell-badge{display:inline-flex;align-items:center;gap:.3rem;margin-top:.3rem;margin-bottom:.55rem;padding:.38rem .65rem;border-radius:99px;font-size:.68rem;font-weight:700;letter-spacing:.02em;background:var(--surface-off);color:var(--text-muted);border:1px solid var(--border);transition:all .15s;width:fit-content;text-decoration:none}
-.plat-sell-badge:hover,.plat-sell-badge:focus-visible{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold)}
+.plat-sell-badge:hover,.plat-sell-badge:focus-visible{background:color-mix(in srgb,var(--gold) 12%,var(--surface));border-color:var(--gold);color:var(--gold-text)}
 .plat-sell-arrow{font-size:.75rem;transition:transform .15s}
 .plat-sell-badge:hover .plat-sell-arrow{transform:translateX(3px)}
 .plat-accent{position:absolute;top:0;left:0;width:4px;height:100%;border-radius:14px 0 0 14px}
@@ -1031,7 +1033,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .fl-add-btn:hover{background:var(--gold-h)}
 .fl-add-btn:active{transform:scale(.97)}
 .fl-sub-btn{display:flex;align-items:center;gap:.4rem;padding:.4rem .85rem;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:var(--radius-lg);font-size:.78rem;font-weight:600;transition:all var(--ease)}
-.fl-sub-btn:hover{border-color:var(--gold);color:var(--gold)}
+.fl-sub-btn:hover{border-color:var(--gold);color:var(--gold-text)}
 
 /* --- PRO BADGE (visible only for paying Pro users) --- */
 .pro-badge{display:none;align-items:center;gap:.25rem;padding:.18rem .55rem;background:linear-gradient(135deg,#b8860b,#f5c518,#b8860b);color:#000;border-radius:99px;font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-shadow:0 1px 4px rgba(245,197,24,.35)}
@@ -1045,14 +1047,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .get-pro-btn:active{transform:scale(.96)}
 .get-pro-btn.visible{display:flex}
 /* --- SHOP HEADER BUTTON (always visible) --- */
-.shop-header-btn{display:flex;align-items:center;gap:.3rem;padding:.3rem .75rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.72rem;font-weight:700;white-space:nowrap;cursor:pointer;transition:all .15s ease}
+.shop-header-btn{display:flex;align-items:center;gap:.3rem;padding:.3rem .75rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold-text);border-radius:99px;font-size:.72rem;font-weight:700;white-space:nowrap;cursor:pointer;transition:all .15s ease}
 .shop-header-btn:hover{background:var(--gold-hi);border-color:var(--gold)}
 .shop-header-btn:active{transform:scale(.96)}
 /* --- PROMO BANNER --- */
 .promo-banner{display:none;align-items:center;justify-content:space-between;gap:.75rem;margin:.6rem 0 .35rem;padding:.55rem .9rem;background:linear-gradient(135deg,rgba(184,134,11,.12),rgba(245,197,24,.08));border:1px solid rgba(245,197,24,.28);border-radius:var(--radius-lg);font-size:.78rem}
 .promo-banner.visible{display:flex}
 .promo-banner-text{color:var(--text);font-weight:600;line-height:1.4}
-.promo-banner-text span{color:var(--gold)}
+.promo-banner-text span{color:var(--gold-text)}
 .promo-banner-cta{flex-shrink:0;padding:.3rem .85rem;background:var(--gold);color:#000;border-radius:99px;font-size:.74rem;font-weight:800;cursor:pointer;white-space:nowrap;border:none;transition:background .15s}
 .promo-banner-cta:hover{background:var(--gold-h)}
 .promo-banner-close{flex-shrink:0;background:none;border:none;color:var(--text-faint);font-size:1rem;cursor:pointer;padding:0 .1rem;line-height:1}
@@ -1096,7 +1098,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 
 /* Trust bundle micro-styles */
 .trust-info{cursor:help;color:var(--text-faint);font-size:.7rem;text-decoration:none}
-.trust-info:hover{color:var(--gold)}
+.trust-info:hover{color:var(--gold-text)}
 
 /* Tier-specific card treatments */
 .plan-card.tier-max{border-color:rgba(102,187,255,.5);background:linear-gradient(160deg,rgba(102,187,255,.06),transparent)}
@@ -1109,7 +1111,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .plan-btn.ultimate-btn:hover{filter:brightness(1.08)}
 .plan-value{font-size:.62rem;color:#4ade80;font-weight:800;margin-bottom:.05rem;line-height:1.3;letter-spacing:.02em}
 .plan-value-sub{font-size:.6rem;color:rgba(255,255,255,.5);margin-bottom:.5rem;line-height:1.3}
-.plan-annual-note{display:none;font-size:.6rem;color:var(--gold);font-weight:700;margin-top:.15rem;line-height:1.2}
+.plan-annual-note{display:none;font-size:.6rem;color:var(--gold-text);font-weight:700;margin-top:.15rem;line-height:1.2}
 .pricing-mode-annual .plan-annual-note{display:block}
 .plan-card{border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:.9rem .75rem;position:relative;transition:border-color .2s;display:flex;flex-direction:column}
 .plan-card.featured{border-color:var(--gold);background:linear-gradient(160deg,rgba(245,197,24,.06),transparent)}
@@ -1120,7 +1122,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .plan-price sub{font-size:.7rem;font-weight:500;color:var(--text-muted)}
 .plan-features{list-style:none;padding:0;margin:.7rem 0 .9rem;display:flex;flex-direction:column;gap:.35rem;flex:1}
 .plan-features li{font-size:.7rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:.35rem;line-height:1.35}
-.plan-features li::before{content:"\2713";color:var(--gold);font-weight:700;flex-shrink:0;margin-top:.05rem}
+.plan-features li::before{content:"\2713";color:var(--gold-text);font-weight:700;flex-shrink:0;margin-top:.05rem}
 .plan-features li.faded::before{content:"\2013";color:var(--text-faint)}
 .plan-features li.faded{color:var(--text-faint)}
 .plan-btn{width:100%;padding:.55rem .4rem;border-radius:var(--radius-md);font-size:.72rem;font-weight:800;cursor:pointer;transition:all .15s ease;border:none;line-height:1.2;margin-top:auto}
@@ -1133,7 +1135,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-credit-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem .9rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:.85rem}
 .scan-credit-info{font-size:.8rem;color:var(--text-muted);line-height:1.45}
 .scan-credit-info strong{color:var(--text);font-weight:700}
-.scan-credit-buy{flex-shrink:0;padding:.4rem .9rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
+.scan-credit-buy{flex-shrink:0;padding:.4rem .9rem;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold-text);border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s}
 .scan-credit-buy:hover{background:var(--gold-hi);border-color:var(--gold)}
 .pricing-close{display:flex;justify-content:center;margin-top:.5rem}
 .pricing-close-btn{padding:.45rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:99px;font-size:.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;transition:all .15s}
@@ -1174,7 +1176,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .shop-pack:active{transform:scale(.98)}
 .shop-pack.feat{border-color:var(--gold-border)}
 .shop-pack-qty{font-size:.85rem;font-weight:800}
-.shop-pack-price{font-size:1.05rem;font-weight:900;color:var(--gold);margin-top:.15rem}
+.shop-pack-price{font-size:1.05rem;font-weight:900;color:var(--gold-text);margin-top:.15rem}
 .shop-pack-note{font-size:.6rem;color:var(--text-muted);margin-top:.2rem}
 .shop-pack-save{font-size:.6rem;color:#4ade80;font-weight:700;margin-top:.2rem}
 .shop-pack-badge{position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.55rem;font-weight:800;padding:.1rem .45rem;border-radius:99px;white-space:nowrap;letter-spacing:.03em}
@@ -1185,7 +1187,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .shop-alt-btn:hover{border-color:var(--gold)}
 .shop-signin{padding:.7rem .8rem;background:rgba(196,122,0,.10);border:1px solid rgba(196,122,0,.4);border-radius:var(--radius-md);font-size:.74rem;color:var(--text);line-height:1.5;margin-bottom:.85rem}
 /* Header shop button — must stay reachable at EVERY width. */
-.shop-btn{display:flex;align-items:center;gap:.3rem;padding:.36rem .7rem;min-height:34px;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold);border-radius:99px;font-size:.72rem;font-weight:800;white-space:nowrap;cursor:pointer;font-family:inherit;transition:all .15s ease}
+.shop-btn{display:flex;align-items:center;gap:.3rem;padding:.36rem .7rem;min-height:34px;background:var(--surface);border:1.5px solid var(--gold-border);color:var(--gold-text);border-radius:99px;font-size:.72rem;font-weight:800;white-space:nowrap;cursor:pointer;font-family:inherit;transition:all .15s ease}
 .shop-btn:hover{background:var(--gold-hi);border-color:var(--gold)}
 .shop-btn:active{transform:scale(.96)}
 
@@ -1214,7 +1216,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-gate-opt-info{flex:1}
 .scan-gate-opt-name{font-size:.85rem;font-weight:700;color:var(--text)}
 .scan-gate-opt-desc{font-size:.73rem;color:var(--text-muted);margin-top:.1rem}
-.scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
+.scan-gate-opt-price{font-size:.82rem;font-weight:800;color:var(--gold-text);flex-shrink:0;margin-left:.75rem}
 .scan-gate-cancel{font-size:.78rem;color:var(--text-faint);cursor:pointer;text-decoration:underline;background:none;border:none;padding:.25rem}
 .scan-gate-packs{display:flex;flex-direction:column;gap:.5rem;margin:.85rem 0 .5rem}
 .scan-gate-pack{display:flex;align-items:center;justify-content:space-between;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:var(--radius-md);cursor:pointer;transition:border-color .15s,background .15s;background:var(--surface-2);position:relative}
@@ -1223,7 +1225,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .scan-gate-pack-left{text-align:left;flex:1}
 .scan-gate-pack-name{font-size:.83rem;font-weight:700;color:var(--text)}
 .scan-gate-pack-desc{font-size:.72rem;color:var(--text-muted);margin-top:.1rem}
-.scan-gate-pack-price{font-size:.9rem;font-weight:800;color:var(--gold);flex-shrink:0;margin-left:.75rem}
+.scan-gate-pack-price{font-size:.9rem;font-weight:800;color:var(--gold-text);flex-shrink:0;margin-left:.75rem}
 .scan-gate-pack-badge{position:absolute;top:-9px;right:.6rem;background:var(--gold);color:#000;font-size:.62rem;font-weight:800;padding:.1rem .45rem;border-radius:20px;letter-spacing:.03em}
 .scan-gate-divider{font-size:.72rem;font-weight:700;color:var(--text-muted);text-align:center;margin:.55rem 0 .4rem;position:relative;letter-spacing:.04em}
 .scan-gate-divider::before,.scan-gate-divider::after{content:"";position:absolute;top:50%;width:32%;height:1px;background:var(--border)}
@@ -1233,7 +1235,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .grade-cta-banner{display:none;margin:.85rem 0 .25rem;padding:.9rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.08) 0%,rgba(196,122,0,.04) 100%);border:1px solid rgba(196,122,0,.3);border-radius:var(--radius-lg);animation:fadeSlideUp .3s ease}
 .grade-cta-banner.show{display:block}
 @keyframes fadeSlideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.grade-cta-label{font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:.5rem}
+.grade-cta-label{font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.5rem}
 .grade-cta-headline{font-size:.9rem;font-weight:700;color:var(--text);margin-bottom:.2rem;line-height:1.35}
 .grade-cta-sub{font-size:.75rem;color:var(--text-muted);line-height:1.45;margin-bottom:.75rem}
 .grade-cta-btns{display:flex;flex-wrap:wrap;gap:.45rem}
@@ -1251,7 +1253,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 /* Scan overlay CTA (inside the dark overlay) */
 #scanGradeCTA{display:none;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:.85rem 1rem;max-width:340px;width:100%;text-align:center;margin-top:-.25rem}
 #scanGradeCTA.show{display:block}
-#scanGradeCTA .sgc-label{font-size:.65rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.4rem}
+#scanGradeCTA .sgc-label{font-size:.65rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.4rem}
 #scanGradeCTA .sgc-headline{font-size:.9rem;font-weight:700;color:#fff;margin-bottom:.3rem;line-height:1.3}
 #scanGradeCTA .sgc-sub{font-size:.73rem;color:rgba(255,255,255,.6);margin-bottom:.65rem;line-height:1.4}
 #scanGradeCTA .sgc-btns{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center}
@@ -1954,15 +1956,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy Grader Credits</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startGradeScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$5.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.60/scan</div>
+          <div>10 scans</div><div style="color:var(--gold-text);font-weight:800">$5.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.60/scan</div>
         </button>
         <button onclick="startGradeScanCheckout('25')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>25 scans</div><div style="color:var(--gold);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 13%</div>
+          <div>25 scans</div><div style="color:var(--gold-text);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 13%</div>
         </button>
         <button onclick="startGradeScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
-          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$22.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 23%</div>
+          <div>50 scans</div><div style="color:var(--gold-text);font-weight:800">$22.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 23%</div>
         </button>
       </div>
     </div>
@@ -1975,15 +1977,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy ID Scanner Credits</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold);font-weight:800">$1.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.20/scan</div>
+          <div>10 scans</div><div style="color:var(--gold-text);font-weight:800">$1.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.20/scan</div>
         </button>
         <button onclick="startIdScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>50 scans</div><div style="color:var(--gold);font-weight:800">$7.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 20%</div>
+          <div>50 scans</div><div style="color:var(--gold-text);font-weight:800">$7.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 20%</div>
         </button>
         <button onclick="startIdScanCheckout('100')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
-          <div>100 scans</div><div style="color:var(--gold);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 35%</div>
+          <div>100 scans</div><div style="color:var(--gold-text);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 35%</div>
         </button>
       </div>
     </div>
@@ -2004,7 +2006,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div id="referSection" style="display:none;margin-top:.5rem">
     <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
     <div style="padding:.65rem .75rem;background:linear-gradient(135deg,rgba(196,122,0,.08),rgba(196,122,0,.04));border:1px solid rgba(196,122,0,.25);border-radius:var(--radius-md)">
-      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:.3rem">🎁 Refer a Friend</div>
+      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.3rem">🎁 Refer a Friend</div>
       <div style="font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:.2rem">Both get 5 free ID scans</div>
       <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.55rem;line-height:1.4">Share your link — when a friend signs up for the first time, you both instantly get 5 ID scan credits.</div>
       <button id="refShareBtn" onclick="shareReferralLink()" style="width:100%;padding:.45rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.75rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">
@@ -2054,8 +2056,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.5),transparent)"></div>
   <div style="padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem">
     <div style="flex:1;min-width:0">
-      <div style="font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:.2rem">🎁 New user offer</div>
-      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in + verify email —<br>get <span style="color:var(--gold)">10 ID scans</span> + <span style="color:var(--gold)">1 AI Grade free</span></div>
+      <div style="font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.2rem">🎁 New user offer</div>
+      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in + verify email —<br>get <span style="color:var(--gold-text)">10 ID scans</span> + <span style="color:var(--gold-text)">1 AI Grade free</span></div>
       <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Credits never expire</div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex-shrink:0">
@@ -2070,7 +2072,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
      eBay-friendly kicker — they're a top affiliate partner and often the winning
      venue for a given card, so we never frame them as the enemy. -->
 <div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
-  <div style="font-size:.68rem;color:var(--gold);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
+  <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
   <h1 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h1>
   <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Pro adds Whatnot, Poshmark, Mercari, Mana Pool, Cardsphere, Cardmarket &amp; CardNexus. Pro Max unlocks COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk.</div>
 </div>
@@ -2097,7 +2099,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   }
 </style>
 <div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
-  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold);font-weight:800"></span> <span id="socialProofLabel"></span></span>
+  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold-text);font-weight:800"></span> <span id="socialProofLabel"></span></span>
   <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
     <span id="tryExampleFirstVisitPrefix" style="font-size:.68rem;color:var(--text-faint);font-weight:600;white-space:nowrap">New here? →</span>
     <button id="tryExampleBtn" onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try Charizard →</button>
@@ -2124,7 +2126,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Scan
       </button>
-      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openScanMenuOnTab('grade')" title="AI Grading — Quick or Deep">
+      <button id="gradeBtn" class="scan-btn" style="border-color:var(--gold);color:var(--gold-text)" onclick="openScanMenuOnTab('grade')" title="AI Grading — Quick or Deep">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         Grade
       </button>
@@ -2425,7 +2427,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </div>
         <!-- Graded data banner — shown when graded pill selected but no API graded data -->
         <div id="gradedCompsBanner" style="display:none;margin-top:.6rem;padding:.75rem 1rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:.625rem">
-          <div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.45rem;letter-spacing:.04em">GRADED PRICE</div>
+          <div style="font-size:.72rem;font-weight:700;color:var(--gold-text);margin-bottom:.45rem;letter-spacing:.04em">GRADED PRICE</div>
           <!-- No data state -->
           <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -2452,7 +2454,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </div>
         <!-- JP quick links (shown only for pokemonjp game) -->
         <div id="jpLinksPanel" style="display:none;margin:.75rem 0;padding:.75rem 1rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:.625rem">
-          <div style="font-size:.75rem;font-weight:700;color:var(--gold);margin-bottom:.5rem;letter-spacing:.04em">JP RESEARCH LINKS</div>
+          <div style="font-size:.75rem;font-weight:700;color:var(--gold-text);margin-bottom:.5rem;letter-spacing:.04em">JP RESEARCH LINKS</div>
           <a id="jpEbayLink" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;font-weight:600;color:var(--text);text-decoration:none;padding:.4rem .5rem;border-radius:.4rem;transition:background .15s" onmouseover="this.style.background='rgba(0,0,0,.06)'" onmouseout="this.style.background='transparent'">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             eBay JP Sold Comps (cat.183454)
@@ -2470,7 +2472,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <!-- eBay sold comps auto-status -->
         <div id="ebayCompsStatus" style="display:none;margin-bottom:.35rem;padding:.38rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.68rem;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;gap:.5rem">
           <span id="ebayCompsStatusText"></span>
-          <button id="ebayCompsRefreshBtn" onclick="fetchAndApplySoldComps(true)" style="background:none;border:none;color:var(--gold);font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;padding:0">Refresh</button>
+          <button id="ebayCompsRefreshBtn" onclick="fetchAndApplySoldComps(true)" style="background:none;border:none;color:var(--gold-text);font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;padding:0">Refresh</button>
         </div>
 
         <div class="price-override">
@@ -2588,7 +2590,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <!-- Grading ROI Calculator — shown when Raw/Ungraded selected -->
         <div id="gradingRoiPanel" style="display:none;margin-top:.875rem;padding:.85rem 1rem;background:rgba(196,122,0,.06);border:1.5px solid rgba(196,122,0,.22);border-radius:.75rem">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;cursor:pointer" onclick="toggleRoiPanel()">
-            <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--gold)">&#127942; Is It Worth Grading?</div>
+            <div style="font-size:.72rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--gold-text)">&#127942; Is It Worth Grading?</div>
             <span id="roiChevron" style="font-size:.7rem;color:var(--text-faint);transition:transform .2s">&#9660;</span>
           </div>
           <div id="roiBody">
@@ -2735,7 +2737,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="results-area" id="resultsArea">
     <div class="intro-state" style="text-align:left;padding:1.5rem 1.25rem">
       <!-- headline -->
-      <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold)">maximum profit</span></div>
+      <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold-text)">maximum profit</span></div>
       <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, Magic, Yu-Gi-Oh, Lorcana or One Piece card — see exact fees &amp; payouts across every platform.</div>
 
       <!-- Feature bullets -->
@@ -2773,7 +2775,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <!-- Social proof mini row -->
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <div style="padding:.35rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:99px;font-size:.67rem;color:#4ade80;font-weight:700">✓ 100% free to use</div>
-        <div id="introTodayBadge" style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold);font-weight:700;display:none">🔍 <span id="introTodayCount">0</span> cards searched today</div>
+        <div id="introTodayBadge" style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold-text);font-weight:700;display:none">🔍 <span id="introTodayCount">0</span> cards searched today</div>
         <div style="padding:.35rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;font-size:.67rem;color:var(--text-muted);font-weight:600">No account needed to search</div>
       </div>
     </div>
@@ -2792,7 +2794,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div style="font-size:1.05rem;font-weight:800;color:var(--text);margin-bottom:.4rem">Track your card flips</div>
     <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Log every buy &amp; sell, see your total profit,<br>and track cards you still own — all free.</div>
     <div style="display:flex;flex-direction:column;gap:.6rem;max-width:260px;margin:0 auto 1.5rem">
-      <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--gold);font-weight:700"><span style="font-weight:700">🎁</span> 10 free ID scans + 1 grade scan on sign up</div>
+      <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--gold-text);font-weight:700"><span style="font-weight:700">🎁</span> 10 free ID scans + 1 grade scan on sign up</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Flip log with profit/loss per card</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Portfolio tracker for cards you own</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Export your flip history as CSV</div>
@@ -2884,7 +2886,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <!-- Anon sync banner — only visible when signed OUT and collection has entries -->
   <div id="anonSyncBanner" style="display:none;margin-bottom:1rem;padding:.7rem .9rem;background:linear-gradient(135deg,rgba(59,130,246,.10),rgba(59,130,246,.05));border:1px solid rgba(59,130,246,.35);border-radius:10px;align-items:center;gap:.6rem;flex-wrap:wrap">
     <span style="font-size:1.15rem">💾</span>
-    <span style="flex:1;min-width:180px;font-size:.78rem;color:var(--text);line-height:1.4">Your cards are saved to this browser only. <strong style="color:var(--gold)">Sign in + verify email</strong> to sync across devices and unlock <strong style="color:var(--gold)">10 free ID scans + 1 AI Grade</strong>.</span>
+    <span style="flex:1;min-width:180px;font-size:.78rem;color:var(--text);line-height:1.4">Your cards are saved to this browser only. <strong style="color:var(--gold-text)">Sign in + verify email</strong> to sync across devices and unlock <strong style="color:var(--gold-text)">10 free ID scans + 1 AI Grade</strong>.</span>
     <button onclick="triggerGoogleSignIn()" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:8px;font-size:.75rem;font-weight:800;cursor:pointer;white-space:nowrap">Sign in →</button>
   </div>
 
@@ -2923,7 +2925,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <!-- Pro nudge for free users with 5+ cards -->
     <div id="colProNudge" style="display:none;margin:.5rem 0;padding:.6rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.22);border-radius:10px;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('collection_nudge')">
       <span style="font-size:.75rem;color:rgba(196,122,0,.9)">Pro unlocks P&amp;L chart, grading ROI &amp; unlimited tracking</span>
-      <span style="font-size:.72rem;font-weight:800;color:var(--gold);white-space:nowrap">See Pro →</span>
+      <span style="font-size:.72rem;font-weight:800;color:var(--gold-text);white-space:nowrap">See Pro →</span>
     </div>
     <div id="collectionWrap"></div>
 
@@ -3079,7 +3081,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <div class="scan-gate-pack-desc" style="line-height:1.5;margin-top:.25rem">
             <span style="color:#fff;font-weight:600">4–6 photos · front, back + 2–4 edges</span>
             <br><span style="color:rgba(255,255,255,.7);font-size:.72rem">Measures centering · inspects each corner · sees edge dings Quick misses · CV-verified pillars</span>
-            <br><span style="color:var(--gold);font-size:.68rem;font-weight:700;letter-spacing:.02em;margin-top:.15rem;display:inline-block">Use before submitting to PSA / BGS / CGC</span>
+            <br><span style="color:var(--gold-text);font-size:.68rem;font-weight:700;letter-spacing:.02em;margin-top:.15rem;display:inline-block">Use before submitting to PSA / BGS / CGC</span>
           </div>
         </div>
         <div class="scan-gate-pack-price">2 credits</div>
@@ -3097,7 +3099,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </div>
     </div>
     <!-- Photo tips CTA — opens the full guide -->
-    <button onclick="openPhotoTipsModal('grade')" style="margin-top:.85rem;width:100%;padding:.6rem .8rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.28);border-radius:8px;color:var(--gold);font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">
+    <button onclick="openPhotoTipsModal('grade')" style="margin-top:.85rem;width:100%;padding:.6rem .8rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.28);border-radius:8px;color:var(--gold-text);font-size:.78rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">
       📸 See what a good grading photo looks like
     </button>
     <div id="gradeTierCreditLine" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:.65rem;text-align:center"></div>
@@ -3114,7 +3116,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="scan-gate-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
     <div class="scan-gate-icon">📸</div>
     <div class="scan-gate-title">How to take a great grading photo</div>
-    <div class="scan-gate-sub" style="line-height:1.5">Follow these and the AI can see the same defects a real grader would. It's a screening tool, not a PSA replacement — <a href="/accuracy" style="color:var(--gold);text-decoration:underline">see our accuracy log</a>.</div>
+    <div class="scan-gate-sub" style="line-height:1.5">Follow these and the AI can see the same defects a real grader would. It's a screening tool, not a PSA replacement — <a href="/accuracy" style="color:var(--gold-text);text-decoration:underline">see our accuracy log</a>.</div>
 
     <!-- Golden Rules with real DO/DON'T demo photos.
          Images are lazy-loaded — they don't hit the network until the
@@ -3218,7 +3220,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
          thumbnail per angle, using the same demo card across all six so the
          viewer can mentally rotate it. All lazy-loaded (~166 KB total). -->
     <div style="margin-top:1rem;padding-top:.9rem;border-top:1px solid rgba(255,255,255,.08)">
-      <div style="color:var(--gold);font-weight:800;font-size:.85rem;text-align:center;margin-bottom:.15rem">The 6 photos Deep Grade needs</div>
+      <div style="color:var(--gold-text);font-weight:800;font-size:.85rem;text-align:center;margin-bottom:.15rem">The 6 photos Deep Grade needs</div>
       <div style="color:rgba(255,255,255,.6);font-size:.7rem;text-align:center;line-height:1.4;margin-bottom:.75rem">Front, back, and each of the four edges close-up. Here's what each should look like:</div>
       <style>
         .pt-angle-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:.45rem; }
@@ -3294,7 +3296,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
     <!-- 2026-08-20: Annual-mode value banner — shown only when Annual is active. -->
     <div id="pricingAnnualBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;color:#fde68a;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600">
-      🎁 <strong style="color:var(--gold)">Best value:</strong> pay yearly and <strong>save about 25%</strong> on every tier · same scans, same features, one payment.
+      🎁 <strong style="color:var(--gold-text)">Best value:</strong> pay yearly and <strong>save about 25%</strong> on every tier · same scans, same features, one payment.
     </div>
 
     <!-- 2026-08-20: Sign-up bonus banner — shown to unverified free users only. -->
@@ -3420,7 +3422,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
     <div id="shopSignInNote" class="shop-signin" style="display:none">
       You need to be signed in to buy credits so they attach to your account.
-      <a href="/signin" style="color:var(--gold);font-weight:800">Sign in</a> &mdash; verifying your email also unlocks 10 free ID scans + 1 AI Grade.
+      <a href="/signin" style="color:var(--gold-text);font-weight:800">Sign in</a> &mdash; verifying your email also unlocks 10 free ID scans + 1 AI Grade.
     </div>
 
     <div class="shop-tabs" role="tablist">
@@ -3493,7 +3495,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       entry will be saved as graded (e.g. PSA 10) so the user doesn't confuse
       a graded save with a raw one.
     -->
-    <div id="mGradeBanner" style="display:none;margin:-.4rem 0 .8rem;padding:.55rem .75rem;background:linear-gradient(135deg,rgba(240,180,41,.18),rgba(212,175,55,.10));border:1px solid rgba(212,175,55,.55);border-radius:8px;color:var(--gold);font-weight:700;font-size:.85rem;display:flex;align-items:center;gap:.5rem">
+    <div id="mGradeBanner" style="display:none;margin:-.4rem 0 .8rem;padding:.55rem .75rem;background:linear-gradient(135deg,rgba(240,180,41,.18),rgba(212,175,55,.10));border:1px solid rgba(212,175,55,.55);border-radius:8px;color:var(--gold-text);font-weight:700;font-size:.85rem;display:flex;align-items:center;gap:.5rem">
       <span style="font-size:1.1rem">🏅</span>
       <span>Saving as <span id="mGradeBannerLabel">PSA 10</span></span>
     </div>
@@ -3680,8 +3682,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div id="ccmSet" style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">—</div>
         <!-- Grade chip: shown only when the user saved this card at a specific grade
              (e.g. PSA 10). Hidden by default; populated by openCollectionCardDetail. -->
-        <div id="ccmGradeChip" style="display:none;margin-bottom:.35rem"><span id="ccmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold);letter-spacing:.02em"></span></div>
-        <div id="ccmValue" style="font-size:1.15rem;font-weight:800;color:var(--gold);line-height:1.1">$—</div>
+        <div id="ccmGradeChip" style="display:none;margin-bottom:.35rem"><span id="ccmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold-text);letter-spacing:.02em"></span></div>
+        <div id="ccmValue" style="font-size:1.15rem;font-weight:800;color:var(--gold-text);line-height:1.1">$—</div>
         <div id="ccmPnL" style="font-size:.72rem;margin-top:.15rem;color:#aaa">—</div>
       </div>
     </div>
@@ -3721,7 +3723,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div style="flex:1;min-width:0">
         <div id="fdmName" style="font-weight:900;font-size:1.05rem;line-height:1.15;margin-bottom:.15rem;word-break:break-word">—</div>
         <div id="fdmSet" style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">—</div>
-        <div id="fdmGradeChip" style="display:none;margin-bottom:.35rem"><span id="fdmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold);letter-spacing:.02em"></span></div>
+        <div id="fdmGradeChip" style="display:none;margin-bottom:.35rem"><span id="fdmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold-text);letter-spacing:.02em"></span></div>
         <div id="fdmProfit" style="font-size:1.3rem;font-weight:800;line-height:1.1">+$0.00</div>
         <div id="fdmRoi" style="font-size:.72rem;margin-top:.15rem;font-weight:700">—</div>
       </div>
@@ -3735,7 +3737,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </div>
       <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
         <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Sold</div>
-        <div id="fdmSold" style="font-size:.95rem;font-weight:800;color:var(--gold)">$0.00</div>
+        <div id="fdmSold" style="font-size:.95rem;font-weight:800;color:var(--gold-text)">$0.00</div>
       </div>
       <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
         <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Platform</div>
@@ -3778,8 +3780,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
 
     <div id="msMktHint" style="display:none;font-size:.7rem;color:var(--text-muted);margin-bottom:.55rem;padding:.4rem .55rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.22);border-radius:8px">
-      Current market: <strong id="msMktVal" style="color:var(--gold)">—</strong>
-      <button type="button" onclick="_msUseMarket()" style="float:right;background:transparent;border:none;color:var(--gold);font-size:.7rem;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Use this</button>
+      Current market: <strong id="msMktVal" style="color:var(--gold-text)">—</strong>
+      <button type="button" onclick="_msUseMarket()" style="float:right;background:transparent;border:none;color:var(--gold-text);font-size:.7rem;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Use this</button>
     </div>
 
     <label style="display:block;font-size:.7rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.3rem">Sold for</label>
@@ -4131,10 +4133,28 @@ window.CARDSELL_AFFIL_SGC      = window.AFFILIATE.sgc.link_url;
    ═══════════════════════════════════════════ */
 
 // ── TCGPriceLookup API Key (JS variable only, resets on reload) ──
-// Load saved API key from localStorage on startup
 window.tplApiKey = window.CARDSELL_TPL_KEY || ''; // Key is baked in — no UI needed
-// Load saved OpenAI key for AI card scanning
-window._openAiKey = (() => { try { return localStorage.getItem('cardsell_openai_key') || ''; } catch(e) { return ''; } })();
+
+// 2026-09-04 (SOL-PLAT-013) — user-supplied API keys no longer persist to disk.
+// They used to live in localStorage, which survives indefinitely and is
+// readable by any same-origin XSS. They now live in sessionStorage, so a key is
+// scoped to the tab and dropped when that tab closes. A key already saved by an
+// earlier build is migrated across once and then erased from localStorage, so
+// existing users are not silently logged out of their own key mid-session.
+window._openAiKey = (() => {
+  try {
+    const legacy = localStorage.getItem('cardsell_openai_key');
+    if (legacy) {
+      try { sessionStorage.setItem('cardsell_openai_key', legacy); } catch(e) {}
+      try { localStorage.removeItem('cardsell_openai_key'); } catch(e) {}
+    }
+    return sessionStorage.getItem('cardsell_openai_key') || '';
+  } catch(e) { return ''; }
+})();
+// The TPL key is baked in at build time and no code path ever read the
+// persisted copy back, so writing it to disk was risk with no benefit. Clear
+// anything an earlier build left behind.
+try { localStorage.removeItem('cardsell_tpl_key'); } catch(e) {}
 
 function saveOpenAiKey() {
   const val = (document.getElementById('openAiKeyInput')?.value || '').trim();
@@ -4144,7 +4164,11 @@ function saveOpenAiKey() {
     return;
   }
   window._openAiKey = val;
-  try { localStorage.setItem('cardsell_openai_key', val); } catch(e) {}
+  // sessionStorage, not localStorage — see SOL-PLAT-013 note above.
+  try {
+    if (val) sessionStorage.setItem('cardsell_openai_key', val);
+    else sessionStorage.removeItem('cardsell_openai_key');
+  } catch(e) {}
   if (status) status.textContent = val ? '✅ AI scanning enabled — costs ~$0.001 per scan.' : 'Key cleared. Using basic text reading.';
 }
 
@@ -4265,8 +4289,8 @@ async function loadSettingsScanCredits() {
 function saveTPLKey() {
   const val = (document.getElementById('tplKeyInput')?.value || '').trim();
   window.tplApiKey = val;
-  // Persist to localStorage so it survives page reloads
-  try { localStorage.setItem('cardsell_tpl_key', val); } catch(e) {}
+  // Deliberately not persisted: nothing ever read this value back, so storing
+  // a user API key on disk bought nothing. Held in memory for this page only.
   updateKeyStatus();
   // Close panel after save
   document.getElementById('settingsPanel')?.classList.remove('open');
@@ -5062,7 +5086,7 @@ async function searchPokemon(q) {
         <div class="drop-thumb-ph">🃏</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(c.set?.name||c.set_name||'')}${c.number ? ' · #'+esc(c.number) : ''}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(c.set?.name||c.set_name||'')}${c.number ? ' · #'+esc(c.number) : ''}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold-text)">TPL</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5213,7 +5237,7 @@ async function searchPokemonJP(q) {
   items.push(`<div class="drop-item" data-idx="${ebayIdx}" role="option" style="border-left:3px solid var(--gold)">
     <div class="drop-thumb-ph" style="font-size:1.3rem">JP</div>
     <div class="drop-info">
-      <div class="drop-name">${esc(q)} <span style="font-size:.75rem;color:var(--gold);font-weight:700">ジャパニーズ</span></div>
+      <div class="drop-name">${esc(q)} <span style="font-size:.75rem;color:var(--gold-text);font-weight:700">ジャパニーズ</span></div>
       <div class="drop-meta">Click to view eBay JP sold comps + PSA grade prices</div>
     </div>
     <span class="drop-price" style="background:var(--gold);color:#fff;font-size:.7rem;padding:.2rem .5rem;border-radius:.4rem">JP COMPS</span>
@@ -5230,7 +5254,7 @@ async function searchPokemonJP(q) {
         <div class="drop-thumb-ph">🃏</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL JP</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold-text)">TPL JP</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`);
@@ -5349,7 +5373,7 @@ async function searchMTG(q) {
         <div class="drop-thumb-ph">✨</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold-text)">TPL</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5449,7 +5473,7 @@ async function searchLorcana(q) {
         ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">🌟</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold-text)">TPL</span></div>
         </div>
         ${nmPrice!==null?`<span class="drop-price">$${nmPrice.toFixed(2)}</span>`:`<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5533,7 +5557,7 @@ async function searchOnePiece(q) {
         ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">⚓</div>`}
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity?' · '+esc(c.rarity):''} <span style="font-size:.68rem;color:var(--gold-text)">TPL</span></div>
         </div>
         ${nmPrice!==null?`<span class="drop-price">$${nmPrice.toFixed(2)}</span>`:`<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5575,7 +5599,7 @@ async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
       ${c.image_url ? `<img class="drop-thumb" src="${c.image_url}" loading="lazy" decoding="async" alt="${esc(c.name)}"/>` : `<div class="drop-thumb-ph">${emoji}</div>`}
       <div class="drop-info">
         <div class="drop-name">${esc(c.name)}</div>
-        <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+        <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold-text)">TPL</span></div>
       </div>
       ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
     </div>`;
@@ -5602,7 +5626,7 @@ async function searchYugioh(q) {
         <div class="drop-thumb-ph">🐉</div>
         <div class="drop-info">
           <div class="drop-name">${esc(c.name)}</div>
-          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold)">TPL</span></div>
+          <div class="drop-meta">${esc(_tplSetName(c))}${c.rarity ? ' · ' + esc(c.rarity) : ''} <span style="font-size:.68rem;color:var(--gold-text)">TPL</span></div>
         </div>
         ${nmPrice !== null ? `<span class="drop-price">$${nmPrice.toFixed(2)}</span>` : `<span class="drop-no-price">No price</span>`}
       </div>`;
@@ -5687,7 +5711,7 @@ function attachDropHandlers(cardFactory) {
     footer.setAttribute('role', 'button');
     footer.setAttribute('tabindex', '0');
     footer.innerHTML = `<span>See all results as cards</span><span style="font-size:.8rem">&#8594;</span>`;
-    footer.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);font-size:.82rem;font-weight:700;color:var(--gold);cursor:pointer;';
+    footer.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);font-size:.82rem;font-weight:700;color:var(--gold-text);cursor:pointer;';
     footer.addEventListener('click', () => {
       dropList.classList.remove('open');
       openCatalog(searchInput.value.trim());
@@ -5890,10 +5914,10 @@ function _renderSourceDisagreement(d, basisLabel) {
   if (!d) return '';
   const hi = d.higher === 'tcg' ? 'TCGplayer' : 'PriceCharting';
   const tcgLink = d.tcgUrl
-    ? `<a href="${d.tcgUrl}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">TCGplayer ↗</a>`
+    ? `<a href="${d.tcgUrl}" target="_blank" rel="noopener" style="color:var(--gold-text);text-decoration:none">TCGplayer ↗</a>`
     : 'TCGplayer';
   const pcLink = d.pcUrl
-    ? `<a href="${d.pcUrl}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">PriceCharting ↗</a>`
+    ? `<a href="${d.pcUrl}" target="_blank" rel="noopener" style="color:var(--gold-text);text-decoration:none">PriceCharting ↗</a>`
     : 'PriceCharting';
   // Name the basis so the seller knows which of the two numbers the payout
   // rows below were computed from. Silence here is what makes a disclosure
@@ -5939,7 +5963,7 @@ function _renderPriceCaption(el, { label, url, cacheAgeSec, datedBySource, updat
   if (!label) { el.textContent = ''; return; }
   const bits = [];
   bits.push(url
-    ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${label} \u2197</a>`
+    ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold-text);text-decoration:none">${label} \u2197</a>`
     : label);
   // A real date from the feed beats a retrieval age -- it is the stronger
   // claim and the one the user actually wants. Only one of the two renders.
@@ -5965,11 +5989,11 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
       ? ` · range <strong style="color:var(--text)">$${Number(tcg.low).toFixed(2)}–$${Number(tcg.high).toFixed(2)}</strong>`
       : '';
     const _tu = _tcgpCondUrl(tcg.url);
-    const tcgUrl = _tu ? `<a href="${_tu}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${src} ↗</a>` : src;
+    const tcgUrl = _tu ? `<a href="${_tu}" target="_blank" rel="noopener" style="color:var(--gold-text);text-decoration:none">${src} ↗</a>` : src;
     parts.push(
       `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .55rem;line-height:1.4">` +
         `<span class="trust-pill" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.55);color:#4ade80;font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">Market price</span>` +
-        `<strong style="color:var(--gold)">$${Number(tcg.market).toFixed(2)}</strong>` +
+        `<strong style="color:var(--gold-text)">$${Number(tcg.market).toFixed(2)}</strong>` +
         ` · ${tcgUrl}` +
         rangeStr +
         ` <span style="opacity:.6;font-size:.68rem">· retrieved ${ageStr}</span>` +
@@ -5989,7 +6013,7 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
     };
     const pill = pillMap[conf] || pillMap.medium;
     const pcUrl = pc.url
-      ? `<a href="${pc.url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">PriceCharting ↗</a>`
+      ? `<a href="${pc.url}" target="_blank" rel="noopener" style="color:var(--gold-text);text-decoration:none">PriceCharting ↗</a>`
       : 'PriceCharting';
     const matched = pc.productName
       ? ` <span style="opacity:.6;font-size:.68rem">· ${pc.productName}</span>`
@@ -6003,7 +6027,7 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
       `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.3rem;font-size:.78rem;line-height:1.4">` +
         `<span class="trust-pill" style="background:${pill.bg};border:1px solid ${pill.border};color:${pill.color};font-weight:800;font-size:.68rem;padding:.1rem .45rem;border-radius:99px;letter-spacing:.02em">${pill.label}</span>` +
         `<span style="opacity:.85">Guide value</span>` +
-        ` <strong style="color:var(--gold)">$${Number(pc.median).toFixed(2)}</strong>` +
+        ` <strong style="color:var(--gold-text)">$${Number(pc.median).toFixed(2)}</strong>` +
         ` · ${pcUrl}` +
         matched +
         pcAge +
@@ -6047,7 +6071,7 @@ function renderPriceStatus({ tcg, ebay, pc, fallbackEbayUrl }) {
       ? ` <span class="trust-info" title="${outliersRemoved} outlier${outliersRemoved === 1 ? '' : 's'} filtered from ${ebay.rawCount || ebay.count} raw comps. Prices outside 1.5× IQR or 30%–300% of median were removed.">ⓘ</span>`
       : '';
     const ebayUrl = ebay.searchUrl
-      ? `<a href="${ebay.searchUrl}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">eBay ↗</a>`
+      ? `<a href="${ebay.searchUrl}" target="_blank" rel="noopener" style="color:var(--gold-text);text-decoration:none">eBay ↗</a>`
       : 'eBay';
     parts.push(
       `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .5rem;margin-top:.3rem;font-size:.78rem;line-height:1.4">` +
@@ -6348,7 +6372,7 @@ function renderTrustLine(data) {
   return (
     `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .55rem;line-height:1.4">` +
       `<span style="color:var(--text)">eBay sold</span>` +
-      ` · <strong style="color:var(--gold)">${cnt} comp${cnt === 1 ? '' : 's'}</strong>` +
+      ` · <strong style="color:var(--gold-text)">${cnt} comp${cnt === 1 ? '' : 's'}</strong>` +
       ` · median <strong style="color:var(--text)">$${med.toFixed(2)}</strong>` +
       rangeStr +
     `</div>` +
@@ -6804,7 +6828,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
   const tcgHasMarket = tcg && tcg.market != null && tcg.market > 0;
   if (!tcgHasMarket && !ebayHasComps && !pcHasPrice) {
     statusTxt.innerHTML =
-      `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700;text-decoration:none">View sold comps on eBay →</a>` +
+      `<a href="${fallbackEbayUrl}" target="_blank" rel="noopener" style="color:var(--gold-text);font-weight:700;text-decoration:none">View sold comps on eBay →</a>` +
       renderGradeOpportunity(gradeOpp);
   }
 }
@@ -6895,7 +6919,7 @@ async function doSportsSearchLive(q) {
   html += `<div class="drop-item" data-sports-idx="ebay-direct" style="border-left:3px solid var(--gold);cursor:pointer">
     <div class="drop-thumb-ph" style="font-size:1.1rem">🛒</div>
     <div class="drop-info">
-      <div class="drop-name">${esc(q)} <span style="font-size:.72rem;color:var(--gold);font-weight:700">SEARCH EBAY SOLD</span></div>
+      <div class="drop-name">${esc(q)} <span style="font-size:.72rem;color:var(--gold-text);font-weight:700">SEARCH EBAY SOLD</span></div>
       <div class="drop-meta">Open eBay sold listings for: ${esc(queryParts.slice(0,3).join(' '))}</div>
     </div>
     <span style="background:var(--gold);color:#fff;font-size:.68rem;font-weight:700;padding:.2rem .5rem;border-radius:.4rem;white-space:nowrap">Sold Comps</span>
@@ -11224,7 +11248,7 @@ function calc() {
           <div class="payout-rank-name">${p.name}</div>
           <div class="payout-rank-bar-wrap"><div class="payout-rank-bar" style="width:${pct}%;background:var(--text-muted);opacity:.4"></div></div>
           <div class="payout-rank-amt payout-rank-blur">$•••.••</div>
-          <div class="payout-rank-delta" style="color:var(--gold);font-weight:700">Unlock</div>
+          <div class="payout-rank-delta" style="color:var(--gold-text);font-weight:700">Unlock</div>
         </div>`;
       });
       // 2026-09-01: region disclaimer. If any venue in the visible ranking is
@@ -11636,9 +11660,9 @@ function calc() {
         <span style="font-size:.65rem;font-weight:800;background:linear-gradient(135deg,#b8860b,#f5c518);color:#000;padding:.15rem .45rem;border-radius:99px;letter-spacing:.04em">${esc(_upgradeTarget.toUpperCase())}</span>
       </div>
       ${mightEarnMore && diff > 0.5
-          ? `<div style="font-size:.76rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; You could net <strong>$${diff.toFixed(2)} more</strong> on ${esc(PLATFORMS[bestAlt.pid].name)}</div>`
+          ? `<div style="font-size:.76rem;font-weight:700;color:var(--gold-text);margin-bottom:.5rem">&#9650; You could net <strong>$${diff.toFixed(2)} more</strong> on ${esc(PLATFORMS[bestAlt.pid].name)}</div>`
           : mightEarnMore
-            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold);margin-bottom:.5rem">&#9650; A ${esc(_upgradeTarget)} platform pays more than any free one</div>`
+            ? `<div style="font-size:.72rem;font-weight:700;color:var(--gold-text);margin-bottom:.5rem">&#9650; A ${esc(_upgradeTarget)} platform pays more than any free one</div>`
             : `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.5rem">See exact payouts across all platforms</div>`}
       <div style="opacity:.85">${blurRows}</div>
       <div style="text-align:center;margin-top:.75rem">
@@ -11691,7 +11715,7 @@ function calc() {
           : 'Pro Max unlocks COMC + Fanatics Collect — maximize this deal';
         html += `<div style="margin-top:.35rem;padding:.45rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('deal_score_nudge')">
           <span style="font-size:.7rem;color:rgba(196,122,0,.9)">${esc(_nudgeCopy)}</span>
-          <span style="font-size:.68rem;font-weight:800;color:var(--gold);white-space:nowrap">Upgrade →</span>
+          <span style="font-size:.68rem;font-weight:800;color:var(--gold-text);white-space:nowrap">Upgrade →</span>
         </div>`;
       }
     }
@@ -11969,12 +11993,12 @@ function switchView(view) {
           <div style="font-size:.88rem;font-weight:800;color:var(--text);letter-spacing:-.01em">⚙️ Admin Dashboard</div>
           <div style="display:flex;gap:.4rem">
             <button onclick="exportSubscriberCSV()" style="padding:.35rem .75rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">⬇ Export Emails</button>
-            <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
+            <button onclick="loadAdminData()" id="adminRefreshBtn" style="padding:.35rem .75rem;background:var(--surface-2);border:1px solid var(--border);color:var(--gold-text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer">↻ Refresh</button>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem">
           <div class="pnl-card" style="border-color:rgba(74,222,128,.25)"><div class="pnl-label">Pro Users</div><div class="pnl-value pos" id="adminProUsers">—</div><div class="pnl-sub" id="adminProSub"></div></div>
-          <div class="pnl-card" style="border-color:rgba(196,122,0,.25)"><div class="pnl-label">Est. MRR</div><div class="pnl-value" id="adminMRR" style="color:var(--gold)">—</div><div class="pnl-sub" id="adminMRRSub">active subscriptions</div></div>
+          <div class="pnl-card" style="border-color:rgba(196,122,0,.25)"><div class="pnl-label">Est. MRR</div><div class="pnl-value" id="adminMRR" style="color:var(--gold-text)">—</div><div class="pnl-sub" id="adminMRRSub">active subscriptions</div></div>
           <div class="pnl-card"><div class="pnl-label">Newsletter</div><div class="pnl-value" id="adminNewsletter">—</div><div class="pnl-sub">subscribers</div></div>
           <div class="pnl-card"><div class="pnl-label">Total Signups</div><div class="pnl-value" id="adminSignups">—</div><div class="pnl-sub" id="adminReferralSub"></div></div>
         </div>
@@ -12386,7 +12410,7 @@ function renderGradingLog() {
             <td class="ft-mono">${e.salePrice ? '$'+e.salePrice.toFixed(2) : '<span style="color:var(--text-muted)">—</span>'}</td>
             <td>${roi}</td>
             <td><div style="display:flex;gap:.3rem">
-              <button class="ft-delete" onclick="openGradingModal(${e.id})" title="Edit" style="color:var(--gold)">✎</button>
+              <button class="ft-delete" onclick="openGradingModal(${e.id})" title="Edit" style="color:var(--gold-text)">✎</button>
               <button class="ft-delete" onclick="deleteGradingEntry(${e.id})" title="Delete">✕</button>
             </div></td>
           </tr>`;
@@ -12887,7 +12911,7 @@ function renderCollectionView() {
             : '';
           const thumbCell = `<div style="position:relative;width:40px;height:56px">${thumbImg}${gradeBadge}</div>`;
           const cardNameHtml = _hasGrade
-            ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold);vertical-align:middle;white-space:nowrap">${esc2(_gradeLabel)}</span>${esc2(p.card)}`
+            ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold-text);vertical-align:middle;white-space:nowrap">${esc2(_gradeLabel)}</span>${esc2(p.card)}`
             : esc2(p.card);
           // 2026-08-19: The row button used to open eBay for marketplace
           // research. That duplicated the card-tap detail popup (which
@@ -12906,7 +12930,7 @@ function renderCollectionView() {
             <td><div class="ft-card" title="${esc2(p.card)}${_hasGrade ? ' — ' + esc2(_gradeLabel) : ''}">${cardNameHtml}</div></td>
             <td class="ft-set">${esc2(p.set||'—')}</td>
             <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
-            <td class="ft-mono" style="color:var(--gold)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
+            <td class="ft-mono" style="color:var(--gold-text)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
             <td onclick="event.stopPropagation()">${sellCell}</td>
@@ -14029,7 +14053,7 @@ function renderFlipsView() {
           : '';
         const thumbCell = `<div style="position:relative;width:40px;height:56px">${thumbImg}${gradeBadge}</div>`;
         const cardNameHtml = _hasGrade
-          ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold);vertical-align:middle;white-space:nowrap">${esc(_gradeLabel)}</span>${esc(f.card)}`
+          ? `<span style="display:inline-block;padding:.05rem .3rem;margin-right:.35rem;background:rgba(212,175,55,.18);border:1px solid rgba(212,175,55,.4);border-radius:4px;font-size:.65rem;font-weight:800;color:var(--gold-text);vertical-align:middle;white-space:nowrap">${esc(_gradeLabel)}</span>${esc(f.card)}`
           : esc(f.card);
         // Date shown as small caption under the card name so we don't need
         // a dedicated column (saves horizontal space for the thumbnail).
@@ -14041,7 +14065,7 @@ function renderFlipsView() {
           <td><div class="ft-card" title="${esc(f.card)}${_hasGrade ? ' — ' + esc(_gradeLabel) : ''}">${cardNameHtml}</div>${dateCaption}</td>
           <td style="font-size:.72rem;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.set||'—')}</td>
           <td class="ft-mono">$${b.toFixed(2)}</td>
-          <td class="ft-mono" style="color:var(--gold)">$${s.toFixed(2)}</td>
+          <td class="ft-mono" style="color:var(--gold-text)">$${s.toFixed(2)}</td>
           <td class="ft-mono" style="color:${roiColor};font-weight:700">${pr>=0?'+':''}$${Math.abs(pr).toFixed(2)}</td>
           <td style="font-size:.72rem;color:${hasCost?roiColor:'var(--text-faint)'};font-weight:700">${hasCost?`${roi>=0?'+':''}${roi.toFixed(1)}%`:'—'}</td>
           <td style="font-size:.72rem">${esc(f.platform || '—')}</td>
@@ -14896,7 +14920,7 @@ async function _reidentifyAndLoadGraded(frontBase64, psaGrade) {
     if (el) {
       const busy = document.createElement('div');
       busy.id = '_reidBusy';
-      busy.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:20;border-radius:14px;font-weight:800;font-size:.85rem;color:var(--gold)';
+      busy.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:20;border-radius:14px;font-weight:800;font-size:.85rem;color:var(--gold-text)';
       busy.innerHTML = '<span class="spinner" style="width:14px;height:14px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem"></span>Loading card\u2026';
       const host = el;
       if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
@@ -15357,7 +15381,7 @@ function openWrongCardPicker() {
       '<div style="flex:1;min-width:0">' +
         '<div style="font-weight:800;color:#fff;font-size:.95rem">' + esc(c.n || '') + '</div>' +
         '<div style="font-size:.78rem;color:rgba(255,255,255,.7);margin-top:.15rem">' + esc(c.s || '') + ' · #' + esc(String(c.nu || '')) + (c.r ? ' · ' + esc(c.r) : '') + '</div>' +
-        (isCurrent ? '<div style="font-size:.7rem;color:var(--gold);margin-top:.2rem;font-weight:700">✓ Currently selected</div>' : '') +
+        (isCurrent ? '<div style="font-size:.7rem;color:var(--gold-text);margin-top:.2rem;font-weight:700">✓ Currently selected</div>' : '') +
       '</div>' +
       '<div style="color:rgba(255,255,255,.4);font-size:1.1rem">›</div>' +
     '</div>';
@@ -17160,7 +17184,7 @@ async function processScanImage(input) {
         }
         statusEl.innerHTML = `<span style="color:#f87171;font-weight:700">${title}</span>`;
         const retryHtml = showRetry
-          ? `<button onclick="window._skipQCDupe=true;_startSingleScanCapture()" style="margin-right:.5rem;background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Scan again anyway</button>`
+          ? `<button onclick="window._skipQCDupe=true;_startSingleScanCapture()" style="margin-right:.5rem;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Scan again anyway</button>`
           : '';
         resultEl.innerHTML = `<div style="font-size:.85rem;color:rgba(255,255,255,.7);margin-bottom:.75rem">${msg}</div>${retryHtml}<button onclick="cancelScan();setTimeout(()=>_startSingleScanCapture(),100)" style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:.55rem 1rem;font-weight:700;font-size:.85rem;cursor:pointer">Retake photo</button>`;
         try { if (window.va) va('track', 'photo_qc_reject', { reason, blur: qc.details.blurScore, w: qc.details.width, h: qc.details.height }); } catch(_) {}
@@ -18162,7 +18186,7 @@ async function processGradeImage(input) {
   window._gradeFrontBase64 = await compressImage(file, 1000);
   window._gradeFrontUrl    = frontUrl;
 
-  const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold)">(Step 1 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 1 of 2)</span>';
+  const stepLabel = window._gradeIsDeep ? ' <span style="font-size:.7rem;color:var(--gold-text)">(Step 1 of 3+)</span>' : ' <span style="font-size:.7rem;color:rgba(255,255,255,.5)">(Step 1 of 2)</span>';
   statusEl.innerHTML = '<span style="color:#4ade80">\u2713 Front captured</span>' + stepLabel + '<br><span style="font-size:.82rem;opacity:.8">Now flip it \u2014 take the BACK photo</span>';
   resultEl.innerHTML = '<button onclick="_startGradeBackCapture()" style="margin-top:.25rem;background:var(--gold);color:#000;border:none;border-radius:10px;padding:.6rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">\uD83D\uDCF7 Take Back Photo</button>';
 }
@@ -18213,10 +18237,10 @@ function showDeepGradeEdgeUI() {
   const min = 2, max = 4;
 
   statusEl.innerHTML =
-    '<span style="color:#4ade80">\u2713 Front + back captured</span> <span style="font-size:.7rem;color:var(--gold)">(Step 2 of 3)</span>' +
+    '<span style="color:#4ade80">\u2713 Front + back captured</span> <span style="font-size:.7rem;color:var(--gold-text)">(Step 2 of 3)</span>' +
     '<br><span style="font-size:.85rem;color:#fff;font-weight:700;margin-top:.35rem;display:inline-block">Add edge photos — pick <strong>at least 2</strong>, up to 4</span>' +
     '<br><span style="font-size:.72rem;color:rgba(255,255,255,.55);line-height:1.45">Hold the card so the light hits one edge at a time. Fill the frame with just that edge — don\'t worry about the whole card.</span>' +
-    '<br><a href="#" onclick="event.preventDefault();openPhotoTipsModal(null);return false;" style="display:inline-block;margin-top:.4rem;font-size:.7rem;color:var(--gold);text-decoration:underline;font-weight:600">📸 Show photo tips</a>';
+    '<br><a href="#" onclick="event.preventDefault();openPhotoTipsModal(null);return false;" style="display:inline-block;margin-top:.4rem;font-size:.7rem;color:var(--gold-text);text-decoration:underline;font-weight:600">📸 Show photo tips</a>';
 
   const edgeBtn = (key, label, emoji, tip) => {
     const done = !!(edges[key] || edges[key.toLowerCase()]);
@@ -18302,7 +18326,7 @@ async function submitGradeScan(deepGrade) {
   const analyzingCount = deepGrade
     ? 'front, back + ' + Object.keys(window._gradeEdges || {}).length + ' edges'
     : 'front + back';
-  statusEl.innerHTML = '<span style="color:var(--gold);font-weight:800">' +
+  statusEl.innerHTML = '<span style="color:var(--gold-text);font-weight:800">' +
     (deepGrade ? '\uD83D\uDD0D Deep Grade Analysis' : '\u2605 Estimated Grade Scanner') +
     '</span><br><span style="font-size:.8rem;opacity:.7">Analyzing ' + analyzingCount + '\u2026 this may take 10\u201320s</span>';
   resultEl.innerHTML = '<div style="width:100%;height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden"><div style="height:100%;width:35%;background:var(--gold);border-radius:99px;animation:pulse 1.5s ease-in-out infinite"></div></div>';
@@ -21831,7 +21855,7 @@ window.addEventListener('load', () => {
     <!-- Logo -->
     <div class="auth-modal-logo">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-      <span style="font-size:.9rem;font-weight:900;color:var(--text)">Card<span style="color:var(--gold)">Resell</span></span>
+      <span style="font-size:.9rem;font-weight:900;color:var(--text)">Card<span style="color:var(--gold-text)">Resell</span></span>
     </div>
 
     <!-- Sign In view -->
@@ -22903,7 +22927,7 @@ function openBulkGrade(mode) {
   // Update the header title to include the mode.
   const titleWrap = ov.querySelector('div[style*="font-size:1rem"]');
   if (titleWrap) {
-    titleWrap.innerHTML = '<span style="color:var(--gold)">' + (mode === 'deep' ? '🔍' : '⚡') + '</span> ' +
+    titleWrap.innerHTML = '<span style="color:var(--gold-text)">' + (mode === 'deep' ? '🔍' : '⚡') + '</span> ' +
       (mode === 'deep' ? 'Bulk Deep Grade' : 'Bulk Quick Grade') +
       ' <span style="font-size:.6rem;font-weight:800;letter-spacing:.06em;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.15rem .4rem;border-radius:99px">PRO MAX</span>';
   }
@@ -22945,7 +22969,7 @@ function openBulkGrade(mode) {
   const credits = (window._scanCredits || 0);
   const info = document.getElementById('bulkGradeCreditsInfo');
   if (info) {
-    info.innerHTML = 'You have <strong style="color:var(--gold)">' + credits + '</strong> grade credit' +
+    info.innerHTML = 'You have <strong style="color:var(--gold-text)">' + credits + '</strong> grade credit' +
       (credits !== 1 ? 's' : '') + ' available';
   }
   _bulkGradeShowSection('intro');
@@ -23195,12 +23219,12 @@ function processBulkGradeFiles(input) {
       : totalPhotos + ' photos (front + back each)';
     msg.innerHTML = '<strong style="color:#fff">' + count + ' card' + (count !== 1 ? 's' : '') + ' ready</strong>' +
       '<br><span style="font-size:.72rem;color:var(--text-muted)">' + photoLabel + '</span>' +
-      (truncated ? '<br><span style="color:var(--gold);font-size:.72rem">(capped at ' + cap + ' cards this session)</span>' : '');
+      (truncated ? '<br><span style="color:var(--gold-text);font-size:.72rem">(capped at ' + cap + ' cards this session)</span>' : '');
   }
   if (bud) {
     if (hasEnough) {
       const perCard = (mode === 'deep') ? 2 : 1;
-      bud.innerHTML = 'Uses <strong style="color:var(--gold)">' + needCredits + ' grade credit' + (needCredits !== 1 ? 's' : '') +
+      bud.innerHTML = 'Uses <strong style="color:var(--gold-text)">' + needCredits + ' grade credit' + (needCredits !== 1 ? 's' : '') +
         '</strong> (' + perCard + '/card) · you have ' + credits;
       if (btn) {
         btn.disabled = false; btn.style.opacity = '1';
@@ -23596,7 +23620,7 @@ function openBulkGradeDetail(idx) {
   ];
   const roiBlock = (r.rawPrice > 0 && r.gradedPrice > 0)
     ? '<div style="padding:.75rem;background:rgba(196,122,0,.06);border:1px solid rgba(196,122,0,.2);border-radius:10px;margin-top:.75rem">' +
-        '<div style="font-size:.72rem;font-weight:800;color:var(--gold);margin-bottom:.4rem">Grading ROI</div>' +
+        '<div style="font-size:.72rem;font-weight:800;color:var(--gold-text);margin-bottom:.4rem">Grading ROI</div>' +
         '<div style="display:flex;gap:.75rem;flex-wrap:wrap;font-size:.72rem;color:rgba(255,255,255,.75)">' +
           '<div>Raw: <strong style="color:#fff">$' + r.rawPrice.toFixed(2) + '</strong></div>' +
           '<div>PSA 10: <strong style="color:#fff">$' + r.gradedPrice.toFixed(2) + '</strong></div>' +
@@ -25263,7 +25287,7 @@ function _bulkUpdateRow(rowId, result) {
       ? `<span style="position:absolute;top:-6px;right:-6px;background:rgba(139,92,246,1);color:#fff;font-size:.62rem;font-weight:800;border-radius:99px;padding:1px 5px;line-height:1.3;box-shadow:0 0 0 2px #111">×${result.qty}</span>`
       : '';
     const priceHtml = result.marketPrice != null
-      ? `<span style="color:var(--gold);font-weight:700">$${result.marketPrice.toFixed(2)}</span>` +
+      ? `<span style="color:var(--gold-text);font-weight:700">$${result.marketPrice.toFixed(2)}</span>` +
         (result.priceVariant ? `<span style="color:rgba(255,255,255,.35);font-size:.68rem"> · ${_esc(formatVariantName(result.priceVariant))}</span>` : '') +
         ` <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`
       : `<span style="color:rgba(255,255,255,.3)">${_esc(result.unavailableReason || 'Price unavailable')}</span> <button onclick="bulkEditPrice('${rowId}')" title="Enter price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`;
@@ -26258,7 +26282,7 @@ function _esc(s) {
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(255,255,255,.06);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">📷</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:.9rem;font-weight:800">Bulk ID Scan</div>
-          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Identify + price up to 50 cards. <strong style="color:var(--gold)">1 ID credit / card</strong> · 1 photo</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Identify + price up to 50 cards. <strong style="color:var(--gold-text)">1 ID credit / card</strong> · 1 photo</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
@@ -26283,7 +26307,7 @@ function _esc(s) {
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">⚡</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:.9rem;font-weight:800">Quick Grade</div>
-          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, ballpark PSA estimate. <strong style="color:var(--gold)">1 credit</strong> · 2 photos (front + back)</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, ballpark PSA estimate. <strong style="color:var(--gold-text)">1 credit</strong> · 2 photos (front + back)</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
@@ -26293,7 +26317,7 @@ function _esc(s) {
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:.9rem;font-weight:800">Deep Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
-          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, tightest PSA estimate. <strong style="color:var(--gold)">2 credits</strong> · 6 photos (front, back, 4 edges)</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, tightest PSA estimate. <strong style="color:var(--gold-text)">2 credits</strong> · 6 photos (front, back, 4 edges)</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
@@ -26330,7 +26354,7 @@ function _esc(s) {
       <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">⚡</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:.9rem;font-weight:800">Bulk Quick Grade</div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Ballpark grades for a fast sort. <strong style="color:var(--gold)">1 credit / card</strong> · 2 photos each (front + back)</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Ballpark grades for a fast sort. <strong style="color:var(--gold-text)">1 credit / card</strong> · 2 photos each (front + back)</div>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </button>
@@ -26340,7 +26364,7 @@ function _esc(s) {
       <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:.9rem;font-weight:800">Bulk Deep Grade</div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Tightest per-card estimate for cards worth submitting. <strong style="color:var(--gold)">2 credits / card</strong> · 6 photos each</div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Tightest per-card estimate for cards worth submitting. <strong style="color:var(--gold-text)">2 credits / card</strong> · 6 photos each</div>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
     </button>
@@ -26357,7 +26381,7 @@ function _esc(s) {
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
     <div>
       <div style="font-size:1rem;font-weight:800;color:#fff;display:flex;align-items:center;gap:.4rem">
-        <span style="color:var(--gold)">⭐</span> Bulk AI Grade
+        <span style="color:var(--gold-text)">⭐</span> Bulk AI Grade
         <span style="font-size:.6rem;font-weight:800;letter-spacing:.06em;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.15rem .4rem;border-radius:99px">PRO MAX</span>
       </div>
       <div id="bulkGradeSubtitle" style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">1 grade credit per card · up to 25 per session</div>
@@ -26374,7 +26398,7 @@ function _esc(s) {
       an Etsy lot, or a whole PC before submitting to PSA.
     </div>
     <div style="background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:12px;padding:.9rem 1.1rem;max-width:340px;font-size:.78rem;color:rgba(255,255,255,.85);line-height:1.55;text-align:left">
-      <div style="font-weight:800;color:var(--gold);margin-bottom:.4rem">Pro Max includes:</div>
+      <div style="font-weight:800;color:var(--gold-text);margin-bottom:.4rem">Pro Max includes:</div>
       • 40 AI Grades/mo · 100 ID scans/mo<br>
       • 15% off top-up packs<br>
       • <strong style="color:#fff">Bulk Grade tool</strong> (this one)<br>
