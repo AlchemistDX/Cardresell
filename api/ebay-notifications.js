@@ -3,9 +3,18 @@
 // POST (JSON body)          → acknowledges deletion notification with 200 OK
 
 import { createHash } from 'crypto';
+import { cleanCredential } from './_ebayAuth.js';
 
 // This token must match exactly what you enter in the eBay portal
-const VERIFICATION_TOKEN = process.env.EBAY_VERIFICATION_TOKEN || 'CardResell-eBay-Notify-2026-secure-token-v1';
+// cleanCredential() strips stray quotes, real whitespace, and LITERAL \n / \r
+// / \t sequences. This is load-bearing, not defensive dressing: on 2026-09-05
+// the value stored in Vercel production carried a trailing newline, so this
+// endpoint was answering eBay's challenge with a hash over the wrong token.
+// The clean token hashes to c61401b9...; the corrupted one to 0d8f324a...,
+// and production was returning the latter. A mismatched challenge response
+// fails eBay's endpoint validation, which gates production API access.
+const VERIFICATION_TOKEN = cleanCredential(process.env.EBAY_VERIFICATION_TOKEN)
+  || 'CardResell-eBay-Notify-2026-secure-token-v1';
 const ENDPOINT_URL       = 'https://www.cardresell.org/api/ebay-notifications';
 
 export default async function handler(req, res) {
