@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { readAppSource } from './_appsource.mjs';
 let fail=0;
 const ok=(c,m)=>{ if(!c){console.log('FAIL: '+m); fail++;} else console.log('ok: '+m); };
 for (const f of ['index.html','accuracy.html','pricing.html']) {
@@ -18,7 +19,7 @@ for (const f of ['index.html','accuracy.html','pricing.html']) {
   const o=(src.match(/<div\b/g)||[]).length, c=(src.match(/<\/div>/g)||[]).length;
   ok(o===c, `${f} div balance ${o}/${c} (${n} scripts parsed)`);
 }
-const idx=fs.readFileSync('index.html','utf8');
+const idx=readAppSource();
 const pr=fs.readFileSync('pricing.html','utf8');
 const ac=fs.readFileSync('accuracy.html','utf8');
 JSON.parse(fs.readFileSync('vercel.json','utf8'));

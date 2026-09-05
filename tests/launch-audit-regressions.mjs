@@ -1,10 +1,11 @@
 import fs from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import gradeOpportunity from '../api/grade-opportunity.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const index = readAppSource();
 const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
 const stripeCheckout = fs.readFileSync(path.join(root, 'api/stripe-checkout.js'), 'utf8');
 const tierApi = fs.readFileSync(path.join(root, 'api/_tier.js'), 'utf8');
@@ -227,7 +228,7 @@ try {
 //      and the user could not read why checkout failed.
 {
   const fs = await import('node:fs');
-  const rd = (f) => fs.readFileSync(new URL(f, import.meta.url), 'utf8');
+  const rd = (f) => (f === '../index.html' ? readAppSource() : fs.readFileSync(new URL(f, import.meta.url), 'utf8'));
   const CHECKOUTS = [
     '../api/stripe-id-checkout.js',
     '../api/stripe-grade-checkout.js',
@@ -1118,7 +1119,7 @@ try {
 // values. The most expensive numbers in the app carried a fabricated
 // freshness promise.
 {
-  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const idx = readAppSource();
 
   check('there is exactly one price-caption renderer',
         (idx.match(/function _renderPriceCaption\(/g) || []).length === 1,
@@ -1251,7 +1252,7 @@ try {
 // Holo, 679/107,255) to 14.7% -- so any era or set baseline applied to a
 // specific card is off by up to ~18x. The correct ship was nothing.
 {
-  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const idx = readAppSource();
 
   check('renderGradeOpportunity still renders nothing',
         /function renderGradeOpportunity\(g\) \{\s*\n\s*return '';\s*\n\}/.test(idx),
@@ -1288,7 +1289,7 @@ try {
 // spread a slab does have. Each check below pins a rule that, if broken,
 // turns an honest value axis into a misleading claim.
 {
-  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const idx = readAppSource();
   const ladStart = idx.indexOf('function _qpGradeLadder');
   const ladEnd = idx.indexOf('function renderQuickPricing');
   const lad = ladStart > -1 && ladEnd > ladStart ? idx.slice(ladStart, ladEnd) : '';
@@ -1362,7 +1363,7 @@ try {
 // the one cue that would have shown the user the wrong card. Downstream
 // prices were all internally consistent, just for a card nobody asked for.
 {
-  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const idx = readAppSource();
 
   check('the set-hint ranker exists and is applied to TPL search results',
         /function _rankTplBySetHint/.test(idx)
@@ -1424,7 +1425,7 @@ try {
 // P0-D says every published number carries source + retrieval age + an explicit
 // undated marker; the ladder was exempt by omission, not by design.
 {
-  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const idx = readAppSource();
   const lad = idx.slice(idx.indexOf('function _qpRenderLadder'),
                         idx.indexOf('function _qpRenderLadder') + 4000);
 

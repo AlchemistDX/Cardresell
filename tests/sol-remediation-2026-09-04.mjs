@@ -7,11 +7,12 @@
 // text so a semantic change breaks the test.
 
 import fs from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const index = readAppSource();
 const scanApi = fs.readFileSync(path.join(root, 'api/scan.js'), 'utf8');
 
 let passed = 0, failed = 0;

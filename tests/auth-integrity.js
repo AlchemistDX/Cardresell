@@ -16,6 +16,7 @@ const path = require('path');
 
 const INDEX = '/home/user/workspace/cardresell/index.html';
 const SIGNIN = '/home/user/workspace/cardresell/signin.html';
+const { readAppSource } = require('./_appsource.cjs');
 
 let failures = 0;
 let checks = 0;
@@ -40,7 +41,7 @@ function readFile(p) {
     console.log(`SKIP (missing): ${p}`);
     return null;
   }
-  return fs.readFileSync(p, 'utf8');
+  return p === INDEX ? readAppSource() : fs.readFileSync(p, 'utf8');
 }
 
 const index = readFile(INDEX);

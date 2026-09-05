@@ -7,7 +7,8 @@
 //     Bulbasaur #133 $20.87.
 //   * api/tcg-price.js emits `imageUrl`; it has never emitted `image`.
 import { readFileSync } from 'node:fs';
-const h = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+import { readAppSource } from './_appsource.mjs';
+const h = readAppSource();
 const api = readFileSync(new URL('../api/tcg-price.js', import.meta.url), 'utf8');
 let fail = 0;
 const ok = (name, cond) => { if (!cond) { console.error('FAIL: ' + name); fail++; } else console.log('pass: ' + name); };

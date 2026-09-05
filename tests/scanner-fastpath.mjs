@@ -16,11 +16,12 @@
 //   accepted 26/30, wrong-accepted 0, mean pHash self-distance 2.5 bits.
 
 import { readFileSync } from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const index = readFileSync(join(ROOT, 'index.html'), 'utf8');
+const index = readAppSource();
 const scanMiss = readFileSync(join(ROOT, 'api', 'scan-miss.js'), 'utf8');
 const seeder = readFileSync(join(ROOT, 'tools', 'seed_set.py'), 'utf8');
 

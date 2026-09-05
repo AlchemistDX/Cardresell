@@ -12,11 +12,12 @@
  *                 deep-grade edge photos, nor over-cap or replaced queues.
  */
 import fs from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const HTML = readAppSource();
 const PRO  = fs.readFileSync(path.join(ROOT, 'api/pro-status.js'), 'utf8');
 const SCAN = fs.readFileSync(path.join(ROOT, 'api/scan.js'), 'utf8');
 

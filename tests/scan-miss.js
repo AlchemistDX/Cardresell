@@ -12,6 +12,7 @@
 const fs = require('fs');
 
 const INDEX = '/home/user/workspace/cardresell/index.html';
+const { readAppSource } = require('./_appsource.cjs');
 const SCAN_MISS_API = '/home/user/workspace/cardresell/api/scan-miss.js';
 
 let failures = 0;
@@ -28,7 +29,7 @@ function check(name, cond, detail) {
   }
 }
 
-const html = fs.readFileSync(INDEX, 'utf8');
+const html = readAppSource();
 
 console.log('\n[scan-miss regression checks]');
 

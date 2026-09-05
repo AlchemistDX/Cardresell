@@ -15,12 +15,13 @@
 //     `set_mismatch` for a product it had matched exactly. "Mew" -> "w" was
 //     broken the same way.
 import { readFileSync } from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { normalizeSetName } from '../api/_tcgcsv.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = readFileSync(join(ROOT, 'index.html'), 'utf8');
+const HTML = readAppSource();
 const TCGCSV = readFileSync(join(ROOT, 'api/_tcgcsv.js'), 'utf8');
 
 let pass = 0; const fails = [];

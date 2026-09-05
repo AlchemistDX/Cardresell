@@ -4,9 +4,10 @@
 // jpEbaySellLink, scan-miss sell-flow link, tcgplayerUrl on port entries.
 
 const fs = require('fs');
+const { readAppSource } = require('./_appsource.cjs');
 const path = require('path');
 
-const INDEX  = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const INDEX  = readAppSource();
 const RESOLVE = fs.readFileSync(path.join(__dirname, '..', 'api', 'tcgp-resolve.js'), 'utf8');
 
 let pass = 0, fail = 0;

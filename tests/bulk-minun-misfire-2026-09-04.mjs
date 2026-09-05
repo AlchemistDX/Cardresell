@@ -8,11 +8,12 @@
 // arbitrary printing -- POP Series 3 #4 at $50.00 -- was rendered as the
 // user's card.
 import { readFileSync } from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = readFileSync(join(ROOT, 'index.html'), 'utf8');
+const HTML = readAppSource();
 const TCG = readFileSync(join(ROOT, 'api/tcg-price.js'), 'utf8');
 
 let pass = 0; const fails = [];

@@ -9,11 +9,12 @@
  * is present, so a future colour tweak that quietly drops below 4.5:1 fails.
  */
 import { readFileSync } from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = (f) => readFileSync(join(ROOT, f), 'utf8');
+const read = (f) => (f === 'index.html' ? readAppSource() : readFileSync(join(ROOT, f), 'utf8'));
 const idx = read('index.html');
 const vercel = JSON.parse(read('vercel.json'));
 

@@ -19,11 +19,12 @@
 // Run: node tests/fee-truth-offline.mjs
 
 import fs from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const src = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const src = readAppSource();
 
 /** Pull a top-level `const NAME = { ... };` block out of index.html by brace matching.
  *  Needed because the extracted fee functions are evaluated in isolation via

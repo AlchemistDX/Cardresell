@@ -15,7 +15,8 @@
 
 import { readFileSync } from 'node:fs';
 
-const index = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+import { readAppSource } from './_appsource.mjs';
+const index = readAppSource();
 const tcgPrice = readFileSync(new URL('../api/tcg-price.js', import.meta.url), 'utf8');
 
 let passed = 0, failed = 0;

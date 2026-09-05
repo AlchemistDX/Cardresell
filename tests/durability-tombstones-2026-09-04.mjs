@@ -11,11 +11,12 @@
  * and being commented out, so anything executable is executed.
  */
 import fs from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const HTML = readAppSource();
 const API  = fs.readFileSync(path.join(ROOT, 'api', 'user-data.js'), 'utf8');
 
 let pass = 0;

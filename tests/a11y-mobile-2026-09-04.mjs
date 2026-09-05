@@ -15,11 +15,12 @@
  *   SOL-PLAT-010  "3 months free" overstated the annual discount by 8 cents.
  */
 import fs from 'node:fs';
+import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const HTML = readAppSource();
 
 let pass = 0;
 const fails = [];
