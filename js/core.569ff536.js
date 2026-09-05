@@ -7477,9 +7477,33 @@ function calc() {
       ...results.filter(r => _visible.has(r.pid) && r.applicable && venueEnabled(r.pid)).map(r => r.netPayout),
       0
     );
-    const mightEarnMore = proOnlyResults[0] && proOnlyResults[0].netPayout > bestFreePayout;
-    const bestAlt = proOnlyResults[0];
+    // The "You could net $X more on Y" headline is a promise: pay $9.99 and
+    // beat free by $X on Y. Two rules keep that promise honest:
+    //  (1) bestAlt must be unlocked by the tier we're actually SELLING here,
+    //      not just any locked venue. Otherwise a Free user sees a COMC-driven
+    //      headline attached to a $9.99 Pro button that doesn't include COMC.
+    //  (2) bestAlt must be rankable per venueRanked() — the main payout ranker
+    //      already refuses to crown consign/cash venues (see the
+    //      UNRANKED_VENUE_GROUPS comment at the top of the venue system).
+    //      COMC's raw net beats TCGplayer for the same reason the ranker
+    //      won't crown it: it hides weeks-to-months before cash lands. If the
+    //      main ranker won't put it at #1, the upsell headline can't either.
+    //  (3) bestAlt must have all its venueRequirements() met — the same rule
+    //      venueEligible() applies in the main ranker. Cardmarket needs both
+    //      EU postage and an EU-registered account; without them the number
+    //      is meaningless (see the VENUE_REQUIRES comment). A Free seller who
+    //      pays $9.99 chasing a Cardmarket gap gets a venue that won't rank
+    //      until they enter data they may not have. Falling back is honest.
+    // Falls back to the generic "A Pro platform pays more…" copy that's
+    // already written below.
+    const _sellingTier   = _uTier === 'free' ? 'pro' : 'pro_max';
+    const _sellingSet    = platformsForTier(_sellingTier);
+    const _headlineCands = proOnlyResults.filter(r =>
+      _sellingSet.has(r.pid) && venueRanked(r.pid) && venueRequirementMet(r.pid)
+    );
+    const bestAlt = _headlineCands[0];
     const diff = bestAlt ? (bestAlt.netPayout - bestFreePayout) : 0;
+    const mightEarnMore = bestAlt && bestAlt.netPayout > bestFreePayout;
 
     const blurRows = proOnlyResults.map(r => {
       const info = PLATFORMS[r.pid];
@@ -7487,9 +7511,14 @@ function calc() {
       // Mini effort dot so users see the tradeoff without needing to unlock.
       const eColor = info.effort === 'easy' ? '#4ade80' : info.effort === 'medium' ? '#fbbf24' : '#f87171';
       const eTag   = info.effort ? `<span title="${info.hassle || ''}" style="display:inline-flex;align-items:center;gap:.25rem;font-size:.62rem;font-weight:700;color:${eColor};text-transform:uppercase;letter-spacing:.03em"><span style="width:.35rem;height:.35rem;border-radius:50%;background:${eColor};display:inline-block"></span>${info.effort}</span>` : '';
+      // Placeholder over the real value. The previous CSS blur left the exact
+      // net readable in the DOM (devtools, select-all), which contradicted
+      // "exact nets stay locked until you subscribe". A non-numeric string
+      // gives no readable value to lift. isBetter still colors the row so the
+      // "one of these beats free" signal survives.
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid rgba(255,255,255,.06)">
         <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">${info.emoji} ${info.name} ${eTag}</span>
-        <span style="font-family:var(--mono);font-size:.88rem;font-weight:700;filter:blur(5px);user-select:none;color:${isBetter?'var(--green)':'var(--text)'}">${fmt(r.netPayout)}</span>
+        <span aria-label="Locked — unlock to view" style="font-family:var(--mono);font-size:.88rem;font-weight:700;user-select:none;letter-spacing:.05em;color:${isBetter?'var(--green)':'var(--text-muted)'}">$•••.••</span>
       </div>`;
     }).join('');
 
