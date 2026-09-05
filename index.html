@@ -24281,6 +24281,60 @@ const BULK_CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 const BULK_CONDITION_LABELS = { NM: 'Near Mint', LP: 'Lightly Played', MP: 'Moderately Played', HP: 'Heavily Played', DMG: 'Damaged' };
 const BULK_VARIANT_PRIORITY = ['holofoil', 'reverseHolofoil', 'normal', 'firstEditionHolofoil', 'firstEditionNormal', 'firstEdition'];
 
+// 2026-09-04 (Bulbasaur #133): the scanner reported the name as
+// "Bulbasaur (Mega Evolution Stamped)". pokemontcg.io returned ZERO rows for
+// every query built from that string -- with the number, with the set, and
+// name-only -- so the row rendered "Price unavailable" for a card the catalog
+// holds and prices at ~$20.64. The parenthetical is a variant note the
+// scanner adds; it is not part of the catalog name.
+//
+// Bracketed qualifiers ARE sometimes genuine ("Unown [A]" is a real, distinct
+// card name), so the qualified name is still tried FIRST and the stripped
+// form is only added as an extra, wider attempt. That is safe even for Unown,
+// because the exact bracketed query returns zero rows anyway and the
+// corroboration guard below still requires the number or set to agree before
+// any price is shown.
+function _bulkNameVariants(name) {
+  const full = String(name || '').trim();
+  const out = full ? [full] : [];
+  const stripped = full
+    .replace(/[\(\[][^)\]]*[\)\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Guard against a name that is ENTIRELY a qualifier, e.g. "(Promo)".
+  if (stripped && stripped !== full) out.push(stripped);
+  return out;
+}
+
+// Every /api/tcg-price fallback in the bulk path went out with the raw
+// scanner name, so a parenthetical qualifier defeated the fallback for the
+// same reason it defeated the primary lookup. Try each name spelling here
+// too. Returns the priced payload or null; callers keep their own shapes.
+async function _bulkTcgPriceFetch(name, number, setName, rarity) {
+  for (const nm of _bulkNameVariants(name)) {
+    try {
+      const url = `/api/tcg-price?name=${encodeURIComponent(nm)}`
+        + (number  ? '&number=' + encodeURIComponent(number)  : '')
+        + (setName ? '&set='    + encodeURIComponent(setName) : '')
+        + (rarity  ? '&rarity=' + encodeURIComponent(rarity)  : '');
+      const r = await fetch(url, { signal: AbortSignal.timeout(7000) });
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d && d.market > 0) return d;
+    } catch (_) {}
+  }
+  return null;
+}
+
+// A Response-shaped shim so the five existing fallback sites can adopt the
+// helper without restructuring their parsing.
+function _bulkTcgPriceShim(name, number, setName, rarity) {
+  return {
+    ok: true,
+    json: async () => (await _bulkTcgPriceFetch(name, number, setName, rarity)) || {},
+  };
+}
+
 // 2026-09-04 (Minun #194 misfire): a bulk row showed the scanner's identity
 // ("Minun - Paradox Rift #194") next to a price and thumbnail belonging to a
 // completely different card (POP Series 3 #4, $50.00, 2006 art). The match
@@ -24577,7 +24631,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
           // If pokemontcg.io returned this card but no market price, fall through to /api/tcg-price live lookup
           if (bestMarket == null) {
             try {
-              const r2 = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}`, { signal: AbortSignal.timeout(7000) });
+              const r2 = _bulkTcgPriceShim(cleanName, cleanNumber, setName, '');
               if (r2.ok) {
                 const d = await r2.json();
                 if (d && d.market > 0) {
@@ -24609,7 +24663,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
   // because many JP cards share the English character name.
   if (isJapanese) {
     try {
-      const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${rarity ? '&rarity=' + encodeURIComponent(rarity) : ''}`, { signal: AbortSignal.timeout(7000) });
+      const r = _bulkTcgPriceShim(cleanName, cleanNumber, setName, rarity);
       if (r.ok) {
         const d = await r.json();
         if (d && d.market > 0) {
@@ -24633,10 +24687,18 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // printing. Add a set-scoped query in between: it is far more selective
     // than name-only, and it still answers when the number query comes back
     // empty. The bare-name query stays last as the widest net.
+    // 2026-09-04: built over _bulkNameVariants so a scanner-added
+    // parenthetical ("Bulbasaur (Mega Evolution Stamped)") cannot zero out
+    // every query. Selective forms for BOTH name spellings come before either
+    // bare-name query, so widening never costs precision.
+    const _names = _bulkNameVariants(cleanName);
+    const _setQ = setName ? String(setName).replace(/"/g, '') : '';
     const queries = [];
-    if (cleanNumber) queries.push(`name:"${cleanName}" number:"${cleanNumber}"`);
-    if (setName) queries.push(`name:"${cleanName}" set.name:"${String(setName).replace(/"/g, '')}"`);
-    queries.push(`name:"${cleanName}"`);
+    for (const nm of _names) {
+      if (cleanNumber) queries.push(`name:"${nm}" number:"${cleanNumber}"`);
+      if (_setQ) queries.push(`name:"${nm}" set.name:"${_setQ}"`);
+    }
+    for (const nm of _names) queries.push(`name:"${nm}"`);
 
     let cards = null;
     for (const q of queries) {
@@ -24658,7 +24720,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // no-data answer from BOTH sources may render "Price unavailable".
     if (!cards || !cards.length) {
       try {
-        const rFb = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${cleanRarity ? '&rarity=' + encodeURIComponent(cleanRarity) : ''}`, { signal: AbortSignal.timeout(7000) });
+        const rFb = _bulkTcgPriceShim(cleanName, cleanNumber, setName, cleanRarity);
         if (rFb.ok) {
           const d = await rFb.json();
           if (d && d.market > 0) {
@@ -24734,7 +24796,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // rendered a POP Series 3 price and image.
     if (!_bulkCandidateCorroborated(best, setName, cleanNumber)) {
       try {
-        const rMis = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${cleanRarity ? '&rarity=' + encodeURIComponent(cleanRarity) : ''}`, { signal: AbortSignal.timeout(7000) });
+        const rMis = _bulkTcgPriceShim(cleanName, cleanNumber, setName, cleanRarity);
         if (rMis.ok) {
           const dMis = await rMis.json();
           if (dMis && dMis.market > 0) {
@@ -24795,7 +24857,7 @@ async function _bulkFetchPrice(cardName, setName, cardNumber, cardType, isJapane
     // /api/tcg-price live lookup. Same fallback path JP cards use.
     if (bestMarket == null) {
       try {
-        const r = await fetch(`/api/tcg-price?name=${encodeURIComponent(cleanName)}${cleanNumber ? '&number=' + encodeURIComponent(cleanNumber) : ''}${setName ? '&set=' + encodeURIComponent(setName) : ''}${rarity ? '&rarity=' + encodeURIComponent(rarity) : ''}`, { signal: AbortSignal.timeout(7000) });
+        const r = _bulkTcgPriceShim(cleanName, cleanNumber, setName, rarity);
         if (r.ok) {
           const d = await r.json();
           if (d && d.market > 0) {

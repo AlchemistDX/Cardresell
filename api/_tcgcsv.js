@@ -147,7 +147,17 @@ export function normalizeSetName(s) {
   return String(s)
     .toLowerCase()
     // Strip common prefixes: "SV02:", "SWSH06:", "ME04:", "XY -"
-    .replace(/^(sv|swsh|xy|bw|hgss|dp|sm|me|meg?)\d*\s*:?\s*/i, '')
+    //
+    // 2026-09-04 (Bulbasaur #133): the prefix alternation had no right-hand
+    // boundary, so "me" matched the first two letters of a real WORD.
+    // "Mega Evolution" normalised to "ga evolution" and "Mew" to "w", while
+    // the catalog's "ME01: Mega Evolution" normalised correctly to
+    // "mega evolution". The two sides therefore never compared equal and
+    // /api/tcg-price answered `set_mismatch` for a card it had matched
+    // exactly. Require the prefix to be followed by a non-letter -- a digit,
+    // a colon, a dash, whitespace, or end of string -- so a set code is
+    // stripped but a word that merely starts with those letters is not.
+    .replace(/^(sve|mee|sv|swsh|xy|bw|hgss|dp|sm|me|meg?)(?=\d|[\s:—–-]|$)\d*\s*:?\s*/i, '')
     .replace(/^ex\s+/i, '')
     .replace(/^pop\s*\d*\s*/i, '')
     // Remove punctuation

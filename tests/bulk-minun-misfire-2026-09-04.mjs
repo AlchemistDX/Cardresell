@@ -46,13 +46,24 @@ function grabFn(src, sig) {
 {
   const fn = grabFn(HTML, 'async function _bulkFetchPrice(');
   ok('the Pokemon price function exists', fn.length > 0);
-  const qi = fn.indexOf('const queries = [];');
+  // 2026-09-04: the ladder now begins by deriving the name spellings and the
+  // quote-stripped set, so anchor at that line -- `const queries = []` now
+  // sits after both and would slice them out.
+  let qi = fn.indexOf('const _names = _bulkNameVariants(cleanName);');
+  if (qi === -1) qi = fn.indexOf('const queries = [];');
   ok('the query ladder is present', qi !== -1);
   const ladder = fn.slice(qi, fn.indexOf('let cards', qi));
   ok('the number query is still tried first', ladder.includes('number:'));
   ok('a set-scoped query was added', ladder.includes('set.name:'));
-  ok('the set query is guarded on setName being present', /if \(setName\) queries\.push/.test(ladder));
+  ok('the set query is guarded on a set being present',
+     /if \(_setQ\) queries\.push/.test(ladder) || /if \(setName\) queries\.push/.test(ladder));
+  ok('the set is only omitted when genuinely absent',
+     /setName \? String\(setName\)/.test(ladder) || /if \(setName\)/.test(ladder));
   ok('the set query strips quotes so it cannot break the query', /replace\(\/"\/g, ''\)/.test(ladder));
+  // The number and set queries must use whatever name spelling the ladder is
+  // iterating, never a hardcoded raw name.
+  ok('the queries interpolate the ladder name, not a fixed one',
+     !/name:"\$\{cleanName\}"/.test(ladder));
   const iNum = ladder.indexOf('number:');
   const iSet = ladder.indexOf('set.name:');
   const iBare = ladder.lastIndexOf('queries.push(`name:');
@@ -140,9 +151,19 @@ eq('a candidate with no number and no set is rejected',
   const after = fn.slice(at, at + 1800);
   ok('the winner is passed through the guard', /_bulkCandidateCorroborated\(best, setName, cleanNumber\)/.test(after));
   ok('an uncorroborated winner is not returned as the card', /if \(!_bulkCandidateCorroborated/.test(after));
-  ok('it retries the tcgcsv price route before giving up', /\/api\/tcg-price\?name=/.test(after));
-  ok('the retry is a real network call, not stubbed out',
-     /await fetch\(`\/api\/tcg-price\?name=/.test(after));
+  ok('it retries the tcgcsv price route before giving up',
+     /_bulkTcgPriceShim\(/.test(after) || /\/api\/tcg-price\?name=/.test(after));
+  {
+    // The retry is delegated to _bulkTcgPriceFetch (2026-09-04) so it can try
+    // the qualifier-stripped name too. Verify the helper really goes to the
+    // network and really hits the tcgcsv price route.
+    const helper = grabFn(HTML, 'async function _bulkTcgPriceFetch');
+    ok('the retry helper exists', helper.length > 0);
+    ok('the retry is a real network call, not stubbed out',
+       /await fetch\(url,/.test(helper));
+    ok('the retry targets the tcgcsv price route', /\/api\/tcg-price\?name=/.test(helper));
+    ok('the retry only accepts a positive price', /d\.market > 0/.test(helper));
+  }
   ok('the retry passes the scanned set so it cannot match another set',
      /rMis[\s\S]{0,40}|&set=' \+ encodeURIComponent\(setName\)/.test(after));
   // The bad-match branch must emit NEITHER a price NOR an image.

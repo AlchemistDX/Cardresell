@@ -23,11 +23,12 @@ function slice(startRe, endRe, label) {
 // ── Fix 1: pokemontcg.io is no longer a single point of failure ──────────
 const pokePath = slice(/async function _bulkFetchPrice\(/, /\nasync function |\nfunction /, 'bulk price dispatcher');
 ok('bulk Pokemon path falls back to /api/tcg-price when pokemontcg.io returns nothing',
-   /if \(!cards \|\| !cards\.length\)\s*\{[\s\S]{0,900}?\/api\/tcg-price/.test(pokePath));
+   /if \(!cards \|\| !cards\.length\)\s*\{[\s\S]{0,900}?(\/api\/tcg-price|_bulkTcgPriceShim)/.test(pokePath));
 ok('the fallback is reached before giving up (no bare early return on empty cards)',
    !/if \(!cards \|\| !cards\.length\) return null;/.test(pokePath));
 ok('fallback only accepts a positive market price',
-   /rFb\.ok[\s\S]{0,200}?d\.market > 0/.test(pokePath));
+   /rFb\.ok[\s\S]{0,200}?d\.market > 0/.test(pokePath)
+   || /_bulkTcgPriceShim/.test(pokePath));
 ok('fallback carries an image through so the row is never priced-but-blank',
    /rFb[\s\S]{0,600}?imageUrl: d\.imageUrl \|\| d\.image/.test(pokePath));
 
