@@ -414,4 +414,56 @@ check('a legacy claim with no timestamp is recoverable, not a permanent block',
 check('and the guard still governed the write it allowed',
       (await DS.getDraft(kv, 'sub1', lg.draftId)).draft.rev === 2);
 
+
+console.log('\na persisted packet is a snapshot, and never takes the draft down with it');
+const pkBase = () => ({
+  draftId: 'drf_' + 'a'.repeat(32), instanceId: 'i1', sku: 's1',
+  slot: 'ebay:fixed-price', title: 'T', price: 10,
+});
+const pk_stored = (extra) => JSON.stringify({ ...DS.buildDraft(pkBase()), ...extra });
+
+check('a draft with no packet reads clean',
+      DS.readStoredDraft(pk_stored({})).packetStatus === undefined);
+
+const pk_cur = DS.readStoredDraft(pk_stored({ packet: { packetSchemaVersion: 1, title: 'X' } }));
+check('a current packet is returned as usable',
+      pk_cur.ok === true && pk_cur.packetUsable === true && pk_cur.packetStatus === 'CURRENT');
+check('and it is the packet itself, not a copy of the draft', pk_cur.packet.title === 'X');
+
+const pk_ahead = DS.readStoredDraft(pk_stored({ packet: { packetSchemaVersion: 99, title: 'X' } }));
+check('🔴 a packet from a NEWER deploy does not fail the draft read',
+      pk_ahead.ok === true,
+      'the draft is authoritative; the snapshot is advisory');
+check('but the packet is refused as unusable',
+      pk_ahead.packetUsable === false && pk_ahead.packetStatus === 'INCOMPATIBLE');
+check('and it is named as pk_ahead of this reader',
+      pk_ahead.packetReason === 'PACKET_VERSION_AHEAD_OF_READER');
+check('🔴 the unreadable packet is preserved verbatim, not dropped',
+      pk_ahead.packetRaw && pk_ahead.packetRaw.packetSchemaVersion === 99,
+      'the client that CAN read it may be one deploy away');
+check('and the usable packet field is null so nothing stale can be shown',
+      pk_ahead.packet === null);
+
+const pk_bad = DS.readStoredDraft(pk_stored({ packet: { packetSchemaVersion: '1' } }));
+check('🔴 a string version is unknown provenance, not version 1',
+      pk_bad.packetUsable === false && pk_bad.packetReason === 'PACKET_VERSION_MALFORMED');
+const pk_noVer = DS.readStoredDraft(pk_stored({ packet: { title: 'X' } }));
+check('a packet with no version at all is refused, never assumed current',
+      pk_noVer.packetUsable === false);
+check('and the draft is still perfectly readable', pk_noVer.ok === true && pk_noVer.draft.price === 10);
+
+check('a non-object packet is refused at WRITE time', (() => {
+  try { DS.buildDraft({ ...pkBase(), packet: 'nope' }); return false; }
+  catch (e) { return e.message.endsWith(':packet:not-an-object'); }
+})());
+check('a packet is stored verbatim with the version it declared',
+      DS.buildDraft({ ...pkBase(), packet: { packetSchemaVersion: 1, a: 1 } }).packet.packetSchemaVersion === 1,
+      'stamping our own version onto someone else\u2019s packet destroys the fact that makes it safe to read');
+
+const pk_tomb = DS.readStoredDraft(JSON.stringify({
+  ...DS.buildDraft(pkBase()), status: 'deleted', packet: { packetSchemaVersion: 1 },
+}));
+check('a tombstone is still DELETED regardless of what packet it carries',
+      pk_tomb.ok === false && pk_tomb.error === DS.ERR.DELETED);
+
 done();

@@ -1,3 +1,4 @@
+import { readStoredPacket, PACKET_COMPAT } from './_listingPacket.js';
 // api/_draftStore.js
 //
 // C1 — authoritative persistence for listing drafts.
@@ -163,7 +164,42 @@ export function readStoredDraft(stored) {
     // index reconciliation is allowed to prune on. Absence is not.
     return { ok: false, error: ERR.DELETED, evidence: 'tombstone', exists: true, deleted: true, draft: d };
   }
-  return { ok: true, draft: d };
+  const result = { ok: true, draft: d };
+
+  // ── A persisted packet is a SNAPSHOT, never the authority ────────────────
+  //
+  // The packet a seller saw when they drafted is worth keeping — it is the
+  // provenance of the price they agreed to. But it is derived data: comps
+  // move, fees change, and a packet written three weeks ago may no longer
+  // describe reality.
+  //
+  // So the rule here is asymmetric on purpose:
+  //   the DRAFT is authoritative and always readable;
+  //   the PACKET is advisory and may be refused without taking the draft
+  //   down with it.
+  //
+  // A packet written by a newer deploy, or one with no migration path, makes
+  // `packetUsable:false` — the caller must recompute rather than show stale
+  // numbers, and must never present an unmigrated packet as current. What it
+  // must NOT do is turn "I can't read this snapshot" into "your draft is
+  // gone".
+  if (d.packet !== undefined && d.packet !== null) {
+    const read = readStoredPacket(d.packet);
+    result.packet       = read.usable ? read.packet : null;
+    result.packetStatus = read.status;
+    result.packetUsable = read.usable;
+    if (!read.usable) {
+      result.packetReason = read.reason;
+      // Preserved verbatim, never rewritten or dropped: the client that CAN
+      // read it may be one deploy away.
+      result.packetRaw = d.packet;
+    }
+    if (read.migrationsApplied && read.migrationsApplied.length) {
+      result.packetMigrations = read.migrationsApplied;
+    }
+  }
+
+  return result;
 }
 
 // ── Building ───────────────────────────────────────────────────────────────
@@ -218,6 +254,15 @@ export function buildDraft(input = {}) {
     createdByOperation: input.createdByOperation || null,
   };
   if (input.notes !== undefined) draft.notes = requireString(input.notes, 'notes', { max: 4000, allowEmpty: true });
+  // Optional provenance snapshot. Stored verbatim with whatever version it
+  // declares — stamping our own version onto someone else's packet would
+  // destroy the one fact that makes it safe to read later.
+  if (input.packet !== undefined && input.packet !== null) {
+    if (typeof input.packet !== 'object' || Array.isArray(input.packet)) {
+      throw new Error(`${ERR.FIELD_INVALID}:packet:not-an-object`);
+    }
+    draft.packet = input.packet;
+  }
   return draft;
 }
 
