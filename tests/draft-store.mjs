@@ -61,10 +61,11 @@ check('a sub-cent price is refused', bad({ price: 19.999 }, 'sub-cent'),
 check('a negative price is refused', bad({ price: -1 }, 'negative'));
 check('a price of zero is allowed — free is a real listing choice',
       DS.buildDraft({ ...base(), price: 0 }).price === 0);
-check('a title over the eBay 80-char limit is refused',
-      bad({ title: 'x'.repeat(81) }, 'too-long'),
-      'eBay would reject it at publish; catching it at draft time is the point of a draft');
-check('an 80-char title is accepted', DS.buildDraft({ ...base(), title: 'x'.repeat(80) }).title.length === 80);
+check('an 81-char title STORES fine — 80 is eBay\'s rule, not the store\'s',
+      DS.buildDraft({ ...base(), title: 'x'.repeat(81) }).title.length === 81,
+      'the store is multi-venue by design; see the slot-validation block below');
+check('but a title past the storage sanity bound is refused',
+      bad({ title: 'x'.repeat(DS.TITLE_HARD_MAX + 1) }, 'too-long'));
 check('a numeric-string price is refused, not coerced', bad({ price: '400' }, 'not-a-finite-number'));
 
 // ── edit + revision concurrency ──────────────────────────────────────────
@@ -102,14 +103,14 @@ check('a published draft is not freely editable',
 
 // ── tombstones ───────────────────────────────────────────────────────────
 console.log('\ndeleting leaves a tombstone, not a hole');
-const t = DS.tombstone(d2);
+const t = DS.tombstone(d2, { expectedRev: d2.rev });
 check('the tombstone bumps the revision too', t.rev === 3);
 check('the tombstone is marked deleted', t.status === DS.DRAFT_STATUS.DELETED);
 check('the tombstone keeps identity', t.draftId === d2.draftId && t.instanceId === d2.instanceId);
 check('the tombstone DROPS seller content',
       t.title === undefined && t.price === undefined,
       'a tombstone proves non-active; it is not a backup of the seller\'s content');
-check('tombstoning twice is idempotent', DS.tombstone(t).rev === t.rev);
+check('tombstoning twice is idempotent — and needs no revision', DS.tombstone(t).rev === t.rev);
 const readTomb = DS.readStoredDraft(JSON.stringify(t));
 check('🔴 a tombstone reads as DELETED, not as absent',
       readTomb.error === DS.ERR.DELETED && readTomb.deleted === true && readTomb.exists === true,
@@ -202,5 +203,184 @@ await checkAsync('a draft never leaks across users',
     const other = await DS.getDraft(kv, 'sub2', live.draftId);
     return other.error === DS.ERR.NOT_FOUND;
   }, 'the key is scoped per user');
+
+
+// ── orphan claims ────────────────────────────────────────────────────────
+console.log('\n🔴 a claimed-but-uncommitted revision must always recover');
+kv = makeKv();
+const od = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', od, 'op-create');           // rev 1 committed
+// Editor A claims rev 2 and dies before writing.
+await kv('set', DS.revisionClaimKey('sub1', od.draftId, 2),
+         JSON.stringify({ op: 'op-A', at: Date.now() }), 'NX', 'EX', 600);
+const stillOne = await DS.getDraft(kv, 'sub1', od.draftId);
+check('setup: rev 2 is claimed but the record is still rev 1',
+      stillOne.draft.rev === 1);
+
+const opARetry = await DS.putDraft(kv, 'sub1', { ...od, rev: 2, price: 350 }, 'op-A');
+check('🔴 the SAME operation retrying completes its own revision',
+      opARetry.ok === true && opARetry.replayedClaim === true,
+      'otherwise a retry after a lost response deadlocks against its own claim');
+
+// Now the harder case: a DIFFERENT operation meets a young orphan, then a stale one.
+kv = makeKv();
+const od2 = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', od2, 'op-create');
+await kv('set', DS.revisionClaimKey('sub1', od2.draftId, 2),
+         JSON.stringify({ op: 'op-A', at: Date.now() }), 'NX', 'EX', 600);
+const youngOrphan = await DS.putDraft(kv, 'sub1', { ...od2, rev: 2, price: 1 }, 'op-B');
+check('a YOUNG claim from another operation is refused as IN-FLIGHT, not conflict',
+      youngOrphan.ok === false && youngOrphan.error === DS.ERR.REV_IN_FLIGHT,
+      'nothing has conflicted yet — the other writer may simply still be running');
+check('and the refusal is RETRYABLE with a hint of how long to wait',
+      youngOrphan.retryable === true && youngOrphan.retryAfterMs > 0);
+
+// Age the claim past the grace window.
+await kv('set', DS.revisionClaimKey('sub1', od2.draftId, 2),
+         JSON.stringify({ op: 'op-A', at: Date.now() - (DS.CLAIM_GRACE_MS + 5000) }));
+const staleOrphan = await DS.putDraft(kv, 'sub1', { ...od2, rev: 2, price: 1 }, 'op-B');
+check('🔴 a STALE orphan is taken over — never a permanent block',
+      staleOrphan.ok === true && staleOrphan.claimOutcome === DS.CLAIM_OUTCOME.ORPHAN_TAKEN,
+      '"someone else has rev 2" when nobody has rev 2 would wedge the draft forever');
+const afterTakeover = await DS.getDraft(kv, 'sub1', od2.draftId);
+check('the takeover actually advanced the record', afterTakeover.draft.rev === 2);
+
+// Only ONE taker may win an orphan.
+kv = makeKv();
+const od3 = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', od3, 'op-create');
+await kv('set', DS.revisionClaimKey('sub1', od3.draftId, 2),
+         JSON.stringify({ op: 'op-A', at: Date.now() - 60000 }), 'NX', 'EX', 600);
+const [tb, tc] = await Promise.all([
+  DS.putDraft(kv, 'sub1', { ...od3, rev: 2, price: 11 }, 'op-B'),
+  DS.putDraft(kv, 'sub1', { ...od3, rev: 2, price: 22 }, 'op-C'),
+]);
+check('🔴 two writers racing to take over the SAME orphan: exactly one wins',
+      tb.ok !== tc.ok, 'the takeover is itself an NX claim');
+
+// A claim whose revision DID commit is a genuine conflict, not an orphan.
+kv = makeKv();
+const od4 = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', od4, 'op-create');
+await DS.putDraft(kv, 'sub1', { ...od4, rev: 2, price: 9 }, 'op-A');
+await kv('set', DS.revisionClaimKey('sub1', od4.draftId, 2),
+         JSON.stringify({ op: 'op-A', at: Date.now() - 60000 }));
+const committed = await DS.putDraft(kv, 'sub1', { ...od4, rev: 2, price: 5 }, 'op-B');
+check('🔴 a claim whose revision COMMITTED is a real conflict, never taken over',
+      committed.ok === false && committed.error === DS.ERR.REV_CONFLICT,
+      'the authoritative record decides whether it committed, not the claim');
+
+// ── the guard: ownership is necessary, never sufficient ──────────────────
+console.log('\n🔴 claim ownership is NEVER sufficient on its own');
+kv = makeKv();
+const gd = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', gd, 'op-1');
+await DS.putDraft(kv, 'sub1', { ...gd, rev: 2, price: 300 }, 'op-2');
+await DS.putDraft(kv, 'sub1', { ...gd, rev: 3, price: 250 }, 'op-3');
+// Ops wipe every claim key. Concurrency detection is gone; correctness is not.
+for (const k of [...kv.store.keys()]) if (k.startsWith('draftrev:')) kv.store.delete(k);
+// This writer read rev 2 and believes rev 3 is next. The record is already at 3.
+const staleAfterWipe = await DS.putDraft(kv, 'sub1', { ...gd, rev: 3, price: 1 }, 'op-stale');
+check('🔴 a stale writer cannot advance just because the claim key vanished',
+      staleAfterWipe.ok === false && staleAfterWipe.error === DS.ERR.REV_CONFLICT,
+      'losing claim keys must degrade concurrency detection, never correctness');
+check('and it is told the authoritative revision it actually lost to',
+      staleAfterWipe.current && staleAfterWipe.current.rev === 3);
+const rightful = await DS.putDraft(kv, 'sub1', { ...gd, rev: 4, price: 200 }, 'op-4');
+check('the CORRECT successor still writes fine after a claim wipe', rightful.ok === true);
+
+// ── DELETE concurrency ───────────────────────────────────────────────────
+console.log('\n🔴 delete is destructive, so it gets edit-grade concurrency');
+kv = makeKv();
+const dd = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', dd, 'op-c');
+await DS.putDraft(kv, 'sub1', { ...dd, rev: 2, price: 300 }, 'op-e1');
+await DS.putDraft(kv, 'sub1', { ...dd, rev: 3, price: 275 }, 'op-e2');
+await DS.putDraft(kv, 'sub1', { ...dd, rev: 4, price: 260 }, 'op-e3');
+
+const phoneStale = await DS.deleteDraft(kv, 'sub1', dd.draftId, 3, 'op-phone');
+check('🔴 DELETE with a STALE expectedRev is refused',
+      phoneStale.ok === false && phoneStale.error === DS.ERR.REV_CONFLICT,
+      'the phone would otherwise destroy a version the seller never saw');
+const survived = await DS.getDraft(kv, 'sub1', dd.draftId);
+check('and the record is untouched at its current revision',
+      survived.ok === true && survived.draft.rev === 4 && survived.draft.price === 260);
+check('the refusal hands back the current record so the UI can show the diff',
+      phoneStale.current && phoneStale.current.price === 260);
+
+const noRev = await DS.deleteDraft(kv, 'sub1', dd.draftId, undefined, 'op-norev');
+check('🔴 DELETE with NO expectedRev on an ACTIVE draft is refused',
+      noRev.ok === false && noRev.error === DS.ERR.REV_REQUIRED);
+
+const good = await DS.deleteDraft(kv, 'sub1', dd.draftId, 4, 'op-del');
+check('DELETE at the current revision succeeds', good.ok === true && good.deleted === true);
+const twice = await DS.deleteDraft(kv, 'sub1', dd.draftId, 4, 'op-del2');
+check('deleting an already-tombstoned draft succeeds even with a stale rev',
+      twice.ok === true && twice.alreadyDeleted === true,
+      'the intent is already satisfied and there is no unseen work left to destroy');
+const twiceNoRev = await DS.deleteDraft(kv, 'sub1', dd.draftId, undefined, 'op-del3');
+check('and with no rev at all', twiceNoRev.ok === true && twiceNoRev.alreadyDeleted === true);
+
+const resurrect = await DS.putDraft(kv, 'sub1', { ...dd, rev: 5, price: 999 }, 'op-zombie');
+check('🔴 no stale PUT can resurrect a tombstone',
+      resurrect.ok === false && resurrect.error === DS.ERR.DELETED,
+      'deletion is a decision the seller made; a slow client must not undo it by arriving late');
+const resurrectHigh = await DS.putDraft(kv, 'sub1', { ...dd, rev: 6, price: 999 }, 'op-zombie2');
+check('not even at a higher revision', resurrectHigh.ok === false && resurrectHigh.error === DS.ERR.DELETED);
+
+// ── slot-specific validation ─────────────────────────────────────────────
+console.log('\nvenue rules belong to the venue, not to the storage layer');
+const longTitle = DS.buildDraft({ ...base(), title: 'x'.repeat(120) });
+check('a 120-char title SAVES — a seller mid-edit is not blocked from persisting',
+      longTitle.title.length === 120,
+      'save rules and publish rules are different rules; conflating them is how apps lose drafts');
+const ebayCheck = DS.validateDraftForSlot(longTitle, 'ebay:fixed-price');
+check('🔴 but it fails eBay validation at 80 chars',
+      ebayCheck.ok === false && ebayCheck.violations.some((v) => v.code === DS.VIOLATION.TITLE_TOO_LONG));
+check('the violation says by how much', ebayCheck.violations[0].detail === '120 > 80');
+check('the same title fails Mercari even harder at 40',
+      DS.validateDraftForSlot(longTitle, 'mercari:fixed-price').violations
+        .some((v) => v.detail === '120 > 40'),
+      'baking 80 into the store would have hidden this the day a second venue lands');
+check('but PASSES TCGplayer at 200', DS.validateDraftForSlot(longTitle, 'tcgplayer:fixed-price').ok === true);
+check('a normal draft passes its own slot', DS.validateDraftForSlot(DS.buildDraft(base())).ok === true);
+check('a zero price is fine to store but refused by eBay',
+      DS.buildDraft({ ...base(), price: 0 }).price === 0 &&
+      DS.validateDraftForSlot(DS.buildDraft({ ...base(), price: 0 }), 'ebay:fixed-price')
+        .violations.some((v) => v.code === DS.VIOLATION.ZERO_PRICE));
+check('an unknown slot is refused rather than assumed permissive',
+      DS.validateDraftForSlot(DS.buildDraft(base()), 'nope:nope').violations[0].code === DS.VIOLATION.UNKNOWN_SLOT);
+check('every Phase 1 venue slot has rules',
+      INV.VENUES.every((v) => INV.SUPPORTED_SLOTS[v].every((st) => !!DS.SLOT_RULES[`${v}:${st}`])),
+      'a slot with no rules would publish unvalidated');
+
+
+// ── replaying a write that already committed ─────────────────────────────
+console.log('\nan operation retrying its OWN committed write is a replay, not a failure');
+kv = makeKv();
+const rp = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', rp, 'op-c');
+const firstWrite = await DS.putDraft(kv, 'sub1', { ...rp, rev: 2, price: 321 }, 'op-edit');
+check('setup: the write lands', firstWrite.ok === true);
+const replay = await DS.putDraft(kv, 'sub1', { ...rp, rev: 2, price: 321 }, 'op-edit');
+check('🔴 the same operation retrying gets SUCCESS, not a conflict',
+      replay.ok === true && replay.replayedWrite === true,
+      'a caller whose response was lost must not be told its committed write failed');
+check('and it gets back the record that actually landed', replay.draft.price === 321);
+const notMine = await DS.putDraft(kv, 'sub1', { ...rp, rev: 2, price: 999 }, 'op-other');
+check('a DIFFERENT operation at that revision is still a conflict',
+      notMine.ok === false && notMine.error === DS.ERR.REV_CONFLICT,
+      'replay is only available to the operation that owns the claim');
+const unchanged = await DS.getDraft(kv, 'sub1', rp.draftId);
+check('and the impostor changed nothing', unchanged.draft.price === 321);
+
+console.log('\nclaim keys are protocol state with a documented lifecycle');
+check('a claim is a lease, not a permanent lock', DS.CLAIM_TTL_SEC === 600);
+check('the in-flight grace window is much shorter than the lease',
+      DS.CLAIM_GRACE_MS < DS.CLAIM_TTL_SEC * 1000,
+      'otherwise an orphan could never be taken over before its own lease expired');
+check('takeover keys are namespaced separately from claims',
+      DS.takeoverKey('s', 'd', 2).startsWith('drafttake:') &&
+      DS.revisionClaimKey('s', 'd', 2).startsWith('draftrev:'));
 
 done();

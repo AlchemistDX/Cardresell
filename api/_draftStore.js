@@ -23,6 +23,31 @@ export const DRAFT_SCHEMA_VERSION = 1;
 /** Retained after delete so a later read can prove non-active rather than absent. */
 export const TOMBSTONE_TTL_SEC = 90 * 24 * 60 * 60;
 
+/**
+ * A storage-layer sanity bound, NOT a venue rule. eBay's 80-character limit is
+ * eBay's, and the storage model is deliberately multi-venue — baking 80 in here
+ * would mean discovering an eBay constraint in the generic persistence layer
+ * the day Mercari (or a venue with a longer limit) is added.
+ * Venue limits live in SLOT_RULES / validateDraftForSlot below.
+ */
+/**
+ * ── OPERATION ID STABILITY (a client-side contract the server must enforce) ──
+ *
+ * Every "this is my own retry" protection here depends on the operation id
+ * being STABLE across network retries. If the client mints a fresh id per HTTP
+ * attempt, the protection disappears at exactly the moment it is needed — when
+ * a response was lost and the client retries.
+ *
+ * So the operation id is NOT generated server-side per request. It is derived
+ * from the caller's Idempotency-Key, which the client is required to hold
+ * constant for the lifetime of one intended mutation. A request with no
+ * Idempotency-Key on a mutating draft route is refused rather than assigned a
+ * random id, because a random id is indistinguishable from a new operation.
+ */
+export const OPERATION_ID_SOURCE = 'idempotency-key';
+
+export const TITLE_HARD_MAX = 500;
+
 export const DRAFT_STATUS = {
   DRAFT:     'draft',      // editable, nothing published
   PUBLISHING: 'publishing', // handed to a venue, outcome unknown
@@ -37,6 +62,7 @@ export const ERR = {
   NOT_FOUND:        'DRAFT_NOT_FOUND',
   DELETED:          'DRAFT_DELETED',
   REV_CONFLICT:     'DRAFT_REVISION_CONFLICT',
+  REV_IN_FLIGHT:    'DRAFT_REVISION_IN_FLIGHT',
   REV_REQUIRED:     'DRAFT_REVISION_REQUIRED',
   NOT_EDITABLE:     'DRAFT_NOT_EDITABLE',
   SCHEMA_TOO_NEW:   'DRAFT_SCHEMA_TOO_NEW',
@@ -55,6 +81,47 @@ export function revisionClaimKey(googleSub, draftId, rev) {
 
 export function newDraftId() {
   return `drf_${randomBytes(16).toString('hex')}`;
+}
+
+/**
+ * Per-slot publish requirements. The draft may be SAVED without satisfying
+ * these — a seller mid-edit should not be blocked from persisting work — but it
+ * cannot be handed to that venue until it does. Save rules and publish rules
+ * are different rules, and conflating them is how apps lose drafts.
+ */
+export const SLOT_RULES = {
+  'ebay:fixed-price': { titleMax: 80, requiresPrice: true,  allowsZeroPrice: false },
+  'ebay:auction':     { titleMax: 80, requiresPrice: true,  allowsZeroPrice: false },
+  'mercari:fixed-price':  { titleMax: 40, requiresPrice: true, allowsZeroPrice: false },
+  'whatnot:auction':      { titleMax: 80, requiresPrice: true, allowsZeroPrice: true },
+  'tcgplayer:fixed-price':{ titleMax: 200, requiresPrice: true, allowsZeroPrice: false },
+};
+
+export const VIOLATION = {
+  TITLE_TOO_LONG:  'SLOT_TITLE_TOO_LONG',
+  PRICE_REQUIRED:  'SLOT_PRICE_REQUIRED',
+  ZERO_PRICE:      'SLOT_ZERO_PRICE_NOT_ALLOWED',
+  UNKNOWN_SLOT:    'SLOT_RULES_UNKNOWN',
+};
+
+/** @returns {{ok:boolean, violations:Array<{code:string,field:string,detail:string}>}} */
+export function validateDraftForSlot(draft, slot = draft && draft.slot) {
+  const rules = SLOT_RULES[slot];
+  if (!rules) return { ok: false, violations: [{ code: VIOLATION.UNKNOWN_SLOT, field: 'slot', detail: String(slot) }] };
+  const v = [];
+  const title = (draft && draft.title) || '';
+  if (title.length > rules.titleMax) {
+    v.push({ code: VIOLATION.TITLE_TOO_LONG, field: 'title',
+             detail: `${title.length} > ${rules.titleMax}` });
+  }
+  const price = draft ? draft.price : undefined;
+  if (rules.requiresPrice && (price === null || price === undefined)) {
+    v.push({ code: VIOLATION.PRICE_REQUIRED, field: 'price', detail: 'missing' });
+  }
+  if (!rules.allowsZeroPrice && price === 0) {
+    v.push({ code: VIOLATION.ZERO_PRICE, field: 'price', detail: '0' });
+  }
+  return { ok: v.length === 0, violations: v };
 }
 
 // ── Reading ────────────────────────────────────────────────────────────────
@@ -142,7 +209,7 @@ export function buildDraft(input = {}) {
     slot:       requireString(input.slot, 'slot', { max: 64 }),
     status:     DRAFT_STATUS.DRAFT,
     rev:        1,
-    title:      requireString(input.title, 'title', { max: 80 }),
+    title:      requireString(input.title, 'title', { max: TITLE_HARD_MAX }),
     price:      requireMoney(input.price, 'price', { allowNull: false }),
     quantity:   Number.isInteger(input.quantity) && input.quantity > 0 ? input.quantity : 1,
     createdAt:  now,
@@ -172,7 +239,7 @@ export function applyEdit(current, patch = {}, opts = {}) {
   if (expected !== current.rev) throw new Error(ERR.REV_CONFLICT);
 
   const next = { ...current };
-  if (patch.title !== undefined)    next.title    = requireString(patch.title, 'title', { max: 80 });
+  if (patch.title !== undefined)    next.title    = requireString(patch.title, 'title', { max: TITLE_HARD_MAX });
   if (patch.price !== undefined)    next.price    = requireMoney(patch.price, 'price', { allowNull: false });
   if (patch.notes !== undefined)    next.notes    = requireString(patch.notes, 'notes', { max: 4000, allowEmpty: true });
   if (patch.quantity !== undefined) {
@@ -197,11 +264,20 @@ export function applyEdit(current, patch = {}, opts = {}) {
 /** Turn a draft into a tombstone. Retained, not erased. */
 export function tombstone(current, opts = {}) {
   if (!current || typeof current !== 'object') throw new Error(ERR.NOT_FOUND);
-  if (current.status === DRAFT_STATUS.DELETED) return current;   // idempotent
+
+  // Deleting an ALREADY-deleted draft is idempotent regardless of revision.
+  // The seller's intent is already satisfied and there is no unseen work left
+  // to destroy, so a stale expectedRev here is harmless.
+  if (current.status === DRAFT_STATUS.DELETED) return current;
+
+  // Deletion is destructive, so it gets the SAME concurrency requirement as an
+  // edit. Phone opens rev 4; desktop edits price to rev 5; phone taps Delete
+  // still holding rev 4. Without this the phone destroys a version the seller
+  // never saw.
   const expected = opts.expectedRev;
-  if (expected !== undefined && expected !== null && expected !== current.rev) {
-    throw new Error(ERR.REV_CONFLICT);
-  }
+  if (expected === undefined || expected === null) throw new Error(ERR.REV_REQUIRED);
+  if (!Number.isInteger(expected)) throw new Error(`${ERR.FIELD_INVALID}:expectedRev:not-an-integer`);
+  if (expected !== current.rev) throw new Error(ERR.REV_CONFLICT);
   return {
     schemaVersion: current.schemaVersion,
     draftId:    current.draftId,
@@ -236,33 +312,131 @@ export function tombstone(current, opts = {}) {
 // earlier attempt, so a retry after a lost response completes instead of
 // dead-locking against its own claim.
 
+/**
+ * ── Claim keys are PROTOCOL STATE, not cache ──────────────────────────────
+ *
+ * Contract, stated explicitly because correctness now depends on it:
+ *
+ *  - A claim is created with SET NX and a TTL. It is a LEASE, not a lock held
+ *    forever.
+ *  - A claim proves only that one writer owns the ATTEMPT at a revision. It
+ *    never proves the revision committed.
+ *  - Claims are allowed to expire, and are allowed to be wiped entirely (an
+ *    ops action, a flushed Redis, an eviction). Losing all claim keys must
+ *    degrade concurrency detection, never correctness.
+ *
+ * Which forces the load-bearing invariant:
+ *
+ *    CLAIM OWNERSHIP IS NECESSARY TO ADVANCE A REVISION.
+ *    IT IS NEVER SUFFICIENT IF THE AUTHORITATIVE RECORD IS NOT EXACTLY THE
+ *    EXPECTED PREDECESSOR.
+ *
+ * So every write re-checks the authoritative record immediately before writing.
+ * A stale client at rev 3 cannot write rev 4 just because a claim key vanished
+ * while the record already moved to rev 5.
+ */
 export const CLAIM_TTL_SEC = 10 * 60;
 
 /**
- * @param kv async (cmd, ...args) => value   — thin Upstash command wrapper
+ * How long a claim is presumed genuinely in flight. Inside this window an
+ * orphan is indistinguishable from a slow writer, so we refuse but mark the
+ * refusal RETRYABLE rather than declaring a conflict that is not one.
  */
-export async function claimRevision(kv, googleSub, draftId, rev, operationId) {
+export const CLAIM_GRACE_MS = 30 * 1000;
+
+export function takeoverKey(googleSub, draftId, rev) {
+  return `drafttake:${googleSub}:${draftId}:${rev}`;
+}
+
+export const CLAIM_OUTCOME = {
+  MINE:        'mine',          // fresh claim
+  OWN_RETRY:   'own-retry',     // same operation retrying
+  COMMITTED:   'committed',     // that revision already landed — real conflict
+  IN_FLIGHT:   'in-flight',     // someone else, recently — retryable
+  ORPHAN_TAKEN:'orphan-taken',  // stale claim, never committed, taken over
+  ORPHAN_LOST: 'orphan-lost',   // another writer won the takeover race
+  UNAVAILABLE: 'unavailable',
+};
+
+function parseClaim(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'object') return v;
+  try { const p = JSON.parse(v); return p && typeof p === 'object' ? p : { op: String(v), at: 0 }; }
+  catch { return { op: String(v), at: 0 }; }
+}
+
+/**
+ * Claim the right to attempt `rev`.
+ *
+ * The orphan case review raised is real: a writer can claim rev 4 and die
+ * before writing, leaving the record at rev 3 and rev 4 permanently claimed by
+ * nobody. Resolution is deterministic:
+ *
+ *   holder is me                       -> own retry, proceed
+ *   record already at >= rev           -> it committed, genuine conflict
+ *   record < rev, claim is young       -> may still be in flight, retryable
+ *   record < rev, claim is stale       -> orphan; take over via an NX takeover
+ *                                         key so only one taker wins
+ *
+ * @param readRev async () => number|null   current authoritative revision
+ */
+export async function claimRevision(kv, googleSub, draftId, rev, operationId, readRev) {
   const key = revisionClaimKey(googleSub, draftId, rev);
   const op  = operationId || 'anon';
+  const payload = JSON.stringify({ op, at: Date.now() });
+
   let res;
   try {
-    res = await kv('set', key, op, 'NX', 'EX', CLAIM_TTL_SEC);
+    res = await kv('set', key, payload, 'NX', 'EX', CLAIM_TTL_SEC);
   } catch {
-    // Fail closed. An unclaimable revision must not be written optimistically:
+    // Fail closed. An unclaimable revision must never be written optimistically:
     // that is exactly the lost update this mechanism exists to prevent.
-    return { claimed: false, error: ERR.STORE_UNAVAILABLE, retryable: true };
+    return { claimed: false, outcome: CLAIM_OUTCOME.UNAVAILABLE, error: ERR.STORE_UNAVAILABLE, retryable: true };
   }
-  if (res === 'OK' || res === true) return { claimed: true, mine: true };
+  if (res === 'OK' || res === true) return { claimed: true, outcome: CLAIM_OUTCOME.MINE };
 
-  // Someone holds it. If it is our own operation retrying, it is ours.
   let holder = null;
-  try { holder = await kv('get', key); } catch { holder = null; }
-  if (holder && operationId && String(holder) === String(operationId)) {
-    return { claimed: true, mine: true, replayedClaim: true };
+  try { holder = parseClaim(await kv('get', key)); } catch { holder = null; }
+
+  // A FAILED read of the holder is not evidence about who owns it.
+  if (!holder) {
+    return { claimed: false, outcome: CLAIM_OUTCOME.UNAVAILABLE, error: ERR.STORE_UNAVAILABLE, retryable: true };
   }
-  // A FAILED read of the holder is not evidence that it is not ours, so this
-  // is a refusal, not a takeover.
-  return { claimed: false, error: ERR.REV_CONFLICT, retryable: false, holder: holder ? true : null };
+  if (operationId && String(holder.op) === String(operationId)) {
+    return { claimed: true, outcome: CLAIM_OUTCOME.OWN_RETRY, replayedClaim: true };
+  }
+
+  // Did the claim actually commit? The authoritative record decides, not the claim.
+  let currentRev = null;
+  if (typeof readRev === 'function') {
+    try { currentRev = await readRev(); } catch { currentRev = undefined; }
+  }
+  if (currentRev === undefined) {
+    return { claimed: false, outcome: CLAIM_OUTCOME.UNAVAILABLE, error: ERR.STORE_UNAVAILABLE, retryable: true };
+  }
+  if (currentRev !== null && currentRev >= rev) {
+    return { claimed: false, outcome: CLAIM_OUTCOME.COMMITTED, error: ERR.REV_CONFLICT, retryable: false };
+  }
+
+  const age = Date.now() - (Number(holder.at) || 0);
+  if (age < CLAIM_GRACE_MS) {
+    // Genuinely might still be running. Refusing is right; calling it a
+    // conflict is not, because nothing has conflicted yet.
+    return {
+      claimed: false, outcome: CLAIM_OUTCOME.IN_FLIGHT,
+      error: ERR.REV_IN_FLIGHT, retryable: true, retryAfterMs: CLAIM_GRACE_MS - age,
+    };
+  }
+
+  // Orphan. Exactly one taker may win, so the takeover is itself an NX claim.
+  let took;
+  try { took = await kv('set', takeoverKey(googleSub, draftId, rev), op, 'NX', 'EX', CLAIM_TTL_SEC); }
+  catch { return { claimed: false, outcome: CLAIM_OUTCOME.UNAVAILABLE, error: ERR.STORE_UNAVAILABLE, retryable: true }; }
+  if (took !== 'OK' && took !== true) {
+    return { claimed: false, outcome: CLAIM_OUTCOME.ORPHAN_LOST, error: ERR.REV_CONFLICT, retryable: false };
+  }
+  try { await kv('set', key, payload); } catch { /* the takeover key is what matters */ }
+  return { claimed: true, outcome: CLAIM_OUTCOME.ORPHAN_TAKEN, tookOverFrom: holder.op };
 }
 
 /** Read the authoritative record. Distinguishes absent / tombstoned / unreadable. */
@@ -283,14 +457,63 @@ export async function getDraft(kv, googleSub, draftId) {
  * `operationId` makes the write retry-safe.
  */
 export async function putDraft(kv, googleSub, draft, operationId) {
-  const claim = await claimRevision(kv, googleSub, draft.draftId, draft.rev, operationId);
+  const readRev = async () => {
+    const cur = await getDraft(kv, googleSub, draft.draftId);
+    if (cur.ok) return cur.draft.rev;
+    if (cur.error === ERR.DELETED) return cur.draft.rev;
+    if (cur.error === ERR.NOT_FOUND) return null;
+    throw new Error(cur.error);
+  };
+
+  // A tombstone is checked BEFORE anything else. Refusing with "revision
+  // conflict" would invite the client to re-read and retry at a higher
+  // revision, which is precisely the resurrection we are preventing.
+  const pre = await getDraft(kv, googleSub, draft.draftId);
+  if (!pre.ok && pre.error === ERR.DELETED && draft.status !== DRAFT_STATUS.DELETED) {
+    return { ok: false, error: ERR.DELETED, current: pre.draft, retryable: false };
+  }
+
+  const claim = await claimRevision(kv, googleSub, draft.draftId, draft.rev, operationId, readRev);
   if (!claim.claimed) return { ok: false, ...claim };
+
+  // My own claim, and the record is already AT that revision: this operation
+  // already committed and lost the response. Replaying its own write as a
+  // conflict would tell a successful caller it failed.
+  if (claim.outcome === CLAIM_OUTCOME.OWN_RETRY) {
+    const mine = await getDraft(kv, googleSub, draft.draftId);
+    if (mine.ok && mine.draft.rev === draft.rev) {
+      return { ok: true, draft: mine.draft, replayedClaim: true, replayedWrite: true,
+               claimOutcome: claim.outcome };
+    }
+  }
+
+  // ── The guard. Ownership is necessary, never sufficient. ────────────────
+  // Re-read the authoritative record immediately before writing, so a lost or
+  // manually cleared claim key cannot let a stale writer advance a revision.
+  const cur = await getDraft(kv, googleSub, draft.draftId);
+  if (!cur.ok) {
+    if (cur.error === ERR.DELETED) {
+      // No stale write may resurrect a tombstone. Deletion is a decision the
+      // seller made; a slow client must not undo it by arriving late.
+      return { ok: false, error: ERR.DELETED, current: cur.draft, retryable: false };
+    }
+    if (cur.error === ERR.NOT_FOUND) {
+      if (draft.rev !== 1) {
+        return { ok: false, error: ERR.REV_CONFLICT, evidence: 'record-absent', retryable: false };
+      }
+    } else {
+      return { ok: false, error: cur.error, retryable: cur.retryable };
+    }
+  } else if (cur.draft.rev !== draft.rev - 1) {
+    return { ok: false, error: ERR.REV_CONFLICT, current: cur.draft, evidence: `authoritative-rev-${cur.draft.rev}` };
+  }
+
   try {
     await kv('set', draftKey(googleSub, draft.draftId), JSON.stringify(draft));
   } catch {
     return { ok: false, error: ERR.STORE_UNAVAILABLE, retryable: true, claimHeld: true };
   }
-  return { ok: true, draft, replayedClaim: !!claim.replayedClaim };
+  return { ok: true, draft, replayedClaim: !!claim.replayedClaim, claimOutcome: claim.outcome };
 }
 
 /**
@@ -332,13 +555,17 @@ export async function deleteDraft(kv, googleSub, draftId, expectedRev, operation
   } catch (e) {
     return { ok: false, error: e.message, current: read.draft };
   }
-  const claim = await claimRevision(kv, googleSub, draftId, stone.rev, operationId);
-  if (!claim.claimed) return { ok: false, ...claim };
-  try {
-    await kv('set', draftKey(googleSub, draftId), JSON.stringify(stone));
-    await kv('expire', draftKey(googleSub, draftId), TOMBSTONE_TTL_SEC);
-  } catch {
-    return { ok: false, error: ERR.STORE_UNAVAILABLE, retryable: true };
+  // Route the tombstone write through putDraft so it inherits the claim, the
+  // orphan rules and the authoritative-predecessor guard. A delete that skipped
+  // those would be the one destructive path without them.
+  const written = await putDraft(kv, googleSub, stone, operationId);
+  if (!written.ok) {
+    if (written.error === ERR.REV_CONFLICT) {
+      const fresh = await getDraft(kv, googleSub, draftId);
+      return { ok: false, error: ERR.REV_CONFLICT, current: fresh.ok ? fresh.draft : written.current };
+    }
+    return written;
   }
-  return { ok: true, draft: stone, deleted: true };
+  try { await kv('expire', draftKey(googleSub, draftId), TOMBSTONE_TTL_SEC); } catch { /* retention only */ }
+  return { ok: true, draft: stone, deleted: true, alreadyDeleted: false };
 }
