@@ -593,7 +593,7 @@ check('insufficient identity blocks',
       }).blockingCodes.includes(PACKET_CODES.INSUFFICIENT_IDENTITY));
 
 check('packet is keyed by the canonical sku',
-      packet.sku.startsWith('v1-') && packet.sku === packet.identity.sku);
+      packet.sku.startsWith('v2-') && packet.sku === packet.identity.sku);
 check('packet reports the real achieved net, not the requested target',
       Math.abs(packet.pricing.achievedNet - netEbayForPrice(packet.pricing.listPrice, CTXS[0])) < 0.006);
 
@@ -811,10 +811,16 @@ check('a raw card raises no cert warning',
       !buildListingPacket({ card: 'Mew ex', set: 'Paldean Fates', setCode: 'paf', number: '232', game: 'pokemon' },
                           { feeModelRevision: FEE_MODEL_REVISION })
         .notes.some((n) => n.code === PACKET_CODES.SLAB_WITHOUT_CERT));
-check('packet identity reports certKnown and instanceDistinguishable',
+check('packet identity reports certKnown either way',
       packetNoCert.identity.certKnown === false &&
-      packetNoCert.identity.instanceDistinguishable === false &&
-      packetCert.identity.instanceDistinguishable === true);
+      packetCert.identity.certKnown === true);
+check('🔴 a cert does NOT change the sku — it is instance data now',
+      packetNoCert.sku === packetCert.sku,
+      'two PSA 9s share a product class; the inventory instance separates the copies');
+check('the SKU never claims to identify one physical copy',
+      packetCert.identity.identifiesOnePhysicalCopy === false);
+check('a cert-less slab still warns, because the LISTING is worse without it',
+      packetNoCert.notes.some((n) => n.code === PACKET_CODES.SLAB_WITHOUT_CERT));
 
 // ── The live save path must actually be able to supply a cert (Fix A) ────
 // The identity model has always had a cert axis. What was missing was any way

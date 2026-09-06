@@ -357,19 +357,47 @@ export async function listDraftIds(googleSub, opts = {}) {
   // not be dropped from the index by the very read that is repairing it.
   const union = [...new Set([...(indexed || []), ...scanned])];
 
+  // ── Stale entries: the opposite risk that a union introduces ────────────
+  //
+  //     index:   A, B, C
+  //     records: A, B
+  //
+  // A union alone keeps C forever. But we must NOT prune on a SCAN miss —
+  // SCAN is not a snapshot, so "the scan didn't see it" and "it isn't there"
+  // are different statements, and conflating them deletes live drafts.
+  //
+  // So the rule is asymmetric, and deliberately so:
+  //   never remove an entry merely because SCAN missed it;
+  //   remove one only once the authoritative record is POSITIVELY confirmed
+  //   absent by a direct read of its own key.
+  // No false deletion from an incomplete scan, and no permanent zombies.
+  const suspect = (indexed || []).filter((id) => !scanned.includes(id));
+  const confirmedGone = [];
+  for (const id of suspect) {
+    try {
+      const rec = await kv('get', draftRecordKey(googleSub, id));
+      // Only a definite null/absent answer counts. An error is not evidence.
+      if (rec === null || rec === undefined) confirmedGone.push(id);
+    } catch { /* unreadable is not absent — keep the entry */ }
+  }
+  if (confirmedGone.length) {
+    try { await kv('srem', draftsKey(googleSub), ...confirmedGone); } catch {}
+  }
+  const live = union.filter((id) => !confirmedGone.includes(id));
+
   const missingFromIndex = scanned.filter((id) => !(indexed || []).includes(id));
   if (missingFromIndex.length) {
     try { await kv('sadd', draftsKey(googleSub), ...missingFromIndex); }
     catch { /* the right answer still gets returned; the next read retries */ }
   }
-  if (union.length) {
+  if (live.length) {
     try { await kv('expire', draftsKey(googleSub), DRAFT_INDEX_TTL_SEC); } catch {}
   }
   // Only claim freshness if the repair itself succeeded.
   if (!missingFromIndex.length || await indexContains(googleSub, missingFromIndex)) {
     await markIndexFresh(googleSub);
   }
-  return union;
+  return live;
 }
 
 /** Verify a repair actually landed before claiming the index is clean. */

@@ -102,10 +102,10 @@ console.log('\nslab identity — cert is what separates two identical grades');
 const psa9a = row({ grader: 'PSA', grade: '9', cert: '84213771' });
 const psa9b = row({ grader: 'PSA', grade: '9', cert: '84213772' });
 
-diff('two PSA 9s of the same card are two different items', psa9a, psa9b,
-     'without cert in identity, a reseller holding duplicates gets one record for two cards');
+same('🔴 two PSA 9s of the same card are ONE product class', psa9a, psa9b,
+     'cert identifies a slab, not a product — duplicates are separated by inventory instance id');
 
-same('same cert → same item', psa9a, row({ grader: 'PSA', grade: '9', cert: '84213771' }));
+same('cert is irrelevant to the sku entirely', psa9a, row({ grader: 'PSA', grade: '9' }));
 
 diff('raw and graded are different', row(), psa9a);
 diff('PSA 9 and PSA 10 are different',
@@ -197,7 +197,7 @@ check('all skus are distinct', new Set(skus).size === skus.length);
 check('head is human-readable', skuFor(row()).includes(GAME_CODES.pokemon),
       'a SKU should be debuggable at a glance, not fully opaque');
 check('unknown game still produces a valid sku',
-      /^v1-XXX/.test(skuFor({ setCode: 'x', number: '1' })));
+      /^v2-XXX/.test(skuFor({ setCode: 'x', number: '1' })));
 
 check('empty axes do not shift meaning',
       skuFor({ game: 'pokemon', setCode: 'a', number: '' })
@@ -263,30 +263,34 @@ const SLAB_CERT_A  = { ...SLAB_NO_CERT, cert: '84061234' };
 const SLAB_CERT_B  = { ...SLAB_NO_CERT, cert: '84069999' };
 const RAW_CARD     = { game: 'pokemon', setCode: 'sv1', number: '045/198' };
 
-check('a raw card is complete identity',
+check('a raw card is complete PRODUCT identity',
       identityCompleteness(RAW_CARD).complete === true);
-check('a raw card is NOT a distinguishable instance — two copies are fungible',
-      identityCompleteness(RAW_CARD).instanceDistinguishable === false);
-check('a cert-less slab is INCOMPLETE identity',
-      identityCompleteness(SLAB_NO_CERT).complete === false);
-check('a cert-less slab names cert as the missing axis',
-      identityCompleteness(SLAB_NO_CERT).missing.includes('cert'));
-check('a cert-less slab is NOT a distinguishable instance',
-      identityCompleteness(SLAB_NO_CERT).instanceDistinguishable === false);
-check('a certified slab is complete AND distinguishable',
-      identityCompleteness(SLAB_CERT_A).complete === true &&
-      identityCompleteness(SLAB_CERT_A).instanceDistinguishable === true);
+check('🔴 the SKU never claims to identify one physical copy — for anything',
+      identityCompleteness(RAW_CARD).identifiesOnePhysicalCopy === false &&
+      identityCompleteness(SLAB_CERT_A).identifiesOnePhysicalCopy === false,
+      'uniformly false is honest; true-for-slabs invited callers to use the SKU as an instance key');
+check('🔴 a cert-less slab is COMPLETE product identity',
+      identityCompleteness(SLAB_NO_CERT).complete === true,
+      '"PSA 9 Charizard Base Set 4" is exactly the product whose payout we compare');
+check('cert is no longer a missing identity axis',
+      !identityCompleteness(SLAB_NO_CERT).missing.includes('cert'));
+check('but a slab still recommends a cert, for the listing',
+      identityCompleteness(SLAB_NO_CERT).certRecommended === true &&
+      identityCompleteness(RAW_CARD).certRecommended === false);
+check('grader and grade ARE identity — a PSA 9 and a PSA 10 are different products',
+      skuFor(SLAB_NO_CERT) !== skuFor({ ...SLAB_NO_CERT, grade: '10' }) &&
+      skuFor(SLAB_NO_CERT) !== skuFor({ ...SLAB_NO_CERT, grader: 'bgs' }));
 check('cardIdentity exposes certKnown so callers cannot miss it',
       cardIdentity(SLAB_NO_CERT).certKnown === false &&
       cardIdentity(SLAB_CERT_A).certKnown === true);
-check('cardIdentity exposes instanceDistinguishable',
-      cardIdentity(SLAB_CERT_A).instanceDistinguishable === true);
-check('🔴 two same-grade slabs with different certs are DIFFERENT skus',
-      skuFor(SLAB_CERT_A) !== skuFor(SLAB_CERT_B),
-      'this is the whole point: two PSA 9s are two objects, not one');
-check('cert-less slabs of the same card collapse to one sku (documented cost)',
-      skuFor(SLAB_NO_CERT) === skuFor({ ...SLAB_NO_CERT }),
-      'which is exactly why the packet raises SLAB_WITHOUT_CERT');
+check('🔴 two PSA 9s of the same card are the SAME product class',
+      skuFor(SLAB_CERT_A) === skuFor(SLAB_CERT_B),
+      'same comps, same category, same payout math — cert belongs on the instance');
+check('a raw copy and a graded copy are still different products',
+      skuFor(RAW_CARD) !== skuFor(SLAB_CERT_A));
+check('the namespace was bumped, so the hash change is auditable',
+      skuFor(SLAB_CERT_A).startsWith('v2-'),
+      'a silent re-key of persisted inventory is undebuggable later');
 check('cert separators are normalized — 8406-1234 is the same slab as 84061234',
       skuFor({ ...SLAB_NO_CERT, cert: '8406-1234' }) === skuFor({ ...SLAB_NO_CERT, cert: '84061234' }));
 check('a cert on a RAW card does not affect its identity',

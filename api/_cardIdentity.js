@@ -20,14 +20,22 @@
 // We read: game, setCode, set, number, rarity, isJapanese, grader, grade, cert.
 //
 // ── Namespace versioning, not freezing ──
-// Every SKU carries a `v1-` prefix. Normalization rules WILL need fixing one
+// Every SKU carries a `v2-` prefix. Normalization rules WILL need fixing one
 // day (see the rarity caveat below). Freezing them is a promise that gets
 // broken; versioning means v2 rules can ship without colliding with live v1
 // listings, and the migration is explicit instead of silent.
 
 import { createHash } from 'crypto';
 
-export const IDENTITY_NAMESPACE = 'v1';
+/**
+ * Bumped v1 -> v2 when the cert number moved OUT of the SKU and onto the
+ * inventory instance. Every slab SKU changes as a result, so the namespace
+ * changes with it — a silent hash change that quietly re-keys inventory is
+ * exactly the kind of thing that is impossible to debug six months later.
+ * Nothing is persisted yet (no KV store, nothing deployed), so this costs
+ * nothing today and would have been expensive after the first saved draft.
+ */
+export const IDENTITY_NAMESPACE = 'v2';
 
 // Games as actually written by core.js. `pokemonjp` is not a separate game —
 // it is Pokémon in Japanese, and it collapses to pokemon + language ja.
@@ -207,7 +215,13 @@ export function identityString(row) {
     a.variant,
     a.grader || 'raw',
     a.grade,
-    a.cert,
+    // NO cert. A cert number identifies a physical slab, not a product. Two
+    // PSA 9 copies of the same card are the same sellable thing — same comps,
+    // same venue category, same payout math — and the whole product is
+    // comparing payouts for a product across venues. Keeping cert here made
+    // every slab its own product class, which would have fragmented pricing
+    // per slab. Cert now lives on the inventory instance, where the physical
+    // copy is actually modelled.
   ].join('|');
 }
 
@@ -226,7 +240,7 @@ function skuHead(axes) {
 /**
  * Deterministic SKU.
  *
- *   v1-PKM SV4 245-<16 hex>
+ *   v2-PKM SV4 245-<16 hex>
  *   └┬┘ └──────┬─────┘ └─┬─┘
  *    │         │         └── sha256 of the full identity string
  *    │         └──────────── readable head (game + set + number)
@@ -254,25 +268,22 @@ export function skuFor(row) {
  * listings all key off. Deliberately carries no venue fields.
  */
 /**
- * Is this identity complete, and does it describe a distinguishable physical
- * instance?
+ * Is this PRODUCT identity complete?
  *
- * These are two different questions and conflating them loses money:
+ * Note what this deliberately no longer asks: whether we can tell one physical
+ * copy from another. The SKU cannot answer that for anything, and pretending
+ * it could for slabs was the flaw.
  *
- *   `complete`                — do we have every axis that applies to this
- *                               card? A slab without a cert is INCOMPLETE.
- *   `instanceDistinguishable` — does the SKU identify one physical object?
- *                               Two raw Charizards of the same print are
- *                               genuinely fungible and SHOULD share a SKU.
- *                               Two PSA 9s are not: they have different certs,
- *                               different scratches, and one may already be
- *                               listed. Without a cert they collapse into one
- *                               SKU, and the second draft silently overwrites
- *                               the first.
+ * A cert-less PSA 9 is a perfectly complete product identity — "PSA 9 Charizard
+ * Base Set 4" is exactly the thing whose payout we compare across venues. What
+ * a missing cert costs us is a better LISTING (eBay's Certification Number
+ * descriptor) and buyer trust, not the ability to identify the product. So a
+ * missing cert is a listing-quality warning, raised by the packet, and not an
+ * identity failure that blocks a handoff.
  *
- * So a raw card is complete-but-not-distinguishable by design, while a
- * cert-less slab is neither, and callers must be able to tell those apart
- * rather than seeing one "valid" boolean.
+ * Distinguishing two physical copies is the inventory instance's job, and it
+ * uses a generated id precisely because no function of card attributes can
+ * separate two indistinguishable raw copies. See `api/_inventoryInstance.js`.
  */
 export function identityCompleteness(row) {
   const axes    = identityAxes(row);
@@ -282,17 +293,24 @@ export function identityCompleteness(row) {
   if (!axes.set)    missing.push('set');
   if (!axes.number) missing.push('number');
   if (slab) {
+    // Grader and grade ARE product identity: a PSA 9 and a PSA 10 of the same
+    // card are different products with different comps. The cert is not.
     if (!axes.grader) missing.push('grader');
     if (!axes.grade)  missing.push('grade');
-    if (!axes.cert)   missing.push('cert');
   }
   return {
     complete: missing.length === 0,
     missing,
+    // Still surfaced, because the listing wants it and a slab without one is
+    // worth a warning — it is just no longer part of identity.
     certKnown: slab ? !!axes.cert : false,
-    // Only a certified slab is one identifiable object. Raw cards are
-    // fungible, so `false` here is correct and expected for them.
-    instanceDistinguishable: slab && !!axes.cert,
+    certRecommended: slab,
+    /**
+     * Always false, for every card, by design. The SKU is a product class.
+     * Uniformly false is more honest than a flag that was true only for
+     * certified slabs and invited callers to use the SKU as an instance key.
+     */
+    identifiesOnePhysicalCopy: false,
   };
 }
 
@@ -304,9 +322,12 @@ export function cardIdentity(row) {
     namespace:      IDENTITY_NAMESPACE,
     graded:         isSlab(row),
     ...axes,
-    // Never let a cert-less slab pass as uniquely identified inventory.
-    certKnown:               comp.certKnown,
-    instanceDistinguishable: comp.instanceDistinguishable,
+    certKnown:                 comp.certKnown,
+    certRecommended:           comp.certRecommended,
+    // Always false. Distinguishing physical copies is the inventory
+    // instance's job — see api/_inventoryInstance.js. Kept explicit so no
+    // caller can mistake a product SKU for a per-copy key.
+    identifiesOnePhysicalCopy: comp.identifiesOnePhysicalCopy,
     identityComplete:        comp.complete,
     missingAxes:             comp.missing,
     // Display-only. NOT part of identity — a renamed card is the same card,

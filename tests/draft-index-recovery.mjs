@@ -23,6 +23,7 @@ process.env.KV_REST_API_TOKEN = 'test-token';
 
 const store = new Map();   // key -> string | Set
 let failCommands = new Set();
+let scanHides = new Set();
 let commandLog = [];
 
 globalThis.fetch = async (url) => {
@@ -58,7 +59,10 @@ globalThis.fetch = async (url) => {
       const pattern = args[2];
       const rx = new RegExp('^' + pattern.split('*').map((p) =>
         p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
-      result = ['0', [...store.keys()].filter((k) => rx.test(k))];
+      // scanHides simulates SCAN's non-snapshot nature: a key that exists but
+      // which this particular scan pass does not return.
+      result = ['0', [...store.keys()].filter((k) => rx.test(k)
+        && ![...scanHides].some((h) => k.endsWith(`:${h}`)))];
       break;
     }
     default: result = null;
@@ -66,6 +70,7 @@ globalThis.fetch = async (url) => {
   return { ok: true, status: 200, json: async () => ({ result }) };
 };
 
+const INV = await import(new URL('../api/_inventoryInstance.js', import.meta.url).href);
 const DI = await import('../api/_draftIndex.js');
 const { readStoredPacket, PACKET_COMPAT, PACKET_SCHEMA_VERSION } =
   await import('../api/_listingPacket.js');
@@ -208,12 +213,18 @@ console.log('\nreconcile is a union, not a replacement');
 reset();
 writeRecord(SUB, 'A');
 await DI.indexDraft(SUB, SKU + '-a', 'A');
-store.get(DI.draftsKey(SUB)).add('inflight');     // indexed, record not yet visible to SCAN
+// indexDraft writes the RECORD first and the index second, so an indexed id
+// always has a record. The case the union protects is therefore a record that
+// exists but which this scan pass did not return — not a missing record.
+writeRecord(SUB, 'inflight');
+store.get(DI.draftsKey(SUB)).add('inflight');
 store.delete(DI.indexFreshKey(SUB));
+scanHides = new Set(['inflight']);
 listed = await DI.listDraftIds(SUB);
+scanHides = new Set();
 check('a reconcile keeps index entries the scan did not see',
       listed.includes('inflight') && listed.includes('A'),
-      'a draft mid-write must not be dropped by the read that is repairing the index');
+      'a draft the scan missed must not be dropped by the read repairing the index');
 
 // ── 3f. A clean empty account does not scan on every read ─────────────────
 console.log('\nempty accounts settle');
@@ -323,6 +334,133 @@ check('a migration that does not advance the version fails loudly',
       && stuck.reason === 'PACKET_MIGRATION_DID_NOT_ADVANCE_VERSION',
       'a half-applied chain must not be handed back as usable');
 delete PACKET_MIGRATIONS[1]; delete PACKET_MIGRATIONS[2];
+
+
+// ── 3g. Stale index entries — pruning only on POSITIVE absence ────────────
+console.log('\nstale entries are pruned, but only on proof');
+reset();
+writeRecord(SUB, 'A'); await DI.indexDraft(SUB, SKU + '-a', 'A');
+writeRecord(SUB, 'B'); await DI.indexDraft(SUB, SKU + '-b', 'B');
+store.get(DI.draftsKey(SUB)).add('C');            // C indexed, no record: a zombie
+store.delete(DI.indexFreshKey(SUB));
+listed = await DI.listDraftIds(SUB);
+check('a zombie index entry is dropped once its record is confirmed absent',
+      !listed.includes('C') && listed.includes('A') && listed.includes('B'));
+check('and it is removed from the index, not just filtered from the reply',
+      !store.get(DI.draftsKey(SUB)).has('C'),
+      'otherwise the zombie returns on every future read');
+
+console.log('\n🔴 but never pruned on a scan miss alone');
+reset();
+writeRecord(SUB, 'A'); await DI.indexDraft(SUB, SKU + '-a', 'A');
+writeRecord(SUB, 'B'); await DI.indexDraft(SUB, SKU + '-b', 'B');
+store.delete(DI.indexFreshKey(SUB));
+scanHides = new Set(['B']);                       // SCAN is not a snapshot
+listed = await DI.listDraftIds(SUB);
+scanHides = new Set();
+check('🔴 a live draft the scan missed is NOT deleted',
+      listed.includes('B') && store.get(DI.draftsKey(SUB)).has('B'),
+      '"the scan did not see it" and "it is not there" are different statements');
+
+console.log('\nan unreadable record is not evidence of absence');
+reset();
+writeRecord(SUB, 'A'); await DI.indexDraft(SUB, SKU + '-a', 'A');
+writeRecord(SUB, 'B'); await DI.indexDraft(SUB, SKU + '-b', 'B');
+store.delete(DI.indexFreshKey(SUB));
+scanHides = new Set(['B']);
+failCommands = new Set(['get']);                  // existence check itself fails
+listed = await DI.listDraftIds(SUB);
+failCommands = new Set(); scanHides = new Set();
+check('a failed existence check keeps the entry',
+      listed.includes('B') && store.get(DI.draftsKey(SUB)).has('B'),
+      'an error is not a null');
+
+// ── 5. Inventory instance layer (C0c) ────────────────────────────────────
+console.log('\n🔴 C0c — SKU is product, instance is the physical copy');
+const CARD_RAW  = { game: 'pokemon', setCode: 'base', set: 'Base Set', number: '4', card: 'Charizard' };
+const CARD_PSA9 = { ...CARD_RAW, grader: 'psa', grade: '9' };
+
+const rawA = INV.buildInstance(CARD_RAW, { condition: 'near-mint', acquisitionCost: 80 });
+const rawB = INV.buildInstance(CARD_RAW, { condition: 'heavily-played', acquisitionCost: 45 });
+check('🔴 two raw copies share one SKU', rawA.sku === rawB.sku);
+check('🔴 but are different instances — the collision is gone',
+      rawA.instanceId !== rawB.instanceId,
+      'this is the case that was broken before C0c: NM and HP collided on one draft pointer');
+check('each carries its own condition and cost',
+      rawA.condition === 'near-mint' && rawA.acquisitionCost === 80 &&
+      rawB.condition === 'heavily-played' && rawB.acquisitionCost === 45);
+check('instance ids are generated, not derived',
+      INV.buildInstance(CARD_RAW, { condition: 'near-mint' }).instanceId !==
+      INV.buildInstance(CARD_RAW, { condition: 'near-mint' }).instanceId,
+      'no function of card attributes can separate two indistinguishable copies');
+check('the id is prefixed and key-safe',
+      /^inv_[0-9a-f]{32}$/.test(rawA.instanceId));
+
+const slabA = INV.buildInstance({ ...CARD_PSA9, cert: '84061234' }, {});
+const slabB = INV.buildInstance({ ...CARD_PSA9, cert: '84069999' }, {});
+check('🔴 two PSA 9s share one SKU', slabA.sku === slabB.sku);
+check('🔴 and are separated by instance, each keeping its own cert',
+      slabA.instanceId !== slabB.instanceId &&
+      slabA.cert === '84061234' && slabB.cert === '84069999',
+      'same mechanism fixes raw and graded duplicates');
+check('cert lives on the instance, never on a raw copy', rawA.cert === null);
+check('a graded instance takes its condition from the grade', slabA.condition === 'graded');
+
+console.log('\nuniqueness moves to the instance');
+check('the draft-uniqueness key is per instance',
+      INV.instanceDraftKey('sub1', rawA.instanceId) === `instancedraft:sub1:${rawA.instanceId}`);
+check('two raw copies get two independent draft slots',
+      INV.instanceDraftKey('sub1', rawA.instanceId) !== INV.instanceDraftKey('sub1', rawB.instanceId));
+check('a per-product set still answers "all drafts for this card"',
+      INV.skuInstancesKey('sub1', rawA.sku) === `skuinv:sub1:${rawA.sku}`);
+check('key delimiters are refused, not escaped',
+      (() => { try { INV.instanceKey('a:b', 'x'); return false; } catch { return true; } })());
+
+console.log('\nquantity — lots, with honest limits');
+const lot = INV.buildInstance(CARD_RAW, { condition: 'near-mint', quantity: 5 });
+check('a lot of five identical NM copies is one record', lot.quantity === 5);
+check('quantity defaults to one', rawA.quantity === 1);
+for (const bad of ['5', 0, -1, 2.5, NaN]) {
+  check(`quantity ${JSON.stringify(bad)} is refused, not coerced`,
+        (() => { try { INV.buildInstance(CARD_RAW, { condition: 'mint', quantity: bad }); return false; }
+                 catch (e) { return e.message === 'INSTANCE_QUANTITY_INVALID'; } })());
+}
+check('🔴 a slab lot cannot exceed one — a cert describes one object',
+      (() => { try { INV.buildInstance({ ...CARD_PSA9, cert: '1' }, { quantity: 3 }); return false; }
+               catch (e) { return e.message === 'INSTANCE_SLAB_QUANTITY_MUST_BE_ONE'; } })());
+check('an unknown condition is refused rather than guessed',
+      (() => { try { INV.buildInstance(CARD_RAW, { condition: 'pretty good' }); return false; }
+               catch (e) { return e.message === 'INSTANCE_CONDITION_UNKNOWN'; } })());
+for (const bad of [null, '', '12', [], NaN, -5]) {
+  const r = (() => { try { return INV.buildInstance(CARD_RAW, { condition: 'mint', acquisitionCost: bad }); }
+                     catch (e) { return e.message; } })();
+  check(`cost ${JSON.stringify(bad)} never becomes a real number`,
+        bad === null || bad === '' ? r.acquisitionCost === null : r === 'INSTANCE_COST_INVALID',
+        'Number(null) === 0 must not turn missing input into a $0 cost basis');
+}
+
+console.log('\nlot splitting stays possible');
+const { remainder, split } = INV.splitInstance(lot, 2, { condition: 'lightly-played', acquisitionCost: 12 });
+check('the split leaves the lot smaller', remainder.quantity === 3);
+check('the split copies become their own instance',
+      split.quantity === 2 && split.instanceId !== lot.instanceId);
+check('the split can differ materially', split.condition === 'lightly-played' && split.acquisitionCost === 12);
+check('both sides keep the same product', remainder.sku === split.sku);
+check('a split cannot empty the lot',
+      (() => { try { INV.splitInstance(lot, 5); return false; }
+               catch (e) { return e.message === 'SPLIT_WOULD_EMPTY_LOT'; } })());
+check('a slab cannot be split', (() => { try { INV.splitInstance(slabA, 1); return false; }
+               catch (e) { return e.message === 'SPLIT_SLAB_NOT_SPLITTABLE'; } })());
+
+console.log('\ninstance schema version is read, not assumed');
+check('a current instance is usable', INV.readStoredInstance(rawA).usable === true);
+check('a newer instance is refused and preserved',
+      (() => { const r = INV.readStoredInstance({ ...rawA, schemaVersion: 99 });
+               return !r.usable && r.reason === 'INSTANCE_VERSION_AHEAD_OF_READER' && r.instance.cert === null; })());
+for (const bad of [undefined, null, '1', 1.5, 0]) {
+  check(`instance version ${JSON.stringify(bad)} is incompatible, never current`,
+        INV.readStoredInstance({ ...rawA, schemaVersion: bad }).reason === 'INSTANCE_VERSION_MALFORMED');
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
