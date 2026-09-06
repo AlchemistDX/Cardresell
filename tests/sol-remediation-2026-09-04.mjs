@@ -17,9 +17,26 @@ const scanApi = fs.readFileSync(path.join(root, 'api/scan.js'), 'utf8');
 
 let passed = 0, failed = 0;
 function check(name, cond) {
+  // A Promise is never a truth value. `(async () => {...})()` is always
+  // truthy, so passing one here asserts nothing while printing ok — we
+  // shipped two of those. Make the whole category impossible, loudly.
+  if (cond && typeof cond.then === 'function') {
+    failed++;
+    console.log(`  FAIL ${name}\n       → TEST_API_MISUSE: a Promise is not a truth value; await it or use checkAsync()`);
+    return;
+  }
+
   if (cond) { console.log(`  PASS  ${name}`); passed++; }
   else { console.log(`  FAIL  ${name}`); failed++; }
 }
+/** For assertions whose condition is async. Awaits, then asserts. */
+async function checkAsync(name, thunk, hint) {
+  let v;
+  try { v = await (typeof thunk === 'function' ? thunk() : thunk); }
+  catch (e) { v = false; hint = `threw: ${e.message}`; }
+  return check(name, !!v, hint);
+}
+
 
 console.log('\n[Sol remediation 2026-09-04]');
 

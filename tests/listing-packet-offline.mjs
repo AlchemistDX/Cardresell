@@ -30,9 +30,26 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 let passed = 0, failed = 0;
 function check(name, cond, hint = '') {
+  // A Promise is never a truth value. `(async () => {...})()` is always
+  // truthy, so passing one here asserts nothing while printing ok — we
+  // shipped two of those. Make the whole category impossible, loudly.
+  if (cond && typeof cond.then === 'function') {
+    failed++;
+    console.log(`  FAIL ${name}\n       → TEST_API_MISUSE: a Promise is not a truth value; await it or use checkAsync()`);
+    return;
+  }
+
   if (cond) { passed++; console.log(`  ok   ${name}`); }
   else { failed++; console.log(`  FAIL ${name}${hint ? '\n       → ' + hint : ''}`); }
 }
+/** For assertions whose condition is async. Awaits, then asserts. */
+async function checkAsync(name, thunk, hint) {
+  let v;
+  try { v = await (typeof thunk === 'function' ? thunk() : thunk); }
+  catch (e) { v = false; hint = `threw: ${e.message}`; }
+  return check(name, !!v, hint);
+}
+
 
 // ── Pull the real fee + inversion functions out of the built core.js ───────
 const coreFile = fs.readdirSync(path.join(root, 'js')).find((f) => /^core\..*\.js$/.test(f));

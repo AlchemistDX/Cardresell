@@ -19,9 +19,26 @@ import { readFileSync } from 'node:fs';
 
 let passed = 0, failed = 0;
 function check(label, cond, hint) {
+  // A Promise is never a truth value. `(async () => {...})()` is always
+  // truthy, so passing one here asserts nothing while printing ok — we
+  // shipped two of those. Make the whole category impossible, loudly.
+  if (cond && typeof cond.then === 'function') {
+    failed++;
+    console.log(`  FAIL ${label}\n       → TEST_API_MISUSE: a Promise is not a truth value; await it or use checkAsync()`);
+    return;
+  }
+
   if (cond) { console.log('  \u2713 ' + label); passed++; }
   else { console.log('  \u2717 ' + label + (hint ? '\n      ' + hint : '')); failed++; }
 }
+/** For assertions whose condition is async. Awaits, then asserts. */
+async function checkAsync(label, thunk, hint) {
+  let v;
+  try { v = await (typeof thunk === 'function' ? thunk() : thunk); }
+  catch (e) { v = false; hint = `threw: ${e.message}`; }
+  return check(label, !!v, hint);
+}
+
 
 console.log('\n[Variant selection]');
 

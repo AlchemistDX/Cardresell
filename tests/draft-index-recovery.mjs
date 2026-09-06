@@ -13,9 +13,26 @@ import assert from 'node:assert';
 
 let passed = 0, failed = 0;
 function check(name, cond, detail) {
+  // A Promise is never a truth value. `(async () => {...})()` is always
+  // truthy, so passing one here asserts nothing while printing ok — we
+  // shipped two of those. Make the whole category impossible, loudly.
+  if (cond && typeof cond.then === 'function') {
+    failed++;
+    console.log(`  FAIL ${name}\n       → TEST_API_MISUSE: a Promise is not a truth value; await it or use checkAsync()`);
+    return;
+  }
+
   if (cond) { passed++; console.log(`  ok   ${name}`); }
   else { failed++; console.log(`  FAIL ${name}`); if (detail) console.log(`       → ${detail}`); }
 }
+/** For assertions whose condition is async. Awaits, then asserts. */
+async function checkAsync(name, thunk, hint) {
+  let v;
+  try { v = await (typeof thunk === 'function' ? thunk() : thunk); }
+  catch (e) { v = false; hint = `threw: ${e.message}`; }
+  return check(name, !!v, hint);
+}
+
 
 // ── in-memory Upstash ─────────────────────────────────────────────────────
 process.env.KV_REST_API_URL   = 'https://kv.test';
@@ -480,7 +497,8 @@ check('the draft index is a SET name, not a single pointer',
       INV.instanceDraftsKey('sub1', 'inv_x') === 'instancedrafts:sub1:inv_x');
 check('slots are per venue and strategy',
       INV.draftSlot('ebay') === 'ebay:fixed-price' &&
-      INV.draftSlot('mercari', 'auction') === 'mercari:auction');
+      INV.draftSlot('ebay', 'auction') === 'ebay:auction' &&
+      INV.draftSlot('mercari', 'fixed-price') === 'mercari:fixed-price');
 check('venue case is normalized', INV.draftSlot('eBay') === INV.draftSlot('ebay'));
 check('🔴 eBay and Mercari drafts can coexist on one instance in the SHAPE',
       INV.draftSlot('ebay') !== INV.draftSlot('mercari'),
@@ -565,6 +583,8 @@ check('the valuation key contains the sku, so it stays debuggable',
 // ── 9. Create idempotency ───────────────────────────────────────────────
 console.log('\n🔴 retries must not mint two records');
 const UUID = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+const REQ_A = { quantity: 5, condition: 'near-mint' };
+const REQ_B = { quantity: 10, condition: 'near-mint' };
 let idemStore = new Map();
 const idemKv = async (cmd, key, ...rest) => {
   if (cmd === 'get') return idemStore.has(key) ? idemStore.get(key) : null;
@@ -576,8 +596,8 @@ const idemKv = async (cmd, key, ...rest) => {
 let creations = 0;
 const create = async () => { creations += 1; return { instanceId: `inv_made_${creations}` }; };
 
-const first  = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
-const second = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+const first  = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create, { request: REQ_A });
+const second = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create, { request: REQ_A });
 check('the first attempt does the work', first.result.instanceId === 'inv_made_1');
 check('🔴 a retry does NOT create a second record', creations === 1,
       'generated ids are non-deterministic, so SKU dedup cannot catch this');
@@ -585,12 +605,12 @@ check('🔴 the retry returns the ORIGINAL result',
       second.result.instanceId === 'inv_made_1' && second.replayed === true);
 check('a different key is a different action',
       (await IDEM.runOnce(idemKv, 'sub1', 'instance-create',
-        '11111111-2222-3333-4444-555555555555', create)).result.instanceId === 'inv_made_2');
+        '11111111-2222-3333-4444-555555555555', create, { request: REQ_A })).result.instanceId === 'inv_made_2');
 check('another user cannot replay this user\'s attempt',
-      (await IDEM.runOnce(idemKv, 'sub2', 'instance-create', UUID, create)).replayed === false,
+      (await IDEM.runOnce(idemKv, 'sub2', 'instance-create', UUID, create, { request: REQ_A })).replayed === false,
       'the key is scoped per user or one seller could read another\'s create result');
 check('the same key in a different scope is a different action',
-      (await IDEM.runOnce(idemKv, 'sub1', 'draft-create', UUID, create)).replayed === false);
+      (await IDEM.runOnce(idemKv, 'sub1', 'draft-create', UUID, create, { request: REQ_A })).replayed === false);
 
 for (const bad of ['', 'abc', null, 42, 'not-a-uuid-at-all', undefined]) {
   check(`idempotency key ${JSON.stringify(bad)} is refused`,
@@ -600,16 +620,16 @@ for (const bad of ['', 'abc', null, 42, 'not-a-uuid-at-all', undefined]) {
 idemStore = new Map(); creations = 0;
 const boom = async () => { creations += 1; throw new Error('WORK_FAILED'); };
 let threw = false;
-try { await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, boom); } catch { threw = true; }
+try { await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, boom, { request: REQ_A }); } catch { threw = true; }
 check('a failing attempt propagates the error', threw);
-const retried = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+const retried = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create, { request: REQ_A });
 check('🔴 and is RETRYABLE — one transient failure must not poison the key forever',
       retried.replayed === false && retried.result.instanceId.startsWith('inv_made_'),
       'a failed attempt must release its reservation, or one blip refuses the create for a day');
 idemStore = new Map();
 await idemKv('set', IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID),
              JSON.stringify({ status: 'in-flight', at: Date.now() }));
-const concurrent = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+const concurrent = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create, { request: REQ_A });
 check('a concurrent attempt is refused rather than raced',
       concurrent.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT,
       'racing two creates is precisely the bug this module exists to prevent');
@@ -709,15 +729,15 @@ for (const scope of IDEM.IDEMPOTENT_SCOPES) {
         IDEM.policyFor(scope).onStoreUnavailable === IDEM.FAIL_POLICY.FAIL_CLOSED);
 }
 attempts = 0;
-const down1 = await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance);
+const down1 = await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance, { request: REQ_A });
 check('🔴 a store outage does NOT run the side effect', attempts === 0,
       'whatever broke the store is plausibly also breaking responses — this is the HIGH-retry window');
 check('it reports unavailable, not success', down1.state === IDEM.IDEMPOTENCY_STATE.UNAVAILABLE);
 check('it is marked retryable with user-facing copy',
       down1.retryable === true && /try again/i.test(down1.message));
 attempts = 0;
-await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance);
-await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance);
+await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance, { request: REQ_A });
+await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance, { request: REQ_A });
 check('🔴 repeated retries during an outage never publish twice', attempts === 0,
       'a duplicate eBay listing is a real listing with real fees the seller must find and end by hand');
 check('an unknown scope is refused rather than defaulted',
@@ -744,7 +764,7 @@ s14.set(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2),
         JSON.stringify({ status: 'in-flight', at: Date.now(), op: UUID2 }));
 world = [{ instanceId: 'inv_real', createdByOperation: UUID2 }];   // the work DID land
 ran14 = 0;
-const rec = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+const rec = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { request: REQ_A, reconcile: reconcile14 });
 check('🔴 an in-flight marker with a landed side effect RECONCILES', rec.state === IDEM.IDEMPOTENCY_STATE.RECONCILED,
       'reserve→work→record has a window; the retry must reconcile before repeating');
 check('🔴 and does NOT repeat the side effect', ran14 === 0 && world.length === 1);
@@ -754,7 +774,7 @@ check('it returns the ORIGINAL resource', rec.result.instanceId === 'inv_real' &
 s14 = new Map(); world = []; ran14 = 0;
 s14.set(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2),
         JSON.stringify({ status: 'in-flight', at: Date.now(), op: UUID2 }));
-const conc = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+const conc = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { request: REQ_A, reconcile: reconcile14 });
 check('a genuinely concurrent attempt is refused, not raced',
       conc.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT && ran14 === 0);
 
@@ -762,17 +782,17 @@ check('a genuinely concurrent attempt is refused, not raced',
 s14 = new Map();                                     // marker gone (TTL)
 world = [{ instanceId: 'inv_real', createdByOperation: UUID2 }];
 ran14 = 0;
-const exp = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+const exp = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { request: REQ_A, reconcile: reconcile14 });
 check('🔴 an EXPIRED reservation over a landed side effect still reconciles',
       exp.state === IDEM.IDEMPOTENCY_STATE.RECONCILED && ran14 === 0,
       'this is the case that silently duplicates without a reconcile step');
 
 // the resource pointer alone is enough, without a reconcile hook
 s14 = new Map(); ran14 = 0; world = [];
-await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { request: REQ_A, reconcile: reconcile14 });
 check('the work ran once on a clean slate', ran14 === 1);
 s14.delete(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2));   // lose the RESULT record only
-const viaPointer = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14);  // no reconcile hook
+const viaPointer = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { request: REQ_A });  // no reconcile hook
 check('🔴 the resource pointer alone recovers a lost result record',
       viaPointer.state === IDEM.IDEMPOTENCY_STATE.RECONCILED && ran14 === 1,
       'the pointer is written first precisely so it outlives the result record');
@@ -786,10 +806,117 @@ s14 = new Map(); world = []; ran14 = 0;
 s14.set(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2),
         JSON.stringify({ status: 'in-flight', at: Date.now() }));
 const badRec = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14,
-                                  { reconcile: async () => { throw new Error('DOWN'); } });
+                                  { request: REQ_A, reconcile: async () => { throw new Error('DOWN'); } });
 check('🔴 a FAILED reconcile is no evidence and must not be read as absence',
       badRec.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT && ran14 === 0,
       'same rule as index pruning: a failed read is not proof the side effect did not happen');
+
+
+// ── 15. The key identifies one MUTATION, not a store slot ───────────────
+console.log('\n🔴 same key + different request must be refused');
+let s15 = new Map();
+const kv15 = async (cmd, key, ...rest) => {
+  if (cmd === 'get') return s15.has(key) ? s15.get(key) : null;
+  if (cmd === 'set') { s15.set(key, rest[0]); return 'OK'; }
+  if (cmd === 'del') { s15.delete(key); return 1; }
+  if (cmd === 'expire') return 1;
+  return null;
+};
+let made = 0;
+const mk = async () => { made += 1; return { instanceId: `inv_f${made}` }; };
+
+const f1 = await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk, { request: REQ_A });
+check('the first request succeeds', f1.state === IDEM.IDEMPOTENCY_STATE.FRESH && made === 1);
+const f2 = await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk, { request: REQ_A });
+check('the SAME request with the same key replays', f2.replayed === true && made === 1);
+const f3 = await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk, { request: REQ_B });
+check('🔴 a DIFFERENT request with the same key is REFUSED',
+      f3.state === IDEM.IDEMPOTENCY_STATE.MISMATCH && f3.error === IDEM.FINGERPRINT_MISMATCH,
+      'asking for quantity 10 and being handed the quantity-5 result is a lie, not idempotency');
+check('and the refusal does NOT run the work', made === 1);
+check('the mismatch is not marked retryable — retrying will not help a client bug',
+      f3.retryable === false);
+
+console.log('\nthe fingerprint is canonical, so field order cannot break retries');
+check('key order does not change the fingerprint',
+      IDEM.requestFingerprint({ a: 1, b: 2 }) === IDEM.requestFingerprint({ b: 2, a: 1 }),
+      'otherwise a rebuilt client object looks like a different mutation and every retry is refused');
+check('nesting is canonicalized too',
+      IDEM.requestFingerprint({ x: { p: 1, q: 2 } }) === IDEM.requestFingerprint({ x: { q: 2, p: 1 } }));
+check('array ORDER does matter — [a,b] is not [b,a]',
+      IDEM.requestFingerprint({ x: [1, 2] }) !== IDEM.requestFingerprint({ x: [2, 1] }));
+check('a changed value changes the fingerprint',
+      IDEM.requestFingerprint({ q: 5 }) !== IDEM.requestFingerprint({ q: 10 }));
+check('undefined and absent are the same request',
+      IDEM.requestFingerprint({ a: 1, b: undefined }) === IDEM.requestFingerprint({ a: 1 }));
+check('null and absent are NOT the same request',
+      IDEM.requestFingerprint({ a: 1, b: null }) !== IDEM.requestFingerprint({ a: 1 }),
+      'an explicit null is a stated value; absent is no statement');
+check('"5" and 5 are different requests',
+      IDEM.requestFingerprint({ q: '5' }) !== IDEM.requestFingerprint({ q: 5 }));
+check('a request is REQUIRED — an undeclared body cannot be fingerprinted',
+      await (async () => { try { await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk); return false; }
+                           catch (e) { return e.message === 'IDEMPOTENCY_REQUEST_REQUIRED'; } })());
+
+console.log('\nthe pointer path honours the fingerprint too');
+s15 = new Map(); made = 0;
+await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk, { request: REQ_A });
+s15.delete(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID));   // lose the result record
+const viaPtrMismatch = await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk, { request: REQ_B });
+check('🔴 a mismatched request cannot be answered from the resource pointer either',
+      viaPtrMismatch.state === IDEM.IDEMPOTENCY_STATE.MISMATCH && made === 1,
+      'the pointer is evidence about a DIFFERENT operation');
+const viaPtrMatch = await IDEM.runOnce(kv15, 'sub1', 'instance-create', UUID, mk, { request: REQ_A });
+check('but a matching request still recovers from the pointer',
+      viaPtrMatch.state === IDEM.IDEMPOTENCY_STATE.RECONCILED && made === 1);
+
+console.log('\nlisting-publish: the case that must never replay across requests');
+s15 = new Map();
+let published = [];
+const pub = async () => { published.push('one'); return { listingId: `lst_${published.length}` }; };
+const PRICE_A = { sku: 'v2-X', price: 400, title: 'Charizard PSA 9' };
+const PRICE_B = { sku: 'v2-X', price: 40,  title: 'Charizard PSA 9' };
+await IDEM.runOnce(kv15, 'sub1', 'listing-publish', UUID, pub, { request: PRICE_A });
+const wrongPrice = await IDEM.runOnce(kv15, 'sub1', 'listing-publish', UUID, pub, { request: PRICE_B });
+check('🔴 a different PRICE under the same key is refused, not replayed',
+      wrongPrice.state === IDEM.IDEMPOTENCY_STATE.MISMATCH,
+      'replaying here tells the seller a $40 listing published at $400');
+check('and it does not publish a second listing', published.length === 1);
+
+// ── 16. Venue + strategy PAIR validation ────────────────────────────────
+console.log('\n🔴 the venue/strategy PAIR must be possible');
+check('eBay supports auction', INV.draftSlot('ebay', 'auction') === 'ebay:auction');
+check('Whatnot supports auction', INV.draftSlot('whatnot', 'auction') === 'whatnot:auction');
+check('🔴 Mercari + auction is refused even though both tokens are valid',
+      (() => { try { INV.draftSlot('mercari', 'auction'); return false; }
+               catch (e) { return e.message === 'SLOT_STRATEGY_UNSUPPORTED_FOR_VENUE'; } })(),
+      'a draft in an impossible slot looks like a listing in progress that can never publish');
+check('Whatnot + fixed-price is refused',
+      (() => { try { INV.draftSlot('whatnot', 'fixed-price'); return false; }
+               catch (e) { return e.message === 'SLOT_STRATEGY_UNSUPPORTED_FOR_VENUE'; } })());
+check('every venue declares at least one strategy',
+      INV.VENUES.every((v) => INV.SUPPORTED_SLOTS[v].length > 0));
+check('the strategy list is derived from the table, not maintained separately',
+      INV.STRATEGIES.every((st) => Object.values(INV.SUPPORTED_SLOTS).flat().includes(st)));
+check('admission reports the pair failure specifically',
+      INV.phase1DraftAdmission([], 'mercari', 'auction') === 'SLOT_STRATEGY_UNSUPPORTED_FOR_VENUE');
+check('a Phase 1 eBay auction slot is admitted', INV.phase1DraftAdmission([], 'ebay', 'auction') === null);
+
+// ── 17. The harness itself refuses a Promise as a truth value ───────────
+console.log('\n🔴 a Promise is never a truth value');
+const before = failed;
+console.log('  (the next three FAIL lines are EXPECTED — the guard proving it fires)');
+check('[expected-fail] a Promise passed to check() is a FAILURE, not an ok', (async () => true)());
+check('🔴 the harness caught it', failed === before + 1,
+      'two vacuous assertions shipped before this guard existed');
+failed = before;   // that failure was the point of the test
+await checkAsync('checkAsync awaits and asserts the resolved value', async () => true);
+await checkAsync('[expected-fail] checkAsync fails on a resolved false', async () => false);
+check('the false case counted as a failure', failed === before + 1);
+failed = before;
+await checkAsync('[expected-fail] a throwing async assertion is a failure, not a crash', async () => { throw new Error('x'); });
+check('the throw counted as a failure', failed === before + 1);
+failed = before;
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -19,6 +19,16 @@ let failures = 0;
 let checks = 0;
 
 function check(name, cond, detail) {
+  // A Promise is never a truth value. `(async () => {...})()` is always
+  // truthy, so passing one here asserts nothing while printing ok — we
+  // shipped two of those. Make the whole category impossible, loudly.
+  if (cond && typeof cond.then === 'function') {
+  checks++;
+    failures++;
+    console.log(`  FAIL ${name}\n       → TEST_API_MISUSE: a Promise is not a truth value; await it or use checkAsync()`);
+    return;
+  }
+
   checks++;
   if (cond) {
     console.log(`  ✓ ${name}`);
@@ -28,6 +38,14 @@ function check(name, cond, detail) {
     if (detail) console.log(`      ${detail}`);
   }
 }
+/** For assertions whose condition is async. Awaits, then asserts. */
+async function checkAsync(name, thunk, hint) {
+  let v;
+  try { v = await (typeof thunk === 'function' ? thunk() : thunk); }
+  catch (e) { v = false; hint = `threw: ${e.message}`; }
+  return check(name, !!v, hint);
+}
+
 
 const html = readAppSource();
 

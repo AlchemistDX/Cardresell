@@ -87,8 +87,27 @@ export function instanceDraftsKey(googleSub, instanceId) {
  * casing. So: canonicalize, then validate against a known set, and refuse
  * anything that is not exactly one canonical slot.
  */
-export const VENUES = ['ebay', 'mercari', 'whatnot', 'tcgplayer'];
-export const STRATEGIES = ['fixed-price', 'auction'];
+/**
+ * Venue -> the strategies that venue actually supports.
+ *
+ * Validating venue and strategy INDEPENDENTLY would accept
+ * mercari + auction — both tokens individually valid, the pair meaningless.
+ * Since the slot is a uniqueness boundary, an impossible slot is a real
+ * inventory bug: a draft could occupy a slot nothing can ever publish to, and
+ * the instance would look like it already has a listing in progress.
+ *
+ * Not a Phase 1 blocker, since admission refuses everything except eBay
+ * anyway, but the contract is cheap to get right while the function is new.
+ */
+export const SUPPORTED_SLOTS = {
+  ebay:       ['fixed-price', 'auction'],
+  mercari:    ['fixed-price'],
+  whatnot:    ['auction'],
+  tcgplayer:  ['fixed-price'],
+};
+
+export const VENUES = Object.keys(SUPPORTED_SLOTS);
+export const STRATEGIES = [...new Set(Object.values(SUPPORTED_SLOTS).flat())];
 
 function canonicalToken(v) {
   return String(v ?? '').trim().toLowerCase().replace(/[\s_]+/g, '-');
@@ -101,6 +120,8 @@ export function draftSlot(venue, strategy = 'fixed-price') {
   if (!st) throw new Error('SLOT_STRATEGY_EMPTY');
   if (!VENUES.includes(v)) throw new Error('SLOT_VENUE_UNKNOWN');
   if (!STRATEGIES.includes(st)) throw new Error('SLOT_STRATEGY_UNKNOWN');
+  // The PAIR has to be possible, not just each token individually.
+  if (!SUPPORTED_SLOTS[v].includes(st)) throw new Error('SLOT_STRATEGY_UNSUPPORTED_FOR_VENUE');
   // Belt and braces: the slot is a key component, so it must never carry a
   // delimiter that could shift the meaning of the key it lands in.
   const slot = `${v}:${st}`;

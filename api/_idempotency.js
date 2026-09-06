@@ -29,7 +29,48 @@
 //      process dies before the result is recorded, the reservation expires, and
 //      the retry cheerfully does it again.
 
+import { createHash } from 'crypto';
+
 const KEY_TTL_SEC = 24 * 60 * 60;   // longer than any plausible retry window
+
+/**
+ * ── The key identifies ONE INTENDED MUTATION, not a slot in a store ───────
+ *
+ * user + scope + key stops cross-user replay, which is necessary but not
+ * sufficient. A client bug can send the same key with a different body:
+ *
+ *   1. Idempotency-Key: abc, quantity 5   -> created
+ *   2. Idempotency-Key: abc, quantity 10  -> replayed the quantity-5 result
+ *
+ * The key was honoured and the seller was still lied to: they asked for ten
+ * and got a success response describing five. For listing-publish it is worse
+ * — reusing a key with a different price or title would silently return the
+ * previous listing, so the seller believes they published a $400 card at $400
+ * when the live listing says $40.
+ *
+ * So the stored attempt carries a fingerprint of the mutation-defining fields.
+ * Same key + same fingerprint is a genuine retry. Same key + different
+ * fingerprint is a client bug, and it gets refused rather than answered.
+ */
+export const FINGERPRINT_MISMATCH = 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_REQUEST';
+
+/**
+ * Canonical JSON: keys sorted at every depth, so property order in the request
+ * cannot change the fingerprint. Without this, two identical requests
+ * serialized in different orders look like different mutations and every retry
+ * from a rebuilt client object gets refused.
+ */
+export function canonicalize(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v ?? null);
+  if (Array.isArray(v)) return `[${v.map(canonicalize).join(',')}]`;
+  const keys = Object.keys(v).filter((k) => v[k] !== undefined).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalize(v[k])}`).join(',')}}`;
+}
+
+/** sha256 over the canonical form of the mutation-defining fields. */
+export function requestFingerprint(request) {
+  return createHash('sha256').update(canonicalize(request ?? null)).digest('hex').slice(0, 32);
+}
 
 /**
  * What to do when idempotency cannot be established.
@@ -68,6 +109,7 @@ export const IDEMPOTENCY_STATE = {
   REPLAYED:      'replayed',        // completed before — stored result returned
   RECONCILED:    'reconciled',      // side effect already landed; recovered, not repeated
   UNAVAILABLE:   'unavailable',     // idempotency unestablishable — refused
+  MISMATCH:      'mismatch',        // key reused for a DIFFERENT mutation — refused
 };
 
 /** User-facing copy for the refusal, so every caller says the same thing. */
@@ -130,6 +172,11 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
   const k        = idempotencyKeyFor(googleSub, scope, opKey);
   const resKey   = resourcePointerKey(googleSub, scope, opKey);
   const reconcile = typeof opts.reconcile === 'function' ? opts.reconcile : null;
+  // The fingerprint is REQUIRED for every scope. An operation with no declared
+  // request body cannot be distinguished from a different operation reusing the
+  // key, which is the whole point of having one.
+  if (opts.request === undefined) throw new Error('IDEMPOTENCY_REQUEST_REQUIRED');
+  const fingerprint = requestFingerprint(opts.request);
 
   // ── 1. Read the attempt record. A read FAILURE is not "nothing recorded". ──
   let existing, storeReadable = true;
@@ -142,6 +189,17 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
   if (storeReadable && existing) {
     const parsed = typeof existing === 'string' ? safeParse(existing) : existing;
 
+    // Fingerprint is checked BEFORE anything is replayed or reconciled. A
+    // mismatch means this is not a retry of that operation at all, so neither
+    // the stored result nor the resource pointer is a valid answer to it.
+    if (parsed && parsed.fingerprint && parsed.fingerprint !== fingerprint) {
+      return {
+        state: IDEMPOTENCY_STATE.MISMATCH, result: null, replayed: false,
+        error: FINGERPRINT_MISMATCH, retryable: false,
+        message: 'This request reuses a key from a different operation.',
+      };
+    }
+
     if (parsed && parsed.status === 'done') {
       return { state: IDEMPOTENCY_STATE.REPLAYED, result: parsed.result, replayed: true };
     }
@@ -153,7 +211,7 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
     if (parsed && parsed.status === 'in-flight') {
       const landed = await tryReconcile(reconcile, opKey);
       if (landed) {
-        await recordDone(kv, k, resKey, landed, opKey);
+        await recordDone(kv, k, resKey, landed, opKey, fingerprint);
         return { state: IDEMPOTENCY_STATE.RECONCILED, result: landed, replayed: true };
       }
       return {
@@ -168,7 +226,7 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
   //       after the work succeeded — the case that silently duplicates.
   const alreadyLanded = await tryReconcile(reconcile, opKey);
   if (alreadyLanded) {
-    await recordDone(kv, k, resKey, alreadyLanded, opKey);
+    await recordDone(kv, k, resKey, alreadyLanded, opKey, fingerprint);
     return { state: IDEMPOTENCY_STATE.RECONCILED, result: alreadyLanded, replayed: true };
   }
 
@@ -179,6 +237,13 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
     try { pointer = await kv('get', resKey); } catch { pointer = null; }
     if (pointer) {
       const p = typeof pointer === 'string' ? safeParse(pointer) || { resourceId: pointer } : pointer;
+      if (p.fingerprint && p.fingerprint !== fingerprint) {
+        return {
+          state: IDEMPOTENCY_STATE.MISMATCH, result: null, replayed: false,
+          error: FINGERPRINT_MISMATCH, retryable: false,
+          message: 'This request reuses a key from a different operation.',
+        };
+      }
       return { state: IDEMPOTENCY_STATE.RECONCILED, result: p, replayed: true };
     }
   }
@@ -187,7 +252,7 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
   let reserved = false;
   if (storeReadable) {
     try {
-      await kv('set', k, JSON.stringify({ status: 'in-flight', at: Date.now(), op: opKey }));
+      await kv('set', k, JSON.stringify({ status: 'in-flight', at: Date.now(), op: opKey, fingerprint }));
       await kv('expire', k, KEY_TTL_SEC);
       reserved = true;
     } catch { reserved = false; }
@@ -217,7 +282,7 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
     throw err;
   }
 
-  await recordDone(kv, k, resKey, result, opKey);
+  await recordDone(kv, k, resKey, result, opKey, fingerprint);
   return { state: IDEMPOTENCY_STATE.FRESH, result, replayed: false };
 }
 
@@ -239,16 +304,16 @@ async function tryReconcile(reconcile, opKey) {
  * retry recoverable, whereas a result record without a pointer only helps
  * while it lives.
  */
-async function recordDone(kv, k, resKey, result, opKey) {
+async function recordDone(kv, k, resKey, result, opKey, fingerprint) {
   const resourceId = result && (result.instanceId || result.draftId || result.listingId || result.id);
   if (resourceId) {
     try {
-      await kv('set', resKey, JSON.stringify({ resourceId, op: opKey, at: Date.now() }));
+      await kv('set', resKey, JSON.stringify({ resourceId, op: opKey, at: Date.now(), fingerprint }));
       await kv('expire', resKey, KEY_TTL_SEC);
     } catch { /* the reconcile hook is the backstop */ }
   }
   try {
-    await kv('set', k, JSON.stringify({ status: 'done', at: Date.now(), result, op: opKey }));
+    await kv('set', k, JSON.stringify({ status: 'done', at: Date.now(), result, op: opKey, fingerprint }));
     await kv('expire', k, KEY_TTL_SEC);
   } catch { /* work is done; failing to record only costs retry safety */ }
 }
