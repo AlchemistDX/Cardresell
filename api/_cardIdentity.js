@@ -342,3 +342,53 @@ export function hasSufficientIdentity(row) {
   const a = identityAxes(row);
   return !!(a.game && a.game !== 'unknown' && a.set && a.number);
 }
+
+/**
+ * ── SKU identity is NOT valuation identity ───────────────────────────────
+ *
+ * Condition is deliberately outside the SKU, so a Near Mint and a heavily
+ * played raw Charizard share one product SKU. They must never share a price.
+ *
+ * That is a footgun sitting in plain sight: `priceCache[sku]` reads perfectly
+ * naturally and would serve an NM valuation to an HP copy — a wrong number that
+ * looks completely authoritative, which is the failure mode this codebase keeps
+ * designing against. So the distinction is a named function with its own key
+ * space rather than a convention someone has to remember.
+ *
+ *   product identity   → what thing is this?        → skuFor()
+ *   valuation identity → what is THIS COPY worth?   → valuationKeyFor()
+ *
+ * For a slab the grade already lives in the SKU, so the two collapse — but the
+ * key is still produced through this function, so no caller has to know which
+ * case it is holding.
+ */
+export function valuationKeyFor(row, opts = {}) {
+  const sku  = skuFor(row);
+  const slab = isSlab(row);
+
+  if (slab) {
+    // The grade IS the condition, and it is already an identity axis.
+    return `${sku}|graded`;
+  }
+
+  const condition = String(opts.condition ?? row?.condition ?? '')
+    .trim().toLowerCase().replace(/\s+/g, '-');
+  if (!condition) {
+    // No silent default. An unpriced-because-unknown-condition raw card is a
+    // question for the seller, not a guess with a dollar sign in front of it.
+    throw new Error('VALUATION_CONDITION_REQUIRED');
+  }
+  // Pricing source belongs in the key too: the same copy carries different
+  // comps on different venues, and mixing them in one cache is how a TCGplayer
+  // number ends up presented as an eBay payout.
+  const source = String(opts.source ?? 'any').trim().toLowerCase();
+  return `${sku}|${condition}|${source}`;
+}
+
+/**
+ * True when two rows are the same product but must be valued separately.
+ * Useful in tests and assertions; cheap enough to call in a guard.
+ */
+export function sameProductDifferentValue(a, b, optsA = {}, optsB = {}) {
+  return skuFor(a) === skuFor(b) && valuationKeyFor(a, optsA) !== valuationKeyFor(b, optsB);
+}

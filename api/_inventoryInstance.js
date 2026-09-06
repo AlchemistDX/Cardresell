@@ -55,14 +55,49 @@ export function skuInstancesKey(googleSub, sku) {
   return `skuinv:${keyPart(googleSub)}:${keyPart(sku)}`;
 }
 /**
- * The uniqueness constraint moves here from the SKU.
+ * The uniqueness constraint moves here from the SKU — as a SET, not a pointer.
  *
- * One active draft per INSTANCE, not per SKU. That single change fixes raw
- * duplicates and graded duplicates with the same mechanism, instead of fixing
- * graded ones by inflating the SKU and leaving raw ones broken.
+ * One physical PSA 9 will eventually carry an eBay draft, a Mercari draft and a
+ * Whatnot draft at the same time. That is not a hypothetical: cross-venue
+ * payout comparison is the product, and eBay is the first integration rather
+ * than the destination. A singular pointer would encode "one draft per
+ * instance" into the storage shape and have to be unwound later, so the shape
+ * is plural now, while it costs nothing.
+ *
+ * The Phase 1 restriction lives ABOVE storage, as a business rule, where it can
+ * be relaxed without a migration:
+ *
+ *     Phase 1 permits at most one active eBay draft per instance.
+ *
+ * Long term the rule is one active draft per (instance, venue, strategy) —
+ * "strategy" because a lot of 11 may eventually split across auction and
+ * fixed-price at once.
  */
-export function instanceDraftKey(googleSub, instanceId) {
-  return `instancedraft:${keyPart(googleSub)}:${keyPart(instanceId)}`;
+export function instanceDraftsKey(googleSub, instanceId) {
+  return `instancedrafts:${keyPart(googleSub)}:${keyPart(instanceId)}`;
+}
+
+/**
+ * The slot a draft occupies within an instance. Uniqueness is per slot, so
+ * broadening from "one draft" to "one per venue" needs no key change.
+ */
+export function draftSlot(venue, strategy = 'fixed-price') {
+  return `${keyPart(String(venue || '').toLowerCase())}:${keyPart(strategy)}`;
+}
+
+/** Venues Phase 1 can actually hand off to. Deliberately short and honest. */
+export const PHASE1_VENUES = ['ebay'];
+
+/**
+ * Phase 1 business rule, applied above the plural storage shape.
+ * Returns a refusal reason or null.
+ */
+export function phase1DraftAdmission(existingSlots, venue, strategy = 'fixed-price') {
+  const v = String(venue || '').toLowerCase();
+  if (!PHASE1_VENUES.includes(v)) return 'VENUE_NOT_SUPPORTED_IN_PHASE_1';
+  const slot = draftSlot(v, strategy);
+  if ((existingSlots || []).includes(slot)) return 'ACTIVE_DRAFT_EXISTS_FOR_SLOT';
+  return null;
 }
 
 /** Reject delimiters rather than escaping them — an id is ours to generate. */
@@ -98,7 +133,19 @@ export function buildInstance(row, opts = {}) {
   if (!condition) throw new Error('INSTANCE_CONDITION_UNKNOWN');
 
   const quantity = normalizeQuantity(opts.quantity, slab);
-  const cost     = normalizeCost(opts.acquisitionCost);
+  // Named TOTAL, and it is the total for the whole lot. "acquisitionCost: 25"
+  // on a lot of 11 is unanswerable — $25 each or $25 for all of them? — and
+  // that ambiguity would silently poison every profit figure My Flips shows.
+  // Storing lot total + quantity also preserves the actual transaction, so
+  // per-unit is derived rather than the other way round.
+  const cost = normalizeCost(
+    opts.totalAcquisitionCost !== undefined ? opts.totalAcquisitionCost : opts.acquisitionCost,
+  );
+  if (opts.acquisitionCost !== undefined && opts.totalAcquisitionCost === undefined
+      && normalizeQuantity(opts.quantity, slab) > 1) {
+    // Refuse the ambiguous shape outright rather than pick a meaning for it.
+    throw new Error('INSTANCE_COST_AMBIGUOUS_USE_TOTAL');
+  }
 
   return {
     schemaVersion: INSTANCE_SCHEMA_VERSION,
@@ -117,7 +164,7 @@ export function buildInstance(row, opts = {}) {
     cert: slab ? (axes.cert || null) : null,
     condition,
     quantity,
-    acquisitionCost: cost,
+    totalAcquisitionCost: cost,
     photos: [],            // paths only, and not before Phase 3
     notes: typeof opts.notes === 'string' ? opts.notes.slice(0, 2000) : '',
     createdAt: new Date().toISOString(),
@@ -140,6 +187,15 @@ function normalizeQuantity(v, slab) {
   if (slab && v !== 1) throw new Error('INSTANCE_SLAB_QUANTITY_MUST_BE_ONE');
   if (v > MAX_LOT_QUANTITY) throw new Error('INSTANCE_QUANTITY_TOO_LARGE');
   return v;
+}
+
+/** Per-unit cost, derived. Null propagates — an unknown basis is not zero. */
+export function unitAcquisitionCost(instance) {
+  const total = instance?.totalAcquisitionCost;
+  const qty   = instance?.quantity;
+  if (total === null || total === undefined) return null;
+  if (!Number.isInteger(qty) || qty < 1) return null;
+  return Math.round((total / qty) * 100) / 100;
 }
 
 /** Strict: `Number(null) === 0` must never become a real acquisition cost. */
@@ -167,19 +223,69 @@ export function splitInstance(instance, count, changes = {}) {
   if (instance.cert || instance.condition === 'graded') {
     throw new Error('SPLIT_SLAB_NOT_SPLITTABLE');
   }
+  if (!Number.isInteger(instance.quantity) || instance.quantity < 1) {
+    throw new Error('SPLIT_SOURCE_QUANTITY_INVALID');
+  }
   if (count >= instance.quantity) throw new Error('SPLIT_WOULD_EMPTY_LOT');
 
-  const remainder = { ...instance, quantity: instance.quantity - count };
+  const qty = instance.quantity;
+
+  /**
+   * Cost basis is CONSERVED across a split. Splitting a lot is not an economic
+   * event — no money moved — so the money must not change. Once My Flips
+   * computes real profit, a split that quietly created or destroyed basis
+   * would show up as phantom profit or phantom loss on a card the seller never
+   * traded.
+   *
+   * Done in integer cents, and the remainder is derived by SUBTRACTION rather
+   * than by rounding the other side independently. Two independent roundings
+   * of $100 / 3 give $33.33 and $66.67 only by luck; subtraction is exact by
+   * construction for every input.
+   */
+  const total = instance.totalAcquisitionCost;
+  let splitCost = null, remainderCost = null;
+  if ((total === null || total === undefined) && changes.totalAcquisitionCost !== undefined) {
+    // Refuse rather than quietly discard it. You cannot allocate a share of a
+    // basis that was never recorded, and silently dropping a number the seller
+    // typed is how a cost basis goes missing without anyone noticing.
+    throw new Error('SPLIT_COST_ALLOCATION_WITHOUT_BASIS');
+  }
+  if (total !== null && total !== undefined) {
+    const totalCents = Math.round(total * 100);
+    let splitCents;
+    if (changes.totalAcquisitionCost !== undefined) {
+      // Manual allocation is allowed, but it must still add up.
+      const manual = normalizeCost(changes.totalAcquisitionCost);
+      if (manual === null) throw new Error('SPLIT_COST_ALLOCATION_INVALID');
+      splitCents = Math.round(manual * 100);
+      if (splitCents > totalCents) throw new Error('SPLIT_COST_EXCEEDS_BASIS');
+    } else {
+      splitCents = Math.round((totalCents * count) / qty);
+    }
+    const remainderCents = totalCents - splitCents;
+    if (remainderCents < 0) throw new Error('SPLIT_COST_EXCEEDS_BASIS');
+    splitCost     = splitCents / 100;
+    remainderCost = remainderCents / 100;
+    // Conservation is asserted, not assumed. If this ever trips, the bug is
+    // here and not in the seller's arithmetic.
+    if (splitCents + remainderCents !== totalCents) {
+      throw new Error('SPLIT_COST_NOT_CONSERVED');
+    }
+  }
+
+  const remainder = {
+    ...instance,
+    quantity: qty - count,
+    totalAcquisitionCost: remainderCost,
+  };
   const split = {
     ...instance,
     instanceId: newInstanceId(),
     quantity: count,
+    totalAcquisitionCost: splitCost,
     createdAt: new Date().toISOString(),
     ...(changes.condition
       ? { condition: normalizeCondition(changes.condition, false) || instance.condition }
-      : {}),
-    ...(changes.acquisitionCost !== undefined
-      ? { acquisitionCost: normalizeCost(changes.acquisitionCost) }
       : {}),
   };
   return { remainder, split };

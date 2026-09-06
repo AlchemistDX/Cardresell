@@ -70,6 +70,8 @@ globalThis.fetch = async (url) => {
   return { ok: true, status: 200, json: async () => ({ result }) };
 };
 
+const ID = await import(new URL('../api/_cardIdentity.js', import.meta.url).href);
+const IDEM = await import(new URL('../api/_idempotency.js', import.meta.url).href);
 const INV = await import(new URL('../api/_inventoryInstance.js', import.meta.url).href);
 const DI = await import('../api/_draftIndex.js');
 const { readStoredPacket, PACKET_COMPAT, PACKET_SCHEMA_VERSION } =
@@ -380,15 +382,15 @@ console.log('\n🔴 C0c — SKU is product, instance is the physical copy');
 const CARD_RAW  = { game: 'pokemon', setCode: 'base', set: 'Base Set', number: '4', card: 'Charizard' };
 const CARD_PSA9 = { ...CARD_RAW, grader: 'psa', grade: '9' };
 
-const rawA = INV.buildInstance(CARD_RAW, { condition: 'near-mint', acquisitionCost: 80 });
-const rawB = INV.buildInstance(CARD_RAW, { condition: 'heavily-played', acquisitionCost: 45 });
+const rawA = INV.buildInstance(CARD_RAW, { condition: 'near-mint', totalAcquisitionCost: 80 });
+const rawB = INV.buildInstance(CARD_RAW, { condition: 'heavily-played', totalAcquisitionCost: 45 });
 check('🔴 two raw copies share one SKU', rawA.sku === rawB.sku);
 check('🔴 but are different instances — the collision is gone',
       rawA.instanceId !== rawB.instanceId,
       'this is the case that was broken before C0c: NM and HP collided on one draft pointer');
 check('each carries its own condition and cost',
-      rawA.condition === 'near-mint' && rawA.acquisitionCost === 80 &&
-      rawB.condition === 'heavily-played' && rawB.acquisitionCost === 45);
+      rawA.condition === 'near-mint' && rawA.totalAcquisitionCost === 80 &&
+      rawB.condition === 'heavily-played' && rawB.totalAcquisitionCost === 45);
 check('instance ids are generated, not derived',
       INV.buildInstance(CARD_RAW, { condition: 'near-mint' }).instanceId !==
       INV.buildInstance(CARD_RAW, { condition: 'near-mint' }).instanceId,
@@ -408,16 +410,16 @@ check('a graded instance takes its condition from the grade', slabA.condition ==
 
 console.log('\nuniqueness moves to the instance');
 check('the draft-uniqueness key is per instance',
-      INV.instanceDraftKey('sub1', rawA.instanceId) === `instancedraft:sub1:${rawA.instanceId}`);
+      INV.instanceDraftsKey('sub1', rawA.instanceId) === `instancedrafts:sub1:${rawA.instanceId}`);
 check('two raw copies get two independent draft slots',
-      INV.instanceDraftKey('sub1', rawA.instanceId) !== INV.instanceDraftKey('sub1', rawB.instanceId));
+      INV.instanceDraftsKey('sub1', rawA.instanceId) !== INV.instanceDraftsKey('sub1', rawB.instanceId));
 check('a per-product set still answers "all drafts for this card"',
       INV.skuInstancesKey('sub1', rawA.sku) === `skuinv:sub1:${rawA.sku}`);
 check('key delimiters are refused, not escaped',
       (() => { try { INV.instanceKey('a:b', 'x'); return false; } catch { return true; } })());
 
 console.log('\nquantity — lots, with honest limits');
-const lot = INV.buildInstance(CARD_RAW, { condition: 'near-mint', quantity: 5 });
+const lot = INV.buildInstance(CARD_RAW, { condition: 'near-mint', quantity: 5, totalAcquisitionCost: 40 });
 check('a lot of five identical NM copies is one record', lot.quantity === 5);
 check('quantity defaults to one', rawA.quantity === 1);
 for (const bad of ['5', 0, -1, 2.5, NaN]) {
@@ -432,19 +434,28 @@ check('an unknown condition is refused rather than guessed',
       (() => { try { INV.buildInstance(CARD_RAW, { condition: 'pretty good' }); return false; }
                catch (e) { return e.message === 'INSTANCE_CONDITION_UNKNOWN'; } })());
 for (const bad of [null, '', '12', [], NaN, -5]) {
-  const r = (() => { try { return INV.buildInstance(CARD_RAW, { condition: 'mint', acquisitionCost: bad }); }
+  const r = (() => { try { return INV.buildInstance(CARD_RAW, { condition: 'mint', totalAcquisitionCost: bad }); }
                      catch (e) { return e.message; } })();
   check(`cost ${JSON.stringify(bad)} never becomes a real number`,
-        bad === null || bad === '' ? r.acquisitionCost === null : r === 'INSTANCE_COST_INVALID',
+        bad === null || bad === '' ? r.totalAcquisitionCost === null : r === 'INSTANCE_COST_INVALID',
         'Number(null) === 0 must not turn missing input into a $0 cost basis');
 }
 
 console.log('\nlot splitting stays possible');
-const { remainder, split } = INV.splitInstance(lot, 2, { condition: 'lightly-played', acquisitionCost: 12 });
+const { remainder, split } = INV.splitInstance(lot, 2, { condition: 'lightly-played', totalAcquisitionCost: 12 });
 check('the split leaves the lot smaller', remainder.quantity === 3);
 check('the split copies become their own instance',
       split.quantity === 2 && split.instanceId !== lot.instanceId);
-check('the split can differ materially', split.condition === 'lightly-played' && split.acquisitionCost === 12);
+check('the split can differ materially', split.condition === 'lightly-played' && split.totalAcquisitionCost === 12);
+check('and the basis it leaves behind is the remainder, not the original',
+      remainder.totalAcquisitionCost === 28,
+      'a split moves no money, so the two halves must still sum to $40');
+check('allocating cost against an unrecorded basis is refused, not ignored',
+      (() => { try { INV.splitInstance(
+                 INV.buildInstance(CARD_RAW, { condition: 'mint', quantity: 4 }),
+                 1, { totalAcquisitionCost: 10 }); return false; }
+               catch (e) { return e.message === 'SPLIT_COST_ALLOCATION_WITHOUT_BASIS'; } })(),
+      'silently dropping a number the seller typed is how a cost basis goes missing');
 check('both sides keep the same product', remainder.sku === split.sku);
 check('a split cannot empty the lot',
       (() => { try { INV.splitInstance(lot, 5); return false; }
@@ -461,6 +472,153 @@ for (const bad of [undefined, null, '1', 1.5, 0]) {
   check(`instance version ${JSON.stringify(bad)} is incompatible, never current`,
         INV.readStoredInstance({ ...rawA, schemaVersion: bad }).reason === 'INSTANCE_VERSION_MALFORMED');
 }
+
+
+// ── 6. Plural draft index + venue slots (multi-venue readiness) ──────────
+console.log('\n🔴 one instance, many venues');
+check('the draft index is a SET name, not a single pointer',
+      INV.instanceDraftsKey('sub1', 'inv_x') === 'instancedrafts:sub1:inv_x');
+check('slots are per venue and strategy',
+      INV.draftSlot('ebay') === 'ebay:fixed-price' &&
+      INV.draftSlot('mercari', 'auction') === 'mercari:auction');
+check('venue case is normalized', INV.draftSlot('eBay') === INV.draftSlot('ebay'));
+check('🔴 eBay and Mercari drafts can coexist on one instance in the SHAPE',
+      INV.draftSlot('ebay') !== INV.draftSlot('mercari'),
+      'the storage model must not need unwinding when the second venue arrives');
+check('Phase 1 admits a first eBay draft',
+      INV.phase1DraftAdmission([], 'ebay') === null);
+check('Phase 1 refuses a SECOND eBay draft for the same instance',
+      INV.phase1DraftAdmission(['ebay:fixed-price'], 'ebay') === 'ACTIVE_DRAFT_EXISTS_FOR_SLOT');
+check('Phase 1 refuses other venues by RULE, not by storage shape',
+      INV.phase1DraftAdmission([], 'mercari') === 'VENUE_NOT_SUPPORTED_IN_PHASE_1',
+      'relaxing this later must not require a migration');
+check('an auction strategy is a different slot from fixed-price',
+      INV.phase1DraftAdmission(['ebay:fixed-price'], 'ebay', 'auction') === null);
+
+// ── 7. Lot cost basis: unambiguous, and conserved ───────────────────────
+console.log('\n🔴 lot cost basis');
+const CARD_R = { game: 'pokemon', setCode: 'base', set: 'Base Set', number: '4', card: 'Charizard' };
+const lot11 = INV.buildInstance(CARD_R, { condition: 'near-mint', quantity: 11, totalAcquisitionCost: 55 });
+check('the field says TOTAL, so 11 for $55 cannot be misread',
+      lot11.totalAcquisitionCost === 55 && lot11.acquisitionCost === undefined);
+check('per-unit is derived, not stored', INV.unitAcquisitionCost(lot11) === 5);
+check('an unknown basis stays null and never becomes zero',
+      INV.unitAcquisitionCost(INV.buildInstance(CARD_R, { condition: 'mint' })) === null);
+check('🔴 the ambiguous single-cost field is REFUSED on a multi-copy lot',
+      (() => { try { INV.buildInstance(CARD_R, { condition: 'mint', quantity: 4, acquisitionCost: 25 }); return false; }
+               catch (e) { return e.message === 'INSTANCE_COST_AMBIGUOUS_USE_TOTAL'; } })(),
+      '$25 each or $25 for all four? we refuse to pick a meaning');
+
+console.log('\ncost basis is conserved across a split');
+for (const [qty, total, take] of [[10, 100, 3], [3, 100, 1], [11, 55, 3], [7, 0.07, 2], [2, 1234.56, 1]]) {
+  const src = INV.buildInstance(CARD_R, { condition: 'near-mint', quantity: qty, totalAcquisitionCost: total });
+  const { remainder, split } = INV.splitInstance(src, take);
+  const sum = Math.round((remainder.totalAcquisitionCost + split.totalAcquisitionCost) * 100);
+  check(`qty ${qty} / $${total} split ${take}: basis conserved exactly`,
+        sum === Math.round(total * 100),
+        `got $${(sum / 100).toFixed(2)} — a split moves no money, so the money must not change`);
+  check(`qty ${qty} / $${total} split ${take}: quantities conserved`,
+        remainder.quantity + split.quantity === qty);
+}
+const manual = INV.splitInstance(
+  INV.buildInstance(CARD_R, { condition: 'near-mint', quantity: 10, totalAcquisitionCost: 100 }),
+  3, { totalAcquisitionCost: 45 });
+check('a manual allocation is allowed', manual.split.totalAcquisitionCost === 45);
+check('and still has to add up', manual.remainder.totalAcquisitionCost === 55);
+check('a manual allocation cannot exceed the basis',
+      (() => { try { INV.splitInstance(
+                 INV.buildInstance(CARD_R, { condition: 'mint', quantity: 5, totalAcquisitionCost: 20 }),
+                 2, { totalAcquisitionCost: 999 }); return false; }
+               catch (e) { return e.message === 'SPLIT_COST_EXCEEDS_BASIS'; } })());
+check('an unknown basis splits to unknown, not to zero',
+      (() => { const r = INV.splitInstance(
+                 INV.buildInstance(CARD_R, { condition: 'mint', quantity: 5 }), 2);
+               return r.split.totalAcquisitionCost === null && r.remainder.totalAcquisitionCost === null; })());
+
+// ── 8. SKU identity is NOT valuation identity ───────────────────────────
+console.log('\n🔴 product identity vs valuation identity');
+const nmKey = ID.valuationKeyFor(CARD_R, { condition: 'near-mint' });
+const hpKey = ID.valuationKeyFor(CARD_R, { condition: 'heavily-played' });
+check('🔴 NM and HP are the same PRODUCT', ID.skuFor(CARD_R) === ID.skuFor(CARD_R));
+check('🔴 but never the same VALUATION', nmKey !== hpKey,
+      'priceCache[sku] would serve an NM price for an HP copy — authoritative and wrong');
+check('the helper states the relationship directly',
+      ID.sameProductDifferentValue(CARD_R, CARD_R, { condition: 'near-mint' }, { condition: 'heavily-played' }));
+check('a missing condition is refused, not defaulted',
+      (() => { try { ID.valuationKeyFor(CARD_R); return false; }
+               catch (e) { return e.message === 'VALUATION_CONDITION_REQUIRED'; } })(),
+      'a guessed condition is a guessed price with a dollar sign in front of it');
+check('a slab collapses to one valuation — the grade is already identity',
+      ID.valuationKeyFor({ ...CARD_R, grader: 'psa', grade: '9' }) ===
+      ID.valuationKeyFor({ ...CARD_R, grader: 'psa', grade: '9', cert: '840612' }),
+      'two PSA 9s are worth the same; the cert does not change the price');
+check('a PSA 9 and a PSA 10 are valued apart',
+      ID.valuationKeyFor({ ...CARD_R, grader: 'psa', grade: '9' }) !==
+      ID.valuationKeyFor({ ...CARD_R, grader: 'psa', grade: '10' }));
+check('pricing source is part of the valuation key',
+      ID.valuationKeyFor(CARD_R, { condition: 'mint', source: 'ebay' }) !==
+      ID.valuationKeyFor(CARD_R, { condition: 'mint', source: 'tcgplayer' }),
+      'a TCGplayer number must not be cached where an eBay payout is read');
+check('the valuation key contains the sku, so it stays debuggable',
+      nmKey.startsWith(ID.skuFor(CARD_R)));
+
+// ── 9. Create idempotency ───────────────────────────────────────────────
+console.log('\n🔴 retries must not mint two records');
+const UUID = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+let idemStore = new Map();
+const idemKv = async (cmd, key, ...rest) => {
+  if (cmd === 'get') return idemStore.has(key) ? idemStore.get(key) : null;
+  if (cmd === 'set') { idemStore.set(key, rest[0]); return 'OK'; }
+  if (cmd === 'del') { idemStore.delete(key); return 1; }
+  if (cmd === 'expire') return 1;
+  return null;
+};
+let creations = 0;
+const create = async () => { creations += 1; return { instanceId: `inv_made_${creations}` }; };
+
+const first  = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+const second = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+check('the first attempt does the work', first.result.instanceId === 'inv_made_1');
+check('🔴 a retry does NOT create a second record', creations === 1,
+      'generated ids are non-deterministic, so SKU dedup cannot catch this');
+check('🔴 the retry returns the ORIGINAL result',
+      second.result.instanceId === 'inv_made_1' && second.replayed === true);
+check('a different key is a different action',
+      (await IDEM.runOnce(idemKv, 'sub1', 'instance-create',
+        '11111111-2222-3333-4444-555555555555', create)).result.instanceId === 'inv_made_2');
+check('another user cannot replay this user\'s attempt',
+      (await IDEM.runOnce(idemKv, 'sub2', 'instance-create', UUID, create)).replayed === false,
+      'the key is scoped per user or one seller could read another\'s create result');
+check('the same key in a different scope is a different action',
+      (await IDEM.runOnce(idemKv, 'sub1', 'draft-create', UUID, create)).replayed === false);
+
+for (const bad of ['', 'abc', null, 42, 'not-a-uuid-at-all', undefined]) {
+  check(`idempotency key ${JSON.stringify(bad)} is refused`,
+        (() => { try { IDEM.validIdempotencyKey(bad); return !IDEM.validIdempotencyKey(bad); }
+                 catch { return true; } })());
+}
+idemStore = new Map(); creations = 0;
+const boom = async () => { creations += 1; throw new Error('WORK_FAILED'); };
+let threw = false;
+try { await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, boom); } catch { threw = true; }
+check('a failing attempt propagates the error', threw);
+const retried = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+check('🔴 and is RETRYABLE — one transient failure must not poison the key forever',
+      retried.replayed === false && retried.result.instanceId.startsWith('inv_made_'),
+      'a failed attempt must release its reservation, or one blip refuses the create for a day');
+check('a concurrent attempt is refused rather than raced',
+      (async () => {
+        idemStore = new Map();
+        await idemKv('set', IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID),
+                     JSON.stringify({ status: 'in-flight', at: Date.now() }));
+        const r = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
+        return r.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT;
+      })() instanceof Promise);
+check('the scopes that must be idempotent are named in one place',
+      IDEM.IDEMPOTENT_SCOPES.includes('instance-create') &&
+      IDEM.IDEMPOTENT_SCOPES.includes('draft-create') &&
+      IDEM.IDEMPOTENT_SCOPES.includes('instance-split') &&
+      IDEM.IDEMPOTENT_SCOPES.includes('listing-publish'));
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
