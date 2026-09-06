@@ -352,10 +352,15 @@ check('the derived title respects the venue limit, not a generic one',
 check('🔴 the stored title is a string, not the builder result object',
       typeof n.title === 'string' && !n.title.includes('[object'),
       'buildListingTitle returns {title, ok, dropped} — storing it whole renders as [object Object]');
+// The refusal now comes from the identity gate (card:SELL_NEEDS_CARD_NAME)
+// rather than the title builder (title:NO_CARD_NAME). That ordering is the
+// point: a nameless card used to pass the gate and die at the title, which is
+// how the Sell button came to be offered for a card that could not be listed.
+// Both layers still refuse it; the earlier one just answers first now.
 check('a title that cannot be built at all is refused', (() => {
   const b = httpInput(); delete b.card.card_name;
   try { EP.normalizeCreateInput(b); return false; }
-  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:title:NO_CARD_NAME'; }
+  catch (e) { return /NO_CARD_NAME|SELL_NEEDS_CARD_NAME/.test(e.message); }
 })());
 check('🔴 a Mercari draft gets a Mercari-length title',
       EP.normalizeCreateInput({ ...httpInput(), slot: 'mercari:fixed-price' }).title.length <= 40,
@@ -594,5 +599,159 @@ reset();
   check('🔴 every eligible row creates a real draft with nothing blocking it',
         n === rows.length * 2, firstProblem || `${n}/${rows.length * 2} succeeded`);
 }
+
+// ── the nameless card, end to end ─────────────────────────────────────────
+// B1. The row the review supplied was stamped eligible and then refused at
+// title generation. Both halves are pinned here: the gate must refuse it, and
+// if it somehow reaches the create anyway, the create must still refuse rather
+// than store a titleless draft.
+console.log('\na card with no name is stopped at the gate, not at the title');
+reset();
+{
+  const nameless = { game: 'pokemon', set_name: 'Champions Path', card_number: '074/073' };
+  const st = SELL.sellStamp(nameless);
+  check('🔴 the gate refuses it, so no button is ever drawn',
+        st.eligible === false && st.missing[0] === 'SELL_NEEDS_CARD_NAME', JSON.stringify(st));
+
+  let refusal = '';
+  try {
+    EP.normalizeCreateInput({
+      card: nameless, instanceId: 'inst_nameless',
+      slot: 'ebay:fixed-price', price: 400, priceSource: 'comp',
+    });
+  } catch (e) { refusal = e.message; }
+  // It is refused with the GATE's reason, not the title builder's: normalize
+  // runs the same missingIdentityAxes the stamp does, so the two layers cannot
+  // disagree about whether a card has a name.
+  check('🔴 and the create refuses it independently (defence in depth)',
+        /SELL_NEEDS_CARD_NAME/.test(refusal), refusal || 'it was accepted');
+
+  // Each spelling individually, through the real create, so a gate that
+  // recognises a name the create does not is caught here too.
+  let ok = 0;
+  for (const [i, k] of ['card', 'card_name', 'name'].entries()) {
+    const row = { ...nameless, [k]: 'Charizard VMAX' };
+    if (!SELL.sellStamp(row).eligible) continue;
+    const norm = EP.normalizeCreateInput({
+      card: row, instanceId: `inst_name_${i}`,
+      slot: 'ebay:fixed-price', price: 400, priceSource: 'comp',
+    });
+    const res = await SVC.createDraft(kv, SUB, norm, K(`nm-${i}`));
+    if (res.state === IDEM.IDEMPOTENCY_STATE.FRESH && res.result?.saved
+        && res.result.draft.title) ok++;
+  }
+  check('🔴 every accepted name spelling creates a titled draft', ok === 3, `${ok}/3`);
+}
+
+// ── valid identity, no price ──────────────────────────────────────────────
+// B2. The product decision: sufficient identity starts an INCOMPLETE draft.
+// Refusing here was the entry point promising an operation then declining it,
+// and it stranded the cards that most need help — real cards with no comp.
+// The price becomes a named blocking finding on the review screen instead.
+console.log('\na correctly identified card with no price still gets a draft');
+reset();
+{
+  const card = CARD();
+  check('the card is eligible on identity alone', SELL.sellStamp(card).eligible === true);
+
+  const norm = EP.normalizeCreateInput({
+    card, instanceId: 'inst_noprice', slot: 'ebay:fixed-price',
+    // Both omitted together: no number, so no claim about where it came from.
+    price: undefined, priceSource: undefined,
+  });
+  check('normalize carries no price', norm.price === undefined);
+  check('🔴 and no provenance is claimed for the absent price',
+        norm.priceSource === undefined,
+        'priceSource with no price would be a claim about nothing');
+
+  const res = await SVC.createDraft(kv, SUB, norm, K('noprice'));
+  check('🔴 the draft is really created and stored',
+        res.state === IDEM.IDEMPOTENCY_STATE.FRESH && res.result?.saved === true,
+        `${res.state} ${res.result?.error || ''}`);
+
+  const v = res.result.publishable?.violations || [];
+  const blocking = v.filter((x) => x.blocking);
+  check('🔴 the review screen is told price is required, by name',
+        blocking.some((x) => x.code === DS.VIOLATION.PRICE_REQUIRED || /PRICE/.test(x.code)),
+        JSON.stringify(v.map((x) => x.code)));
+  check('the finding names the price field rather than counting problems',
+        blocking.some((x) => x.field === 'price'), JSON.stringify(blocking));
+  check('so the draft exists but is not publishable',
+        res.result.publishable?.ok !== true);
+
+  // The seller then supplies the price on the review screen, and the same
+  // draft becomes publishable. That is the whole point of allowing it to exist.
+  const priced = EP.normalizeCreateInput({
+    card, instanceId: 'inst_nowpriced', slot: 'ebay:fixed-price',
+    price: 400, priceSource: 'seller',
+  });
+  const res2 = await SVC.createDraft(kv, SUB, priced, K('nowpriced'));
+  const blocking2 = (res2.result.publishable?.violations || []).filter((x) => x.blocking);
+  check('🔴 once a price exists, nothing blocks it',
+        res2.result?.saved === true && blocking2.length === 0,
+        JSON.stringify(blocking2.map((x) => x.code)));
+
+  // And a source without a number is still refused at the door.
+  let claim = '';
+  try {
+    EP.normalizeCreateInput({
+      card, instanceId: 'inst_x', slot: 'ebay:fixed-price',
+      price: undefined, priceSource: 'comp',
+    });
+  } catch (e) { claim = e.message; }
+  check('🔴 "this came from a comp" with no comp is refused',
+        /priceSource:no-price/.test(claim), claim || 'it was accepted');
+}
+
+// ── slot rejection happens before every side effect ───────────────────────
+// Item 6 of the required return. An unsupported slot must not reserve quota,
+// write an idempotency record, mutate the index, or persist a draft.
+console.log('\nan unsupported slot changes nothing at all');
+reset();
+{
+  const card = CARD();
+  // Snapshot via the fake's own SCAN, not a guessed property. The first version
+  // of this read `kv.store` — undefined on this stub — so both snapshots were
+  // the string "undefined" and the assertion passed without inspecting
+  // anything. A check that cannot fail is worse than no check.
+  const snapshot = async () => {
+    const [, keys] = await kv('scan', '0', 'match', '*', 'count', '10000');
+    const out = {};
+    for (const k of keys.sort()) { try { out[k] = await kv('get', k); } catch { out[k] = '<non-string>'; } }
+    return JSON.stringify(out);
+  };
+  const before = await snapshot();
+  check('the snapshot actually sees the store', before.length > 2, before);
+  const norm = EP.normalizeCreateInput({
+    card, instanceId: 'inst_slot', slot: 'etsy:fixed-price',
+    price: 400, priceSource: 'seller',
+  });
+  check('normalize passes it through (the slot registry owns this rule)',
+        norm.slot === 'etsy:fixed-price');
+
+  let res = null, threw = '';
+  try { res = await SVC.createDraft(kv, SUB, norm, K('slotbad')); }
+  catch (e) { threw = e.message; }
+
+  check('🔴 the create refuses the unsupported slot',
+        /DRAFT_SLOT_INVALID/.test(threw), threw || JSON.stringify(res && res.result));
+
+  const after = await snapshot();
+  check('🔴 and leaves no trace: no draft, no index entry, no idempotency record',
+        after === before,
+        'a refusal that still wrote something would leak quota or block a retry');
+
+  // The retry proof: because nothing was recorded, the same key is still free
+  // for the corrected request rather than replaying the refusal forever.
+  const good = EP.normalizeCreateInput({
+    card, instanceId: 'inst_slot', slot: 'ebay:fixed-price',
+    price: 400, priceSource: 'seller',
+  });
+  const res2 = await SVC.createDraft(kv, SUB, good, K('slotbad'));
+  check('🔴 so the corrected retry on the same key succeeds',
+        res2.state === IDEM.IDEMPOTENCY_STATE.FRESH && res2.result?.saved === true,
+        `${res2.state} — a refusal must not poison its idempotency key`);
+}
+
 
 done();

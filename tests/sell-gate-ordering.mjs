@@ -283,4 +283,129 @@ console.log('\nthe wire projection carries the card, not the photo album');
   console.log(`       (500 rows serialised to ${(bytes / 1024).toFixed(0)} KB)`);
 }
 
+// ── S1: the instance UUID lifecycle ────────────────────────────────────────
+// The id used to be a hash of the card's identity fields, which quietly
+// asserted that two separately scanned copies of the same card were ONE
+// physical object. It is now a UUID minted per displayed scan. That is a
+// behaviour the rest of Block D will build draft-to-card relationships on, so
+// the lifecycle is pinned here rather than left to inspection.
+console.log('\nthe scan instance id lives exactly as long as the displayed scan');
+{
+  const { sandbox } = makeSandbox();
+  let n = 0;
+  sandbox.crypto = { randomUUID: () => 'uuid-' + (++n) };
+
+  const first = sandbox._crScanInstanceId(CARD_A);
+  check('the id is minted for the displayed scan', /^inst_scan_uuid-1$/.test(first), first);
+
+  // Re-render of the SAME displayed scan: the panel redraws for all sorts of
+  // reasons (condition pill, price refresh) and must not silently become a
+  // different physical object mid-flow.
+  check('🔴 re-reading the same displayed scan keeps its id',
+        sandbox._crScanInstanceId(CARD_A) === first
+        && sandbox._crScanInstanceId({ ...CARD_A }) === first,
+        'a redraw must not mint a new instance');
+
+  // A different card is a different instance.
+  const b = sandbox._crScanInstanceId(CARD_B);
+  check('a different card gets a different id', b !== first, `${b} vs ${first}`);
+
+  // Back to A: this is a NEW scan of A, and it must NOT recover A's old id.
+  // The old identity-hash implementation returned the same value here, which
+  // is the precise bug — a second copy of the card inheriting the first
+  // copy's instance.
+  const aAgain = sandbox._crScanInstanceId(CARD_A);
+  check('🔴 a genuinely new scan of the same card gets a NEW id',
+        aAgain !== first,
+        'an identity hash returned the old id here, merging two physical cards');
+
+  // Two identical cards scanned in a row are still two instances.
+  sandbox.window._crScanInstance = null;
+  const c1 = sandbox._crScanInstanceId(CARD_A);
+  sandbox.window._crScanInstance = null;
+  const c2 = sandbox._crScanInstanceId(CARD_A);
+  check('🔴 two scans of an identical card are two instances', c1 !== c2, `${c1} / ${c2}`);
+
+  // No crypto.randomUUID (older Safari): still unique, never a thrown error.
+  const { sandbox: s2 } = makeSandbox();
+  s2.crypto = { randomUUID: () => { throw new Error('unsupported'); } };
+  const f1 = s2._crScanInstanceId(CARD_A);
+  s2.window._crScanInstance = null;
+  const f2 = s2._crScanInstanceId(CARD_A);
+  check('the fallback id still works and is still unique',
+        !!f1 && !!f2 && f1 !== f2, `${f1} / ${f2}`);
+}
+
+console.log('\nthe idempotency key follows the instance, so replays are safe');
+{
+  const { sandbox } = makeSandbox();
+  let n = 0;
+  sandbox.crypto = { randomUUID: () => 'uuid-' + (++n) };
+
+  // Capture the payload every create sends.
+  const sent = [];
+  sandbox._crCreateDraft = async (p) => { sent.push(p); };
+  sandbox.window._crSellApproved = CARD_A;
+
+  // A double tap: two starts with no new scan in between.
+  await sandbox.startListingDraft();
+  await sandbox.startListingDraft();
+  check('both taps sent a create', sent.length === 2);
+  check('🔴 a double tap reuses one idempotency key',
+        sent[0].idemKey === sent[1].idemKey,
+        'two keys would create two drafts for one physical card');
+  check('and one instance id', sent[0].instanceId === sent[1].instanceId);
+  check('the key is derived from the instance and the slot',
+        sent[0].idemKey === 'sell-' + sent[0].instanceId + '-ebay:fixed-price',
+        sent[0].idemKey);
+
+  // A retry after a lost response is the same displayed scan, so the same key
+  // replays the draft the seller already has rather than making a second one.
+  sandbox._crCreateDraft = async () => { throw new Error('network'); };
+  let failed = false;
+  try { await sandbox.startListingDraft(); } catch (_) { failed = true; }
+  sandbox._crCreateDraft = async (p) => { sent.push(p); };
+  await sandbox.startListingDraft();
+  check('🔴 a retry after a dropped response reuses the same key',
+        sent[sent.length - 1].idemKey === sent[0].idemKey,
+        'a new key on retry is how one card becomes two listings');
+
+  // A new scan must NOT reuse the key, or the second card would replay the
+  // first card's draft and the seller would never get a listing for it.
+  sandbox.window._crScanInstance = null;
+  sandbox.window._crSellApproved = CARD_A;
+  await sandbox.startListingDraft();
+  const last = sent[sent.length - 1];
+  check('🔴 a new scan of the same card gets a fresh key',
+        last.idemKey !== sent[0].idemKey,
+        'replaying the previous draft would silently drop this card');
+}
+
+console.log('\nan unpriced card still starts a draft, claiming no provenance');
+{
+  // B2 on the client side. Refusing here was the entry point promising an
+  // operation and then declining it.
+  const { sandbox } = makeSandbox();
+  const sent = [];
+  sandbox._crCreateDraft = async (p) => { sent.push(p); };
+  sandbox.window._crSellApproved = CARD_A;
+  sandbox.getEffectivePrice = () => 0;
+
+  await sandbox.startListingDraft();
+  check('🔴 no price no longer refuses to start a draft', sent.length === 1,
+        'the seller was previously stranded with an identified card and no comp');
+  check('no price is sent', sent[0].price === undefined);
+  check('🔴 and no priceSource is claimed alongside it',
+        sent[0].priceSource === undefined,
+        'a source with no number is a claim about nothing');
+
+  // With a price, provenance is claimed again.
+  sandbox.getEffectivePrice = () => 400;
+  sandbox.window._crScanInstance = null;
+  await sandbox.startListingDraft();
+  check('a priced draft carries its source', sent[1].price === 400
+        && ['seller', 'comp'].includes(sent[1].priceSource), JSON.stringify(sent[1].priceSource));
+}
+
+
 done();

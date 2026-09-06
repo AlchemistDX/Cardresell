@@ -497,6 +497,14 @@ export function normalizeCreateInput(body) {
   // would mark every price as seller-entered and permanently silence the
   // warning that exists to catch prices of unknown origin.
   const priceSource = normToken(body.priceSource, 'priceSource');
+  // A source with no number claims provenance for nothing. A draft may legally
+  // exist without a price (the seller sets it on the review screen, and the
+  // slot rules raise a blocking PRICE_REQUIRED until they do) — but it may not
+  // arrive carrying "this came from a comp" with no comp attached, because D4
+  // puts that claim on screen next to the number it describes.
+  if (priceSource && !(out.price > 0)) {
+    throw new Error('DRAFT_FIELD_INVALID:priceSource:no-price');
+  }
   if (priceSource) {
     if (!PRICE_SOURCES.includes(priceSource)) {
       throw new Error('DRAFT_FIELD_INVALID:priceSource:unrecognised');

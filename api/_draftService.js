@@ -42,7 +42,7 @@ import {
   validateDraftForSlot,
   draftKey,
   readStoredDraft,
-} from './_draftStore.js';
+  SLOT_RULES,} from './_draftStore.js';
 
 import {
   runOnce,
@@ -63,6 +63,8 @@ import { reserveDraftSlot, releaseDraftSlot, DRAFT_CAP, QUOTA } from './_draftQu
 export const SERVICE_ERR = {
   ...STORE_ERR,
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
+  // Raised by createDraft for a slot the registry does not define. It existed
+  // unused until the ordering fix below gave it its only caller.
   SLOT_INVALID: 'DRAFT_SLOT_INVALID',
   DRAFT_CAP_REACHED: 'DRAFT_CAP_REACHED',
 };
@@ -168,6 +170,30 @@ export { DRAFT_CAP };
 
 export async function createDraft(kv, googleSub, input, idempotencyKey) {
   const scope = SCOPES.DRAFT_CREATE;
+
+  // ── An unsupported slot is refused BEFORE anything is recorded ──────────
+  //
+  // Previously a draft for an unknown slot was persisted, indexed, and counted
+  // against the seller's cap, and only became a blocking SLOT_RULES_UNKNOWN at
+  // publish time. That spends a quota slot on a draft that can never publish,
+  // and it writes an idempotency record — so a corrected retry on the same key
+  // replayed the bad draft instead of creating the right one.
+  //
+  // The rule itself is NOT duplicated here: the slot registry in _draftStore
+  // remains its only definition, and this asks it rather than restating it.
+  // What is enforced here is ORDERING — refusal precedes every side effect:
+  // no quota reservation, no idempotency record, no index mutation, no write.
+  if (!Object.prototype.hasOwnProperty.call(SLOT_RULES, String(input && input.slot))) {
+    const err = new Error(SERVICE_ERR.SLOT_INVALID);
+    err.detail = {
+      error: SERVICE_ERR.SLOT_INVALID,
+      slot: (input && input.slot) || null,
+      supported: Object.keys(SLOT_RULES),
+      retryable: false,
+    };
+    throw err;
+  }
+
   const operationId = operationIdFor(scope, idempotencyKey);
   const request = selectMutation(scope, input);
 

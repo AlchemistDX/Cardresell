@@ -424,7 +424,14 @@ export function buildDraft(input = {}) {
     status:     DRAFT_STATUS.DRAFT,
     rev:        1,
     title:      requireString(input.title, 'title', { max: TITLE_HARD_MAX }),
-    price:      requireMoney(input.price, 'price', { allowNull: false }),
+    // allowNull: a draft may exist before it has a price. Sell eligibility is
+    // an identity question — we know WHICH card this is — so a card with no
+    // available comp still gets a draft, and validateForSlot raises a blocking
+    // PRICE_REQUIRED until the seller sets one on the review screen. That
+    // validator already handled a null price; only this line was stricter than
+    // the layer beneath it, which meant the entry point had to refuse the
+    // create and strand exactly the cards that most need help.
+    price:      requireMoney(input.price, 'price', { allowNull: true }),
     quantity:   Number.isInteger(input.quantity) && input.quantity > 0 ? input.quantity : 1,
     createdAt:  now,
     updatedAt:  now,

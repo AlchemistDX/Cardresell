@@ -29,12 +29,19 @@
 // are: copy changes without the machine reason changing, and a screen that
 // shows a raw code is a screen that made the seller guess.
 
-import { identityAxes, hasSufficientIdentity, identityFieldConflicts } from './_cardIdentity.js';
+import { identityAxes, hasSufficientIdentity, identityFieldConflicts, displayNameOf } from './_cardIdentity.js';
 
 export const SELL_BLOCKED = {
   NO_GAME:   'SELL_NEEDS_GAME',
   NO_SET:    'SELL_NEEDS_SET',
   NO_NUMBER: 'SELL_NEEDS_NUMBER',
+  // The title builder refuses a nameless card with NO_CARD_NAME, so a row with
+  // a game, a set and a number but no name was being stamped eligible and then
+  // refused at create — the exact dead button this module exists to prevent.
+  // Identity sufficiency for a SKU and sufficiency to LIST are not the same
+  // question: the SKU hashes the axes, the listing needs something to call the
+  // card. This gate answers the second question.
+  NO_NAME:   'SELL_NEEDS_CARD_NAME',
   NO_ROW:    'SELL_NEEDS_CARD',
   // Not a missing axis — a contradicted one. Two spellings of the same field
   // carrying different values is not something a seller can fix by adding
@@ -61,6 +68,9 @@ export function missingIdentityAxes(row) {
   if (!a.game || a.game === 'unknown') missing.push(SELL_BLOCKED.NO_GAME);
   if (!a.set) missing.push(SELL_BLOCKED.NO_SET);
   if (!a.number) missing.push(SELL_BLOCKED.NO_NUMBER);
+  // Read through the same alias list `cardIdentity().displayName` uses, so the
+  // gate cannot recognise a name the title builder does not, or vice versa.
+  if (!displayNameOf(row)) missing.push(SELL_BLOCKED.NO_NAME);
   return missing;
 }
 
@@ -75,6 +85,8 @@ export function sellBlockedMessage(code) {
       return 'We could not read the card number.';
     case SELL_BLOCKED.NO_ROW:
       return 'No card details to list.';
+    case SELL_BLOCKED.NO_NAME:
+      return 'We could not read this card\u2019s name.';
     case SELL_BLOCKED.CONFLICT:
       return "This card's details don't agree with each other. Re-scan it, or open it and correct the name, set and number.";
     default:
@@ -106,9 +118,14 @@ export function sellStamp(row) {
   // conflicted row would be stamped eligible with an empty missing list, and
   // the create would then refuse it. That is exactly the gate/create
   // disagreement this module exists to make impossible.
-  const conflicted = identityFieldConflicts(row).length > 0;
-  const eligible = !conflicted && hasSufficientIdentity(row);
-  const missing  = eligible ? [] : missingIdentityAxes(row);
+  // `eligible` is now exactly "nothing is missing". The earlier version
+  // delegated the boolean to hasSufficientIdentity and derived the list
+  // separately, which is how a nameless card came to be stamped eligible with
+  // an empty missing list. One computation, read two ways, cannot disagree with
+  // itself. A test pins that hasSufficientIdentity still implies the three axes
+  // it owns, so the SKU rule and this gate stay aligned without being fused.
+  const missing  = missingIdentityAxes(row);
+  const eligible = missing.length === 0;
   return {
     eligible,
     missing,
@@ -116,8 +133,22 @@ export function sellStamp(row) {
   };
 }
 
-/** Stamp a list of rows in place-safe fashion, returning new objects. */
-export function stampRows(rows) {
+/**
+ * Stamp every position in a list, returning ONLY the stamps, positionally.
+ *
+ * This replaces an earlier `stampRows` that returned annotated rows and passed
+ * non-objects (null, strings, numbers) straight through unstamped. Its only
+ * caller then read `row.sell`, which for those positions was undefined, and
+ * substituted `{eligible:false, missing:[], message:null}` — an unexplained
+ * refusal. `sellStamp(null)` had the right answer all along
+ * (SELL_NEEDS_CARD, "No card details to list."); the wrapper discarded it.
+ *
+ * So: no pass-through, no annotated rows, no second shape for the caller to
+ * reinterpret. Malformed positions are stamped like anything else, because a
+ * malformed row is a refusal WITH a reason, not an absence of one. Index i of
+ * the output always describes index i of the input.
+ */
+export function stampList(rows) {
   if (!Array.isArray(rows)) return [];
-  return rows.map((r) => (r && typeof r === 'object' ? { ...r, sell: sellStamp(r) } : r));
+  return rows.map((r) => sellStamp(r));
 }

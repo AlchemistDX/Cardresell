@@ -125,6 +125,66 @@ export function canonicalGame(row) {
   return ct || 'unknown';
 }
 
+/**
+ * Every row key the server's identity and eligibility code reads, and the
+ * schema version of that set.
+ *
+ * This is the authoritative transport contract for POST /api/sell-eligibility.
+ * The client projects each row down to exactly these keys before sending, which
+ * replaced a denylist. A denylist fails open: any field added to a card row
+ * later — a private note, a base64 photo, an address — rides along until
+ * somebody remembers to block it. This list fails closed.
+ *
+ * It decides what crosses the network, not whether a card qualifies. No
+ * eligibility logic lives here.
+ *
+ * If you add a recognised spelling to IDENTITY_ALIAS_GROUPS or read a new key
+ * in identityAxes/cardIdentity, add it here too. tests/sell-eligibility.mjs
+ * fails loudly otherwise: an unprojected field would arrive undefined and the
+ * card would go quietly ineligible with no visible cause.
+ */
+export const SELL_WIRE_SCHEMA_VERSION = 1;
+
+export const IDENTITY_WIRE_FIELDS = Object.freeze([
+  // name
+  'card', 'card_name', 'name',
+  // set
+  'set', 'set_name', 'setName', 'setCode',
+  // number
+  'number', 'card_number',
+  // game / category
+  'game', 'cardType',
+  // language
+  'language', 'lang', 'isJapanese', 'is_japanese',
+  // slab
+  'grader', 'grade', 'cert', 'certNumber', 'cert_number',
+  // descriptive
+  'condition', 'rarity',
+]);
+
+/** Project a row to the wire contract. Returns a new object; never mutates. */
+export function projectIdentityForWire(row) {
+  if (!row || typeof row !== 'object') return {};
+  const out = {};
+  for (const k of IDENTITY_WIRE_FIELDS) {
+    if (row[k] !== undefined && row[k] !== null && row[k] !== '') out[k] = row[k];
+  }
+  return out;
+}
+
+/**
+ * The card's display name, read through every spelling the codebase writes.
+ *
+ * Exported because three call sites need the SAME answer: the SKU record's
+ * displayName, the listing title (which refuses NO_CARD_NAME without one), and
+ * the Sell gate (which must not offer a button for a card the title builder
+ * will reject). A second copy of this alias list is how the gate and the title
+ * builder would come to disagree about whether a card has a name.
+ */
+export function displayNameOf(row) {
+  return String(row?.card ?? row?.card_name ?? row?.name ?? '').trim();
+}
+
 // ── Alias conflicts ─────────────────────────────────────────────────────────
 
 /**
@@ -402,7 +462,7 @@ export function cardIdentity(row) {
     // Same reason as the set axis above: `name`/`setName` are the live scan
     // object's spelling, `card`/`set` the saved row's. Display-only, so widening
     // these cannot move a SKU.
-    displayName:    String(row?.card ?? row?.card_name ?? row?.name    ?? '').trim(),
+    displayName:    displayNameOf(row),
     displaySetName: String(row?.set  ?? row?.set_name  ?? row?.setName ?? '').trim(),
   };
 }

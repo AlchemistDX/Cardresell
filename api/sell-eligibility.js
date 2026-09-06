@@ -2,11 +2,34 @@
 //
 // ── Why this endpoint exists at all ──────────────────────────────────────────
 //
-// Scan results are stamped server-side on the way out (api/scan.js), so the
-// Sell button on a fresh scan needs nothing from here. The Collection view is
-// the awkward case: it renders from `loadPortData()`, which is localStorage —
-// `cardsell_portfolio` — so those rows never passed through a server response
-// and carry no stamp.
+// Nothing else in the app decides this. Both places a Sell entry point can
+// appear ask THIS endpoint:
+//
+//   • the scan panel — renderCardDetails() calls applySellGate(card), one row;
+//   • the Collection table — hydrateCollectionSellButtons(rows) calls
+//     fetchSellStamps(rows), the whole visible page in one request.
+//
+// Both go through fetchSellStamps(), so there is ONE transport and one rule.
+//
+// CORRECTION (D1 second review). An earlier version of this comment said scan
+// results were "stamped server-side on the way out (api/scan.js), so the Sell
+// button on a fresh scan needs nothing from here." That was never true of the
+// shipped code: api/scan.js does not import _sellEligibility and does not
+// stamp anything, and the scan panel has always called this endpoint. The
+// sentence described a design that was considered and dropped. It is recorded
+// here rather than quietly deleted because a false description of a security
+// boundary is worse than no description — anyone auditing the scan path would
+// have gone looking for a stamp in scan.js and concluded the check was
+// happening somewhere it was not. tests/sell-eligibility.mjs now fails if
+// scan.js starts stamping without this comment being updated.
+//
+// Two transports calling one server-owned rule would be fine; two
+// implementations of the rule would not. There is currently one of each.
+//
+// The Collection is the reason a request is needed at all: it renders from
+// `loadPortData()` — localStorage, `cardsell_portfolio` — so those rows never
+// passed through any server response and could not carry a stamp even if
+// responses were stamped.
 //
 // That leaves three options and only one of them is acceptable:
 //
@@ -31,7 +54,7 @@
 // outcome rather than a coincidental one.
 
 import { verifyTokenFlexible } from './_verifyToken.js';
-import { stampRows } from './_sellEligibility.js';
+import { stampList } from './_sellEligibility.js';
 
 // One request covers a maxed-out Pro collection (500). Chunking is the
 // client's problem above that, and it is told the limit rather than having the
@@ -90,7 +113,10 @@ export default async function handler(req, res) {
   // Positional: stamps[i] describes rows[i]. The client holds the rows; sending
   // them back would double the payload for no gain, and echoing user card data
   // is a habit worth not forming.
-  const stamps = stampRows(rows).map((r) => (r && r.sell) || { eligible: false, missing: [], message: null });
+  // Every position goes through the policy itself. No fallback object here:
+  // a fallback is how a refusal loses its reason, and an unexplained missing
+  // button is the one outcome this endpoint exists to make impossible.
+  const stamps = stampList(rows);
 
   return res.status(200).json({ stamps, count: stamps.length });
 }

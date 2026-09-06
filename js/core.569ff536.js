@@ -17979,24 +17979,52 @@ function _crStillCurrent(t) {
   return t && t.gen === _crSellGen && t.auth === (window._googleIdToken || '');
 }
 
-/* Fields never sent to the eligibility endpoint.
+/* The eligibility transport contract, version 1.
 
-   A saved Collection row carries a base64 thumbnail; 500 of those is a payload
-   measured in megabytes for a question answerable from six fields.
+   A row is projected down to exactly these keys before it is sent. This
+   replaced a denylist. The denylist solved the payload problem — a saved
+   Collection row carries a base64 thumbnail, and 500 of those is megabytes for
+   a question answerable from a handful of fields — but it fails OPEN: every
+   field added to a card row afterwards travels until somebody remembers to
+   block it, which for photos, notes or addresses is a privacy leak that no
+   test would notice.
 
-   This is a DENYLIST on purpose. An allowlist would be a second implementation
-   of "which fields mean identity" living on the client — the exact translation
-   layer this design refused earlier — and the failure mode is silent: forget to
-   allow a field the server reads, and a perfectly good card goes ineligible for
-   no visible reason. A denylist can only remove what it names, and
-   tests/sell-eligibility.mjs proves the projection cannot change a stamp. */
-const CR_WIRE_OMIT = ['img', 'image', 'imageUrl', 'imageData', 'thumb', 'thumbnail',
-                      'photos', 'localPhotos', 'notes', 'history', 'priceHistory'];
+   This list decides what crosses the network, not whether the card qualifies.
+   No eligibility logic here.
+
+   It must stay identical to IDENTITY_WIRE_FIELDS in api/_cardIdentity.js, and
+   tests/sell-eligibility.mjs compares the two and fails when they drift — the
+   failure mode of an allowlist being silent (drop a field the server reads and
+   a good card goes ineligible with no visible cause), the drift test IS the
+   mitigation and is not optional. */
+const CR_SELL_WIRE_VERSION = 1;
+const CR_SELL_WIRE_FIELDS = [
+  // name
+  'card', 'card_name', 'name',
+  // set
+  'set', 'set_name', 'setName', 'setCode',
+  // number
+  'number', 'card_number',
+  // game / category
+  'game', 'cardType',
+  // language
+  'language', 'lang', 'isJapanese', 'is_japanese',
+  // slab
+  'grader', 'grade', 'cert', 'certNumber', 'cert_number',
+  // descriptive
+  'condition', 'rarity',
+];
 
 function _crWireRow(row) {
+  // A non-object is forwarded untouched so the server sees the malformed value
+  // and stamps it SELL_NEEDS_CARD with a reason. Projecting it to {} here would
+  // launder a malformed row into an empty one and lose that distinction.
   if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
   const out = {};
-  for (const k in row) if (!CR_WIRE_OMIT.includes(k)) out[k] = row[k];
+  for (const k of CR_SELL_WIRE_FIELDS) {
+    const v = row[k];
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
   return out;
 }
 
@@ -18222,20 +18250,23 @@ async function startListingDraft() {
   let price = 0;
   try { price = Number(getEffectivePrice()) || 0; } catch (_) { price = 0; }
 
-  // eBay fixed-price needs a number. Saying so beats a 400 from the server.
-  if (!(price > 0)) {
-    showToast('Add a price for this card first — a fixed-price listing needs one.');
-    return;
-  }
-
-  // Where the number came from, never defaulted. A price the seller typed is
-  // their expected sale price; a price we filled is comp-derived. The draft
-  // records the difference because a seller-entered price is not evidence of
-  // anything and must not later be presented as a comp.
+  // A missing price no longer refuses. Sell approval is about identity: we know
+  // WHICH card this is, so the draft can exist and the review screen names the
+  // price as a required field the seller still has to fill. Refusing here was
+  // the entry point promising an operation and then declining it — the failure
+  // mode this block exists to remove — and it stranded exactly the cards that
+  // most need a listing: real cards with no comp.
+  //
+  // Where the number came from, never defaulted, and never sent without a
+  // number to describe. A price the seller typed is their asking price; a price
+  // we filled is comp-derived. The draft records the difference because a
+  // seller-entered price is not evidence of anything and must not later be
+  // presented as a comp.
   let ov = null;
   try { ov = parseFloat(document.getElementById('priceOverride').value); } catch (_) {}
   const sellerTyped = !isNaN(ov) && ov > 0 && !window._ovAutoFilled;
-  const priceSource = sellerTyped ? 'seller' : 'comp';
+  const priced      = price > 0;
+  const priceSource = priced ? (sellerTyped ? 'seller' : 'comp') : undefined;
 
   const instanceId = _crScanInstanceId(card);
   const origLabel = lbl ? lbl.textContent : '';
@@ -18249,7 +18280,11 @@ async function startListingDraft() {
       // response replays the same draft. A later scan is a new instance and a
       // new key, which is the point: it may be a different card in hand.
       idemKey:    'sell-' + instanceId + '-' + CR_D1_SLOT,
-      price, priceSource, source: 'scan',
+      // Both omitted together when there is no price: an unpriced draft makes
+      // no provenance claim at all.
+      price: priced ? price : undefined,
+      priceSource,
+      source: 'scan',
     });
   } finally {
     if (btn) btn.disabled = false;
@@ -18407,19 +18442,23 @@ async function startListingDraftForEntry(entryId) {
   const p = port.find((x) => x.id === entryId);
   if (!p) { showToast('That card is no longer in your collection.'); return; }
 
+  // As in the scan path: no value on file starts an unpriced draft rather
+  // than refusing, and the review screen asks for the price.
   const price = Number(p.currentValue ?? p.buyPrice ?? 0) || 0;
-  if (!(price > 0)) {
-    showToast('Add a value for this card first — a fixed-price listing needs one.');
-    return;
-  }
   // `currentValue` is refreshed from our own price feed; `buyPrice` is what the
   // seller paid, which is not a comp and must not be recorded as one.
-  const priceSource = (p.currentValue != null && Number(p.currentValue) > 0) ? 'comp' : 'seller';
+  // Omitted entirely when there is no number, matching the scan path: no price
+  // means no provenance claim, and the server refuses a source without a value.
+  const priced      = price > 0;
+  const priceSource = !priced ? undefined
+    : ((p.currentValue != null && Number(p.currentValue) > 0) ? 'comp' : 'seller');
 
   await _crCreateDraft({
     card: p,
     instanceId: 'inst_col_' + entryId,
     idemKey:    'sell-col-' + entryId + '-' + CR_D1_SLOT,
-    price, priceSource, source: 'collection',
+    price: priced ? price : undefined,
+    priceSource,
+    source: 'collection',
   });
 }
