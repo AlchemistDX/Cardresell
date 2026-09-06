@@ -53,8 +53,15 @@ async function checkAsync(name, thunk, hint) {
 
 
 // ── Pull the real fee + inversion functions out of the built core.js ───────
-const coreFile = fs.readdirSync(path.join(root, 'js')).find((f) => /^core\..*\.js$/.test(f));
-const coreSrc  = fs.readFileSync(path.join(root, 'js', coreFile), 'utf8');
+// Resolved from index.html, never by scanning js/. A directory scan used to
+// live here and it picked the FIRST core.*.js it found. That worked only while
+// exactly one existed: the moment a retired bundle was kept on disk during the
+// f70d460f rename, this scan silently loaded the Phase 0 file and the fee
+// constants vanished. The document decides what ships, so the document decides
+// what we test.
+const _core    = readCoreBundle();
+const coreFile = _core.rel;
+const coreSrc  = _core.source;
 
 function extractFn(name) {
   const start = coreSrc.indexOf(`function ${name}(`);
