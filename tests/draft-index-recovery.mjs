@@ -108,7 +108,9 @@ check('it names which writes failed',
       && res.failed.some((f) => f.step === 'skudraft_set'));
 check('lost duplicate-detection is called out separately', res.skuPointerLost === true,
       'the seller may be offered a second draft for the same card — recoverable, visible');
-check('a deterministic recovery path is named', res.recovery === 'rebuildDraftIndex');
+check('a deterministic recovery path is named',
+      res.recovery === 'reconcileDraftIndex' && typeof DI.reconcileDraftIndex === 'function',
+      'the named path must exist as an export, not just as a string');
 
 // ── 3. 🔴 The stranded-draft scenario cannot happen ───────────────────────
 console.log('\n🔴 the draft is never unreachable');
@@ -128,6 +130,100 @@ commandLog = [];
 listed = await DI.listDraftIds(SUB);
 check('the repaired index is used, so the scan is not the hot path',
       listed.includes('d1') && !commandLog.includes('scan'));
+
+// ── 3b. 🔴 PARTIAL index — non-empty does not imply complete (review) ─────
+// The realistic torn write: draft A indexed fine, draft B's index write
+// failed, so the index is NON-EMPTY and still missing B. An "is it empty?"
+// fallback trusts it and B is unreachable forever.
+console.log('\n🔴 partial index — the non-empty-but-incomplete case');
+reset();
+// A saves and indexes cleanly.
+writeRecord(SUB, 'A');
+let r = await DI.indexDraft(SUB, SKU + '-a', 'A');
+check('setup: A indexed cleanly', r.ok === true);
+// B's record persists; B's index write fails.
+writeRecord(SUB, 'B');
+failCommands = new Set(['sadd']);
+r = await DI.indexDraft(SUB, SKU + '-b', 'B');
+failCommands = new Set();
+check('setup: B\'s index write failed', r.degraded === true);
+const idxNow = store.get(DI.draftsKey(SUB));
+check('🔴 the index is NON-EMPTY and incomplete — the exact hole',
+      idxNow instanceof Set && idxNow.has('A') && !idxNow.has('B'),
+      'if this is not true the test proves nothing');
+check('the degraded write asks the caller to repair now',
+      r.repairRequired === true && r.recovery === 'reconcileDraftIndex');
+
+listed = await DI.listDraftIds(SUB);
+check('🔴 a normal list read returns BOTH drafts',
+      listed.includes('A') && listed.includes('B'),
+      `got [${listed}] — a non-empty index must never be assumed complete`);
+check('🔴 and the index itself is repaired, without an operator',
+      store.get(DI.draftsKey(SUB)).has('B'));
+commandLog = [];
+listed = await DI.listDraftIds(SUB);
+check('once reconciled, later reads trust the index again',
+      listed.length === 2 && !commandLog.includes('scan'),
+      'otherwise the cache is pointless and every read scans');
+
+// ── 3c. Pathological: the invalidation ALSO fails ─────────────────────────
+console.log('\n🔴 when the freshness invalidation fails too');
+reset();
+writeRecord(SUB, 'A');
+await DI.indexDraft(SUB, SKU + '-a', 'A');
+await DI.listDraftIds(SUB);                       // index now marked clean
+writeRecord(SUB, 'B');
+failCommands = new Set(['sadd', 'del']);          // index write AND invalidation fail
+r = await DI.indexDraft(SUB, SKU + '-b', 'B');
+failCommands = new Set();
+check('the failed invalidation is reported honestly',
+      r.degraded === true && r.freshnessInvalidated === false,
+      'we must not claim to have invalidated a marker we could not delete');
+check('repairRequired still tells the caller to reconcile',
+      r.repairRequired === true,
+      'this is the path that stays correct when every marker write failed');
+const forced = await DI.reconcileDraftIndex(SUB);
+check('🔴 a forced reconcile scans regardless of the index looking clean',
+      forced.ids.includes('A') && forced.ids.includes('B'),
+      'this is the deterministic repair that does not depend on any marker');
+check('the index is whole afterwards', store.get(DI.draftsKey(SUB)).has('B'));
+
+// ── 3d. TTL backstop — recovery even if nothing signalled ─────────────────
+console.log('\nTTL backstop');
+reset();
+writeRecord(SUB, 'A');
+await DI.indexDraft(SUB, SKU + '-a', 'A');
+await DI.listDraftIds(SUB);
+writeRecord(SUB, 'B');                            // record exists, never indexed at all
+store.delete(DI.indexFreshKey(SUB));              // marker expires on its own TTL
+listed = await DI.listDraftIds(SUB);
+check('an expired freshness marker forces a reconcile',
+      listed.includes('A') && listed.includes('B'),
+      'bounded staleness: recovery happens within RECONCILE_INTERVAL_SEC even if every signal was lost');
+check('the backstop interval is a real bound', DI.RECONCILE_INTERVAL_SEC > 0
+      && DI.RECONCILE_INTERVAL_SEC <= 24 * 60 * 60);
+
+// ── 3e. The repair must not drop what the scan cannot see ─────────────────
+console.log('\nreconcile is a union, not a replacement');
+reset();
+writeRecord(SUB, 'A');
+await DI.indexDraft(SUB, SKU + '-a', 'A');
+store.get(DI.draftsKey(SUB)).add('inflight');     // indexed, record not yet visible to SCAN
+store.delete(DI.indexFreshKey(SUB));
+listed = await DI.listDraftIds(SUB);
+check('a reconcile keeps index entries the scan did not see',
+      listed.includes('inflight') && listed.includes('A'),
+      'a draft mid-write must not be dropped by the read that is repairing the index');
+
+// ── 3f. A clean empty account does not scan on every read ─────────────────
+console.log('\nempty accounts settle');
+reset();
+await DI.listDraftIds(SUB);                       // first read reconciles and marks clean
+commandLog = [];
+listed = await DI.listDraftIds(SUB);
+check('a genuinely empty, reconciled index is a valid answer',
+      listed.length === 0 && !commandLog.includes('scan'),
+      'emptiness was never the right question — completeness is');
 
 // ── 4. Recovery under multiple drafts, and no cross-tenant bleed ──────────
 console.log('\nrebuild from primary storage');

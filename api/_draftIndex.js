@@ -175,6 +175,7 @@ export async function rebuildDraftIndex(googleSub) {
   const dk = draftsKey(googleSub);
   await kv('sadd', dk, ...ids);
   await kv('expire', dk, DRAFT_INDEX_TTL_SEC);
+  await markIndexFresh(googleSub);
   return { rebuilt: ids.length, ids };
 }
 
@@ -211,6 +212,18 @@ export async function indexDraft(googleSub, sku, draftId) {
   await attempt('drafts_ttl',   () => kv('expire', dk, DRAFT_INDEX_TTL_SEC));
   await attempt('skudraft_ttl', () => kv('expire', sk, DRAFT_INDEX_TTL_SEC));
 
+  // The index may now be missing this draft while still holding others, so it
+  // is non-empty AND incomplete. Invalidate the freshness marker so the next
+  // read reconciles instead of trusting it. Best effort: if this delete fails
+  // too, the marker's TTL still forces a reconcile, and repairRequired below
+  // asks the caller not to wait for either.
+  let invalidated = true;
+  if (failed.length) invalidated = await invalidateIndexFreshness(googleSub);
+
+  // A clean write leaves the index complete, so refresh the marker — otherwise
+  // every read would reconcile forever after the first degraded write.
+  if (!failed.length) await markIndexFresh(googleSub);
+
   return {
     draftId,
     sku,
@@ -220,7 +233,11 @@ export async function indexDraft(googleSub, sku, draftId) {
     // rather than claiming the whole save is suspect.
     skuPointerLost: failed.some((f) => f.step === 'skudraft_set'),
     failed,
-    recovery: failed.length ? 'rebuildDraftIndex' : null,
+    // The caller should reconcile now rather than rely on the next read. This
+    // is the path that stays correct even when the invalidation itself failed.
+    repairRequired: failed.length > 0,
+    freshnessInvalidated: failed.length ? invalidated : null,
+    recovery: failed.length ? 'reconcileDraftIndex' : null,
   };
 }
 
@@ -242,39 +259,136 @@ export async function unindexDraft(googleSub, sku, draftId) {
 }
 
 /**
+ * ── Index freshness marker ────────────────────────────────────────────────
+ *
+ * The empty-index fallback closed only half the hole. Review caught the other
+ * half, and the counterexample is the realistic one:
+ *
+ *     authoritative records:  A, B
+ *     index:                  A          ← B's index write failed
+ *
+ * The index is non-empty, so an "is it empty?" test trusts it and B stays
+ * unreachable through the normal list path indefinitely. **Non-empty does not
+ * imply complete.** Emptiness was never the right question; completeness is,
+ * and the index cannot answer that about itself.
+ *
+ * So completeness is tracked out of band, in one key:
+ *
+ *     draftindex_ck:<sub>  = 'clean',  TTL RECONCILE_INTERVAL_SEC
+ *
+ * ABSENT means "reconcile before trusting the index". Absence is the
+ * conservative state, which is what makes this safe under partial failure:
+ *
+ *   - A degraded index write DELETES the marker. Delete-to-invalidate rather
+ *     than write-a-dirty-flag, because if the delete fails the marker simply
+ *     stays as it was and the TTL still bounds the damage, whereas a failed
+ *     dirty-flag WRITE would leave a clean-looking index forever.
+ *   - The marker carries a TTL, so even in the pathological case where both
+ *     the index write and the invalidation fail, a reconcile happens within
+ *     RECONCILE_INTERVAL_SEC with no operator involved. Bounded staleness
+ *     instead of unbounded.
+ *   - The degraded write also returns `repairRequired: true`, so the caller
+ *     reconciles immediately rather than waiting for either signal.
+ *
+ * Three independent paths to recovery, and the weakest of them is time-bounded.
+ * Cost on the hot path is one extra GET.
+ */
+export const RECONCILE_INTERVAL_SEC = 24 * 60 * 60;
+
+export function indexFreshKey(googleSub) {
+  return `draftindex_ck:${keyPart(googleSub)}`;
+}
+
+/** Mark the index as possibly incomplete. Best effort by construction. */
+async function invalidateIndexFreshness(googleSub) {
+  try { await kv('del', indexFreshKey(googleSub)); return true; }
+  catch { return false; }
+}
+
+/** Record that the index was just reconciled against primary storage. */
+async function markIndexFresh(googleSub) {
+  try {
+    await kv('set', indexFreshKey(googleSub), 'clean');
+    await kv('expire', indexFreshKey(googleSub), RECONCILE_INTERVAL_SEC);
+    return true;
+  } catch { return false; }
+}
+
+/**
  * All draft ids for a user. Unordered — callers sort by the draft's own fields.
  *
- * Self-healing: an empty or unreadable index falls back to a prefix scan of
- * primary storage and rewrites the index from what it finds. This is the
- * deterministic recovery path for a torn index write — it needs no operator
- * and no background job, because the next list read performs it.
+ * Reconciles against primary storage whenever the index cannot be shown to be
+ * complete: when the freshness marker is absent or unreadable, when the index
+ * itself is unreadable, when it comes back empty, or when the caller forces it.
+ * Otherwise it trusts the index and costs one extra GET.
  *
- * Falling back on an genuinely-empty index is harmless: the scan returns
- * nothing too, and we have spent one cheap SCAN to prove it.
+ * `opts.reconcile` is internal, not user-controlled — call it right after a
+ * degraded write so the repair does not wait for the next read.
  */
-export async function listDraftIds(googleSub) {
+export async function listDraftIds(googleSub, opts = {}) {
   if (!googleSub) return [];
 
-  let ids = null;
+  const forced = opts.reconcile === true;
+
+  // Is the index known-complete? Absent, expired or unreadable all mean "no".
+  let fresh = false;
+  if (!forced) {
+    try { fresh = (await kv('get', indexFreshKey(googleSub))) === 'clean'; }
+    catch { fresh = false; }
+  }
+
+  let indexed = null;
   try {
     const raw = await kv('smembers', draftsKey(googleSub));
-    ids = Array.isArray(raw) ? raw : [];
+    indexed = Array.isArray(raw) ? raw : [];
   } catch {
-    ids = null; // index unreadable — fall through to the scan
+    indexed = null;
   }
 
-  if (ids && ids.length) return ids;
+  // Fast path: the index is readable AND provably reconciled since the last
+  // degraded write. Emptiness is irrelevant here — a genuinely empty index
+  // that is marked clean is a correct answer.
+  if (!forced && fresh && indexed) return indexed;
 
+  // Slow path: authoritative storage decides.
   const scanned = await scanDraftIds(googleSub);
-  if (scanned.length) {
-    // Repair on the way past. A failure here is not fatal: we already have
-    // the correct answer to return, and the next read will try again.
-    try {
-      await kv('sadd', draftsKey(googleSub), ...scanned);
-      await kv('expire', draftsKey(googleSub), DRAFT_INDEX_TTL_SEC);
-    } catch { /* returning the right answer matters more than caching it */ }
+
+  // Union, not replacement. A record written but not yet visible to SCAN must
+  // not be dropped from the index by the very read that is repairing it.
+  const union = [...new Set([...(indexed || []), ...scanned])];
+
+  const missingFromIndex = scanned.filter((id) => !(indexed || []).includes(id));
+  if (missingFromIndex.length) {
+    try { await kv('sadd', draftsKey(googleSub), ...missingFromIndex); }
+    catch { /* the right answer still gets returned; the next read retries */ }
   }
-  return scanned;
+  if (union.length) {
+    try { await kv('expire', draftsKey(googleSub), DRAFT_INDEX_TTL_SEC); } catch {}
+  }
+  // Only claim freshness if the repair itself succeeded.
+  if (!missingFromIndex.length || await indexContains(googleSub, missingFromIndex)) {
+    await markIndexFresh(googleSub);
+  }
+  return union;
+}
+
+/** Verify a repair actually landed before claiming the index is clean. */
+async function indexContains(googleSub, ids) {
+  try {
+    const raw = await kv('smembers', draftsKey(googleSub));
+    const set = new Set(Array.isArray(raw) ? raw : []);
+    return ids.every((id) => set.has(id));
+  } catch { return false; }
+}
+
+/**
+ * Force a reconcile. This is the path a caller invokes after indexDraft
+ * reports `repairRequired`, and it scans regardless of what the index looks
+ * like — precisely because a non-empty index proves nothing about completeness.
+ */
+export async function reconcileDraftIndex(googleSub) {
+  const ids = await listDraftIds(googleSub, { reconcile: true });
+  return { reconciled: ids.length, ids };
 }
 
 /** Existing draft id for this card, or null. */
