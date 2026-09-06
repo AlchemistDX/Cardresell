@@ -271,7 +271,21 @@ export function validateDraftForSlot(draft, slot = draft && draft.slot) {
   if (!rules.allowsZeroPrice && price === 0) {
     push(VIOLATION.ZERO_PRICE, 'price', '0');
   }
-  if (draft && !Object.prototype.hasOwnProperty.call(draft, 'packet')) {
+  // Provenance is only a question once there IS a price.
+  //
+  // An unpriced draft used to collect NO_PROVENANCE ('unknown') on top of its
+  // blocking PRICE_REQUIRED — two findings about one fact, and the second one
+  // incoherent: there is no number, so nothing is claiming an origin it cannot
+  // support. The review screen would have told the seller "add your price" and
+  // "we cannot say where this price came from" about the same empty field.
+  //
+  // A missing price is an incomplete draft, which is an expected state for a
+  // card with no available comp. It is not a data-quality defect. Absence is
+  // represented by null/undefined, never by 0 — a zero price is a real number
+  // that eBay refuses, and the slot rules refuse it as ZERO_PRICE rather than
+  // mistaking it for absence.
+  const hasPrice = draft && draft.price !== null && draft.price !== undefined;
+  if (hasPrice && !Object.prototype.hasOwnProperty.call(draft, 'packet')) {
     if (draft.priceSource === PRICE_SOURCE.SELLER) {
       push(VIOLATION.SELLER_PRICED, 'price', PRICE_SOURCE.SELLER);
     } else {

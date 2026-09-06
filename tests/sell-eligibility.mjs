@@ -311,8 +311,18 @@ console.log('\nthe refusals D1 cannot trigger are still refusals');
   // claim about where its absent number came from.
   check('$0 with no source passes normalize; the slot rules are its gate',
         !refuses({ ...base, price: 0, priceSource: undefined }));
-  check('🔴 but a priceSource with no price is refused as an empty claim',
-        /priceSource:no-price/.test(refuses({ ...base, price: 0, priceSource: 'comp' }) || ''));
+  // FIXTURE NOTE (D2): this used `price: 0` as its stand-in for "no price",
+  // which encoded the exact conflation the D1 verdict ruled out. $0 is a
+  // PRESENT number — an invalid eBay price that the slot rules refuse as
+  // ZERO_PRICE — so a provenance claim attached to it describes something
+  // real and is not an empty claim. Genuine absence is undefined/null, and
+  // that is what an empty claim has to be tested against.
+  check('🔴 a priceSource with a genuinely ABSENT price is an empty claim',
+        /priceSource:no-price/.test(
+          refuses({ ...base, price: undefined, priceSource: 'comp' }) || ''));
+  check('🔴 but $0 keeps its provenance — 0 is a number, not an absence',
+        !refuses({ ...base, price: 0, priceSource: 'comp' }),
+        'the slot rules refuse $0 as ZERO_PRICE; normalize must not also call it missing');
   check('🔴 and an unpriced draft with no source is allowed to exist',
         !refuses({ ...base, price: undefined, priceSource: undefined }));
   check('note: an unsupported slot passes normalize and is caught later',
@@ -495,6 +505,118 @@ console.log('\nboth Sell entry points ask the one endpoint');
   check('\ud83d\udd34 and the retraction is recorded rather than quietly deleted',
         /CORRECTION \(D1 second review\)/.test(epSrc)
         && /does not import _sellEligibility and does not/.test(epSrc));
+}
+
+
+// ── identityReadiness is the single owner of sufficiency ───────────────
+// The second review's structural should-fix. Sufficiency had drifted from
+// hasSufficientIdentity() to missingIdentityAxes(); it now lives in one
+// neutral result that every consumer reads. These tests exist so the NEXT
+// consumer cannot quietly adopt one of the wrappers as authoritative.
+console.log('\nsufficiency is decided in exactly one place');
+{
+  const R = IDENT.identityReadiness;
+
+  const full = R(CARD());
+  check('a complete row is ready', full.sufficient === true && full.missingAxes.length === 0);
+
+  // Neutral vocabulary: the identity module must not know how sellers are
+  // spoken to. A SELL_ code down here means the packet builder would end up
+  // importing the Sell vocabulary to read a readiness result.
+  const namelessR = R({ game: 'pokemon', set_name: 'Champions Path', card_number: '074/073' });
+  check('\ud83d\udd34 readiness reports NEUTRAL axis names, not seller codes',
+        namelessR.missingAxes.every((a) => /^(game|set|number|name)$/.test(a)),
+        JSON.stringify(namelessR.missingAxes));
+
+  // Two questions, one list.
+  check('\ud83d\udd34 a nameless card still has a SKU but cannot be listed',
+        namelessR.sufficientForSku === true && namelessR.sufficient === false,
+        'collapsing these breaks SKUs for nameless cards or restores the dead button');
+
+  check('a non-row is every axis missing, and says so',
+        R(null).noRow === true && R(null).missingAxes.length === 4
+        && R([]).noRow === true);
+
+  // hasSufficientIdentity is a WRAPPER, not a second opinion. Checked across a
+  // spread of shapes rather than one happy row.
+  const shapes = [
+    CARD(), { ...CARD(), rarity: '' }, { ...CARD(), setCode: 'CPA' },
+    { game: 'pokemon', set_name: 'Champions Path', card_number: '074/073' },
+    { game: 'pokemon' }, { setCode: 'obf', number: '1' }, {}, null, [], 'x', 7,
+    { ...CARD(), game: '' }, { ...CARD(), card: '   ' },
+    { ...CARD(), card: 'A', card_name: 'B' },
+  ];
+  let wrapped = 0, stamped = 0, created = 0;
+  for (const row of shapes) {
+    const r = R(row);
+    if (IDENT.hasSufficientIdentity(row) === r.sufficientForSku) wrapped++;
+    // The stamp's boolean IS readiness.sufficient — not a parallel derivation.
+    if (SELL.sellStamp(row).eligible === r.sufficient) stamped++;
+    // And the create refuses exactly when readiness says it is not ready.
+    let accepted = true;
+    try {
+      EP.normalizeCreateInput({
+        card: row, instanceId: 'inst_x', slot: 'ebay:fixed-price',
+        price: 400, priceSource: 'seller',
+      });
+    } catch (_) { accepted = false; }
+    if (accepted === r.sufficient) created++;
+  }
+  check('\ud83d\udd34 hasSufficientIdentity is a thin wrapper on every shape',
+        wrapped === shapes.length, `${wrapped}/${shapes.length}`);
+  check('\ud83d\udd34 sellStamp.eligible IS readiness.sufficient on every shape',
+        stamped === shapes.length, `${stamped}/${shapes.length}`);
+  check('\ud83d\udd34 the create accepts exactly what readiness calls ready',
+        created === shapes.length, `${created}/${shapes.length}`,
+        'gate and create disagreeing is the dead Sell button, in both directions');
+
+  // A conflict is not an absence, and readiness reports both rather than
+  // letting one hide the other.
+  const conf = R({ ...CARD(), card: 'A', card_name: 'B' });
+  check('a conflicted row is not ready, and its conflict is reported',
+        conf.sufficient === false && conf.conflicts.length > 0);
+  check('the conflict does not masquerade as a missing axis',
+        conf.missingAxes.length === 0, JSON.stringify(conf.missingAxes));
+  check('\ud83d\udd34 but the seller is told about the conflict, not the axes',
+        SELL.sellStamp({ ...CARD(), card: 'A', card_name: 'B' }).missing[0]
+          === 'SELL_IDENTITY_CONFLICT');
+  // setCode and a display set name are DIFFERENT FIELDS, not alias spellings.
+  check('setCode alongside a display set name is not a conflict',
+        R({ ...CARD(), setCode: 'CPA', set_name: 'Champions Path' }).conflicts.length === 0,
+        'alias conflicts apply to alternative spellings of one field only');
+}
+
+console.log('\nno consumer derives an eligibility boolean of its own');
+{
+  // The drift guard. The whole failure mode is a fourth function appearing
+  // that looks at the axes directly, so this greps the server for that shape.
+  const files = ['_cardIdentity.js', '_sellEligibility.js', 'drafts.js',
+                 'sell-eligibility.js', '_listingPacket.js', '_draftStore.js',
+                 '_draftService.js', '_listingTitle.js'];
+  const offenders = [];
+  for (const f of files) {
+    const src = readFileSync(new URL('../api/' + f, import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    // `<something>.game && ... .set && ... .number` — the three-axis test
+    // written out by hand. Permitted in _cardIdentity.js only, and only
+    // inside identityReadiness, which is where it now lives once.
+    const hits = src.match(/\.game\b[^;\n]{0,80}&&[^;\n]{0,80}\.(set|number)\b[^;\n]{0,80}&&/g) || [];
+    if (hits.length) offenders.push(`${f}: ${hits.length}`);
+  }
+  check('\ud83d\udd34 nothing re-derives the three-axis test by hand',
+        offenders.length === 0, offenders.join(' | ')
+        + ' — read identityReadiness(row) instead of asking the axes');
+
+  // And the identity module stays free of seller vocabulary.
+  const idSrc = readFileSync(new URL('../api/_cardIdentity.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  check('\ud83d\udd34 the identity module knows no seller reason codes',
+        !/SELL_NEEDS_|SELL_IDENTITY_/.test(idSrc),
+        'readiness must stay neutral or every consumer inherits the Sell vocabulary');
+
+  // Only one module owns the axis-to-code translation.
+  const sellSrc = readFileSync(new URL('../api/_sellEligibility.js', import.meta.url), 'utf8');
+  check('the axis-to-code map exists once', (sellSrc.match(/AXIS_TO_CODE/g) || []).length >= 2);
 }
 
 

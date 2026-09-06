@@ -4,7 +4,7 @@
 //
 // D1 says the Sell entry point "appears only when identity is sufficient to
 // build a packet". The browser is the thing that has to decide whether to draw
-// a button, and the rule lives in `hasSufficientIdentity()` on the server. The
+// a button, and the rule lives in `identityReadiness()` on the server. The
 // obvious shortcut is to write `if (game && set && number)` in core.js — four
 // tokens, reads fine, and it is a SECOND implementation of identity
 // sufficiency. This codebase has been bitten four times by exactly that shape
@@ -29,7 +29,10 @@
 // are: copy changes without the machine reason changing, and a screen that
 // shows a raw code is a screen that made the seller guess.
 
-import { identityAxes, hasSufficientIdentity, identityFieldConflicts, displayNameOf } from './_cardIdentity.js';
+// identityReadiness is the single owner of sufficiency. This module translates
+// its neutral axis names into seller-facing reason codes and sentences, and
+// decides nothing about readiness itself.
+import { identityReadiness } from './_cardIdentity.js';
 
 export const SELL_BLOCKED = {
   NO_GAME:   'SELL_NEEDS_GAME',
@@ -57,21 +60,33 @@ export const SELL_BLOCKED = {
  * hunt; "needs the set and the card number" is actionable. Same rule the
  * review screen follows for missing fields.
  */
+const AXIS_TO_CODE = Object.freeze({
+  game:   SELL_BLOCKED.NO_GAME,
+  set:    SELL_BLOCKED.NO_SET,
+  number: SELL_BLOCKED.NO_NUMBER,
+  name:   SELL_BLOCKED.NO_NAME,
+});
+
 export function missingIdentityAxes(row) {
-  if (!row || typeof row !== 'object') return [SELL_BLOCKED.NO_ROW];
+  return sellReasons(identityReadiness(row));
+}
+
+/**
+ * Translate a readiness result into seller-facing codes.
+ *
+ * Split out from missingIdentityAxes so a caller that already has a readiness
+ * result does not have to recompute it just to get the codes — recomputation
+ * is where two answers to one question come from.
+ */
+export function sellReasons(readiness) {
+  if (readiness.noRow) return [SELL_BLOCKED.NO_ROW];
   // A contradiction outranks an absence. If two spellings of the card name
   // disagree, no amount of filling in the set number makes this listable, and
   // telling the seller to add a set number would be a lie about the problem.
-  if (identityFieldConflicts(row).length) return [SELL_BLOCKED.CONFLICT];
-  const a = identityAxes(row);
-  const missing = [];
-  if (!a.game || a.game === 'unknown') missing.push(SELL_BLOCKED.NO_GAME);
-  if (!a.set) missing.push(SELL_BLOCKED.NO_SET);
-  if (!a.number) missing.push(SELL_BLOCKED.NO_NUMBER);
-  // Read through the same alias list `cardIdentity().displayName` uses, so the
-  // gate cannot recognise a name the title builder does not, or vice versa.
-  if (!displayNameOf(row)) missing.push(SELL_BLOCKED.NO_NAME);
-  return missing;
+  // This is a PRESENTATION decision, which is why it lives here and not in
+  // identityReadiness: readiness reports both facts, this chooses what to say.
+  if (readiness.conflicts.length) return [SELL_BLOCKED.CONFLICT];
+  return readiness.missingAxes.map((axis) => AXIS_TO_CODE[axis]).filter(Boolean);
 }
 
 /** Seller-facing sentence for a blocked axis. */
@@ -105,31 +120,22 @@ export function sellBlockedMessage(code) {
  * Sell option should be told why, in the same place they were expecting the
  * button.
  *
- * Note it delegates the boolean to `hasSufficientIdentity` rather than
- * deriving it from `missing.length === 0`. Those two are the same today. If
- * they ever stop being the same, the packet builder's rule is the one that
- * matters, because it is the thing that will actually refuse — and this stamp
- * promising a button that the create then rejects is worse than no button.
+ * ONE readiness call, read two ways. `eligible` is `readiness.sufficient` and
+ * `missing` is the same result translated into codes, so the boolean and the
+ * list cannot contradict each other. Two earlier versions of this function
+ * computed them separately: the first derived the boolean from
+ * hasSufficientIdentity (which is how a nameless card was stamped eligible
+ * with an empty missing list), the second derived it from `missing.length`,
+ * which was correct but still left two functions that could drift apart.
+ * Neither computes sufficiency any more — identityReadiness does.
  */
 export function sellStamp(row) {
-  // Conflict is checked here as well as inside missingIdentityAxes, because
-  // `eligible` delegates to hasSufficientIdentity — which asks only whether the
-  // axes are present, not whether they are contradicted. Without this line a
-  // conflicted row would be stamped eligible with an empty missing list, and
-  // the create would then refuse it. That is exactly the gate/create
-  // disagreement this module exists to make impossible.
-  // `eligible` is now exactly "nothing is missing". The earlier version
-  // delegated the boolean to hasSufficientIdentity and derived the list
-  // separately, which is how a nameless card came to be stamped eligible with
-  // an empty missing list. One computation, read two ways, cannot disagree with
-  // itself. A test pins that hasSufficientIdentity still implies the three axes
-  // it owns, so the SKU rule and this gate stay aligned without being fused.
-  const missing  = missingIdentityAxes(row);
-  const eligible = missing.length === 0;
+  const readiness = identityReadiness(row);
+  const missing = sellReasons(readiness);
   return {
-    eligible,
+    eligible: readiness.sufficient,
     missing,
-    message: eligible ? null : sellBlockedMessage(missing[0]),
+    message: readiness.sufficient ? null : sellBlockedMessage(missing[0]),
   };
 }
 

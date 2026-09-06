@@ -6,9 +6,9 @@ import {
 } from './_draftService.js';
 import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub } from './_draftStore.js';
 import { SLOT_RULES } from './_draftStore.js';
-import { skuFor } from './_cardIdentity.js';
+import { skuFor, identityReadiness } from './_cardIdentity.js';
 import { buildListingTitle } from './_listingTitle.js';
-import { missingIdentityAxes } from './_sellEligibility.js';
+import { sellReasons } from './_sellEligibility.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
 
 // /api/drafts — listing draft CRUD
@@ -446,12 +446,19 @@ export function normalizeCreateInput(body) {
     throw new Error('DRAFT_FIELD_INVALID:card:required');
   }
 
-  // The same gate the Sell button was drawn from. If these disagree, the
-  // button is the thing that is wrong, and this is the side that must hold —
-  // a draft with no usable identity is unlistable at every later step.
-  const missing = missingIdentityAxes(card);
-  if (missing.length) {
-    throw new Error(`DRAFT_FIELD_INVALID:card:${missing.join(',')}`);
+  // The same gate the Sell button was drawn from — literally the same
+  // function, called on the same row. If these disagree, the button is the
+  // thing that is wrong, and this is the side that must hold: a draft with no
+  // usable identity is unlistable at every later step.
+  //
+  // One readiness result, translated once. Calling identityReadiness here and
+  // sellReasons on its output means the create cannot refuse a row for a
+  // reason the gate would not have given, and cannot accept one the gate
+  // refused. Recomputing sufficiency is precisely what let a nameless card
+  // through, so it is not recomputed.
+  const readiness = identityReadiness(card);
+  if (!readiness.sufficient) {
+    throw new Error(`DRAFT_FIELD_INVALID:card:${sellReasons(readiness).join(',')}`);
   }
 
   // Title is built to the VENUE's limit, not to a generic maximum. Building
@@ -502,7 +509,15 @@ export function normalizeCreateInput(body) {
   // slot rules raise a blocking PRICE_REQUIRED until they do) — but it may not
   // arrive carrying "this came from a comp" with no comp attached, because D4
   // puts that claim on screen next to the number it describes.
-  if (priceSource && !(out.price > 0)) {
+  //
+  // ABSENCE, not falsiness. This read `!(out.price > 0)`, which refused the
+  // provenance of a $0 price — the exact conflation the D1 verdict ruled out:
+  // "$0 should remain an invalid eBay price and be refused by the slot rules",
+  // not folded into "no price". A seller who types 0 HAS stated a number and
+  // its origin is knowable; the slot registry is what refuses it, as
+  // ZERO_PRICE. Deciding it twice, in two vocabularies, is how the seller ends
+  // up told to add a price they just entered.
+  if (priceSource && (out.price === undefined || out.price === null)) {
     throw new Error('DRAFT_FIELD_INVALID:priceSource:no-price');
   }
   if (priceSource) {

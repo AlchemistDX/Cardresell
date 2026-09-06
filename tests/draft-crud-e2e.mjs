@@ -671,8 +671,10 @@ reset();
 
   const v = res.result.publishable?.violations || [];
   const blocking = v.filter((x) => x.blocking);
+  // Exact code, not /PRICE/. A regex here would pass on ZERO_PRICE too, and
+  // "your price is zero" is a different sentence from "add your price".
   check('🔴 the review screen is told price is required, by name',
-        blocking.some((x) => x.code === DS.VIOLATION.PRICE_REQUIRED || /PRICE/.test(x.code)),
+        blocking.some((x) => x.code === DS.VIOLATION.PRICE_REQUIRED),
         JSON.stringify(v.map((x) => x.code)));
   check('the finding names the price field rather than counting problems',
         blocking.some((x) => x.field === 'price'), JSON.stringify(blocking));
@@ -751,6 +753,100 @@ reset();
   check('🔴 so the corrected retry on the same key succeeds',
         res2.state === IDEM.IDEMPOTENCY_STATE.FRESH && res2.result?.saved === true,
         `${res2.state} — a refusal must not poison its idempotency key`);
+}
+
+
+// ── PERMANENT INVARIANTS: what an unpriced draft is, and is not ─────────
+//
+// Decided in the D1 verdict. An unpriced draft is a NEUTRAL INCOMPLETE state
+// — "Needs price" — not a warning and not a seller error. The draft was
+// created successfully and is behaving exactly as intended, so the findings it
+// carries must say one thing once. These are pinned permanently because the
+// list, review and handoff screens all derive their state from these findings
+// rather than from a client-side `if (!price)`, and a stray warning here would
+// render as a defect the seller cannot act on.
+console.log('\nan unpriced draft says one thing, once');
+reset();
+{
+  const norm = EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'inst_inv', slot: 'ebay:fixed-price',
+    price: undefined, priceSource: undefined,
+  });
+  const res = await SVC.createDraft(kv, SUB, norm, K('inv'));
+  const v = res.result.publishable?.violations || [];
+  const blocking = v.filter((x) => x.blocking);
+  const codes = v.map((x) => x.code);
+
+  check('\ud83d\udd34 EXACTLY ONE blocking finding, and it is PRICE_REQUIRED',
+        blocking.length === 1 && blocking[0].code === DS.VIOLATION.PRICE_REQUIRED,
+        JSON.stringify(blocking.map((x) => x.code)));
+  check('\ud83d\udd34 NO missing-provenance warning about a price that does not exist',
+        !codes.includes(DS.VIOLATION.NO_PROVENANCE),
+        JSON.stringify(codes) + ' — two findings for one fact, the second incoherent');
+  check('\ud83d\udd34 and no seller-priced info either — nobody priced it',
+        !codes.includes(DS.VIOLATION.SELLER_PRICED), JSON.stringify(codes));
+  check('\ud83d\udd34 so the whole finding set is one blocker and nothing else',
+        v.length === 1, JSON.stringify(codes));
+  check('\ud83d\udd34 zero warnings — this is incomplete, not defective',
+        res.result.publishable.warnings === 0
+        && res.result.publishable.infos === 0,
+        `w=${res.result.publishable.warnings} i=${res.result.publishable.infos}`);
+
+  // No fabricated provenance ANYWHERE in the persisted record.
+  const stored = res.result.draft;
+  check('\ud83d\udd34 the stored draft fabricates no priceSource',
+        stored.priceSource === null || stored.priceSource === undefined,
+        JSON.stringify(stored.priceSource));
+  check('\ud83d\udd34 absence is null/undefined — never coerced to 0',
+        stored.price !== 0 && (stored.price === null || stored.price === undefined),
+        JSON.stringify(stored.price),
+        '$0 is a real number eBay refuses, not a synonym for "no price"');
+}
+
+// ── $0 is NOT missing ─────────────────────────────────────────
+// The distinction the verdict asked for explicitly. A seller who types 0 has
+// stated a price; it is an invalid eBay price and the SLOT RULES refuse it.
+// Folding it into "no price" would tell them to add a price they just added.
+console.log('\na zero price is refused as invalid, not treated as absent');
+reset();
+{
+  const norm = EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'inst_zero', slot: 'ebay:fixed-price',
+    price: 0, priceSource: 'seller',
+  });
+  check('normalize accepts 0 — the slot registry owns this rule, not the parser',
+        norm.price === 0);
+  const res = await SVC.createDraft(kv, SUB, norm, K('zero'));
+  const codes = (res.result.publishable?.violations || []).map((x) => x.code);
+  check('\ud83d\udd34 $0 on eBay fixed-price is ZERO_PRICE',
+        codes.includes(DS.VIOLATION.ZERO_PRICE), JSON.stringify(codes));
+  check('\ud83d\udd34 and is NOT reported as a missing price',
+        !codes.includes(DS.VIOLATION.PRICE_REQUIRED), JSON.stringify(codes));
+  check('the seller who typed it keeps that provenance',
+        res.result.draft.priceSource === 'seller');
+  check('the stored 0 is a real 0, not nulled out',
+        res.result.draft.price === 0, JSON.stringify(res.result.draft.price));
+  // A PRESENT price reports its provenance — including 0. Found by mutation:
+  // writing the presence check as `!!draft.price` still passed every other
+  // assertion here while silently dropping the provenance finding for a $0
+  // draft, because 0 is falsy. Presence is `!== null && !== undefined`, and
+  // this is the assertion that says so out loud.
+  check('\ud83d\udd34 a $0 draft still reports WHERE the 0 came from',
+        codes.includes(DS.VIOLATION.SELLER_PRICED),
+        JSON.stringify(codes)
+        + ' — 0 is a present price, so provenance is still a question');
+
+  // A venue that permits it accepts the same number — proving the refusal is
+  // the slot's rule and not a global one.
+  const wn = EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'inst_zero_wn', slot: 'whatnot:auction',
+    price: 0, priceSource: 'seller',
+  });
+  const res3 = await SVC.createDraft(kv, SUB, wn, K('zerown'));
+  const c3 = (res3.result.publishable?.violations || []).map((x) => x.code);
+  check('\ud83d\udd34 the same $0 is fine on a venue whose rules allow it',
+        !c3.includes(DS.VIOLATION.ZERO_PRICE) && !c3.includes(DS.VIOLATION.PRICE_REQUIRED),
+        JSON.stringify(c3) + ' — proves the refusal belongs to the slot');
 }
 
 

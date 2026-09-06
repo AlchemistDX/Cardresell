@@ -676,11 +676,31 @@ console.log('\nonly ERROR blocks a handoff');
   }
 
   // ── counts add up ──
-  const multi = DS.validateDraftForSlot({ slot: 'mercari:fixed-price', title: 'y'.repeat(60) });
+  // FIXTURE NOTE (D2 readiness consolidation): this used to be an UNPRICED
+  // draft, which produced three findings only because an absent price also
+  // collected a NO_PROVENANCE warning — two complaints about one fact, the
+  // second one incoherent (there was no number claiming an origin). That
+  // double-report is gone, so an unpriced draft now yields two errors and no
+  // warning, and this fixture had to change to keep testing what it was
+  // written to test.
+  //
+  // A $0 price with no stated source is the honest three-finding case: the
+  // title is too long (error), $0 is not a valid Mercari price (error), and a
+  // price that IS present with no nameable origin is a real data-quality
+  // warning. Same counts, all three now defensible.
+  const multi = DS.validateDraftForSlot({
+    slot: 'mercari:fixed-price', title: 'y'.repeat(60), price: 0,
+  });
   check('several findings are all reported, not just the first',
         multi.violations.length === 3
         && multi.errors === 2 && multi.warnings === 1,
         'fixing one field at a time across three round trips is not a review screen');
+  // And the reason the warning exists here is the present-but-unattributed
+  // price — pinned so this fixture cannot drift back to the incoherent one.
+  check('\ud83d\udd34 the warning is about a price that exists, not one that does not',
+        multi.violations.some((x) => x.code === DS.VIOLATION.NO_PROVENANCE)
+        && !multi.violations.some((x) => x.code === DS.VIOLATION.PRICE_REQUIRED),
+        JSON.stringify(multi.violations.map((x) => x.code)));
   check('and only the errors are blocking', multi.blocking.length === 2 && multi.ok === false);
   check('🔴 a WARNING is counted but does not change the verdict',
         multi.warnings === 1 && !multi.blocking.some((x) => x.severity === DS.SEVERITY.WARNING));

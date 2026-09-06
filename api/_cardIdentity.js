@@ -467,10 +467,98 @@ export function cardIdentity(row) {
   };
 }
 
-/** True when there is enough identity to build anything at all. */
-export function hasSufficientIdentity(row) {
+
+/**
+ * ── Identity readiness: the ONE place sufficiency is decided ────────────────
+ *
+ * D1's second review caught that the canonical owner of "is this card ready?"
+ * had drifted. `hasSufficientIdentity()` answered three axes; `sellStamp()`
+ * built its own list and, for a while, derived its boolean from the other
+ * function — which is how a nameless card was stamped eligible and then
+ * refused at title generation. Fixing the boolean fixed the bug but left two
+ * functions that could disagree again the moment a fourth axis appeared.
+ *
+ * So sufficiency is computed HERE, once, and every consumer reads this result:
+ *
+ *   hasSufficientIdentity()  → thin wrapper, the SKU question
+ *   sellStamp()              → translates axes into seller-facing codes
+ *   normalizeCreateInput()   → refuses on the same axes the gate refused on
+ *
+ * The result is deliberately NEUTRAL. Axis names are `game`/`set`/`number`/
+ * `name`, not SELL_NEEDS_* codes: this module has no opinion about how a
+ * seller should be spoken to, and a reason code leaking down here is how the
+ * packet builder would end up importing the Sell vocabulary.
+ *
+ * ── Two questions, one derivation ──────────────────────────────────────────
+ *
+ * `sufficientForSku` and `sufficient` are NOT independent booleans. Both read
+ * the single `missingAxes` list. They differ because the questions differ:
+ *
+ *   sufficientForSku — can this be a SKU / a packet? Three axes. The card NAME
+ *                      is display-only and deliberately outside identity (a
+ *                      renamed card is the same card), so a nameless row still
+ *                      has a valid SKU.
+ *   sufficient       — can this be LISTED? All four axes, and no contradiction,
+ *                      because a listing needs something to call the card and
+ *                      a title cannot be built without a name.
+ *
+ * Collapsing them into one boolean would either break SKUs for nameless cards
+ * or reintroduce the dead Sell button. Keeping them as two derivations of one
+ * list is what stops them drifting.
+ */
+
+/** The axes a SKU hashes. `name` is deliberately absent — see above. */
+export const SKU_AXES = Object.freeze(['game', 'set', 'number']);
+
+/** Every axis listing readiness considers, in the order a seller fixes them. */
+export const READINESS_AXES = Object.freeze(['game', 'set', 'number', 'name']);
+
+export function identityReadiness(row) {
+  // A non-row is not a card missing some fields — it is not a card. Reported
+  // as every axis missing so a caller that only reads `missingAxes` cannot
+  // mistake it for a nearly-complete row, and flagged so a caller that needs
+  // to say "no card details at all" can.
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    return Object.freeze({
+      noRow: true,
+      sufficient: false,
+      sufficientForSku: false,
+      missingAxes: READINESS_AXES.slice(),
+      conflicts: [],
+    });
+  }
+
+  const conflicts = identityFieldConflicts(row);
   const a = identityAxes(row);
-  return !!(a.game && a.game !== 'unknown' && a.set && a.number);
+  const missingAxes = [];
+  if (!a.game || a.game === 'unknown') missingAxes.push('game');
+  if (!a.set) missingAxes.push('set');
+  if (!a.number) missingAxes.push('number');
+  // Read through displayNameOf, the single owner of the name alias list, so
+  // readiness cannot recognise a name the title builder does not.
+  if (!displayNameOf(row)) missingAxes.push('name');
+
+  return Object.freeze({
+    noRow: false,
+    // Both derived from the one list above.
+    sufficientForSku: SKU_AXES.every((x) => !missingAxes.includes(x)),
+    sufficient: missingAxes.length === 0 && conflicts.length === 0,
+    missingAxes,
+    conflicts,
+  });
+}
+
+/**
+ * True when there is enough identity to build a SKU or a listing packet.
+ *
+ * A thin wrapper over identityReadiness() and nothing more. It reads the three
+ * SKU axes and, deliberately, does NOT consider the card name or field
+ * conflicts — widening it would change what a SKU is. Callers who need
+ * listing readiness want `identityReadiness(row).sufficient`, which is what
+ * the Sell gate uses.
+ */
+export function hasSufficientIdentity(row) {
+  return identityReadiness(row).sufficientForSku;
 }
 
 /**
