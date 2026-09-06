@@ -3122,6 +3122,17 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <span style="font-size:1.1rem">🏅</span>
       <span>Saving as <span id="mGradeBannerLabel">PSA 10</span></span>
     </div>
+    <!--
+      Cert number: only shown for graded saves. Two PSA 9s of the same card are
+      not the same object — they have different certs, different surfaces, and
+      one of them may already be listed. Without the cert they collapse into a
+      single identity and the second listing draft overwrites the first, so
+      this is the field that makes graded inventory countable.
+    -->
+    <div class="modal-field modal-full" id="mCertField" style="display:none">
+      <label for="mCertNumber">Cert / serial number <span style="opacity:.65;font-weight:400">&middot; optional, on the slab label</span></label>
+      <input type="text" id="mCertNumber" placeholder="e.g. 84061234" autocomplete="off" inputmode="numeric" maxlength="24" />
+    </div>
     <div class="modal-grid">
       <div class="modal-field modal-full">
         <label>Card Name</label>

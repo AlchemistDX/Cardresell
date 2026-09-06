@@ -26,12 +26,29 @@ const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 // account stops costing storage without us running a reaper.
 export const DRAFT_INDEX_TTL_SEC = 180 * 24 * 60 * 60;
 
+/**
+ * Encoding contract for key components.
+ *
+ * These keys are built by joining components with ':', so a component that
+ * itself contains ':' could forge another user's key. Google's `sub` is
+ * numeric today, but relying on an upstream format we do not control is how
+ * that stops being true quietly. Every component is percent-encoded, which
+ * removes ':' from the alphabet a component can contain and makes the
+ * separator unambiguous by construction rather than by luck.
+ *
+ * This is separate from the URL encoding in kv() — that one is transport, this
+ * one is the logical key.
+ */
+function keyPart(v) {
+  return encodeURIComponent(String(v));
+}
+
 export function draftsKey(googleSub) {
-  return `drafts:${googleSub}`;
+  return `drafts:${keyPart(googleSub)}`;
 }
 
 export function skuDraftKey(googleSub, sku) {
-  return `skudraft:${googleSub}:${sku}`;
+  return `skudraft:${keyPart(googleSub)}:${keyPart(sku)}`;
 }
 
 export function storageAvailable() {

@@ -92,7 +92,18 @@ export function normalizeNumber(v) {
  */
 export function canonicalLanguage(row) {
   const g  = String(row?.game ?? '').toLowerCase().trim();
-  const jp = row?.isJapanese === true || row?.is_japanese === true || g === 'pokemonjp';
+  // Union of every Japanese signal we accept, including an explicit language
+  // field. There are two live save paths — one writes game:'pokemonjp', the
+  // other writes game:'pokemon' + isJapanese:true — and they were producing
+  // two SKUs for one card. A union resolves deterministically no matter how
+  // many signals disagree: any Japanese signal wins, and an explicit
+  // language:'en' cannot override a 'pokemonjp' game because the game field
+  // describes the printing while `language` is often just a UI default.
+  const explicit = String(row?.language ?? row?.lang ?? '').toLowerCase().trim();
+  const jp = row?.isJapanese === true
+          || row?.is_japanese === true
+          || g === 'pokemonjp'
+          || explicit === 'ja' || explicit === 'jp' || explicit === 'japanese';
   return jp ? 'ja' : 'en';
 }
 
@@ -242,13 +253,62 @@ export function skuFor(row) {
  * The canonical card record. This is what drafts, packets and (later) venue
  * listings all key off. Deliberately carries no venue fields.
  */
+/**
+ * Is this identity complete, and does it describe a distinguishable physical
+ * instance?
+ *
+ * These are two different questions and conflating them loses money:
+ *
+ *   `complete`                — do we have every axis that applies to this
+ *                               card? A slab without a cert is INCOMPLETE.
+ *   `instanceDistinguishable` — does the SKU identify one physical object?
+ *                               Two raw Charizards of the same print are
+ *                               genuinely fungible and SHOULD share a SKU.
+ *                               Two PSA 9s are not: they have different certs,
+ *                               different scratches, and one may already be
+ *                               listed. Without a cert they collapse into one
+ *                               SKU, and the second draft silently overwrites
+ *                               the first.
+ *
+ * So a raw card is complete-but-not-distinguishable by design, while a
+ * cert-less slab is neither, and callers must be able to tell those apart
+ * rather than seeing one "valid" boolean.
+ */
+export function identityCompleteness(row) {
+  const axes    = identityAxes(row);
+  const slab    = isSlab(row);
+  const missing = [];
+  if (!axes.game || axes.game === 'unknown') missing.push('game');
+  if (!axes.set)    missing.push('set');
+  if (!axes.number) missing.push('number');
+  if (slab) {
+    if (!axes.grader) missing.push('grader');
+    if (!axes.grade)  missing.push('grade');
+    if (!axes.cert)   missing.push('cert');
+  }
+  return {
+    complete: missing.length === 0,
+    missing,
+    certKnown: slab ? !!axes.cert : false,
+    // Only a certified slab is one identifiable object. Raw cards are
+    // fungible, so `false` here is correct and expected for them.
+    instanceDistinguishable: slab && !!axes.cert,
+  };
+}
+
 export function cardIdentity(row) {
   const axes = identityAxes(row);
+  const comp = identityCompleteness(row);
   return {
     sku:            skuFor(row),
     namespace:      IDENTITY_NAMESPACE,
     graded:         isSlab(row),
     ...axes,
+    // Never let a cert-less slab pass as uniquely identified inventory.
+    certKnown:               comp.certKnown,
+    instanceDistinguishable: comp.instanceDistinguishable,
+    identityComplete:        comp.complete,
+    missingAxes:             comp.missing,
     // Display-only. NOT part of identity — a renamed card is the same card,
     // and card names vary across our sources more than any other field.
     displayName:    String(row?.card ?? row?.card_name ?? '').trim(),

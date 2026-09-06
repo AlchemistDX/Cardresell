@@ -6406,34 +6406,123 @@ function netEbayForPrice(price, ctx) {
  * `exact` reports whether we actually landed within a nickel. We never claim
  * the target was hit — we report what the price really nets.
  */
+// Order totals at which net(price) steps DOWN rather than sliding.
+//
+// Derived from feeEbay, not guessed: the only such point is the per-order fee,
+// which is `total <= 10 ? 0.30 : 0.40`. Everything else in feeEbay is
+// continuous — the FVF tier break at $2,500/$7,500 changes the SLOPE but not
+// the value (tierBoundary * baseRate is the same from both sides), and the Top
+// Rated discount and promoted-listing rate are proportional.
+//
+// A downward step is what breaks bisection: it makes net(price) non-monotonic,
+// so a band of net values is reachable at two different prices and the search
+// can converge on the expensive one. listPriceForTargetNet therefore searches
+// each continuous branch separately instead of scanning a fixed window.
+//
+// ⚠️ Adding another stepped fee means adding its total here. tests/
+// listing-packet-offline.mjs derives the real discontinuities from feeEbay by
+// brute force and fails if this list disagrees, so the omission cannot pass
+// review unnoticed.
+const FEE_TOTAL_DISCONTINUITIES = [10];
+
 function listPriceForTargetNet(targetNet, ctx) {
   const c      = ctx || {};
-  const target = Number(targetNet);
   const netFor = typeof c.netFor === 'function' ? c.netFor : netEbayForPrice;
-  const net    = function (p) { return netFor(p, c); };
   const EPS    = 0.005;   // half a cent of slack, so cent rounding is not a miss
-  const FLOOR  = 0.01;
+  const FLOOR_C = 1;      // one cent, the lowest listable price
 
+  // Strict numeric parse. Number() is too permissive to guard a pricing
+  // function: Number(null), Number([]) and Number('') are all 0, so a null
+  // target would be priced as a legitimate $0 payout and return a confident
+  // list price for a request that never specified one. Only a real number or
+  // a non-empty numeric string counts.
+  const num = function (v) {
+    if (typeof v === 'number') return isFinite(v) ? v : NaN;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v);
+      return isFinite(n) ? n : NaN;
+    }
+    return NaN;
+  };
+
+  const target = num(targetNet);
   if (!isFinite(target)) {
     return { ok: false, reason: 'BAD_TARGET', listPrice: null, achievedNet: null };
   }
 
-  // A target so low that the minimum listable price already clears it.
-  if (net(FLOOR) >= target - EPS) {
-    const a = net(FLOOR);
+  // Malformed fee settings must be refused, not silently coerced. Numerical
+  // inversion on garbage input tends to return a confident-looking number.
+  const shipCharge = c.shipCharge == null ? 0 : num(c.shipCharge);
+  const shipCost   = c.shipCost   == null ? 0 : num(c.shipCost);
+  const promo      = c.ebayPromo  == null ? 0 : num(c.ebayPromo);
+  const badCtx =
+       !isFinite(shipCharge) || shipCharge < 0
+    || !isFinite(shipCost)   || shipCost   < 0
+    || !isFinite(promo)      || promo < 0 || promo > 100;
+  if (badCtx) {
     return {
-      ok: true, listPrice: FLOOR, achievedNet: Math.round(a * 100) / 100,
+      ok: false, reason: 'BAD_CONTEXT', listPrice: null, achievedNet: null,
+      targetNet: target,
+      message: 'Shipping and promoted-listing values must be non-negative, '
+             + 'and the promoted rate must be between 0 and 100%.'
+    };
+  }
+
+  // Work in whole cents. Prices are cents, so searching the integers directly
+  // removes every float-rounding question from the search itself.
+  const netC = function (cents) { return netFor(cents / 100, c); };
+  const clears = function (cents) { return netC(cents) >= target - EPS; };
+
+  if (clears(FLOOR_C)) {
+    const a = netC(FLOOR_C);
+    return {
+      ok: true, listPrice: FLOOR_C / 100, achievedNet: Math.round(a * 100) / 100,
       targetNet: target, delta: Math.round((a - target) * 100) / 100,
       exact: Math.abs(a - target) <= 0.05, atFloor: true,
       feeModelRevision: FEE_MODEL_REVISION
     };
   }
 
-  // Grow an upper bracket. Doubling rather than solving for it keeps this
-  // correct even if a future fee tier makes the curve steeper somewhere.
-  let hi = Math.max(1, Math.abs(target) + 5), guard = 0;
-  while (net(hi) < target && guard < 64) { hi *= 2; guard++; }
-  if (net(hi) < target) {
+  // Translate each discontinuity from order-total space into price space, and
+  // keep the highest cent price that still sits on the low side of it.
+  const edges = FEE_TOTAL_DISCONTINUITIES
+    .map(function (t) { return Math.floor((t - shipCharge) * 100); })
+    .filter(function (e) { return e >= FLOOR_C; })
+    .sort(function (a, b) { return a - b; });
+
+  // Within one branch net is continuous and — for any sane fee setting —
+  // strictly increasing, so the lowest clearing cent price can be found by
+  // plain integer bisection with no window to tune.
+  function lowestClearingIn(loC, hiC) {
+    if (hiC !== null && hiC < loC) return null;
+    let lo = loC, hi = hiC;
+    if (hi === null) {
+      // Unbounded top branch: grow until it clears, or conclude it never does.
+      hi = Math.max(lo, 1);
+      let guard = 0;
+      while (!clears(hi) && guard < 64) { hi *= 2; guard++; }
+      if (!clears(hi)) return null;
+    } else if (!clears(hi)) {
+      return null;             // this branch tops out below the target
+    }
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (clears(mid)) hi = mid; else lo = mid + 1;
+    }
+    return clears(lo) ? lo : null;
+  }
+
+  // Ascending branches: the first one that can clear the target holds the
+  // globally lowest price, because every later branch starts higher.
+  let lo = FLOOR_C, found = null;
+  for (const edge of edges) {
+    found = lowestClearingIn(lo, edge);
+    if (found !== null) break;
+    lo = edge + 1;
+  }
+  if (found === null) found = lowestClearingIn(lo, null);
+
+  if (found === null) {
     // Marginal fees at or above 100% — e.g. a promoted-listing rate that eats
     // every extra dollar. No price reaches this payout; say so.
     return {
@@ -6443,22 +6532,8 @@ function listPriceForTargetNet(targetNet, ctx) {
     };
   }
 
-  let lo = 0;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2;
-    if (net(mid) < target) lo = mid; else hi = mid;
-  }
-
-  // Round up to a real cent price, then walk down for the lowest cent price
-  // that still clears the target. The window covers the $10 per-order step.
-  let price = Math.ceil(hi * 100) / 100;
-  for (let k = 1; k <= 60; k++) {
-    const cand = Math.round((price - k * 0.01) * 100) / 100;
-    if (cand < FLOOR) break;
-    if (net(cand) >= target - EPS) price = cand;
-  }
-
-  const achieved = net(price);
+  const price    = found / 100;
+  const achieved = netC(found);
   return {
     ok: true,
     listPrice: price,
@@ -8079,6 +8154,7 @@ function addCurrentCardToCollection() {
 function _syncFlipModalGradeBanner() {
   const banner    = document.getElementById('mGradeBanner');
   const labelEl   = document.getElementById('mGradeBannerLabel');
+  const certField = document.getElementById('mCertField');
   const modalBox  = document.querySelector('#flipModal .modal-box');
   const graderKey = document.querySelector('#gradedPills .pill.sel')?.dataset?.val || 'no';
   const gradeVal  = document.getElementById('gradeSelect')?.value || '';
@@ -8087,12 +8163,18 @@ function _syncFlipModalGradeBanner() {
     const label = `${names[graderKey] || graderKey.toUpperCase()} ${gradeVal}`;
     if (labelEl) labelEl.textContent = label;
     if (banner) banner.style.display = 'flex';
+    if (certField) certField.style.display = '';
     if (modalBox) {
       modalBox.dataset.grader = graderKey;
       modalBox.dataset.grade  = gradeVal;
     }
   } else {
     if (banner) banner.style.display = 'none';
+    // Hide AND clear: a stale cert left in the box would otherwise be saved
+    // onto a raw card, inventing a slab that does not exist.
+    if (certField) certField.style.display = 'none';
+    const certInput = document.getElementById('mCertNumber');
+    if (certInput) certInput.value = '';
     if (modalBox) {
       delete modalBox.dataset.grader;
       delete modalBox.dataset.grade;
@@ -8143,13 +8225,18 @@ function closeFlipModal(e) {
   const modalBox = document.querySelector('#flipModal .modal-box');
   if (banner) banner.style.display = 'none';
   if (modalBox) { delete modalBox.dataset.grader; delete modalBox.dataset.grade; }
+  // Same reasoning for the cert box: a cert belongs to exactly one slab, so
+  // carrying one into the next card would attach a real serial to the wrong
+  // object — worse than having no cert at all.
+  const certField = document.getElementById('mCertField');
+  if (certField) certField.style.display = 'none';
   document.getElementById('flipModal').classList.remove('open');
   clearModal();
 }
 
 function clearModal() {
   ['mCardName','mSetName','mBuyPrice','mSellPrice','mCurrentValue',
-   'mFees','mShipCost','mGradingCost'].forEach(id => {
+   'mFees','mShipCost','mGradingCost','mCertNumber'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -8179,6 +8266,13 @@ function saveFlipEntry() {
     const modalBox   = document.querySelector('#flipModal .modal-box');
     const savedGrader = modalBox?.dataset?.grader || '';
     const savedGrade  = modalBox?.dataset?.grade || '';
+    // Cert is only meaningful on a slab, and only digits/letters from the
+    // label are meaningful on a cert. Strip separators so "8406-1234" and
+    // "84061234" resolve to the same slab rather than two.
+    const savedCert = (savedGrader && savedGrade)
+      ? String(document.getElementById('mCertNumber')?.value || '')
+          .replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 24)
+      : '';
     // Capture card image + number + tcgplayer.url from selectedCard so the
     // Collection view can render a thumbnail and route users straight to the
     // exact TCGplayer product page (via our Impact affiliate) later.
@@ -8211,6 +8305,7 @@ function saveFlipEntry() {
       tcgplayerUrl: cardTcgpUrl,
       grader: savedGrader || null,
       grade: savedGrade || null,
+      cert: savedCert || null,
       // Identity fields for lossless "View full card" replay:
       game:       cardGame,
       cardType:   cardGame === 'pokemonjp' ? 'pokemon' : cardGame,
@@ -8225,6 +8320,7 @@ function saveFlipEntry() {
     window.trackEvent?.('collection_add', {
       source: 'single',
       graded: !!(savedGrader && savedGrade),
+      hasCert: !!savedCert,
       hasPrice: curVal > 0,
     });
   } else {

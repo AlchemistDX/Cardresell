@@ -18,6 +18,7 @@ import {
   normalizeText, normalizeNumber,
   canonicalGame, canonicalLanguage, canonicalGrader, canonicalGrade, canonicalCert,
   isSlab, identityAxes, identityString, skuFor, cardIdentity, hasSufficientIdentity,
+  identityCompleteness,
 } from '../api/_cardIdentity.js';
 
 import { draftsKey, skuDraftKey, DRAFT_INDEX_TTL_SEC } from '../api/_draftIndex.js';
@@ -248,6 +249,86 @@ check('normalizeNumber strips separators',    normalizeNumber('SV 045') === 'sv4
 check('canonicalGrade of empty is empty',     canonicalGrade({}) === '');
 check('canonicalGrade keeps non-numeric grades',
       canonicalGrade({ grade: 'Authentic Altered' }) === 'authenticaltered');
+
+
+// ── 10. Cert propagation and incomplete-instance semantics ───────────────
+// The reviewer's Fix A. The identity model always had a cert axis, but the
+// save path could not supply one, so every slab was silently an incomplete
+// instance while reporting itself as valid identity. Completeness and
+// instance-uniqueness are now two separate questions.
+console.log('\ncert propagation / incomplete instances');
+
+const SLAB_NO_CERT = { game: 'pokemon', setCode: 'sv1', number: '045/198', grader: 'psa', grade: '9' };
+const SLAB_CERT_A  = { ...SLAB_NO_CERT, cert: '84061234' };
+const SLAB_CERT_B  = { ...SLAB_NO_CERT, cert: '84069999' };
+const RAW_CARD     = { game: 'pokemon', setCode: 'sv1', number: '045/198' };
+
+check('a raw card is complete identity',
+      identityCompleteness(RAW_CARD).complete === true);
+check('a raw card is NOT a distinguishable instance — two copies are fungible',
+      identityCompleteness(RAW_CARD).instanceDistinguishable === false);
+check('a cert-less slab is INCOMPLETE identity',
+      identityCompleteness(SLAB_NO_CERT).complete === false);
+check('a cert-less slab names cert as the missing axis',
+      identityCompleteness(SLAB_NO_CERT).missing.includes('cert'));
+check('a cert-less slab is NOT a distinguishable instance',
+      identityCompleteness(SLAB_NO_CERT).instanceDistinguishable === false);
+check('a certified slab is complete AND distinguishable',
+      identityCompleteness(SLAB_CERT_A).complete === true &&
+      identityCompleteness(SLAB_CERT_A).instanceDistinguishable === true);
+check('cardIdentity exposes certKnown so callers cannot miss it',
+      cardIdentity(SLAB_NO_CERT).certKnown === false &&
+      cardIdentity(SLAB_CERT_A).certKnown === true);
+check('cardIdentity exposes instanceDistinguishable',
+      cardIdentity(SLAB_CERT_A).instanceDistinguishable === true);
+check('🔴 two same-grade slabs with different certs are DIFFERENT skus',
+      skuFor(SLAB_CERT_A) !== skuFor(SLAB_CERT_B),
+      'this is the whole point: two PSA 9s are two objects, not one');
+check('cert-less slabs of the same card collapse to one sku (documented cost)',
+      skuFor(SLAB_NO_CERT) === skuFor({ ...SLAB_NO_CERT }),
+      'which is exactly why the packet raises SLAB_WITHOUT_CERT');
+check('cert separators are normalized — 8406-1234 is the same slab as 84061234',
+      skuFor({ ...SLAB_NO_CERT, cert: '8406-1234' }) === skuFor({ ...SLAB_NO_CERT, cert: '84061234' }));
+check('a cert on a RAW card does not affect its identity',
+      skuFor({ ...RAW_CARD, cert: '84061234' }) === skuFor(RAW_CARD),
+      'cert is only meaningful when grader + grade are present');
+check('hasSufficientIdentity is unchanged by cert — it gates listability, not uniqueness',
+      hasSufficientIdentity(SLAB_NO_CERT) === true);
+
+// ── 11. Explicit language input (reviewer #3) ────────────────────────────
+console.log('\nlanguage signals');
+
+check('explicit language:"ja" is honored',
+      canonicalLanguage({ game: 'pokemon', language: 'ja' }) === 'ja');
+check('explicit lang:"jp" is honored',
+      canonicalLanguage({ game: 'pokemon', lang: 'jp' }) === 'ja');
+check('explicit language:"japanese" is honored',
+      canonicalLanguage({ game: 'pokemon', language: 'Japanese' }) === 'ja');
+check('explicit language:"en" stays English',
+      canonicalLanguage({ game: 'pokemon', language: 'en' }) === 'en');
+check('game:pokemonjp still wins over an English language default',
+      canonicalLanguage({ game: 'pokemonjp', language: 'en' }) === 'ja',
+      'the game field describes the printing; language is often a UI default');
+check('isJapanese flag still wins over an English language default',
+      canonicalLanguage({ game: 'pokemon', isJapanese: true, language: 'en' }) === 'ja');
+check('🔴 both JP save paths produce the SAME sku',
+      skuFor({ game: 'pokemonjp', setCode: 'sv1', number: '045' }) ===
+      skuFor({ game: 'pokemon', isJapanese: true, setCode: 'sv1', number: '045' }),
+      'two code paths, one card');
+check('an unknown language string does not silently become Japanese',
+      canonicalLanguage({ game: 'pokemon', language: 'de' }) === 'en');
+
+// ── 12. Key delimiter safety (reviewer #7) ──────────────────────────────
+console.log('\nkey encoding contract');
+
+check('a sub containing the separator cannot forge another key',
+      skuDraftKey('a:b', 'sku1') !== skuDraftKey('a', 'b:sku1'),
+      'components are percent-encoded, so ":" is not in a component alphabet');
+check('a sku containing the separator is encoded too',
+      !skuDraftKey('u1', 'a:b').endsWith('a:b'));
+check('ordinary subs and skus are unaffected',
+      skuDraftKey('1234567890', 'v1-charizard-abcdef0123456789')
+        === 'skudraft:1234567890:v1-charizard-abcdef0123456789');
 
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);

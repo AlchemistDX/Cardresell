@@ -38,6 +38,7 @@ export const FORBIDDEN_AGE_KEYS = ['cacheAgeSec', 'ageSec', 'ageSeconds', 'secon
 export const PACKET_CODES = {
   MISSING_FEE_MODEL_REVISION: 'MISSING_FEE_MODEL_REVISION',
   INSUFFICIENT_IDENTITY:      'INSUFFICIENT_IDENTITY',
+  SLAB_WITHOUT_CERT:          'SLAB_WITHOUT_CERT',
   NO_CARD_NAME:               'NO_CARD_NAME',
   TITLE_BUDGET_EXCEEDED:      'TITLE_BUDGET_EXCEEDED',
   MISSING_REQUIRED_ASPECT:    'MISSING_REQUIRED_ASPECT',
@@ -103,12 +104,33 @@ export function stampPriceBasis(basisMeta, nowMs) {
   return out;
 }
 
-/** Display age computed at READ time from the absolute stamp. */
+// No price data predates this app, so a stamp older than this is corrupt
+// input rather than very stale data.
+const MIN_PLAUSIBLE_STAMP_MS = Date.UTC(2015, 0, 1);
+// Tolerated clock skew between the writing machine and the reading one.
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+/**
+ * Display age computed at READ time from the absolute stamp.
+ *
+ * Returns null rather than a plausible-looking string whenever the stamp
+ * cannot be trusted. The failure mode this guards is specific: a numeric or
+ * malformed value like `-1` used to reach Date.parse and come back as
+ * "9379 days ago", and a stamp six hours in the future used to clamp to zero
+ * and render as "just now" — telling the seller their price was fresh when we
+ * had no idea how old it was. "Unknown" is the honest answer; a wrong age is
+ * worse than a blank one because the seller prices against it.
+ */
 export function ageFromRetrievedAt(retrievedAt, nowMs) {
-  if (!retrievedAt) return null;
+  // Must be a real timestamp string. Numbers, arrays and objects all coerce
+  // into something Date.parse will happily interpret.
+  if (typeof retrievedAt !== 'string' || !retrievedAt.trim()) return null;
   const t = Date.parse(retrievedAt);
   if (!Number.isFinite(t)) return null;
-  const secs = Math.max(0, Math.round(((Number.isFinite(nowMs) ? nowMs : Date.now()) - t) / 1000));
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  if (t < MIN_PLAUSIBLE_STAMP_MS) return null;
+  if (t - now > MAX_FUTURE_SKEW_MS) return null;
+  const secs = Math.max(0, Math.round((now - t) / 1000));
   if (secs < 60)    return 'just now';
   if (secs < 3600)  return `${Math.round(secs / 60)} min ago`;
   if (secs < 86400) return `${Math.round(secs / 3600)} hr ago`;
@@ -210,6 +232,16 @@ export function buildListingPacket(row = {}, ctx = {}) {
   if (!hasSufficientIdentity(row)) {
     add(PACKET_CODES.INSUFFICIENT_IDENTITY, SEVERITY.ERROR,
         'Need at least game, set and card number to build a listing.');
+  }
+  // A graded card with no cert is not a uniquely identified item. It can still
+  // be listed — plenty of sellers omit the cert — but it must not pass as
+  // countable inventory, because two of them share one SKU and the second
+  // draft would silently replace the first. WARNING, not ERROR: the seller is
+  // allowed to proceed, they just do not get instance-level tracking.
+  if (ident.graded && !ident.certKnown) {
+    add(PACKET_CODES.SLAB_WITHOUT_CERT, SEVERITY.WARNING,
+        'Graded card has no cert number. Add it from the slab label so this '
+      + 'copy is tracked separately from other copies of the same card.');
   }
   if (!title.ok && title.reason === 'NO_CARD_NAME') {
     add(PACKET_CODES.NO_CARD_NAME, SEVERITY.ERROR, 'No card name — cannot build a title.');

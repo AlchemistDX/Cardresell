@@ -23,7 +23,15 @@ import {
 export const DEFAULT_MAX_TITLE = 80;
 
 /**
- * Drop order, cheapest loss first. Lower `priority` survives longer.
+ * Drop order, cheapest loss first. Lower `priority` is offered budget first.
+ *
+ * This is priority-ordered FIRST FIT, not strict priority. Segments are
+ * offered the remaining budget in priority order, and one that does not fit is
+ * dropped — but a cheaper lower-priority segment may still fit afterwards.
+ * That is deliberate: if a long set name cannot fit, spending the leftover
+ * eight characters on "Holo Rare" gives the buyer more to match on than
+ * leaving the title short. The guarantee is therefore "nothing is dropped that
+ * would have fit", plus strict precedence for the top three below.
  *
  * The ordering is a claim about what a card buyer searches for, and the
  * ordering of the top three is the part that matters:
