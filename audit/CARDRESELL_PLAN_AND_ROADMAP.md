@@ -262,7 +262,30 @@ The reason is epistemic, not cosmetic:
 
 The current code says TCGCSV has no condition-level SKU and PriceCharting raw is an ungraded/loose blend; it therefore states that neither source is a condition-graded Near Mint quote (`js/core.d9e1b484.js:1741-1757`, `1809-1812`).
 
-The disagreement disclosure activates only when both values exist, the higher value is at least $20, and the ratio is outside 1.5× in either direction (`js/core.d9e1b484.js:1759-1781`). The display names both sources, shows both values, and names the basis used for payout (`js/core.d9e1b484.js:1784-1814`).
+**The disclosure is WITHDRAWN as of 2026-09-04 and is not rendered anywhere.** What follows
+describes code that exists and does not run.
+
+The detection thresholds are `_sourceDisagreement` (`js/core.d9e1b484.js:1767`): both values
+exist, the higher is at least $20, and the ratio is outside 1.5× in either direction. The
+renderer `_renderSourceDisagreement` (`:1784`) names both sources, shows both values, and names
+the basis used for payout.
+
+Neither function is called. `_renderSourceDisagreement` appears exactly once in the bundle —
+its own definition — and `_sourceDisagreement` appears twice: its definition and a mention
+inside the withdrawal comment at `:1910-1922`. The withdrawal comment states that detection is
+"still exercised by tests"; **that is not accurate.** The only test is a regex asserting the
+string `function _sourceDisagreement` appears in the bundle text
+(`tests/launch-audit-regressions.mjs:1664`), which would pass if the body were `return null`.
+The label has been corrected to say what it checks.
+
+**What the withdrawal costs, recorded on purpose:** when the two feeds disagree by more than
+50%, the seller sees only the basis we picked, with no statement that the other source says
+something very different. Both numbers are still rendered separately and neither is averaged
+into the other, so §5.4's actual prohibition — do not average — holds. What is missing is the
+explicit statement of disagreement.
+
+**Decision (2026-09-06): the disclosure returns to the card detail view, in its own unit.**
+Rationale and scope in `audit/DECISION_SOURCE_DISAGREEMENT.md`. It is not in D2.1's scope.
 
 This corrects the roadmap context brief. Its statement that TCGplayer is “Near Mint only” is not what the current client claims. **Code wins:** do not describe the TCGplayer figure as a Near Mint quote without new provider-level evidence.
 
@@ -440,7 +463,13 @@ The inverse seeks the lowest list price that clears the target, then recomputes 
 
 **Why:** An average of incompatible measurements creates false precision. Accuracy matters more than matching a competitor's simpler headline.
 
-The implemented threshold and disclosure are at `js/core.d9e1b484.js:1741-1814`.
+The threshold and renderer exist at `js/core.d9e1b484.js:1767` and `:1784`. **The renderer is
+withdrawn and neither function is called** — see §3.4 for the corrected state, the cost, and the
+routing decision.
+
+The rule as stated is still satisfied in its load-bearing half: source-specific values are kept
+and shown separately, and nothing is averaged. The unsatisfied half is the explicit disclosure
+of disagreement.
 
 ## 5.5 Never invent liquidity, freshness, or timing
 
@@ -846,7 +875,7 @@ Before claiming a task is done:
 - [ ] I handled absence separately from zero.
 - [ ] I preserved the difference between product identity, physical instance identity, and selling intent.
 - [ ] I used the forward fee function for inverse verification.
-- [ ] I retained source identity and disclosed source disagreement.
+- [ ] I retained source identity, and did not average disagreeing sources into a third number. (Explicit cross-source disclosure is withdrawn — §3.4 — so this item does not require it.)
 - [ ] I added a behavioral test and confirmed it is registered if it is meant to gate.
 - [ ] I stated which tests and external gates were not run.
 - [ ] I renamed every changed immutable bundle and updated its HTML reference.

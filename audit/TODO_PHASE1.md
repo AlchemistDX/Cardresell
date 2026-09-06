@@ -22,9 +22,19 @@ Status per `audit/CARDRESELL_PLAN_AND_ROADMAP.md` §6.2.
 | D6 (new-seller warning) | Later in D | Show before handoff when applicable; do not invent eligibility. |
 | D7 (local photos) | Later in D | Ordered local photo state, validation, removal, cross-device limitation copy; no server upload. |
 
-### D2.1 entry gate (pinned)
+### D2.1 entry gate — CLOSED 2026-09-06
 
-Roadmap §3.4 in `CARDRESELL_PLAN_AND_ROADMAP.md` still describes the withdrawn cross-source disclosure as live. **Fix that description before another reviewer reads the doc against D2.1.** Detection is still computed and tested — decide whether to route it to the card detail view only, or to keep it fully dark. Question sits with you.
+Pointer only. Full record: `audit/DECISION_SOURCE_DISAGREEMENT.md`.
+
+The disclosure returns to the **card detail view**, in its own unit, and is **not in D2.1's
+scope** — a drafts row shows a chosen price with provenance, not a live cross-source comparison,
+so there is no comparison there to disagree about. Roadmap §3.4, §5.4, and the §12 checklist
+item are corrected.
+
+Two things were wrong in the way this gate was previously stated here, both worth knowing:
+detection is **not** "still computed" — nothing calls `_sourceDisagreement`; and it is **not**
+"tested" — the sole assertion was a regex over bundle text that would pass if the body were
+`return null` (`tests/launch-audit-regressions.mjs:1664`, label now corrected).
 
 ### D2.1 blocker — RESOLVED 2026-09-06
 
@@ -48,11 +58,10 @@ rows are not tappable in D2.1, and blocker copy is owned by the server, shipped 
 
 Nothing in the spec awaits a decision. The remaining D2.1 work is writing the code.
 
-**Entry gate — still open, still yours.** The cross-source disagreement routing call is
-unresolved: roadmap §3.4 (`:265`) and §5.4 (`:439-443`) both describe the withdrawn disclosure
-feature as live, `_renderSourceDisagreement` (`js/core.d9e1b484.js:1784`) is called from
-nowhere, and the §12 checklist item (`:849`) cannot be ticked either way. Route detection to
-the card detail view, or keep it dark and correct the two roadmap sections.
+**Entry gate — closed 2026-09-06.** Decided: card detail view, own unit, not D2.1's scope.
+Roadmap §3.4, §5.4, and the §12 checklist item corrected; the misleading test label corrected.
+Record at `audit/DECISION_SOURCE_DISAGREEMENT.md`. **Nothing now stands between here and
+writing the screen.**
 
 ---
 
@@ -132,8 +141,18 @@ Ordered by cost of leaving them broken, not by ease.
 
 - **PUSH GATE — do not push before the Cert ID is rotated.** `94dc777` is unreachable from `origin/main`, so the credential fragments exist only in unpushed history. The push is the publishing event. This is additive to the deploy-authorization rule below, not a replacement: rotation removes one blocker, it does not authorize a push. Recorded at `audit/DECISION_94dc777.md`.
 - **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory and now gates the first push. Sequence, environment dependencies, and the 18/19-vs-19/19 distinction are in `audit/DECISION_94dc777.md`. Once rotated and verified, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
-- **Commit `94dc777` — DECIDED, option A, keep the history** (2026-09-06). The message contains no full credential and no credential-shaped fragment; rewriting 36 commits would invalidate every stamp in the audit corpus to redact a fragment of a credential being retired anyway. Conditional on rotation actually happening. Full record at `audit/DECISION_94dc777.md`.
-- **36 outgoing commits, nothing pushed** (`git rev-list --count origin/main..HEAD` = 36 at tip `cbb5552`; `origin/main` = `9aaf326`). The three since `95435b4` are the T2.7/T2.8 patch, the D2.1 contract, and Amendment 1 — all documentation-only, so every code line number cited across the corpus remains valid. No deployment until you authorize it.
+- **Commit `94dc777` — DECIDED, option A, keep the history** (2026-09-06). The message contains no full credential and no credential-shaped fragment; rewriting the branch (36 commits when the decision was taken, more since) would invalidate every stamp in the audit corpus to redact a fragment of a credential being retired anyway. Conditional on rotation actually happening. Full record at `audit/DECISION_94dc777.md`.
+- **41 outgoing commits, nothing pushed.** `origin/main` = `9aaf326`. Verify with
+  `git rev-list --count origin/main..HEAD`; a count is not pinned to a hash here because the
+  edit that records it is itself one of the commits it counts. The parent of this edit was
+  `f2ad902` at 40 outgoing.
+
+  Since `cbb5552` (where this line last read 36): the `94dc777` decision record, the
+  `readiness` server change, the test rename, Amendment 2 with the `focus` parameter, and the
+  source-disagreement decision. **Two of those touched code** — `readinessOf` in
+  `api/_draftService.js`, and `focus` across `api/_draftStore.js`, `api/_draftService.js`,
+  `api/drafts.js`. Line numbers cited in the audit corpus for those three files may have
+  shifted; every other file's citations remain valid. No deployment until you authorize it.
 
 ---
 

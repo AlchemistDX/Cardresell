@@ -1661,7 +1661,13 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
         /if \(!\(_bandActive && basis && basis\.graded\)\) \{/.test(index));
   // Withdrawn render, detection deliberately retained.
   check('disagreement render is not called', !/parts\.push\(_renderSourceDisagreement/.test(index));
-  check('disagreement detection is retained', /function _sourceDisagreement/.test(index));
+  // Text-presence only. This asserts the definition still exists in the bundle;
+  // it does NOT exercise the thresholds, and would pass if the body were
+  // `return null`. Nothing calls _sourceDisagreement, so there is no behaviour
+  // to exercise until the card-detail routing lands. Do not read this as
+  // coverage of the 1.5x / $20 rule.
+  check('the detection function definition is still present in the bundle (text only)',
+        /function _sourceDisagreement/.test(index));
 }
 // PriceCharting's 7/8/9 fields are grader-agnostic, so must not carry a grader name.
 {
