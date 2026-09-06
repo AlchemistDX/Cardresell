@@ -6,8 +6,9 @@
 `audit/d21/D21_AND_ORIENTATION_ANSWERS.md`. Every field name below is copied from source, not
 inferred. No test was run in producing this.
 
-**The one open binding is now closed** — see §1.2a. Resolving it surfaced one new problem that
-needs an owner decision before the client copy table is written: see §3.4a.
+**Amendment 1 applied 2026-09-06** (owner-decided). Both open items are closed: rows are not
+tappable in D2.1 (§3.1a), and blocker copy is owned by the server and shipped on the wire
+(§1.2, §3.4). Nothing in this document is awaiting a decision.
 
 ---
 
@@ -31,22 +32,38 @@ Added to `summarize()` (`api/_draftService.js:493-513`), making thirteen keys:
 
 ```js
 readiness: {
-  publishable: <boolean>,   // passthrough of the server's own determination
-  blockers:    [<VIOLATION code>, ...]   // ERROR severity only, codes only
+  publishable: <boolean>,
+  blockers: [{ code: <VIOLATION code>, message: <string> }, ...]
 }
 ```
 
-`blockers` carries **only `error`-severity codes**, because only `error` blocks:
+Derived, not recomputed (§1.2a):
+
+```js
+const v = validateDraftForSlot(draft, draft.slot);
+readiness = {
+  publishable: v.ok,
+  blockers: v.blocking.map((x) => ({ code: x.code, message: x.message }))
+};
+```
+
+`v.blocking` is exactly the ERROR set, because only `error` blocks:
 `blocks(severity) { return severity === SEVERITY.ERROR; }` (`api/_draftStore.js:152-154`).
+Take `code` and `message` only — `field`, `detail`, `severity`, and `blocking` are redundant on
+the wire, since every element of `v.blocking` is by construction blocking and of error
+severity.
 
-The four blocking codes (`VIOLATION`, `api/_draftStore.js:156-163`; severity map `:172-190`):
+`message` is already interpolated server-side. The client performs no substitution.
 
-| Code | Meaning |
-|---|---|
-| `SLOT_PRICE_REQUIRED` | slot requires a price and price is `null`/`undefined` |
-| `SLOT_ZERO_PRICE_NOT_ALLOWED` | price is `0` and this slot forbids zero |
-| `SLOT_TITLE_TOO_LONG` | title exceeds the slot limit |
-| `SLOT_RULES_UNKNOWN` | slot not in the registry |
+The four blocking codes (`VIOLATION`, `api/_draftStore.js:156-163`; severity map `:172-190`)
+and their server messages (`api/_draftStore.js:208-225`):
+
+| Code | Meaning | Server message |
+|---|---|---|
+| `SLOT_PRICE_REQUIRED` | slot requires a price and price is `null`/`undefined` | This listing needs a price before it can be sent. |
+| `SLOT_ZERO_PRICE_NOT_ALLOWED` | price is `0` and this slot forbids zero | A price of zero is not allowed for `{venue}`. |
+| `SLOT_TITLE_TOO_LONG` | title exceeds the slot limit | Title is `{length}` characters; `{venue}` allows `{max}`. Shorten it by `{n}`. |
+| `SLOT_RULES_UNKNOWN` | slot not in the registry | CardResell does not know how to list to `{slot}` yet. |
 
 **Deliberately excluded from `blockers`:** `DRAFT_NO_PRICE_PROVENANCE` (warning) and
 `DRAFT_PRICE_SELLER_ENTERED` (info). Neither blocks publish. The provenance warning
@@ -77,7 +94,10 @@ Each violation is `{ code, field, detail, severity, blocking, message }`, constr
 
 ```js
 const v = validateDraftForSlot(draft, draft.slot);
-readiness = { publishable: v.ok, blockers: v.blocking.map((x) => x.code) };
+readiness = {
+  publishable: v.ok,
+  blockers: v.blocking.map((x) => ({ code: x.code, message: x.message }))
+};
 ```
 
 `v.blocking` is exactly the ERROR set, not an independent notion — the per-violation flag is
@@ -243,6 +263,40 @@ There is no router. Screens are top-level `<div>`s that `switchView(view)` shows
 Add a `#draftsView` container, a tab, and a branch in `switchView`. Call
 `switchView('drafts')`.
 
+**Trap:** `switchView` uses three different show/hide mechanisms. `.flips-view` carries
+`display:none` in CSS (`index.html:954`), so setting `style.display = ''` on a container in that
+class yields a blank tab — documented at `js/core.d9e1b484.js:8131-8134`. Set an explicit
+display value, or keep `#draftsView` out of `.flips-view`.
+
+### 3.1a Rows are not tappable in D2.1
+
+**The drafts list is informational. No row opens anything.**
+
+D3 is the screen that renders a full draft, and it is not built. The alternatives were a
+stripped-down detail view inside D2.1, which risks becoming a half-D3 that D3 later has to tear
+out, or routing a tap back to the card panel, which is built around a fresh scan rather than a
+stored draft and is more plumbing than it appears.
+
+D3 adds row navigation when it lands. Until then a row is something a seller reads, not
+something they open.
+
+**Consequence for the "navigate by returned ID" contract.** With no detail screen, the
+requirement to navigate by the returned `draftId` and never by `rows[0]` is satisfied at the
+list level:
+
+- After a create, open **All drafts** and highlight the row whose `draftId` matches the create
+  response.
+- Find it by id. Never assume position, and never use `rows[0]`.
+- If the created draft is not on the first page, page forward until its id is found, or scroll
+  it into view once found. Do not silently show the list without it.
+- A replay (HTTP 200, same `draftId`) does the same thing — highlight the existing row. That is
+  the replay-is-success rule with no detail screen behind it.
+
+The paging order makes this load-bearing rather than defensive: ids sort lexically and recency
+applies only within a page (§2.3), so a freshly created draft is **not** reliably on page 1.
+An implementation that shows page 1 and stops will routinely fail to display the draft the
+seller just made.
+
 ### 3.2 Auth
 
 Use `_crIdToken()` (`js/core.d9e1b484.js:18093-18108`). There is **no canonical
@@ -264,74 +318,44 @@ inline `style="..."` in template literals; that is the de-facto convention.
 
 ### 3.4 Row copy
 
-| Condition | Copy | Action |
+**The client authors no blocker copy.** A blocked row renders `readiness.blockers[n].message`
+verbatim, as a second line beneath the title, in `--text-muted`.
+
+Render **every** blocker on the row, each on its own line. There are at most four. Showing one
+and hiding the rest would be omission dressed as brevity.
+
+A non-textual marker is permitted and encouraged — a coloured left border, a dot, the wrench
+icon — because it is not copy and does not duplicate the server's message. **A text chip is
+not permitted**, since authoring "Needs price" alongside the server sentence re-creates exactly
+the duplication this decision removes.
+
+`code` is on the wire for branching and testing, not for display. The client may switch on it
+to choose a marker; it must never map it to a string.
+
+Why the server owns this: per §3.1a a row cannot be tapped, so the row is the **only** place a
+seller ever learns what is wrong with their draft. A four-word chip is a dead end — "Title too
+long" with no way to discover how long. The row must carry the real sentence, and the server
+already owns it, with interpolated values a client cannot reconstruct without a second copy of
+the slot rules table.
+
+#### Stub rows — the client's to author
+
+The server ships no text for the four stub kinds, and routing a stub `reason` through
+`reasonMessage()` hits its `default` branch and returns the wrong sentence (§2.5).
+
+| `reason` | Copy | Action |
 |---|---|---|
-| `blockers` includes `SLOT_PRICE_REQUIRED` | Needs price | opens draft |
-| `blockers` includes `SLOT_ZERO_PRICE_NOT_ALLOWED` | Price can't be $0 for this venue | opens draft |
-| `blockers` includes `SLOT_TITLE_TOO_LONG` | Title too long | opens draft |
-| `blockers` includes `SLOT_RULES_UNKNOWN` | Venue not supported | opens draft |
-| `DRAFT_READ_FAILED` | Couldn't load this draft. It's still saved. | **Try again** (only kind where retry is honest) |
+| `DRAFT_READ_FAILED` | Couldn't load this draft. It's still saved. | **Try again** |
 | `DRAFT_VANISHED` | This draft is no longer in storage. | none |
 | `DRAFT_SCHEMA_TOO_NEW` | Saved by a newer version of CardResell. Reload to update. | Reload |
 | `DRAFT_UNREADABLE` | This draft's saved data can't be read. | none |
 
-Never say "deleted" for `DRAFT_VANISHED` — the server has not established that, and deleted
-drafts are filtered out before they reach the client.
+Only `DRAFT_READ_FAILED` carries `retryable: true`; it is the only kind where a retry is
+honest. Never say "deleted" for `DRAFT_VANISHED` — the server has not established that, and
+genuinely deleted drafts are filtered out before they reach the client.
 
 Every stub renders as a **visible row**. Never filter one out. `api/_draftService.js:464-470`:
 a record we could not read is not a record that does not exist.
-
-The four stub rows are genuinely the client's to author — the server ships no text for them
-(§2.5). **The four blocker rows are not.** See §3.4a.
-
-### 3.4a OPEN DECISION — the server already owns blocker copy
-
-Closing the §1.2a binding surfaced this, and it changes §3.4.
-
-Every violation object already carries a `message`, populated at `api/_draftStore.js:252` from
-`reasonMessage(code, { venue, slot, ...ctx })`. That function has real per-code copy for all
-four blocking codes (`api/_draftStore.js:208-225`):
-
-| Code | Server message |
-|---|---|
-| `SLOT_PRICE_REQUIRED` | "This listing needs a price before it can be sent." |
-| `SLOT_ZERO_PRICE_NOT_ALLOWED` | "A price of zero is not allowed for `{venue}`." |
-| `SLOT_TITLE_TOO_LONG` | "Title is `{length}` characters; `{venue}` allows `{max}`. Shorten it by `{n}`." |
-| `SLOT_RULES_UNKNOWN` | "CardResell does not know how to list to `{slot}` yet." |
-
-So §3.4's first four rows are a **second copy source for a business message the server already
-produces** — rule 1, the defect shape that has bitten this project four times. Two concrete
-consequences, not stylistic ones:
-
-1. `SLOT_TITLE_TOO_LONG`'s server message is **computed** from `length`, `max` and venue. A
-   codes-only wire throws that away, and "Title too long" cannot be reconstructed into
-   "Shorten it by 12" on the client without re-deriving the limit — a second copy of the slot
-   rules table on top of a second copy of the copy.
-2. `SLOT_ZERO_PRICE_NOT_ALLOWED` and `SLOT_RULES_UNKNOWN` interpolate venue and slot. Same
-   problem, smaller blast radius.
-
-Three ways out. This is an owner call:
-
-- **(a) Ship `message` alongside `code`.** `blockers: [{ code, message }, ...]`. Server stays
-  the single copy owner, interpolation survives, wire cost is a short string per blocker on
-  rows that have one. Costs the wire-format minimalism §1.2 was aiming at.
-- **(b) Keep codes only, and accept terse chips as a distinct register.** A row chip
-  ("Needs price") and a detail sentence ("This listing needs a price before it can be sent.")
-  are arguably different surfaces, not duplicate implementations. Defensible — but it must be
-  written down as a decision, and `SLOT_TITLE_TOO_LONG` still loses its numbers, so its chip
-  has to stay genuinely generic and D3 has to carry the specific sentence.
-- **(c) Codes only, chips generic, and every blocker row links to D3** where the server
-  message is rendered verbatim from the per-draft read. Cheapest wire, no duplicate copy, at
-  the cost of one navigation for the seller to learn the specific number.
-
-My read: **(a)**. It keeps one copy owner for one business message, which is rule 1 applied
-literally, and the wire cost is a handful of bytes on the minority of rows that are blocked.
-(b) is the option that looks cheapest today and quietly re-creates the duplication the rule
-exists to prevent. But this is a product-voice call as much as an architecture one, so it is
-yours.
-
-**Until this is decided, do not write the §3.4 blocker copy into the client.** The stub copy
-(bottom four rows) is unaffected and can proceed.
 
 ### 3.5 Copy rules
 
@@ -345,6 +369,15 @@ anywhere in the codebase. Unfinished states say **under maintenance**, never "be
 (`index.html:1072-1091`), asserted rule-by-rule at
 `tests/a11y-mobile-2026-09-04.mjs:269-330`. Match the existing pattern and add the new
 selectors to that block.
+
+Per §3.1a the row itself is not a touch target. The only interactive elements this screen ships
+are the **Try again** and **Reload** actions on stub rows (§3.4) and the paging control — those
+are what need 44×44 and what belong in the asserted block. Do not give a non-interactive row a
+touch-target rule; it would assert a tap affordance the screen deliberately does not have.
+
+One caveat worth stating plainly: `tests/a11y-mobile-2026-09-04.mjs` is **not registered** in
+`tests/run-all.sh`. Adding selectors to its asserted block is correct, but it will not gate
+until someone registers it. Registering it is out of scope here and is not tracked elsewhere.
 
 Secondary text uses `--text-muted` (`index.html:89`, `:123`). **Do not use `--text-faint`** —
 it is an open contrast finding at 1.90:1. Do not define a new token.
@@ -381,8 +414,9 @@ Cases:
    `allowsZeroPrice: true` (`whatnot:auction`, `api/_draftStore.js:119`) does **not**. This is
    the `f0324d4` regression at list level, and the exact reason `if (!row.price)` is wrong —
    `!0 === true` would mark a publishable $0 Whatnot draft as needing a price.
-2. The client renders "Needs price" only from `blockers`, including the adversarial case of an
-   absent price with an empty `blockers` array.
+2. The client renders blocker text only from `readiness.blockers[n].message`. Assert with a
+   fixture whose message is a recognisable sentinel string, and assert that string appears in
+   the rendered row.
 3. All four stub kinds render a visible row with their own copy. Assert the client matches
    `'DRAFT_UNREADABLE'` and never `'DRAFT_RECORD_UNREADABLE'` or `'unreadable'`.
 4. Only `DRAFT_READ_FAILED` offers retry.
@@ -390,11 +424,20 @@ Cases:
 6. `total: 0` is the only path to the empty state.
 7. 503 with `retryable` and 503 without are distinguished, and neither renders "no drafts."
 8. `degraded: true` renders rows plus a banner, never a hidden list.
-9. A 200 replay opens the same `draftId` as the 201 would have.
-10. `readiness` is present and correctly typed on every summary row.
-11. `readiness.publishable === v.ok` and `readiness.blockers` equals
-    `v.blocking.map(x => x.code)` for a fixture set spanning all four blocking codes — pins
-    §1.2a against a reintroduced second formula.
+9. A 200 replay resolves to the same `draftId` a 201 would have, and surfaces no error.
+10. `readiness` is present and correctly typed on every summary row, with `blockers` an array
+    of `{ code, message }` objects.
+11. Every blocker on a multi-blocker row is rendered, not just the first.
+12. `readiness.publishable === v.ok` and `readiness.blockers` equals
+    `v.blocking.map(x => ({ code: x.code, message: x.message }))` for a fixture set spanning
+    all four blocking codes — pins §1.2a against a reintroduced second formula.
+13. Source-text tripwire: the drafts-screen code contains none of the four blocking codes
+    mapped to a literal string. This is a tripwire, not proof — it catches the obvious
+    reintroduction, not a clever one.
+14. After a create whose `draftId` is deliberately not `rows[0]`, the list highlights the row
+    matching that id. A 200 replay with the same id highlights the same row.
+15. No row carries a click, tap, or key handler, and no code path calls `switchView` to a
+    detail view — pins §3.1a.
 
 ---
 
@@ -428,12 +471,16 @@ Nothing catches a violation at edit time — no linter, no formatter, no `packag
 - [ ] `degraded: true` renders rows plus banner.
 - [ ] All four stubs render visible rows with authored copy; only `DRAFT_READ_FAILED` retries.
 - [ ] `readiness` derived from `v.ok` / `v.blocking`, not recomputed (§1.2a).
-- [ ] §3.4a decided, and blocker copy has exactly one owner.
-- [ ] "Needs price" derives from `readiness.blockers`; no `if (!price)` anywhere in the client.
+- [ ] Blocked rows render the server `message` verbatim; the client contains no blocker copy.
+- [ ] Every blocker on a row is rendered, not just the first.
+- [ ] No text chip duplicates a server message.
+- [ ] Blocked state derives from `readiness`; no `if (!price)` anywhere in the client.
 - [ ] $0 renders distinctly from absent price.
-- [ ] Replay (200) opens the existing draft with no error.
-- [ ] Created draft opened by returned `draftId`, never `rows[0]`.
-- [ ] New coarse-pointer targets are 44×44 and added to the a11y test's asserted block.
+- [ ] Rows are not tappable; no detail view was built.
+- [ ] Replay (200) is treated as success with no error surfaced.
+- [ ] Created and replayed drafts are located by `draftId` and highlighted, never by position.
+- [ ] Interactive elements only (stub actions, paging) are 44×44 and added to the a11y test's
+      asserted block; non-interactive rows are not given touch-target rules.
 - [ ] New secondary text uses `--text-muted`.
 - [ ] Suite registered with `else FAIL=1`.
 - [ ] Bundle renamed, `index.html:3515` updated, old file kept, slot 1 run.
@@ -444,7 +491,9 @@ Nothing catches a violation at edit time — no linter, no formatter, no `packag
 ## Part 7 — Out of scope
 
 - Any publish control. There is no publish path in Phase 1 by design.
-- D3's review screen. D2.1 navigates to a draft; rendering the packet is D3.
+- **Row navigation.** Deferred to D3, which must add it. D2.1 ships a read-only list (§3.1a).
+- A detail or review view of any kind, however minimal.
+- Registering `tests/a11y-mobile-2026-09-04.mjs` in `run-all.sh` (§3.6).
 - Atomic one-active-draft-per-(instance, slot) — still absent (`createDraft()`). D2.1 may
   surface duplicates if they exist; it must not hide them and must not invent client-side
   enforcement.
@@ -475,14 +524,45 @@ Checked against tip `95435b4` while filing. Read-only; no test run, nothing push
 - `reasonMessage()`'s `default` branch returns "This draft cannot be listed yet." — correct
   that it is wrong copy for a stub row.
 
-**One correction, folded in as §3.4a:** the spec's premise that the server supplies no
-human-readable text is true for the **four stub kinds** but false for the **four blocking
-codes**. Every violation object carries a `message` from `reasonMessage()` (`:252`), and that
-function has specific, partly interpolated copy for all four blockers (`:208-225`). Authoring
-fresh client copy for those four would duplicate a business message the server already owns,
-and `SLOT_TITLE_TOO_LONG` would lose its computed "Shorten it by N". Filed as an open owner
-decision with three options; my recommendation is (a), ship `message` next to `code`.
+**One correction, raised on filing and now resolved by Amendment 1:** the spec's premise that
+the server supplies no human-readable text is true for the **four stub kinds** but false for the
+**four blocking codes**. Every violation object carries a `message` from `reasonMessage()`
+(`:252`), and that function has specific, partly interpolated copy for all four blockers
+(`:208-225`). Authoring fresh client copy for those four would have duplicated a business
+message the server already owns, and `SLOT_TITLE_TOO_LONG` would have lost its computed
+"Shorten it by N". Owner decided option (a): ship `message` next to `code`. §1.2 and §3.4 now
+reflect that; the former §3.4a is deleted.
+
+### Amendment 1 — verified while applying
+
+- **`tests/a11y-mobile-2026-09-04.mjs` is confirmed unregistered.** `grep -c` against
+  `tests/run-all.sh` returns 0. The file exists and its 44×44 block is real
+  (`SOL-PLAT-009 — 44x44 minimum touch targets at 375px`, `:269`), so adding selectors there is
+  correct — but it will not gate. Recorded in §3.6 and Part 7 rather than left implied.
+- **The `switchView` blank-tab trap** (`.flips-view { display:none }`, `index.html:954`;
+  documented at `js/core.d9e1b484.js:8131-8134`) was missing from §3.1 and is now stated. It is
+  the most likely way a correct implementation ships an empty screen.
+- **Two knock-ons from Decision 1** that the amendment did not cover, now folded in: §3.6's
+  44×44 rule no longer applies to rows, only to stub actions and paging, since a
+  non-interactive row given a touch-target rule asserts an affordance the screen deliberately
+  lacks; and Part 4 case 9's "opens" was reworded, since nothing opens.
+- **§3.1a's highlight rule is load-bearing, not defensive.** Ids sort lexically and recency
+  applies only within a page (§2.3), so a new draft is not reliably on page 1. Stated inline.
+- Added case 15 to pin §3.1a: no row handler, no `switchView` to a detail view. Without it,
+  "rows are not tappable" is an acceptance box with no test behind it.
 
 **Unverified / not attempted:** none of the runtime claims were exercised, since running tests
 was out of scope for this filing. The `f0324d4` regression reference in Part 4 case 1 was not
 traced to that commit.
+
+---
+
+## Note for whoever implements this
+
+The original §3.4 was wrong, and the way it was wrong is worth keeping in view. The answer
+packet established that the server ships no human-readable text for stub rows; that was
+generalised into "the server supplies no text" and a copy table was authored for the blocker
+rows too. One verified fact, applied one step past where it held.
+
+The tripwire in test 13 exists because that mistake is easy to make again, and it will look
+reasonable at the time.
