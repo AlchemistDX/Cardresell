@@ -27,7 +27,7 @@ echo "  CardResell regression suite"
 echo "════════════════════════════════════════════════════"
 
 echo ""
-echo "▶ [1/25] Asset fingerprints (referenced bundles named after their bytes)"
+echo "▶ [1/26] Asset fingerprints (referenced bundles named after their bytes)"
 if node "$ROOT/tests/asset-fingerprints.mjs"; then
   :
 else
@@ -35,7 +35,7 @@ else
 fi
 
 echo ""
-echo "▶ [2/25] Syntax check (all inline <script> blocks)"
+echo "▶ [2/26] Syntax check (all inline <script> blocks)"
 if node "$ROOT/tests/syntax-check.js"; then
   echo "  passed"
 else
@@ -43,7 +43,7 @@ else
 fi
 
 echo ""
-echo "▶ [3/25] Auth stack integrity"
+echo "▶ [3/26] Auth stack integrity"
 if node "$ROOT/tests/auth-integrity.js"; then
   :
 else
@@ -51,7 +51,7 @@ else
 fi
 
 echo ""
-echo "▶ [4/25] Scan-miss regression checks"
+echo "▶ [4/26] Scan-miss regression checks"
 if node "$ROOT/tests/scan-miss.js"; then
   :
 else
@@ -59,7 +59,7 @@ else
 fi
 
 echo ""
-echo "▶ [5/25] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
+echo "▶ [5/26] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
 if node "$ROOT/tests/deeplink-companions.js"; then
   :
 else
@@ -67,7 +67,7 @@ else
 fi
 
 echo ""
-echo "▶ [6/25] Copy truth checks"
+echo "▶ [6/26] Copy truth checks"
 if node "$ROOT/tests/copy-truth-offline.mjs"; then
   :
 else
@@ -75,7 +75,7 @@ else
 fi
 
 echo ""
-echo "▶ [7/25] Fee truth checks"
+echo "▶ [7/26] Fee truth checks"
 if node "$ROOT/tests/fee-truth-offline.mjs"; then
   :
 else
@@ -83,7 +83,7 @@ else
 fi
 
 echo ""
-echo "▶ [8/25] Stripe webhook P0 checks"
+echo "▶ [8/26] Stripe webhook P0 checks"
 if node "$ROOT/tests/webhook-p0-offline.mjs"; then
   :
 else
@@ -91,7 +91,7 @@ else
 fi
 
 echo ""
-echo "▶ [9/25] Launch-audit regressions"
+echo "▶ [9/26] Launch-audit regressions"
 if node "$ROOT/tests/launch-audit-regressions.mjs"; then
   :
 else
@@ -99,7 +99,7 @@ else
 fi
 
 echo ""
-echo "▶ [10/25] Variant selection (premium-printing bias)"
+echo "▶ [10/26] Variant selection (premium-printing bias)"
 if node "$ROOT/tests/variant-selection.mjs"; then
   :
 else
@@ -107,7 +107,7 @@ else
 fi
 
 echo ""
-echo "▶ [11/25] Sports price guard (host + parallel discipline)"
+echo "▶ [11/26] Sports price guard (host + parallel discipline)"
 if node "$ROOT/tests/sports-price-guard.mjs"; then
   :
 else
@@ -115,7 +115,7 @@ else
 fi
 
 echo ""
-echo "▶ [12/25] Quick Pricing + headline price"
+echo "▶ [12/26] Quick Pricing + headline price"
 if node "$ROOT/tests/quick-pricing.mjs"; then
   :
 else
@@ -123,7 +123,7 @@ else
 fi
 
 echo ""
-echo "▶ [13/25] Sports parallel matching"
+echo "▶ [13/26] Sports parallel matching"
 if node "$ROOT/tests/sports-parallel.mjs"; then
   :
 else
@@ -131,7 +131,7 @@ else
 fi
 
 echo ""
-echo "▶ [14/25] Scanner fastpath + miss-logging"
+echo "▶ [14/26] Scanner fastpath + miss-logging"
 if node "$ROOT/tests/scanner-fastpath.mjs"; then
   :
 else
@@ -139,7 +139,7 @@ else
 fi
 
 echo ""
-echo "▶ [15/25] eBay auth + taxonomy (offline)"
+echo "▶ [15/26] eBay auth + taxonomy (offline)"
 if node "$ROOT/tests/ebay-auth-offline.mjs"; then
   :
 else
@@ -147,7 +147,7 @@ else
 fi
 
 echo ""
-echo "▶ [16/25] Card identity + SKU golden tests"
+echo "▶ [16/26] Card identity + SKU golden tests"
 if node "$ROOT/tests/sku-identity.mjs"; then
   :
 else
@@ -155,7 +155,7 @@ else
 fi
 
 echo ""
-echo "▶ [17/25] Sell entry point eligibility (D1 gate, offline)"
+echo "▶ [17/26] Sell entry point eligibility (D1 gate, offline)"
 if node "$ROOT/tests/sell-eligibility.mjs"; then
   :
 else
@@ -163,7 +163,7 @@ else
 fi
 
 echo ""
-echo "▶ [18/25] Sell gate: out-of-order responses + wire size (D1, offline)"
+echo "▶ [18/26] Sell gate: out-of-order responses + wire size (D1, offline)"
 if node "$ROOT/tests/sell-gate-ordering.mjs"; then
   :
 else
@@ -171,7 +171,7 @@ else
 fi
 
 echo ""
-echo "▶ [19/25] Listing packet: title + condition + target-net + metadata (offline)"
+echo "▶ [19/26] Listing packet: title + condition + target-net + metadata (offline)"
 if node "$ROOT/tests/listing-packet-offline.mjs"; then
   :
 else
@@ -179,7 +179,7 @@ else
 fi
 
 echo ""
-echo "▶ [20/25] Draft index recovery + packet schema version (offline)"
+echo "▶ [20/26] Draft index recovery + packet schema version (offline)"
 if node "$ROOT/tests/draft-index-recovery.mjs"; then
   :
 else
@@ -187,7 +187,7 @@ else
 fi
 
 echo ""
-echo "▶ [21/25] C1 draft store — revisions, tombstones, schema safety (offline)"
+echo "▶ [21/26] C1 draft store — revisions, tombstones, schema safety (offline)"
 if node "$ROOT/tests/draft-store.mjs"; then
   :
 else
@@ -195,7 +195,7 @@ else
 fi
 
 echo ""
-echo "▶ [22/25] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
+echo "▶ [22/26] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
 if node "$ROOT/tests/draft-crud-e2e.mjs"; then
   :
 else
@@ -203,7 +203,7 @@ else
 fi
 
 echo ""
-echo "▶ [23/25] C2/C3 draft list + cap — hydration, paging, severity (offline)"
+echo "▶ [23/26] C2/C3 draft list + cap — hydration, paging, severity (offline)"
 if node "$ROOT/tests/draft-list-cap.mjs"; then
   :
 else
@@ -212,19 +212,19 @@ fi
 
 echo ""
 if [[ "${DRAFT_KV_LIVE:-0}" == "1" ]]; then
-  echo "▶ [24/25] C1 draft persistence against the REAL store"
+  echo "▶ [24/26] C1 draft persistence against the REAL store"
   if node "$ROOT/tests/draft-kv-live.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [24/25] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
+  echo "▶ [24/26] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
 fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [25/25] Prod endpoint smoke ($BASE)"
+  echo "▶ [25/26] Prod endpoint smoke ($BASE)"
   if node "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else
@@ -232,7 +232,19 @@ if [[ "$LOCAL_ONLY" == "0" ]]; then
   fi
 else
   echo ""
-  echo "▶ [25/25] Prod endpoint smoke — SKIPPED (--local)"
+  echo "▶ [25/26] Prod endpoint smoke — SKIPPED (--local)"
+fi
+
+echo ""
+if [[ "${COND_PILLS_BROWSER:-0}" == "1" ]]; then
+  echo "▶ [26/26] Condition-applicability interaction (real browser)"
+  if node "$ROOT/tests/condition-applicability.mjs"; then
+    :
+  else
+    FAIL=1
+  fi
+else
+  echo "▶ [26/26] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
 fi
 
 echo ""

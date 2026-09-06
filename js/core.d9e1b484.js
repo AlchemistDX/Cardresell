@@ -2986,14 +2986,23 @@ function _buildSportsCard(playerName) {
 //     condition itself ("Raw - Excellent"), so it double-discounts
 //
 // So for sports we hide both and pin condition to Near Mint (multiplier 1.0).
+// The Condition half of that hiding now happens in
+// _applyConditionApplicability(), which is the single owner of that control's
+// visibility; the pinning and the Graded Slab hiding still happen here.
 function _applySportsPriceControls(card) {
   const c = card || selectedCard;
   const isSports = c && c.game === 'sports';
-  const ids = ['condLabel', 'condPills', 'gradedLabel', 'gradedPills'];
+  // Condition visibility is NOT set here. _applyConditionApplicability() owns
+  // it, because the decision has to weigh sports and graded together and two
+  // functions writing style.display on the same nodes is how they end up
+  // fighting -- sports would un-hide the pills on a raw sports card right
+  // after the graded path hid them.
+  const ids = ['gradedLabel', 'gradedPills'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isSports ? 'none' : '';
   });
+  try { _applyConditionApplicability(c); } catch(_) {}
   const pl = document.getElementById('printingLabel');
   if (pl) {
     pl.innerHTML = isSports
@@ -4417,6 +4426,14 @@ function _onPrintingChange() {
 
 function updatePriceFromPrinting() {
   const key = printSelect.value;
+  // Condition applicability is decided FIRST, not at the tail. This function
+  // has three early returns (no card / no prices / unpriced variant), and a
+  // tail hook silently skipped all three -- a graded selection that took an
+  // early path left the inert pills on screen. Applicability depends only on
+  // printSelect.value and selectedCard, both of which are already final here,
+  // so the top of the function is both the earliest correct place and the only
+  // one every path passes through.
+  try { _applyConditionApplicability(); } catch(_) {}
   // 2026-09-01 (launch gate): when the price ladder produced the number that
   // the payouts are computed from, the headline MUST render from that same
   // number. Otherwise "Market Value" shows one feed (the embedded per-card
@@ -4504,6 +4521,51 @@ function updatePriceFromPrinting() {
   // changes the BASIS rather than a fee input, so guarantee the widget follows
   // it regardless of which branch calc() took.
   try { renderQuickPricing(); } catch(_) {}
+}
+
+/* ── Condition applicability ─────────────────────────────────────────────────
+   ONE owner for "should the Condition pills be on screen at all".
+
+   Condition scales a RAW price. There are exactly two cases where it does not
+   apply, and they used to be handled in different places:
+
+     1) A graded variant is selected. getCondMultiplier() already hard-returns
+        1.0 for slabs and getEffectivePrice() refuses to apply a multiplier to
+        one, so the pills were fully visible and clickable while being
+        arithmetically inert -- tapping Damaged on a PSA 8 moved nothing. A
+        control that accepts a click and changes nothing reads as broken. The
+        grade already encodes the slab's condition; that is the whole point of
+        a grade.
+
+     2) Sports. sp_grade encodes condition itself ("Raw - Excellent"), so a
+        pill applied on top would double-discount. This rule predates the fix
+        and previously lived inside _applySportsPriceControls().
+
+   Both reasons resolve here so the two paths cannot fight over style.display
+   on the same nodes -- which is precisely what would have happened had the
+   graded case been bolted on as a second implementation.
+
+   Deliberately does NOT re-pin the pill in the graded case. The multiplier is
+   already forced to 1.0 while a slab is selected, so a stale selection cannot
+   leak into any price, and leaving it alone means switching back to Raw
+   restores the condition the user actually chose instead of silently
+   resetting them to Near Mint. Sports keeps its own pinning, because there the
+   control is hidden for the whole card and the multiplier is not forced.
+   ────────────────────────────────────────────────────────────────────────── */
+function _conditionApplies(card) {
+  const c = card || ((typeof selectedCard !== 'undefined') ? selectedCard : null);
+  if (c && c.game === 'sports') return false;
+  // Guarded: this can run before the printing selector is populated.
+  try { if (isGradedVariant()) return false; } catch (_) {}
+  return true;
+}
+
+function _applyConditionApplicability(card) {
+  const applies = _conditionApplies(card);
+  ['condLabel', 'condPills'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = applies ? '' : 'none';
+  });
 }
 
 // ── Condition multipliers ──
