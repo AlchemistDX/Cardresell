@@ -186,7 +186,9 @@ is wired.
 the tests key on (`tests/draft-list-cap.mjs:241, 295, 316, 360`).
 
 Tombstoned drafts are filtered out entirely and never reach the client
-(`api/_draftService.js:567, 577`).
+(`api/_draftService.js:620, 630`). **Corrected 2026-09-06** — this read `:567, 577`, which are
+the limit clamp and a comment. Same wrong pair Amendment 2 inherited and fixed in §2.8; this
+was its second, unnoticed home. Both now cite the tombstone check and the filter.
 
 ### 2.5 The four stub kinds
 
@@ -336,8 +338,8 @@ position from `focusOffset`.
 #### The trap: a non-null `focusOffset` does not guarantee the row is on the page
 
 `ordered` is the id list, and tombstoned ids are dropped only after hydration — the read returns
-`STORE_ERR.DELETED` and the row becomes `null` (`api/_draftService.js:590`), then
-`rows.filter((r) => r !== null)` removes it (`:600`). This is the same mechanism that lets
+`STORE_ERR.DELETED` and the row becomes `null` (`api/_draftService.js:620`), then
+`rows.filter((r) => r !== null)` removes it (`:630`). This is the same mechanism that lets
 `count` fall below the page size (§2.2). A focused id tombstoned between index write and read
 resolves to an offset, is served, and then disappears from `rows`.
 
@@ -522,6 +524,40 @@ means renumbering the banners or accepting a wrong count.
 >
 > Slot numbering is now `[n/28]`, so this suite lands as `[29/29]` with a further renumber.
 
+**Fixture provenance (2026-09-06, binding): the browser suite's fixtures are GENERATED from the
+real handler, never hand-written.**
+
+`tests/draft-focus.mjs`'s `fakeRes()` captures the exact envelope `api/drafts.js` emits in
+`res.body`. A generator reusing that scaffold seeds real scenarios, calls `EP.default`, and
+writes the envelopes to a fixture file the browser suite loads.
+
+Why this is binding and not a preference: a hand-written fixture that quietly disagrees with
+what the server emits **still fails loudly** — but it fails as *"the screen is broken."* The
+repair then changes the screen to match the wrong fixture, and the suite goes green against a
+shape production never sends. That is worse than a vacuous assertion, because it is
+green-after-work rather than green-on-arrival.
+
+This is not hypothetical. Generating the fixtures found the shape on the first run:
+
+```
+envelope keys: cap,count,degraded,focusOffset,nextCursor,rows,source,total   (8)
+row keys:      draftId,summary
+readiness:     row.summary.readiness   -- NOT row.readiness
+```
+
+`readiness` is **nested inside `summary`**, and `draftId` is duplicated at both levels. §2.4
+documents this correctly, so generation *confirmed* the contract here rather than contradicting
+it — but a fixture hand-written from case 10's phrase "present on every summary row" could
+easily have put it at `row.readiness`, and the screen would have been built to read a field the
+server does not send.
+
+Generated at the same time and available to the suite: `page1`, `focusMidList` (offset **37** of
+60, target present in page), `focusAbsent` (`focusOffset: null`), `focusInvalid`
+(400 `LIST_FOCUS_INVALID`), `focusConflict` (400 `LIST_FOCUS_CURSOR_CONFLICT`).
+
+The stub-row, `degraded`, and multi-blocker scenarios need forced store errors. Generate those
+the same way — through the harness's store maps — rather than authoring the envelope by hand.
+
 **Harness decision (2026-09-06): this is a self-hosting real-browser suite, not a text suite.**
 See `audit/DECISION_CLIENT_TEST_HARNESS.md`. The `readCoreBundle`/`resolveCoreBundle` advice
 above applies only to the cases that stay offline — the browser resolves `index.html`'s own
@@ -556,8 +592,22 @@ Cases:
     reintroduction, not a clever one.
 14. After a create whose `draftId` is deliberately not `rows[0]`, the list highlights the row
     matching that id. A 200 replay with the same id highlights the same row.
-15. No row carries a click, tap, or key handler, and no code path calls `switchView` to a
-    detail view — pins §3.1a.
+15. **Rewritten 2026-09-06 — assert the behaviour, not the absence of handlers.** Synthesize a
+    real `click` on a row (and a `keydown` of Enter on it), then assert that **nothing
+    navigated**: `switchView` was not called, `location.hash` is unchanged, and the drafts view
+    is still the visible one. Do **not** assert that no row carries a handler.
+
+    Why the rewrite: handler-absence is checkable on live nodes, but **a delegated listener on
+    an ancestor container appears on no row at all.** If the screen ever adopts event
+    delegation — a natural choice for a list — the old assertion passes while every row is
+    tappable. It is a false negative in exactly the direction that matters, and it survives the
+    move from source text to a real browser, which is why the browser harness alone does not
+    fix it.
+
+    Spy on `switchView` (`js/core.d9e1b484.js`, one definition) by replacing it for the duration
+    of the assertion and restoring it after. Synthesizing the event exercises the real path from
+    the row upward, so delegation is covered without the test knowing whether delegation is
+    used — which is the property to want.
 
 ---
 

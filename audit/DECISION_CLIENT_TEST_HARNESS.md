@@ -110,6 +110,48 @@ last commit spent its message documenting.
 | 21 | **browser** | "Exactly one list request" needs the real create-to-list path with a counted `fetch` stub. The contract already warns to assert the count, not the absence of a loop. |
 | 13 | offline, **stays a tripwire** | Explicitly labelled a tripwire in the contract, consistent with the accepted "drift guard is a TRIPWIRE not a proof" decision. It is honest as written. What changes is that case 2's sentinel-string assertion becomes *real* in the browser suite, so the tripwire is backed instead of standing alone. |
 
+## 4a. Two amendments from review — both accepted
+
+### Fixtures are generated, never hand-written
+
+A hand-written fixture that disagrees with the server **fails loudly, in the wrong direction.**
+It reads as "the screen is broken," the screen gets changed to match the fixture, and the suite
+goes green against a shape production never sends. Green-after-work is worse than
+green-on-arrival, because the work is evidence of care.
+
+`fakeRes()` in `tests/draft-focus.mjs` already captures the real envelope in `res.body`. A
+generator reusing that scaffold produced, on its first run:
+
+```
+envelope keys: cap,count,degraded,focusOffset,nextCursor,rows,source,total   (8)
+row keys:      draftId,summary
+readiness:     row.summary.readiness   -- NOT row.readiness
+```
+
+**`readiness` is nested inside `summary`**, and `draftId` appears at both levels. §2.4 documents
+this correctly — so generation confirmed the contract rather than contradicting it. But case
+10's phrase "present on every summary row" would support a hand-written fixture putting it at
+`row.readiness`, and the screen would then have been built against a field the server never
+sends. The mismatch that would have caused was found before a line of screen code existed.
+
+Binding, and written into contract Part 4.
+
+### Case 15 asserts behaviour, not handler absence
+
+Handler-absence is checkable on live DOM nodes — but **a delegated listener on an ancestor
+container appears on no row at all.** If the screen adopts event delegation, which is the
+natural choice for a list, the old assertion passes while every row is tappable.
+
+That is a false negative in the one direction that matters, and **it survives the move from
+source text to a real browser** — so the harness decision alone does not fix it. This is a
+useful boundary on the whole reframe: a real browser makes a behavioural assertion *possible*,
+it does not make a surface assertion *behavioural*.
+
+Case 15 now synthesizes a real click and an Enter keydown on a row and asserts nothing
+navigated: `switchView` not called, `location.hash` unchanged, drafts view still visible.
+Synthesizing the event exercises the real path from the row upward, so delegation is covered
+**without the test knowing whether delegation is used** — which is the property to want.
+
 ## 5. Not in scope, deliberately
 
 **No extraction harness gets built, and slot 26 does not get ungated.** The screen is worth more
