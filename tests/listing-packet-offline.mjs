@@ -24,6 +24,7 @@ import {
 } from '../api/_listingPacket.js';
 import { CONDITION, CONDITION_DESCRIPTOR, DESCRIPTOR_VALUES_RESOLVED } from '../api/_ebayTaxonomy.js';
 import { cardIdentity, skuFor } from '../api/_cardIdentity.js';
+import { readCoreBundle } from './_assetRefs.mjs';
 import crypto from 'node:crypto';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -843,7 +844,7 @@ check('a cert-less slab still warns, because the LISTING is worse without it',
 // The identity model has always had a cert axis. What was missing was any way
 // for a user to fill it, which made the axis decorative. These assertions are
 // source-level on purpose: they fail if the input or the write is removed.
-const coreForCert  = fs.readFileSync(path.join(root, 'js', 'core.569ff536.js'), 'utf8');
+const coreForCert  = readCoreBundle().source;
 const htmlForCert  = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 check('🔴 the flip modal has a cert input',
       /id="mCertNumber"/.test(htmlForCert));

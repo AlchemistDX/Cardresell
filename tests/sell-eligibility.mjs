@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { harness } from './_assert.mjs';
+import { readCoreBundle } from './_assetRefs.mjs';
 
 const { check, done } = harness('sell-eligibility');
 
@@ -163,7 +164,7 @@ console.log('\nthe eligibility wire schema cannot drift from what the server rea
   // S3: the client sends an allowlist now. An allowlist fails silently — drop a
   // field the server reads and a good card goes ineligible with no visible
   // cause — so this comparison is the mitigation, not a nicety.
-  const core = readFileSync(new URL('../js/core.569ff536.js', import.meta.url), 'utf8');
+  const core = readCoreBundle().source;
   const m = core.match(/const CR_SELL_WIRE_FIELDS = \[([\s\S]*?)\];/);
   check('the client declares a wire field list', !!m);
   const clientFields = [...(m ? m[1] : '').matchAll(/'([^']+)'/g)].map((x) => x[1]);
@@ -463,7 +464,7 @@ console.log('\nboth Sell entry points ask the one endpoint');
         'if scan.js starts stamping there are two transports — fine — but the '
         + 'endpoint header describes one, so update it in the same commit');
 
-  const clientSrc = readFileSync(new URL('../js/core.569ff536.js', import.meta.url), 'utf8');
+  const clientSrc = readCoreBundle().source;
   // The scan panel path.
   check('the scan panel asks the endpoint',
         /applySellGate\(card\)/.test(clientSrc) && /fetchSellStamps\(\[card\]\)/.test(clientSrc));

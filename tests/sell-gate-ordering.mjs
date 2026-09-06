@@ -18,12 +18,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
 import { harness } from './_assert.mjs';
+import { readCoreBundle } from './_assetRefs.mjs';
 
 const { check, done } = harness('sell-gate-ordering');
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ── Slice the D1 block out of the shipped file ──────────────────────────────
-const SRC = readFileSync(join(ROOT, 'js/core.569ff536.js'), 'utf8');
+const SRC = readCoreBundle().source;
 const MARK = 'D1 — THE LISTING DRAFT ENTRY POINT';
 const at = SRC.indexOf(MARK);
 check('the D1 block is still findable in core.js', at > 0,
