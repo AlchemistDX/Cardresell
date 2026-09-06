@@ -172,7 +172,8 @@ pages — that would fabricate an ordering the server does not provide.
 
 ### 2.4 Row shapes
 
-**Summary row — two keys:** `{ draftId, summary }` (`api/_draftService.js:565`).
+**Summary row — two keys:** `{ draftId, summary }` (`api/_draftService.js:618`). **Citation
+corrected 2026-09-06** — this read `:565`, which the `focus` change turned into a blank line.
 `summary` holds twelve keys today, thirteen after Part 1:
 `draftId, sku, instanceId, slot, status, rev, title, price, quantity, createdAt, updatedAt,
 hasPacket` + `readiness`.
@@ -180,7 +181,8 @@ hasPacket` + `readiness`.
 `packet` is deliberately absent. `hasPacket` is **always `false` in production** until Block B
 is wired.
 
-**Stub row — four keys:** `{ draftId, summary: null, reason, retryable }`.
+**Stub row — four keys:** `{ draftId, summary: null, reason, retryable }`
+(`api/_draftService.js:615, 622, 625, 627` — one construction site per reason).
 
 **Discriminate on `row.summary` being truthy**, then switch on `row.reason`. That is the field
 the tests key on (`tests/draft-list-cap.mjs:241, 295, 316, 360`).
@@ -523,6 +525,22 @@ means renumbering the banners or accepting a wrong count.
 > `audit/DECISION_SOURCE_DISAGREEMENT.md`. Real evidence, wrong conclusion.
 >
 > Slot numbering is now `[n/28]`, so this suite lands as `[29/29]` with a further renumber.
+
+**Citation hygiene (2026-09-06, habit):** when a fix corrects a `file:line` citation, grep the
+corpus for the *same wrong pair* before committing. Both citation errors found here were one
+wrong pair propagating to two homes, not two independent mistakes — `:567, 577` lived in §2.4 and
+§2.8, and correcting only §2.8 left the other in place for a reviewer to trust.
+
+A corpus sweep of all `api/*.js:<line>` citations across the 17 audit docs was run once. It
+flagged 105 and **almost all were false positives**: a citation pointing at the comment
+immediately above the code is correct style, and a range like `:480-548` legitimately starts on
+a docblock opener. The signal is narrower — citations landing on a **blank line**, a
+**mid-docblock fragment**, or **out of range**. Those cannot be intentional.
+
+That filter found exactly one real drift, and it was here: §2.4's summary-row citation
+`api/_draftService.js:565` had become a blank line, because the `focus` change moved the row
+construction 53 lines down. It is the single citation the screen was most likely to be built
+against. Now `:618`, with the four stub sites at `:615, 622, 625, 627`.
 
 **Fixture provenance (2026-09-06, binding): the browser suite's fixtures are GENERATED from the
 real handler, never hand-written.**
