@@ -82,6 +82,68 @@ The Phase 1 constraints are recorded in `audit/PHASE1_CHECKLIST_2026-09-05.md:53
 
 ---
 
+## 1.4 Why a scanner at all
+
+The weak answer is "it is easier than typing." If that were the whole reason,
+the scanner would be a convenience feature and could be cut. It is not, and it
+cannot.
+
+**1. The scanner exists to resolve identity, not to save keystrokes.**
+A card's value does not hang off its name. It hangs off the exact printing:
+set, collector number, rarity, variant, and edition. "Mew" is hundreds of
+distinct products at wildly different prices; the Crown Zenith Galarian Gallery
+GG10 is a different economic object from a base-set Mew, and a seller who types
+the name has no way to know which one they are holding. This is why
+`/api/scan` returns *candidates* rather than an answer, and why the user
+confirms one before anything is charged (`api/scan.js:8`,
+`api/scan-debit-id.js:3-5`). The scanner's product job is to collapse a
+hundred plausible SKUs to one correct SKU. Everything downstream — price, fee
+math, payout, listing title — is only as correct as that one decision.
+
+The credit model is the tell. The system debits on *confirmation* of a
+candidate and refunds when no candidates are returned
+(`api/scan-debit-id.js`, `api/scan-refund.js:11`). CardResell charges for a
+resolved identity, because the resolved identity is the thing of value.
+
+**2. Identification cost is what decides whether a card is worth listing at
+all.** This is the business argument and it is the one most easily missed.
+Most cards in a real collection are worth a few dollars. The seller's cost per
+card is dominated by human time, not by fees. If identifying and pricing one
+card takes two minutes of manual searching, then a \$3 card is not worth
+listing, and the seller rationally leaves the entire long tail of their
+collection in a box. Drive identification toward a few seconds and the
+profitability floor drops, which changes *which cards exist as inventory*. A
+scanner is therefore not a faster path to the same outcome — it expands the set
+of cards that can be sold at all. That is also why bulk and rapid-scan modes
+are first-class rather than power-user extras.
+
+**3. A scan is evidence of a specific physical copy; typing is not.**
+Typing a name describes a catalog entry. A scan captures the copy in the
+seller's hand at a moment in time. That distinction is load-bearing:
+`_crScanInstanceId()` mints a fresh UUID per displayed scan so two scans of the
+same product are not treated as the same physical card
+(`js/core.d9e1b484.js:18269-18290`). Condition claims, listing photos (D7), and
+not accidentally listing one card twice all depend on having an instance rather
+than a product.
+
+**4. It is also the largest accuracy liability in the system, which is the
+reason it keeps getting audited.** Every other component can only be as right
+as the identification it was handed. A misread collector number does not
+produce a missing price — it produces a *confident, wrong* price, delivered to
+a seller as a valuation. That failure mode is strictly worse than returning
+nothing, and it is the direct reason for candidate confirmation instead of
+auto-accept, for the recurring scan-accuracy audits, and for `/api/scan-miss`,
+which records cards the scanner identified but the catalog could not match so
+coverage gaps can be prioritized from evidence rather than guessed
+(`api/scan-miss.js:1-11`). A residual bulk number-misread issue is still open
+(§8.8); it is a correctness bug, not a polish item.
+
+**Summary for a reviewer:** the scanner is the identity layer. Convenience is a
+side effect. If a proposed change makes scanning faster but less certain about
+*which* card it resolved, it is a net loss, and this project will reject it.
+
+---
+
 # 2. Repository and runtime architecture
 
 ## 2.1 Physical shape
