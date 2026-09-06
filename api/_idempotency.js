@@ -386,14 +386,55 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
     return { state: IDEMPOTENCY_STATE.RECONCILED, result: pointerParsed, replayed: true };
   }
 
-  // ── 3. Reserve. If we cannot reserve, we cannot promise once-only. ──
+  // ── 3. Reserve, and reserve EXCLUSIVELY. ──
+  //
+  // This was a plain SET, and a plain SET is not a reservation — it is an
+  // announcement. Three simultaneous creates each read "nothing recorded",
+  // each overwrote the marker, and each did the work: three drafts from one
+  // idempotency key. The live-store pass caught it; the in-memory suite never
+  // did, because it only ever retried sequentially.
+  //
+  // NX makes the reservation the same kind of object as a revision claim:
+  // exactly one caller can hold it, and everyone else is told who does.
+  // Single command, so a crash cannot leave a marker with no expiry.
   let reserved = false;
+  let reserveFailed = false;
   if (storeReadable) {
     try {
-      await kv('set', k, JSON.stringify({ status: 'in-flight', at: Date.now(), op: opKey, fingerprint }));
-      await kv('expire', k, KEY_TTL_SEC);
-      reserved = true;
-    } catch { reserved = false; }
+      const won = await kv(
+        'set', k,
+        JSON.stringify({ status: 'in-flight', at: Date.now(), op: opKey, fingerprint }),
+        'NX', 'EX', KEY_TTL_SEC,
+      );
+      reserved = won === 'OK';
+    } catch { reserveFailed = true; }
+  }
+
+  // Lost the reservation race. Someone else is doing, or already did, this
+  // exact operation. Re-read their record rather than guessing — between the
+  // failed NX and now it may already have completed.
+  if (!reserved && !reserveFailed && storeReadable) {
+    let holder = null;
+    try { holder = await kv('get', k); } catch { holder = null; }
+    const h = typeof holder === 'string' ? safeParse(holder) : holder;
+
+    if (h && h.fingerprint && h.fingerprint !== fingerprint) {
+      return {
+        state: IDEMPOTENCY_STATE.MISMATCH, result: null, replayed: false,
+        error: FINGERPRINT_MISMATCH, retryable: false,
+        message: 'This request reuses a key from a different operation.',
+      };
+    }
+    if (h && h.status === 'done') {
+      return { state: IDEMPOTENCY_STATE.REPLAYED, result: h.result, replayed: true };
+    }
+    // Still in flight, or the holder record vanished between the NX and the
+    // read. Either way this caller must NOT proceed to do the work: the whole
+    // point of losing the race is that someone else has it.
+    return {
+      state: IDEMPOTENCY_STATE.IN_FLIGHT, result: null, replayed: false,
+      message: UNAVAILABLE_MESSAGE, retryable: true,
+    };
   }
 
   if (!reserved) {

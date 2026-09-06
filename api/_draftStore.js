@@ -533,7 +533,24 @@ export async function putDraft(kv, googleSub, draft, operationId) {
   }
 
   const claim = await claimRevision(kv, googleSub, draft.draftId, draft.rev, operationId, readRev);
-  if (!claim.claimed) return { ok: false, ...claim };
+  if (!claim.claimed) {
+    // Every refusal must arrive with the evidence that justifies it. A bare
+    // "someone else changed this" is not actionable — the UI cannot show the
+    // seller the edit they did not have, so it cannot offer them a choice. The
+    // live-store race exposed this: the loser was refused correctly and told
+    // nothing about what it lost to.
+    //
+    // The read is best-effort on purpose. Failing to fetch evidence must not
+    // turn a correct refusal into an error.
+    if (claim.error === ERR.REV_CONFLICT) {
+      const fresh = await getDraft(kv, googleSub, draft.draftId);
+      if (fresh.ok) return { ok: false, ...claim, current: fresh.draft, evidence: 'claim-committed' };
+      if (fresh.error === ERR.DELETED && fresh.draft) {
+        return { ok: false, ...claim, current: fresh.draft, evidence: 'deleted-while-writing' };
+      }
+    }
+    return { ok: false, ...claim };
+  }
 
   // My own claim, and the record is already AT that revision: this operation
   // already committed and lost the response. Replaying its own write as a

@@ -34,7 +34,7 @@ import {
   DRAFT_STATUS,
   buildDraft,
   applyEdit,
-  tombstone,
+  deleteDraft,
   getDraft,
   putDraft,
   newDraftId,
@@ -253,38 +253,27 @@ export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, id
 export async function deleteDraftOp(kv, googleSub, draftId, expectedRev, idempotencyKey) {
   const operationId = operationIdFor('draft-delete', idempotencyKey);
 
-  const cur = await getDraft(kv, googleSub, draftId);
-  if (!cur.ok) {
-    if (cur.error === STORE_ERR.DELETED) {
-      // Already tombstoned. Idempotent success, and the index cleanup is
-      // retried, because the previous attempt may be exactly what failed.
-      const index = await detachIndexes(googleSub, cur.draft);
-      return { ok: true, deleted: true, alreadyDeleted: true, draft: cur.draft, index,
-               degraded: index.degraded, repairRequired: index.repairRequired };
-    }
-    return cur;
+  // Delegate the WRITE to the store. This used to be reimplemented here —
+  // read, tombstone, putDraft — and the copy silently omitted the retention
+  // TTL, so every tombstone written through the service was permanent while
+  // every tombstone written through the store expired at 90 days. The live
+  // store is what showed it: ttl = -1. Two implementations of one rule is the
+  // bug, not the missing line.
+  const out = await deleteDraft(kv, googleSub, draftId, expectedRev, operationId);
+
+  if (!out.ok) {
+    // The record still stands. Indexes are deliberately untouched: unindexing
+    // a draft that was NOT tombstoned would hide a live draft from its owner.
+    return out;
   }
 
-  let stone;
-  try {
-    stone = tombstone(cur.draft, { expectedRev });
-  } catch (e) {
-    return { ok: false, error: e.message, current: cur.draft };
-  }
-
-  const written = await putDraft(kv, googleSub, stone, operationId);
-  if (!written.ok) {
-    // The record still stands. Indexes are deliberately untouched: unindexing a
-    // draft that was NOT tombstoned would hide a live draft from its owner.
-    return written;
-  }
-
-  const index = await detachIndexes(googleSub, stone);
+  // The tombstone is authoritative whatever happens next. Index cleanup is a
+  // cache eviction, and a cache eviction cannot un-delete anything — so its
+  // failure downgrades the response to degraded, never to failed. A repeated
+  // delete retries exactly this step, because it may be what failed.
+  const index = await detachIndexes(googleSub, out.draft);
   return {
-    ok: true,
-    deleted: true,
-    alreadyDeleted: false,
-    draft: stone,
+    ...out,
     index,
     degraded: index.degraded,
     repairRequired: index.repairRequired,
