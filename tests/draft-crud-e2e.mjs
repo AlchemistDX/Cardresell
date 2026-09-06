@@ -444,4 +444,34 @@ function fakeRes() {
   return r;
 }
 
+// ── The reserved synthetic-test namespace ─────────────────────────────────
+console.log('\nthe test namespace is reserved by us, not by luck');
+
+check('the reserved prefix is recognised', DS.isSyntheticTestSub('ktest-abc123') === true);
+check('a numeric Google sub is not reserved', DS.isSyntheticTestSub('118273645500192837465') === false);
+check('🔴 an alphanumeric Firebase-shaped uid is not reserved',
+      DS.isSyntheticTestSub('Xk29fLpQ7bVzR1mHs4Tw') === false,
+      'the reservation must not accidentally capture real identifiers');
+check('a non-string is not reserved', DS.isSyntheticTestSub(null) === false
+      && DS.isSyntheticTestSub(undefined) === false && DS.isSyntheticTestSub(12345) === false);
+check('the prefix is not matched mid-string',
+      DS.isSyntheticTestSub('user-ktest-nope') === false,
+      'only a leading prefix reserves; a substring match would capture real users');
+
+// The door itself. This is what makes the namespace ours: the harness can
+// write there because authenticated traffic cannot.
+const rsvSeen = {};
+const rsvRes = {
+  status(c) { rsvSeen.status = c; return this; },
+  json(b) { rsvSeen.body = b; return this; },
+  setHeader() { return this; },
+};
+await EP.default(
+  { method: 'GET', url: '/api/drafts', headers: { authorization: 'Bearer ktest-token' }, query: {} },
+  rsvRes,
+);
+check('🔴 the HTTP door refuses the reserved namespace',
+      rsvSeen.status === 403 || rsvSeen.status === 401,
+      `got ${rsvSeen.status} — a reserved sub must never reach the store`);
+
 done();

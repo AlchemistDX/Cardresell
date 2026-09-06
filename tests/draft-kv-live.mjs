@@ -10,10 +10,21 @@
 //
 // ── Safety ────────────────────────────────────────────────────────────────
 //
-// This talks to the REAL store. Every key it writes is namespaced under a
-// synthetic user id that cannot collide with a Google sub (`ktest-<random>`,
-// where a real sub is all digits), and the run deletes everything it created
-// before exiting — including on failure.
+// This talks to the REAL store. Every key it writes is namespaced under an
+// owner id from a prefix the APPLICATION reserves and refuses at its HTTP
+// door (SYNTHETIC_TEST_PREFIX), so the namespace is ours by construction
+// rather than by assumption about identity-provider formats.
+//
+// Cleanup is layered, because a test that writes to production KV should not
+// rely on a single mechanism:
+//   1. a pre-run sweep of the reserved prefix, which drains any run that died
+//   2. a short safety TTL on keys we are not asserting a TTL on, so a SIGKILL
+//      or lost machine self-heals within the hour
+//   3. signal + uncaught handlers, for terminations `finally` never sees
+//   4. `finally`, for ordinary failure
+// Every delete re-checks the reserved prefix itself. Nothing here ever sweeps
+// a broad `draft:*` pattern — a stale-key sweep able to match a real record
+// would be worse than the leak it fixes.
 
 import { harness } from './_assert.mjs';
 const { check, checkAsync, done } = harness('draft-kv-live');
@@ -29,10 +40,6 @@ if (!URL_ || !TOKEN) {
   console.error('draft-kv-live: KV_REST_API_URL / KV_REST_API_TOKEN required');
   process.exit(1);
 }
-
-// A real Google sub is a numeric string. This can never be one.
-const SUB = `ktest-${Math.random().toString(36).slice(2, 10)}`;
-const created = new Set();
 
 async function raw(url, token, args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join('/');
@@ -54,6 +61,111 @@ const SVC  = await import('../api/_draftService.js');
 const DS   = await import('../api/_draftStore.js');
 const IDX  = await import('../api/_draftIndex.js');
 const IDEM = await import('../api/_idempotency.js');
+
+// The owner id comes out of the RESERVED namespace the application refuses at
+// its HTTP door. Not "a real sub happens to look different" — a property of
+// our own code. See SYNTHETIC_TEST_PREFIX in api/_draftStore.js.
+const SUB = `${DS.SYNTHETIC_TEST_PREFIX}${Math.random().toString(36).slice(2, 10)}`;
+const created = new Set();
+
+// Refuse to run at all if the id is not in the reserved namespace. A typo here
+// would otherwise point a destructive test at real records.
+if (!DS.isSyntheticTestSub(SUB)) {
+  console.error('draft-kv-live: REFUSING — test sub is outside the reserved namespace');
+  process.exit(1);
+}
+
+// Every key this run touches must carry the reserved prefix. Cleanup checks
+// this again per key, independently, immediately before deleting. The two
+// checks are deliberately redundant: the delete loop must not inherit its
+// safety from whoever populated the set.
+function reserved(key) {
+  return typeof key === 'string' && key.includes(SUB) && DS.isSyntheticTestSub(SUB);
+}
+
+// A safety net for the terminations `finally` cannot catch — SIGKILL, a hard
+// timeout, the machine going away. Those leave keys behind forever, and this
+// is production KV. Anything the harness is not asserting a TTL on gets a
+// short expiry, so an abandoned run drains itself within the hour.
+const SAFETY_TTL_SEC = 3600;
+async function arm(key) {
+  if (!reserved(key)) return;
+  try { await raw(URL_, TOKEN, ['expire', key, SAFETY_TTL_SEC, 'NX']); } catch {}
+}
+
+async function scanReserved(pattern) {
+  const found = new Set();
+  let cursor = '0';
+  do {
+    const page = await raw(URL_, TOKEN, ['scan', cursor, 'match', pattern, 'count', 500]);
+    const r = page.body.result;
+    if (!Array.isArray(r)) break;
+    cursor = String(r[0]);
+    for (const k of r[1] || []) found.add(k);
+  } while (cursor !== '0');
+  return [...found];
+}
+
+// Sweep debris from any earlier run that died before its own cleanup. Scoped
+// to the reserved prefix and NEVER to a broad `draft:*` pattern — a stale-key
+// sweep that could match a real record is worse than the leak it fixes.
+// The current run's sub is freshly random, so nothing here belongs to it.
+async function sweepStale() {
+  try {
+    const stale = await scanReserved(`*${DS.SYNTHETIC_TEST_PREFIX}*`);
+    const mine = stale.filter((k) => k.includes(SUB));
+    if (mine.length) {
+      console.error('draft-kv-live: REFUSING — current namespace already occupied');
+      process.exit(1);
+    }
+    let n = 0;
+    for (const k of stale) {
+      if (!k.includes(DS.SYNTHETIC_TEST_PREFIX)) continue; // belt and braces
+      try { await raw(URL_, TOKEN, ['del', k]); n += 1; } catch {}
+    }
+    if (n) console.log(`pre-run: swept ${n} abandoned key(s) from earlier runs`);
+  } catch (e) {
+    console.log('pre-run: stale sweep failed —', e && e.message);
+  }
+}
+await sweepStale();
+
+let cleanedUp = false;
+async function cleanup() {
+  if (cleanedUp) return;
+  cleanedUp = true;
+  let removed = 0, refused = 0;
+  for (const k of created) {
+    if (!reserved(k)) { refused += 1; continue; }
+    try { await raw(URL_, TOKEN, ['del', k]); removed += 1; } catch {}
+  }
+  try {
+    const leftovers = await scanReserved(`*${SUB}*`);
+    for (const k of leftovers) {
+      if (!reserved(k)) { refused += 1; continue; }
+      try { await raw(URL_, TOKEN, ['del', k]); removed += 1; } catch {}
+    }
+    const still = await scanReserved(`*${SUB}*`);
+    console.log(`\ncleanup: removed ${removed} keys, ${still.length} remaining under ${SUB}`);
+    if (refused) console.log(`  refused to delete ${refused} key(s) outside the reserved namespace`);
+    if (still.length) console.log('  leftover:', still.slice(0, 10).join(', '));
+  } catch (e) {
+    console.log('\ncleanup: scan sweep failed —', e && e.message);
+  }
+}
+
+// finally covers ordinary failure. These cover the rest.
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(sig, async () => { await cleanup(); process.exit(130); });
+}
+process.on('uncaughtException', async (e) => {
+  console.error('draft-kv-live: uncaught —', e && e.message);
+  await cleanup(); process.exit(1);
+});
+process.on('unhandledRejection', async (e) => {
+  console.error('draft-kv-live: unhandled rejection —', e && (e.message || e));
+  await cleanup(); process.exit(1);
+});
 
 function K(label) {
   const h = [...(label + SUB)].reduce((a, c) => (a * 33 + c.charCodeAt(0)) % 0xffffffff, 7);
@@ -355,23 +467,13 @@ try {
 } catch (e) {
   console.error('\ndraft-kv-live: threw —', e && e.stack ? e.stack : e);
   exitCode = 1;
+  // Arm the safety net on everything still standing. Deliberately LAST: two
+  // assertions above inspect real TTL behaviour (a live draft must have none,
+  // a tombstone must have 90 days) and an earlier net would have faked both.
+  for (const k of created) await arm(k);
+
 } finally {
-  // ── Cleanup, unconditionally ─────────────────────────────────────────────
-  let removed = 0;
-  for (const k of created) {
-    try { await raw(URL_, TOKEN, ['del', k]); removed += 1; } catch {}
-  }
-  try {
-    const page = await raw(URL_, TOKEN, ['scan', '0', 'match', `*${SUB}*`, 'count', 1000]);
-    const leftovers = (page.body.result && page.body.result[1]) || [];
-    for (const k of leftovers) { try { await raw(URL_, TOKEN, ['del', k]); removed += 1; } catch {} }
-    const page2 = await raw(URL_, TOKEN, ['scan', '0', 'match', `*${SUB}*`, 'count', 1000]);
-    const still = (page2.body.result && page2.body.result[1]) || [];
-    console.log(`\ncleanup: removed ${removed} keys, ${still.length} remaining under ${SUB}`);
-    if (still.length) console.log('  leftover:', still.slice(0, 10).join(', '));
-  } catch (e) {
-    console.log('\ncleanup: scan sweep failed —', e && e.message);
-  }
+  await cleanup();
 }
 
 done();

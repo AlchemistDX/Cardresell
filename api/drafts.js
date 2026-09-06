@@ -3,7 +3,7 @@ import {
   createDraft, readDraft, updateDraft, deleteDraftOp, listDrafts,
   SERVICE_ERR,
 } from './_draftService.js';
-import { ERR as STORE_ERR, DRAFT_STATUS } from './_draftStore.js';
+import { ERR as STORE_ERR, DRAFT_STATUS, isSyntheticTestSub } from './_draftStore.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
 
 // /api/drafts — listing draft CRUD
@@ -55,6 +55,14 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
   if (!googleSub) return res.status(401).json({ error: 'Sign in required' });
+
+  // The reserved synthetic-test namespace is refused here, at the only door
+  // real traffic comes through. This is what makes `ktest-*` genuinely ours:
+  // no authenticated request can write into it, so anything found there was
+  // put there by a test and is safe for a test to delete.
+  if (isSyntheticTestSub(googleSub)) {
+    return res.status(403).json({ error: 'Reserved account namespace' });
+  }
 
   const kv = makeKv(kvUrl, kvToken);
   const draftId = (req.query && req.query.id) ? String(req.query.id) : '';

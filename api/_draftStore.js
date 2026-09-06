@@ -21,6 +21,27 @@ import { randomBytes } from 'crypto';
 
 export const DRAFT_SCHEMA_VERSION = 1;
 
+/**
+ * A namespace RESERVED for synthetic test records, and reserved by us.
+ *
+ * The live-store harness writes into production KV, so it needs an owner id it
+ * can never share with a real seller. It used `ktest-<random>` and justified
+ * the safety with "a real Google sub is all digits" — which is true today and
+ * is not ours to guarantee. Firebase uids are alphanumeric, and an identifier
+ * format we do not control is a poor foundation for the one property that
+ * keeps a test from deleting a customer's drafts.
+ *
+ * So the reservation is inverted: this prefix belongs to tests because the
+ * application refuses it at the door (see api/drafts.js), not because we
+ * expect our identity providers never to emit it. The safety proof is now a
+ * statement about our own code.
+ */
+export const SYNTHETIC_TEST_PREFIX = 'ktest-';
+
+export function isSyntheticTestSub(sub) {
+  return typeof sub === 'string' && sub.startsWith(SYNTHETIC_TEST_PREFIX);
+}
+
 /** Retained after delete so a later read can prove non-active rather than absent. */
 export const TOMBSTONE_TTL_SEC = 90 * 24 * 60 * 60;
 
