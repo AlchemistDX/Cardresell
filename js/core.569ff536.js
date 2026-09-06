@@ -9052,7 +9052,7 @@ function renderCollectionView() {
             <td class="ft-mono" style="color:var(--gold-text)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
-            <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">${crSellSlot}${sellCell}</div></td>
+            <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center;flex-wrap:nowrap">${crSellSlot}${sellCell}</div></td>
             <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">
               <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="event.stopPropagation();refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
               <button class="ft-delete" onclick="event.stopPropagation();deletePortEntry(${p.id})" title="Remove">✕</button>
@@ -9062,8 +9062,10 @@ function renderCollectionView() {
       </table>
     </div>`;
 
-  // D1: one batched eligibility request for the rows just drawn.
-  try { hydrateCollectionSellButtons(sorted); } catch (_) {}
+  // D1: one batched eligibility request for the rows just drawn. Bumping the
+  // generation first invalidates any batch still in flight from a previous
+  // render, so a stale answer cannot decorate the rows that just replaced it.
+  try { _crBumpGen(); hydrateCollectionSellButtons(sorted); } catch (_) {}
 }
 
 // ── Fetch best eBay median price for a single portfolio entry ──
@@ -17957,6 +17959,47 @@ window.addEventListener('load', () => {
    Failing closed is the default everywhere below: no stamp, no button.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Binding an answer to the moment it was asked about ──────────────────────
+   An eligibility answer is only true of the card that was on screen when it was
+   asked for. Responses do not arrive in the order they were sent, so a slow
+   "eligible" for card A can land after a fast "refused" for card B and light up
+   a button for the wrong card.
+
+   The first version of this keyed on a hash of the card's identity fields,
+   which handled A-then-B but not the same card re-rendered twice, and did not
+   notice sign-out at all. A monotonic counter plus the auth token in force at
+   request time covers all three: a response is applied only if the panel has
+   not moved on AND the account has not changed underneath it. */
+let _crSellGen = 0;
+function _crBumpGen() { return ++_crSellGen; }
+
+// Captured when a request goes out, checked when it comes back.
+function _crStamp() { return { gen: _crSellGen, auth: window._googleIdToken || '' }; }
+function _crStillCurrent(t) {
+  return t && t.gen === _crSellGen && t.auth === (window._googleIdToken || '');
+}
+
+/* Fields never sent to the eligibility endpoint.
+
+   A saved Collection row carries a base64 thumbnail; 500 of those is a payload
+   measured in megabytes for a question answerable from six fields.
+
+   This is a DENYLIST on purpose. An allowlist would be a second implementation
+   of "which fields mean identity" living on the client — the exact translation
+   layer this design refused earlier — and the failure mode is silent: forget to
+   allow a field the server reads, and a perfectly good card goes ineligible for
+   no visible reason. A denylist can only remove what it names, and
+   tests/sell-eligibility.mjs proves the projection cannot change a stamp. */
+const CR_WIRE_OMIT = ['img', 'image', 'imageUrl', 'imageData', 'thumb', 'thumbnail',
+                      'photos', 'localPhotos', 'notes', 'history', 'priceHistory'];
+
+function _crWireRow(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  const out = {};
+  for (const k in row) if (!CR_WIRE_OMIT.includes(k)) out[k] = row[k];
+  return out;
+}
+
 // Four call sites in this file each inline their own copy of the Firebase
 // force-refresh dance. This is the extracted version, used by the new D1 calls
 // so there isn't a fifth. Retrofitting the existing four means touching the
@@ -18006,7 +18049,7 @@ async function fetchSellStamps(rows) {
     const r = await fetch('/api/sell-eligibility', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ rows }),
+      body: JSON.stringify({ rows: rows.map(_crWireRow) }),
     });
     if (r.status === 401) return { ok: false, reason: 'SIGNED_OUT' };
     if (!r.ok)            return { ok: false, reason: 'ASK_FAILED' };
@@ -18079,20 +18122,29 @@ async function applySellGate(card) {
     else         { msgEl.textContent = ''; blocked.style.display = 'none'; }
   };
 
+  // A new card on the panel invalidates every answer still in flight.
+  _crBumpGen();
   if (!card) { hide(''); return; }
 
-  // A stale answer must never draw a button for a card that is no longer on
-  // screen, so every request carries the token of the card it was asked about.
-  const token = _crIntentToken(card);
-  applySellGate._pending = token;
+  // Every request is bound to the render that asked for it and to the account
+  // signed in at the time. Anything that arrives after either has moved is
+  // discarded without touching the DOM.
+  const tag = _crStamp();
 
   hide('');
   if (btn) btn.disabled = true;
 
   const res = await fetchSellStamps([card]);
-  if (applySellGate._pending !== token) return; // the panel moved on
+  if (!_crStillCurrent(tag)) return;
 
-  if (!res.ok) { hide(_crSellUnavailableMsg(res.reason)); return; }
+  if (!res.ok) {
+    hide(_crSellUnavailableMsg(res.reason));
+    // A network failure is not evidence that the card cannot be sold, so the
+    // seller gets a way to ask again rather than a dead end. Signed-out is a
+    // real answer and needs no retry.
+    if (res.reason === 'ASK_FAILED') _crShowSellRetry(card);
+    return;
+  }
 
   const stamp = res.stamps[0];
   if (!stamp || stamp.eligible !== true) {
@@ -18106,6 +18158,46 @@ async function applySellGate(card) {
   blocked.style.display = 'none';
   row.style.display = 'block';
   if (btn) btn.disabled = false;
+}
+
+/* Retry lives inside the refusal box so the sentence and the way to act on it
+   are the same element. Rebuilt each time rather than toggled, so a retry
+   button can never outlive the message that justified it. */
+function _crShowSellRetry(card) {
+  const box = document.getElementById('crSellBlocked');
+  if (!box || box.querySelector('[data-cr-retry]')) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('data-cr-retry', '1');
+  b.textContent = 'Try again';
+  b.style.cssText = 'margin-left:.5rem;background:none;border:none;padding:0;'
+    + 'font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;color:inherit';
+  b.onclick = () => { applySellGate(card); };
+  box.appendChild(b);
+}
+
+/* ── Which physical copy, for a card that is not in the collection yet ───────
+   A saved Collection row is a real copy and its row id is a real instance key.
+   A scanned card is not in inventory at all, so there is nothing to key on.
+
+   The first version hashed the identity fields. That was wrong in a way worth
+   naming: two separately scanned copies of the same card collapse onto one
+   token, so the field would have carried a claim — "these are the same physical
+   object" — that is false, and later inventory work would have inherited it.
+
+   A fresh id is minted per displayed scan instead. It is honest (a new scan is
+   a new copy as far as anything here knows), it still de-dupes a double tap,
+   and it makes no claim across scans. Real instance identity arrives with
+   inventory in Block E. */
+function _crScanInstanceId(card) {
+  const key = _crIntentToken(card);
+  if (!window._crScanInstance || window._crScanInstance.key !== key) {
+    let id;
+    try { id = crypto.randomUUID(); }
+    catch (_) { id = 'x' + Date.now().toString(16) + Math.random().toString(16).slice(2, 10); }
+    window._crScanInstance = { key, id: 'inst_scan_' + id };
+  }
+  return window._crScanInstance.id;
 }
 
 /* ── Starting the draft ──────────────────────────────────────────────────── */
@@ -18145,15 +18237,18 @@ async function startListingDraft() {
   const sellerTyped = !isNaN(ov) && ov > 0 && !window._ovAutoFilled;
   const priceSource = sellerTyped ? 'seller' : 'comp';
 
-  const intent = _crIntentToken(card);
+  const instanceId = _crScanInstanceId(card);
   const origLabel = lbl ? lbl.textContent : '';
   if (btn) btn.disabled = true;
   if (lbl) lbl.textContent = 'Starting\u2026';
   try {
     await _crCreateDraft({
       card,
-      instanceId: 'inst_' + intent,
-      idemKey:    'sell-' + intent + '-' + CR_D1_SLOT,
+      instanceId,
+      // Keyed on the instance, so a double tap or a retry after a dropped
+      // response replays the same draft. A later scan is a new instance and a
+      // new key, which is the point: it may be a different card in hand.
+      idemKey:    'sell-' + instanceId + '-' + CR_D1_SLOT,
       price, priceSource, source: 'scan',
     });
   } finally {
@@ -18227,19 +18322,34 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
    server has answered for the whole page in one request. */
 async function hydrateCollectionSellButtons(rows) {
   if (!Array.isArray(rows) || !rows.length) return;
+  // A re-render (sort, filter, delete, price refresh) invalidates every batch
+  // still in flight. Without this, an older answer can land after the table has
+  // been rebuilt and decorate replacement rows with stamps that were never
+  // about them.
+  const tag = _crStamp();
   const slotFor = (id) => document.getElementById('crSellCell_' + id);
 
   const res = await fetchSellStamps(rows);
+  if (!_crStillCurrent(tag)) return;
+
   if (!res.ok) {
-    // Signed out is the common case and is not an error worth shouting about:
-    // leave the cells empty. A failed check gets a retry affordance instead of
-    // a button that might not work.
+    // Signed out is the common case and not worth shouting about: leave the
+    // cells empty. A failed check gets a real, focusable retry — a network
+    // failure is not evidence that these cards cannot be sold.
     if (res.reason === 'ASK_FAILED') {
       rows.forEach((p) => {
         const el = slotFor(p.id);
-        if (el) el.innerHTML = '<button type="button" title="Couldn\'t check — tap to retry"'
-          + ' onclick="event.stopPropagation();renderCollectionView()"'
-          + ' style="background:none;border:none;cursor:pointer;font-size:.8rem;opacity:.45">↻</button>';
+        if (!el) return;
+        el.innerHTML = '';
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = '\u21bb';
+        b.setAttribute('aria-label', "Couldn't check whether this card can be listed. Try again.");
+        b.title = "Couldn't check \u2014 try again";
+        b.style.cssText = 'background:none;border:none;cursor:pointer;font-size:.8rem;opacity:.5;'
+          + 'flex:0 0 auto;min-height:32px;min-width:32px';
+        b.onclick = (ev) => { ev.stopPropagation(); renderCollectionView(); };
+        el.appendChild(b);
       });
     }
     return;
@@ -18249,27 +18359,45 @@ async function hydrateCollectionSellButtons(rows) {
     const el = slotFor(p.id);
     if (!el) return;
     const stamp = res.stamps[i] || null;
-    if (stamp && stamp.eligible === true) {
-      el.innerHTML = '<button type="button" title="Start a listing draft for this card"'
-        + ' onclick="event.stopPropagation();startListingDraftForEntry(' + p.id + ')"'
-        + ' style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;'
-        + 'background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;'
-        + 'font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">🛠️ List</button>';
-    } else {
-      // Not silently omitted. A dense table row has no space for a sentence, so
-      // the reason is on the control and one tap away in full.
-      const why = (stamp && stamp.message) || 'This card needs more detail before it can be listed.';
-      el.innerHTML = '<button type="button" disabled title="' + _crAttr(why) + '"'
-        + ' onclick="event.stopPropagation();showToast(this.title)"'
-        + ' style="background:none;border:none;cursor:help;font-size:.8rem;opacity:.35">🛠️</button>';
-    }
-  });
-}
+    el.innerHTML = '';
 
-function _crAttr(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (stamp && stamp.eligible === true) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = '\ud83d\udee0\ufe0f List';
+      b.title = 'Start a listing draft for this card';
+      b.setAttribute('aria-label', 'Start a listing draft for this card');
+      // flex:0 0 auto matters: the cell is a flex row inside a narrow table
+      // column, and without it the button is compressed to an 11px sliver on a
+      // phone — nominally present, impossible to hit.
+      b.style.cssText = 'display:inline-flex;align-items:center;gap:.3rem;padding:.45rem .6rem;'
+        + 'background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;'
+        + 'font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap;flex:0 0 auto;min-height:32px';
+      b.onclick = (ev) => { ev.stopPropagation(); startListingDraftForEntry(p.id); };
+      el.appendChild(b);
+      return;
+    }
+
+    // NOT a Sell control. D1's acceptance criterion is that the Sell entry
+    // point appears only when identity is sufficient, and a greyed-out List
+    // button is still a List button appearing on a row that cannot be listed.
+    //
+    // It is also enabled on purpose. The previous version was a `disabled`
+    // button carrying its reason in a `title`, which cannot be clicked, cannot
+    // be focused, and is invisible to a screen reader and to every touch
+    // device — the reason was reachable by mouse hover and by nothing else.
+    const why = (stamp && stamp.message) || 'This card needs more detail before it can be listed.';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Needs info';
+    b.title = why;
+    b.setAttribute('aria-label', why);   // read aloud instead of the short label
+    b.style.cssText = 'padding:.45rem .5rem;background:none;border:1px dashed currentColor;'
+      + 'border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer;opacity:.55;'
+      + 'white-space:nowrap;color:inherit;flex:0 0 auto;min-height:32px';
+    b.onclick = (ev) => { ev.stopPropagation(); showToast(why); };
+    el.appendChild(b);
+  });
 }
 
 // A saved Collection row is a real physical copy, so its row id is a genuine

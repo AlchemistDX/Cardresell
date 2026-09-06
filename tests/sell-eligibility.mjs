@@ -131,21 +131,29 @@ console.log('\nboth client row shapes are accepted without translation');
 
 console.log('\nthe create refuses exactly what the stamp refuses');
 {
-  // This is the drift test. Same rows, both sides.
+  // The drift test. Same rows, both sides.
+  //
+  // The earlier version of this passed only `{card, instanceId, slot, price}`
+  // and proved parity for IDENTITY alone. That was too weak to be the contract
+  // it claimed to be: the stamp can say "eligible" while the create refuses on
+  // a field the stamp never looks at. The payload below is the one
+  // startListingDraft actually builds, priceSource included.
   const rows = [
     CARD(),
     { ...CARD(), set_name: '' },
     { ...CARD(), card_number: '' },
     { ...CARD(), game: 'unknown' },
+    { ...CARD(), card_name: 'Blastoise', name: 'Charizard' },   // alias conflict
+    { ...CARD(), number: '004/102', card_number: '074/073' },   // conflicting numbers
   ];
   let agree = 0;
   for (const card of rows) {
     const stampSaysOk = SELL.sellStamp(card).eligible;
     let createSaysOk = true;
     try {
-      EP.normalizeCreateInput({ card, instanceId: 'inst_1', slot: 'ebay:fixed-price', price: 10 });
+      EP.normalizeCreateInput({ card, instanceId: 'inst_1', slot: 'ebay:fixed-price',
+                                price: 10, priceSource: 'comp' });
     } catch (e) {
-      // Only an identity refusal counts as the create saying "no" here.
       if (e.message.startsWith('DRAFT_FIELD_INVALID:card:')) createSaysOk = false;
       else throw e;
     }
@@ -154,6 +162,106 @@ console.log('\nthe create refuses exactly what the stamp refuses');
   check('🔴 the button gate and the create gate never disagree',
         agree === rows.length,
         `${rows.length - agree} row(s) would show a Sell button whose create refuses`);
+}
+
+console.log('\nevery payload D1 can actually build is accepted');
+{
+  // D1's payload space is small and fully enumerable, which is the only reason
+  // this can be proved rather than sampled: slot is the CR_D1_SLOT constant,
+  // price is guarded `> 0` on the client before the call, and priceSource is
+  // 'seller' or 'comp' and is never defaulted.
+  const eligible = CARD();
+  check('the row used here is genuinely eligible', SELL.sellStamp(eligible).eligible);
+
+  const payloads = [];
+  for (const priceSource of ['seller', 'comp']) {
+    for (const price of [0.01, 1, 10, 400, 99999.99]) {
+      payloads.push({ card: eligible, instanceId: 'inst_scan_x', slot: 'ebay:fixed-price',
+                      price, priceSource });
+    }
+  }
+  let ok = 0, firstErr = '';
+  for (const pl of payloads) {
+    try { EP.normalizeCreateInput(pl); ok++; }
+    catch (e) { if (!firstErr) firstErr = `${e.message} for ${JSON.stringify({ p: pl.price, s: pl.priceSource })}`; }
+  }
+  check('🔴 eligible ⟹ the create accepts every price/source pair D1 can send',
+        ok === payloads.length, firstErr);
+}
+
+console.log('\nthe refusals D1 cannot trigger are still refusals');
+{
+  // Proving the create is strict about the fields D1 happens to get right is
+  // what stops a future caller from getting them wrong quietly.
+  const base = { card: CARD(), instanceId: 'inst_1', slot: 'ebay:fixed-price',
+                 price: 10, priceSource: 'comp' };
+  const refuses = (o) => {
+    try { EP.normalizeCreateInput(o); return null; } catch (e) { return e.message; }
+  };
+  check('an unrecognised priceSource is refused, not coerced',
+        refuses({ ...base, priceSource: 'vibes' }) === 'DRAFT_FIELD_INVALID:priceSource:unrecognised');
+  check('a negative price is refused', /price:negative/.test(refuses({ ...base, price: -1 }) || ''));
+  check('a non-numeric price is refused', /price:not-a-number/.test(refuses({ ...base, price: NaN }) || ''));
+  check('a client-supplied sku is still refused',
+        /sku:derived-from-card/.test(refuses({ ...base, sku: 'v2-AAA-0000000000000000' }) || ''));
+
+  // Two gaps found while writing this, both real and both reported rather than
+  // quietly patched: normalizeCreateInput accepts a $0 price and an unsupported
+  // slot. Neither is reachable from D1 — the client refuses price <= 0 and the
+  // slot is a constant — but neither is refused HERE, so the packet validator
+  // is the gate that catches them. These assertions pin the current, behaviour
+  // so the follow-up change is visible when it lands.
+  check('note: $0 passes normalize and is caught later by the slot rules',
+        refuses({ ...base, price: 0 }) === null,
+        'if this now fails, normalize got stricter — good, update the note');
+  check('note: an unsupported slot passes normalize and is caught later',
+        refuses({ ...base, slot: 'etsy:fixed-price' }) === null,
+        'if this now fails, normalize got stricter — good, update the note');
+}
+
+console.log('\naliases may differ in spelling, never in meaning');
+{
+  const conflicted = (r) => SELL.sellStamp(r).missing[0] === SELL.SELL_BLOCKED.CONFLICT;
+  const base = CARD();
+
+  check('two spellings of the card name disagreeing is refused',
+        conflicted({ ...base, card_name: 'Blastoise', name: 'Charizard' }));
+  check('two spellings of the set disagreeing is refused',
+        conflicted({ ...base, set: 'Base Set', setName: 'Champions Path' }));
+  check('two spellings of the number disagreeing is refused',
+        conflicted({ ...base, number: '004/102', card_number: '074/073' }));
+  check('two spellings of the language disagreeing is refused',
+        conflicted({ ...base, language: 'en', lang: 'ja' }));
+  check('two spellings of the cert disagreeing is refused',
+        conflicted({ ...base, cert: '12345678', certNumber: '87654321', grader: 'PSA', grade: '10' }));
+  check('game and cardType disagreeing is refused',
+        conflicted({ ...base, game: 'pokemon', cardType: 'magic' }));
+
+  // The false positives that would have made this feature unshippable.
+  check('a set CODE and a set NAME are not a conflict',
+        !conflicted({ ...base, setCode: 'CPA', set: 'Champions Path' }),
+        'a machine code and a display name are different fields, not two spellings');
+  check('pokemonjp against cardType pokemon is not a conflict',
+        !conflicted({ ...base, game: 'pokemonjp', cardType: 'pokemon' }));
+  check('spellings that normalize equal are not a conflict',
+        !conflicted({ ...base, card_name: 'Pokémon-EX', name: 'pokemon ex' }));
+  check('an empty alias is not an assertion and cannot conflict',
+        !conflicted({ ...base, card_name: 'Charizard VMAX', name: '' }));
+
+  // Ordering invariance. This is the property that makes the refusal honest:
+  // if the answer depended on key order, "conflict" would just mean "the reads
+  // happened in an unlucky sequence".
+  const keys = ['card', 'card_name', 'name'];
+  const vals = { card: 'Blastoise', card_name: 'Charizard', name: 'Pikachu' };
+  const perms = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+  const answers = new Set(perms.map((order) => {
+    const row = { ...base };
+    for (const k of keys) delete row[k];
+    for (const i of order) row[keys[i]] = vals[keys[i]];
+    return JSON.stringify(SELL.sellStamp(row));
+  }));
+  check('🔴 alias ordering cannot change the answer',
+        answers.size === 1, `${answers.size} different verdicts across key orderings`);
 }
 
 done();

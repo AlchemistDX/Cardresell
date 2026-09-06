@@ -125,6 +125,68 @@ export function canonicalGame(row) {
   return ct || 'unknown';
 }
 
+// ── Alias conflicts ─────────────────────────────────────────────────────────
+
+/**
+ * The same field arrives under several spellings: the live scan panel says
+ * `setName`, a saved Collection row says `set`, the API tests say `set_name`.
+ * `identityAxes` reads all of them so no client has to translate a row.
+ *
+ * Precedence answers "which spelling wins" but it cannot answer "which VALUE is
+ * true". A payload carrying `{ card: 'Blastoise', name: 'Charizard' }` is not a
+ * spelling question — it is two different cards, and silently taking the first
+ * one now decides an authoritative SKU and an authoritative listing title.
+ *
+ * So: aliases may disagree in spelling, never in meaning. This function reports
+ * the groups whose non-empty members do not normalize to the same value, and
+ * both gates — the Sell button and the draft create — refuse on a non-empty
+ * result. Order within a group is irrelevant to the answer, which is the point:
+ * a conflict cannot be resolved by reordering the reads.
+ *
+ * Deliberately NOT alias groups:
+ *   • `setCode` vs `set`/`setName` — a machine code and a display name are
+ *     different kinds of field. 'TGO3' and 'Lost Origin Trainer Gallery' are
+ *     both correct, and treating them as conflicting would refuse every card
+ *     that carries a set code.
+ *   • `condition`, `rarity` — single-spelling fields, nothing to conflict with.
+ *
+ * `game` IS included, compared after canonicalization so that the legitimate
+ * `pokemonjp` → `pokemon` collapse is not read as a disagreement.
+ */
+export const IDENTITY_ALIAS_GROUPS = [
+  { field: 'cardName', keys: ['card', 'card_name', 'name'],        norm: normalizeText   },
+  { field: 'setName',  keys: ['set', 'set_name', 'setName'],       norm: normalizeText   },
+  { field: 'number',   keys: ['number', 'card_number'],            norm: normalizeNumber },
+  { field: 'language', keys: ['language', 'lang'],                 norm: normalizeText   },
+  { field: 'cert',     keys: ['cert', 'certNumber', 'cert_number'],norm: normalizeNumber },
+  { field: 'game',     keys: ['game', 'cardType'],                 norm: (v, row) => canonicalGame({ game: v, cardType: v }) },
+];
+
+/**
+ * @returns {Array<{field:string, values:Object}>} one entry per conflicting
+ * group, naming the field and every spelling that disagreed — a list, not a
+ * count, so a caller can tell the seller exactly which two values fought.
+ * Empty array means no conflict. A non-object row has nothing to conflict.
+ */
+export function identityFieldConflicts(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return [];
+  const out = [];
+  for (const group of IDENTITY_ALIAS_GROUPS) {
+    const seen = new Map();          // normalized value -> first raw spelling
+    const values = {};
+    for (const key of group.keys) {
+      const raw = row[key];
+      if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+      const n = group.norm(raw, row);
+      if (n === '') continue;        // normalizes to nothing: not an assertion
+      values[key] = raw;
+      if (!seen.has(n)) seen.set(n, key);
+    }
+    if (seen.size > 1) out.push({ field: group.field, values });
+  }
+  return out;
+}
+
 // ── Slab identity ───────────────────────────────────────────────────────────
 
 /**

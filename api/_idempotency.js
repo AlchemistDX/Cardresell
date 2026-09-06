@@ -127,6 +127,12 @@ export const MUTATION_FIELDS = {
     // first and then replay that answer for a different card entirely.
     sku: 'id',
     instanceId: 'id', slot: 'token', price: 'money', title: 'text', strategy: 'token',
+    // Counts, and is not optional. The same number recorded as a seller's
+    // asking price and as a comp-derived price are two different claims about
+    // where it came from, and D4 puts that claim on screen. Leaving it
+    // undeclared did not make it ignored — it made every create D1 sends throw
+    // MUTATION_FIELD_UNDECLARED, which no identity-level parity test could see.
+    priceSource: 'token',
   },
   'instance-split': {
     instanceId: 'id', count: 'count', totalAcquisitionCost: 'money',

@@ -29,13 +29,18 @@
 // are: copy changes without the machine reason changing, and a screen that
 // shows a raw code is a screen that made the seller guess.
 
-import { identityAxes, hasSufficientIdentity } from './_cardIdentity.js';
+import { identityAxes, hasSufficientIdentity, identityFieldConflicts } from './_cardIdentity.js';
 
 export const SELL_BLOCKED = {
   NO_GAME:   'SELL_NEEDS_GAME',
   NO_SET:    'SELL_NEEDS_SET',
   NO_NUMBER: 'SELL_NEEDS_NUMBER',
   NO_ROW:    'SELL_NEEDS_CARD',
+  // Not a missing axis — a contradicted one. Two spellings of the same field
+  // carrying different values is not something a seller can fix by adding
+  // information, so it is reported separately and never mixed into the
+  // "you still need X" list.
+  CONFLICT:  'SELL_IDENTITY_CONFLICT',
 };
 
 /**
@@ -47,6 +52,10 @@ export const SELL_BLOCKED = {
  */
 export function missingIdentityAxes(row) {
   if (!row || typeof row !== 'object') return [SELL_BLOCKED.NO_ROW];
+  // A contradiction outranks an absence. If two spellings of the card name
+  // disagree, no amount of filling in the set number makes this listable, and
+  // telling the seller to add a set number would be a lie about the problem.
+  if (identityFieldConflicts(row).length) return [SELL_BLOCKED.CONFLICT];
   const a = identityAxes(row);
   const missing = [];
   if (!a.game || a.game === 'unknown') missing.push(SELL_BLOCKED.NO_GAME);
@@ -66,6 +75,8 @@ export function sellBlockedMessage(code) {
       return 'We could not read the card number.';
     case SELL_BLOCKED.NO_ROW:
       return 'No card details to list.';
+    case SELL_BLOCKED.CONFLICT:
+      return "This card's details don't agree with each other. Re-scan it, or open it and correct the name, set and number.";
     default:
       // Never echo an unknown code at a seller. An unrecognised reason is a
       // bug in this module, and the seller should see a sentence either way.
@@ -89,7 +100,14 @@ export function sellBlockedMessage(code) {
  * promising a button that the create then rejects is worse than no button.
  */
 export function sellStamp(row) {
-  const eligible = hasSufficientIdentity(row);
+  // Conflict is checked here as well as inside missingIdentityAxes, because
+  // `eligible` delegates to hasSufficientIdentity — which asks only whether the
+  // axes are present, not whether they are contradicted. Without this line a
+  // conflicted row would be stamped eligible with an empty missing list, and
+  // the create would then refuse it. That is exactly the gate/create
+  // disagreement this module exists to make impossible.
+  const conflicted = identityFieldConflicts(row).length > 0;
+  const eligible = !conflicted && hasSufficientIdentity(row);
   const missing  = eligible ? [] : missingIdentityAxes(row);
   return {
     eligible,

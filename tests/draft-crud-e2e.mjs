@@ -551,4 +551,48 @@ check('🔴 the HTTP door refuses the reserved namespace',
       rsvSeen.status === 403 || rsvSeen.status === 401,
       `got ${rsvSeen.status} — a reserved sub must never reach the store`);
 
+// ── eligible ⟹ the create actually succeeds ───────────────────────────────
+// The other half of the D1 contract. sell-eligibility.mjs proves the two gates
+// agree about REFUSAL; this proves the acceptance is real — that a row the Sell
+// button appears on produces a stored draft, not just a payload that survives
+// normalization. Normalization is not the whole gate: it accepts a $0 price and
+// an unsupported slot, both of which the slot rules catch later, so a create
+// that stops at normalize would be proving the wrong thing.
+console.log('\na card the Sell button appears on can really be created');
+reset();
+{
+  const rows = [
+    CARD(),
+    { ...CARD(), rarity: '' },
+    { ...CARD(), language: 'ja' },
+    { ...CARD(), grader: 'PSA', grade: '10', cert: '12345678' },
+    { ...CARD(), setCode: 'CPA' },
+  ];
+  let n = 0, firstProblem = '';
+  for (const [i, card] of rows.entries()) {
+    if (!SELL.sellStamp(card).eligible) { firstProblem ||= `row ${i} was not eligible to begin with`; continue; }
+    for (const priceSource of ['seller', 'comp']) {
+      const norm = EP.normalizeCreateInput({
+        card, instanceId: `inst_scan_${i}_${priceSource}`,
+        slot: 'ebay:fixed-price', price: 400, priceSource,
+      });
+      const res = await SVC.createDraft(kv, SUB, norm, K(`parity-${i}-${priceSource}`));
+      if (res.state !== IDEM.IDEMPOTENCY_STATE.FRESH || res.result?.saved !== true) {
+        firstProblem ||= `row ${i}/${priceSource} → ${res.state} ${res.result?.error || ''}`; continue;
+      }
+      // A created-but-unlistable draft would satisfy the letter of the contract
+      // and break its intent, so publish-readiness is checked too. A
+      // seller-entered price is INFO, not blocking — that distinction is the
+      // whole reason `blocking` exists rather than a violation count.
+      const blocking = (res.result.publishable?.violations || []).filter((v) => v.blocking);
+      if (blocking.length) {
+        firstProblem ||= `row ${i}/${priceSource} created with ${blocking.map((v) => v.code).join(',')}`; continue;
+      }
+      n++;
+    }
+  }
+  check('🔴 every eligible row creates a real draft with nothing blocking it',
+        n === rows.length * 2, firstProblem || `${n}/${rows.length * 2} succeeded`);
+}
+
 done();
