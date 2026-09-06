@@ -38,11 +38,21 @@ The gap was real: `api/_draftService.js:493-512` summary rows carry identity, st
 
 Still no client-side inference. The display state is server-derived or it does not exist.
 
-### D2.1 spec destination
+### D2.1 spec — FILED
 
-The spec is being filed at **`audit/DRAFT_LIST_API_CONTRACT.md`** — the path `js/core.d9e1b484.js:18394` already points at, and which does not yet exist on disk. Writing it there closes a dangling reference rather than adding a new document.
+The contract is at **`audit/DRAFT_LIST_API_CONTRACT.md`** (commit `a6a15e7`, Amendment 1 merged
+in `cbb5552`). It is written against the real field names and both open decisions are closed:
+rows are not tappable in D2.1, and blocker copy is owned by the server, shipped as
+`{ code, message }`. Filing it there closed the dangling reference at
+`js/core.d9e1b484.js:18394`.
 
-Write it against the real field names, not the packet's assumed ones. The three that will bite: the paging cursor is a **plain integer offset** (`/^[0-9]+$/`, `api/drafts.js:150`), `count === 0` **does not** mean end-of-list (terminate on `nextCursor === null`; genuine emptiness is `total === 0`), and the eligibility stamp field is **`missing`**, not `missingAxes`, carrying codes like `SELL_NEEDS_SET` rather than axis names.
+Nothing in the spec awaits a decision. The remaining D2.1 work is writing the code.
+
+**Entry gate — still open, still yours.** The cross-source disagreement routing call is
+unresolved: roadmap §3.4 (`:265`) and §5.4 (`:439-443`) both describe the withdrawn disclosure
+feature as live, `_renderSourceDisagreement` (`js/core.d9e1b484.js:1784`) is called from
+nowhere, and the §12 checklist item (`:849`) cannot be ticked either way. Route detection to
+the card detail view, or keep it dark and correct the two roadmap sections.
 
 ---
 

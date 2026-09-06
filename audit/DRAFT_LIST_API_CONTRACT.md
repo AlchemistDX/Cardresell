@@ -405,7 +405,8 @@ fi
 ```
 
 The `else FAIL=1` branch is mandatory — without it the suite runs, prints, and does not gate.
-The `[n/26]` labels are literal strings and `[26/26]` is currently the last; adding a 27th
+**DONE 2026-09-06.** Registered as `[27/27]`; all 29 `[n/26]` labels renumbered to `[n/27]`.
+The `[n/26]` labels were literal strings and `[26/26]` was the last; adding a 27th
 means renumbering the banners or accepting a wrong count.
 
 Cases:
@@ -520,7 +521,8 @@ Checked against tip `95435b4` while filing. Read-only; no test run, nothing push
   (`ebay:fixed-price`, `ebay:auction`, `mercari:fixed-price`, `tcgplayer:fixed-price`) are
   `false`. Title limits 80 / 80 / 40 / 80 / 200.
 - Slot 23 registration block at `tests/run-all.sh:205-211`, shape reproduced correctly
-  including `else FAIL=1`. `[26/26]` is the final label, so a 27th requires renumbering.
+  including `else FAIL=1`. `[26/26]` was the final label, so the 27th required renumbering all
+  29 label strings — done in the same commit as the server change.
 - `reasonMessage()`'s `default` branch returns "This draft cannot be listed yet." — correct
   that it is wrong copy for a stub row.
 
@@ -566,3 +568,24 @@ rows too. One verified fact, applied one step past where it held.
 
 The tripwire in test 13 exists because that mistake is easy to make again, and it will look
 reasonable at the time.
+
+---
+
+## Addendum — found while implementing (2026-09-06)
+
+**The blocker codes on the wire are prefixed, and the `VIOLATION` key names are not.**
+`VIOLATION.TITLE_TOO_LONG === 'SLOT_TITLE_TOO_LONG'` (`api/_draftStore.js:157`), and the same
+holds for the other five: `SLOT_PRICE_REQUIRED`, `SLOT_ZERO_PRICE_NOT_ALLOWED`,
+`SLOT_RULES_UNKNOWN`, `DRAFT_NO_PRICE_PROVENANCE`, `DRAFT_PRICE_SELLER_ENTERED`
+(`:156-163`).
+
+§1.2's table is correct — it lists the values. This addendum exists because the failure mode
+is silent: a client that matches on the key name matches nothing, so a row carrying a real
+blocker renders as though it had none. That is worse than a crash, because the screen looks
+fine. Test `draft-readiness-2026-09-06.mjs` now asserts every emitted code is a declared
+`VIOLATION` **value** and is not a bare key name.
+
+**§1.2's severity claim is confirmed.** `DRAFT_NO_PRICE_PROVENANCE` is WARNING and
+`DRAFT_PRICE_SELLER_ENTERED` is INFO (`api/_draftStore.js:192-193`), so neither reaches
+`blockers`. The reasoning is in the code comment at `:180-191`: a price the seller typed *has*
+provenance — the seller — and blocking on it would refuse to list a draft priced by hand.

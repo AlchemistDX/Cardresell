@@ -509,6 +509,29 @@ function summarize(draft) {
     // exists is worth one boolean, because the row can say "priced from a
     // saved quote" without carrying the quote.
     hasPacket: Object.prototype.hasOwnProperty.call(draft, 'packet'),
+    readiness: readinessOf(draft),
+  };
+}
+
+// Publish-readiness for one row, derived from the validator and nothing else.
+//
+// There is no second eligibility formula here, and there must never be. The
+// list screen and the review screen have to agree about whether a draft can be
+// listed; the only way to guarantee that is for both to read the same function.
+// `ok` and `blocking` come straight from validateDraftForSlot -- this maps them
+// into a wire shape, it does not recompute them.
+//
+// `message` ships next to `code` because the server already owns this copy.
+// reasonMessage() has specific text for all four blocking codes, and
+// SLOT_TITLE_TOO_LONG's is computed ("Shorten it by N"), which a client-side
+// copy table cannot reproduce without duplicating the length arithmetic. A
+// client that authors its own strings for these codes is a rule-1 duplication
+// of a business message. Render what the server sends.
+export function readinessOf(draft) {
+  const v = validateDraftForSlot(draft);
+  return {
+    publishable: v.ok,
+    blockers: v.blocking.map((x) => ({ code: x.code, message: x.message })),
   };
 }
 
