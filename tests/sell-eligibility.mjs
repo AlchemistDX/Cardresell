@@ -588,8 +588,22 @@ console.log('\nsufficiency is decided in exactly one place');
 
 console.log('\nno consumer derives an eligibility boolean of its own');
 {
-  // The drift guard. The whole failure mode is a fourth function appearing
-  // that looks at the axes directly, so this greps the server for that shape.
+  // The drift guard, described honestly: this is a TRIPWIRE, not a proof.
+  //
+  // It greps for one written form of the three-axis test. Equivalent logic
+  // written another way -- destructured locals, a helper, an array .every(),
+  // reordered axes -- evades the pattern and this check would still pass. So
+  // a pass here does NOT establish that no alternative implementation exists.
+  //
+  // What actually carries that weight is the behavioural pair above: stamp
+  // eligibility IS readiness.sufficient across every shape, and create accepts
+  // exactly what readiness calls ready. Those catch a second implementation
+  // whenever it DISAGREES. The gap they cannot see is a duplicate that agrees
+  // today and drifts later -- which is what this tripwire is for, and why it
+  // is kept alongside them rather than instead of them.
+  //
+  // Deliberately not an AST pass: the cost of a parser here outweighs a
+  // tripwire plus two behavioural contracts plus the mutation runs.
   const files = ['_cardIdentity.js', '_sellEligibility.js', 'drafts.js',
                  'sell-eligibility.js', '_listingPacket.js', '_draftStore.js',
                  '_draftService.js', '_listingTitle.js'];
@@ -603,9 +617,10 @@ console.log('\nno consumer derives an eligibility boolean of its own');
     const hits = src.match(/\.game\b[^;\n]{0,80}&&[^;\n]{0,80}\.(set|number)\b[^;\n]{0,80}&&/g) || [];
     if (hits.length) offenders.push(`${f}: ${hits.length}`);
   }
-  check('\ud83d\udd34 nothing re-derives the three-axis test by hand',
+  check('\ud83d\udd34 tripwire: no server file spells out the three-axis test',
         offenders.length === 0, offenders.join(' | ')
-        + ' — read identityReadiness(row) instead of asking the axes');
+        + ' — read identityReadiness(row) instead of asking the axes'
+        + ' (pattern-based: catches the common form, not every equivalent)');
 
   // And the identity module stays free of seller vocabulary.
   const idSrc = readFileSync(new URL('../api/_cardIdentity.js', import.meta.url), 'utf8')
