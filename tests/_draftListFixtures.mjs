@@ -1,0 +1,248 @@
+// tests/_draftListFixtures.mjs — the D2.1 screen's fixtures, GENERATED.
+//
+// Contract: audit/DRAFT_LIST_API_CONTRACT.md Part 4, "Fixture provenance".
+//
+// Every envelope in here is whatever `api/drafts.js` actually emitted for a
+// seeded scenario. Nothing is hand-written. The rule exists because a
+// hand-written fixture that disagrees with the server still fails loudly, but
+// it fails as "the screen is broken" — and the repair then changes the screen
+// to match the wrong fixture, leaving the suite green against a shape
+// production never sends. Green-after-work is worse than green-on-arrival.
+//
+// It paid for itself on the first run: `readiness` is nested at
+// `row.summary.readiness`, not `row.readiness`, and `draftId` appears at both
+// levels. Part 2.4 documents that correctly, but case 10's phrase "present on
+// every summary row" would have supported a hand-written fixture putting it one
+// level too high.
+//
+// Generated at call time rather than committed as JSON, deliberately: a
+// committed artifact can drift from the handler between the day it was written
+// and the day someone reads the suite. This cannot.
+
+import {
+  SUB, K, store, sets, reset, kv, SVC, DS, EP, input, fakeReq, fakeRes, fail,
+} from './_draftHarness.mjs';
+
+const call = async (query) => {
+  const res = fakeRes();
+  await EP.default(fakeReq({ method: 'GET', query }), res);
+  return { status: res.statusCode, body: res.body };
+};
+
+const draftKeyOf = (id) => `draft:${SUB}:${id}`;
+
+/** Seed n publishable drafts through the real service. */
+async function seedPublishable(n, over = () => ({})) {
+  const ids = [];
+  for (let i = 0; i < n; i++) {
+    const out = await SVC.createDraft(kv, SUB, input({
+      instanceId: `inst_${i}`,
+      sku: `v2-SKU${i}-592a391e7b472559`,
+      title: `Card number ${i}`,
+      price: 400 + i,
+      ...over(i),
+    }), K(`fx-seed-${i}`));
+    ids.push(out.result.draftId);
+  }
+  return ids;
+}
+
+/**
+ * Put an id in the index whose stored record produces a given read failure.
+ * This is the only way to generate the three non-throwing stub kinds: they are
+ * properties of the stored bytes, not of the request.
+ */
+function plantUnreadable(id, kind) {
+  if (!sets.has(`drafts:${SUB}`)) sets.set(`drafts:${SUB}`, new Set());
+  sets.get(`drafts:${SUB}`).add(id);
+  store.set(`draftquota:${SUB}`, String(sets.get(`drafts:${SUB}`).size));
+  store.set(`draftquotafresh:${SUB}`, '1');
+  if (kind === 'vanished') {
+    store.delete(draftKeyOf(id));                        // indexed, no record
+  } else if (kind === 'schemaTooNew') {
+    store.set(draftKeyOf(id), JSON.stringify({ schemaVersion: 9999, status: 'draft' }));
+  } else if (kind === 'unreadable') {
+    store.set(draftKeyOf(id), 'not json at all{{');      // unparseable
+  }
+}
+
+export async function generateFixtures() {
+  const fx = {};
+
+  // ── a plain page of publishable rows ──────────────────────────────────────
+  reset();
+  await seedPublishable(30);
+  fx.page1 = await call({});
+  fx.page2 = await call({ cursor: String(fx.page1.body.nextCursor) });
+
+  // ── the empty state: total 0 is the ONLY path to it (case 6) ──────────────
+  reset();
+  fx.empty = await call({});
+
+  // ── blocked rows, one per blocking code, plus a multi-blocker row ─────────
+  //
+  // Built through the real validator, so `message` is the server's own
+  // sentence — including SLOT_TITLE_TOO_LONG's computed "shorten by N", which
+  // is the one no client-side copy table could reproduce.
+  reset();
+  const blocked = {};
+  blocked.titleTooLong = (await SVC.createDraft(kv, SUB, input({
+    instanceId: 'inst_title', sku: 'v2-TITLE-592a391e7b472559',
+    title: 'T'.repeat(140), price: 400,
+  }), K('fx-title'))).result.draftId;
+  blocked.priceRequired = (await SVC.createDraft(kv, SUB, input({
+    instanceId: 'inst_noprice', sku: 'v2-NOPRICE-592a391e7b472559',
+    title: 'Unpriced draft', price: null,
+  }), K('fx-noprice'))).result.draftId;
+  blocked.zeroPrice = (await SVC.createDraft(kv, SUB, input({
+    instanceId: 'inst_zero', sku: 'v2-ZERO-592a391e7b472559',
+    title: 'Zero priced on eBay', price: 0,
+  }), K('fx-zero'))).result.draftId;
+  // Two blocking findings about two different fields on one row (case 11).
+  blocked.multi = (await SVC.createDraft(kv, SUB, input({
+    instanceId: 'inst_multi', sku: 'v2-MULTI-592a391e7b472559',
+    title: 'M'.repeat(140), price: 0,
+  }), K('fx-multi'))).result.draftId;
+  fx.blocked = await call({});
+  fx.blockedIds = blocked;
+
+  // ── $0 renders distinctly from absent price (case 1) ─────────────────────
+  //
+  // whatnot:auction is the one slot with allowsZeroPrice:true
+  // (api/_draftStore.js:136), so a $0 draft there is genuinely publishable.
+  // This is the f0324d4 regression at list level: `if (!row.price)` marks it
+  // as needing a price, because !0 === true.
+  reset();
+  const zero = {};
+  zero.publishableZero = (await SVC.createDraft(kv, SUB, input({
+    instanceId: 'inst_wn', sku: 'v2-WN-592a391e7b472559',
+    slot: 'whatnot:auction', title: 'Whatnot zero dollar auction',
+    price: 0,
+  }), K('fx-wn'))).result.draftId;
+  zero.absentPrice = (await SVC.createDraft(kv, SUB, input({
+    instanceId: 'inst_abs', sku: 'v2-ABS-592a391e7b472559',
+    title: 'Absent price draft', price: null,
+  }), K('fx-abs'))).result.draftId;
+  fx.zeroPrice = await call({});
+  fx.zeroPriceIds = zero;
+
+  // ── all four stub kinds on one page (cases 3, 4) ──────────────────────────
+  reset();
+  const realIds = await seedPublishable(2);
+  const stubIds = {
+    vanished: DS.newDraftId(),
+    schemaTooNew: DS.newDraftId(),
+    unreadable: DS.newDraftId(),
+    readFailed: realIds[0],
+  };
+  plantUnreadable(stubIds.vanished, 'vanished');
+  plantUnreadable(stubIds.schemaTooNew, 'schemaTooNew');
+  plantUnreadable(stubIds.unreadable, 'unreadable');
+  // READ_FAILED is the store call THROWING, not bad bytes — the only stub kind
+  // that needs failure injection rather than a planted record.
+  fail.commands = new Set(['get']);
+  fail.keyPrefix = draftKeyOf(stubIds.readFailed);
+  fx.stubs = await call({});
+  fail.commands = new Set();
+  fail.keyPrefix = null;
+  fx.stubIds = stubIds;
+
+  // ── a fully tombstoned mid-list page: count 0, nextCursor NOT null ────────
+  //
+  // Case 5. This is the page that makes `count === 0` an unsafe end-of-walk
+  // signal, and the reason the screen must terminate only on nextCursor null.
+  // First attempt seeded 30 and emptied offsets 25-29 — the LAST page, where
+  // nextCursor is legitimately null, so the fixture proved nothing. The page
+  // has to be a middle one for `count === 0` and a non-null nextCursor to
+  // coexist, which is the only configuration that makes case 5 bite.
+  reset();
+  const walkIds = await seedPublishable(60);
+  const sorted = [...walkIds].sort();
+  // And the ids have to stay INDEXED. deleteDraftOp also de-indexes, which
+  // shifts the 55 survivors up and refills offsets 25-29 with live rows —
+  // count came back 5, not 0. Rule 2 (drop tombstones from the page) only has
+  // something to drop while the index still lists them.
+  for (const id of sorted.slice(25, 30)) {
+    await SVC.deleteDraftOp(kv, SUB, id, 1, K(`fx-tomb-${id}`));
+    sets.get(`drafts:${SUB}`).add(id);
+  }
+  fx.tombstonedPage = await call({ cursor: '25', limit: '5' });
+
+  // ── focus: the four resolutions ───────────────────────────────────────────
+  reset();
+  const focusIds = await seedPublishable(60);
+  const focusSorted = [...focusIds].sort();
+  const midTarget = focusSorted[37];
+  fx.focusMidList = await call({ focus: midTarget });
+  fx.focusAbsent = await call({ focus: DS.newDraftId() });
+  fx.focusInvalid = await call({ focus: 'not-a-draft-id' });
+  fx.focusConflict = await call({ focus: midTarget, cursor: '0' });
+  fx.focusMidTarget = midTarget;
+
+  // ── the trap: a real offset whose row is gone (case 19) ───────────────────
+  //
+  // Tombstoned between index write and hydration: focusOffset resolves, the
+  // row is filtered out, and the screen must render the saved-may-lag notice
+  // rather than an error or a blank.
+  //
+  // deleteDraftOp removes the id from the index AND tombstones the record, so
+  // on its own it produces focusOffset null — an absent id, not the trap. The
+  // race being modelled is narrower: the id is still indexed and the record is
+  // already gone. Re-adding it after the delete reconstructs that window, the
+  // same way tests/draft-focus.mjs:134 does.
+  const tombTarget = focusSorted[12];
+  await SVC.deleteDraftOp(kv, SUB, tombTarget, 1, K('fx-tomb-focus'));
+  sets.get(`drafts:${SUB}`).add(tombTarget);
+  fx.focusTombstoned = await call({ focus: tombTarget });
+  fx.focusTombstonedTarget = tombTarget;
+
+  // ── degraded: rows AND a banner, never a hidden list (case 8) ────────────
+  //
+  // Generated by failing the index read so the service falls to its reconcile
+  // path, which is what sets degraded on a 200.
+  reset();
+  await seedPublishable(4);
+  fail.commands = new Set(['smembers']);
+  const degraded = await call({});
+  fail.commands = new Set();
+  fx.degraded = degraded;
+
+  // ── the two 503 shapes (case 7) ──────────────────────────────────────────
+  //
+  // Both must render "couldn't load", never "you have no drafts". They are
+  // distinguished by the presence of `retryable`, not by the status.
+  reset();
+  await seedPublishable(3);
+  fail.commands = new Set(['smembers', 'scan']);
+  fx.unavailableRetryable = await call({});
+  fail.commands = new Set();
+
+  // ── create: fresh, replay, and the degraded/repairRequired replay ─────────
+  //
+  // Cases 9, 14, 21, 22. The replay must carry the IDENTICAL draftId, and a
+  // 200 must be treated as success.
+  reset();
+  await seedPublishable(30);
+  const idem = K('fx-create-once');
+  const CARDX = {
+    game: 'pokemon', set_name: 'Champions Path', card_number: '074/073',
+    card_name: 'Charizard VMAX', rarity: 'Secret Rare', language: 'en',
+  };
+  const post = async () => {
+    const res = fakeRes();
+    await EP.default(fakeReq({
+      method: 'POST',
+      body: { card: CARDX, instanceId: 'inst_created', slot: 'ebay:fixed-price', price: 999 },
+      headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': idem },
+    }), res);
+    return { status: res.statusCode, body: res.body };
+  };
+  fx.createFresh = await post();
+  fx.createReplay = await post();
+  // The list the screen would then request, focused on the created id.
+  if (fx.createFresh.body && fx.createFresh.body.draftId) {
+    fx.createFocusList = await call({ focus: fx.createFresh.body.draftId });
+  }
+
+  return fx;
+}
