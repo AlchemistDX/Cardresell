@@ -190,7 +190,12 @@ export function identityAxes(row) {
     game:     canonicalGame(row),
     language: canonicalLanguage(row),
     // setCode is the stable machine identifier; the display name is a fallback.
-    set:      normalizeNumber(row?.setCode) || normalizeText(row?.set ?? row?.set_name),
+    // `setName` is what the scan panel's live card object calls this field;
+    // `set`/`set_name` are what the saved Collection row and the API tests use.
+    // All three are read here so the client never has to translate a row on its
+    // way to the server — a translation layer is the second implementation of
+    // identity in disguise, and it drifts the moment one call site forgets it.
+    set:      normalizeNumber(row?.setCode) || normalizeText(row?.set ?? row?.set_name ?? row?.setName),
     number:   normalizeNumber(row?.number ?? row?.card_number),
     variant:  normalizeText(row?.rarity),
     grader:   slab ? canonicalGrader(row) : '',
@@ -332,8 +337,11 @@ export function cardIdentity(row) {
     missingAxes:             comp.missing,
     // Display-only. NOT part of identity — a renamed card is the same card,
     // and card names vary across our sources more than any other field.
-    displayName:    String(row?.card ?? row?.card_name ?? '').trim(),
-    displaySetName: String(row?.set  ?? row?.set_name  ?? '').trim(),
+    // Same reason as the set axis above: `name`/`setName` are the live scan
+    // object's spelling, `card`/`set` the saved row's. Display-only, so widening
+    // these cannot move a SKU.
+    displayName:    String(row?.card ?? row?.card_name ?? row?.name    ?? '').trim(),
+    displaySetName: String(row?.set  ?? row?.set_name  ?? row?.setName ?? '').trim(),
   };
 }
 

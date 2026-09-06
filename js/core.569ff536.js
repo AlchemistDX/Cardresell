@@ -3561,6 +3561,12 @@ function loadCardUI(card) {
   updateSellLinks(card);
   updateSellLinks._skipRecalc = false;
 
+  // D1: ask the server whether this card can start a listing draft, and draw
+  // the entry point from that answer alone. Deliberately not awaited — the
+  // panel must not wait on a network round trip to render, and applySellGate
+  // discards any answer that arrives after the panel has moved to another card.
+  try { applySellGate(card); } catch (_) {}
+
   // Build printing dropdown from priceVariants
   currentPrices = {};
   printSelect.innerHTML = '';
@@ -9028,6 +9034,11 @@ function renderCollectionView() {
           // "Sold" — a one-tap action that logs the sale to the Flips tab
           // and moves the card out of Collection. The full card-tap popup
           // is unchanged and still offers eBay/TCGplayer/PWCC/COMC links.
+          // D1: the listing-draft button is filled in after the fact. The table
+          // renders from localStorage synchronously, and eligibility is the
+          // server's answer, so the slot goes out empty and
+          // hydrateCollectionSellButtons() fills every row in one request.
+          const crSellSlot = `<span id="crSellCell_${p.id}"></span>`;
           const sellCell = `<button type="button" onclick="event.stopPropagation();openMarkSoldModal(${p.id})" title="Log sale of ${esc2(p.card)} and move to Flips" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:8px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">🎉 Sold</button>`;
           // The whole row (except the action buttons) is a tap target that
           // opens the card-detail modal — addresses "lack of at least a link
@@ -9041,7 +9052,7 @@ function renderCollectionView() {
             <td class="ft-mono" style="color:var(--gold-text)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
             <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
             <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
-            <td onclick="event.stopPropagation()">${sellCell}</td>
+            <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">${crSellSlot}${sellCell}</div></td>
             <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">
               <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="event.stopPropagation();refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
               <button class="ft-delete" onclick="event.stopPropagation();deletePortEntry(${p.id})" title="Remove">✕</button>
@@ -9050,6 +9061,9 @@ function renderCollectionView() {
         }).join('')}</tbody>
       </table>
     </div>`;
+
+  // D1: one batched eligibility request for the rows just drawn.
+  try { hydrateCollectionSellButtons(sorted); } catch (_) {}
 }
 
 // ── Fetch best eBay median price for a single portfolio entry ──
@@ -17929,3 +17943,355 @@ window.addEventListener('load', () => {
     }
   } catch(_) {}
 });
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   D1 — THE LISTING DRAFT ENTRY POINT                              (2026-09-06)
+
+   One question — "can this card start a listing?" — and this file never answers
+   it. The answer comes from /api/sell-eligibility, which is the same
+   sellStamp() the create path refuses on. Writing `if (game && set && number)`
+   here would read fine and would be a second implementation of identity
+   sufficiency; the two would drift, and the symptom would be a Sell button that
+   does nothing. Four regressions in this codebase have had exactly that shape.
+
+   Failing closed is the default everywhere below: no stamp, no button.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Four call sites in this file each inline their own copy of the Firebase
+// force-refresh dance. This is the extracted version, used by the new D1 calls
+// so there isn't a fifth. Retrofitting the existing four means touching the
+// billing and portal paths, which is not a UI block's business — noted in
+// audit/BLOCK_D1_REVIEW.md as a follow-up.
+async function _crIdToken() {
+  let t = window._googleIdToken || '';
+  try {
+    const u = (window.googleUser && typeof window.googleUser.getIdToken === 'function')
+      ? window.googleUser
+      : ((window._fbCurrentUser && typeof window._fbCurrentUser.getIdToken === 'function')
+          ? window._fbCurrentUser : null);
+    if (u) { t = await u.getIdToken(true); window._googleIdToken = t; }
+  } catch (_) { /* fall through to whatever we already held */ }
+  return t || '';
+}
+
+// Ask the server about a batch of rows.
+//
+// The return is deliberately a three-way result rather than an array-or-null.
+// "This card is missing its set number" and "we could not reach the server" are
+// different things to tell a seller, and collapsing them produces the screen
+// that says a perfectly good card cannot be sold.
+const CR_SELL_MAX_ROWS = 500; // mirrors MAX_ROWS in api/sell-eligibility.js
+
+async function fetchSellStamps(rows) {
+  if (!Array.isArray(rows) || !rows.length) return { ok: true, stamps: [] };
+  if (rows.length > CR_SELL_MAX_ROWS) {
+    // The server refuses an oversized batch rather than truncating; chunking is
+    // this side's job. A maxed Pro collection is 500, so this is a guard, not a
+    // routine path.
+    const out = [];
+    for (let i = 0; i < rows.length; i += CR_SELL_MAX_ROWS) {
+      const part = await fetchSellStamps(rows.slice(i, i + CR_SELL_MAX_ROWS));
+      if (!part.ok) return part;
+      out.push(...part.stamps);
+    }
+    return { ok: true, stamps: out };
+  }
+
+  const token = await _crIdToken();
+  // Creating a draft needs a verified account, so an anonymous visitor has
+  // nothing to gain from a Sell button. This is a real answer, not a failure.
+  if (!token) return { ok: false, reason: 'SIGNED_OUT' };
+
+  try {
+    const r = await fetch('/api/sell-eligibility', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ rows }),
+    });
+    if (r.status === 401) return { ok: false, reason: 'SIGNED_OUT' };
+    if (!r.ok)            return { ok: false, reason: 'ASK_FAILED' };
+    const j = await r.json();
+    if (!Array.isArray(j.stamps) || j.stamps.length !== rows.length) {
+      // Positional contract broken — pairing stamps to the wrong rows would
+      // offer a Sell button on a card that cannot build a packet.
+      return { ok: false, reason: 'ASK_FAILED' };
+    }
+    return { ok: true, stamps: j.stamps };
+  } catch (_) {
+    return { ok: false, reason: 'ASK_FAILED' };
+  }
+}
+
+function _crSellUnavailableMsg(reason) {
+  if (reason === 'SIGNED_OUT') return 'Sign in to start a listing for this card.';
+  return "Couldn't check whether this card is ready to list. Check your connection and try again.";
+}
+
+/* ── Which physical copy is this? ────────────────────────────────────────────
+   A draft belongs to one copy of one card, and the server takes `instanceId` as
+   an opaque string — it does not derive it, because no function of card
+   attributes can tell two PSA 9s apart (see api/_inventoryInstance.js).
+
+   A saved Collection row IS a copy, so its row id is a genuine instance key.
+   The scan panel is not: the card is in the seller's hand, not in their
+   inventory. There we mint a token from the fields on screen so that tapping
+   Sell twice on the same card does not open two drafts.
+
+   That token is a REQUEST DE-DUP KEY, not identity. It never reaches storage as
+   identity, it is never used to price or title anything, and the worst case if
+   it collides or misses is a duplicate draft the seller can discard — not a
+   wrong number presented as authoritative. The real fix is an inventory
+   instance created when a card is taken in hand; that is Block E work and is
+   named in audit/BLOCK_D1_REVIEW.md rather than quietly settled here. */
+function _crIntentToken(row) {
+  const parts = [
+    row && row.game, row && row.cardType,
+    row && (row.setCode || row.set_code),
+    row && (row.set || row.set_name || row.setName),
+    row && (row.number || row.card_number),
+    row && row.grader, row && row.grade, row && row.cert,
+  ].map((v) => String(v == null ? '' : v).toLowerCase().trim()).join('|');
+  // djb2. Short, stable, and only ever used as a de-dup token.
+  let h = 5381;
+  for (let i = 0; i < parts.length; i++) h = (((h << 5) + h) ^ parts.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+
+/* ── The card panel ──────────────────────────────────────────────────────── */
+
+// Set by applySellGate so startListingDraft() acts on exactly the row the
+// server approved, not on whatever the panel happens to hold a moment later.
+window._crSellApproved = null;
+
+async function applySellGate(card) {
+  const row     = document.getElementById('crSellRow');
+  const blocked = document.getElementById('crSellBlocked');
+  const msgEl   = document.getElementById('crSellBlockedMsg');
+  const btn     = document.getElementById('crSellBtn');
+  if (!row || !blocked || !msgEl) return;
+
+  const hide = (message) => {
+    window._crSellApproved = null;
+    row.style.display = 'none';
+    if (message) { msgEl.textContent = message; blocked.style.display = 'block'; }
+    // Clear the text as well as hiding the node: a stale refusal left in the
+    // DOM is one CSS accident away from being shown against the wrong card.
+    else         { msgEl.textContent = ''; blocked.style.display = 'none'; }
+  };
+
+  if (!card) { hide(''); return; }
+
+  // A stale answer must never draw a button for a card that is no longer on
+  // screen, so every request carries the token of the card it was asked about.
+  const token = _crIntentToken(card);
+  applySellGate._pending = token;
+
+  hide('');
+  if (btn) btn.disabled = true;
+
+  const res = await fetchSellStamps([card]);
+  if (applySellGate._pending !== token) return; // the panel moved on
+
+  if (!res.ok) { hide(_crSellUnavailableMsg(res.reason)); return; }
+
+  const stamp = res.stamps[0];
+  if (!stamp || stamp.eligible !== true) {
+    // Say why. A row that just goes quiet teaches a seller nothing, and the
+    // message names the missing axes rather than counting them.
+    hide((stamp && stamp.message) || 'This card needs a bit more detail before it can be listed.');
+    return;
+  }
+
+  window._crSellApproved = card;
+  blocked.style.display = 'none';
+  row.style.display = 'block';
+  if (btn) btn.disabled = false;
+}
+
+/* ── Starting the draft ──────────────────────────────────────────────────── */
+
+// eBay first, because eBay is the integration we have. The slot is not a
+// seller preference yet — choosing among venues is the Block D venue step, and
+// pretending to offer the choice here would be a control that does nothing.
+const CR_D1_SLOT = 'ebay:fixed-price';
+
+async function startListingDraft() {
+  const card = window._crSellApproved;
+  const btn  = document.getElementById('crSellBtn');
+  const lbl  = document.getElementById('crSellBtnLabel');
+  // The button is only drawn after the server approved a specific row. If that
+  // approval is gone, the safe move is to re-ask rather than to guess.
+  if (!card) { try { applySellGate(selectedCard); } catch (_) {} return; }
+
+  // Price stays a client input: the one implementation of price basis lives in
+  // this file (window._crBasis / getEffectivePrice), and duplicating it on the
+  // server would be the fifth instance of the mistake this design is avoiding.
+  // That trust boundary is declared, not hidden — see audit/BLOCK_D1_REVIEW.md.
+  let price = 0;
+  try { price = Number(getEffectivePrice()) || 0; } catch (_) { price = 0; }
+
+  // eBay fixed-price needs a number. Saying so beats a 400 from the server.
+  if (!(price > 0)) {
+    showToast('Add a price for this card first — a fixed-price listing needs one.');
+    return;
+  }
+
+  // Where the number came from, never defaulted. A price the seller typed is
+  // their expected sale price; a price we filled is comp-derived. The draft
+  // records the difference because a seller-entered price is not evidence of
+  // anything and must not later be presented as a comp.
+  let ov = null;
+  try { ov = parseFloat(document.getElementById('priceOverride').value); } catch (_) {}
+  const sellerTyped = !isNaN(ov) && ov > 0 && !window._ovAutoFilled;
+  const priceSource = sellerTyped ? 'seller' : 'comp';
+
+  const intent = _crIntentToken(card);
+  const origLabel = lbl ? lbl.textContent : '';
+  if (btn) btn.disabled = true;
+  if (lbl) lbl.textContent = 'Starting\u2026';
+  try {
+    await _crCreateDraft({
+      card,
+      instanceId: 'inst_' + intent,
+      idemKey:    'sell-' + intent + '-' + CR_D1_SLOT,
+      price, priceSource, source: 'scan',
+    });
+  } finally {
+    if (btn) btn.disabled = false;
+    if (lbl) lbl.textContent = origLabel || '\ud83d\udee0\ufe0f Start a listing';
+  }
+}
+
+/* ── The create call ─────────────────────────────────────────────────────────
+   Both entry points — the card panel and a Collection row — come through here.
+   The first cut of this block had the fetch and the whole status ladder written
+   out twice, which is the duplicate-implementation shape this codebase keeps
+   getting caught by; the two copies would have drifted the first time a status
+   code changed. The callers differ only in where the copy identity comes from. */
+async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, source }) {
+  try {
+    const token = await _crIdToken();
+    if (!token) { showToast('Sign in to start a listing.'); return null; }
+
+    const r = await fetch('/api/drafts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token,
+        // Same card, same slot, same key — so a double tap or a retry after a
+        // dropped response replays the draft the seller already has instead of
+        // opening a second one.
+        'Idempotency-Key': idemKey,
+      },
+      body: JSON.stringify({
+        // The client says WHICH card. It does not say what the card is called
+        // or what its SKU is — the server derives both, and refuses a
+        // client-supplied title or sku outright.
+        card, instanceId, slot: CR_D1_SLOT, price, priceSource,
+      }),
+    });
+
+    const j = await r.json().catch(() => ({}));
+
+    if (r.status === 201 || r.status === 200) {
+      const replay = r.status === 200;
+      window.trackEvent?.('listing_draft_created', { replay, priceSource, slot: CR_D1_SLOT, source });
+      showToast(replay ? 'You already have a draft for this card.' : 'Listing draft started.');
+      // The draft list view is D2. Until it exists, the id is what the seller
+      // has, so it is remembered rather than dropped on the floor — and the
+      // list must be navigated by id after a create, never by assuming the new
+      // draft sits at the top of page 1 (see audit/DRAFT_LIST_API_CONTRACT.md).
+      if (j && j.draftId) window._crLastDraftId = j.draftId;
+      return j && j.draftId ? j.draftId : null;
+    }
+
+    if (r.status === 409 && /CAP/i.test(String((j && (j.code || j.error)) || ''))) {
+      showToast("You've reached the draft limit. Finish or discard a draft to start another.");
+      return null;
+    }
+    if (r.status === 401) { showToast('Sign in to start a listing.'); return null; }
+    if (r.status === 503) { showToast('Drafts are unavailable right now. Nothing was saved \u2014 try again shortly.'); return null; }
+
+    // Anything else: show what the server said rather than inventing a reason.
+    showToast((j && (j.error || j.code)) || "Couldn't start the listing draft.");
+    return null;
+  } catch (_) {
+    showToast("Couldn't reach the server. Nothing was saved.");
+    return null;
+  }
+}
+
+/* ── Collection rows ─────────────────────────────────────────────────────────
+   renderCollectionView() builds its table synchronously from localStorage, so
+   the rows go out with an empty slot and the buttons are filled in once the
+   server has answered for the whole page in one request. */
+async function hydrateCollectionSellButtons(rows) {
+  if (!Array.isArray(rows) || !rows.length) return;
+  const slotFor = (id) => document.getElementById('crSellCell_' + id);
+
+  const res = await fetchSellStamps(rows);
+  if (!res.ok) {
+    // Signed out is the common case and is not an error worth shouting about:
+    // leave the cells empty. A failed check gets a retry affordance instead of
+    // a button that might not work.
+    if (res.reason === 'ASK_FAILED') {
+      rows.forEach((p) => {
+        const el = slotFor(p.id);
+        if (el) el.innerHTML = '<button type="button" title="Couldn\'t check — tap to retry"'
+          + ' onclick="event.stopPropagation();renderCollectionView()"'
+          + ' style="background:none;border:none;cursor:pointer;font-size:.8rem;opacity:.45">↻</button>';
+      });
+    }
+    return;
+  }
+
+  rows.forEach((p, i) => {
+    const el = slotFor(p.id);
+    if (!el) return;
+    const stamp = res.stamps[i] || null;
+    if (stamp && stamp.eligible === true) {
+      el.innerHTML = '<button type="button" title="Start a listing draft for this card"'
+        + ' onclick="event.stopPropagation();startListingDraftForEntry(' + p.id + ')"'
+        + ' style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;'
+        + 'background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;'
+        + 'font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">🛠️ List</button>';
+    } else {
+      // Not silently omitted. A dense table row has no space for a sentence, so
+      // the reason is on the control and one tap away in full.
+      const why = (stamp && stamp.message) || 'This card needs more detail before it can be listed.';
+      el.innerHTML = '<button type="button" disabled title="' + _crAttr(why) + '"'
+        + ' onclick="event.stopPropagation();showToast(this.title)"'
+        + ' style="background:none;border:none;cursor:help;font-size:.8rem;opacity:.35">🛠️</button>';
+    }
+  });
+}
+
+function _crAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// A saved Collection row is a real physical copy, so its row id is a genuine
+// per-copy instance key — no intent token needed here.
+async function startListingDraftForEntry(entryId) {
+  const port = loadPortData();
+  const p = port.find((x) => x.id === entryId);
+  if (!p) { showToast('That card is no longer in your collection.'); return; }
+
+  const price = Number(p.currentValue ?? p.buyPrice ?? 0) || 0;
+  if (!(price > 0)) {
+    showToast('Add a value for this card first — a fixed-price listing needs one.');
+    return;
+  }
+  // `currentValue` is refreshed from our own price feed; `buyPrice` is what the
+  // seller paid, which is not a comp and must not be recorded as one.
+  const priceSource = (p.currentValue != null && Number(p.currentValue) > 0) ? 'comp' : 'seller';
+
+  await _crCreateDraft({
+    card: p,
+    instanceId: 'inst_col_' + entryId,
+    idemKey:    'sell-col-' + entryId + '-' + CR_D1_SLOT,
+    price, priceSource, source: 'collection',
+  });
+}

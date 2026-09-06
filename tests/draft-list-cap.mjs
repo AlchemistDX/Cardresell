@@ -173,6 +173,23 @@ const IDEM = await import('../api/_idempotency.js');
 
 
 
+// The HTTP create contract (D1, 2026-09-06): the client names WHICH card and
+// the server derives sku and title from it. A client-supplied sku or title is
+// refused outright, so an HTTP-level create must not send them — `input()`
+// below is still correct for direct SVC.createDraft calls, which take an
+// already-normalized record.
+const CARD = () => ({
+  game: 'pokemon', set_name: 'Champions Path', card_number: '074/073',
+  card_name: 'Charizard VMAX', rarity: 'Secret Rare', language: 'en',
+});
+const httpInput = (over = {}) => ({
+  card: CARD(),
+  instanceId: 'inst_abc123',
+  slot: 'ebay:fixed-price',
+  price: 400,
+  ...over,
+});
+
 const input = (over = {}) => ({
   sku: 'v2-XXX7473-592a391e7b472559',
   instanceId: 'inst_abc123',
@@ -552,7 +569,7 @@ reset();
   for (let i = 0; i < SVC.DRAFT_CAP; i++) set.add(`drf_${String(i).padStart(32, '0')}`);
   const res = fakeRes();
   await EP.default(fakeReq({
-    method: 'POST', body: input(),
+    method: 'POST', body: httpInput(),
     headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K('http-cap') },
   }), res);
   check('🔴 a create at the cap is 409, not 500',

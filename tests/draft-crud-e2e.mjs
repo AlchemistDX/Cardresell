@@ -149,6 +149,9 @@ const SVC = await import('../api/_draftService.js');
 const DS  = await import('../api/_draftStore.js');
 const EP  = await import('../api/drafts.js');
 const IDEM = await import('../api/_idempotency.js');
+const IDENT = await import('../api/_cardIdentity.js');
+const TITLE = await import('../api/_listingTitle.js');
+const SELL  = await import('../api/_sellEligibility.js');
 
 
 const input = () => ({
@@ -157,6 +160,19 @@ const input = () => ({
   slot: 'ebay:fixed-price',
   title: 'Charizard VMAX 074/073 PSA 10',
   price: 400,
+});
+
+// ── HTTP create input ─────────────────────────────────────────────────────
+// The endpoint no longer accepts `sku`/`title` — it derives them from the
+// card row. The service still takes them explicitly, so `input()` stays as
+// it is; this is the network-facing shape.
+const CARD = () => ({
+  game: 'pokemon', set_name: 'Champions Path', card_number: '074/073',
+  card_name: 'Charizard VMAX', rarity: 'Secret Rare', language: 'en',
+});
+const httpInput = () => ({
+  card: CARD(), instanceId: 'inst_abc123',
+  slot: 'ebay:fixed-price', price: 400,
 });
 
 // ── create → read → edit → delete ─────────────────────────────────────────
@@ -318,34 +334,75 @@ check('a field error is 400', EP.statusForStoreError(`${DS.ERR.FIELD_INVALID}:pr
 
 console.log('\nnormalization happens once, in the endpoint');
 const n = EP.normalizeCreateInput({
-  sku: '  v2-XXX7473-592a391e7b472559 ', instanceId: 'inst_abc123',
-  slot: 'eBay:Fixed-Price', title: '  Charizard  ', price: '400.005',
+  card: CARD(), instanceId: '  inst_abc123 ',
+  slot: 'eBay:Fixed-Price', price: '400.005',
 });
-check('🔴 an id keeps its casing', n.sku === 'v2-XXX7473-592a391e7b472559',
-      'lowercasing ids would corrupt every real SKU and refuse every genuine retry');
+check('🔴 an id keeps its casing', n.instanceId === 'inst_abc123',
+      'lowercasing ids would corrupt every real id and refuse every genuine retry');
 check('a token is lowercased', n.slot === 'ebay:fixed-price');
-check('text is trimmed', n.title === 'Charizard');
 check('money is rounded to cents once, here', n.price === 400.01);
-check('a dollar sign is accepted from a text input', EP.normalizeCreateInput({ ...input(), price: '$19.99' }).price === 19.99);
+check('🔴 the sku is derived, and matches skuFor on the same row',
+      n.sku === IDENT.skuFor(CARD()),
+      'if the endpoint derived it differently the stored draft would point at a different card');
+check('🔴 the title is derived, and matches buildListingTitle',
+      n.title === TITLE.buildListingTitle(CARD(), { maxLength: 80 }).title,
+      'a second title implementation is how the listing and the packet start disagreeing');
+check('the derived title respects the venue limit, not a generic one',
+      n.title.length <= 80);
+check('🔴 the stored title is a string, not the builder result object',
+      typeof n.title === 'string' && !n.title.includes('[object'),
+      'buildListingTitle returns {title, ok, dropped} — storing it whole renders as [object Object]');
+check('a title that cannot be built at all is refused', (() => {
+  const b = httpInput(); delete b.card.card_name;
+  try { EP.normalizeCreateInput(b); return false; }
+  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:title:NO_CARD_NAME'; }
+})());
+check('🔴 a Mercari draft gets a Mercari-length title',
+      EP.normalizeCreateInput({ ...httpInput(), slot: 'mercari:fixed-price' }).title.length <= 40,
+      'building to 500 then failing slot validation is a dead end the seller cannot act on');
+check('🔴 a client-supplied sku is refused, not dropped', (() => {
+  try { EP.normalizeCreateInput({ ...httpInput(), sku: 'v2-forged' }); return false; }
+  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:sku:derived-from-card'; }
+})(), 'a caller who thought they set the sku must be told they did not');
+check('🔴 a client-supplied title is refused, not dropped', (() => {
+  try { EP.normalizeCreateInput({ ...httpInput(), title: 'Whatever I like' }); return false; }
+  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:title:derived-from-card'; }
+})(), 'otherwise any text can sit above a price we then stamp with provenance');
+check('a missing card is refused', (() => {
+  const b = httpInput(); delete b.card;
+  try { EP.normalizeCreateInput(b); return false; }
+  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:card:required'; }
+})());
+check('🔴 a card with no number is refused, naming the axis', (() => {
+  const b = httpInput(); delete b.card.card_number;
+  try { EP.normalizeCreateInput(b); return false; }
+  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:card:SELL_NEEDS_NUMBER'; }
+})(), 'the create must hold even if the Sell button was drawn wrongly');
+check('a card with no set is refused, naming the axis', (() => {
+  const b = httpInput(); delete b.card.set_name;
+  try { EP.normalizeCreateInput(b); return false; }
+  catch (e) { return e.message === 'DRAFT_FIELD_INVALID:card:SELL_NEEDS_SET'; }
+})());
+check('a dollar sign is accepted from a text input', EP.normalizeCreateInput({ ...httpInput(), price: '$19.99' }).price === 19.99);
 check('a negative price is refused', (() => {
-  try { EP.normalizeCreateInput({ ...input(), price: -1 }); return false; }
+  try { EP.normalizeCreateInput({ ...httpInput(), price: -1 }); return false; }
   catch (e) { return e.message === 'DRAFT_FIELD_INVALID:price:negative'; }
 })());
 check('a non-numeric price is refused', (() => {
-  try { EP.normalizeCreateInput({ ...input(), price: 'free' }); return false; }
+  try { EP.normalizeCreateInput({ ...httpInput(), price: 'free' }); return false; }
   catch (e) { return e.message.endsWith(':not-a-number'); }
 })());
 check('🔴 a strategy that disagrees with the slot is refused', (() => {
-  try { EP.normalizeCreateInput({ ...input(), strategy: 'auction' }); return false; }
+  try { EP.normalizeCreateInput({ ...httpInput(), strategy: 'auction' }); return false; }
   catch (e) { return e.message === 'DRAFT_FIELD_INVALID:strategy:disagrees-with-slot'; }
 })(), 'silently preferring one would make two different-looking requests behave identically');
 check('a strategy that agrees is accepted',
-      EP.normalizeCreateInput({ ...input(), strategy: 'Fixed-Price' }).strategy === 'fixed-price');
+      EP.normalizeCreateInput({ ...httpInput(), strategy: 'Fixed-Price' }).strategy === 'fixed-price');
 
 console.log('\nthe endpoint refuses to invent an idempotency key');
 reset();
 const res = fakeRes();
-await EP.default(fakeReq({ method: 'POST', body: input() }), res);
+await EP.default(fakeReq({ method: 'POST', body: httpInput() }), res);
 check('🔴 POST with no Idempotency-Key is refused',
       res.statusCode === 400 && res.body.code === 'IDEMPOTENCY_KEY_REQUIRED',
       'a server-minted key looks like a new operation on every retry, removing the protection exactly when it is needed');
@@ -359,15 +416,15 @@ check('🔴 PATCH with no expectedRev is 428',
 check('and it explains why rather than just refusing', typeof res2.body.hint === 'string');
 
 const res3 = fakeRes();
-await EP.default(fakeReq({ method: 'POST', body: input(), headers: { 'idempotency-key': K('http-post') } }), res3);
+await EP.default(fakeReq({ method: 'POST', body: httpInput(), headers: { 'idempotency-key': K('http-post') } }), res3);
 check('a valid POST is 201 with the draft', res3.statusCode === 201 && !!res3.body.draft);
 const res4 = fakeRes();
-await EP.default(fakeReq({ method: 'POST', body: input(), headers: { 'idempotency-key': K('http-post') } }), res4);
+await EP.default(fakeReq({ method: 'POST', body: httpInput(), headers: { 'idempotency-key': K('http-post') } }), res4);
 check('🔴 the replay is 200, not 201, with the same draftId',
       res4.statusCode === 200 && res4.body.draftId === res3.body.draftId &&
       res4.body.replayed === true);
 const res5 = fakeRes();
-await EP.default(fakeReq({ method: 'POST', body: { ...input(), price: 12 }, headers: { 'idempotency-key': K('http-post') } }), res5);
+await EP.default(fakeReq({ method: 'POST', body: { ...httpInput(), price: 12 }, headers: { 'idempotency-key': K('http-post') } }), res5);
 check('🔴 the same key with a different body is 409', res5.statusCode === 409);
 
 console.log('\nan unauthenticated or unconfigured request never touches the store');

@@ -1995,6 +1995,25 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div id="cardNameBlock" style="display:none">
           <div class="card-name" id="cardNameEl"></div>
           <div class="card-meta-row" id="cardMetaEl"></div>
+          <!-- 2026-09-06 (D1): the CardResell listing draft entry point.
+               Sits ABOVE the outbound eBay/TCGplayer links deliberately — those
+               hand the seller to someone else's wizard and lose every number we
+               just computed. This one keeps the card, the price and its basis
+               inside the app.
+
+               Visibility is decided by the server (/api/sell-eligibility) and
+               never by a field check in this file. When it is refused, the
+               reason takes the button's place rather than the row going quiet —
+               a missing button teaches a seller nothing. -->
+          <div id="crSellRow" style="display:none;margin-top:.75rem">
+            <button id="crSellBtn" type="button" class="sell-btn" style="margin-top:0;width:100%;justify-content:center;background:linear-gradient(135deg,#3b82f6,#2563eb);border:none"
+                    onclick="startListingDraft()">
+              <span id="crSellBtnLabel">🛠️ Start a listing</span>
+            </button>
+          </div>
+          <div id="crSellBlocked" style="display:none;margin-top:.75rem;font-size:.7rem;line-height:1.4;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:.5rem .6rem">
+            <span style="opacity:.75">🛠️</span> <span id="crSellBlockedMsg"></span>
+          </div>
           <!-- 2026-08-14: paired Sell buttons — eBay for sold-comps research +
                'Sell one like this' flow, TCGplayer for direct product page
                where the 'Sell Yours' CTA lives one tap away. -->

@@ -5,6 +5,10 @@ import {
   SERVICE_ERR,
 } from './_draftService.js';
 import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub } from './_draftStore.js';
+import { SLOT_RULES } from './_draftStore.js';
+import { skuFor } from './_cardIdentity.js';
+import { buildListingTitle } from './_listingTitle.js';
+import { missingIdentityAxes } from './_sellEligibility.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
 
 // /api/drafts — listing draft CRUD
@@ -403,15 +407,81 @@ function normText(v, field, max) {
   return s;
 }
 
+/**
+ * ── The client says WHICH card, never what it is called or worth ──────────
+ *
+ * Create used to accept `sku` and `title` directly. That is the wrong shape
+ * for a boundary, for a reason that only shows up later: a client that can
+ * post its own `sku` can create a draft whose stored identity disagrees with
+ * the card the seller actually scanned, and a client that can post its own
+ * `title` can put anything above a price that we then stamp with provenance.
+ * Neither is a hypothetical attack — both are what a refactor on the browser
+ * side does by accident.
+ *
+ * So identity is DERIVED here, from the card row, using the same `skuFor()`
+ * and `buildListingTitle()` the packet builder uses. A request carrying an
+ * explicit `sku` or `title` is refused rather than having the field quietly
+ * dropped: a caller who thought they were setting the title needs to be told
+ * they were not.
+ *
+ * `price` is a different matter and stays a client input, because the one
+ * implementation of price basis genuinely lives in core.js today. That is a
+ * trust boundary this endpoint does not close — it is recorded in
+ * audit/BLOCK_D1_REVIEW.md as a Phase 2 item rather than papered over. What
+ * this endpoint does enforce is that the price says where it came from, which
+ * is why `priceSource` has no default.
+ */
 export function normalizeCreateInput(body) {
   const slot = normToken(body.slot, 'slot');
+
+  // Refuse, don't drop. See above.
+  for (const derived of ['sku', 'title']) {
+    if (body[derived] !== undefined && body[derived] !== null) {
+      throw new Error(`DRAFT_FIELD_INVALID:${derived}:derived-from-card`);
+    }
+  }
+
+  const card = body.card;
+  if (!card || typeof card !== 'object' || Array.isArray(card)) {
+    throw new Error('DRAFT_FIELD_INVALID:card:required');
+  }
+
+  // The same gate the Sell button was drawn from. If these disagree, the
+  // button is the thing that is wrong, and this is the side that must hold —
+  // a draft with no usable identity is unlistable at every later step.
+  const missing = missingIdentityAxes(card);
+  if (missing.length) {
+    throw new Error(`DRAFT_FIELD_INVALID:card:${missing.join(',')}`);
+  }
+
+  // Title is built to the VENUE's limit, not to a generic maximum. Building
+  // an 80-char title for eBay and a 40-char one for Mercari is the same
+  // function with a different bound; building one 500-char title and letting
+  // slot validation reject it is a dead end the seller cannot act on.
+  const titleMax = (SLOT_RULES[slot] && SLOT_RULES[slot].titleMax) || undefined;
+
+  // buildListingTitle returns a RESULT, not a string — `{title, ok, dropped,
+  // reason}`. Storing the object itself is a mistake this endpoint made for
+  // exactly one commit, and it is worth a word: `title: buildListingTitle(...)`
+  // reads correct, type-checks nowhere, and produced a draft whose title was
+  // `[object Object]` by the time anything rendered it.
+  const built = buildListingTitle(card, titleMax ? { maxLength: titleMax } : {});
+  if (!built.ok) {
+    // A title the builder could not fit is not a draft worth creating. Dropped
+    // SEGMENTS are normal and fine — the builder trimming rarity to fit 80
+    // chars is it doing its job, and `dropped` is reported on the draft rather
+    // than refused. `ok: false` is the different case: nothing usable came out.
+    throw new Error(`DRAFT_FIELD_INVALID:title:${built.reason || 'unbuildable'}`);
+  }
+
   const out = {
-    sku:        normId(body.sku, 'sku'),
+    sku:        skuFor(card),
     instanceId: normId(body.instanceId, 'instanceId'),
     slot,
-    title:      normText(body.title, 'title', 500),
+    title:      built.title,
     price:      normMoney(body.price, 'price'),
   };
+  if (built.dropped && built.dropped.length) out.titleDropped = built.dropped;
   // `strategy` is derivable from the slot (`ebay:auction` → `auction`), so it
   // is accepted for clarity but must AGREE. Silently preferring one over the
   // other would make two requests that look different behave identically.
