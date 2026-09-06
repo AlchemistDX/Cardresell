@@ -107,6 +107,23 @@ export function newDraftId() {
 }
 
 /**
+ * Is this string shaped like an id `newDraftId()` would have produced?
+ *
+ * Lives here, next to the generator, because the generator owns the format. A
+ * caller that needs to validate a draft id must not carry its own regex — that
+ * is two definitions of "draft id" drifting apart the moment the generator
+ * changes.
+ *
+ * Note what this does NOT do: it does not assert the draft exists, and it is
+ * not currently applied to `?id=`, PATCH, or DELETE, which accept any
+ * non-empty string. Tightening those is a behavior change with its own blast
+ * radius; see Part 7 of audit/DRAFT_LIST_API_CONTRACT.md.
+ */
+export function isDraftId(value) {
+  return typeof value === 'string' && /^drf_[0-9a-f]{32}$/.test(value);
+}
+
+/**
  * Per-slot publish requirements. The draft may be SAVED without satisfying
  * these — a seller mid-edit should not be blocked from persisting work — but it
  * cannot be handed to that venue until it does. Save rules and publish rules

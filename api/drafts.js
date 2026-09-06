@@ -4,7 +4,7 @@ import {
   listDraftSummaries, LIST_PAGE_DEFAULT, LIST_PAGE_MAX, DRAFT_CAP,
   SERVICE_ERR,
 } from './_draftService.js';
-import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub } from './_draftStore.js';
+import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub, isDraftId } from './_draftStore.js';
 import { SLOT_RULES } from './_draftStore.js';
 import { skuFor, identityReadiness } from './_cardIdentity.js';
 import { buildListingTitle } from './_listingTitle.js';
@@ -153,10 +153,22 @@ async function handleGet(req, res, kv, googleSub, draftId) {
     if (limitRaw !== '' && (Number(limitRaw) < 1 || Number(limitRaw) > LIST_PAGE_MAX)) {
       return res.status(400).json({ error: `limit must be between 1 and ${LIST_PAGE_MAX}`, code: 'LIST_LIMIT_RANGE' });
     }
+    // `focus` asks the server which page a draft is on, so the client never
+    // pages forward hunting for an id it just created.
+    const focusRaw = qs(req, 'focus');
+    if (focusRaw !== '' && !isDraftId(focusRaw)) {
+      return res.status(400).json({ error: 'focus must be a draft id', code: 'LIST_FOCUS_INVALID' });
+    }
+    // Both supplied is a caller defect, not a preference to resolve. Picking a
+    // winner would hide the bug in whichever one lost.
+    if (focusRaw !== '' && cursorRaw !== '') {
+      return res.status(400).json({ error: 'focus and cursor cannot be combined', code: 'LIST_FOCUS_CURSOR_CONFLICT' });
+    }
 
     const page = await listDraftSummaries(kv, googleSub, {
       limit: limitRaw === '' ? LIST_PAGE_DEFAULT : Number(limitRaw),
       cursor: cursorRaw === '' ? 0 : Number(cursorRaw),
+      focus: focusRaw === '' ? null : focusRaw,
     });
     if (page.unavailable) {
       return res.status(503).json({ error: 'Could not load your drafts', retryable: true });
@@ -169,6 +181,7 @@ async function handleGet(req, res, kv, googleSub, draftId) {
       cap: DRAFT_CAP,
       source: page.source,
       degraded: page.degraded,
+      focusOffset: page.focusOffset === undefined ? null : page.focusOffset,
     });
   }
 

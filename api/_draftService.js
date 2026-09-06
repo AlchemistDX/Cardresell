@@ -574,6 +574,36 @@ export async function listDraftSummaries(kv, googleSub, opts = {}) {
   const ordered = [...ids].sort();
   let start = Number(opts.cursor);
   if (!Number.isInteger(start) || start < 0) start = 0;
+
+  // `focus` answers "which page is this draft on" in one request.
+  //
+  // Draft ids are random (`newDraftId`), so a new draft's position in the
+  // sorted order is uniformly distributed. A client that renders page 1 and
+  // looks for the id it just created finds it 25/N of the time -- 5% at the
+  // 500 cap. The alternative the client would otherwise reach for is paging
+  // forward until the id turns up, which is up to 20 sequential authenticated
+  // requests before first paint, and unbounded in principle because the cap
+  // can be exceeded under concurrency (see the 519 note above).
+  //
+  // The offset is free: `ordered` is already in hand.
+  //
+  // A -1 is not an error. The id may be legitimately absent because the create
+  // resolved through the reconcile path and the index has not caught up -- the
+  // draft is saved either way. Serving page 1 with a null offset lets the
+  // screen say "saved, may take a moment" instead of "not found".
+  let focusOffset = null;
+  if (typeof opts.focus === 'string' && opts.focus) {
+    const at = ordered.indexOf(opts.focus);
+    if (at >= 0) {
+      focusOffset = at;
+      // Align to a limit boundary so the page served is a page the cursor
+      // contract could also have produced. An unaligned window would make
+      // `nextCursor` describe a walk that skips rows.
+      start = Math.floor(at / limit) * limit;
+    } else {
+      start = 0;
+    }
+  }
   const slice = ordered.slice(start, start + limit);
   const end = start + slice.length;
 
@@ -620,6 +650,11 @@ export async function listDraftSummaries(kv, googleSub, opts = {}) {
     source: listed.source || null,
     degraded: !!listed.degraded,
     unavailable: false,
+    // Found/not-found signal plus a diagnostic. NOT row arithmetic: a row can
+    // be tombstoned between the index write and the hydration read, in which
+    // case this is a real offset and the row is still absent from `rows`. The
+    // screen matches on draftId and treats any absence the same way.
+    focusOffset,
   };
 }
 

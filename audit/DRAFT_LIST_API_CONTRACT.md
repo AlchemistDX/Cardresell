@@ -252,6 +252,98 @@ in-flight.
 
 ---
 
+### 2.8 The `focus` parameter
+
+Added by Amendment 2. A contract change, not a screen behavior, so it lives with the other
+paging concerns.
+
+**Why it exists.** `newDraftId()` is `drf_${randomBytes(16).toString('hex')}`
+(`api/_draftStore.js:105-107`) and paging sorts ids lexically (`api/_draftService.js:574`), so a
+new draft's page position is **uniformly random** — not "usually recent."
+
+| Seller's drafts | P(new draft on page 1) |
+|---|---|
+| 25 | 100% |
+| 200 | 12.5% |
+| 500 (cap) | 5% |
+
+Amendment 1's page-forward rule therefore cost up to 20 sequential authenticated requests
+before first paint, and a highlight-only-if-already-loaded rule would have degraded silently
+with usage: flawless on a dev account with six drafts, failing for the sellers with the most at
+stake. The server can answer directly — `listDraftSummaries` already holds `ordered`, the
+complete sorted id array (`api/_draftService.js:574`), and already returns
+`total: ordered.length` (`:614`). The offset of any id is `ordered.indexOf(draftId)`, free in
+memory it already has.
+
+**No bounded client loop, ever.** `api/_draftService.js:162` records that concurrent requests
+took a 500-cap seller to 519 in a test. The cap can be exceeded, so "up to 20 pages" is a floor,
+not a ceiling. A client written as `for (let p = 0; p < 20; p++)` would be wrong on exactly the
+seller it was written for.
+
+#### Request
+
+`GET /api/drafts?focus=<draftId>` — optional, read only on the hydrated list path. Ignored on
+the `?ids=1` path, which D2.1 does not use.
+
+The server resolves the id to its offset in `ordered` and serves **the page containing it**,
+aligned to `limit` boundaries so the cursor contract is unchanged:
+
+```js
+pageStart = Math.floor(focusOffset / limit) * limit;
+```
+
+Everything downstream — `nextCursor`, `count`, `total`, ordering, recency-within-page — behaves
+exactly as for an equivalent `cursor` request. `focus` resolves to an offset and then stops
+being special.
+
+#### Validation — refuse, never clamp
+
+Follows the existing pattern at `api/drafts.js:145-155`.
+
+| Condition | Status | Body |
+|---|---|---|
+| `focus` does not match the draft-id format | 400 | `{ error: 'focus must be a draft id', code: 'LIST_FOCUS_INVALID' }` |
+| `focus` and `cursor` both supplied | 400 | `{ error: 'focus and cursor cannot be combined', code: 'LIST_FOCUS_CURSOR_CONFLICT' }` |
+
+Sending both is a caller defect, not a preference to resolve — refuse rather than pick a winner
+(§5.6). The id format is **server-owned**; the client never validates a draft id and never
+constructs one. It echoes what the create response gave it.
+
+**Rule-1 note on the format predicate.** No draft-id format check existed anywhere before this
+amendment — `?id=`, PATCH, and DELETE all test only for non-empty (`api/drafts.js:118, 241,
+268`). Writing a regex inline for `focus` alone would create a second, narrower definition of
+"draft id" sitting next to the generator that actually owns the format. The predicate is
+therefore exported once from `_draftStore.js`, beside `newDraftId()`, and `focus` calls it.
+Retrofitting the other three paths onto the same predicate is deliberately **not** part of this
+amendment: those paths currently accept any non-empty string and tightening them is a
+behavior change with its own blast radius. Tracked in Part 7.
+
+#### Envelope
+
+One key added to the seven in §2.2:
+
+```
+focusOffset: <integer> | null
+```
+
+- **Integer** — the id was found in `ordered`; the served page is the one containing it.
+- **`null`** — the id is not in the index. The server serves page 1.
+
+**`focusOffset` is a found/not-found signal and a diagnostic. It is not row arithmetic.** The
+client marks the row whose `draftId` matches the created id, and must never compute a row
+position from `focusOffset`.
+
+#### The trap: a non-null `focusOffset` does not guarantee the row is on the page
+
+`ordered` is the id list, and tombstoned ids are dropped only after hydration — the read returns
+`STORE_ERR.DELETED` and the row becomes `null` (`api/_draftService.js:590`), then
+`rows.filter((r) => r !== null)` removes it (`:600`). This is the same mechanism that lets
+`count` fall below the page size (§2.2). A focused id tombstoned between index write and read
+resolves to an offset, is served, and then disappears from `rows`.
+
+So the client handles two independent facts: what `focusOffset` says, and whether a matching row
+is actually present. §3.1a is written so both resolve to the same safe outcome.
+
 ## Part 3 — The screen
 
 ### 3.1 Mounting and navigation
@@ -282,20 +374,28 @@ something they open.
 
 **Consequence for the "navigate by returned ID" contract.** With no detail screen, the
 requirement to navigate by the returned `draftId` and never by `rows[0]` is satisfied at the
-list level:
+list level. Amendment 2 replaced the original page-forward rule with four principles that leave
+the client no branch to get wrong:
 
-- After a create, open **All drafts** and highlight the row whose `draftId` matches the create
-  response.
-- Find it by id. Never assume position, and never use `rows[0]`.
-- If the created draft is not on the first page, page forward until its id is found, or scroll
-  it into view once found. Do not silently show the list without it.
-- A replay (HTTP 200, same `draftId`) does the same thing — highlight the existing row. That is
-  the replay-is-success rule with no detail screen behind it.
+1. **One request. Render what the server sent.** Open **All drafts** with
+   `?focus=<draftId>` from the create response (§2.8). Never block first paint. Never loop.
+2. **Highlight the row whose `draftId` matches the created id**, if that row is present.
+3. **If no matching row is present, show a one-line notice: the draft is saved and may take a
+   moment to appear.** Take the framing from the create response's own `degraded` /
+   `repairRequired` flags, which state it directly — `api/drafts.js:229-230`: "the draft IS
+   saved. Only finding it in a list may lag."
+4. **Never page-hunt. Never let absence render as loss.**
 
-The paging order makes this load-bearing rather than defensive: ids sort lexically and recency
-applies only within a page (§2.3), so a freshly created draft is **not** reliably on page 1.
-An implementation that shows page 1 and stops will routinely fail to display the draft the
-seller just made.
+Principle 2 keeps the no-`rows[0]` rule intact: the id is still matched, just not chased.
+
+Principle 3 covers all three ways a row can go missing — reconcile lag, a tombstone race
+(§2.8), and an index that has not caught up — with one message that is true in every case and
+invents no cause. The client does not try to distinguish them; the server cannot cheaply do so
+either, and a guessed cause would violate §5.2.
+
+A replay (HTTP 200, same `draftId`) takes the identical path — same `focus` request, same
+highlight, same notice if absent. That is the replay-is-success rule with no detail screen
+behind it.
 
 ### 3.2 Auth
 
@@ -442,6 +542,31 @@ Cases:
 
 ---
 
+### Added by Amendment 2
+
+**16.** `focus` for an id at a mid-list offset serves the page containing it, with
+`focusOffset` equal to its absolute offset in `ordered` and `nextCursor` correct for that
+page's boundary.
+
+**17.** `focus` for an id absent from the index serves page 1 with `focusOffset: null`.
+
+**18.** `focus` with a malformed id returns 400 `LIST_FOCUS_INVALID`. `focus` combined with
+`cursor` returns 400 `LIST_FOCUS_CURSOR_CONFLICT`.
+
+**19.** A focused id that is tombstoned yields a non-null `focusOffset` with no matching row in
+`rows`. The client renders the notice, not an error and not a blank.
+
+**20.** A focused id at offset 499 — and at 518, per the over-cap case at
+`api/_draftService.js:162` — resolves in exactly one request.
+
+**21.** The create-to-list path issues **exactly one** list request. Assert the count, not the
+absence of a loop; a bounded loop that happens to terminate at one on the fixture would
+otherwise pass.
+
+**22.** A create whose response carries `degraded: true, repairRequired: true` renders the
+notice, and the notice text is not authored per-cause — the same string appears for the
+tombstone case in test 19.
+
 ## Part 5 — Bundle rename
 
 `core.d9e1b484.js` is served `max-age=31536000, immutable` (`vercel.json:47-48`). Changed bytes
@@ -489,6 +614,18 @@ Nothing catches a violation at edit time — no linter, no formatter, no `packag
 
 ---
 
+### Added by Amendment 2
+
+- [ ] Exactly one list request on the create-to-list path; no loop, bounded or otherwise.
+- [ ] Row matched by `draftId`; no row position computed from `focusOffset`.
+- [ ] Missing row renders the saved-may-lag notice, identical across all three causes.
+- [ ] `focus` misuse refused with a 400, never clamped or silently ignored.
+
+Amendment 2's brief called for removing Amendment 1's page-forward acceptance line. There was
+none: the page-forward rule lived only in §3.1a's prose, and the surviving acceptance item
+above — "located by `draftId` and highlighted, never by position" — is unaffected by this
+amendment and stays as written. Nothing was removed.
+
 ## Part 7 — Out of scope
 
 - Any publish control. There is no publish path in Phase 1 by design.
@@ -504,6 +641,15 @@ Nothing catches a violation at edit time — no linter, no formatter, no `packag
   UI that depends on it.
 
 ---
+
+### Added by Amendment 2
+
+- **Retrofitting `?id=`, PATCH, and DELETE onto the shared draft-id predicate.** Those three
+  paths test only for non-empty (`api/drafts.js:118, 241, 268`). `focus` uses the exported
+  predicate from `_draftStore.js`, but tightening the existing paths is a behavior change with
+  its own blast radius and belongs in its own unit.
+- **Distinguishing why a focused row is missing.** Reconcile lag, tombstone race, and index lag
+  all render the same notice by design (§3.1a principle 3).
 
 ## Verification log
 
