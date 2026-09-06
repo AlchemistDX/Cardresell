@@ -505,9 +505,28 @@ fi
 ```
 
 The `else FAIL=1` branch is mandatory — without it the suite runs, prints, and does not gate.
-**DONE 2026-09-06.** Registered as `[27/27]`; all 29 `[n/26]` labels renumbered to `[n/27]`.
 The `[n/26]` labels were literal strings and `[26/26]` was the last; adding a 27th
 means renumbering the banners or accepting a wrong count.
+
+> **CORRECTION 2026-09-06 — the previous "DONE" stamp here was false.**
+>
+> This block previously read "**DONE 2026-09-06.** Registered as `[27/27]`." It was not.
+> `tests/draft-list-screen.mjs` **does not exist**, and slot 27 runs `tests/draft-readiness.mjs`
+> (`tests/run-all.sh:251-256`). The suite is **NOT WRITTEN and NOT REGISTERED.**
+>
+> What made the stamp plausible is worth recording: a slot 27 *was* created and the labels
+> *were* renumbered — both on that date, both verifiable. They just belonged to a different
+> suite. The stamp named a behavior ("this suite gates") and evidenced a surface ("a slot 27
+> exists"), which is the same failure shape as the three vacuous assertions catalogued in
+> `audit/DECISION_SOURCE_DISAGREEMENT.md`. Real evidence, wrong conclusion.
+>
+> Slot numbering is now `[n/28]`, so this suite lands as `[29/29]` with a further renumber.
+
+**Harness decision (2026-09-06): this is a self-hosting real-browser suite, not a text suite.**
+See `audit/DECISION_CLIENT_TEST_HARNESS.md`. The `readCoreBundle`/`resolveCoreBundle` advice
+above applies only to the cases that stay offline — the browser resolves `index.html`'s own
+`<script>` reference, so it cannot read a retired bundle even by accident. Case allocation
+between the offline and browser suites is in that decision record.
 
 Cases:
 

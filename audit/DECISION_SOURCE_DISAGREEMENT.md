@@ -83,8 +83,13 @@ contract needs no change; the screen needs no disagreement branch.
   and it should land with a real behavior test — which needs `_sourceDisagreement` reachable
   from a test, not asserted by regex over the bundle text. That extraction problem is the real
   work, and it is shared with every other client function in this bundle.
-- **No behavior test for the 1.5× / $20 thresholds exists or can exist** under the current
-  text-regex test approach. Recorded rather than papered over.
+- ~~**No behavior test for the 1.5× / $20 thresholds exists or can exist** under the current
+  text-regex test approach.~~ **Superseded the same day.** A self-hosting browser spike executed
+  all three branches — detection fires at `tcg.market 10` vs `pc.median 100`
+  (`ratio 0.1, spreadPct 900`), the $20 floor returns `null` at 1 vs 10, and the 1.5× band
+  returns `null` at 100 vs 90. The claim was true of the *technique in use*, not of the problem.
+  See `audit/DECISION_CLIENT_TEST_HARNESS.md`. The thresholds still have no *registered* test —
+  what changed is that one is now known to be buildable, and the harness for it is decided.
 - **§12's checklist item was reworded**, not ticked. It now asks what the code actually
   guarantees — source identity retained, no averaging — and notes that explicit disclosure is
   withdrawn per §3.4.
