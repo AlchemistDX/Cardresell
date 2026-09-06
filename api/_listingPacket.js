@@ -1,0 +1,283 @@
+// api/_listingPacket.js — packet assembly + metadata stamp
+//
+// Phase 1, Block B5. Assembles identity (A1), title (B1), category and
+// aspects (B2), condition (B3) and pricing (B4) into one packet, and stamps
+// the five metadata fields.
+//
+// ── Why the stamp exists ──
+// Not so we can trust an old packet's validity — validity is always
+// recomputed. It's so "this draft looked different yesterday" becomes
+// answerable instead of a guess. That matters more after Phase 3, when a
+// packet may have produced a real live listing that a buyer is looking at.
+//
+// ── 🔴 The relative-age bug this file fixes ──
+// `_basisMeta` in core.js carries `cacheAgeSec` — a RELATIVE age. Persist that
+// into a draft and it freezes: read the draft three days later and it still
+// claims "retrieved 3h ago". By the standing rule that is a stamped lie, and
+// it is currently how the data is shaped. So every relative age is converted
+// to an absolute `retrievedAt` ISO timestamp on the way in, and display age is
+// computed at read time. `FORBIDDEN_AGE_KEYS` is exported so a test can walk
+// the finished packet and prove none of them survived.
+
+import { cardIdentity, hasSufficientIdentity } from './_cardIdentity.js';
+import { buildListingTitle } from './_listingTitle.js';
+import { buildConditionBlock, SEVERITY } from './_conditionDescriptors.js';
+import {
+  categoryForCard, buildRequiredAspects, CARD_CATEGORIES, VERIFIED_TREE_VERSION,
+} from './_ebayTaxonomy.js';
+
+/** Ours. Bump when the packet's own shape changes. */
+export const PACKET_SCHEMA_VERSION = 1;
+
+/**
+ * Any of these keys inside a persisted packet is a bug: they encode "how long
+ * ago" relative to a moment that is gone by the time anyone reads it.
+ */
+export const FORBIDDEN_AGE_KEYS = ['cacheAgeSec', 'ageSec', 'ageSeconds', 'secondsAgo', 'age'];
+
+export const PACKET_CODES = {
+  MISSING_FEE_MODEL_REVISION: 'MISSING_FEE_MODEL_REVISION',
+  INSUFFICIENT_IDENTITY:      'INSUFFICIENT_IDENTITY',
+  NO_CARD_NAME:               'NO_CARD_NAME',
+  TITLE_BUDGET_EXCEEDED:      'TITLE_BUDGET_EXCEEDED',
+  MISSING_REQUIRED_ASPECT:    'MISSING_REQUIRED_ASPECT',
+  UNVERIFIED_ASPECT_VALUES:   'UNVERIFIED_ASPECT_VALUES',
+  TAXONOMY_VERSION_ASSUMED:   'TAXONOMY_VERSION_ASSUMED',
+  NO_PRICE:                   'NO_PRICE',
+};
+
+/**
+ * 'Sep 2026' → '2026-09'.
+ *
+ * PLATFORMS.ebay.verified is a human display string. The stamp needs something
+ * sortable and machine-comparable. If the input is unparseable we return null
+ * rather than a plausible-looking guess — an unknown verification date must
+ * not masquerade as a known one.
+ */
+const MONTHS = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+};
+export function normalizeVerifiedStamp(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}$/.test(s)) return s;                      // already normalized
+  const m = s.match(/^([A-Za-z]{3,})\.?\s+(\d{4})$/);
+  if (!m) return null;
+  const mm = MONTHS[m[1].slice(0, 3).toLowerCase()];
+  return mm ? `${m[2]}-${mm}` : null;
+}
+
+/**
+ * Convert a `_basisMeta`-shaped object into a persistable price-basis stamp.
+ *
+ * The relative `cacheAgeSec` becomes an absolute `retrievedAt`. Nothing
+ * relative comes out the other side. If there is no age information we emit
+ * `retrievedAt: null` — an honest gap beats a fabricated timestamp.
+ */
+export function stampPriceBasis(basisMeta, nowMs) {
+  if (!basisMeta || typeof basisMeta !== 'object') return null;
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+
+  const age = Number(basisMeta.cacheAgeSec);
+  const retrievedAt = Number.isFinite(age) && age >= 0
+    ? new Date(now - age * 1000).toISOString()
+    : null;
+
+  const out = {
+    label:         basisMeta.label || null,
+    sourceUrl:     basisMeta.sourceUrl || null,
+    // Whether the FEED gave us a real as-of date, or we only know when we
+    // fetched it. PriceCharting publishes no as-of date; that distinction is
+    // already surfaced in the UI and must survive into the packet.
+    datedBySource: basisMeta.datedBySource === true,
+    retrievedAt,
+    low:           basisMeta.low  ?? null,
+    mid:           basisMeta.mid  ?? null,
+    high:          basisMeta.high ?? null,
+    highClamped:   basisMeta.highClamped === true,
+  };
+  // Belt and braces: if a future _basisMeta grows another relative field,
+  // this strips it rather than letting it ride along into storage.
+  for (const k of FORBIDDEN_AGE_KEYS) delete out[k];
+  return out;
+}
+
+/** Display age computed at READ time from the absolute stamp. */
+export function ageFromRetrievedAt(retrievedAt, nowMs) {
+  if (!retrievedAt) return null;
+  const t = Date.parse(retrievedAt);
+  if (!Number.isFinite(t)) return null;
+  const secs = Math.max(0, Math.round(((Number.isFinite(nowMs) ? nowMs : Date.now()) - t) / 1000));
+  if (secs < 60)    return 'just now';
+  if (secs < 3600)  return `${Math.round(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.round(secs / 3600)} hr ago`;
+  return `${Math.round(secs / 86400)} days ago`;
+}
+
+/**
+ * Which aspect name carries "which printing is this" in each category.
+ * Grounded in the real getItemAspectsForCategory response saved at
+ * api/data/ebay_aspect_names_183454_261328_183050.json:
+ *   CCG (183454)       has "Rarity", no "Parallel/Variety"
+ *   Sports (261328)    has "Parallel/Variety", no "Rarity"
+ *   Non-Sport (183050) has "Parallel/Variety", no "Rarity"
+ * Sending "Rarity" to the sports category would be sending a field that does
+ * not exist there.
+ */
+function variantAspectName(categoryId) {
+  return categoryId === CARD_CATEGORIES.CCG.id ? 'Rarity' : 'Parallel/Variety';
+}
+
+/**
+ * Optional aspects we can fill from data we actually hold. These are
+ * DISPLAY SUGGESTIONS for the seller to match against the venue's own
+ * dropdowns — not verified API values.
+ *
+ * We know the aspect NAMES are real (fetched from eBay). We do NOT know the
+ * allowed VALUES for constrained aspects like `Game`, because that needs
+ * getItemAspectsForCategory value enumerations we have not captured. Same rule
+ * as the condition descriptors in B3: an unverified value is labelled
+ * unverified, never presented as authoritative.
+ */
+function buildOptionalAspects(row, ident, categoryId) {
+  const a = {};
+  const put = (k, v) => { const s = String(v ?? '').trim(); if (s) a[k] = [s]; };
+
+  put('Card Name',   ident.displayName);
+  put('Card Number', row?.number ?? row?.card_number);
+  put('Set',         ident.displaySetName);
+  put(variantAspectName(categoryId), row?.rarity);
+  put('Language',    ident.language === 'ja' ? 'Japanese' : 'English');
+  return a;
+}
+
+/**
+ * Assemble the packet. Synchronous and pure — no network, no storage — so it
+ * is testable offline and so a draft save never depends on eBay being up.
+ *
+ * `ctx` must carry:
+ *   feeModelRevision     integer from core.js FEE_MODEL_REVISION (required)
+ *   feeScheduleVerified  'Sep 2026' or '2026-09' (from PLATFORMS.ebay.verified)
+ *   taxonomyTreeVersion  live-read version string, optional
+ *   pricing              the listPriceForTargetNet result, optional
+ *   basisMeta            _basisMeta-shaped price basis, optional
+ *   now                  ms epoch, for deterministic tests
+ */
+export function buildListingPacket(row = {}, ctx = {}) {
+  const now   = Number.isFinite(ctx.now) ? ctx.now : Date.now();
+  const notes = [];
+  const add   = (code, severity, message, extra = {}) =>
+    notes.push({ code, severity, message, ...extra });
+
+  const ident = cardIdentity(row);
+  const title = buildListingTitle(row, { maxLength: ctx.maxTitleLength });
+  const cat   = categoryForCard({ ...row, setName: ident.displaySetName });
+  const req   = buildRequiredAspects({ ...row, setName: ident.displaySetName });
+  const cond  = buildConditionBlock(row);
+
+  // ── The five metadata fields ────────────────────────────────────────────
+  // feeModelRevision is REQUIRED and deliberately not defaulted. The single
+  // source of truth is FEE_MODEL_REVISION in core.js, and duplicating a
+  // fallback here would let the two drift silently — which is exactly the
+  // ambiguity this field exists to remove. A missing value is an ERROR, not a
+  // zero.
+  const feeModelRevision = Number.isInteger(ctx.feeModelRevision) ? ctx.feeModelRevision : null;
+  if (feeModelRevision === null) {
+    add(PACKET_CODES.MISSING_FEE_MODEL_REVISION, SEVERITY.ERROR,
+        'No feeModelRevision supplied. Pass FEE_MODEL_REVISION from core.js — '
+      + 'a packet that cannot say which fee logic priced it is permanently ambiguous.');
+  }
+
+  const treeVersionLive = ctx.taxonomyTreeVersion ? String(ctx.taxonomyTreeVersion) : null;
+  if (!treeVersionLive) {
+    add(PACKET_CODES.TAXONOMY_VERSION_ASSUMED, SEVERITY.INFO,
+        `No live taxonomy version supplied; recording the last verified value `
+      + `(${VERIFIED_TREE_VERSION}) and labelling it as such.`);
+  }
+
+  const metadata = {
+    packetSchemaVersion: PACKET_SCHEMA_VERSION,
+    taxonomyTreeVersion: treeVersionLive || VERIFIED_TREE_VERSION,
+    // Never claim a live read we did not perform.
+    taxonomyTreeVersionSource: treeVersionLive ? 'live' : 'verified-constant',
+    feeModelRevision,
+    feeScheduleVerified: normalizeVerifiedStamp(ctx.feeScheduleVerified),
+    generatedAt: new Date(now).toISOString(),
+  };
+
+  // ── Validation ──────────────────────────────────────────────────────────
+  if (!hasSufficientIdentity(row)) {
+    add(PACKET_CODES.INSUFFICIENT_IDENTITY, SEVERITY.ERROR,
+        'Need at least game, set and card number to build a listing.');
+  }
+  if (!title.ok && title.reason === 'NO_CARD_NAME') {
+    add(PACKET_CODES.NO_CARD_NAME, SEVERITY.ERROR, 'No card name — cannot build a title.');
+  } else if (title.dropped.length) {
+    add(PACKET_CODES.TITLE_BUDGET_EXCEEDED, SEVERITY.INFO,
+        `Title hit the ${title.maxLength}-character limit; omitted ${title.dropped.join(', ')}.`,
+        { dropped: title.dropped });
+  }
+  for (const name of req.missing) {
+    add(PACKET_CODES.MISSING_REQUIRED_ASPECT, SEVERITY.WARNING,
+        `"${name}" is required by ${req.categoryLabel} and we could not fill it. `
+      + 'Set it in the listing form.', { aspect: name });
+  }
+  add(PACKET_CODES.UNVERIFIED_ASPECT_VALUES, SEVERITY.WARNING,
+      'Aspect values are our display suggestions, not verified venue values. '
+    + 'Match them against the listing form\'s own dropdowns.');
+
+  const pricing = ctx.pricing || null;
+  if (!pricing || pricing.ok !== true || !(pricing.listPrice > 0)) {
+    add(PACKET_CODES.NO_PRICE, SEVERITY.WARNING,
+        'No list price computed. Set a target payout to get one.');
+  }
+
+  notes.push(...cond.notes);
+
+  const blocking = notes.filter((n) => n.severity === SEVERITY.ERROR);
+
+  return {
+    sku: ident.sku,
+    identity: ident,
+    title: { text: title.title, length: title.length, dropped: title.dropped },
+    category: { id: cat.id, label: cat.label },
+    aspects: {
+      required: req.aspects,
+      missingRequired: req.missing,
+      optional: buildOptionalAspects(row, ident, cat.id),
+      valuesVerified: false,
+    },
+    condition: cond,
+    pricing: pricing
+      ? {
+          listPrice:   pricing.listPrice,
+          targetNet:   pricing.targetNet,
+          achievedNet: pricing.achievedNet,
+          // Report what the price really nets, never the requested figure.
+          exact:       pricing.exact === true,
+          delta:       pricing.delta,
+        }
+      : null,
+    priceBasis: stampPriceBasis(ctx.basisMeta, now),
+    metadata,
+    notes,
+    // C7 severity tiers: only ERROR blocks the handoff.
+    blocked: blocking.length > 0,
+    blockingCodes: blocking.map((n) => n.code),
+  };
+}
+
+/** Deep-walk a packet and return every forbidden relative-age key path found. */
+export function findRelativeAgeKeys(node, path = '$', found = []) {
+  if (!node || typeof node !== 'object') return found;
+  if (Array.isArray(node)) {
+    node.forEach((v, i) => findRelativeAgeKeys(v, `${path}[${i}]`, found));
+    return found;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    if (FORBIDDEN_AGE_KEYS.includes(k)) found.push(`${path}.${k}`);
+    findRelativeAgeKeys(v, `${path}.${k}`, found);
+  }
+  return found;
+}

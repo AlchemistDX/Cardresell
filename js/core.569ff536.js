@@ -6359,6 +6359,118 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   items.taxNote      = true;
   return items;
 }
+// ── Fee model revision (Block B5) ─────────────────────────────────────────
+// Our own integer, unrelated to any venue's published schedule.
+// BUMP THIS whenever the arithmetic inside any fee* function changes.
+//
+// PLATFORMS.<venue>.verified answers "when did we last read eBay's published
+// rate card" — currently 'Sep 2026'. It cannot answer "which version of our
+// code did this arithmetic": fix a fee bug on Sep 18 and both stamps still
+// read 'Sep 2026', so two packets computed by different logic look identical.
+// Two questions, two fields. This one is cheap now and impossible to backfill.
+const FEE_MODEL_REVISION = 1;
+
+// ── Target net → list price, by bisection (Block B4) ─────────────────────
+// Standing rule: invert by bisection on the forward function, never by
+// re-deriving the algebra. feeEbay is piecewise (two tier boundaries, a Top
+// Rated multiplier, a per-order step) and every algebraic inverse anyone
+// writes for it drifts from the real function the first time a rate moves.
+// Bisecting the real function cannot drift, because it calls the real function.
+
+/** Net proceeds for a given eBay list price. Mirrors the payout row exactly:
+ *  price + buyer-paid shipping - total fees - the postage the seller pays. */
+function netEbayForPrice(price, ctx) {
+  const c          = ctx || {};
+  const shipCharge = Number(c.shipCharge) || 0;
+  const shipCost   = Number(c.shipCost)   || 0;
+  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, c.ebayTopRated);
+  const totalFees  = items.reduce(function (s, f) { return s + f.a; }, 0);
+  return price + shipCharge - totalFees - shipCost;
+}
+
+/**
+ * Smallest list price whose net proceeds reach `targetNet`.
+ *
+ * "Smallest price that clears the target" rather than "price that hits the
+ * target exactly" is deliberate: a cheaper card at the same payout sells
+ * faster, so among equally-good answers the seller wants the low one.
+ *
+ * ⚠ net(price) is NOT strictly monotonic. eBay's per-order fee steps from
+ * $0.30 to $0.40 when the order total crosses $10, so net drops ten cents at
+ * that point and a band of net values is reachable at two different prices.
+ * Pure bisection would return whichever side it converged on. So after
+ * bisecting we scan a small cent-level window downward and keep the lowest
+ * price that still clears the target.
+ *
+ * The returned `achievedNet` is always recomputed through feeEbay, and
+ * `exact` reports whether we actually landed within a nickel. We never claim
+ * the target was hit — we report what the price really nets.
+ */
+function listPriceForTargetNet(targetNet, ctx) {
+  const c      = ctx || {};
+  const target = Number(targetNet);
+  const netFor = typeof c.netFor === 'function' ? c.netFor : netEbayForPrice;
+  const net    = function (p) { return netFor(p, c); };
+  const EPS    = 0.005;   // half a cent of slack, so cent rounding is not a miss
+  const FLOOR  = 0.01;
+
+  if (!isFinite(target)) {
+    return { ok: false, reason: 'BAD_TARGET', listPrice: null, achievedNet: null };
+  }
+
+  // A target so low that the minimum listable price already clears it.
+  if (net(FLOOR) >= target - EPS) {
+    const a = net(FLOOR);
+    return {
+      ok: true, listPrice: FLOOR, achievedNet: Math.round(a * 100) / 100,
+      targetNet: target, delta: Math.round((a - target) * 100) / 100,
+      exact: Math.abs(a - target) <= 0.05, atFloor: true,
+      feeModelRevision: FEE_MODEL_REVISION
+    };
+  }
+
+  // Grow an upper bracket. Doubling rather than solving for it keeps this
+  // correct even if a future fee tier makes the curve steeper somewhere.
+  let hi = Math.max(1, Math.abs(target) + 5), guard = 0;
+  while (net(hi) < target && guard < 64) { hi *= 2; guard++; }
+  if (net(hi) < target) {
+    // Marginal fees at or above 100% — e.g. a promoted-listing rate that eats
+    // every extra dollar. No price reaches this payout; say so.
+    return {
+      ok: false, reason: 'UNREACHABLE_NET', listPrice: null, achievedNet: null,
+      targetNet: target,
+      message: 'No list price reaches this payout at the current fee settings.'
+    };
+  }
+
+  let lo = 0;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (net(mid) < target) lo = mid; else hi = mid;
+  }
+
+  // Round up to a real cent price, then walk down for the lowest cent price
+  // that still clears the target. The window covers the $10 per-order step.
+  let price = Math.ceil(hi * 100) / 100;
+  for (let k = 1; k <= 60; k++) {
+    const cand = Math.round((price - k * 0.01) * 100) / 100;
+    if (cand < FLOOR) break;
+    if (net(cand) >= target - EPS) price = cand;
+  }
+
+  const achieved = net(price);
+  return {
+    ok: true,
+    listPrice: price,
+    achievedNet: Math.round(achieved * 100) / 100,
+    targetNet: target,
+    delta: Math.round((achieved - target) * 100) / 100,
+    exact: Math.abs(achieved - target) <= 0.05,
+    atFloor: false,
+    feeModelRevision: FEE_MODEL_REVISION
+  };
+}
+
 
 // TCGPlayer — dominant TCG singles marketplace (Pokémon, MTG, Yu-Gi-Oh!, Lorcana, etc.)
 // Level 1–4 Marketplace Seller (the default tier for new sellers):
