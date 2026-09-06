@@ -119,32 +119,157 @@ export const SLOT_RULES = {
   'tcgplayer:fixed-price':{ titleMax: 200, requiresPrice: true, allowsZeroPrice: false },
 };
 
+/**
+ * ── Severity: what blocks a handoff, and what merely gets said ────────────
+ *
+ * A single ok/not-ok answer forces every finding to be fatal, and the
+ * predictable result is that genuinely useful advice gets dropped because
+ * nobody wants a warning to stop a sale. So findings are tiered:
+ *
+ *   ERROR   the venue will reject this, or we would be sending something
+ *           we know to be wrong. Blocks handoff. Not overridable.
+ *   WARNING worth the seller's attention; they may proceed anyway.
+ *   INFO    context, not a defect.
+ *
+ * ONLY ERROR blocks. That is the whole contract, and it is asserted in tests
+ * rather than left to each call site to remember.
+ */
+export const SEVERITY = { ERROR: 'error', WARNING: 'warning', INFO: 'info' };
+
+/** Only ERROR blocks a handoff. Nothing else may. */
+export function blocks(severity) {
+  return severity === SEVERITY.ERROR;
+}
+
 export const VIOLATION = {
   TITLE_TOO_LONG:  'SLOT_TITLE_TOO_LONG',
   PRICE_REQUIRED:  'SLOT_PRICE_REQUIRED',
   ZERO_PRICE:      'SLOT_ZERO_PRICE_NOT_ALLOWED',
   UNKNOWN_SLOT:    'SLOT_RULES_UNKNOWN',
+  NO_PROVENANCE:   'DRAFT_NO_PRICE_PROVENANCE',
 };
 
-/** @returns {{ok:boolean, violations:Array<{code:string,field:string,detail:string}>}} */
+/**
+ * The severity of each finding, declared in one place.
+ *
+ * A code with no entry here is treated as ERROR. That default is deliberate:
+ * a new check added without a severity decision should stop a handoff and get
+ * noticed, not sail through as an unread warning.
+ */
+export const VIOLATION_SEVERITY = {
+  [VIOLATION.TITLE_TOO_LONG]: SEVERITY.ERROR,
+  [VIOLATION.PRICE_REQUIRED]: SEVERITY.ERROR,
+  [VIOLATION.ZERO_PRICE]:     SEVERITY.ERROR,
+  [VIOLATION.UNKNOWN_SLOT]:   SEVERITY.ERROR,
+  // Informational: the draft is perfectly listable, we just cannot show the
+  // seller where its price came from. Blocking on this would refuse to list a
+  // draft whose price the seller typed themselves.
+  [VIOLATION.NO_PROVENANCE]:  SEVERITY.INFO,
+};
+
+export function severityOf(code) {
+  return VIOLATION_SEVERITY[code] || SEVERITY.ERROR;
+}
+
+/**
+ * Seller-facing text for each finding.
+ *
+ * These live next to the codes rather than in the UI because the reason a
+ * handoff was refused has to survive being read in a log, a test failure and
+ * a support message — not only in the one screen that happened to render it.
+ * `detail` stays machine-readable; this is the sentence.
+ */
+export function reasonMessage(code, ctx = {}) {
+  switch (code) {
+    case VIOLATION.TITLE_TOO_LONG:
+      return `Title is ${ctx.length} characters; ${ctx.venue || 'this marketplace'} allows ${ctx.max}. Shorten it by ${Math.max(1, (ctx.length || 0) - (ctx.max || 0))}.`;
+    case VIOLATION.PRICE_REQUIRED:
+      return 'This listing needs a price before it can be sent.';
+    case VIOLATION.ZERO_PRICE:
+      return `A price of zero is not allowed for ${ctx.venue || 'this listing type'}.`;
+    case VIOLATION.UNKNOWN_SLOT:
+      return `CardResell does not know how to list to "${ctx.slot}" yet.`;
+    case VIOLATION.NO_PROVENANCE:
+      return 'This price has no saved quote attached, so the listing will not show where it came from.';
+    default:
+      return 'This draft cannot be listed yet.';
+  }
+}
+
+/** The venue name in a slot key, for messages. `ebay:fixed-price` → `eBay`. */
+const VENUE_LABEL = { ebay: 'eBay', mercari: 'Mercari', whatnot: 'Whatnot', tcgplayer: 'TCGplayer' };
+function venueOf(slot) {
+  const head = String(slot || '').split(':')[0];
+  return VENUE_LABEL[head] || head || null;
+}
+
+/**
+ * @returns {{
+ *   ok: boolean, violations: Array<{code,field,detail,severity,blocking,message}>,
+ *   blocking: Array<object>, errors: number, warnings: number, infos: number
+ * }}
+ *
+ * `ok` means NO ERROR-severity finding — not "no findings at all". A draft
+ * with three warnings and no errors is publishable, and saying otherwise would
+ * make the warning tier pointless.
+ */
 export function validateDraftForSlot(draft, slot = draft && draft.slot) {
-  const rules = SLOT_RULES[slot];
-  if (!rules) return { ok: false, violations: [{ code: VIOLATION.UNKNOWN_SLOT, field: 'slot', detail: String(slot) }] };
   const v = [];
+  const venue = venueOf(slot);
+  const push = (code, field, detail, ctx) => {
+    const severity = severityOf(code);
+    v.push({
+      code, field, detail, severity,
+      blocking: blocks(severity),
+      message: reasonMessage(code, { venue, slot, ...ctx }),
+    });
+  };
+
+  const rules = SLOT_RULES[slot];
+  if (!rules) {
+    push(VIOLATION.UNKNOWN_SLOT, 'slot', String(slot), { slot });
+    return finish(v);
+  }
+
   const title = (draft && draft.title) || '';
   if (title.length > rules.titleMax) {
-    v.push({ code: VIOLATION.TITLE_TOO_LONG, field: 'title',
-             detail: `${title.length} > ${rules.titleMax}` });
+    push(VIOLATION.TITLE_TOO_LONG, 'title', `${title.length} > ${rules.titleMax}`,
+         { length: title.length, max: rules.titleMax });
   }
   const price = draft ? draft.price : undefined;
   if (rules.requiresPrice && (price === null || price === undefined)) {
-    v.push({ code: VIOLATION.PRICE_REQUIRED, field: 'price', detail: 'missing' });
+    push(VIOLATION.PRICE_REQUIRED, 'price', 'missing');
   }
   if (!rules.allowsZeroPrice && price === 0) {
-    v.push({ code: VIOLATION.ZERO_PRICE, field: 'price', detail: '0' });
+    push(VIOLATION.ZERO_PRICE, 'price', '0');
   }
-  return { ok: v.length === 0, violations: v };
+  if (draft && !Object.prototype.hasOwnProperty.call(draft, 'packet')) {
+    push(VIOLATION.NO_PROVENANCE, 'packet', 'absent');
+  }
+
+  return finish(v);
 }
+
+function finish(v) {
+  const blocking = v.filter((x) => x.blocking);
+  return {
+    // Publish-readiness. Warnings and info do not gate it.
+    ok: blocking.length === 0,
+    violations: v,
+    blocking,
+    errors:   v.filter((x) => x.severity === SEVERITY.ERROR).length,
+    warnings: v.filter((x) => x.severity === SEVERITY.WARNING).length,
+    infos:    v.filter((x) => x.severity === SEVERITY.INFO).length,
+  };
+}
+
+// ── The WARNING tier is implemented but has no rules yet, on purpose ──────
+//
+// The obvious candidate is "this price came from a quote that is now stale",
+// and it needs a threshold — how many hours before a saved quote stops being
+// trustworthy. That is a product decision about real market behaviour, not a
+// number to pick because the tier looked empty. The mechanism is here and
+// tested; the first rule gets added when the threshold is decided.
 
 // ── Reading ────────────────────────────────────────────────────────────────
 

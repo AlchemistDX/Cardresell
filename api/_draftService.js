@@ -39,6 +39,8 @@ import {
   putDraft,
   newDraftId,
   validateDraftForSlot,
+  draftKey,
+  readStoredDraft,
 } from './_draftStore.js';
 
 import {
@@ -52,12 +54,14 @@ import {
   unindexDraft,
   listDraftIds,
   draftIdForSku,
+  countDrafts,
 } from './_draftIndex.js';
 
 export const SERVICE_ERR = {
   ...STORE_ERR,
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
   SLOT_INVALID: 'DRAFT_SLOT_INVALID',
+  DRAFT_CAP_REACHED: 'DRAFT_CAP_REACHED',
 };
 
 /**
@@ -135,12 +139,56 @@ async function detachIndexes(googleSub, draft) {
  * make a genuine retry look like a new create, and a meaningful field cannot
  * quietly stop counting.
  */
+/**
+ * ── The per-seller draft cap ──────────────────────────────────────────────
+ *
+ * Why a cap exists at all: the draft index is a single set per seller, read
+ * whole on every list. Without a ceiling, a seller who bulk-scans a box and
+ * abandons the drafts makes their own list screen slower every day, and the
+ * cost lands on them rather than on whoever wrote the loop.
+ *
+ * It is deliberately generous. This is a guardrail against unbounded growth,
+ * not a paywall, and Phase 4's bulk flow will need room to work.
+ */
+export const DRAFT_CAP = 500;
+
+/** Counting is best-effort, and the cap FAILS OPEN when it cannot count. */
+async function capState(googleSub) {
+  let count;
+  try {
+    count = await countDrafts(googleSub);
+  } catch {
+    // A store hiccup must not block a seller from saving work. Refusing a
+    // legitimate create because we could not read a counter would trade a
+    // real failure (lost draft) for a hypothetical one (index too big).
+    return { known: false, count: null, atCap: false };
+  }
+  const n = Number(count) || 0;
+  return { known: true, count: n, atCap: n >= DRAFT_CAP };
+}
+
 export async function createDraft(kv, googleSub, input, idempotencyKey) {
   const scope = SCOPES.DRAFT_CREATE;
   const operationId = operationIdFor(scope, idempotencyKey);
   const request = selectMutation(scope, input);
 
   return runOnce(kv, googleSub, scope, idempotencyKey, async () => {
+    // ── The cap is checked HERE, inside the protected operation ───────────
+    //
+    // Placement is the whole correctness argument. A retry of a create that
+    // already succeeded replays the recorded result without ever entering
+    // this body, so a seller sitting exactly at the cap can still recover a
+    // lost response for the draft they already have. Checking the cap at the
+    // HTTP boundary instead would turn a network retry into a refusal for
+    // work that was already done — the exact failure idempotency exists to
+    // prevent, reintroduced by a quota check.
+    const cap = await capState(googleSub);
+    if (cap.atCap) {
+      const err = new Error(SERVICE_ERR.DRAFT_CAP_REACHED);
+      err.detail = { error: SERVICE_ERR.DRAFT_CAP_REACHED, count: cap.count, cap: DRAFT_CAP, retryable: false };
+      throw err;
+    }
+
     // The id is minted INSIDE the protected operation. A retry after a lost
     // response replays this result rather than reaching this line again.
     const draft = buildDraft({ ...input, draftId: newDraftId(), rev: 1 });
@@ -170,6 +218,9 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
       // Publish-readiness is informational at create time. A draft is allowed
       // to be saved incomplete; it is not allowed to be published incomplete.
       publishable: validateDraftForSlot(written.draft),
+      // What the seller has room for after this save. `null` when the count
+      // could not be read — the UI says nothing rather than guessing.
+      capRemaining: cap.known ? Math.max(0, DRAFT_CAP - (cap.count + 1)) : null,
     };
   }, {
     // The fingerprint is derived by runOnce from `request`, which is the
@@ -289,6 +340,154 @@ export async function listDrafts(googleSub, opts = {}) {
   // able to answer 503 rather than "no drafts", and it cannot do that from a
   // bare array.
   return listDraftIds(googleSub, { ...opts, detail: true });
+}
+
+
+// ── LIST, HYDRATED ────────────────────────────────────────────────────────
+//
+// Block D's draft list needs more than ids: a seller scanning the screen has
+// to recognise the card without opening it. So this hydrates each id into a
+// summary.
+//
+// Three rules, each one earned the hard way elsewhere in this file:
+//
+// 1. A record we could not READ is not a record that does not EXIST.
+//    The id came from the index or from a scan of authoritative storage, so
+//    something is there. Dropping it because the read failed would render as
+//    "that draft is gone" — the same lie `listDraftIds` refuses to tell about
+//    the list as a whole, told one row at a time instead. Unreadable rows are
+//    returned as stubs carrying their reason, and the screen shows a row it
+//    cannot summarise rather than silently showing one fewer draft.
+//
+// 2. Tombstones are dropped, and that is not the same decision.
+//    A tombstone is POSITIVE evidence the seller deleted it. Omitting it is
+//    reporting what they asked for.
+//
+// 3. Reads are bounded and paged. An unbounded fan-out over a seller's whole
+//    index is a request that gets slower the more they use the product.
+
+export const LIST_PAGE_DEFAULT = 25;
+export const LIST_PAGE_MAX = 100;
+export const LIST_READ_CONCURRENCY = 8;
+
+export const SUMMARY_UNREADABLE = 'unreadable';
+
+/** Reasons a row can appear in the list without a usable summary. */
+export const ROW_REASON = {
+  UNREADABLE: 'DRAFT_UNREADABLE',       // stored bytes are not a draft we can parse
+  SCHEMA_TOO_NEW: 'DRAFT_SCHEMA_TOO_NEW', // written by a newer CardResell
+  READ_FAILED: 'DRAFT_READ_FAILED',     // store call itself failed
+  VANISHED: 'DRAFT_VANISHED',           // indexed, but the record is positively absent
+};
+
+function summarize(draft) {
+  return {
+    draftId: draft.draftId,
+    sku: draft.sku,
+    instanceId: draft.instanceId,
+    slot: draft.slot,
+    status: draft.status,
+    rev: draft.rev,
+    title: draft.title,
+    price: draft.price,
+    quantity: draft.quantity,
+    createdAt: draft.createdAt,
+    updatedAt: draft.updatedAt,
+    // Deliberately NOT the packet. A list of 25 drafts must not ship 25
+    // pricing snapshots to render one line of text each; the review screen
+    // fetches the full draft when the seller opens it. Whether a snapshot
+    // exists is worth one boolean, because the row can say "priced from a
+    // saved quote" without carrying the quote.
+    hasPacket: Object.prototype.hasOwnProperty.call(draft, 'packet'),
+  };
+}
+
+async function mapLimited(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/**
+ * Hydrated, paged draft list.
+ *
+ * Returns { rows, count, total, nextCursor, source, degraded, unavailable }.
+ * `total` counts ids known to the index; `count` counts rows on this page.
+ */
+export async function listDraftSummaries(kv, googleSub, opts = {}) {
+  const listed = await listDraftIds(googleSub, { detail: true });
+  if (listed.unavailable) {
+    return { rows: [], count: 0, total: 0, nextCursor: null, source: null, degraded: true, unavailable: true, retryable: true };
+  }
+
+  const ids = Array.isArray(listed.draftIds) ? listed.draftIds : [];
+
+  let limit = Number(opts.limit);
+  if (!Number.isInteger(limit) || limit < 1) limit = LIST_PAGE_DEFAULT;
+  if (limit > LIST_PAGE_MAX) limit = LIST_PAGE_MAX;
+
+  // Cursor is an offset into a STABLE id order, not into the freshness order
+  // the rows are eventually sorted by. Paging over "most recently updated"
+  // would skip or repeat rows as the seller edits between pages; paging over
+  // sorted ids cannot. The visible ordering is applied per page afterwards.
+  const ordered = [...ids].sort();
+  let start = Number(opts.cursor);
+  if (!Number.isInteger(start) || start < 0) start = 0;
+  const slice = ordered.slice(start, start + limit);
+  const end = start + slice.length;
+
+  const rows = await mapLimited(slice, LIST_READ_CONCURRENCY, async (id) => {
+    let raw;
+    try {
+      raw = await kv('get', draftKey(googleSub, id));
+    } catch {
+      return { draftId: id, summary: null, reason: ROW_REASON.READ_FAILED, retryable: true };
+    }
+    const read = readStoredDraft(raw);
+    if (read.ok) return { draftId: id, summary: summarize(read.draft) };
+
+    if (read.error === STORE_ERR.DELETED) return null;           // rule 2
+    if (read.error === STORE_ERR.NOT_FOUND) {
+      return { draftId: id, summary: null, reason: ROW_REASON.VANISHED, retryable: false };
+    }
+    if (read.error === STORE_ERR.SCHEMA_TOO_NEW) {
+      return { draftId: id, summary: null, reason: ROW_REASON.SCHEMA_TOO_NEW, retryable: false };
+    }
+    return { draftId: id, summary: null, reason: ROW_REASON.UNREADABLE, retryable: false };
+  });
+
+  const kept = rows.filter((r) => r !== null);
+
+  // Newest activity first, and unsummarisable rows sort last rather than
+  // being ordered by a timestamp they do not have.
+  kept.sort((a, b) => {
+    if (a.summary && b.summary) return (b.summary.updatedAt || 0) - (a.summary.updatedAt || 0);
+    if (a.summary) return -1;
+    if (b.summary) return 1;
+    return String(a.draftId).localeCompare(String(b.draftId));
+  });
+
+  return {
+    rows: kept,
+    count: kept.length,
+    total: ordered.length,
+    // A cursor is offered only while stable ids remain. `count` can be lower
+    // than the page size because tombstones were dropped — that is not the
+    // end of the list, so the cursor must come from the id slice, never from
+    // how many rows survived hydration.
+    nextCursor: end < ordered.length ? end : null,
+    source: listed.source || null,
+    degraded: !!listed.degraded,
+    unavailable: false,
+  };
 }
 
 export { draftIdForSku, DRAFT_STATUS };

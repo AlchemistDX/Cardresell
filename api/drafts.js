@@ -1,6 +1,7 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import {
   createDraft, readDraft, updateDraft, deleteDraftOp, listDrafts,
+  listDraftSummaries, LIST_PAGE_DEFAULT, LIST_PAGE_MAX, DRAFT_CAP,
   SERVICE_ERR,
 } from './_draftService.js';
 import { ERR as STORE_ERR, DRAFT_STATUS, isSyntheticTestSub } from './_draftStore.js';
@@ -68,7 +69,7 @@ export default async function handler(req, res) {
   const draftId = (req.query && req.query.id) ? String(req.query.id) : '';
 
   try {
-    if (req.method === 'GET')    return await handleGet(res, kv, googleSub, draftId);
+    if (req.method === 'GET')    return await handleGet(req, res, kv, googleSub, draftId);
     if (req.method === 'POST')   return await handleCreate(req, res, kv, googleSub);
     if (req.method === 'PATCH')  return await handleUpdate(req, res, kv, googleSub, draftId);
     if (req.method === 'DELETE') return await handleDelete(req, res, kv, googleSub, draftId);
@@ -83,27 +84,87 @@ export default async function handler(req, res) {
     if (msg === SERVICE_ERR.IDEMPOTENCY_KEY_REQUIRED) {
       return res.status(400).json({ error: msg, code: msg });
     }
+    // 409, not 429. Nothing is rate-limited and waiting will not help — the
+    // seller has to delete a draft or finish one. `retryable: false` says so,
+    // and the reservation for this idempotency key was already released on the
+    // way out, so the same key works again once they have made room.
+    if (msg === SERVICE_ERR.DRAFT_CAP_REACHED) {
+      const d = (e && e.detail) || {};
+      return res.status(409).json({
+        error: `You have reached the maximum of ${DRAFT_CAP} saved drafts. Finish or delete one to save another.`,
+        code: SERVICE_ERR.DRAFT_CAP_REACHED,
+        cap: DRAFT_CAP,
+        count: d.count === undefined ? null : d.count,
+        retryable: false,
+      });
+    }
     return res.status(500).json({ error: 'Draft operation failed', code: msg });
   }
 }
 
 // ── GET ───────────────────────────────────────────────────────────────────
 
-async function handleGet(res, kv, googleSub, draftId) {
+function qs(req, name) {
+  const v = req && req.query ? req.query[name] : undefined;
+  if (v === undefined || v === null) return '';
+  return Array.isArray(v) ? String(v[0]) : String(v);
+}
+
+async function handleGet(req, res, kv, googleSub, draftId) {
   if (!draftId) {
-    const listed = await listDrafts(googleSub);
-    // `listDraftIds` already distinguishes a failed read from an empty index.
-    // A failure must not be rendered as "you have no drafts" — that is the one
-    // response that makes a seller think their work is gone.
-    if (listed.unavailable) {
+    // ── Two list shapes, one endpoint ──────────────────────────────────────
+    //
+    // `?ids=1` keeps the original bare-id answer, which reconciliation and the
+    // index tests depend on. The default is now the hydrated list, because a
+    // list of opaque ids is not something Block D's draft screen can render.
+    const wantIds = String((qs(req, 'ids') || '')) === '1';
+
+    if (wantIds) {
+      const listed = await listDrafts(googleSub);
+      // `listDraftIds` already distinguishes a failed read from an empty index.
+      // A failure must not be rendered as "you have no drafts" — that is the one
+      // response that makes a seller think their work is gone.
+      if (listed.unavailable) {
+        return res.status(503).json({ error: 'Could not load your drafts', retryable: true });
+      }
+      return res.status(200).json({
+        draftIds: listed.draftIds || [],
+        count: (listed.draftIds || []).length,
+        source: listed.source || null,
+        degraded: !!listed.degraded,
+        reconciled: !!listed.reconciled,
+      });
+    }
+
+    const limitRaw = qs(req, 'limit');
+    const cursorRaw = qs(req, 'cursor');
+    // Bad paging params are refused, not silently clamped. A client asking for
+    // limit=abc has a bug, and quietly serving 25 rows hides it.
+    if (limitRaw !== '' && !/^[0-9]+$/.test(limitRaw)) {
+      return res.status(400).json({ error: 'limit must be a positive integer', code: 'LIST_LIMIT_INVALID' });
+    }
+    if (cursorRaw !== '' && !/^[0-9]+$/.test(cursorRaw)) {
+      return res.status(400).json({ error: 'cursor must be a non-negative integer', code: 'LIST_CURSOR_INVALID' });
+    }
+    if (limitRaw !== '' && (Number(limitRaw) < 1 || Number(limitRaw) > LIST_PAGE_MAX)) {
+      return res.status(400).json({ error: `limit must be between 1 and ${LIST_PAGE_MAX}`, code: 'LIST_LIMIT_RANGE' });
+    }
+
+    const page = await listDraftSummaries(kv, googleSub, {
+      limit: limitRaw === '' ? LIST_PAGE_DEFAULT : Number(limitRaw),
+      cursor: cursorRaw === '' ? 0 : Number(cursorRaw),
+    });
+    if (page.unavailable) {
       return res.status(503).json({ error: 'Could not load your drafts', retryable: true });
     }
     return res.status(200).json({
-      draftIds: listed.draftIds || [],
-      count: (listed.draftIds || []).length,
-      source: listed.source || null,
-      degraded: !!listed.degraded,
-      reconciled: !!listed.reconciled,
+      rows: page.rows,
+      count: page.count,
+      total: page.total,
+      nextCursor: page.nextCursor,
+      cap: DRAFT_CAP,
+      source: page.source,
+      degraded: page.degraded,
     });
   }
 

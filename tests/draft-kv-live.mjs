@@ -464,12 +464,98 @@ try {
         !!stale.current && stale.current.price === 11,
         '"someone changed this" is only actionable if you can also say what it now says');
 
+// ══════════════════════════════════════════════════════════════════════════
+// The hydrated list and the cap, against the real store
+//
+// The fake KV has been wrong four times already, and the two things this block
+// checks are exactly the kind it gets wrong: SCARD on a set that does not
+// exist, and eight concurrent GETs that the in-memory fake serialises.
+console.log('\nthe list and the cap against the real store');
+
+{
+  // Earlier blocks in this run already saved drafts under this same reserved
+  // id, so every assertion here is a DELTA against a measured baseline. An
+  // absolute count would have been a test that only passed when it ran first.
+  const baseline = await IDX.countDrafts(SUB);
+
+  const N = 12;
+  const ids = [];
+  for (let i = 0; i < N; i++) {
+    const out = await SVC.createDraft(kv, SUB, {
+      sku: `v2-LIVE${i}-592a391e7b472559`,
+      instanceId: `inst_live_${i}`,
+      slot: 'ebay:fixed-price',
+      title: `Live list card ${i}`,
+      price: 100 + i,
+    }, K(`live-list-${i}`));
+    ids.push(out.result.draftId);
+  }
+  check(`seeded ${N} real drafts`, ids.length === N && ids.every(Boolean));
+
+  const total = baseline + N;
+  const all = await SVC.listDraftSummaries(kv, SUB, { limit: 100 });
+  check(`🔴 all ${total} real drafts hydrate in one page`,
+        all.count === total && all.rows.every((r) => r.summary && r.summary.title),
+        'concurrent GETs against real Upstash is where the in-memory fake stops being evidence');
+  check('🔴 not one row came back as an unreadable stub',
+        all.rows.every((r) => r.summary !== null),
+        'a real GET that returns a shape the parser rejects would show up here and nowhere else');
+  check('the listed total matches the real index', all.total === total);
+  check('every seeded draft is present by id', ids.every((id) => all.rows.some((r) => r.draftId === id)));
+
+  // Paging over the real store, walked to exhaustion.
+  const walked = [];
+  let cursor = 0, pages = 0;
+  for (;;) {
+    const page = await SVC.listDraftSummaries(kv, SUB, { limit: 5, cursor });
+    walked.push(...page.rows.map((r) => r.draftId));
+    pages++;
+    if (page.nextCursor === null) break;
+    cursor = page.nextCursor;
+    if (pages > 40) break; // a runaway walk is a failure, not an infinite test
+  }
+  check('the real walk terminates', pages === Math.ceil(total / 5));
+  check('🔴 and covers every draft exactly once',
+        walked.length === total && new Set(walked).size === total
+        && ids.every((id) => walked.includes(id)),
+        'a duplicated or skipped row across a real page boundary is the bug paging exists to avoid');
+
+  // SCARD against the real store — the cap's only input.
+  const counted = await IDX.countDrafts(SUB);
+  check('🔴 the real index counts what the cap will read',
+        counted === total && typeof counted === 'number',
+        'the cap is only as honest as SCARD; the fake returns a Set size, Upstash returns a string');
+
+  // A deleted draft leaves the count, so the cap does not punish cleanup.
+  const del = await SVC.deleteDraftOp(kv, SUB, ids[0], 1, K('live-del'));
+  check('the real delete tombstoned', del.ok === true);
+  const afterCount = await IDX.countDrafts(SUB);
+  check('🔴 deleting frees a slot against the cap', afterCount === total - 1,
+        'if a tombstone kept its slot, a seller would hit a permanent ceiling they cannot clear');
+
+  const afterList = await SVC.listDraftSummaries(kv, SUB, { limit: 100 });
+  check('and the deleted draft is gone from the real list',
+        afterList.count === total - 1 && !afterList.rows.some((r) => r.draftId === ids[0]));
+}
+
+{
+  // SCARD on a seller who has never saved anything. The fake returns 0 from an
+  // absent Map entry; Upstash has to be asked what it actually does.
+  const emptySub = `${DS.SYNTHETIC_TEST_PREFIX}${Math.random().toString(36).slice(2, 10)}`;
+  const n = await IDX.countDrafts(emptySub);
+  check('🔴 SCARD on a never-used index is 0, not null or an error',
+        n === 0 && typeof n === 'number',
+        'a null here would make the cap comparison NaN and silently stop capping');
+}
+
 } catch (e) {
   console.error('\ndraft-kv-live: threw —', e && e.stack ? e.stack : e);
   exitCode = 1;
   // Arm the safety net on everything still standing. Deliberately LAST: two
   // assertions above inspect real TTL behaviour (a live draft must have none,
   // a tombstone must have 90 days) and an earlier net would have faked both.
+
+
   for (const k of created) await arm(k);
 
 } finally {
