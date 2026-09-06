@@ -918,5 +918,85 @@ await checkAsync('[expected-fail] a throwing async assertion is a failure, not a
 check('the throw counted as a failure', failed === before + 1);
 failed = before;
 
+
+// ── 18. Fingerprint the VALIDATED mutation, not the raw body ────────────
+console.log('\nthe fingerprint describes business intent, not serialization');
+const MF = (o) => IDEM.mutationFingerprint('instance-create', o);
+check('a real SKU keeps its casing — SKUs are opaque ids, not tokens',
+      typeof MF({ sku: 'v2-XXX7473-592a391e7b472559', quantity: 5 }) === 'string',
+      'a blanket lowercase rule here would refuse every genuine retry');
+check('property order does not matter',
+      MF({ sku: 'v2-A', quantity: 5 }) === MF({ quantity: 5, sku: 'v2-A' }));
+check('an unknown cost is still fingerprintable and is not zero',
+      MF({ sku: 'v2-A', totalAcquisitionCost: null }) !== MF({ sku: 'v2-A', totalAcquisitionCost: 0 }),
+      'unknown basis splits to unknown, never zero — same rule as My Flips');
+const refuses = (o, why) => {
+  try { MF(o); return false; } catch (e) { return e.message.includes(why); }
+};
+check('🔴 a numeric STRING is refused, not coerced',
+      refuses({ sku: 'v2-A', quantity: '5' }, 'numeric-string'),
+      'coercing here would be a second normalization impl beside the endpoint, and they would drift');
+check('a non-canonical token is refused', refuses({ sku: 'v2-A', condition: 'Near-Mint' }, 'uncanonical-case'));
+check('an untrimmed value is refused', refuses({ sku: ' v2-A ', quantity: 1 }, 'untrimmed'));
+check('a fractional quantity is refused', refuses({ sku: 'v2-A', quantity: 1.5 }, 'not-a-non-negative-integer'));
+check('a negative quantity is refused', refuses({ sku: 'v2-A', quantity: -1 }, 'not-a-non-negative-integer'));
+check('sub-cent money is refused — 19.999 and 20.00 are the same charge',
+      refuses({ sku: 'v2-A', totalAcquisitionCost: 19.999 }, 'sub-cent-precision'));
+check('🔴 an UNDECLARED field is refused',
+      refuses({ sku: 'v2-A', nope: 1 }, 'MUTATION_FIELD_UNDECLARED'),
+      'silent drift here eventually produces a fingerprint blind to a price change');
+check('a cosmetic field cannot be smuggled in to defeat a retry',
+      refuses({ sku: 'v2-A', requestedAt: 'x' }, 'MUTATION_FIELD_UNDECLARED'));
+check('every idempotent scope declares its mutation fields',
+      IDEM.IDEMPOTENT_SCOPES.every((sc) => IDEM.MUTATION_FIELDS[sc] &&
+                                            Object.keys(IDEM.MUTATION_FIELDS[sc]).length > 0),
+      'a scope with no declared fields would fingerprint every request identically');
+check('listing-publish declares price and title — the fields that must never silently replay',
+      'price' in IDEM.MUTATION_FIELDS['listing-publish'] &&
+      'title' in IDEM.MUTATION_FIELDS['listing-publish']);
+check('an unknown scope cannot be fingerprinted',
+      (() => { try { IDEM.mutationFingerprint('nope', {}); return false; }
+               catch (e) { return e.message === 'IDEMPOTENCY_SCOPE_UNKNOWN'; } })());
+
+// ── 19. PERMANENT: the nastiest crash state ─────────────────────────────
+console.log('\n🔴 PERMANENT ASSERTION — pointer survives, fingerprint differs');
+let s19 = new Map();
+const kv19 = async (cmd, key, ...rest) => {
+  if (cmd === 'get') return s19.has(key) ? s19.get(key) : null;
+  if (cmd === 'set') { s19.set(key, rest[0]); return 'OK'; }
+  if (cmd === 'del') { s19.delete(key); return 1; }
+  return cmd === 'expire' ? 1 : null;
+};
+let sideEffects = 0;
+const publish = async () => { sideEffects += 1; return { listingId: `lst_${sideEffects}` }; };
+const KEY19 = '99999999-8888-7777-6666-555555555555';
+const A = IDEM.selectMutation('listing-publish', { draftId: 'drf_1', price: 400, title: 'Charizard PSA 9' });
+const B = IDEM.selectMutation('listing-publish', { draftId: 'drf_1', price: 40,  title: 'Charizard PSA 9' });
+
+await IDEM.runOnce(kv19, 'sub1', 'listing-publish', KEY19, publish, { request: A });
+// Crash between pointer write and result write: only the pointer survives.
+s19.delete(IDEM.idempotencyKeyFor('sub1', 'listing-publish', KEY19));
+check('setup: only the resource pointer survives',
+      s19.has(IDEM.resourcePointerKey('sub1', 'listing-publish', KEY19)) &&
+      !s19.has(IDEM.idempotencyKeyFor('sub1', 'listing-publish', KEY19)));
+
+const nasty = await IDEM.runOnce(kv19, 'sub1', 'listing-publish', KEY19, publish, {
+  request: B,
+  reconcile: async () => ({ listingId: 'lst_1' }),   // authoritative state EXISTS
+});
+check('🔴 same key + different fingerprint + only the pointer survives → REFUSED',
+      nasty.state === IDEM.IDEMPOTENCY_STATE.MISMATCH && nasty.error === IDEM.FINGERPRINT_MISMATCH,
+      'never reconcile to the old resource: the pointer is evidence about a DIFFERENT mutation');
+check('and it does NOT publish a second listing', sideEffects === 1,
+      'refusing is safe; publishing again is not');
+check('and it does NOT return the old listing as if it were this request',
+      !nasty.result || nasty.result.listingId !== 'lst_1',
+      'returning lst_1 here tells the seller a $40 publish succeeded at $400');
+const honest = await IDEM.runOnce(kv19, 'sub1', 'listing-publish', KEY19, publish, {
+  request: A, reconcile: async () => ({ listingId: 'lst_1' }),
+});
+check('the MATCHING request still recovers from the pointer without republishing',
+      honest.replayed === true && sideEffects === 1);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

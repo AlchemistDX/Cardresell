@@ -155,8 +155,16 @@ else
 fi
 
 echo ""
-echo "▶ [17/18] Draft index recovery + packet schema version (offline)"
+echo "▶ [17/19] Draft index recovery + packet schema version (offline)"
 if node "$ROOT/tests/draft-index-recovery.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [18/19] C1 draft store — revisions, tombstones, schema safety (offline)"
+if node "$ROOT/tests/draft-store.mjs"; then
   :
 else
   FAIL=1
@@ -164,7 +172,7 @@ fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [18/18] Prod endpoint smoke ($BASE)"
+  echo "▶ [19/19] Prod endpoint smoke ($BASE)"
   if node "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else

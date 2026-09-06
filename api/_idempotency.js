@@ -83,6 +83,114 @@ export function requestFingerprint(request) {
  * so a future one has to be argued for explicitly rather than inherited by
  * default.
  */
+/**
+ * ── Fingerprint BUSINESS INTENT, not serialization quirks ─────────────────
+ *
+ * Fingerprinting the raw HTTP body makes these three different mutations:
+ *
+ *   { quantity: 5,   venue: 'ebay' }
+ *   { quantity: '5', venue: 'ebay' }
+ *   { quantity: 5,   venue: 'EBAY' }
+ *
+ * They are the same intended mutation, and if an endpoint accepts all three
+ * then a client that switches serializers gets every retry refused — the
+ * feature becomes worse than not having it. So the fingerprint is taken AFTER
+ * parse/validate/normalize, over a DECLARED field set:
+ *
+ *   parse -> validate -> normalize -> select mutation fields -> fingerprint
+ *
+ * Declaring the fields per scope also means adding a field to a request body
+ * cannot silently change the fingerprint of an unrelated mutation, and a
+ * cosmetic field (client version, timestamp, request id) cannot make a genuine
+ * retry look like a new operation.
+ */
+/**
+ * Field kinds, because "normalized" means different things per field:
+ *
+ *   token  — a closed vocabulary that must be lowercase-canonical
+ *            (venue, strategy, slot, condition)
+ *   id     — an OPAQUE identifier whose casing is meaningful and must not be
+ *            touched. Real SKUs look like `v2-XXX7473-592a391e7b472559`, so a
+ *            blanket lowercase rule here would refuse every genuine retry.
+ *   money  — a number of dollars, or null for unknown. Never a numeric string.
+ *   count  — a non-negative integer. Never a numeric string.
+ *   text   — free text (a title). Trimmed, casing is the seller's.
+ */
+export const MUTATION_FIELDS = {
+  'instance-create': {
+    sku: 'id', quantity: 'count', condition: 'token',
+    totalAcquisitionCost: 'money', cert: 'id',
+  },
+  'draft-create': {
+    instanceId: 'id', slot: 'token', price: 'money', title: 'text', strategy: 'token',
+  },
+  'instance-split': {
+    instanceId: 'id', count: 'count', totalAcquisitionCost: 'money',
+  },
+  'listing-publish': {
+    draftId: 'id', slot: 'token', price: 'money', title: 'text', quantity: 'count',
+  },
+};
+
+export const NOT_NORMALIZED = 'MUTATION_FIELD_NOT_NORMALIZED';
+export const UNDECLARED_FIELD = 'MUTATION_FIELD_UNDECLARED';
+
+/**
+ * Refuse values that are clearly pre-normalization. Deliberately a REFUSAL and
+ * not a coercion: coercing '5' to 5 here would be a second normalization
+ * implementation living beside the endpoint's, and the two would drift. The
+ * endpoint normalizes; this asserts that it did.
+ */
+function assertNormalized(field, kind, v) {
+  if (v === undefined || v === null) return v;
+  const fail = (why) => { throw new Error(`${NOT_NORMALIZED}:${field}:${why}`); };
+
+  if (kind === 'count' || kind === 'money') {
+    if (typeof v === 'string') fail('numeric-string');
+    if (typeof v !== 'number' || !Number.isFinite(v)) fail('not-a-finite-number');
+    if (kind === 'count' && (!Number.isInteger(v) || v < 0)) fail('not-a-non-negative-integer');
+    if (kind === 'money' && v < 0) fail('negative-money');
+    // Money is compared to the cent. 19.999 and 20.00 must not be two
+    // different mutations when they are the same charge.
+    if (kind === 'money' && Math.abs(v * 100 - Math.round(v * 100)) > 1e-9) fail('sub-cent-precision');
+    return v;
+  }
+
+  if (typeof v !== 'string') fail('not-a-string');
+  if (v !== v.trim()) fail('untrimmed');
+  if (kind === 'token') {
+    if (v === '') fail('empty');
+    if (v !== v.toLowerCase()) fail('uncanonical-case');
+    if (/\s/.test(v)) fail('whitespace-in-token');
+  }
+  return v;
+}
+
+/**
+ * Select the declared mutation fields from ALREADY-VALIDATED input and
+ * fingerprint exactly those. An undeclared field throws, because it means the
+ * endpoint and this table disagree about what defines the mutation — the drift
+ * that eventually produces a fingerprint blind to a meaningful change (price).
+ */
+export function selectMutation(scope, validated) {
+  const spec = MUTATION_FIELDS[scope];
+  if (!spec) throw new Error('IDEMPOTENCY_SCOPE_UNKNOWN');
+  const v = validated || {};
+  for (const k of Object.keys(v)) {
+    if (!(k in spec)) throw new Error(`${UNDECLARED_FIELD}:${scope}:${k}`);
+  }
+  const out = {};
+  for (const f of Object.keys(spec)) {
+    if (v[f] !== undefined) out[f] = assertNormalized(f, spec[f], v[f]);
+  }
+  return out;
+}
+
+/** The fingerprint an endpoint should pass, taken over validated input. */
+export function mutationFingerprint(scope, validated) {
+  return requestFingerprint(selectMutation(scope, validated));
+}
+
 export const FAIL_POLICY = { FAIL_CLOSED: 'fail-closed', FAIL_OPEN: 'fail-open' };
 
 /**
@@ -221,31 +329,45 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
     }
   }
 
-  // ── 2. No usable attempt record. Before doing anything, ask whether the side
-  //       effect already landed. This covers the reservation having expired
-  //       after the work succeeded — the case that silently duplicates.
-  const alreadyLanded = await tryReconcile(reconcile, opKey);
-  if (alreadyLanded) {
-    await recordDone(kv, k, resKey, alreadyLanded, opKey, fingerprint);
-    return { state: IDEMPOTENCY_STATE.RECONCILED, result: alreadyLanded, replayed: true };
-  }
-
-  // Also check the pointer directly — cheaper than reconcile and survives a
-  // lost result record on its own.
+  // ── 2. No usable attempt record. Before doing ANYTHING — including asking
+  //       reconcile — check the resource pointer, because the pointer carries
+  //       the fingerprint of the operation that created the resource and
+  //       reconcile does not.
+  //
+  //       Order matters and this was a real bug: reconcile ran first, so a
+  //       mismatched retry got the OLD resource back, and recordDone then
+  //       rewrote the attempt record with the NEW fingerprint pointing at the
+  //       OLD resource — corrupting the evidence permanently, so even the
+  //       honest retry afterwards was answered wrongly. A refusal has to happen
+  //       before any write, not after.
+  let pointerParsed = null;
   if (storeReadable) {
     let pointer = null;
     try { pointer = await kv('get', resKey); } catch { pointer = null; }
     if (pointer) {
-      const p = typeof pointer === 'string' ? safeParse(pointer) || { resourceId: pointer } : pointer;
-      if (p.fingerprint && p.fingerprint !== fingerprint) {
+      pointerParsed = typeof pointer === 'string'
+        ? safeParse(pointer) || { resourceId: pointer } : pointer;
+      if (pointerParsed.fingerprint && pointerParsed.fingerprint !== fingerprint) {
         return {
           state: IDEMPOTENCY_STATE.MISMATCH, result: null, replayed: false,
           error: FINGERPRINT_MISMATCH, retryable: false,
           message: 'This request reuses a key from a different operation.',
         };
       }
-      return { state: IDEMPOTENCY_STATE.RECONCILED, result: p, replayed: true };
     }
+  }
+
+  //       Now it is safe to ask whether the side effect already landed. This
+  //       covers the reservation having expired after the work succeeded — the
+  //       case that silently duplicates.
+  const alreadyLanded = await tryReconcile(reconcile, opKey);
+  if (alreadyLanded) {
+    await recordDone(kv, k, resKey, alreadyLanded, opKey, fingerprint);
+    return { state: IDEMPOTENCY_STATE.RECONCILED, result: alreadyLanded, replayed: true };
+  }
+
+  if (pointerParsed) {
+    return { state: IDEMPOTENCY_STATE.RECONCILED, result: pointerParsed, replayed: true };
   }
 
   // ── 3. Reserve. If we cannot reserve, we cannot promise once-only. ──
