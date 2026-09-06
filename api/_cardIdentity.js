@@ -362,13 +362,33 @@ export function hasSufficientIdentity(row) {
  * key is still produced through this function, so no caller has to know which
  * case it is holding.
  */
+/**
+ * The one aggregate that is allowed to be cached: CardResell's own canonical
+ * valuation, with a defined composition and disclosed disagreement — not
+ * "whichever source answered". Accuracy over being a copycat; cross-source
+ * disagreement is disclosed rather than averaged away.
+ */
+export const CONSENSUS_SOURCE = 'cardresell-consensus';
+
+/** Concrete sources, plus the one defined aggregate. 'any' is not a member. */
+export const VALUATION_SOURCES = [
+  CONSENSUS_SOURCE,
+  'tcgplayer',
+  'ebay',
+  'pricecharting',
+  'cardladder',
+];
+
 export function valuationKeyFor(row, opts = {}) {
   const sku  = skuFor(row);
   const slab = isSlab(row);
 
   if (slab) {
-    // The grade IS the condition, and it is already an identity axis.
-    return `${sku}|graded`;
+    // The grade IS the condition, and it is already an identity axis. The
+    // source still has to be named for the same reason it does for raw.
+    const gsrc = String(opts.source ?? CONSENSUS_SOURCE).trim().toLowerCase();
+    if (!VALUATION_SOURCES.includes(gsrc)) throw new Error('VALUATION_SOURCE_UNKNOWN');
+    return `${sku}|graded|${gsrc}`;
   }
 
   const condition = String(opts.condition ?? row?.condition ?? '')
@@ -381,7 +401,20 @@ export function valuationKeyFor(row, opts = {}) {
   // Pricing source belongs in the key too: the same copy carries different
   // comps on different venues, and mixing them in one cache is how a TCGplayer
   // number ends up presented as an eBay payout.
-  const source = String(opts.source ?? 'any').trim().toLowerCase();
+  //
+  // 'any' is deliberately NOT allowed. It had two possible meanings and only
+  // one of them is cacheable:
+  //
+  //   - "our defined canonical blend"    → legitimate, and now has a real name
+  //   - "whatever source answered first" → NOT cacheable under a shared key,
+  //     because the next reader cannot know what they are reading, and a cache
+  //     whose contents depend on which upstream happened to reply is a source
+  //     of confidently wrong prices
+  //
+  // So the aggregate is a named product with a defined composition, and
+  // everything else must state a concrete source.
+  const source = String(opts.source ?? CONSENSUS_SOURCE).trim().toLowerCase();
+  if (!VALUATION_SOURCES.includes(source)) throw new Error('VALUATION_SOURCE_UNKNOWN');
   return `${sku}|${condition}|${source}`;
 }
 

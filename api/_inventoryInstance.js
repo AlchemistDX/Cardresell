@@ -78,11 +78,42 @@ export function instanceDraftsKey(googleSub, instanceId) {
 }
 
 /**
- * The slot a draft occupies within an instance. Uniqueness is per slot, so
- * broadening from "one draft" to "one per venue" needs no key change.
+ * The slot a draft occupies within an instance.
+ *
+ * The slot IS the uniqueness boundary, so its normalization has to be
+ * deterministic and total. If 'EBAY' and 'ebay' can both reach storage, they
+ * become two logical slots holding two active drafts for one physical card —
+ * the exact collision this layer was built to eliminate, reintroduced through
+ * casing. So: canonicalize, then validate against a known set, and refuse
+ * anything that is not exactly one canonical slot.
  */
+export const VENUES = ['ebay', 'mercari', 'whatnot', 'tcgplayer'];
+export const STRATEGIES = ['fixed-price', 'auction'];
+
+function canonicalToken(v) {
+  return String(v ?? '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+}
+
 export function draftSlot(venue, strategy = 'fixed-price') {
-  return `${keyPart(String(venue || '').toLowerCase())}:${keyPart(strategy)}`;
+  const v = canonicalToken(venue);
+  const st = canonicalToken(strategy);
+  if (!v) throw new Error('SLOT_VENUE_EMPTY');
+  if (!st) throw new Error('SLOT_STRATEGY_EMPTY');
+  if (!VENUES.includes(v)) throw new Error('SLOT_VENUE_UNKNOWN');
+  if (!STRATEGIES.includes(st)) throw new Error('SLOT_STRATEGY_UNKNOWN');
+  // Belt and braces: the slot is a key component, so it must never carry a
+  // delimiter that could shift the meaning of the key it lands in.
+  const slot = `${v}:${st}`;
+  if (slot.split(':').length !== 2) throw new Error('SLOT_UNSAFE');
+  return slot;
+}
+
+/** True when a string is already exactly the canonical form of itself. */
+export function isCanonicalSlot(slot) {
+  if (typeof slot !== 'string' || !slot) return false;
+  const parts = slot.split(':');
+  if (parts.length !== 2) return false;
+  try { return draftSlot(parts[0], parts[1]) === slot; } catch { return false; }
 }
 
 /** Venues Phase 1 can actually hand off to. Deliberately short and honest. */
@@ -93,10 +124,18 @@ export const PHASE1_VENUES = ['ebay'];
  * Returns a refusal reason or null.
  */
 export function phase1DraftAdmission(existingSlots, venue, strategy = 'fixed-price') {
-  const v = String(venue || '').toLowerCase();
+  let slot;
+  try {
+    slot = draftSlot(venue, strategy);   // validates and canonicalizes
+  } catch (e) {
+    return e.message;                    // SLOT_VENUE_UNKNOWN, SLOT_VENUE_EMPTY, ...
+  }
+  const v = slot.split(':')[0];
   if (!PHASE1_VENUES.includes(v)) return 'VENUE_NOT_SUPPORTED_IN_PHASE_1';
-  const slot = draftSlot(v, strategy);
-  if ((existingSlots || []).includes(slot)) return 'ACTIVE_DRAFT_EXISTS_FOR_SLOT';
+  // Compare canonical against canonical. A non-canonical entry already in the
+  // set is a corrupted index, not a near-miss to be tolerated.
+  const existing = (existingSlots || []).map((x) => (isCanonicalSlot(x) ? x : null));
+  if (existing.includes(slot)) return 'ACTIVE_DRAFT_EXISTS_FOR_SLOT';
   return null;
 }
 

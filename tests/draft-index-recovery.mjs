@@ -606,19 +606,190 @@ const retried = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, crea
 check('🔴 and is RETRYABLE — one transient failure must not poison the key forever',
       retried.replayed === false && retried.result.instanceId.startsWith('inv_made_'),
       'a failed attempt must release its reservation, or one blip refuses the create for a day');
+idemStore = new Map();
+await idemKv('set', IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID),
+             JSON.stringify({ status: 'in-flight', at: Date.now() }));
+const concurrent = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
 check('a concurrent attempt is refused rather than raced',
-      (async () => {
-        idemStore = new Map();
-        await idemKv('set', IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID),
-                     JSON.stringify({ status: 'in-flight', at: Date.now() }));
-        const r = await IDEM.runOnce(idemKv, 'sub1', 'instance-create', UUID, create);
-        return r.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT;
-      })() instanceof Promise);
+      concurrent.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT,
+      'racing two creates is precisely the bug this module exists to prevent');
 check('the scopes that must be idempotent are named in one place',
       IDEM.IDEMPOTENT_SCOPES.includes('instance-create') &&
       IDEM.IDEMPOTENT_SCOPES.includes('draft-create') &&
       IDEM.IDEMPOTENT_SCOPES.includes('instance-split') &&
       IDEM.IDEMPOTENT_SCOPES.includes('listing-publish'));
+
+
+// ── 10. Slot normalization is deterministic and total ───────────────────
+console.log('\n🔴 the slot is a uniqueness boundary, so normalization must be total');
+check('🔴 casing cannot create two logical slots',
+      INV.draftSlot('EBAY', 'FIXED-PRICE') === INV.draftSlot('ebay', 'fixed-price'),
+      '"eBay:fixed-price" and "ebay:fixed-price" as two slots reintroduces the collision via casing');
+check('the canonical form is lowercase', INV.draftSlot('eBay') === 'ebay:fixed-price');
+check('whitespace and underscores canonicalize', INV.draftSlot(' eBay ', 'fixed_price') === 'ebay:fixed-price');
+check('a canonical slot recognizes itself', INV.isCanonicalSlot('ebay:fixed-price'));
+check('a non-canonical slot is NOT accepted as canonical', !INV.isCanonicalSlot('eBay:fixed-price'));
+check('a malformed slot is not canonical', !INV.isCanonicalSlot('ebay') && !INV.isCanonicalSlot('a:b:c'));
+for (const [args, expect] of [
+  [['', 'fixed-price'],              'SLOT_VENUE_EMPTY'],
+  [['ebay', ''],                     'SLOT_STRATEGY_EMPTY'],
+  [['unknown-venue', 'fixed-price'], 'SLOT_VENUE_UNKNOWN'],
+  [['ebay', 'whatever'],             'SLOT_STRATEGY_UNKNOWN'],
+  [[null, 'fixed-price'],            'SLOT_VENUE_EMPTY'],
+]) {
+  check(`draftSlot(${JSON.stringify(args)}) is refused → ${expect}`,
+        (() => { try { INV.draftSlot(...args); return false; }
+                 catch (e) { return e.message === expect; } })());
+}
+check('admission refuses a non-canonical venue rather than inventing a slot',
+      INV.phase1DraftAdmission([], 'not-a-venue') === 'SLOT_VENUE_UNKNOWN');
+check('🔴 admission normalizes before comparing, so EBAY hits the existing slot',
+      INV.phase1DraftAdmission(['ebay:fixed-price'], 'EBAY') === 'ACTIVE_DRAFT_EXISTS_FOR_SLOT',
+      'otherwise a differently-cased retry opens a second active draft');
+check('a non-canonical entry already in the set does not count as a match',
+      INV.phase1DraftAdmission(['eBay:fixed-price'], 'ebay') === null);
+
+// ── 11. Repeated splits conserve basis exactly (property test) ──────────
+console.log('\n🔴 repeated splits cannot create or destroy a cent');
+function splitChainConserves(qty, total, takes) {
+  let lots = [INV.buildInstance(CARD_R, { condition: 'near-mint', quantity: qty, totalAcquisitionCost: total })];
+  for (const take of takes) {
+    const target = lots.find((l) => l.quantity > take);
+    if (!target) break;
+    const { remainder, split } = INV.splitInstance(target, take);
+    lots = lots.filter((l) => l !== target).concat([remainder, split]);
+  }
+  const cents = lots.reduce((a, l) => a + Math.round(l.totalAcquisitionCost * 100), 0);
+  const q     = lots.reduce((a, l) => a + l.quantity, 0);
+  return { cents, q, lots: lots.length };
+}
+for (const [qty, total, takes] of [
+  [3, 100, [1, 1]],
+  [10, 100, [3, 2, 1]],
+  [11, 55, [3, 3, 1, 2]],
+  [7, 0.07, [1, 1, 1]],
+  [9, 1000.03, [4, 2, 1]],
+  [5, 33.33, [1, 1, 1, 1]],
+]) {
+  const r = splitChainConserves(qty, total, takes);
+  check(`qty ${qty} / $${total} split ${takes.join(',')} → ${r.lots} lots, basis exact`,
+        r.cents === Math.round(total * 100),
+        `sum $${(r.cents / 100).toFixed(2)} != $${total} — repeated splits must be lossless`);
+  check(`qty ${qty} / $${total} split ${takes.join(',')} → quantity conserved`, r.q === qty);
+}
+
+// ── 12. Valuation source: 'any' is not a thing ──────────────────────────
+console.log('\n🔴 the aggregate source is a defined product, not a shrug');
+check('🔴 "any" is refused as a source',
+      (() => { try { ID.valuationKeyFor(CARD_R, { condition: 'mint', source: 'any' }); return false; }
+               catch (e) { return e.message === 'VALUATION_SOURCE_UNKNOWN'; } })(),
+      '"whichever source answered" is not cacheable — the next reader cannot know what they read');
+check('the default source is the NAMED aggregate',
+      ID.valuationKeyFor(CARD_R, { condition: 'mint' }).endsWith(`|${ID.CONSENSUS_SOURCE}`));
+check('the aggregate has a real name', ID.CONSENSUS_SOURCE === 'cardresell-consensus');
+check('concrete sources are accepted',
+      ID.VALUATION_SOURCES.includes('tcgplayer') && ID.VALUATION_SOURCES.includes('ebay'));
+check('"any" is not a member of the source set', !ID.VALUATION_SOURCES.includes('any'));
+check('an unknown source is refused, not passed through',
+      (() => { try { ID.valuationKeyFor(CARD_R, { condition: 'mint', source: 'some-blog' }); return false; }
+               catch (e) { return e.message === 'VALUATION_SOURCE_UNKNOWN'; } })());
+check('a slab also carries its source',
+      ID.valuationKeyFor({ ...CARD_R, grader: 'psa', grade: '9' }, { source: 'ebay' })
+        !== ID.valuationKeyFor({ ...CARD_R, grader: 'psa', grade: '9' }, { source: 'tcgplayer' }));
+
+// ── 13. Idempotency must not fail open ──────────────────────────────────
+console.log('\n🔴 fail closed when idempotency cannot be established');
+const UUID2 = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+const deadKv = async () => { throw new Error('STORE_DOWN'); };
+let attempts = 0;
+const mkInstance = async () => { attempts += 1; return { instanceId: `inv_x${attempts}` }; };
+
+for (const scope of IDEM.IDEMPOTENT_SCOPES) {
+  check(`${scope} fails CLOSED when the store is unavailable`,
+        IDEM.policyFor(scope).onStoreUnavailable === IDEM.FAIL_POLICY.FAIL_CLOSED);
+}
+attempts = 0;
+const down1 = await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance);
+check('🔴 a store outage does NOT run the side effect', attempts === 0,
+      'whatever broke the store is plausibly also breaking responses — this is the HIGH-retry window');
+check('it reports unavailable, not success', down1.state === IDEM.IDEMPOTENCY_STATE.UNAVAILABLE);
+check('it is marked retryable with user-facing copy',
+      down1.retryable === true && /try again/i.test(down1.message));
+attempts = 0;
+await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance);
+await IDEM.runOnce(deadKv, 'sub1', 'listing-publish', UUID2, mkInstance);
+check('🔴 repeated retries during an outage never publish twice', attempts === 0,
+      'a duplicate eBay listing is a real listing with real fees the seller must find and end by hand');
+check('an unknown scope is refused rather than defaulted',
+      (() => { try { IDEM.policyFor('whatever'); return false; }
+               catch (e) { return e.message === 'IDEMPOTENCY_SCOPE_UNKNOWN'; } })());
+
+// ── 14. Crash after side effect, before result record ───────────────────
+console.log('\n🔴 side effect succeeded, result record lost');
+let s14 = new Map();
+const kv14 = async (cmd, key, ...rest) => {
+  if (cmd === 'get') return s14.has(key) ? s14.get(key) : null;
+  if (cmd === 'set') { s14.set(key, rest[0]); return 'OK'; }
+  if (cmd === 'del') { s14.delete(key); return 1; }
+  if (cmd === 'expire') return 1;
+  return null;
+};
+// Simulate: reservation written, work ran, process died before recordDone.
+let world = [];
+let ran14 = 0;
+const create14 = async (op) => { ran14 += 1; const r = { instanceId: `inv_real`, createdByOperation: op }; world.push(r); return r; };
+const reconcile14 = async (op) => world.find((r) => r.createdByOperation === op) || null;
+
+s14.set(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2),
+        JSON.stringify({ status: 'in-flight', at: Date.now(), op: UUID2 }));
+world = [{ instanceId: 'inv_real', createdByOperation: UUID2 }];   // the work DID land
+ran14 = 0;
+const rec = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+check('🔴 an in-flight marker with a landed side effect RECONCILES', rec.state === IDEM.IDEMPOTENCY_STATE.RECONCILED,
+      'reserve→work→record has a window; the retry must reconcile before repeating');
+check('🔴 and does NOT repeat the side effect', ran14 === 0 && world.length === 1);
+check('it returns the ORIGINAL resource', rec.result.instanceId === 'inv_real' && rec.replayed === true);
+
+// in-flight with nothing landed → refuse, do not race
+s14 = new Map(); world = []; ran14 = 0;
+s14.set(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2),
+        JSON.stringify({ status: 'in-flight', at: Date.now(), op: UUID2 }));
+const conc = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+check('a genuinely concurrent attempt is refused, not raced',
+      conc.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT && ran14 === 0);
+
+// reservation EXPIRED after the work landed → the silent-duplicate case
+s14 = new Map();                                     // marker gone (TTL)
+world = [{ instanceId: 'inv_real', createdByOperation: UUID2 }];
+ran14 = 0;
+const exp = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+check('🔴 an EXPIRED reservation over a landed side effect still reconciles',
+      exp.state === IDEM.IDEMPOTENCY_STATE.RECONCILED && ran14 === 0,
+      'this is the case that silently duplicates without a reconcile step');
+
+// the resource pointer alone is enough, without a reconcile hook
+s14 = new Map(); ran14 = 0; world = [];
+await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14, { reconcile: reconcile14 });
+check('the work ran once on a clean slate', ran14 === 1);
+s14.delete(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2));   // lose the RESULT record only
+const viaPointer = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14);  // no reconcile hook
+check('🔴 the resource pointer alone recovers a lost result record',
+      viaPointer.state === IDEM.IDEMPOTENCY_STATE.RECONCILED && ran14 === 1,
+      'the pointer is written first precisely so it outlives the result record');
+check('the pointer key is deterministic in the operation',
+      IDEM.resourcePointerKey('sub1', 'instance-create', 'abc123')
+        === 'idemresource:sub1:instance-create:abc123');
+check('the created resource carries its operation provenance',
+      world[0].createdByOperation === UUID2,
+      'createdByOperation makes the record itself the evidence, not just the pointer');
+s14 = new Map(); world = []; ran14 = 0;
+s14.set(IDEM.idempotencyKeyFor('sub1', 'instance-create', UUID2),
+        JSON.stringify({ status: 'in-flight', at: Date.now() }));
+const badRec = await IDEM.runOnce(kv14, 'sub1', 'instance-create', UUID2, create14,
+                                  { reconcile: async () => { throw new Error('DOWN'); } });
+check('🔴 a FAILED reconcile is no evidence and must not be read as absence',
+      badRec.state === IDEM.IDEMPOTENCY_STATE.IN_FLIGHT && ran14 === 0,
+      'same rule as index pruning: a failed read is not proof the side effect did not happen');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
