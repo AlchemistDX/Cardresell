@@ -1,8 +1,8 @@
 # CardResell — Phase 1 To-Do
 
-Live list of what is next. Keeps two tracks: the Block D path we are already on (top), and small survivors from the reviewer-62 audit worth doing on the side (bottom). One place, not two.
+Live list of what is next. Keeps two tracks: the Block D path we are already on (top), and small survivors from the audits worth doing on the side (bottom). One place, not two.
 
-Last update: 2026-09-06 after reviewer-62 audit (`audit/reviewer62/REVIEWER_62_VERDICT.md`, commit `047d83e`).
+Last update: 2026-09-06 after the D2.1 + orientation question packets (`audit/d21/D21_AND_ORIENTATION_ANSWERS.md`). Prior update: reviewer-62 audit (`audit/reviewer62/REVIEWER_62_VERDICT.md`, commit `047d83e`).
 
 ---
 
@@ -26,15 +26,29 @@ Status per `audit/CARDRESELL_PLAN_AND_ROADMAP.md` §6.2.
 
 Roadmap §3.4 in `CARDRESELL_PLAN_AND_ROADMAP.md` still describes the withdrawn cross-source disclosure as live. **Fix that description before another reviewer reads the doc against D2.1.** Detection is still computed and tested — decide whether to route it to the card detail view only, or to keep it fully dark. Question sits with you.
 
-### D2.1 blocker (unchanged from the roadmap)
+### D2.1 blocker — RESOLVED 2026-09-06
 
-`api/_draftService.js:493-512` — the current summary rows contain identity, status, revision, title, price, quantity, timestamps, and `hasPacket`. They do **not** carry `publishable` findings. "Needs price" cannot be honestly derived from the list response alone. D2.1 needs either a server-summary extension or a per-draft read. No client-side inference.
+The gap was real: `api/_draftService.js:493-512` summary rows carry identity, status, revision, title, price, quantity, timestamps, and `hasPacket`, but **not** `publishable` findings, so "Needs price" cannot be honestly derived from the list response alone.
+
+**Decision: extend the summary with a small server-derived display state.** Evidence, from `audit/d21/D21_AND_ORIENTATION_ANSWERS.md` Section A:
+
+- `validateDraftForSlot(draft, slot)` (`api/_draftStore.js:244`) is a **pure synchronous function over the already-read record** — no price-provider call, no network fetch, no third-party API, no env secret. Deriving state per row adds **one function call: zero extra KV reads, zero extra parses, zero new awaits, zero new failure modes.**
+- It is **test-safe.** Every registered assertion touching summary shape is a *subset* check — no `Object.keys` equality, no deep-equal, no snapshot anywhere in `tests/`. Adding a field breaks nothing.
+- The rejected alternatives: a per-draft client read costs **+25 HTTP requests, +25 KV reads and 25 full draft records on the wire** for a 25-row page, which is exactly the payload `summarize()` was written to avoid (`api/_draftService.js:508-513`). Shipping full findings couples the list wire format to the finding schema.
+
+Still no client-side inference. The display state is server-derived or it does not exist.
+
+### D2.1 spec destination
+
+The spec is being filed at **`audit/DRAFT_LIST_API_CONTRACT.md`** — the path `js/core.d9e1b484.js:18394` already points at, and which does not yet exist on disk. Writing it there closes a dangling reference rather than adding a new document.
+
+Write it against the real field names, not the packet's assumed ones. The three that will bite: the paging cursor is a **plain integer offset** (`/^[0-9]+$/`, `api/drafts.js:150`), `count === 0` **does not** mean end-of-list (terminate on `nextCursor === null`; genuine emptiness is `total === 0`), and the eligibility stamp field is **`missing`**, not `missingAxes`, carrying codes like `SELL_NEEDS_SET` rather than axis names.
 
 ---
 
-## Track 2 — Reviewer-62 audit survivors (side path)
+## Track 2 — Audit survivors (side path)
 
-All six are small, all reduce a live truth or money defect, none is a rebuild. Pick any of these in a natural gap during D2.1 work — do not let them delay D2.1 itself.
+All eight are small, all reduce a live truth or money defect, none is a rebuild. Pick any of these in a natural gap during D2.1 work — do not let them delay D2.1 itself.
 
 Ordered by cost of leaving them broken, not by ease.
 
@@ -80,13 +94,35 @@ Ordered by cost of leaving them broken, not by ease.
 - **Fix:** branch on the server's `needsPicker` flag before `card_name`. In bulk, a `needsPicker` row should render as "Pick correct match" with a picker action, not as ✓.
 - **Watch:** verify the bulk refund path still works if the user cancels the picker — the credit was debited pre-scan and the picker confirms via `api/scan-debit-id.js`.
 
+### T2.7 — Grading panel uses a flat $25 fee against our own tiers
+
+- **Where:** `js/core.d9e1b484.js:10926` (`GRADING_FEE = 25`), applied `:10975`,
+  printed to the seller `:11043`. Tier table: `api/grade-opportunity.js:44-52`.
+- **Why:** our own numbers say PSA is $50 over $200 raw and $100 over $500.
+  The panel overstates upside by $25–75 on expensive cards, always toward
+  "grade it." One-directional bias, not just an inconsistency. Rule 2.
+- **Fix:** extract the tier table to one shared place; point the live panel
+  at it. Collapses the dormant duplication as a side effect.
+- **Watch:** the panel's flat 13% fee assumption doesn't come from the real
+  fee calculator either. Same fix, ride it along. Needs a grader default —
+  PSA, stated in the caption — which is an owner call.
+
+**Citations verified 2026-09-06 at tip `95435b4`:**  `:10926` is `const GRADING_FEE = 25;   // PSA value tier ~$25 all-in`; `:10927` is `const FEES_PCT    = 13;   // eBay + shipping typical`; `:10975` is `g.upsideNet = gradedNet - rawNet - GRADING_FEE;`; `:11043` prints `net after $${GRADING_FEE} fee + ${FEES_PCT}% sale fees` to the seller. Server tiers at `api/grade-opportunity.js:48-51` are PSA `<200 → 25`, `<500 → 50`, else `100`, with `BGS 50`, `CGC 18`, `SGC 18`. The $25–75 overstatement and the one-directional bias are both confirmed.
+
+### T2.8 — Shipped copy says "beta"
+
+- **Where:** `api/verify-send.js:155` — `message: 'Email delivery is restricted during beta. Use the Firebase verification link instead — check your inbox after tapping Continue.'`
+- **Why:** the product never says "beta." This string is returned in a `200` body on the email-verification fallback path and is rendered to the user, so it is live user-facing copy, not an internal comment. Verified as the **only** user-facing "beta" in shipped code — a repo-wide search across all `.js` and `.html` returns exactly this one hit.
+- **Fix:** reword to the maintenance convention. Something like "Email delivery is temporarily unavailable. Use the Firebase verification link instead — check your inbox after tapping Continue." Use 🛠️ if a status affordance is wanted; never "beta."
+- **Watch:** this is a server file, so it needs no bundle rename. Do not restate the cause — the 403 branch is specifically an unverified-sending-domain condition (`:151`), which is a configuration state, not a product stage.
+
 ---
 
 ## Also open (not audit survivors, from prior notes)
 
 - **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory. Once rotated, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
 - **Commit `94dc777` message A/B undecided.** Option A keeps history; option B rewrites 28 SHAs to redact a partial-credential disclosure. Awaiting your call.
-- **31 outgoing commits, nothing pushed.** No deployment until you authorize it.
+- **33 outgoing commits, nothing pushed** (`git rev-list --count origin/main..HEAD` = 33 at tip `95435b4`; `origin/main` = `9aaf326`). No deployment until you authorize it.
 
 ---
 
@@ -98,6 +134,17 @@ Listed once so a new reviewer or contributor cannot skip them:
 2. Never display an invented number.
 3. Do not stamp a lie.
 4. `main` auto-deploys — every push needs its own fresh `confirm_action`.
-5. No password collection. (Note: shipped code has already breached this — separate decision.)
+5. **No collection of *marketplace* passwords** (`audit/CARDRESELL_PLAN_AND_ROADMAP.md:69`). Not breached. See the correction below.
+
+### Correction — the "password breach" was a misreading, not a defect
+
+An earlier note on this list claimed shipped code had already breached rule 5. **That was wrong, and the note was mine.** Checked against the code at tip `95435b4`:
+
+- The binding rule at `audit/CARDRESELL_PLAN_AND_ROADMAP.md:69` reads **"No collection of marketplace passwords."** It sits in §1.3 directly alongside "No headless-browser listing automation," "No reading seller dashboards through DOM automation," and "No circumvention of a closed partner API" (`:70-72`). It is an anti-automation guardrail about **eBay / TCGplayer credentials**, not a rule against having our own account passwords.
+- What ships is Firebase email+password auth for the user's **own CardResell account**: `signin.html:300` (sign-in), `:331`/`:337` (sign-up + confirm), `:360` (reset), wired to Firebase at `:382`, `:440-441`. That is a different thing from a marketplace credential.
+- **No marketplace credential is collected anywhere.** A repo-wide search for eBay/TCGplayer password or login fields across all `.js` and `.html` returns nothing.
+- **No server route ever receives a password.** `grep -rn "password" api/` returns exactly one hit, a comment at `api/verify-send.js:150`. Credentials go client-side to Firebase Auth; CardResell never stores or transports them.
+
+**Conclusion: rule 5 is intact and nothing needs to be filed.** No numbered item, no owner decision. The parenthetical footnote was a misreading of "marketplace" as "any," and it propagated for several sessions unchallenged — worth noting as a reminder that an unsourced aside on a rules list is exactly where a false claim hides.
 
 Do-not-touch: Ultimate (retired), Grade gold-set, Wallpaper, homepage feature-grid blurb.
