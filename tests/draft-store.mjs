@@ -383,4 +383,35 @@ check('takeover keys are namespaced separately from claims',
       DS.takeoverKey('s', 'd', 2).startsWith('drafttake:') &&
       DS.revisionClaimKey('s', 'd', 2).startsWith('draftrev:'));
 
+
+// ── claim age is server-owned ────────────────────────────────────────────
+console.log('\nclaim age comes from the server clock, never from request input');
+kv = makeKv();
+const ts = DS.buildDraft({ ...base(), title: 'Clock test' });
+await DS.putDraft(kv, 'sub1', ts, 'op-c');
+const rawClaim = kv.store.get(DS.revisionClaimKey('sub1', ts.draftId, 1));
+const parsedClaim = JSON.parse(rawClaim);
+check('the claim stores a server timestamp', Number.isFinite(parsedClaim.at) && parsedClaim.at > 0);
+check('and it is within a second of now', Math.abs(Date.now() - parsedClaim.at) < 1000);
+
+// A client trying to smuggle a timestamp in must not be able to age its own claim.
+const hostile = { ...DS.buildDraft(base()), at: 0, claimedAt: 0, timestamp: 0 };
+await DS.putDraft(kv, 'sub1', { ...hostile, draftId: ts.draftId, rev: 2 }, 'op-hostile2');
+const claim2 = JSON.parse(kv.store.get(DS.revisionClaimKey('sub1', ts.draftId, 2)) || '{}');
+check('🔴 client-supplied timestamp fields cannot age a claim',
+      Number.isFinite(claim2.at) && Math.abs(Date.now() - claim2.at) < 1000,
+      'a client that could set at=0 would get any live writer treated as an orphan');
+
+// An unparseable/legacy claim value is treated as MAXIMALLY OLD, not young.
+kv = makeKv();
+const lg = DS.buildDraft(base());
+await DS.putDraft(kv, 'sub1', lg, 'op-c');
+await kv('set', DS.revisionClaimKey('sub1', lg.draftId, 2), 'op-legacy-plain-string');
+const legacyTakeover = await DS.putDraft(kv, 'sub1', { ...lg, rev: 2, price: 12 }, 'op-new');
+check('a legacy claim with no timestamp is recoverable, not a permanent block',
+      legacyTakeover.ok === true,
+      'treating an unknown age as YOUNG would wedge the draft until its TTL expired');
+check('and the guard still governed the write it allowed',
+      (await DS.getDraft(kv, 'sub1', lg.draftId)).draft.rev === 2);
+
 done();

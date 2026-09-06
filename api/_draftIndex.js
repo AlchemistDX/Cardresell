@@ -338,20 +338,43 @@ export async function listDraftIds(googleSub, opts = {}) {
   }
 
   let indexed = null;
+  let indexReadFailed = false;
   try {
     const raw = await kv('smembers', draftsKey(googleSub));
     indexed = Array.isArray(raw) ? raw : [];
   } catch {
     indexed = null;
+    indexReadFailed = true;
   }
 
   // Fast path: the index is readable AND provably reconciled since the last
   // degraded write. Emptiness is irrelevant here — a genuinely empty index
   // that is marked clean is a correct answer.
-  if (!forced && fresh && indexed) return indexed;
+  if (!forced && fresh && indexed) return detailed(opts, { draftIds: indexed, source: 'index' });
 
   // Slow path: authoritative storage decides.
-  const scanned = await scanDraftIds(googleSub);
+  //
+  // ── "Empty" and "we could not tell" are not the same answer ─────────────
+  //
+  // If BOTH the index read and the scan fail, the honest result is that we do
+  // not know what this seller has. Returning [] here would render as "you have
+  // no drafts" — the one answer that makes someone believe their work is gone,
+  // produced at the exact moment we know the least. So it is reported as
+  // unavailable and the caller is expected to say "could not load", not "none".
+  let scanned;
+  try {
+    scanned = await scanDraftIds(googleSub);
+  } catch (e) {
+    if (indexReadFailed) {
+      if (opts.detail === true) {
+        return { draftIds: [], source: null, degraded: true, unavailable: true, retryable: true };
+      }
+      throw e;
+    }
+    // The index read DID succeed, so we still have a real (if unrepaired)
+    // answer. Serve it rather than failing the whole request.
+    return detailed(opts, { draftIds: indexed, source: 'index', degraded: true });
+  }
 
   // Union, not replacement. A record written but not yet visible to SCAN must
   // not be dropped from the index by the very read that is repairing it.
@@ -397,7 +420,32 @@ export async function listDraftIds(googleSub, opts = {}) {
   if (!missingFromIndex.length || await indexContains(googleSub, missingFromIndex)) {
     await markIndexFresh(googleSub);
   }
-  return live;
+  return detailed(opts, {
+    draftIds: live,
+    source: 'reconciled',
+    degraded: indexReadFailed,
+    reconciled: true,
+  });
+}
+
+/**
+ * `listDraftIds` has always returned a bare array and 258 tests depend on that.
+ * `detail: true` opts into the fuller shape instead of changing the default,
+ * because the difference that matters — empty vs. unknown — is invisible in an
+ * array and every existing caller would keep reading it as "empty".
+ */
+function detailed(opts, result) {
+  if (opts && opts.detail === true) {
+    return {
+      draftIds: result.draftIds || [],
+      source: result.source || null,
+      degraded: !!result.degraded,
+      reconciled: !!result.reconciled,
+      unavailable: false,
+      retryable: false,
+    };
+  }
+  return result.draftIds || [];
 }
 
 /** Verify a repair actually landed before claiming the index is clean. */

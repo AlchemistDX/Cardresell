@@ -27,7 +27,7 @@ echo "  CardResell regression suite"
 echo "════════════════════════════════════════════════════"
 
 echo ""
-echo "▶ [1/18] Syntax check (all inline <script> blocks)"
+echo "▶ [1/20] Syntax check (all inline <script> blocks)"
 if node "$ROOT/tests/syntax-check.js"; then
   echo "  passed"
 else
@@ -35,7 +35,7 @@ else
 fi
 
 echo ""
-echo "▶ [2/18] Auth stack integrity"
+echo "▶ [2/20] Auth stack integrity"
 if node "$ROOT/tests/auth-integrity.js"; then
   :
 else
@@ -43,7 +43,7 @@ else
 fi
 
 echo ""
-echo "▶ [3/18] Scan-miss regression checks"
+echo "▶ [3/20] Scan-miss regression checks"
 if node "$ROOT/tests/scan-miss.js"; then
   :
 else
@@ -51,7 +51,7 @@ else
 fi
 
 echo ""
-echo "▶ [4/18] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
+echo "▶ [4/20] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
 if node "$ROOT/tests/deeplink-companions.js"; then
   :
 else
@@ -59,7 +59,7 @@ else
 fi
 
 echo ""
-echo "▶ [5/18] Copy truth checks"
+echo "▶ [5/20] Copy truth checks"
 if node "$ROOT/tests/copy-truth-offline.mjs"; then
   :
 else
@@ -67,7 +67,7 @@ else
 fi
 
 echo ""
-echo "▶ [6/18] Fee truth checks"
+echo "▶ [6/20] Fee truth checks"
 if node "$ROOT/tests/fee-truth-offline.mjs"; then
   :
 else
@@ -75,7 +75,7 @@ else
 fi
 
 echo ""
-echo "▶ [7/18] Stripe webhook P0 checks"
+echo "▶ [7/20] Stripe webhook P0 checks"
 if node "$ROOT/tests/webhook-p0-offline.mjs"; then
   :
 else
@@ -83,7 +83,7 @@ else
 fi
 
 echo ""
-echo "▶ [8/18] Launch-audit regressions"
+echo "▶ [8/20] Launch-audit regressions"
 if node "$ROOT/tests/launch-audit-regressions.mjs"; then
   :
 else
@@ -91,7 +91,7 @@ else
 fi
 
 echo ""
-echo "▶ [9/18] Variant selection (premium-printing bias)"
+echo "▶ [9/20] Variant selection (premium-printing bias)"
 if node "$ROOT/tests/variant-selection.mjs"; then
   :
 else
@@ -99,7 +99,7 @@ else
 fi
 
 echo ""
-echo "▶ [10/18] Sports price guard (host + parallel discipline)"
+echo "▶ [10/20] Sports price guard (host + parallel discipline)"
 if node "$ROOT/tests/sports-price-guard.mjs"; then
   :
 else
@@ -107,7 +107,7 @@ else
 fi
 
 echo ""
-echo "▶ [11/18] Quick Pricing + headline price"
+echo "▶ [11/20] Quick Pricing + headline price"
 if node "$ROOT/tests/quick-pricing.mjs"; then
   :
 else
@@ -115,7 +115,7 @@ else
 fi
 
 echo ""
-echo "▶ [12/18] Sports parallel matching"
+echo "▶ [12/20] Sports parallel matching"
 if node "$ROOT/tests/sports-parallel.mjs"; then
   :
 else
@@ -123,7 +123,7 @@ else
 fi
 
 echo ""
-echo "▶ [13/18] Scanner fastpath + miss-logging"
+echo "▶ [13/20] Scanner fastpath + miss-logging"
 if node "$ROOT/tests/scanner-fastpath.mjs"; then
   :
 else
@@ -131,7 +131,7 @@ else
 fi
 
 echo ""
-echo "▶ [14/18] eBay auth + taxonomy (offline)"
+echo "▶ [14/20] eBay auth + taxonomy (offline)"
 if node "$ROOT/tests/ebay-auth-offline.mjs"; then
   :
 else
@@ -139,7 +139,7 @@ else
 fi
 
 echo ""
-echo "▶ [15/18] Card identity + SKU golden tests"
+echo "▶ [15/20] Card identity + SKU golden tests"
 if node "$ROOT/tests/sku-identity.mjs"; then
   :
 else
@@ -147,7 +147,7 @@ else
 fi
 
 echo ""
-echo "▶ [16/18] Listing packet: title + condition + target-net + metadata (offline)"
+echo "▶ [16/20] Listing packet: title + condition + target-net + metadata (offline)"
 if node "$ROOT/tests/listing-packet-offline.mjs"; then
   :
 else
@@ -155,7 +155,7 @@ else
 fi
 
 echo ""
-echo "▶ [17/19] Draft index recovery + packet schema version (offline)"
+echo "▶ [17/20] Draft index recovery + packet schema version (offline)"
 if node "$ROOT/tests/draft-index-recovery.mjs"; then
   :
 else
@@ -163,8 +163,16 @@ else
 fi
 
 echo ""
-echo "▶ [18/19] C1 draft store — revisions, tombstones, schema safety (offline)"
+echo "▶ [18/20] C1 draft store — revisions, tombstones, schema safety (offline)"
 if node "$ROOT/tests/draft-store.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [19/20] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
+if node "$ROOT/tests/draft-crud-e2e.mjs"; then
   :
 else
   FAIL=1
@@ -172,7 +180,7 @@ fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [19/19] Prod endpoint smoke ($BASE)"
+  echo "▶ [20/20] Prod endpoint smoke ($BASE)"
   if node "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else
@@ -180,7 +188,7 @@ if [[ "$LOCAL_ONLY" == "0" ]]; then
   fi
 else
   echo ""
-  echo "▶ [18/18] Prod endpoint smoke — SKIPPED (--local)"
+  echo "▶ [20/20] Prod endpoint smoke — SKIPPED (--local)"
 fi
 
 echo ""

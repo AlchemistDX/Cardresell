@@ -358,6 +358,20 @@ export const CLAIM_OUTCOME = {
   UNAVAILABLE: 'unavailable',
 };
 
+/**
+ * Claim age is decided by a SERVER-generated timestamp only.
+ *
+ * If a client could supply the claim's `at`, clock skew or a hostile client
+ * could make a brand-new claim look stale (inviting an immediate takeover of a
+ * live writer) or an abandoned claim look young (blocking recovery for as long
+ * as it liked). The timestamp is stamped inside claimRevision from this
+ * process's clock and is never read from request input.
+ *
+ * A claim value with a missing or non-numeric timestamp is treated as
+ * MAXIMALLY OLD, not as young. That is the safe direction: it permits recovery
+ * of a claim written by an older build, and the authoritative-predecessor guard
+ * still prevents an incorrect write from following the takeover.
+ */
 function parseClaim(v) {
   if (v === null || v === undefined) return null;
   if (typeof v === 'object') return v;

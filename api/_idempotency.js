@@ -122,6 +122,10 @@ export const MUTATION_FIELDS = {
     totalAcquisitionCost: 'money', cert: 'id',
   },
   'draft-create': {
+    // `sku` counts. A draft for a different card is a different mutation, and
+    // omitting it would let one key create a draft for whichever card arrived
+    // first and then replay that answer for a different card entirely.
+    sku: 'id',
     instanceId: 'id', slot: 'token', price: 'money', title: 'text', strategy: 'token',
   },
   'instance-split': {
@@ -210,6 +214,14 @@ export const SCOPE_POLICY = {
 };
 
 export const IDEMPOTENT_SCOPES = Object.keys(SCOPE_POLICY);
+
+/** Named scopes, so a caller cannot typo a string into IDEMPOTENCY_SCOPE_UNKNOWN. */
+export const SCOPES = {
+  INSTANCE_CREATE: 'instance-create',
+  DRAFT_CREATE:    'draft-create',
+  INSTANCE_SPLIT:  'instance-split',
+  LISTING_PUBLISH: 'listing-publish',
+};
 
 export const IDEMPOTENCY_STATE = {
   FRESH:         'fresh',           // nothing recorded — the work ran
@@ -360,7 +372,11 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
   //       Now it is safe to ask whether the side effect already landed. This
   //       covers the reservation having expired after the work succeeded — the
   //       case that silently duplicates.
-  const alreadyLanded = await tryReconcile(reconcile, opKey);
+  // The reconcile hook receives the pointer as well as the op key. Review asked
+  // that the original fingerprint be available on every recovery path, and the
+  // pointer is where it lives: a hook that can see { resourceId, fingerprint }
+  // can rebuild the answer from the authoritative record instead of guessing.
+  const alreadyLanded = await tryReconcile(reconcile, opKey, pointerParsed);
   if (alreadyLanded) {
     await recordDone(kv, k, resKey, alreadyLanded, opKey, fingerprint);
     return { state: IDEMPOTENCY_STATE.RECONCILED, result: alreadyLanded, replayed: true };
@@ -408,10 +424,10 @@ export async function runOnce(kv, googleSub, scope, key, work, opts = {}) {
   return { state: IDEMPOTENCY_STATE.FRESH, result, replayed: false };
 }
 
-async function tryReconcile(reconcile, opKey) {
+async function tryReconcile(reconcile, opKey, pointer) {
   if (!reconcile) return null;
   try {
-    const found = await reconcile(opKey);
+    const found = await reconcile(opKey, pointer || null);
     return found || null;
   } catch {
     // A failed reconcile is NO EVIDENCE, same rule as index pruning. It must
