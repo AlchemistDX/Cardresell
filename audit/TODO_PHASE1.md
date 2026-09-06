@@ -2,7 +2,7 @@
 
 Live list of what is next. Keeps two tracks: the Block D path we are already on (top), and small survivors from the audits worth doing on the side (bottom). One place, not two.
 
-Last update: 2026-09-06 after the D2.1 + orientation question packets (`audit/d21/D21_AND_ORIENTATION_ANSWERS.md`). Prior update: reviewer-62 audit (`audit/reviewer62/REVIEWER_62_VERDICT.md`, commit `047d83e`).
+Last update: 2026-09-06 after filing the D2.1 contract and the `94dc777` decision. Prior: the D2.1 + orientation question packets (`audit/d21/D21_AND_ORIENTATION_ANSWERS.md`). Prior update: reviewer-62 audit (`audit/reviewer62/REVIEWER_62_VERDICT.md`, commit `047d83e`).
 
 ---
 
@@ -120,9 +120,10 @@ Ordered by cost of leaving them broken, not by ease.
 
 ## Also open (not audit survivors, from prior notes)
 
-- **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory. Once rotated, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
-- **Commit `94dc777` message A/B undecided.** Option A keeps history; option B rewrites 28 SHAs to redact a partial-credential disclosure. Awaiting your call.
-- **33 outgoing commits, nothing pushed** (`git rev-list --count origin/main..HEAD` = 33 at tip `95435b4`; `origin/main` = `9aaf326`). No deployment until you authorize it.
+- **PUSH GATE — do not push before the Cert ID is rotated.** `94dc777` is unreachable from `origin/main`, so the credential fragments exist only in unpushed history. The push is the publishing event. This is additive to the deploy-authorization rule below, not a replacement: rotation removes one blocker, it does not authorize a push. Recorded at `audit/DECISION_94dc777.md`.
+- **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory and now gates the first push. Sequence, environment dependencies, and the 18/19-vs-19/19 distinction are in `audit/DECISION_94dc777.md`. Once rotated and verified, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
+- **Commit `94dc777` — DECIDED, option A, keep the history** (2026-09-06). The message contains no full credential and no credential-shaped fragment; rewriting 36 commits would invalidate every stamp in the audit corpus to redact a fragment of a credential being retired anyway. Conditional on rotation actually happening. Full record at `audit/DECISION_94dc777.md`.
+- **36 outgoing commits, nothing pushed** (`git rev-list --count origin/main..HEAD` = 36 at tip `cbb5552`; `origin/main` = `9aaf326`). The three since `95435b4` are the T2.7/T2.8 patch, the D2.1 contract, and Amendment 1 — all documentation-only, so every code line number cited across the corpus remains valid. No deployment until you authorize it.
 
 ---
 
