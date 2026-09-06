@@ -24,6 +24,7 @@ import { buildListingTitle } from './_listingTitle.js';
 import { buildConditionBlock, SEVERITY } from './_conditionDescriptors.js';
 import {
   categoryForCard, buildRequiredAspects, CARD_CATEGORIES, VERIFIED_TREE_VERSION,
+  ASPECT_SOURCE,
 } from './_ebayTaxonomy.js';
 
 /** Ours. Bump when the packet's own shape changes. */
@@ -46,6 +47,131 @@ export const PACKET_CODES = {
   TAXONOMY_VERSION_ASSUMED:   'TAXONOMY_VERSION_ASSUMED',
   NO_PRICE:                   'NO_PRICE',
 };
+
+// ── C0 — schema version handling (Block C entry criterion) ────────────────
+//
+// packetSchemaVersion becomes real the moment packets are persisted. Until
+// something READS it, a v1 packet parsed by v2 code is treated as current and
+// silently mis-parsed — the worst available outcome, because it produces
+// confident wrong prices rather than an error.
+//
+// Exactly four inputs, three outcomes, and "assume current" is not one of
+// them:
+//
+//   equal to current   → CURRENT,      usable
+//   older, known       → MIGRATED,     migrated forward, records the hop
+//   newer than current → INCOMPATIBLE, record preserved, handoff refused
+//   missing/malformed  → INCOMPATIBLE, treated as unknown, never as current
+//
+// Forward safety without destroying user data: an incompatible record is
+// never rewritten or deleted, because the client that CAN read it may be one
+// deploy away.
+
+export const PACKET_COMPAT = {
+  CURRENT:      'CURRENT',
+  MIGRATED:     'MIGRATED',
+  INCOMPATIBLE: 'INCOMPATIBLE',
+};
+
+/**
+ * Registered forward migrations, keyed by the version being migrated FROM.
+ * Each returns the packet at version key+1. Absent entry for an older version
+ * means we cannot migrate it, so it is incompatible rather than assumed.
+ *
+ * Empty today because v1 is current — the table exists so that adding v2 is a
+ * data change rather than a control-flow change.
+ */
+export const PACKET_MIGRATIONS = {
+  // 1: (packet) => ({ ...packet, packetSchemaVersion: 2, /* ... */ }),
+};
+
+/**
+ * Read a stored packet safely. NEVER returns a packet it could not account
+ * for the version of.
+ *
+ * Returns { status, packet, fromVersion, toVersion, migrationsApplied, reason,
+ *           usable }.
+ * `usable === false` means the caller must refuse handoff and preserve the
+ * record untouched.
+ */
+export function readStoredPacket(stored, opts = {}) {
+  const current = Number.isInteger(opts.currentVersion)
+    ? opts.currentVersion
+    : PACKET_SCHEMA_VERSION;
+
+  const fail = (reason) => ({
+    status: PACKET_COMPAT.INCOMPATIBLE,
+    packet: stored ?? null,
+    fromVersion: stored && typeof stored === 'object' ? stored.packetSchemaVersion ?? null : null,
+    toVersion: current,
+    migrationsApplied: [],
+    reason,
+    usable: false,
+  });
+
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    return fail('PACKET_NOT_AN_OBJECT');
+  }
+
+  const raw = stored.packetSchemaVersion;
+  // A version must be a real integer. `'1'`, `1.5`, null and undefined are all
+  // unknown provenance, and unknown provenance is incompatible — not current.
+  if (!Number.isInteger(raw)) return fail('PACKET_VERSION_MALFORMED');
+  if (raw < 1) return fail('PACKET_VERSION_MALFORMED');
+
+  if (raw === current) {
+    return {
+      status: PACKET_COMPAT.CURRENT,
+      packet: stored,
+      fromVersion: raw,
+      toVersion: current,
+      migrationsApplied: [],
+      reason: null,
+      usable: true,
+    };
+  }
+
+  if (raw > current) {
+    // Written by a newer deploy. Preserve it verbatim: the record is not
+    // corrupt, this reader is simply behind.
+    return fail('PACKET_VERSION_AHEAD_OF_READER');
+  }
+
+  // Older. Walk the migration table one step at a time; a single missing hop
+  // makes the whole chain incompatible rather than partially applied.
+  let working = stored;
+  const applied = [];
+  for (let v = raw; v < current; v += 1) {
+    const step = PACKET_MIGRATIONS[v];
+    if (typeof step !== 'function') {
+      return {
+        ...fail('PACKET_NO_MIGRATION_PATH'),
+        fromVersion: raw,
+        migrationsApplied: applied,
+      };
+    }
+    working = step(working);
+    if (!working || working.packetSchemaVersion !== v + 1) {
+      return {
+        ...fail('PACKET_MIGRATION_DID_NOT_ADVANCE_VERSION'),
+        fromVersion: raw,
+        migrationsApplied: applied,
+      };
+    }
+    applied.push(`${v}->${v + 1}`);
+  }
+
+  return {
+    status: PACKET_COMPAT.MIGRATED,
+    packet: working,
+    fromVersion: raw,
+    toVersion: current,
+    migrationsApplied: applied,
+    reason: null,
+    usable: true,
+  };
+}
+
 
 /**
  * 'Sep 2026' → '2026-09'.
@@ -255,9 +381,21 @@ export function buildListingPacket(row = {}, ctx = {}) {
         `"${name}" is required by ${req.categoryLabel} and we could not fill it. `
       + 'Set it in the listing form.', { aspect: name });
   }
+  // Which values we translated from an internal routing token, as opposed to
+  // ones the seller actually supplied. `game: 'pokemonjp'` is our key, not
+  // eBay vocabulary, and a packet that renders it without saying so looks
+  // copy-ready when it is not.
+  const mappedAspects = Object.entries(req.provenance || {})
+    .filter(([, p]) => p.source === ASPECT_SOURCE.MAPPED || p.source === ASPECT_SOURCE.INFERRED)
+    .map(([name]) => name);
   add(PACKET_CODES.UNVERIFIED_ASPECT_VALUES, SEVERITY.WARNING,
       'Aspect values are our display suggestions, not verified venue values. '
-    + 'Match them against the listing form\'s own dropdowns.');
+    + 'Match them against the listing form\'s own dropdowns.'
+    + (mappedAspects.length
+        ? ` We filled ${mappedAspects.join(', ')} from our own catalogue rather than `
+          + "the venue's list, so confirm it before submitting."
+        : ''),
+      { mappedAspects, submissionReady: false });
 
   const pricing = ctx.pricing || null;
   if (!pricing || pricing.ok !== true || !(pricing.listPrice > 0)) {
@@ -278,7 +416,14 @@ export function buildListingPacket(row = {}, ctx = {}) {
       required: req.aspects,
       missingRequired: req.missing,
       optional: buildOptionalAspects(row, ident, cat.id),
+      // Provenance per aspect, so a consumer can tell a seller-supplied value
+      // from one we translated. Phase 2 replaces this with fetched values.
+      provenance: req.provenance || {},
       valuesVerified: false,
+      // Explicit and separate from valuesVerified: nothing in a Phase 1 packet
+      // may be POSTed to a venue as-is. A copy-ready packet is not a
+      // submission-ready one.
+      submissionReady: false,
     },
     condition: cond,
     pricing: pricing

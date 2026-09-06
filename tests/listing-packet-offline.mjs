@@ -864,5 +864,48 @@ check('a venue field cannot smuggle in a different card either',
 check('identity object carries no venue-named keys',
       !Object.keys(cardIdentity(PHYSICAL)).some((k) => /ebay|mercari|tcgplayer|whatnot/i.test(k)));
 
+
+// ── B7 — aspect values must be visibly non-submission-grade (review) ──────
+console.log('\nB7 — unverified aspect values');
+{
+  const jp = buildListingPacket({ card: 'Gengar VSTAR', set: 'VSTAR Universe', number: '199',
+                           game: 'pokemonjp', rarity: 'Special Art Rare' },
+                         { feeModelRevision: 1 });
+  const gameVal = jp.aspects.required.Game?.[0] || '';
+  check('🔴 an internal game token never reaches the Game aspect',
+        !/^pokemon(jp)?$/i.test(gameVal),
+        `Game aspect was "${gameVal}" — that is our routing key, not eBay vocabulary`);
+  check('it renders a human label the seller can match instead',
+        gameVal === 'Pokémon TCG', `got "${gameVal}"`);
+  check('the value records that WE translated it',
+        jp.aspects.provenance?.Game?.source === 'internal-token-mapped');
+  check('🔴 no required aspect value is marked submission-ready',
+        Object.values(jp.aspects.provenance || {}).every((p) => p.submissionReady === false));
+  check('🔴 the packet as a whole is not submission-ready',
+        jp.aspects.submissionReady === false && jp.aspects.valuesVerified === false,
+        'copy-ready is not the same claim as submission-ready');
+  const note = jp.notes.find((n) => n.code === 'UNVERIFIED_ASPECT_VALUES');
+  check('the warning names the aspects we filled ourselves',
+        !!note && Array.isArray(note.mappedAspects) && note.mappedAspects.includes('Game'));
+  check('the warning tells the seller to confirm before submitting',
+        !!note && /confirm it before submitting/.test(note.message));
+  check('Japanese-ness is not smuggled into the game name',
+        !/japan/i.test(gameVal),
+        'language belongs in the Language aspect, not in the name of the game');
+
+  const seller = buildListingPacket({ card: 'Michael Jordan', set: '1986 Fleer', number: '57',
+                               game: 'sports', sport: 'Basketball' }, { feeModelRevision: 1 });
+  check('a seller-supplied value is distinguished from one we mapped',
+        seller.aspects.provenance?.Sport?.source === 'seller-confirmed');
+  check('but it is still not submission-ready in Phase 1',
+        seller.aspects.provenance?.Sport?.submissionReady === false,
+        'we hold verified aspect NAMES, never verified VALUES');
+  const missing = buildListingPacket({ card: 'Some Card', set: 'Some Set', number: '1',
+                               game: 'sports' }, { feeModelRevision: 1 });
+  check('an absent required aspect is provenance-tracked too',
+        missing.aspects.provenance?.Sport?.source === 'missing'
+        && missing.aspects.provenance?.Sport?.value === null);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

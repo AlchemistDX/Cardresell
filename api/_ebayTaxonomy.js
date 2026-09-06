@@ -185,7 +185,11 @@ export function categoryForCard(card = {}) {
   const hay = [card.game, card.franchise, card.sport, card.setName, card.set_name, card.category]
     .filter(Boolean).join(' ').toLowerCase();
 
-  if (card.sport || card.player || card.playerName ||
+  // `game: 'sports'` is this codebase's explicit sports marker. Without it
+  // here, a sports card whose set name carries no brand keyword fell through
+  // to CCG and then emitted the token "sports" into the Game aspect.
+  if (String(card.game || '').toLowerCase() === 'sports' ||
+      card.sport || card.player || card.playerName ||
       /\b(basketball|baseball|football|hockey|soccer|nba|nfl|mlb|nhl|fifa|topps|panini|prizm|donruss)\b/.test(hay)) {
     return CARD_CATEGORIES.SPORTS;
   }
@@ -203,23 +207,127 @@ export function categoryForCard(card = {}) {
  * Returns { categoryId, aspects, missing } — `missing` non-empty means the
  * packet is not yet listable and needs seller input.
  */
+/**
+ * Internal game tokens are OUR routing keys, not venue vocabulary.
+ *
+ * `game: 'pokemonjp'` is how this codebase says "Japanese Pokémon printing".
+ * It is not a string eBay has ever heard of, and passing it straight into the
+ * `Game` aspect produced a packet that LOOKED copy-ready while carrying an
+ * internal token into a constrained field.
+ *
+ * These labels are human-readable renderings for the seller to match against
+ * the venue's own dropdown. They are explicitly NOT verified venue values —
+ * eBay's allowed values for `Game` require getItemAspectsForCategory with a
+ * user token, which is Phase 2. Anything mapped here is marked
+ * `submissionReady: false` and must stay that way until those values are
+ * fetched, not guessed.
+ *
+ * Japanese-ness deliberately does not appear here: it belongs in the Language
+ * aspect, not in the name of the game.
+ */
+const INTERNAL_GAME_LABELS = {
+  pokemon:   'Pokémon TCG',
+  pokemonjp: 'Pokémon TCG',
+  mtg:       'Magic: The Gathering',
+  yugioh:    'Yu-Gi-Oh!',
+  lorcana:   'Disney Lorcana',
+  onepiece:  'One Piece Card Game',
+};
+
+/**
+ * Shape of an internal routing key: all lowercase, no spaces or punctuation.
+ * `pokemonjp` matches; `Pokémon TCG` does not. Used to tell a token we failed
+ * to map from a display string a human actually typed, so a game we add to the
+ * scanner but forget to add above degrades to "missing" instead of leaking.
+ */
+const INTERNAL_TOKEN_SHAPE = /^[a-z0-9]+$/;
+
+/** Where an aspect value came from, which decides whether it may be submitted. */
+export const ASPECT_SOURCE = {
+  SELLER:   'seller-confirmed',
+  MAPPED:   'internal-token-mapped',
+  INFERRED: 'inferred',
+  ABSENT:   'missing',
+};
+
+/** True only for values we have checked against the venue's own allowed list. */
+export function aspectValueIsSubmissionReady() {
+  // Phase 1 holds no verified aspect VALUES for any constrained aspect. This
+  // is a function rather than a constant so Phase 2 can make it per-aspect
+  // without every caller changing shape.
+  return false;
+}
+
+/**
+ * Map a scanned card onto the required aspect for its category.
+ *
+ * Returns { categoryId, aspects, missing, provenance, submissionReady }.
+ * `missing` non-empty means the packet needs seller input. `submissionReady`
+ * is false for the whole of Phase 1: these are display suggestions for a human
+ * to match, never values to POST.
+ */
 export function buildRequiredAspects(card = {}) {
   const cat = categoryForCard(card);
   const aspects = {};
   const missing = [];
+  const provenance = {};
 
   for (const name of cat.requiredAspects) {
-    let value = '';
+    let value  = '';
+    let source = ASPECT_SOURCE.ABSENT;
+
     if (name === 'Game') {
-      value = card.game || (/pok[eé]mon/i.test(JSON.stringify(card)) ? 'Pokémon TCG' : '');
+      const raw = card.game ? String(card.game) : '';
+      const mapped = INTERNAL_GAME_LABELS[raw.toLowerCase()];
+      if (mapped) {
+        // An internal routing token. Render the human label, and record that
+        // this value was translated by us rather than supplied by the seller.
+        value = mapped;
+        source = ASPECT_SOURCE.MAPPED;
+      } else if (raw && INTERNAL_TOKEN_SHAPE.test(raw)) {
+        // Looks like one of our routing keys but is not in the map — a game we
+        // added to the scanner and forgot to add here. Emitting it would leak
+        // the token; guessing a label would invent venue vocabulary. Report it
+        // missing so the seller fills it in, which is honest and fixable.
+        value = '';
+        source = ASPECT_SOURCE.ABSENT;
+      } else if (raw) {
+        // A human-readable string, so it came from a form rather than routing.
+        value = raw;
+        source = ASPECT_SOURCE.SELLER;
+      } else if (/pok[eé]mon/i.test(JSON.stringify(card))) {
+        value = 'Pokémon TCG';
+        source = ASPECT_SOURCE.INFERRED;
+      }
     } else if (name === 'Sport') {
       value = card.sport || '';
+      if (value) source = ASPECT_SOURCE.SELLER;
     } else if (name === 'Franchise') {
       value = card.franchise || '';
+      if (value) source = ASPECT_SOURCE.SELLER;
     }
-    if (value) aspects[name] = [String(value)];
-    else missing.push(name);
+
+    if (value) {
+      aspects[name] = [String(value)];
+      provenance[name] = {
+        value: String(value),
+        source,
+        // Every constrained aspect value is unverified in Phase 1, regardless
+        // of how confident the source looks.
+        submissionReady: aspectValueIsSubmissionReady(name, cat.id),
+      };
+    } else {
+      missing.push(name);
+      provenance[name] = { value: null, source: ASPECT_SOURCE.ABSENT, submissionReady: false };
+    }
   }
 
-  return { categoryId: cat.id, categoryLabel: cat.label, aspects, missing };
+  return {
+    categoryId: cat.id,
+    categoryLabel: cat.label,
+    aspects,
+    missing,
+    provenance,
+    submissionReady: false,
+  };
 }
