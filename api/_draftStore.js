@@ -89,6 +89,7 @@ export const ERR = {
   NOT_EDITABLE:     'DRAFT_NOT_EDITABLE',
   SCHEMA_TOO_NEW:   'DRAFT_SCHEMA_TOO_NEW',
   UNREADABLE:       'DRAFT_RECORD_UNREADABLE',
+  NOT_DISCARDABLE: 'DRAFT_NOT_DISCARDABLE',
   STORE_UNAVAILABLE:'DRAFT_STORE_UNAVAILABLE',
   FIELD_INVALID:    'DRAFT_FIELD_INVALID',
 };
@@ -134,6 +135,17 @@ export const SLOT_RULES = {
  * ONLY ERROR blocks. That is the whole contract, and it is asserted in tests
  * rather than left to each call site to remember.
  */
+/**
+ * How a draft's price came to be. `packet` is implied by a stored quote
+ * snapshot; these name the cases where there is no snapshot.
+ */
+export const PRICE_SOURCE = {
+  SELLER: 'seller',   // the seller typed it
+  COMP:   'comp',     // derived from comparable sales at save time
+  VENUE:  'venue',    // carried over from an existing listing
+};
+export const PRICE_SOURCES = Object.values(PRICE_SOURCE);
+
 export const SEVERITY = { ERROR: 'error', WARNING: 'warning', INFO: 'info' };
 
 /** Only ERROR blocks a handoff. Nothing else may. */
@@ -147,6 +159,7 @@ export const VIOLATION = {
   ZERO_PRICE:      'SLOT_ZERO_PRICE_NOT_ALLOWED',
   UNKNOWN_SLOT:    'SLOT_RULES_UNKNOWN',
   NO_PROVENANCE:   'DRAFT_NO_PRICE_PROVENANCE',
+  SELLER_PRICED:   'DRAFT_PRICE_SELLER_ENTERED',
 };
 
 /**
@@ -164,7 +177,20 @@ export const VIOLATION_SEVERITY = {
   // Informational: the draft is perfectly listable, we just cannot show the
   // seller where its price came from. Blocking on this would refuse to list a
   // draft whose price the seller typed themselves.
-  [VIOLATION.NO_PROVENANCE]:  SEVERITY.INFO,
+  // ── Two different states, deliberately not one finding ─────────────────
+  //
+  // These started as a single INFO on "no saved quote", which quietly taught
+  // the model that provenance means "came from our pricing engine". A price
+  // the seller typed HAS provenance: the seller. It is a complete, defensible
+  // answer to "where did this number come from", and the North Star commits
+  // to every number being able to answer that.
+  //
+  // What is NOT fine is a persisted price whose origin nobody can name. That
+  // is a data-quality defect, not a neutral fact, so it earns a WARNING — the
+  // seller may still list, but the system stops pretending it knows something
+  // it does not.
+  [VIOLATION.SELLER_PRICED]:  SEVERITY.INFO,
+  [VIOLATION.NO_PROVENANCE]:  SEVERITY.WARNING,
 };
 
 export function severityOf(code) {
@@ -189,6 +215,8 @@ export function reasonMessage(code, ctx = {}) {
       return `A price of zero is not allowed for ${ctx.venue || 'this listing type'}.`;
     case VIOLATION.UNKNOWN_SLOT:
       return `CardResell does not know how to list to "${ctx.slot}" yet.`;
+    case VIOLATION.SELLER_PRICED:
+      return 'You set this price yourself.';
     case VIOLATION.NO_PROVENANCE:
       return 'This price has no saved quote attached, so the listing will not show where it came from.';
     default:
@@ -244,7 +272,11 @@ export function validateDraftForSlot(draft, slot = draft && draft.slot) {
     push(VIOLATION.ZERO_PRICE, 'price', '0');
   }
   if (draft && !Object.prototype.hasOwnProperty.call(draft, 'packet')) {
-    push(VIOLATION.NO_PROVENANCE, 'packet', 'absent');
+    if (draft.priceSource === PRICE_SOURCE.SELLER) {
+      push(VIOLATION.SELLER_PRICED, 'price', PRICE_SOURCE.SELLER);
+    } else {
+      push(VIOLATION.NO_PROVENANCE, 'price', draft.priceSource || 'unknown');
+    }
   }
 
   return finish(v);
@@ -403,6 +435,15 @@ export function buildDraft(input = {}) {
   // Optional provenance snapshot. Stored verbatim with whatever version it
   // declares — stamping our own version onto someone else's packet would
   // destroy the one fact that makes it safe to read later.
+  // Where the price came from. A missing value is NOT defaulted to 'seller':
+  // guessing provenance is exactly the failure the WARNING above exists to
+  // surface, and a default would silence it on every draft.
+  if (input.priceSource !== undefined && input.priceSource !== null) {
+    if (!PRICE_SOURCES.includes(input.priceSource)) {
+      throw new Error(`${ERR.FIELD_INVALID}:priceSource:unrecognised`);
+    }
+    draft.priceSource = input.priceSource;
+  }
   if (input.packet !== undefined && input.packet !== null) {
     if (typeof input.packet !== 'object' || Array.isArray(input.packet)) {
       throw new Error(`${ERR.FIELD_INVALID}:packet:not-an-object`);
@@ -790,4 +831,86 @@ export async function deleteDraft(kv, googleSub, draftId, expectedRev, operation
   }
   try { await kv('expire', draftKey(googleSub, draftId), TOMBSTONE_TTL_SEC); } catch { /* retention only */ }
   return { ok: true, draft: stone, deleted: true, alreadyDeleted: false };
+}
+
+/**
+ * ── Discard: the escape hatch for a row that cannot be read ───────────────
+ *
+ * The list deliberately shows rows it could not hydrate, because the index
+ * saying a draft exists is not permission to render it as gone. That choice
+ * creates an obligation: a row the seller can SEE must be a row the seller can
+ * RESOLVE. Otherwise an unreadable draft is visible forever, counts against
+ * the cap, and has no button that works — the worst outcome of the three.
+ *
+ * The normal delete cannot do this. It reads the record to check `expectedRev`
+ * before tombstoning, and there is no revision to read in bytes that will not
+ * parse.
+ *
+ * So discard skips the revision check — and is therefore restricted to
+ * precisely the cases where no revision exists to protect:
+ *
+ *   UNREADABLE  the bytes do not parse, or carry no schema version. Nothing
+ *               is being destroyed that anything could have read.
+ *   NOT_FOUND   indexed but no record. Pure index cleanup.
+ *
+ * It REFUSES a healthy draft, because otherwise it is a way to delete someone
+ * else's concurrent edit by calling the other endpoint. It also refuses
+ * SCHEMA_TOO_NEW: that record is not damaged, it is newer than this deploy,
+ * and destroying data a newer build understands because an older build cannot
+ * read it is the single most destructive thing this module could do. The
+ * seller's own newer client can delete it normally.
+ */
+export const DISCARDABLE = [ERR.UNREADABLE, ERR.NOT_FOUND];
+
+export async function discardDraft(kv, googleSub, draftId, operationId) {
+  let raw;
+  try {
+    raw = await kv('get', draftKey(googleSub, draftId));
+  } catch {
+    return { ok: false, error: ERR.STORE_UNAVAILABLE, evidence: 'read-failed', retryable: true };
+  }
+
+  const read = readStoredDraft(raw);
+
+  if (read.ok) {
+    return { ok: false, error: ERR.NOT_DISCARDABLE, evidence: 'readable', retryable: false };
+  }
+  if (read.error === ERR.DELETED) {
+    // Already resolved. Idempotent, and reported as such so the caller does
+    // not release a quota slot for a draft that never held one.
+    return { ok: true, alreadyDeleted: true, discarded: false };
+  }
+  if (!DISCARDABLE.includes(read.error)) {
+    return { ok: false, error: read.error, evidence: read.evidence, retryable: !!read.retryable };
+  }
+
+  // An index entry with no record behind it needs no tombstone: there is
+  // nothing to suppress. Writing one would invent a deletion that never
+  // happened and hold a key for 90 days to say so.
+  if (read.error === ERR.NOT_FOUND) {
+    return { ok: true, discarded: true, tombstoned: false, reason: ERR.NOT_FOUND };
+  }
+
+  // A tombstone IS written for unreadable bytes, because the corrupt record
+  // is still sitting at that key. Without it the next read finds the same
+  // garbage and the row returns to the list.
+  const stone = {
+    schemaVersion: DRAFT_SCHEMA_VERSION,
+    draftId,
+    status:    DRAFT_STATUS.DELETED,
+    rev:       1,
+    deletedAt: Date.now(),
+    // Recorded so a later investigation can tell a seller-initiated delete
+    // from a record this system could not read and gave up on.
+    discardedUnreadable: true,
+    discardedByOperation: operationId || null,
+  };
+
+  try {
+    await kv('set', draftKey(googleSub, draftId), JSON.stringify(stone), 'EX', String(TOMBSTONE_TTL_SEC));
+  } catch {
+    return { ok: false, error: ERR.STORE_UNAVAILABLE, evidence: 'tombstone-write-failed', retryable: true };
+  }
+
+  return { ok: true, discarded: true, tombstoned: true, draft: stone, reason: ERR.UNREADABLE };
 }

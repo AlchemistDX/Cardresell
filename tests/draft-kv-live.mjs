@@ -61,6 +61,7 @@ const SVC  = await import('../api/_draftService.js');
 const DS   = await import('../api/_draftStore.js');
 const IDX  = await import('../api/_draftIndex.js');
 const IDEM = await import('../api/_idempotency.js');
+const QT   = await import('../api/_draftQuota.js');
 
 // The owner id comes out of the RESERVED namespace the application refuses at
 // its HTTP door. Not "a real sub happens to look different" — a property of
@@ -547,6 +548,65 @@ console.log('\nthe list and the cap against the real store');
         n === 0 && typeof n === 'number',
         'a null here would make the cap comparison NaN and silently stop capping');
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+console.log('\nthe ceiling rests on a real atomic counter');
+{
+  // The whole cap design assumes INCR hands every concurrent caller a
+  // DIFFERENT number, so that exactly CAP callers can receive one at or below
+  // the cap. A local fake cannot prove that — it is single-threaded and would
+  // pass with a read-then-write implementation that overshoots in production.
+  const key = `draftquota:${SUB}-atomic`;
+  created.add(key); await arm(key);
+  await kv('del', key);
+
+  const N = 25;
+  const seen = await Promise.all(
+    Array.from({ length: N }, () => kv('incr', key).then((v) => Number(v))),
+  );
+
+  check('every concurrent reservation got a number', seen.every((n) => Number.isFinite(n)));
+  check('🔴 no two concurrent reservations got the SAME number',
+        new Set(seen).size === N,
+        'a duplicate here means two callers could both believe they took the last slot');
+  check('🔴 the numbers are exactly 1..N with no gaps',
+        seen.slice().sort((a, b) => a - b).every((n, i) => n === i + 1),
+        'a gap would mean a lost reservation and a slot nobody can ever use');
+
+  // And it comes back down the same way.
+  await Promise.all(Array.from({ length: 5 }, () => kv('decr', key)));
+  check('releases are atomic too', Number(await kv('get', key)) === N - 5);
+  await kv('del', key);
+}
+
+console.log('\nthe gate seeds itself from the real index');
+{
+  // A counter that is absent must be derived from the index, not treated as
+  // zero. INCR on a missing key returns 1, so without seeding a seller with
+  // 400 real drafts would be handed a fresh 500.
+  const sub = `${SUB}-seed`;
+  const ids = [];
+  for (let i = 0; i < 4; i++) {
+    const id = DS.newDraftId();
+    ids.push(id);
+    await kv('sadd', `drafts:${sub}`, id);
+  }
+  arm(`drafts:${sub}`);
+  await kv('del', `draftquota:${sub}`);
+  await kv('del', `draftquotafresh:${sub}`);
+  for (const k of [`draftquota:${sub}`, `draftquotafresh:${sub}`, `drafts:${sub}`]) { created.add(k); await arm(k); }
+
+  const res = await QT.reserveDraftSlot(sub);
+  check('the reservation was granted', res.state === QT.QUOTA.RESERVED);
+  check('🔴 and it counted the drafts that were already there',
+        res.count === 5,
+        'seeding from zero is how a nearly-full seller gets a second full allowance');
+
+  await QT.releaseDraftSlot(sub);
+  check('the release put it back', Number(await kv('get', `draftquota:${sub}`)) === 4);
+}
+
 
 } catch (e) {
   console.error('\ndraft-kv-live: threw —', e && e.stack ? e.stack : e);

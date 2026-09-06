@@ -69,6 +69,8 @@ globalThis.fetch = async (url) => {
     }
     case 'set':    store.set(args[0], args[1]); result = 'OK'; break;
     case 'get':    result = typeof store.get(args[0]) === 'string' ? store.get(args[0]) : null; break;
+    case 'incr':   { const n = (Number(store.get(args[0])) || 0) + 1; store.set(args[0], String(n)); result = n; break; }
+    case 'decr':   { const n = (Number(store.get(args[0])) || 0) - 1; store.set(args[0], String(n)); result = n; break; }
     case 'del':    store.delete(args[0]); result = 1; break;
     case 'expire': result = 1; break;
     case 'scan': {
@@ -82,7 +84,13 @@ globalThis.fetch = async (url) => {
         && ![...scanHides].some((h) => k.endsWith(`:${h}`)))];
       break;
     }
-    default: result = null;
+    // ── Unknown commands are a FAILURE, not a null ──────────────────────
+    //
+    // This returned null for years. When the cap moved to INCR, the fake did
+    // not implement it, every reservation read as 0, and the cap test passed
+    // while the cap did nothing. A fake that silently answers "nothing" to a
+    // command it does not know will certify any behaviour you ask it about.
+    default: throw new Error(`fake kv: unimplemented command '${cmd}'`);
   }
   return { ok: true, status: 200, json: async () => ({ result }) };
 };

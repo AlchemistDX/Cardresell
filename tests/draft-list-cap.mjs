@@ -84,6 +84,23 @@ function shouldFail(cmd, args) {
   return true;
 }
 
+/**
+ * Put a seller at `n` active drafts without writing n records.
+ *
+ * Writes the index set AND the quota gate, because a seller who really has n
+ * drafts has both. Stuffing only the set would build a world the API cannot
+ * produce, and a test that passes only in an impossible world is not evidence.
+ * Real drift between the two is exercised separately and on purpose.
+ */
+function stuffIndex(n) {
+  if (!sets.has(`drafts:${SUB}`)) sets.set(`drafts:${SUB}`, new Set());
+  const set = sets.get(`drafts:${SUB}`);
+  while (set.size < n) set.add(`drf_${String(set.size).padStart(32, '0')}`);
+  store.set(`draftquota:${SUB}`, String(set.size));
+  store.set(`draftquotafresh:${SUB}`, '1');
+  return set;
+}
+
 function run(cmd, a) {
   switch (cmd) {
     case 'get': return store.has(a[0]) ? store.get(a[0]) : null;
@@ -93,6 +110,20 @@ function run(cmd, a) {
       if (f.includes('NX') && store.has(k)) return null;
       store.set(k, v);
       return 'OK';
+    }
+    // Real Redis semantics: absent key counts as 0, the value is stored as a
+    // string, and the reply is an integer. Each command is atomic on its own
+    // while a SEQUENCE of them is not — which is exactly the property the cap
+    // race depends on, and exactly why this fake was able to expose it.
+    case 'incr': {
+      const n = (Number(store.get(a[0])) || 0) + 1;
+      store.set(a[0], String(n));
+      return n;
+    }
+    case 'decr': {
+      const n = (Number(store.get(a[0])) || 0) - 1;
+      store.set(a[0], String(n));
+      return n;
     }
     case 'del': { const had = store.delete(a[0]); sets.delete(a[0]); return had ? 1 : 0; }
     case 'expire': return store.has(a[0]) || sets.has(a[0]) ? 1 : 0;
@@ -116,7 +147,13 @@ function run(cmd, a) {
       const re = match ? new RegExp('^' + match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*') + '$') : null;
       return ['0', re ? keys.filter((k) => re.test(k)) : keys];
     }
-    default: return null;
+    // ── Unknown commands are a FAILURE, not a null ──────────────────────
+    //
+    // This returned null for years. When the cap moved to INCR, the fake did
+    // not implement it, every reservation read as 0, and the cap test passed
+    // while the cap did nothing. A fake that silently answers "nothing" to a
+    // command it does not know will certify any behaviour you ask it about.
+    default: throw new Error(`fake kv: unimplemented command '${cmd}'`);
   }
 }
 
@@ -404,9 +441,7 @@ reset();
         'Phase 4 bulk scanning needs room to work');
 
   await seed(3);
-  // Stuff the index up to the cap without writing 500 records.
-  const set = sets.get(`drafts:${SUB}`);
-  for (let i = 0; i < SVC.DRAFT_CAP; i++) set.add(`drf_${String(i).padStart(32, '0')}`);
+  stuffIndex(SVC.DRAFT_CAP);
 
   const refused = await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_over' }), K('over-cap'))
     .then(() => null).catch((e) => e);
@@ -423,8 +458,7 @@ reset();
   const savedId = first.result.draftId;
   check('the draft saved while under the cap', first.result.saved === true);
 
-  const set = sets.get(`drafts:${SUB}`);
-  for (let i = 0; i < SVC.DRAFT_CAP; i++) set.add(`drf_${String(i).padStart(32, '0')}`);
+  stuffIndex(SVC.DRAFT_CAP);
 
   // Same idempotency key, same body: a client retrying a lost response.
   const replay = await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_keep' }), K('retry-me'));
@@ -442,14 +476,17 @@ reset();
 // ── the refusal releases the key, so it works again after making room ──
 reset();
 {
-  const set0 = sets.get(`drafts:${SUB}`) || (sets.set(`drafts:${SUB}`, new Set()), sets.get(`drafts:${SUB}`));
-  for (let i = 0; i < SVC.DRAFT_CAP; i++) set0.add(`drf_${String(i).padStart(32, '0')}`);
+  const set0 = stuffIndex(SVC.DRAFT_CAP);
 
   const refused = await SVC.createDraft(kv, SUB, input(), K('same-key')).then(() => null).catch((e) => e);
   check('refused while full', refused && refused.message === SVC.SERVICE_ERR.DRAFT_CAP_REACHED);
 
-  // The seller deletes something, then the client retries the SAME key.
+  // The seller deletes something, then the client retries the SAME key. The
+  // gate is decremented alongside the index, which is what a real delete does
+  // via `releaseDraftSlot` — a test that shrank only the index would be
+  // exercising drift, not deletion.
   for (let i = 0; i < 5; i++) set0.delete(`drf_${String(i).padStart(32, '0')}`);
+  store.set(`draftquota:${SUB}`, String(set0.size));
   const now = await SVC.createDraft(kv, SUB, input(), K('same-key'));
   check('🔴 the same idempotency key works once there is room',
         now.result && now.result.saved === true,
@@ -551,15 +588,37 @@ console.log('\nonly ERROR blocks a handoff');
         DS.severityOf('SOME_CHECK_ADDED_WITHOUT_A_DECISION') === DS.SEVERITY.ERROR,
         'a new check with a forgotten severity should stop a handoff and get noticed, not sail through unread');
 
-  // ── info does not gate publishing ──
-  const noPacket = DS.validateDraftForSlot({ ...base, packet: undefined });
-  delete noPacket.__none;
+  // ── "the seller typed it" is provenance; "nobody knows" is a defect ──
+  //
+  // These were one finding, and collapsing them taught the system that
+  // provenance means "came from our pricing engine". A seller-entered price
+  // is a complete answer to where the number came from.
+  const typed = DS.validateDraftForSlot({
+    slot: 'ebay:fixed-price', title: 'Charizard', price: 400,
+    priceSource: DS.PRICE_SOURCE.SELLER,
+  });
+  check('🔴 a seller-entered price is recorded as provenance, not as missing',
+        typed.violations.some((x) => x.code === DS.VIOLATION.SELLER_PRICED)
+        && !typed.violations.some((x) => x.code === DS.VIOLATION.NO_PROVENANCE));
+  check('and it is INFO, so it never blocks', typed.ok === true && typed.blocking.length === 0);
+  check('the seller can read it', /you set this price/i.test(
+        typed.violations.find((x) => x.code === DS.VIOLATION.SELLER_PRICED).message));
+
   const np = DS.validateDraftForSlot({ slot: 'ebay:fixed-price', title: 'Charizard', price: 400 });
-  check('a draft with no saved quote still raises a finding',
+  check('a price with no stated origin still raises a finding',
         np.violations.some((x) => x.code === DS.VIOLATION.NO_PROVENANCE));
-  check('🔴 but it is INFO and does NOT block the listing',
-        np.ok === true && np.infos === 1 && np.blocking.length === 0,
-        'blocking here would refuse to list a draft whose price the seller typed themselves');
+  check('🔴 it is a WARNING — a data-quality defect, not a neutral fact',
+        DS.severityOf(DS.VIOLATION.NO_PROVENANCE) === DS.SEVERITY.WARNING);
+  check('🔴 but it still does NOT block the listing',
+        np.ok === true && np.blocking.length === 0,
+        'blocking would refuse to list a real draft over a missing label');
+  check('🔴 a missing source is never defaulted to "seller"',
+        !np.violations.some((x) => x.code === DS.VIOLATION.SELLER_PRICED),
+        'defaulting would silence the warning on every draft, which is the whole failure');
+  check('an unrecognised price source is refused outright',
+        (() => { try { DS.buildDraft({ slot: 'ebay:fixed-price', sku: 'v2-A-592a391e7b472559',
+                 instanceId: 'i', title: 't', price: 1, priceSource: 'vibes' }); return false; }
+                 catch (e) { return /priceSource/.test(e.message); } })());
 
   // ── errors block, and say why ──
   const long = DS.validateDraftForSlot({ ...base, title: 'x'.repeat(120) });
@@ -603,16 +662,25 @@ console.log('\nonly ERROR blocks a handoff');
   const multi = DS.validateDraftForSlot({ slot: 'mercari:fixed-price', title: 'y'.repeat(60) });
   check('several findings are all reported, not just the first',
         multi.violations.length === 3
-        && multi.errors === 2 && multi.infos === 1,
+        && multi.errors === 2 && multi.warnings === 1,
         'fixing one field at a time across three round trips is not a review screen');
   check('and only the errors are blocking', multi.blocking.length === 2 && multi.ok === false);
+  check('🔴 a WARNING is counted but does not change the verdict',
+        multi.warnings === 1 && !multi.blocking.some((x) => x.severity === DS.SEVERITY.WARNING));
 
-  // ── the tier exists even with no rules in it yet ──
-  check('the WARNING tier is defined and ready for its first rule',
-        DS.SEVERITY.WARNING === 'warning' && typeof multi.warnings === 'number');
-  check('and no finding has silently been declared a WARNING',
-        Object.values(DS.VIOLATION_SEVERITY).every((s) => s !== DS.SEVERITY.WARNING),
-        'the staleness threshold is a product decision, not a number to invent because the tier looked empty');
+  // ── the WARNING tier has exactly one rule, and it is the deliberate one ──
+  //
+  // This guard used to assert the tier was EMPTY. It is no longer empty: an
+  // unattributable price is a genuine data-quality defect and earns a warning
+  // without needing a threshold invented for it. The guard is kept, narrowed
+  // to the rules actually decided, so the next warning still has to be an
+  // explicit choice rather than a quiet addition.
+  const warned = Object.entries(DS.VIOLATION_SEVERITY)
+    .filter(([, sev]) => sev === DS.SEVERITY.WARNING)
+    .map(([code]) => code);
+  check('the WARNING tier holds only the rule that was actually decided',
+        warned.length === 1 && warned[0] === DS.VIOLATION.NO_PROVENANCE,
+        'the stale-quote threshold is still a product decision, not a number to invent because a tier looked thin');
 }
 
 // ── the reasons reach the client, not just the server ────────────────────
@@ -632,6 +700,240 @@ reset();
   check('🔴 with the message, severity and field for each finding',
         res.body.publishable.violations.every((v) => v.message && v.severity && v.field),
         'the review screen must not have to re-derive why the handoff is blocked');
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+console.log('\nthe cap is a ceiling under concurrency, not just in sequence');
+
+reset();
+{
+  // One slot left.
+  const set = stuffIndex(SVC.DRAFT_CAP - 1);
+  check(`setup: ${SVC.DRAFT_CAP - 1} drafts, one slot left`, set.size === SVC.DRAFT_CAP - 1);
+
+  // Twenty genuinely different creates, each with its own idempotency key.
+  // Idempotency cannot help here: these are twenty distinct intents, and it is
+  // correct for twenty distinct intents to each attempt a create. Only the
+  // quota may stop them.
+  const attempts = await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      SVC.createDraft(kv, SUB, input({ instanceId: `inst_race_${i}`, sku: `v2-RACE${i}-592a391e7b472559` }), K(`race-${i}`))
+        .then((r) => ({ ok: true, r }))
+        .catch((e) => ({ ok: false, e })))
+  );
+
+  const saved = attempts.filter((a) => a.ok && a.r.result && a.r.result.saved === true);
+  const refused = attempts.filter((a) => !a.ok && a.e.message === SVC.SERVICE_ERR.DRAFT_CAP_REACHED);
+
+  check('every attempt resolved as either a save or a cap refusal',
+        saved.length + refused.length === 20,
+        `saved=${saved.length} refused=${refused.length}`);
+  check('🔴 exactly ONE create won the last slot',
+        saved.length === 1,
+        `${saved.length} creates succeeded into a single free slot`);
+  check('🔴 the active count never exceeds the cap',
+        sets.get(`drafts:${SUB}`).size <= SVC.DRAFT_CAP,
+        `ended at ${sets.get(`drafts:${SUB}`).size}, cap is ${SVC.DRAFT_CAP}`);
+  check('and the other nineteen were told the cap, not an internal error',
+        refused.length === 19);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+console.log('\nthe gate is kept honest over a draft lifetime');
+
+reset();
+{
+  // Deleting must give the slot back, or the cap ratchets: a seller who has
+  // created and deleted 500 drafts would be permanently full with nothing
+  // saved.
+  const ids = await seed(3);
+  check('setup: the gate counted the creates', store.get(`draftquota:${SUB}`) === '3');
+
+  await SVC.deleteDraftOp(kv, SUB, ids[0], 1, K('q-del'));
+  check('🔴 a delete releases the slot', store.get(`draftquota:${SUB}`) === '2',
+        'a cap that only counts up ratchets a seller into a ceiling they cannot clear');
+
+  // A repeated delete must not release twice — that would hand out a slot the
+  // seller never freed.
+  await SVC.deleteDraftOp(kv, SUB, ids[0], 1, K('q-del-again')).catch(() => {});
+  check('🔴 deleting an already-deleted draft does not release a second slot',
+        store.get(`draftquota:${SUB}`) === '2');
+}
+
+reset();
+{
+  // A create that reserves and then fails to write must not leak the slot.
+  stuffIndex(10);
+  failCommands = new Set(['set']);
+  await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_fail' }), K('q-fail')).catch(() => {});
+  failCommands = new Set();
+  check('🔴 a create that failed to persist gives its slot back',
+        store.get(`draftquota:${SUB}`) === '10',
+        'leaked slots accumulate silently into a seller locked out below their real limit');
+}
+
+reset();
+{
+  // Downward drift — an evicted counter, or drafts written before the gate
+  // existed. The cap must not silently stop enforcing.
+  stuffIndex(SVC.DRAFT_CAP);
+  store.delete(`draftquota:${SUB}`);
+  store.delete(`draftquotafresh:${SUB}`);
+
+  const blocked = await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_drift' }), K('q-drift'))
+    .then(() => null).catch((e) => e);
+  check('🔴 a missing gate is re-derived from the index, not treated as zero',
+        blocked && blocked.message === SVC.SERVICE_ERR.DRAFT_CAP_REACHED,
+        'INCR on an absent key returns 1 — without seeding, a full seller would look empty');
+}
+
+reset();
+{
+  // Upward drift — leaked slots say full when the seller has room. The first
+  // attempt is refused (a disagreement is not evidence of room during a
+  // concurrent burst), but it marks the gate stale so the retry succeeds.
+  stuffIndex(100);
+  store.set(`draftquota:${SUB}`, String(SVC.DRAFT_CAP));
+
+  const first = await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_leak1' }), K('q-leak-1'))
+    .then(() => null).catch((e) => e);
+  check('a leaked gate refuses once', first && first.message === SVC.SERVICE_ERR.DRAFT_CAP_REACHED);
+  check('and the refusal reports the INDEX count, not the drifted gate',
+        first.detail.count === 100,
+        'telling a seller with 100 drafts that they have 500 is a lie the UI would repeat');
+  check('the stale gate was marked for re-derivation',
+        store.get(`draftquotafresh:${SUB}`) === undefined);
+
+  const second = await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_leak2' }), K('q-leak-2'));
+  check('🔴 and the very next attempt succeeds',
+        second.result && second.result.saved === true,
+        'a seller must not be locked out below their real limit by a counter nobody can see');
+  check('the gate now agrees with the index', store.get(`draftquota:${SUB}`) === '101');
+}
+
+reset();
+{
+  // The gate must never be the reason a draft is lost.
+  stuffIndex(5);
+  failCommands = new Set(['incr']);
+  const out = await SVC.createDraft(kv, SUB, input({ instanceId: 'inst_open' }), K('q-open'));
+  failCommands = new Set();
+  check('🔴 an unreachable gate does not block a save', out.result.saved === true,
+        'refusing real work over an unreadable counter trades a certain loss for a hypothetical one');
+  check('and remaining room is reported as unknown rather than guessed',
+        out.result.capRemaining === null);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+console.log('\na row the seller can see must be a row the seller can resolve');
+
+reset();
+{
+  const ids = await seed(2);
+  // Corrupt one record's bytes. The index still lists it, so it is visible.
+  store.set(`draft:${SUB}:${ids[0]}`, '{not json at all');
+
+  const listed = await SVC.listDraftSummaries(kv, SUB, { limit: 50 });
+  const stub = listed.rows.find((r) => r.draftId === ids[0]);
+  check('setup: the corrupt draft is visible as a stub', stub && stub.summary === null);
+  check('and it is flagged unreadable', stub.reason === 'DRAFT_UNREADABLE');
+
+  const before = store.get(`draftquota:${SUB}`);
+  const del = await SVC.deleteDraftOp(kv, SUB, ids[0], 1, K('trap-del'))
+    .then((r) => r).catch((e) => ({ threw: e.message }));
+  check('🔴 the seller can remove a draft nobody can read',
+        del && del.ok === true,
+        'visible + counts against the cap + impossible to delete is a permanent dead row');
+  check('🔴 and removing it frees the slot it was occupying',
+        store.get(`draftquota:${SUB}`) === String(Number(before) - 1));
+
+  const after = await SVC.listDraftSummaries(kv, SUB, { limit: 50 });
+  check('and it is gone from the list', !after.rows.some((r) => r.draftId === ids[0]));
+}
+
+
+reset();
+{
+  // The waived revision check must not become a route around concurrency.
+  const ids = await seed(1);
+  const dis = await DS.discardDraft(kv, SUB, ids[0], 'op-x');
+  check('🔴 discard refuses a draft that reads perfectly well',
+        dis.ok === false && dis.error === DS.ERR.NOT_DISCARDABLE,
+        'otherwise "delete without a revision" is available on any draft by calling the other path');
+
+  const still = await DS.getDraft(kv, SUB, ids[0]);
+  check('and the healthy draft is untouched', still.ok === true && still.draft.rev === 1);
+}
+
+reset();
+{
+  // A record written by a NEWER deploy is not damaged — it is ahead of us.
+  const ids = await seed(1);
+  const rec = JSON.parse(store.get(`draft:${SUB}:${ids[0]}`));
+  rec.schemaVersion = DS.DRAFT_SCHEMA_VERSION + 5;
+  store.set(`draft:${SUB}:${ids[0]}`, JSON.stringify(rec));
+
+  const dis = await DS.discardDraft(kv, SUB, ids[0], 'op-y');
+  check('🔴 discard refuses a record newer than this deploy',
+        dis.ok === false && dis.error === DS.ERR.SCHEMA_TOO_NEW,
+        'destroying data a newer build understands because an older one cannot read it is the worst move available');
+
+  const kept = store.get(`draft:${SUB}:${ids[0]}`);
+  check('and the newer record is still there for the client that wrote it',
+        JSON.parse(kept).schemaVersion === DS.DRAFT_SCHEMA_VERSION + 5);
+}
+
+reset();
+{
+  // Indexed but absent: cleanup, not a tombstone for a record that never was.
+  const ids = await seed(2);
+  store.delete(`draft:${SUB}:${ids[0]}`);
+
+  const del = await SVC.deleteDraftOp(kv, SUB, ids[0], 1, K('trap-vanish'));
+  check('🔴 a vanished row can be cleared off the list', del.ok === true);
+  check('and no tombstone was invented for a record that never existed',
+        store.get(`draft:${SUB}:${ids[0]}`) === undefined,
+        'a 90-day key asserting a deletion that never happened is a fabricated fact');
+  check('the index no longer advertises it',
+        !sets.get(`drafts:${SUB}`).has(ids[0]));
+  check('and the slot came back', store.get(`draftquota:${SUB}`) === '1');
+}
+
+reset();
+{
+  // An id that was never this seller's stays a plain not-found. Reporting a
+  // successful delete for any string would make the endpoint a liar.
+  await seed(1);
+  const bogus = `drf_${'a'.repeat(32)}`;
+  const del = await SVC.deleteDraftOp(kv, SUB, bogus, 1, K('trap-bogus'))
+    .then((r) => r).catch((e) => ({ threw: e.message }));
+  check('🔴 an id that is not in the index is still not found',
+        del && del.ok === false && del.error === DS.ERR.NOT_FOUND);
+}
+
+// ── the obligation, stated as a test ──────────────────────────────────────
+//
+// Every reason the list can show a row it could not hydrate must have an
+// answer to "what can the seller do about this?". A new reason added without
+// one fails here rather than shipping as a permanent dead row.
+{
+  const RESOLUTION = {
+    DRAFT_UNREADABLE:     'discard',   // bytes will not parse — delete clears it
+    DRAFT_VANISHED:       'discard',   // indexed, no record — delete clears it
+    DRAFT_READ_FAILED:    'retry',     // transient; the row is fine
+    DRAFT_SCHEMA_TOO_NEW: 'newer-client', // intact and owned by a newer deploy
+  };
+  const reasons = Object.values(SVC.ROW_REASON);
+  check('🔴 every stub reason has a stated resolution',
+        reasons.every((r) => RESOLUTION[r]),
+        'a visible row with no working action is worse than either hiding it or failing the list');
+  check('and the only ones without a self-service fix are the recoverable ones',
+        reasons.filter((r) => RESOLUTION[r] === 'discard').length === 2
+        && RESOLUTION[SVC.ROW_REASON.READ_FAILED] === 'retry',
+        'READ_FAILED must stay retryable — discarding a draft over a flaky read destroys a good draft');
 }
 
 done();

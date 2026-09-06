@@ -90,6 +90,20 @@ function run(cmd, a) {
       store.set(k, v);
       return 'OK';
     }
+    // Real Redis semantics: absent key counts as 0, the value is stored as a
+    // string, and the reply is an integer. Each command is atomic on its own
+    // while a SEQUENCE of them is not — which is exactly the property the cap
+    // race depends on, and exactly why this fake was able to expose it.
+    case 'incr': {
+      const n = (Number(store.get(a[0])) || 0) + 1;
+      store.set(a[0], String(n));
+      return n;
+    }
+    case 'decr': {
+      const n = (Number(store.get(a[0])) || 0) - 1;
+      store.set(a[0], String(n));
+      return n;
+    }
     case 'del': { const had = store.delete(a[0]); sets.delete(a[0]); return had ? 1 : 0; }
     case 'expire': return store.has(a[0]) || sets.has(a[0]) ? 1 : 0;
     case 'sadd': {
@@ -112,7 +126,13 @@ function run(cmd, a) {
       const re = match ? new RegExp('^' + match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*') + '$') : null;
       return ['0', re ? keys.filter((k) => re.test(k)) : keys];
     }
-    default: return null;
+    // ── Unknown commands are a FAILURE, not a null ──────────────────────
+    //
+    // This returned null for years. When the cap moved to INCR, the fake did
+    // not implement it, every reservation read as 0, and the cap test passed
+    // while the cap did nothing. A fake that silently answers "nothing" to a
+    // command it does not know will certify any behaviour you ask it about.
+    default: throw new Error(`fake kv: unimplemented command '${cmd}'`);
   }
 }
 

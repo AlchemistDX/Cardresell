@@ -4,7 +4,7 @@ import {
   listDraftSummaries, LIST_PAGE_DEFAULT, LIST_PAGE_MAX, DRAFT_CAP,
   SERVICE_ERR,
 } from './_draftService.js';
-import { ERR as STORE_ERR, DRAFT_STATUS, isSyntheticTestSub } from './_draftStore.js';
+import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub } from './_draftStore.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
 
 // /api/drafts — listing draft CRUD
@@ -312,6 +312,10 @@ export function statusForStoreError(err) {
     // record safely, and the honest answer is "update the app", not "error".
     case STORE_ERR.SCHEMA_TOO_NEW: return 409;
     case STORE_ERR.UNREADABLE:     return 500;
+    // 409, not 400. The request was well formed; the state it names is one
+    // this operation will not act on, and the client cannot fix it by
+    // rewriting the request.
+    case STORE_ERR.NOT_DISCARDABLE: return 409;
     case STORE_ERR.STORE_UNAVAILABLE: return 503;
     default:
       if (typeof err === 'string' && err.startsWith(STORE_ERR.FIELD_INVALID)) return 400;
@@ -418,6 +422,16 @@ export function normalizeCreateInput(body) {
       throw new Error('DRAFT_FIELD_INVALID:strategy:disagrees-with-slot');
     }
     out.strategy = strategy;
+  }
+  // Where the price came from. Accepted but NEVER defaulted: a default here
+  // would mark every price as seller-entered and permanently silence the
+  // warning that exists to catch prices of unknown origin.
+  const priceSource = normToken(body.priceSource, 'priceSource');
+  if (priceSource) {
+    if (!PRICE_SOURCES.includes(priceSource)) {
+      throw new Error('DRAFT_FIELD_INVALID:priceSource:unrecognised');
+    }
+    out.priceSource = priceSource;
   }
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   return out;

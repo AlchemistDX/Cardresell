@@ -35,6 +35,7 @@ import {
   buildDraft,
   applyEdit,
   deleteDraft,
+  discardDraft,
   getDraft,
   putDraft,
   newDraftId,
@@ -56,6 +57,8 @@ import {
   draftIdForSku,
   countDrafts,
 } from './_draftIndex.js';
+
+import { reserveDraftSlot, releaseDraftSlot, DRAFT_CAP, QUOTA } from './_draftQuota.js';
 
 export const SERVICE_ERR = {
   ...STORE_ERR,
@@ -149,23 +152,19 @@ async function detachIndexes(googleSub, draft) {
  *
  * It is deliberately generous. This is a guardrail against unbounded growth,
  * not a paywall, and Phase 4's bulk flow will need room to work.
+ *
+ * ── Why the check is a reservation and not a count ───────────────────────
+ *
+ * The first implementation read the count and compared it. That is not a
+ * ceiling. Two requests at 499 both read 499, both pass, both create; twenty
+ * concurrent requests took a 500-cap seller to 519 in a test that is now
+ * permanent. The comparison has to happen on a number no other caller can
+ * also have received, which is what an atomic reservation gives.
+ *
+ * The mechanism lives in `_draftQuota.js` and this module does not
+ * second-guess it: one business behaviour, one implementation.
  */
-export const DRAFT_CAP = 500;
-
-/** Counting is best-effort, and the cap FAILS OPEN when it cannot count. */
-async function capState(googleSub) {
-  let count;
-  try {
-    count = await countDrafts(googleSub);
-  } catch {
-    // A store hiccup must not block a seller from saving work. Refusing a
-    // legitimate create because we could not read a counter would trade a
-    // real failure (lost draft) for a hypothetical one (index too big).
-    return { known: false, count: null, atCap: false };
-  }
-  const n = Number(count) || 0;
-  return { known: true, count: n, atCap: n >= DRAFT_CAP };
-}
+export { DRAFT_CAP };
 
 export async function createDraft(kv, googleSub, input, idempotencyKey) {
   const scope = SCOPES.DRAFT_CREATE;
@@ -182,21 +181,33 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
     // HTTP boundary instead would turn a network retry into a refusal for
     // work that was already done — the exact failure idempotency exists to
     // prevent, reintroduced by a quota check.
-    const cap = await capState(googleSub);
-    if (cap.atCap) {
+    // Atomic: INCR hands every caller a different number, so exactly
+    // DRAFT_CAP callers can ever receive one at or below the cap.
+    const cap = await reserveDraftSlot(googleSub);
+    if (cap.state === QUOTA.AT_CAP) {
       const err = new Error(SERVICE_ERR.DRAFT_CAP_REACHED);
       err.detail = { error: SERVICE_ERR.DRAFT_CAP_REACHED, count: cap.count, cap: DRAFT_CAP, retryable: false };
       throw err;
     }
+    const reserved = cap.state === QUOTA.RESERVED;
 
     // The id is minted INSIDE the protected operation. A retry after a lost
     // response replays this result rather than reaching this line again.
     const draft = buildDraft({ ...input, draftId: newDraftId(), rev: 1 });
 
-    const written = await putDraft(kv, googleSub, draft, operationId);
+    let written;
+    try {
+      written = await putDraft(kv, googleSub, draft, operationId);
+    } catch (e) {
+      // A slot held by a create that never persisted is a leak, and leaks
+      // accumulate into a seller locked out below their real limit.
+      if (reserved) await releaseDraftSlot(googleSub);
+      throw e;
+    }
     if (!written.ok) {
       // A failed authoritative write is a real failure. Nothing is indexed,
       // because nothing exists to index.
+      if (reserved) await releaseDraftSlot(googleSub);
       const err = new Error(written.error);
       err.detail = written;
       throw err;
@@ -220,7 +231,12 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
       publishable: validateDraftForSlot(written.draft),
       // What the seller has room for after this save. `null` when the count
       // could not be read — the UI says nothing rather than guessing.
-      capRemaining: cap.known ? Math.max(0, DRAFT_CAP - (cap.count + 1)) : null,
+      // The reservation already counts this draft, so remaining is measured
+      // from it directly. `null` when the gate could not be read — the UI says
+      // nothing rather than guessing.
+      capRemaining: reserved && Number.isFinite(cap.count)
+        ? Math.max(0, DRAFT_CAP - cap.count)
+        : null,
     };
   }, {
     // The fingerprint is derived by runOnce from `request`, which is the
@@ -310,7 +326,54 @@ export async function deleteDraftOp(kv, googleSub, draftId, expectedRev, idempot
   // every tombstone written through the store expired at 90 days. The live
   // store is what showed it: ttl = -1. Two implementations of one rule is the
   // bug, not the missing line.
-  const out = await deleteDraft(kv, googleSub, draftId, expectedRev, operationId);
+  let out = await deleteDraft(kv, googleSub, draftId, expectedRev, operationId);
+  let discarded = false;
+
+  // ── Delete must also work on rows nothing can read ────────────────────
+  //
+  // The list shows rows it could not hydrate rather than pretending they are
+  // gone. That is the right call, but it hands the seller a row with no
+  // working action unless delete can finish the job: a normal delete reads the
+  // record to check `expectedRev`, and bytes that will not parse have no
+  // revision to check.
+  //
+  // So this is ONE delete with a fallback, not a second Discard button. The
+  // seller's intent is identical either way, and a separate operation would be
+  // a second implementation of "remove this draft" — the exact shape of bug
+  // that has already cost this codebase four regressions.
+  //
+  // The revision requirement is waived only where no revision exists to
+  // protect. `discardDraft` enforces that itself: it refuses a healthy record,
+  // so this cannot become a route around a concurrent edit.
+  if (!out.ok && (out.error === STORE_ERR.UNREADABLE || out.error === STORE_ERR.NOT_FOUND)) {
+    // A NOT_FOUND id that is not in this seller's index is simply not theirs
+    // and stays a 404. Only an id the index still advertises earns cleanup —
+    // otherwise any unknown id would report a successful delete.
+    let advertised = true;
+    if (out.error === STORE_ERR.NOT_FOUND) {
+      try {
+        const idx = await listDraftIds(googleSub, { detail: true });
+        const ids = idx.draftIds || [];
+        // A degraded index cannot prove absence, and refusing cleanup on an
+        // unprovable absence is how the dead row becomes permanent. Cleanup
+        // of an entry the index does not list is harmless: there is no record
+        // to destroy and the srem is a no-op.
+        advertised = ids.includes(draftId) || idx.degraded === true;
+      } catch { advertised = false; }
+    }
+    if (advertised) {
+      const dis = await discardDraft(kv, googleSub, draftId, operationId);
+      if (dis.ok) {
+        // Carry enough of a record for index detach. There is no sku to clean
+        // up because there was nothing readable to take one from; the periodic
+        // reconcile clears any dangling pointer.
+        out = { ...dis, draft: dis.draft || { draftId }, deleted: true };
+        discarded = true;
+      } else {
+        return dis;
+      }
+    }
+  }
 
   if (!out.ok) {
     // The record still stands. Indexes are deliberately untouched: unindexing
@@ -323,9 +386,30 @@ export async function deleteDraftOp(kv, googleSub, draftId, expectedRev, idempot
   // failure downgrades the response to degraded, never to failed. A repeated
   // delete retries exactly this step, because it may be what failed.
   const index = await detachIndexes(googleSub, out.draft);
+
+  // ── Give the slot back ────────────────────────────────────────────────
+  //
+  // A cap that only ever counts up is a cap that ratchets: delete 500 drafts
+  // and you still cannot save a 501st. The release is best-effort and never
+  // fails the delete — the tombstone is already authoritative, and a leaked
+  // slot is repaired by the reconcile inside the next reservation, whereas a
+  // failed delete would be a real loss of control for the seller.
+  //
+  // Released exactly once per draft. A repeated delete DOES reach here — the
+  // store reports an already-tombstoned draft as ok:true so the caller sees a
+  // successful delete either way — so the release is gated on the store's
+  // `alreadyDeleted` flag rather than on ok. Without that gate, deleting the
+  // same draft twice hands back two slots and the cap drifts loose one
+  // double-click at a time.
+  const slot = out.alreadyDeleted === true
+    ? { released: false, count: null, reason: 'already-deleted' }
+    : await releaseDraftSlot(googleSub);
+
   return {
     ...out,
     index,
+    quota: slot,
+    discarded,
     degraded: index.degraded,
     repairRequired: index.repairRequired,
   };
