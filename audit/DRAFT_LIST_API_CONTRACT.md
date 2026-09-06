@@ -582,7 +582,7 @@ holds for the other five: `SLOT_PRICE_REQUIRED`, `SLOT_ZERO_PRICE_NOT_ALLOWED`,
 §1.2's table is correct — it lists the values. This addendum exists because the failure mode
 is silent: a client that matches on the key name matches nothing, so a row carrying a real
 blocker renders as though it had none. That is worse than a crash, because the screen looks
-fine. Test `draft-readiness-2026-09-06.mjs` now asserts every emitted code is a declared
+fine. Test `draft-readiness.mjs` now asserts every emitted code is a declared
 `VIOLATION` **value** and is not a bare key name.
 
 **§1.2's severity claim is confirmed.** `DRAFT_NO_PRICE_PROVENANCE` is WARNING and

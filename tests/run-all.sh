@@ -249,7 +249,7 @@ fi
 
 echo ""
 echo "▶ [27/27] D2.1 draft-list readiness (derivation + copy ownership)"
-if node "$ROOT/tests/draft-readiness-2026-09-06.mjs"; then
+if node "$ROOT/tests/draft-readiness.mjs"; then
   :
 else
   FAIL=1
