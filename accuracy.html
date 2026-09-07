@@ -148,6 +148,15 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 <h2 id="fees">Marketplace fees</h2>
 <p>We track the exact fee schedule for every venue in the payout ranking and re-verify it on the cadence below. Every fee row on a card's Net Payout tile carries a <span class="pill-verified">• Fee schedule verified &lt;date&gt;</span> pill that links here. That pill dates the <em>fee schedule</em> we read &mdash; it is not a statement about a card's price, which we never verify. If a fee has changed and we haven't caught it yet, <a href="/contact.html">tell us</a>.</p>
 <table class="fee-table">
+<!-- 2026-09-07: THESE DATES ARE A SECOND COPY. The shipped fee model carries its
+     own `feeAuditedOn` per venue in PLATFORMS (js/core.<hash>.js); the "Last
+     verified" column below and that field are two hand-maintained copies of one
+     fact. tests/accuracy-fee-parity.mjs holds them equal in BOTH directions and
+     fails on a venue present on only one side or a date that disagrees.
+     If a fee changed: correct the model first, then this stamp. Do not stamp a lie.
+     The parity guard checks venue identity and DATE only -- it does not verify
+     that the fee text in each row describes the arithmetic the model implements,
+     so a green run here is not a claim that these descriptions are correct. -->
   <thead><tr><th>Venue</th><th>Fee model</th><th>Last verified</th><th>Source</th></tr></thead>
   <tbody>
     <tr><td>eBay</td><td>13.25% FVF on total (item&nbsp;+ shipping&nbsp;+ tax) up to $7,500/item, then 2.35% · $0.30/order &le;$10 or $0.40 above · Basic Store 12.35% with $2,500 boundary · Top Rated –10% · +1.65% international fee and 3% currency conversion when the buyer is outside the US</td><td>Sep 1, 2026</td><td><a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822" target="_blank" rel="noopener">eBay seller hub</a></td></tr>

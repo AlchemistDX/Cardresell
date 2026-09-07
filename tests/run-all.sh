@@ -27,7 +27,7 @@ echo "  CardResell regression suite"
 echo "════════════════════════════════════════════════════"
 
 echo ""
-echo "▶ [1/31] Asset fingerprints (referenced bundles named after their bytes)"
+echo "▶ [1/33] Asset fingerprints (referenced bundles named after their bytes)"
 if node "$ROOT/tests/asset-fingerprints.mjs"; then
   :
 else
@@ -35,7 +35,7 @@ else
 fi
 
 echo ""
-echo "▶ [2/31] Syntax check (all inline <script> blocks)"
+echo "▶ [2/33] Syntax check (all inline <script> blocks)"
 if node "$ROOT/tests/syntax-check.js"; then
   echo "  passed"
 else
@@ -43,7 +43,7 @@ else
 fi
 
 echo ""
-echo "▶ [3/31] Auth stack integrity"
+echo "▶ [3/33] Auth stack integrity"
 if node "$ROOT/tests/auth-integrity.js"; then
   :
 else
@@ -51,7 +51,7 @@ else
 fi
 
 echo ""
-echo "▶ [4/31] Scan-miss regression checks"
+echo "▶ [4/33] Scan-miss regression checks"
 if node "$ROOT/tests/scan-miss.js"; then
   :
 else
@@ -59,7 +59,7 @@ else
 fi
 
 echo ""
-echo "▶ [5/31] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
+echo "▶ [5/33] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
 if node "$ROOT/tests/deeplink-companions.js"; then
   :
 else
@@ -67,7 +67,7 @@ else
 fi
 
 echo ""
-echo "▶ [6/31] Copy truth checks"
+echo "▶ [6/33] Copy truth checks"
 if node "$ROOT/tests/copy-truth-offline.mjs"; then
   :
 else
@@ -75,7 +75,7 @@ else
 fi
 
 echo ""
-echo "▶ [7/31] Fee truth checks"
+echo "▶ [7/33] Fee truth checks"
 if node "$ROOT/tests/fee-truth-offline.mjs"; then
   :
 else
@@ -83,7 +83,7 @@ else
 fi
 
 echo ""
-echo "▶ [8/31] Stripe webhook P0 checks"
+echo "▶ [8/33] Stripe webhook P0 checks"
 if node "$ROOT/tests/webhook-p0-offline.mjs"; then
   :
 else
@@ -91,7 +91,7 @@ else
 fi
 
 echo ""
-echo "▶ [9/31] Launch-audit regressions"
+echo "▶ [9/33] Launch-audit regressions"
 if node "$ROOT/tests/launch-audit-regressions.mjs"; then
   :
 else
@@ -99,7 +99,7 @@ else
 fi
 
 echo ""
-echo "▶ [10/31] Variant selection (premium-printing bias)"
+echo "▶ [10/33] Variant selection (premium-printing bias)"
 if node "$ROOT/tests/variant-selection.mjs"; then
   :
 else
@@ -107,7 +107,7 @@ else
 fi
 
 echo ""
-echo "▶ [11/31] Sports price guard (host + parallel discipline)"
+echo "▶ [11/33] Sports price guard (host + parallel discipline)"
 if node "$ROOT/tests/sports-price-guard.mjs"; then
   :
 else
@@ -115,7 +115,7 @@ else
 fi
 
 echo ""
-echo "▶ [12/31] Quick Pricing + headline price"
+echo "▶ [12/33] Quick Pricing + headline price"
 if node "$ROOT/tests/quick-pricing.mjs"; then
   :
 else
@@ -123,7 +123,7 @@ else
 fi
 
 echo ""
-echo "▶ [13/31] Sports parallel matching"
+echo "▶ [13/33] Sports parallel matching"
 if node "$ROOT/tests/sports-parallel.mjs"; then
   :
 else
@@ -131,7 +131,7 @@ else
 fi
 
 echo ""
-echo "▶ [14/31] Scanner fastpath + miss-logging"
+echo "▶ [14/33] Scanner fastpath + miss-logging"
 if node "$ROOT/tests/scanner-fastpath.mjs"; then
   :
 else
@@ -139,7 +139,7 @@ else
 fi
 
 echo ""
-echo "▶ [15/31] eBay auth + taxonomy (offline)"
+echo "▶ [15/33] eBay auth + taxonomy (offline)"
 if node "$ROOT/tests/ebay-auth-offline.mjs"; then
   :
 else
@@ -147,7 +147,7 @@ else
 fi
 
 echo ""
-echo "▶ [16/31] Card identity + SKU golden tests"
+echo "▶ [16/33] Card identity + SKU golden tests"
 if node "$ROOT/tests/sku-identity.mjs"; then
   :
 else
@@ -155,7 +155,7 @@ else
 fi
 
 echo ""
-echo "▶ [17/31] Sell entry point eligibility (D1 gate, offline)"
+echo "▶ [17/33] Sell entry point eligibility (D1 gate, offline)"
 if node "$ROOT/tests/sell-eligibility.mjs"; then
   :
 else
@@ -163,7 +163,7 @@ else
 fi
 
 echo ""
-echo "▶ [18/31] Sell gate: out-of-order responses + wire size (D1, offline)"
+echo "▶ [18/33] Sell gate: out-of-order responses + wire size (D1, offline)"
 if node "$ROOT/tests/sell-gate-ordering.mjs"; then
   :
 else
@@ -171,7 +171,7 @@ else
 fi
 
 echo ""
-echo "▶ [19/31] Listing packet: title + condition + target-net + metadata (offline)"
+echo "▶ [19/33] Listing packet: title + condition + target-net + metadata (offline)"
 if node "$ROOT/tests/listing-packet-offline.mjs"; then
   :
 else
@@ -179,7 +179,7 @@ else
 fi
 
 echo ""
-echo "▶ [20/31] Draft index recovery + packet schema version (offline)"
+echo "▶ [20/33] Draft index recovery + packet schema version (offline)"
 if node "$ROOT/tests/draft-index-recovery.mjs"; then
   :
 else
@@ -187,7 +187,7 @@ else
 fi
 
 echo ""
-echo "▶ [21/31] C1 draft store — revisions, tombstones, schema safety (offline)"
+echo "▶ [21/33] C1 draft store — revisions, tombstones, schema safety (offline)"
 if node "$ROOT/tests/draft-store.mjs"; then
   :
 else
@@ -195,7 +195,7 @@ else
 fi
 
 echo ""
-echo "▶ [22/31] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
+echo "▶ [22/33] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
 if node "$ROOT/tests/draft-crud-e2e.mjs"; then
   :
 else
@@ -203,7 +203,7 @@ else
 fi
 
 echo ""
-echo "▶ [23/31] C2/C3 draft list + cap — hydration, paging, severity (offline)"
+echo "▶ [23/33] C2/C3 draft list + cap — hydration, paging, severity (offline)"
 if node "$ROOT/tests/draft-list-cap.mjs"; then
   :
 else
@@ -212,19 +212,19 @@ fi
 
 echo ""
 if [[ "${DRAFT_KV_LIVE:-0}" == "1" ]]; then
-  echo "▶ [24/31] C1 draft persistence against the REAL store"
+  echo "▶ [24/33] C1 draft persistence against the REAL store"
   if node "$ROOT/tests/draft-kv-live.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [24/31] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
+  echo "▶ [24/33] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
 fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [25/31] Prod endpoint smoke ($BASE)"
+  echo "▶ [25/33] Prod endpoint smoke ($BASE)"
   if node "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else
@@ -232,23 +232,23 @@ if [[ "$LOCAL_ONLY" == "0" ]]; then
   fi
 else
   echo ""
-  echo "▶ [25/31] Prod endpoint smoke — SKIPPED (--local)"
+  echo "▶ [25/33] Prod endpoint smoke — SKIPPED (--local)"
 fi
 
 echo ""
 if [[ "${COND_PILLS_BROWSER:-0}" == "1" ]]; then
-  echo "▶ [26/31] Condition-applicability interaction (real browser)"
+  echo "▶ [26/33] Condition-applicability interaction (real browser)"
   if node "$ROOT/tests/condition-applicability.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [26/31] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
+  echo "▶ [26/33] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
 fi
 
 echo ""
-echo "▶ [27/31] D2.1 draft-list readiness (derivation + copy ownership)"
+echo "▶ [27/33] D2.1 draft-list readiness (derivation + copy ownership)"
 if node "$ROOT/tests/draft-readiness.mjs"; then
   :
 else
@@ -256,7 +256,7 @@ else
 fi
 
 echo ""
-echo "▶ [28/31] D2.1 draft-list focus parameter (offset resolution + refusal)"
+echo "▶ [28/33] D2.1 draft-list focus parameter (offset resolution + refusal)"
 if node "$ROOT/tests/draft-focus.mjs"; then
   :
 else
@@ -264,7 +264,7 @@ else
 fi
 
 echo ""
-echo "▶ [29/31] D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)"
+echo "▶ [29/33] D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)"
 if node "$ROOT/tests/draft-list-screen.mjs"; then
   :
 else
@@ -276,7 +276,7 @@ echo ""
 # from step 2 onward but was only ever run by hand, so nothing here would have
 # noticed it going red -- an unregistered suite is a suite that protects
 # whichever branch the author last remembered to run it on.
-echo "▶ [30/31] D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)"
+echo "▶ [30/33] D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)"
 if node "$ROOT/tests/draft-review-screen.mjs"; then
   :
 else
@@ -289,8 +289,28 @@ echo ""
 # scope: the rule suite tests pure functions, and the screen suites test one
 # render at a time. A confirmation leaking from one card to the next only shows
 # up when a document survives across two listings and a reload.
-echo "▶ [31/31] Top Rated Plus confirmation is scoped to one listing (4 acceptance states)"
+echo "▶ [31/33] Top Rated Plus confirmation is scoped to one listing (4 acceptance states)"
 if node "$ROOT/tests/trs-listing-scope.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+# 2026-09-07: These two were written, passed, and were NOT wired in here -- the
+# session record claimed contrast-tokens was "registered" when only its pass
+# count had ever been observed by hand. A suite that is never invoked by the
+# runner is not a guard, it is a file. Registering both, and renumbering to 33.
+echo "▶ [32/33] Theme token contrast meets AA in both themes (runtime-resolved)"
+if node "$ROOT/tests/contrast-tokens.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+# Bidirectional: a venue missing from either side, or a date that disagrees
+# across the two surfaces, is a published claim the code no longer backs.
+echo "▶ [33/33] accuracy.html and the fee model agree on venues and audit dates"
+if node "$ROOT/tests/accuracy-fee-parity.mjs"; then
   :
 else
   FAIL=1

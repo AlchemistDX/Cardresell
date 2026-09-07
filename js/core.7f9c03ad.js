@@ -5863,6 +5863,12 @@ function esc(s) {
 //
 // The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
 // downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
+/* 2026-09-07: `feeAuditedOn` below is PUBLISHED. accuracy.html restates every
+ * one of these dates in its "Last verified" column, so changing a stamp here
+ * without changing the page (or the reverse) leaves a public claim the code no
+ * longer backs. tests/accuracy-fee-parity.mjs fails in both directions on venue
+ * set and on date. CROSS_BORDER below backs the page's second table and is held
+ * to the same venue set. */
 const PLATFORMS = {
   ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
