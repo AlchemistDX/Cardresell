@@ -192,8 +192,23 @@ try {
     // one of these does NOT break the suite -- the set may legitimately go
     // stale in the safe direction. It is deliberately not a count, because a
     // count is a number someone has to maintain for no benefit.
-    const KNOWN_UNDECLARED = ['--text-primary', '--amber', '--amber-bg', '--muted'];
+    // Was ['--text-primary', '--amber', '--amber-bg', '--muted'].
+    // --amber and --amber-bg are gone because the two rules that referenced
+    // them (.warning-banner, .clamp-note) were pointed at --orange /
+    // --orange-bg, the warning tier that was already declared and already
+    // working in .note-warn. They were never a missing palette entry; they
+    // were a second implementation of a colour the palette already had.
+    const KNOWN_UNDECLARED = ['--text-primary', '--muted'];
     const fresh = undeclared.filter((n) => !KNOWN_UNDECLARED.includes(n));
+
+    // The ratchet has to shrink, or it is not a ratchet -- it is a list where
+    // fixed debt lingers, which is the "number someone maintains for no
+    // benefit" failure this file already refuses elsewhere. If an entry stops
+    // being referenced, this fails and the entry must come out.
+    const stale = KNOWN_UNDECLARED.filter((n) => !undeclared.includes(n));
+    T.check('every entry in KNOWN_UNDECLARED is still actually referenced',
+      stale.length === 0,
+      'fixed but still listed, remove from the baseline: ' + stale.join(', '));
 
     T.check(`no NEW undeclared token is referenced without a fallback (${refs.length} refs, ${declared.size} declared)`,
       fresh.length === 0,

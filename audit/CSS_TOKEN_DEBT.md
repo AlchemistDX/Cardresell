@@ -81,3 +81,78 @@ Unowned. Each needs a decision, not a rename:
 
 The suite **ratchets** rather than exempts: it asserts no token *outside* this set is
 undeclared, so a new one fails on arrival. Fixing an entry here does not break the suite.
+
+---
+
+# Resolved 2026-09-06 — it was never a missing palette entry
+
+The remedy notes above said a warning token does not exist in the palette, so declaring an amber
+pair would be a palette addition and reusing `--gold` would change what a warning looks like.
+**Both claims were wrong, and the reason they were wrong is the more useful finding.**
+
+The palette already declares a complete warning tier, in **both** the light and dark blocks:
+
+| Token | Light | Dark |
+|---|---|---|
+| `--orange` | `#b85c00` | `#e0832a` |
+| `--orange-bg` | `#fff4e6` | `#1e1004` |
+
+It is already in use and already working — `.note-warn` (`index.html:908`) renders a warning with
+exactly this pair. So `.warning-banner` and `.clamp-note` were not missing a token. **They were a
+second implementation of a colour the palette already had**, and the only reason the duplication
+was visible at all is that the second implementation was never declared.
+
+That is rule 1 — one business behaviour, exactly one implementation — caught for the fifth time,
+in CSS rather than in code. Worth noting how it hid: a duplicate colour token is not a duplicate
+function, so nothing about it looks like the shape the team has learned to watch for. **The tell
+was that the same visual meaning had two vocabularies, and one of them resolved to nothing.**
+
+## The fix
+
+Both rules now reference the declared tier. No palette addition, no new token, no design call:
+
+- `.warning-banner` — `border:1px solid var(--orange)`, `background:var(--orange-bg)`.
+- `.clamp-note` — `border-left:3px solid var(--orange)`; background simplified to
+  `var(--surface-2)` and colour to `var(--text)`, since both fallback chains already resolved to
+  those and the dead half of each was noise.
+
+`var(--amber)` and `var(--amber-bg)` now appear **zero** times in the repo.
+
+Contrast, computed rather than assumed — body text is `var(--text)` on `var(--orange-bg)`:
+
+| Mode | Pair | Ratio |
+|---|---|---|
+| Light | `#18160f` on `#fff4e6` | **16.66:1** |
+| Dark | `#d4d2cc` on `#1e1004` | **12.28:1** |
+| Light | border `#b85c00` on `#fff4e6` | 4.23:1 (non-text, needs 3:1) |
+| Dark | border `#e0832a` on `#1e1004` | 6.59:1 |
+
+## What the before/after showed
+
+The screenshot is worth recording in words, because the defect was worse than "no border".
+
+Before, the stale-fee disclaimer rendered as bare body text while `.clamp-note` **kept its box**
+— so the hierarchy was **inverted**. A note explaining one clamped comp looked like a callout,
+and the banner disclaiming every ranking on the page looked like prose. A seller scanning the
+surface would read the smaller caveat and skip the larger one.
+
+`role="status"` survived throughout, so a screen-reader user got the warning and a sighted user
+did not. That is an unusual direction for that gap to run — the accessible name, role and
+behaviour were all correct, and appearance was the single property no assertion covered.
+
+## Why this mattered beyond appearance
+
+§5.5 forbids inventing freshness, and the banner **is** the mechanism that keeps the ranking
+honest when the fee data is stale. With its styling dead, the rule was satisfied in the DOM and
+not in the seller's experience. A disclosure requirement discharged into invisible markup is not
+discharged. That is the argument for making the palette call rather than deferring it — and in
+the end there was no call to make, only a duplicate to delete.
+
+## The ratchet shrank
+
+`KNOWN_UNDECLARED` in `tests/draft-review-screen.mjs` went from four entries to two
+(`--text-primary`, `--muted`). The ratchet now also asserts **every entry in the baseline is
+still actually referenced**, so a fixed token cannot linger in the list — a ratchet that only
+grows is a list where fixed debt accumulates, which is the same "number someone maintains for no
+benefit" failure this file refuses elsewhere. Verified by mutation: adding a fixed entry to the
+baseline fails the suite (81 passed → 80/1).

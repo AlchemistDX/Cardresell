@@ -313,3 +313,54 @@ the variance checks would pass vacuously and prove nothing.
 The reusable move: **when a justification is a quantified claim, the quantifier is testable.**
 Reasons written in prose get stretched over keys they don't cover, and the stretch is invisible in
 the prose but not in the data. Prefer justifications whose scope can be executed.
+
+---
+
+## Instance 11 — a fixture that never reached the state it was named for
+
+Found by scanning for values whose domain has collapsed to one point. The first thing the scan
+turned up was not a wire key; it was a test input.
+
+`tests/draft-readiness.mjs` built its no-provenance case as
+`base({ priceSource: 'unknown', packet: undefined })`. The provenance gate is
+`!hasOwnProperty(draft, 'packet')`, and an object spread **writes the key with an undefined
+value** rather than omitting it. So the gate never opened and the fixture produced **zero
+violations**. A case named `'no provenance'` asserted nothing about provenance for its entire
+life. It could not go red, because the only thing asserted of that row was that it carried a
+well-typed `readiness` — which it did.
+
+Compounding it: `'unknown'` and `'consensus'` are not members of `PRICE_SOURCES`
+(`{seller, comp, venue}`), and create refuses anything else. The fixtures described drafts the
+store would never persist — invisible because `validateDraftForSlot` and `readinessOf` **read**
+`priceSource` without validating it.
+
+**A fixture whose name asserts a condition it does not create is worse than a missing fixture,
+because it reads as coverage.** A missing case is visible in a list; this one is invisible
+everywhere except in the state it failed to build.
+
+Fixed with a `noPacket()` builder that `delete`s the key, and **case 15 as its negative control**
+— asserting the builder removes the key, that `base({packet: undefined})` still *has* it (the bug
+pinned as an executable fact rather than a comment), that each fixture raises the finding it is
+named for, and that `base().priceSource` is one the store would accept.
+
+The general rule, and it is the same one as instance 8: **a fixture is an instrument, so it owes
+the same negative control an assertion does.** "Prove the instrument can fail" has to include
+proving the *input* reached the condition, not only that the check would fire if it had.
+
+---
+
+## Instance 12 — a colour with two vocabularies, one of which resolved to nothing
+
+`.warning-banner` referenced `--amber` / `--amber-bg`, which were never declared, so both
+declarations were invalid and the banner rendered as plain text. The obvious reading was "the
+palette is missing a warning token." It was not: `--orange` / `--orange-bg` were **already
+declared in both light and dark blocks and already working** in `.note-warn`.
+
+So this was rule 1 — one business behaviour, exactly one implementation — in CSS. Fifth
+occurrence, and it hid because **a duplicate colour token does not look like a duplicate
+function.** Nothing about it matches the shape the codebase has learned to watch for.
+
+The tell, worth keeping: **the same visual meaning had two vocabularies, and one of them resolved
+to nothing.** Where a design intent has more than one token name, one of them is wrong even when
+both resolve — and if one resolves to nothing, the duplication is what made the silence possible.
+Reaching for a new token is a signal to search the palette for the meaning first, not the name.

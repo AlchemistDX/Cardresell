@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════ */
 
 import { readinessOf } from '../api/_draftService.js';
-import { validateDraftForSlot, SLOT_RULES, VIOLATION } from '../api/_draftStore.js';
+import { validateDraftForSlot, SLOT_RULES, VIOLATION, PRICE_SOURCES } from '../api/_draftStore.js';
 
 let FAIL = 0;
 const ok = (name, cond, detail) => {
@@ -16,20 +16,47 @@ const base = (over = {}) => ({
   draftId: 'd_test', sku: 'sku_test', instanceId: 'i_test',
   slot: 'ebay:fixed-price', status: 'draft', rev: 1,
   title: 'Charizard Base Set Holo', price: 250, quantity: 1,
-  priceSource: 'consensus', packet: { source: 'test' },
+  // 'comp' not 'consensus'. PRICE_SOURCES is {seller, comp, venue}
+  // (api/_draftStore.js:159-164) and create REFUSES anything else
+  // (:479-483), so a fixture priced from 'consensus' was describing a draft
+  // the store would never persist. Nothing failed, because readinessOf and
+  // validateDraftForSlot read the field without validating it -- so the
+  // fixture could hold an unpersistable value indefinitely.
+  priceSource: 'comp', packet: { source: 'test' },
   createdAt: 1, updatedAt: 1, ...over,
 });
+
+/* WHY THIS EXISTS
+ *
+ * The provenance gate is `!hasOwnProperty(draft, 'packet')`
+ * (api/_draftStore.js:305). `base({ packet: undefined })` does NOT satisfy it:
+ * the spread writes the key with an undefined value, so the key is still
+ * PRESENT and the whole provenance branch is skipped.
+ *
+ * The fixture that used to be labelled 'no provenance' was built that way and
+ * produced ZERO violations. It asserted nothing about provenance for as long
+ * as it existed, and it could not go red, because the row it fed only had to
+ * be a draft with a well-typed `readiness` -- which it was.
+ *
+ * Deleting the key is the only way to reach the state. Case 15 below is the
+ * negative control that keeps this honest. */
+const noPacket = (over = {}) => {
+  const d = base(over);
+  delete d.packet;
+  return d;
+};
 
 console.log('\nCase 10 — readiness present and correctly typed on every row');
 {
   // A publishable draft, and one of each blocking kind.
   const cases = [
     ['publishable', base()],
-    ['unpriced', base({ price: null, priceSource: undefined, packet: undefined })],
+    ['unpriced', noPacket({ price: null, priceSource: undefined })],
     ['zero price', base({ price: 0 })],
     ['unknown slot', base({ slot: 'nosuch:slot' })],
     ['over-long title', base({ title: 'x'.repeat(400) })],
-    ['no provenance', base({ priceSource: 'unknown', packet: undefined })],
+    ['no provenance (comp, no packet)', noPacket({ priceSource: 'comp' })],
+    ['seller-priced (no packet)', noPacket({ priceSource: 'seller' })],
   ];
   for (const [label, d] of cases) {
     const r = readinessOf(d);
@@ -202,6 +229,49 @@ console.log('\nCase 14 — the constancy argument, mechanised');
   // later re-files it under the constancy sentence by mistake.
   ok('detail also varies, so its exclusion rests on a different reason',
      distinct('detail').length > 1, distinct('detail').join(', '));
+}
+
+console.log('\nCase 15 — the fixtures reach the states they are named for');
+{
+  /* A fixture whose name asserts a condition it does not create is worse than
+   * a missing fixture: it reads as coverage. This is the negative control on
+   * the builder above -- if `noPacket` ever stops removing the key, or the
+   * provenance gate changes shape, these fail instead of quietly passing.
+   *
+   * Found by scanning for wire keys and findings whose value cannot vary
+   * across production-reachable states. The first thing that scan turned up
+   * was not a wire key at all; it was this. */
+  const codesOf = (d) => validateDraftForSlot(d, d.slot).violations.map((v) => v.code);
+
+  ok('base() carries a packet key, so it makes no provenance finding',
+     Object.prototype.hasOwnProperty.call(base(), 'packet')
+     && !codesOf(base()).some((c) => c === VIOLATION.NO_PROVENANCE || c === VIOLATION.SELLER_PRICED));
+
+  ok('noPacket() genuinely removes the key',
+     !Object.prototype.hasOwnProperty.call(noPacket(), 'packet'));
+
+  // The bug this case exists to refuse, pinned as a fact about JS rather than
+  // a comment: assigning undefined is not deleting.
+  ok('base({packet: undefined}) still HAS the key -- the old fixture bug',
+     Object.prototype.hasOwnProperty.call(base({ packet: undefined }), 'packet'));
+
+  ok("a comp-priced draft with no packet raises NO_PROVENANCE",
+     codesOf(noPacket({ priceSource: 'comp' })).includes(VIOLATION.NO_PROVENANCE),
+     JSON.stringify(codesOf(noPacket({ priceSource: 'comp' }))));
+
+  ok("a seller-priced draft with no packet raises SELLER_PRICED",
+     codesOf(noPacket({ priceSource: 'seller' })).includes(VIOLATION.SELLER_PRICED),
+     JSON.stringify(codesOf(noPacket({ priceSource: 'seller' }))));
+
+  // Both are non-blocking, which is the whole reason they cannot reach the
+  // client. Asserted here so the claim in
+  // audit/OPEN_NONBLOCKING_NOT_ON_THE_WIRE.md is not just prose.
+  const nb = validateDraftForSlot(noPacket({ priceSource: 'comp' }), 'ebay:fixed-price');
+  ok('NO_PROVENANCE is not in v.blocking, so readinessOf cannot carry it',
+     !nb.blocking.some((x) => x.code === VIOLATION.NO_PROVENANCE));
+
+  ok('base() priceSource is one the store would actually accept',
+     PRICE_SOURCES.includes(base().priceSource), base().priceSource);
 }
 
 console.log(FAIL ? '\nRESULT: FAIL\n' : '\nRESULT: PASS\n');
