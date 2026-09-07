@@ -128,10 +128,26 @@ understated somewhere does not make a lean. The check is cheap — tabulate the
 signed error across the real parameters (here profile × grader × price, twenty
 cells, one script) — and it inverted the conclusion.
 
-Corollary for `audit/DIRECTIONAL_BIAS_AUDIT.md`: **"7 of 7 lean optimistic" was
-established the same way**, by reading mechanisms, and BIAS-1 is now known to be
-mis-signed for two of four columns. The other six findings have not been
-tabulated and that headline should not be repeated as though they had been.
+Corollary for `audit/DIRECTIONAL_BIAS_AUDIT.md`: "7 of 7 lean optimistic" was
+established the same way, by reading mechanisms, so it needed checking.
+
+**Checked the same day, and the corollary as first written was itself an
+over-correction** — recorded here because it is the same error in the opposite
+direction, which is the one this catalogue keeps failing to notice. I wrote that
+"the other six have not been tabulated," implying six open questions. Four of
+them are **sign-fixed by construction**: they omit a cost that cannot be negative
+(per-order fee, shipping, tax in the fee base, grading postage), and omitting a
+non-negative quantity cannot understate a total in one regime and overstate it
+in another. **No tabulation can flip them, so none was owed.** Only three rows
+were parameter-dependent, and all three turned out wrong or incomplete — see the
+2026-09-07 section of the bias audit.
+
+The lesson is narrower than "compute your directions," then: **establish whether
+a claim is even capable of varying before demanding evidence that it does not.**
+A mechanism argument is sufficient when the sign is fixed by construction and
+insufficient when it is not, and telling those apart is cheap. Blanket suspicion
+of a whole document because one entry was wrong is the same failure as blanket
+confidence — both skip the per-item question.
 
 
 ## Practice

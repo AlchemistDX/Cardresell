@@ -100,6 +100,56 @@ every price point tested.**
 | 6 | no ship-to-grader postage, return postage, or insurance | omits real costs | **optimistic** |
 | 7 | `upsidePct = upsideNet / raw` — divides by the raw price, not by total capital invested (`raw + grading fee`) | inflates the ratio | **optimistic** |
 
+### 2026-09-07 — the directions, re-derived instead of asserted
+
+The table above was built by reading each mechanism. Instance 20 of
+`audit/PATTERN_ASSERTION_SURFACE.md` records that doing so for BIAS-1 produced a
+**wrong** direction, and I then wrote that the other six were equally
+unsubstantiated. **That was over-correction.** Re-derived, the seven split into
+two kinds, and only three of them ever needed tabulating.
+
+**Sign-fixed by construction — rows 2, 3, 4, 6.** Each omits a cost that cannot
+be negative: the per-order fee, shipping, sales tax in the fee base, and
+ship-to-grader postage / return postage / insurance. Omitting a non-negative
+quantity from a cost total cannot understate the cost in one regime and
+overstate it in another. **No tabulation can flip these, so none is owed.**
+Direction stands as written.
+
+**Parameter-dependent — rows 1, 5, 7.** These are the three that need a
+tabulation, and all three are wrong or incomplete as written:
+
+- **Row 1** compares `FEES_PCT` 13% against "eBay's 13.25%," which is the
+  **no-store / not-Top-Rated** rate. That is the app's default profile, so the
+  row is correct *for the default* and silent about the parameter. With a Basic
+  Store (12.35%) or Top Rated (×0.9) it **reverses** above $61.54 / $37.21 /
+  $21.22. Restated: optimistic under the default profile at all prices,
+  pessimistic above a profile-dependent threshold otherwise.
+- **Row 5** says flat `$25` understates the PSA cost. For PSA that holds
+  weakly — the error is exactly **0** below $200 and −$25/−$75 above, never
+  positive — so the direction is defensible. But the row does not describe what
+  the panel actually does: it applies that one PSA figure to columns subtitled
+  **BGS/CGC**, where the model's costs are 50 and 18. Against CGC and SGC the
+  flat $25 **overstates** cost by $7 at every price, which is **pessimistic**.
+  That is a missing row, not a wrong one.
+- **Row 7** — `upsidePct = upsideNet / raw` — inflates the ratio **only while
+  `upsideNet > 0`.** For a loss, dividing by the smaller denominator makes the
+  reported loss *larger* in magnitude than the capital-invested denominator
+  would, i.e. pessimistic. And the panel does render losses: `core:11504` and
+  its else branch print `upsidePct` for `upsideNet <= -5`. So the direction flips
+  on exactly the cases the review asked to be proven.
+
+**Revised headline: four of seven are unconditionally optimistic; three are
+regime-dependent, and each of those three is optimistic in the default/positive
+regime and pessimistic outside it.** The eighth, structural finding — presenting
+a payoff conditional on achieving the grade with no probability attached — is
+unaffected and remains the largest.
+
+Note what this does *not* rescue. The aggregate claim that the panel reads
+optimistically for a default-profile seller looking at a positive PSA upside
+survives, and is the common case. What does not survive is the framing that the
+lean is a property of the model rather than of a regime — and that framing is
+what made "adjust the constant" sound sufficient.
+
 An eighth, arguably the largest, is structural rather than arithmetic: the
 model assumes **the target grade is achieved**. `upsideNet` for the PSA 10
 column is the payoff *conditional on a 10*, presented next to a raw comp with no
