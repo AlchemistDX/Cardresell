@@ -831,3 +831,74 @@ is wrong a second way: on the *observed*-centre branch the spread is synthetic
 **and drawn from a different book than the `mid` it is printed beside**. The
 "only the spread is synthetic" framing was doing more work than it could support,
 in both directions.
+
+## Q3-C addendum — the 3× threshold measured against real catalog data
+
+Answering the named question: **what fraction of healthy books sit between 3× and
+10×, the population the current threshold treats as outliers?**
+
+**Method.** `tools/threshold-distribution.mjs` reads the same public endpoints
+`api/_tcgcsv.js` builds (`https://tcgcsv.com/tcgplayer/{cat}/{gid}/prices`) — no
+credentials, no telemetry, no new collection, and no production traffic. Groups
+are sampled at a stride across each game's catalog rather than taking the first
+N listed, because the first-listed sets skewed 66% Lorcana on a first pass.
+**n = 13,638** priced products across Pokémon (3,070), MTG (4,040), Yu-Gi-Oh
+(685), Lorcana (4,736), One Piece (1,107).
+
+**Limitations, stated up front.** Stride sampling is not random sampling. Counts
+are products-with-a-`midPrice`, mixing singles and sealed. `midPrice` is itself an
+ask median, so every ratio below is ask-relative, not sale-relative. Re-run the
+tool rather than quoting these numbers forward.
+
+### `high / mid` — the constant's first consumer
+
+| band | share of catalog |
+|---|---|
+| ≤ 1.53× | 4.96% |
+| 1.53× – 3.0× (**blend inversion band**) | **6.9%** |
+| 3.0× – 10× (**clamped, below the cited harm**) | **22.2%** |
+| > 10× (the harm the comment names) | 66.0% |
+
+**The clamp fires on 88.2% of the catalog.** A guard whose comment describes
+"sniper listings" and "a troll" and "a scammer" is the normal path for nearly
+nine products in ten. The 22.2% figure is the direct answer to the question: **a
+fifth of the catalog is clamped while sitting below the harm the code's own
+comment cites as the reason for clamping.** That is the cost of the caution,
+measured.
+
+Same threshold, same 88.2%, also excludes the high ask from `_trimmedMean`
+(`H <= D * 3`, `:719`). So the blend almost never contains the high ask — which
+is *why* the derived-centre inversion is confined to 6.9% of products rather than
+being universal. **The margin that over-clamps the display is what limits the
+blend defect.** Tightening `3.0` to better match the cited harm would shrink the
+over-clamping and *grow* the inversion band. The two consumers pull opposite ways
+at every value of the constant.
+
+### `market / mid` — the observed-centre floor
+
+| band | share | disclosed? |
+|---|---|---|
+| ≤ 1.1765× (floor sits below the median ask) | 96.91% | n/a |
+| 1.1765× – 3.0× (**floor prints above an observed ask**) | **3.00%** | **no** |
+| > 3.0× (sales_above_asks) | 0.10% | yes |
+| < 1/3× (asks_above_sales) | 4.29% | yes |
+
+Denominator is the 13,489 products carrying a `marketPrice`, not all 13,638.
+417 of those would print a derived floor above the observed median ask, and
+**404 of the 417 — 96.88% — fall below `_marketAskDivergence`'s `ratio <= 3` gate**
+(`:684`). Max observed `market/mid` is 65×, so the guard is *not* unreachable —
+it fires on about 4.4% of the catalog. **It fires on the wrong side.** Nearly all
+of its coverage is the `asks_above_sales` direction (4.29%), while the direction
+that produces the floor inversion is caught 13 times out of 417.
+
+The guard's coverage is anticorrelated with the defect it would be asked to
+disclose. That is a stronger statement than "unwired": wiring it up would
+disclose 3% of the inversions.
+
+### Checked, not a gap
+
+`highClamped` / `highRaw` **are** read client-side — 5 occurrences in
+`js/core.7f9c03ad.js`, 2 in `accuracy.html`, plus `api/_listingPacket.js:225` and
+assertions in `listing-packet-offline` and `fee-truth-offline`. Given the clamp
+fires on 88.2% of products this would have been a disclosure gap on almost every
+card. It is not one. Recording the negative result so nobody re-opens it.

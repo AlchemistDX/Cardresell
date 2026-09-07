@@ -248,3 +248,23 @@ Q7 is an open reviewer question — needs a decision, not a patch.
 
 Q3-C closed the derived-centre mechanism only. **Do not read Q3-C as "the
 inversion is fixed".**
+
+### T2.11 — _HIGH_CAP_MULT has two consumers and one constant
+
+`_HIGH_CAP_MULT = 3.0` (`api/tcg-price.js:563`) both clamps the displayed `high`
+(`:567-570`) and gates the high ask into `_trimmedMean` (`H <= D * 3`, `:719`).
+Conservative for the display is the harmful direction for the blend.
+
+Measured over 13,638 real products (`tools/threshold-distribution.mjs`):
+
+- clamp fires on **88.2%** of the catalog — it is the normal path, not an
+  outlier guard
+- **22.2%** are clamped while below the 10x harm the code's own comment cites
+- **6.9%** sit in the 1.53x-3.0x blend inversion band
+
+Origin: `005b683` set it below the smallest observed offender (5.7x). No healthy
+distribution was sampled. Not tunable — raising it shrinks the over-clamp and
+grows the inversion band. **Needs two constants, each chosen against its own
+distribution**, plus a comment at each naming its single consumer.
+
+Pattern instance 23, root-cause section.

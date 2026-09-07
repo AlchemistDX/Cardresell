@@ -1167,8 +1167,48 @@ the constant `3.0`.
 | tcgcsv, centre observed | `_marketAskDivergence` | `ratio ≤ 3` | `1.18×`–`3.0×` (23) |
 
 Three guards, one constant, and in every case the interesting inputs are the ones
-the threshold declares uninteresting. Worth asking whether `3.0` was ever chosen
-against a measured distribution, or copied.
+the threshold declares uninteresting.
+
+### Root cause: a threshold with two consumers cannot be tuned conservatively for both
+
+`3.0` was neither measured nor copied. It entered at `005b683` ("universal High
+clamp"), whose body lists the cases that motivated it: 5.7×, 6.2×, 75×, and
+335,000×. It was set **below the smallest observed offender** — a margin of
+safety, chosen entirely from the tail, with no sample of healthy books examined.
+The comment above it (`api/tcg-price.js:556-562`) states the harm as *"users lose
+trust when High is 10-1000x Market"* and then clamps at 3×. **The gap between the
+cited harm and the chosen threshold is not caution; it is the defect's habitat,
+and the caution created it.**
+
+That generalises past this constant. A margin chosen below the smallest observed
+offender is only safe if the guard does one thing. `_HIGH_CAP_MULT` has **two**
+consumers: it clamps a displayed `high` (`:567-570`) and it gates whether the high
+ask enters `_trimmedMean` (`H <= D * 3`, `:719`). Conservative for the display is
+the harmful direction for the blend — the margin that protects one defines the
+range in which the other misbehaves. **Nothing at the constant says it has two
+jobs**, so neither consumer's reviewer could see the trade-off, and both readings
+of "is 3.0 about right?" are locally correct.
+
+Measured over 13,638 real products (`tools/threshold-distribution.mjs`,
+full method and limitations in `audit/d3/DISCLOSURE_PARITY_Q3.md`):
+
+| `high / mid` band | share | which consumer cares |
+|---|---|---|
+| 1.53× – 3.0× | 6.9% | blend — inversion band |
+| 3.0× – 10× | 22.2% | display — clamped below the cited harm |
+| > 10× | 66.0% | display — the harm actually named |
+
+The clamp fires on **88.2%** of the catalog: a guard whose comment says "troll"
+and "scammer" is the normal path for nearly nine products in ten. Moving `3.0`
+up toward the harm it cites would shrink the 22.2% over-clamp and **grow** the
+6.9% inversion band. There is no value of a single constant that is conservative
+for both consumers, which means this is not a tuning problem — the two jobs need
+two constants, each answerable against its own distribution.
+
+**Test:** before calling a threshold conservative, count its consumers. One
+consumer, a margin is caution. Two consumers pulling opposite ways, a margin is a
+choice about which one to harm — made silently, by whoever picked the number for
+the other one.
 
 **Process note, which is the part that generalises.** The derived-centre
 mechanism was measured before it was fixed, so the fix was correct. The
