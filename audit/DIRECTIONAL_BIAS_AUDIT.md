@@ -45,6 +45,44 @@ has a definite direction: optimistic. The sign ambiguity established earlier in
 this document applies to the grading panel's headline upside number and nowhere
 else.
 
+## Method — what is admissible as a bias finding
+
+Promoted here on 2026-09-07 from a single entry, because it is the test that
+separates a bias finding from a design disagreement, and this document has been
+wrong twice for want of stating it.
+
+**Two admissibility tests. A finding must pass both.**
+
+**1. Name the metric.** A direction is meaningless without the quantity it runs
+against. Net and incremental upside give opposite answers for the same defect
+(see the table above). *This is the test the first two revisions failed* — the
+withdrawn seven-item headline asserted directions from mechanisms without
+naming which metric they applied to, and BIAS-1 came out wrong as a result.
+That was the stated reason for the withdrawal.
+
+**2. Compare against a truth, not against an alternative design.** A bias is a
+deviation from something that is the case. "The fee schedule charges on sales
+tax and the model does not" is a truth: the page says so, the gap is $3.18, and
+no design choice makes it not a gap. "The blend includes the low ask and a
+mid/market average would not" is **not** a truth — it is a preference between two
+defensible shapes, neither of which is the correct price.
+
+A shape disagreement can be measured, can be consistent, can even be large, and
+still not be a bias. Filing one as a bias smuggles in the answer to the design
+question: to call the low ask's −11% pull a bias, you must already have decided
+the low ask does not belong, which is the open question itself (T2.13).
+
+**Where a candidate fails test 2, log it as a candidate with its direction
+measured and its blocking decision named.** Do not put it in the table. When the
+design question resolves, it either becomes a numbered bias with the measurement
+already done, or it becomes evidence that the audit was looking in too narrow a
+direction. Both outcomes are worth having; neither requires guessing now.
+
+The two tests are independent. Test 1 catches a direction with no denominator.
+Test 2 catches a direction with no referent. The seven were re-derived twice for
+failing the first; the low-ask candidate below is the first one held out for the
+second.
+
 Everything below the line marked **HISTORICAL** is superseded and kept only to
 show how the claim moved. In particular, the original headline — "seven
 simplifications, all seven overstate, none run the other way" — **is withdrawn.**

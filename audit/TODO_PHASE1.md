@@ -333,3 +333,32 @@ looking pair of constants having asymmetric consequences.
 **Not a request to change the arithmetic.** Deciding this needs a view on whether
 the low ask belongs in a headline at all, which is Q7-adjacent. Do not resolve
 unilaterally.
+
+#### T2.13 — the answer is not free either way, and the commit must say so
+
+Whoever resolves T2.13 should know this before choosing, because one option will
+look like the thing this audit has spent two weeks correcting.
+
+Excluding the low ask **raises** the published headline by a mean ~3.99% (it pulls
+down a median 11.01% where admitted, in 97.3% of cases). A higher headline raises
+every net estimate downstream — the review screen's payout row, the calculator's
+net, both legs of the grading panel. So the option that is arguably more honest
+about what a headline price means is also the option that moves published numbers
+in the **optimistic** direction, which is the exact direction
+`DIRECTIONAL_BIAS_AUDIT.md` exists to correct.
+
+**That is not a reason to choose the other way.** A shift that follows from a
+justified change to what the number *means* is not the same defect as a fee that
+was left out, and treating them as the same would make every correction
+unmakeable in one direction. But the resemblance is real and someone will notice
+it in the diff.
+
+**So: whichever way this resolves, the commit states the direction and magnitude
+of the resulting shift explicitly, and says why it is not BIAS-n.** Do not let
+that reasoning live only in this file. A reviewer meeting a +4% headline shift
+with no explanation will read it as the regression this audit was written to
+catch, and they will be reading it correctly on the evidence available to them.
+
+Applies symmetrically: keeping the low ask means the headline stays ~4% below a
+mid/market centre permanently, and *that* needs stating too, since nothing
+currently discloses that the published price is trimmed downward at all.
