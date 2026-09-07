@@ -479,3 +479,141 @@ venue, do not add the field.
 **And do not bump `feeAuditedOn` without actually re-reading.** Bumping it to
 cover a tax-only check would stamp a schedule re-verification that did not
 happen — a lie in the field whose whole purpose is to not lie about that.
+
+---
+
+## Q3-C — endpoint origin on the synthesis paths (2026-09-07)
+
+**No code changed. Four findings, and the resolution of the first one touches a
+standing rule, so it needs a decision rather than a guess.**
+
+Scope note: T2.5 (accepted, option (a)) drops `low`/`high` on the **fallback
+rung only** — `api/tcg-price.js:293,295`. The **tcgcsv path** at `:241,243` was
+explicitly not closed by that decision, and it is the primary path.
+
+### Reachability first
+
+Checked before writing anything down, because the last two rounds turned on it.
+**Synthesized endpoints are rendered, at four sites:**
+
+| site | renders as |
+|---|---|
+| `js/core.7f9c03ad.js:4382` | **`Lowest listing`** row |
+| `:1912`, `:4504`, `:4532` | `Low $X · Mid $Y · High $Z` / `range $X–$Y` |
+| `:2513` | `_basisMeta.label = 'TCGPlayer market'` |
+| `:4384` | **`Market price`** row |
+
+`_basisMeta.low` traces to `_clampHigh(tcg).low`, which traces to the payload's
+`low`, which is `r.low ?? (displayMarket * 0.85)`. **Reachable by plain `??`;
+frequency unmeasured.**
+
+### Finding 1 — a calculated endpoint renders under a label asserting observation
+
+`low = displayMarket × 0.85` and `high = displayMarket × 1.15` when tcgcsv omits
+them. The row it feeds is titled **"Lowest listing"** — a claim about an observed
+active listing, for a number no listing produced. The range line reads
+`Low $X`, which carries the same implication more weakly.
+
+**This is not a bug in the arithmetic.** The ±15% band is a deliberate standing
+policy (`audit/CARDRESELL_PLAN_AND_ROADMAP.md` Q7, :857) and this API synthesis
+is where that policy is implemented — verified: **there is no client-side
+re-synthesis of the band anywhere** (`0.85` at `core:4632` is the Light Play
+condition multiplier, unrelated). So removing the synthesis does not "fix" it; it
+deletes the policy.
+
+The defect is a **disclosure parity failure of exactly the Q3 shape.** Q3-B's
+landed copy on `accuracy.html` already states the fact for the Sell Now / Patient
+figures — *"Sell Now and Patient are calculated, not observed"* — and the basis
+rows on the price surface carry no equivalent. Same fact, one surface has it,
+another doesn't.
+
+Good news on the render side: **`_rangeParts()` already degrades correctly on
+null** (omits absent parts, returns `[]` when all equal), and the "Lowest listing"
+row is already conditional on `basis.low != null`. So whichever way this is
+resolved, the client needs no new null-handling.
+
+**Decision needed** — these are mutually exclusive:
+
+- **(a) Label it.** Add origin metadata, and make "Lowest listing" render as a
+  calculated-band row (or suppress that specific label) when `low` is
+  synthesized. Keeps the ±15% band everywhere. Costs new copy on the price
+  surface.
+- **(b) Withhold it.** Return `low`/`high` as `null` when upstream omits them,
+  matching T2.5's treatment of the fallback rung. The band then exists only where
+  the endpoints were observed. Costs the band on thin products — and narrows the
+  standing Q7 rule, which is why this is not mine to pick.
+
+### Finding 2 — `market` has two origins, and the code's own comment forbids the relabel
+
+`data.market = _headlinePrice(...)`, which returns:
+
+- the upstream **completed-sales** `marketPrice` when present and non-sentinel
+  (`api/tcg-price.js:625`), **or**
+- `_trimmedMean(...)` — a weighted blend of **active asks** — when it is absent.
+
+Both are returned in a field named `market`, with `source: 'tcgcsv'`, and
+rendered as **"TCGPlayer market"** and **"Market price"**. Nothing in the payload
+distinguishes which happened.
+
+The governing rule is stated in that same function, ten lines above the return
+(`:613-614`):
+
+> *"Market and asks are different quantities and one must never be relabelled as
+> the other."*
+
+**The blend itself is deliberate and well defended** — the comment argues asks are
+the best available signal when no sale exists, and the worked example it records
+(EX Dragon Frontiers Charizard Star, a 19.8× overstatement) is why the old
+"sanity valve" was removed. The blend is not the defect. **The defect is that its
+output is named and labelled as the quantity the comment says it must never be
+relabelled as.**
+
+Needs `marketBasis: 'sales' | 'ask_blend'` in the payload and a label that
+follows it. Precedent for the mechanism already exists in the same file:
+`marketAskDivergence` (`:628`) discloses market-vs-ask disagreement in the
+payload instead of resolving it silently. This reuses that pattern rather than
+inventing one.
+
+### Finding 3 — an unconditional freshness flag justified by a false premise
+
+`core:2513-2519` sets, unconditionally:
+
+```
+datedBySource: true
+// TCGplayer market is derived from completed sales, so a
+// retrieval age is a fair freshness signal for it.
+```
+
+**The comment's premise is false on the blend branch**, where the number is an
+ask aggregate. A retrieval age is a fair freshness signal for a sale that
+happened; it is a much weaker one for a snapshot of current asks, and it is not a
+date the source assigned at all. So a freshness claim is attached to a value
+whose basis may not be dated.
+
+Same family as pattern instance 5 (a comment asserting a basis that the code does
+not establish) and unconditional in the same way `taxNote` was. `datedBySource`
+must be **derived from finding 2's `marketBasis`**, not hardcoded — which makes
+findings 2 and 3 one change, not two.
+
+### Finding 4 — `mid` too, silently
+
+`mid: r.mid ?? displayMarket` (`:242`). When upstream omits the median ask, `mid`
+becomes the headline, so `Low · Mid · High` can render three values of which the
+middle is a copy of a number derived from the outer two. `_rangeParts` suppresses
+the line only when **all three** are equal, so a `mid == market` collapse renders
+as a real three-point range. Lowest severity of the four; same remedy as
+finding 1.
+
+### What this is an instance of
+
+Findings 2 and 3 are **pattern instance 22** again: the origin of `market` is a
+fact with no representation in the payload, so no consumer can ask the question,
+and the label defaults to the more authoritative of the two possible answers.
+Finding 1 is **BIAS-10's shape**: the disclosure exists on one surface
+(`accuracy.html`) and not on the surface where the number is read.
+
+**Direction, for the bias register:** all four lean the same way — toward the
+number looking better sourced than it is (an ask blend presenting as sales, a
+calculated endpoint presenting as a listing, a freshness signal presenting as
+source-dated). None of the four changes a dollar figure; all four change how much
+weight a seller gives one.
