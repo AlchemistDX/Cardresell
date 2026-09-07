@@ -1020,3 +1020,35 @@ says twenty times more, which is the thing the comment promised to say.
 
 Not filed as new work — it raises the priority of the existing unwired-divergence
 item and gives it a reason that does not depend on the inversion.
+
+## Q3-F — the headline is trimmed downward and nothing says so (live, not hypothetical)
+
+T2.13 was filed as a design question about the blend's shape. One half of it is
+**not** a pending question — it is a current, undisclosed property of the number
+every other figure on the site derives from.
+
+Under today's default the blend admits the low ask 52.18% of the time, where it
+pulls the headline down a median 11.01% (in the same direction 97.3% of the
+time). Net against a `(mid*2 + market)/3` centre: below in 41.8% of products,
+mean **−3.99%**.
+
+**That is a systematic downward adjustment to the published price, applied now,
+disclosed nowhere.** Not in the caption, not in the range line, not in the basis
+label — which reads `TCGPlayer market` on a rung where, when `marketBasis` is
+`'ask_blend'`, no market sale is behind the number at all.
+
+It sits inside Q3's actual subject rather than T2.13's: Q3 asks what the seller
+is told about how a number was made. The seller is told the number is TCGplayer
+market. On the ask-blend rung it is a mid-anchored trimmed average of the ask
+book, adjusted downward by a term the seller cannot see and we have never named.
+
+**Deliberately not proposing copy here.** Both the honest labels depend on
+T2.13's outcome, and inventing one now would pin copy to a shape that may change.
+What is being recorded is that the disclosure gap exists under the current
+default and does not require any change to become real — so it cannot be
+deferred as "pending T2.13" without saying out loud that we are shipping an
+undisclosed adjustment in the meantime.
+
+Pairs with `marketBasis` already being on the wire: the field that would let a
+caption tell the truth here exists and, like `marketAskDivergence`, no client
+reads it (instance 24).

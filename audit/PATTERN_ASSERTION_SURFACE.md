@@ -1246,6 +1246,39 @@ while two test files assert it. A field with no reader, green in the suite.
 *coverage* does not. Check the new case against the mechanism's own guard
 conditions before citing it as the place the disclosure will live.
 
+### 2026-09-07 — instance 1 is still the most common one, 23 instances later
+
+Evidence, from the commit that fixed instance 23's client half (`9a3c7ac`).
+
+Before that change was written, **eight suites were green** — including the three
+assertions that are supposed to pin the "Lowest listing" copy
+(`tests/copy-truth-offline.mjs:433,437`; `tests/draft-review-screen.mjs:843,849`).
+They grep for the string. The string never moved. **They would have passed against
+a build with the entire guard deleted**, and they did pass against the broken
+behaviour they were written to protect.
+
+So the assertions guarding the fix for instance 23 were themselves instance 1.
+
+Two mutation tests confirm the replacement block is not the same thing:
+
+| mutation | result |
+|---|---|
+| collapse condition (2) into (1) | 2 failures, both above-ask cases |
+| key the row off `marketBasis` instead of `lowBasis` | 3 failures, incl. the healthy path |
+
+**Why this matters more than one more tally mark.** The catalogue's numbering
+implies progress — 24 entries, each a distinct mechanism found and filed. But the
+oldest and least sophisticated entry is still the one that actually let a defect
+through, in the newest code, in the tests written specifically to guard it. The
+sophisticated entries describe mechanisms; instance 1 describes a habit, and a
+habit does not get fixed by being catalogued.
+
+**Implication for how this file is used:** a green suite is evidence about
+strings until someone checks that an assertion can fail. The mutation test, not
+the passing run, is what makes a behavioural claim. Two mutations took four
+minutes here and are the only reason the three-condition fix is known to be
+guarded rather than merely accompanied by tests.
+
 ## 24. A removal justified by a replacement, where the replacement was never made reachable
 
 The first instance in this catalogue whose defect exists in **neither** commit.
