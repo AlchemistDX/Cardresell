@@ -1,9 +1,31 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**Six instances.** First treated as a class in
-`audit/DECISION_SOURCE_DISAGREEMENT.md:19-22` at three. This file is the
-catalogue; other docs should cite it rather than re-deriving the pattern or
-guessing the count.
+**19 instances.** The highest-numbered entry is instance 19; that number, not
+this sentence, is the thing to check.
+
+> 2026-09-07: this header read **"Six instances"** while the file carried 19 — a
+> stamped count, stale by thirteen, in the document about claims that outlive
+> their evidence.
+>
+> Two failed attempts to make it derived, both worth keeping. The first counting
+> regex matched `## N.` only and returned **4**, missing the fourteen
+> `## Instance N —` headings. Corrected, it returned **13** — because instances
+> 1–6 are list items under "The catalogue", not headings, and instance 17 shares
+> a heading with instance 2 under "The impossible-world subclass". **This file is
+> not machine-countable in its current structure**, so "the headings are the
+> source of truth and this line is a cache" was a promise the format cannot
+> keep, written one line after instance 19 was recorded.
+>
+> Recording the honest position instead: the count here is hand-maintained and
+> therefore suspect, and the check is to read the last entry's number. Making it
+> genuinely derivable would mean restructuring instances 1–6 and 17 into their
+> own headings — a real change, not a header edit, and not done. A derivation is
+> only as good as its parser, and a parser is only as good as the structure it
+> parses.
+
+First treated as a class in `audit/DECISION_SOURCE_DISAGREEMENT.md:19-22` at
+three. This file is the catalogue; other docs should cite it rather than
+re-deriving the pattern or guessing the count.
 
 ## The shape
 
@@ -648,3 +670,53 @@ Corollary for the contrast work in the same session: this is why
 sweep matching zero nodes and a guard whose threshold is unreachable are the
 same failure — a check that passes because nothing arrived, not because
 everything was fine.
+
+## 19. An assertion that pins an occurrence count (2026-09-07)
+
+`tests/minors-011-012-013-2026-09-04.mjs:96` asserted
+`eq(textGoldToken, 125, '011: expected 125 gold text usages repointed to
+--gold-text')`. It found **130**. Nothing had regressed — five *more* text
+usages had been repointed to the accessible token, which is precisely the
+direction SOL-PLAT-011 existed to push. The assertion reported an improvement
+as a defect.
+
+**This is not the catalogue's usual shape, and that is why it gets its own
+entry.** Entries 1–18 are assertions whose evidence is *too weak* for the
+proposition they name: the claim over-reaches the surface it inspects. A count
+assertion does not over-claim its evidence. It claims **the wrong proposition
+entirely**. "There are exactly 125 of these" is not a weaker version of "gold
+text meets AA on light surfaces" — it is a different statement, one that happens
+to have been true on the day it was written.
+
+**The distinguishing property: it is equally loud in both directions.** A
+removal of five usages and an addition of five usages produce the identical
+failure, with the identical message. An assertion that cannot distinguish
+improvement from regression trains you to dismiss it — and dismissal is the
+actual damage, because it is indistinguishable from the response you should have
+to a false alarm. The signal and the noise are the same event.
+
+Note what was already correct in the same test. The line immediately above it —
+`eq(textGold, 0, '011: no color:var(--gold) text usage may remain — it fails AA
+on light')` — is a real behavioural assertion, and it passes. The count line
+added only the claim that the repointing was *broad* rather than token. A floor
+(`>= 125`) says that and stays true under further repointing. Fixed as a floor,
+with the prior assertion and the reason for the change recorded in the test
+body.
+
+**Where it was found matters as much as what it was.** This suite was never
+wired into `tests/run-all.sh`, so it had been red without anyone observing it.
+The count assertion and the unregistered suite are the same failure viewed from
+two sides: a check nobody runs, and a check that cannot tell you anything when
+it does run. See `tests/test-registry.mjs`.
+
+**Related but unverified.** This was described in review as the same family as
+"the flake that impersonated the regression." That precedent is **not recorded
+anywhere in `audit/`** — grep finds no entry for it. Either it predates this
+catalogue or it was never written down. Recording the family resemblance as
+claimed rather than as established, and noting the gap.
+
+**Generalisation, unswept:** how many other assertions in the corpus pin an
+exact count or an exact length rather than a bound? `eq(x, <literal>)` over a
+`.length` or a `matchAll().length` is the signature. Not swept — recorded as
+unswept, per instance 18's lesson that a narrow sweep reported as clean is its
+own instance of the pattern.
