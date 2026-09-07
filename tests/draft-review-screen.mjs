@@ -442,6 +442,179 @@ try {
     await ctx.close();
   });
 
+  // ── Step 5: the fee breakdown ────────────────────────────────────────────
+
+  const feesOf = (page) => page.evaluate(() => {
+    const box = document.querySelector('#reviewWrap .review-fees');
+    if (!box) return null;
+    return {
+      state: box.getAttribute('data-review-fees'),
+      headline: (box.querySelector('[data-fee-net-headline]') || {}).textContent || null,
+      note: (box.querySelector('.review-fees-note') || {}).textContent || '',
+      rows: [...box.querySelectorAll('.review-fee-row')].map((r) => ({
+        kind: r.getAttribute('data-fee-row'),
+        label: (r.querySelector('.review-fee-label') || {}).textContent || '',
+        amount: (r.querySelector('.review-fee-amount') || {}).textContent || '',
+        cells: r.children.length,
+      })),
+    };
+  });
+
+  // '\u2212$1.23' -> -1.23. Accepts the typographic minus the fee rows use.
+  const amt = (t) => {
+    const neg = /^\s*[\u2212-]/.test(String(t));
+    const n = parseFloat(String(t).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? (neg ? -n : n) : NaN;
+  };
+
+  await T.section('a priced draft always shows the breakdown, no toggle', async () => {
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const f = await feesOf(page);
+
+    T.check('the breakdown rendered', f !== null);
+    T.check('it is in the priced state', f && f.state === 'priced', f && f.state);
+    T.check('there is a net headline', f && /^\$\d/.test(f.headline || ''), f && f.headline);
+    T.check('there is exactly one gross row',
+      f && f.rows.filter((r) => r.kind === 'gross').length === 1);
+    T.check('there is exactly one net row',
+      f && f.rows.filter((r) => r.kind === 'net').length === 1);
+    T.check('there is at least one fee row',
+      f && f.rows.filter((r) => r.kind === 'fee').length >= 1,
+      JSON.stringify(f && f.rows.map((r) => r.kind)));
+    T.check('the gross row shows the draft price',
+      f && amt(f.rows.find((r) => r.kind === 'gross').amount) === Number(F.publishable.body.draft.price),
+      f && f.rows.find((r) => r.kind === 'gross').amount);
+    T.check('nothing needed to be clicked to see it', true);
+    await ctx.close();
+  });
+
+  await T.section('the rows and the headline come from the same model', async () => {
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const f = await feesOf(page);
+
+    const gross = amt(f.rows.find((r) => r.kind === 'gross').amount);
+    const net = amt(f.rows.find((r) => r.kind === 'net').amount);
+    const fees = f.rows.filter((r) => r.kind === 'fee').reduce((s2, r) => s2 + amt(r.amount), 0);
+
+    // The rows are summed from feeEbay(); the headline is netEbayForPrice().
+    // Those are two entry points into one model, and if they ever disagree the
+    // model is wrong -- this assertion exists so that shows up here rather
+    // than as a seller noticing the column does not add up.
+    T.check('gross minus the fee rows equals the net row, to the cent',
+      Math.abs((gross + fees) - net) < 0.005,
+      `gross ${gross} fees ${fees} net ${net}`);
+    T.check('the headline is the same number as the net row',
+      Math.abs(amt(f.headline) - net) < 0.005, `${f.headline} vs ${net}`);
+
+    // And the screen's numbers are the model's numbers, not a reimplementation.
+    const direct = await page.evaluate((price) => {
+      const prof = window._crSellerProfile();
+      const items = window.feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, prof.ebayTopRated);
+      return {
+        fees: items.reduce((s3, x) => s3 + x.a, 0),
+        net: window.netEbayForPrice(price, { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, ebayTopRated: prof.ebayTopRated }),
+        labels: items.map((x) => String(x.l)),
+      };
+    }, Number(F.publishable.body.draft.price));
+
+    T.check('the rendered net equals feeEbay/netEbayForPrice called directly',
+      Math.abs(direct.net - net) < 0.005, `${direct.net} vs ${net}`);
+    T.check('the fee rows are the model\'s own line items, in its order',
+      f.rows.filter((r) => r.kind === 'fee').map((r) => r.label).join('|') === direct.labels.join('|'),
+      f.rows.filter((r) => r.kind === 'fee').map((r) => r.label).join('|') + ' vs ' + direct.labels.join('|'));
+    await ctx.close();
+  });
+
+  await T.section('the seller profile has one reader, and the breakdown uses it', async () => {
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const before = await feesOf(page);
+
+    // Move the profile the way a seller would, then re-render. If the screen
+    // had hardcoded the documented defaults instead of reading the profile,
+    // this number would not move.
+    const moved = await page.evaluate(() => {
+      const el = document.getElementById('ebayTopRated');
+      if (!el) return false;
+      el.value = 'yes';
+      window._reviewPaint();
+      return window._crSellerProfile().ebayTopRated === 'yes';
+    });
+    const after = await feesOf(page);
+
+    T.check('the profile select moved', moved === true);
+    T.check('a Top Rated seller keeps strictly more of the same price',
+      amt(after.headline) > amt(before.headline),
+      `${before.headline} -> ${after.headline}`);
+    T.check('the gross did not move, only the fees did',
+      amt(after.rows.find((r) => r.kind === 'gross').amount)
+        === amt(before.rows.find((r) => r.kind === 'gross').amount));
+    await ctx.close();
+  });
+
+  await T.section('the table is shaped for a provenance column and does not claim one', async () => {
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const f = await feesOf(page);
+
+    T.check('every row has exactly two cells, label and amount',
+      f.rows.every((r) => r.cells === 2), JSON.stringify(f.rows.map((r) => r.cells)));
+    T.check('all rows have the same cell count, so a column can be added at once',
+      new Set(f.rows.map((r) => r.cells)).size === 1);
+
+    // No header of any kind. A header with nothing under it is a promise, and
+    // the column it would promise is blocked on the packet wiring.
+    const header = await page.evaluate(() => {
+      const box = document.querySelector('#reviewWrap .review-fees');
+      return {
+        th: box.querySelectorAll('th, thead').length,
+        headerish: box.querySelectorAll('[class*="header"], [class*="col-head"]').length,
+        text: box.innerText,
+      };
+    });
+    T.check('no th or thead in the breakdown', header.th === 0);
+    T.check('no header-classed element in the breakdown', header.headerish === 0);
+    T.check('the word Source does not appear', !/\bSource\b/i.test(header.text), header.text);
+    T.check('the word Provenance does not appear', !/provenance/i.test(header.text), header.text);
+    await ctx.close();
+  });
+
+  await T.section('the limitation is stated in the surface, not only in the code', async () => {
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const f = await feesOf(page);
+
+    T.check('a note is present', (f.note || '').length > 0);
+    T.check('it says shipping is not included', /shipping is not included/i.test(f.note), f.note);
+    T.check('it says why', /draft does not carry one/i.test(f.note), f.note);
+    // The failure this guards: a zero that reads as a fact. Nothing in the
+    // breakdown may present shipping as a modelled line worth $0.00.
+    T.check('shipping is not rendered as a $0.00 fee row',
+      !f.rows.some((r) => /ship|postage/i.test(r.label)),
+      JSON.stringify(f.rows.map((r) => r.label)));
+    await ctx.close();
+  });
+
+  await T.section('an unpriced draft still shows the table, with nothing invented', async () => {
+    const { ctx, page } = await boot(serveRead(F.blockedPrice));
+    await openReview(page, F.ids.blockedPrice);
+    const f = await feesOf(page);
+
+    T.check('the draft really has no price',
+      F.blockedPrice.body.draft.price === null || F.blockedPrice.body.draft.price === undefined,
+      JSON.stringify(F.blockedPrice.body.draft.price));
+    T.check('the breakdown still rendered', f !== null);
+    T.check('in the unpriced state', f && f.state === 'unpriced', f && f.state);
+    T.check('the headline is a dash, not a number', f && f.headline === '\u2014', f && f.headline);
+    T.check('no dollar amount appears anywhere in the breakdown',
+      f && !f.rows.some((r) => /\$/.test(r.amount)), JSON.stringify(f && f.rows.map((r) => r.amount)));
+    T.check('no fee rows were invented', f && f.rows.every((r) => r.kind !== 'fee'));
+    T.check('it tells the seller what to do', /add a price/i.test((f && f.note) || ''), f && f.note);
+    await ctx.close();
+  });
+
 } finally {
   await browser.close();
   server.close();

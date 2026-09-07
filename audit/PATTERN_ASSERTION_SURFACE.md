@@ -364,3 +364,28 @@ The tell, worth keeping: **the same visual meaning had two vocabularies, and one
 to nothing.** Where a design intent has more than one token name, one of them is wrong even when
 both resolve — and if one resolves to nothing, the duplication is what made the silence possible.
 Reaching for a new token is a signal to search the palette for the meaning first, not the name.
+
+---
+
+## Instance 13 — the sixth occurrence, caught in the half-hour before it existed
+
+Step 5 needed the seller's fee tier. The ranking surface already read those three selects
+inline at its own call site, so the cheap move was to write the same three lines on the review
+screen. That would have been rule 1's sixth occurrence, and it would have been indistinguishable
+from the previous five: two surfaces each independently deciding what tier a seller is in, and
+no mechanism that would notice when they drifted apart.
+
+Extracted `_crSellerProfile()` instead and moved both callers onto it.
+
+Recording it because the other twelve instances are all archaeology — a defect found after it
+shipped, reasoned about backwards. This one is the same pattern used **forwards**, and the tell
+was cheaper than any of the diagnoses: *the value I am about to read is already read somewhere
+else.* That question costs one grep and it is the whole of the pattern.
+
+The assertion that holds it is worth noting too, because the obvious one would have been
+useless. Checking that the screen calls `_crSellerProfile()` asserts the source text, which is
+the thing you can see anyway. The assertion instead **moves the profile** — flips Top Rated on,
+re-paints, and requires the seller to keep strictly more of the same price while the gross
+stays put. That fails if the screen hardcodes the defaults, which is exactly the regression a
+future edit would introduce, and it does not care how the value gets there. **Assert the
+coupling by moving the upstream value, not by naming the function that reads it.**

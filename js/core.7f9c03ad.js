@@ -5529,6 +5529,36 @@ function toggleAdv() {
 const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo'];
 const SELLER_PROFILE_LS   = 'cr_seller_profile_v1';
 
+/* The profile as the fee engine wants it, read in exactly ONE place.
+ *
+ * The ranking surface used to read these selects inline at its own call site.
+ * The draft review screen needs the same three values, so writing a second
+ * inline read there would have been a second implementation of "what fee tier
+ * is this seller" -- the duplicate-implementation shape this codebase has now
+ * been caught by five times. Both callers go through here instead, so the two
+ * surfaces cannot disagree about the same seller.
+ *
+ * Defaults are the documented seller default: no store, not Top Rated, no
+ * Promoted Listings, TCGplayer Level 1-4. Each default is a value the select
+ * actually offers ('none'/'basic', 'no'/'yes', '0'..'12'), so the fee engine
+ * can never be handed a tier that does not exist.
+ *
+ * Only WHO keys live here. shipCharge / shipCost / itemCost describe what is
+ * being priced right now, are scoped to the open scan, and deliberately do
+ * NOT belong to the profile -- see the note on _reviewFeesHtml. */
+function _crSellerProfile() {
+  const val = (id, dflt) => {
+    const el = document.getElementById(id);
+    return (el && typeof el.value === 'string' && el.value !== '') ? el.value : dflt;
+  };
+  return {
+    ebayStore:    val('ebayStore',    'none'),
+    ebayTopRated: val('ebayTopRated', 'no'),
+    ebayPromo:    parseInt(val('ebayPromo', '0'), 10) || 0,
+    tcgLevel:     val('tcgLevel',     'l14'),
+  };
+}
+
 function saveSellerProfile() {
   try {
     const out = {};
@@ -7004,10 +7034,12 @@ function calc() {
   const shipCharge    = parseFloat(document.getElementById('shipCharge').value) || 0;
   const shipCost      = parseFloat(document.getElementById('shipCost').value) || 0;
   const itemCost      = parseFloat(document.getElementById('itemCost').value) || 0;
-  const ebayStore     = document.getElementById('ebayStore').value;
-  const ebayPromo     = parseInt(document.getElementById('ebayPromo').value) || 0;
-  const ebayTopRated  = document.getElementById('ebayTopRated').value;
-  const tcgLevel      = document.getElementById('tcgLevel')?.value || 'l14';
+  // One reader for the seller profile; the review screen uses the same one.
+  const _prof = _crSellerProfile();
+  const ebayStore     = _prof.ebayStore;
+  const ebayPromo     = _prof.ebayPromo;
+  const ebayTopRated  = _prof.ebayTopRated;
+  const tcgLevel      = _prof.tcgLevel;
   const tcgIsDirect   = !!(TCG_LEVELS[tcgLevel] && TCG_LEVELS[tcgLevel].direct);
   const comcService   = document.getElementById('comcService').value;
   const comcCashout   = document.getElementById('comcCashout').value;
@@ -19327,6 +19359,121 @@ function _reviewFieldsHtml() {
   return `<div class="review-fields">${rows}${looseHtml}</div>`;
 }
 
+/* ── Fee breakdown ─────────────────────────────────────────────────────────
+ *
+ * ALWAYS VISIBLE, per the accepted decision. A breakdown behind a toggle is a
+ * breakdown most sellers never open, and net proceeds is the number the
+ * listing decision actually turns on. The headline is what you keep; the
+ * table underneath shows how the price got there.
+ *
+ * ONE FEE MODEL. feeEbay() is the only thing in this codebase that knows eBay
+ * fee arithmetic and netEbayForPrice() is the only thing that knows how the
+ * payout row combines it. This screen calls both and formats what comes back.
+ * It does no arithmetic of its own beyond summing the rows the model returned,
+ * and a registered test asserts that sum agrees with the model's own net to
+ * the cent -- if those two ever disagree the model is wrong, not the label.
+ *
+ * SHIPPING IS EXCLUDED, and that is a stated limitation rather than a zero
+ * dressed up as a fact. shipCharge and shipCost live on the scan surface and
+ * describe the card currently in hand; a draft record carries no shipping
+ * field at all. Reading those inputs here would quietly attribute the last
+ * scanned card's postage to an unrelated draft, which is precisely the
+ * invented figure Sec 5.5 refuses. So the basis is the item price alone and
+ * the screen says so, in the surface, not only in this comment.
+ *
+ * NO PROVENANCE COLUMN, AND NO HEADER FOR ONE. The table is shaped to grow a
+ * column -- fixed row structure, one amount cell per row -- but it does not
+ * have one today and does not advertise one. Both non-blocking findings that
+ * would populate it currently fire on every priced draft, because
+ * buildListingPacket() has no production caller; see
+ * audit/OPEN_NONBLOCKING_NOT_ON_THE_WIRE.md. A column that says the same
+ * thing about every row carries no information, and a header with nothing
+ * under it is a promise rather than a disclosure. */
+
+// Fees are modelled for exactly one slot in Phase 1. Any other slot gets an
+// honest refusal rather than eBay's numbers wearing another venue's name.
+const CR_REVIEW_FEE_SLOT = 'ebay:fixed-price';
+
+function _reviewMoney(n) {
+  // Deliberately not _draftPriceText: that answers "what does this draft's
+  // price field say" and returns 'No price yet' when absent. A fee of zero is
+  // a real amount, so a formatter that can print 'No price yet' is the wrong
+  // instrument for a fee cell.
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '\u2014';
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(2);
+}
+
+/** Model output for this draft, or null when there is no price to model. */
+function _reviewFeeCalc() {
+  const d = _reviewState.draft || {};
+  if (d.price === null || d.price === undefined) return null;
+  const price = Number(d.price);
+  if (!Number.isFinite(price)) return null;
+  const prof = _crSellerProfile();
+  const ctx  = { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, ebayTopRated: prof.ebayTopRated };
+  const items = feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, prof.ebayTopRated);
+  return {
+    price,
+    items,
+    fees: items.reduce((sum, f) => sum + f.a, 0),
+    // The model's own net, not price minus the rows above. Same function the
+    // payout row and the target-net bisection use.
+    net: netEbayForPrice(price, ctx),
+  };
+}
+
+function _reviewFeeRow(kind, label, amount) {
+  return `
+        <div class="review-fee-row" data-fee-row="${_reviewEsc(kind)}">
+          <div class="review-fee-label">${_reviewEsc(label)}</div>
+          <div class="review-fee-amount">${_reviewEsc(amount)}</div>
+        </div>`;
+}
+
+function _reviewFeesHtml() {
+  const d = _reviewState.draft || {};
+  const slot = d.slot ? String(d.slot) : '';
+
+  if (slot !== CR_REVIEW_FEE_SLOT) {
+    return `
+      <div class="review-fees" data-review-fees="unmodelled">
+        <div class="review-fees-h">What you keep</div>
+        <div class="review-fees-note">No fee model for ${_reviewEsc(slot || 'this marketplace')} yet, so this draft has no breakdown.</div>
+      </div>`;
+  }
+
+  const c = _reviewFeeCalc();
+
+  if (!c) {
+    // Still the table, still the same rows. An empty shape tells the seller
+    // what adding a price will buy them; hiding it tells them nothing.
+    return `
+      <div class="review-fees" data-review-fees="unpriced">
+        <div class="review-fees-h">What you keep</div>
+        <div class="review-fees-net" data-fee-net-headline="">\u2014</div>
+        <div class="review-fees-table">
+${_reviewFeeRow('gross', 'Item price', '\u2014')}
+${_reviewFeeRow('net', 'You keep', '\u2014')}
+        </div>
+        <div class="review-fees-note">Add a price to see the fee breakdown. Shipping is not included.</div>
+      </div>`;
+  }
+
+  const feeRows = c.items.map((f) => _reviewFeeRow('fee', String(f.l || 'Fee'), '\u2212' + _reviewMoney(f.a))).join('');
+
+  return `
+      <div class="review-fees" data-review-fees="priced">
+        <div class="review-fees-h">What you keep</div>
+        <div class="review-fees-net" data-fee-net-headline="">${_reviewEsc(_reviewMoney(c.net))}</div>
+        <div class="review-fees-table">
+${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}${feeRows}
+${_reviewFeeRow('net', 'You keep', _reviewMoney(c.net))}
+        </div>
+        <div class="review-fees-note">Fees on the item price only. Shipping is not included, because a draft does not carry one yet.</div>
+      </div>`;
+}
+
 function _reviewBodyHtml() {
   if (!_reviewState.signedIn) {
     return `
@@ -19364,7 +19511,7 @@ function _reviewBodyHtml() {
       </div>`;
   }
 
-  return `${_reviewIdentityHtml()}${_reviewFieldsHtml()}`;
+  return `${_reviewIdentityHtml()}${_reviewFieldsHtml()}${_reviewFeesHtml()}`;
 }
 
 function _reviewPaint() {

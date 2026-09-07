@@ -1054,6 +1054,21 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .review-field-label{font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
 .review-field-value{margin-top:2px;font-size:.95rem;color:var(--text);word-break:break-word}
 .review-blocker{margin-top:6px;font-size:.85rem;line-height:1.35;color:var(--red)}
+/* Fee breakdown on the draft review screen. The table is a fixed two-cell
+   grid so a provenance column can be added later by widening the template and
+   nothing else; there is no column header today because there is no column. */
+.review-fees{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)}
+.review-fees-h{font-size:.8rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
+.review-fees-net{margin-top:2px;font-size:1.45rem;font-weight:650;color:var(--text);font-variant-numeric:tabular-nums}
+.review-fees-table{margin-top:10px;display:flex;flex-direction:column}
+.review-fee-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--divider)}
+.review-fee-row:last-child{border-bottom:0}
+.review-fee-label{font-size:.9rem;color:var(--text-muted)}
+.review-fee-amount{font-size:.9rem;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.review-fee-row[data-fee-row="net"]{margin-top:2px;border-top:1px solid var(--border);padding-top:8px}
+.review-fee-row[data-fee-row="net"] .review-fee-label,
+.review-fee-row[data-fee-row="net"] .review-fee-amount{font-weight:650;color:var(--text)}
+.review-fees-note{margin-top:8px;font-size:.8rem;line-height:1.4;color:var(--text-muted)}
 .draft-row-action,.draft-more-btn{padding:.4rem .8rem;background:var(--surface-2);
   border:1px solid var(--border);color:var(--gold-text);border-radius:var(--radius-md);
   font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap}
