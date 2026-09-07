@@ -20,8 +20,30 @@ incremental-upside error depends on both sale scenarios, the applicable fee
 bands, the grader-cost assumptions, and expenses incurred only by the grading
 option.**
 
-That is the whole claim. It is deliberately not a direction, because the
-direction is not a property of the panel — it is a property of the inputs.
+That is the whole claim **for incremental upside**, and for that metric it is
+deliberately not a direction, because the direction is not a property of the
+panel — it is a property of the inputs.
+
+### The two metrics have different answers, and conflating them makes BIAS-1 look optional
+
+**Corrected 2026-09-07 after review.** "Not a direction" was written about
+incremental upside and must not be read as "no lean," because it is too strong
+for the net figures themselves.
+
+| | metric | does an omitted cost have a direction? |
+|---|---|---|
+| **Net** (a single sale's proceeds) | `price − fees − costs` | **Yes — one available direction.** An omitted cost or an understated fee can only make net look better. Every omission here is optimistic, full stop. |
+| **Incremental upside** (graded vs raw) | `gradedNet − rawNet − grading cost` | **No — input-dependent.** Errors on the two legs partially cancel; the sign depends on fee bands, grader cost, and which option incurs the expense. |
+
+So the fee model's omissions **are** unidirectional on every net figure the app
+shows — including the review screen's payout row and the calculator's net — and
+only become sign-ambiguous once you difference two nets against each other.
+
+**BIAS-1 is therefore not optional.** The duplicate fee model is
+rule-1 wrong on code-health grounds regardless, but on the net figures it also
+has a definite direction: optimistic. The sign ambiguity established earlier in
+this document applies to the grading panel's headline upside number and nowhere
+else.
 
 Everything below the line marked **HISTORICAL** is superseded and kept only to
 show how the claim moved. In particular, the original headline — "seven
@@ -468,12 +490,94 @@ disallowed to fetching. So the *magnitude* of the overstatement above the cap is
 number that cannot be sourced does not get stamped, and the `$25` currently in
 the code is itself unsourced (`// PSA value tier ~$25 all-in`, with a `~`).
 
-## What the main fee path does right
+## WITHDRAWN 2026-09-07 — "What the main fee path does right"
 
-`feeEbay` is the counter-example and it is genuinely not leaning:
+**This section was the worst thing in the document, and it was the part that said
+things were fine.**
 
-- 13.25% to $7,500 then 2.35%, applied to a total that **includes shipping and
-  tax** — reproduced against eBay's own worked example.
+It claimed `feeEbay` was "the counter-example and genuinely not leaning," on the
+strength of a rate "applied to a total that **includes shipping and tax** —
+reproduced against eBay's own worked example." **The tax half of that is false**,
+and it was the baseline the comparison table's net column was computed from — so
+those dollar figures were not what `feeEbay` implements either.
+
+`feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible)` computes
+`total = price + shipCharge` (`js/core.7f9c03ad.js:6792`). Shipping: in. Tax:
+**no parameter at all.**
+
+eBay's base, quoted from the raw page rather than a summary of it:
+
+> "**total amount of the sale** includes the item price, any handling charges,
+> any shipping costs collected from the buyer (some exceptions apply), sales tax,
+> and any other applicable fees."
+
+and both of eBay's own worked examples are explicitly tax-inclusive — "Since you
+aren't charging the buyer for shipping or any other costs, **$424 is the total
+amount of the sale (includes 6% sales tax)**" and "The total amount of the sale is
+**$10,070 (includes 6% sales tax)**" ([eBay selling
+fees](https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822)).
+
+Measured against those two examples:
+
+| eBay's own example | eBay bills | `feeEbay` as called | fee understated |
+|---|---:|---:|---:|
+| $400 item, no shipping charged, 6% tax → total $424 | 56.58 | 53.40 | **3.18** |
+| total $10,070 incl 6% tax → item 9,500 | 1,054.55 | 1,041.15 | **13.39** |
+
+$3.18 on a $400 sale is **64× the nickel gate**. "Reproduced against eBay's own
+worked example" is true only if a **tax-inclusive total was passed in as
+`price`** — in which case the operator supplied the tax and the function never
+did.
+
+**And the direction runs the same way as everything else.** Omitting tax from the
+base understates the fee, which overstates net. So the function this audit held
+up as the honest one leans optimistic too — less than the grading panel, but in
+the same direction. That is a stronger finding than anything in the withdrawn
+headline, and it survived in the section least likely to be re-checked precisely
+because that section said things were fine.
+
+Filed as **BIAS-9**.
+
+### The live screen was already right — the audit was the thing that was wrong
+
+The obvious next worry is that D3 step 5's fee breakdown, whose whole selling
+point is that the arithmetic can be checked, is now precisely wrong. **It is not,
+and the code says why:**
+
+- `_reviewFeeCalc()` calls `feeEbay(price, 0, ...)` — shipping charge **hard
+  zero** on this screen — so the heading's `item price only` basis is *true* here
+  (`js/core.7f9c03ad.js:19991`, `:20006`).
+- `items.taxNote = true` **unconditionally** (`:6840`), so the breakdown always
+  renders a **`Buyer sales tax (not estimated) — `** row (`:8156`,
+  `FEE_DISCLOSURE.taxQualifier`). Not a guard that can go unreached.
+- `FEE_DISCLOSURE.estimateNote` (`:6879`, rendered `:20014`) already states the
+  broader base and the direction, verbatim: *"This estimate calculates fees on
+  the item price only. eBay charges its fee on the total sale, which includes
+  buyer-paid shipping and buyer sales tax, so your actual proceeds may be
+  lower."*
+
+So the breakdown reconciles to the cent against a base it names on its face, and
+discloses both exclusions plus the direction of the resulting error. **BIAS-9
+does not block D3.**
+
+**The sharpest part of this whole episode:** the app's disclosure copy was
+correct about tax the entire time, and this audit contradicted it — and then
+cited the contradiction as proof the function was unbiased. A check that reads
+the code but not the code's own user-facing claims is not a check.
+
+I also went looking for a live copy defect here, expecting `estimateNote`'s
+"item price only" to be false wherever a seller charges shipping. **It is not a
+defect:** that string is rendered at exactly one call site, the review screen,
+where `shipCharge` is hard zero. The comparison surface uses the dynamic
+`feeBaseLabel` (`item` / `item + shipping`, `:6839`) instead. Recording the
+negative result so the next reader does not re-open it.
+
+### What is genuinely still true about `feeEbay`
+
+Kept, because it is separately verified and the withdrawal above does not touch it:
+
+- 13.25% to $7,500 then 2.35%, applied to a total that **includes buyer-paid
+  shipping** — shipping only, tax excluded, per the above.
 - The `$0.40` per-order fee is present and correctly **excluded** from the TRS
   discount base (now pinned by five assertions, one naming the four cents).
 - The TRS discount is now **withheld by default** and released only on a
@@ -481,7 +585,8 @@ the code is itself unsourced (`// PSA value tier ~$25 all-in`, with a `~`).
   the correct direction for an unverified benefit.
 - Cross-source disagreement is disclosed rather than averaged.
 
-So the project's core arithmetic is honest. **The lean lives in the surfaces
+So the project's core arithmetic is honest **about fees it models, and it does
+not model tax.** **The lean lives in the surfaces
 that were built to be persuasive** — the grading-upside panel is a pitch
 surface, and it is the one that drifted.
 
@@ -531,6 +636,20 @@ Nothing in this document has been changed in code. Recorded as findings:
   function includes tax is **wrong** — it does not, and packets saying buyer tax
   was not modeled were correct. Demonstrate the actual tax input and the
   resulting fee before claiming otherwise.
+
+  **Measured against eBay's own worked examples: fee understated by $3.18 on
+  their $400 example (64× the nickel gate) and $13.39 on their $10,070 example.**
+  Direction: understates fee, so **overstates net — optimistic.**
+
+  **This one probably cannot be fixed by modelling it, and that is the finding.**
+  Sales tax is a function of the buyer and the ship-to state, and a draft has
+  neither. There is no honest tax number available at draft time, and inventing a
+  rate would be exactly the stamped-invented-number failure this project already
+  has a rule against. So the permanent correct position is the one the code
+  already takes: **the fee estimate is a lower bound on the fee, hence an upper
+  bound on net, and it says so.** What was missing was not a calculation. It was
+  this audit reading its own app's disclosure before calling the function
+  unbiased.
 - **BIAS-5** `GRADING_FEE = 25` contradicts the server's own `getGradingCost`
   tier table (`api/grade-opportunity.js:44-52`). The fix is the tier table, and
   it needs a stated grader default — an owner call. **This is the one BIAS item

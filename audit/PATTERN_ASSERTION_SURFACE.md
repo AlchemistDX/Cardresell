@@ -1,6 +1,6 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**20 instances.** The highest-numbered entry is instance 20; that number, not
+**21 instances.** The highest-numbered entry is instance 21; that number, not
 this sentence, is the thing to check.
 
 > 2026-09-07: this header read **"Six instances"** while the file carried 19 — a
@@ -932,3 +932,83 @@ The durable rule from all of it: **the test for instance 19 is never the
 syntax.** It is whether the integer is the proposition or a stand-in for one.
 `=== 1` for "one implementation" and `=== 0` for "none exist" are propositions.
 `=== 5` for "five call sites happen to exist today" is a stand-in.
+
+
+## 21. An explanation offered for a finding entrenches the finding (2026-09-07)
+
+**This one was contributed by a reviewer about their own contribution, which is
+the only reason it is in the file.**
+
+The finding was "seven simplifications, all seven overstate, none run the other
+way." The mechanism offered for it was elegant: *four of the seven are omissions,
+and an omission of a non-negative cost is unidirectional by construction.* That
+argument is locally valid. It was also structural reasoning about a list that was
+itself wrong, and applied to the wrong metric — the displayed number is a
+difference of two nets, where a cost common to both options cancels exactly.
+
+**The damage was not the error. It was that the finding now felt explained.**
+
+An unexplained finding invites re-derivation; someone eventually recomputes it. A
+finding with a clean mechanism attached does not, because the mechanism answers
+the question a reviewer would have asked. It converts "is this true?" into "yes,
+and here is why" — and the second form does not get re-checked. The count went
+7 → 4/3 → 2/1/1/1/1/1 across three revisions, and every revision was triggered by
+someone recomputing arithmetic, never by someone re-reading the mechanism.
+
+**Same family as instance 5** (the comment asserting shipping was included in the
+fee base). Both are check-stoppers: not wrong claims that hid, but wrong claims
+that answered the reviewer's question *well enough that the question closed.*
+
+### The corollary that matters more
+
+**The false claim landed in the section titled "What the main fee path does
+right."**
+
+That section existed to be the counter-example — the honest thing the audit could
+point at. It claimed `feeEbay` applies its rate to a total including shipping
+**and tax**, "reproduced against eBay's own worked example." The tax half was
+false; the function takes no tax parameter. And that claim was the baseline the
+comparison table's net column was computed from, so it propagated into every
+dollar figure in the table.
+
+It survived four review rounds. The three rounds of corrections all landed on
+sections that asserted a problem. **Nobody re-checked the section that asserted
+things were fine, including the person who wrote it, including the reviewers who
+caught everything else.**
+
+So the search rule: **audit the exculpatory sections first.** A document's claims
+about what is broken get adversarial attention by default, from the author and the
+reviewer both. Its claims about what is sound get none, and they are load-bearing
+in exactly the same way. The place a false premise is safest is under a heading
+saying there is no problem here.
+
+And the direction confirmed the cost of missing it: omitting tax understates the
+fee, which overstates net. The function nominated as the unbiased counter-example
+**leaned the same way as everything the audit was accusing** — $3.18 on eBay's own
+$400 worked example, 64× the nickel gate. The counter-example was evidence for the
+thesis.
+
+### What actually caught it
+
+Not a test, and not a re-reading. The reviewer noticed that a *corrected fact*
+(BIAS-9: `feeEbay` has no tax parameter) had a *consequence one section over* that
+neither of us had traced. **Corrections have blast radius, and the radius is not
+checked by default.** When a fact is retracted, the question is not "is the
+retraction right" — it is "what else was computed from the old fact." The
+comparison table was; nobody looked.
+
+### The negative result, recorded on purpose
+
+Following BIAS-9 I expected to find a live copy defect: `estimateNote` says "this
+estimate calculates fees on the item price only," which is false wherever a seller
+charges shipping, since `feeEbay` uses `price + shipCharge`. **There is no
+defect.** That string has exactly one call site — the review screen, where
+`shipCharge` is hard zero — and the comparison surface uses the dynamic
+`feeBaseLabel` instead. Written down because an unrecorded near-miss gets
+re-investigated, and because the reverse of this pattern is real too: a claim that
+sounds wrong and is actually right costs just as much attention the second time.
+
+**The app's disclosure copy was correct about tax the entire time.** The audit
+contradicted it, then cited the contradiction as proof the function was unbiased.
+A check that reads the code but not the code's own user-facing claims is not a
+check.
