@@ -208,6 +208,25 @@ was its second, unnoticed home. Both now cite the tombstone check and the filter
 1. The row emits `'DRAFT_UNREADABLE'`; the store's own constant is
    `'DRAFT_RECORD_UNREADABLE'` (`api/_draftStore.js:91`). **Match the row value.** A client
    switching on the store spelling falls silently to a default branch.
+
+   **Amendment 4 (2026-09-06) — both spellings are live, and must not be unified.** The
+   single-draft read (§2.9) does not translate: its failures ship raw `STORE_ERR` values, so
+   a client reading `GET /api/drafts?id=` keys on `'DRAFT_RECORD_UNREADABLE'` and is
+   **correct** to. Both spellings now denote the same store condition on two surfaces:
+
+   | Surface | Spelling to key on |
+   |---|---|
+   | List rows (`row.reason`, §2.4/2.5) | `DRAFT_UNREADABLE` |
+   | Single-draft read failure (`body.code`, §2.9) | `DRAFT_RECORD_UNREADABLE` |
+
+   This reads like an inconsistency someone should tidy. **Tidying it in either direction
+   breaks something:** unifying on the store spelling breaks the list's row matching;
+   unifying on the row spelling breaks the read path. Leave both.
+
+   The two surfaces also carry **different copy for the same condition, deliberately** — on
+   the list one row degrades to a stub and the rest of the list works; on the review screen
+   the seller has nothing at all. Same cause, different consequence, different copy. See
+   `audit/DECISION_REVIEW_ERROR_VOCABULARY.md`.
 2. `SUMMARY_UNREADABLE = 'unreadable'` (`api/_draftService.js:483`) is **dead** — declared,
    zero readers repo-wide, never emitted. Never write `reason === 'unreadable'`.
 

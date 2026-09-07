@@ -293,11 +293,33 @@ try {
     // The store's constant is DRAFT_RECORD_UNREADABLE; the ROW value is
     // DRAFT_UNREADABLE. A client keyed on the store constant matches nothing
     // and silently falls through to generic copy — which looks fine on screen.
+    //
+    // REACH: the drafts screen region, not "the client". These two assertions
+    // used to slice to end-of-bundle and read as claims about the whole app.
+    // That was an adequate proxy for exactly as long as the bundle had one
+    // drafts surface. D3's review screen reads GET /api/drafts?id=, whose
+    // failures ship raw STORE_ERR values, so it keys on
+    // DRAFT_RECORD_UNREADABLE correctly — and turned the second assertion red
+    // without anything being wrong. The claim was always about this screen; the
+    // evidence just sampled more than the claim covered.
+    //
+    // The region is now DECLARED by a sentinel in the bundle rather than
+    // inferred from whatever sits next to it, so the next append cannot widen
+    // it silently. See audit/DECISION_REVIEW_ERROR_VOCABULARY.md.
     const { source } = readCoreBundle();
-    const screen = source.slice(source.indexOf('_DRAFT_STUB_COPY'));
-    T.check('the client keys on the row value DRAFT_UNREADABLE',
+    const REGION_END = 'END DRAFTS SCREEN REGION';
+    const from = source.indexOf('_DRAFT_STUB_COPY');
+    const to = source.indexOf(REGION_END);
+    // Both bounds are asserted, not assumed. A missing sentinel makes
+    // indexOf return -1, and slice(from, -1) is a near-full-width region that
+    // would quietly restore the very over-reach this replaced.
+    T.check('the drafts screen region has both bounds in the bundle',
+      from !== -1 && to !== -1 && to > from,
+      `region bounds not found: from=${from} to=${to} — the sentinel comment was removed or moved`);
+    const screen = source.slice(from, to);
+    T.check('the drafts screen keys on the row value DRAFT_UNREADABLE',
       screen.includes('DRAFT_UNREADABLE'));
-    T.check('the client does NOT key on the store constant DRAFT_RECORD_UNREADABLE',
+    T.check('the drafts screen does NOT key on the store constant DRAFT_RECORD_UNREADABLE',
       !screen.includes('DRAFT_RECORD_UNREADABLE'),
       'that constant never appears in a row; keying on it matches nothing');
   }

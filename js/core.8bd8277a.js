@@ -8115,12 +8115,14 @@ function switchView(view) {
   const flips      = document.getElementById('flipsView');
   const collection = document.getElementById('collectionView');
   const drafts     = document.getElementById('draftsView');
+  const review     = document.getElementById('reviewView');
 
   // Hide all
   if (lookup)     lookup.classList.remove('hidden');
   if (flips)      flips.classList.remove('active');
   if (collection) collection.style.display = 'none';
   if (drafts)     drafts.style.display = 'none';
+  if (review)     review.style.display = 'none';
   const adminViewEl = document.getElementById('adminView');
   if (adminViewEl) adminViewEl.style.display = 'none';
 
@@ -8144,6 +8146,12 @@ function switchView(view) {
     // class someone might add later" is not a property worth depending on.
     if (drafts) drafts.style.display = 'block';
     renderDraftsView();
+  } else if (view === 'review') {
+    // No .view-tab has data-view="review", so the tab strip correctly shows no
+    // active tab -- the review screen is a destination, not a section.
+    if (lookup) lookup.classList.add('hidden');
+    if (review) review.style.display = 'block';
+    renderReviewView();
   } else if (view === 'admin') {
     // Extra guard: only inject & show admin UI after confirming owner sub server-side.
     if (window._userSub !== window._OWNER_SUB) { switchView('lookup'); return; }
@@ -18852,6 +18860,14 @@ function _draftsAbsorb(resp, { append }) {
 
   if (resp.status !== 200) {
     const b = resp.body || {};
+    // NOT PORTABLE. `b.error` is rendered directly because THIS endpoint's
+    // failures ship human prose ('Could not load your drafts',
+    // api/drafts.js:132,174). The single-draft read on the same file ships
+    // machine codes instead (`DRAFT_NOT_FOUND`, via errorBody at
+    // api/drafts.js:343-344), so this line copied to that path prints a store
+    // constant at the seller. The review screen maps codes to copy for exactly
+    // this reason -- see _REVIEW_ERR_COPY and
+    // audit/DECISION_REVIEW_ERROR_VOCABULARY.md.
     _draftsState.error = {
       text: b.error || "Something went wrong loading your drafts.",
       // `retryable` is the server's word. Absent means absent, not false-y
@@ -18998,4 +19014,316 @@ try {
   window.loadDraftsNextPage = loadDraftsNextPage;
   window.loadDraftsFirstPage = loadDraftsFirstPage;
   window._draftsState       = _draftsState;
+} catch (_) {}
+
+/* ═══════════ END DRAFTS SCREEN REGION ═══════════
+   A declared boundary, not an inferred one.
+
+   tests/draft-list-screen.mjs slices the bundle from `_DRAFT_STUB_COPY` to this
+   marker to assert things about the drafts screen and nothing else. It used to
+   slice to end-of-bundle, which was an adequate proxy for exactly as long as
+   the bundle had one drafts surface -- appending the review screen silently
+   widened the region and turned a true assertion red.
+
+   Inferring the end from "wherever the next screen happens to start" would
+   re-break the same way on the next append. Moving this marker is a visible
+   edit; appending code below it cannot move it.
+
+   DO NOT delete or relocate this without reading that suite.
+   ═══════════════════════════════════════════════ */
+
+// ── Draft review screen — Block D3, step 2: the container ───────────────────
+//
+// Reached by tapping a row (step 3), never by a tab. There is no
+// `#review/<draftId>` URL: the app has switchView and nothing else, and hash
+// routing for one screen would make the back button work here and fail silently
+// on collection, flips and lookup (audit/DECISION_D3_ENTRY.md §5).
+//
+// This step is the container, the state machine and every failure state. The
+// field-by-field rendering (step 4) and the fee breakdown (step 5) land on top
+// of it.
+
+/**
+ * Error copy for the single-draft read. Owned by this screen outright.
+ *
+ * `body.error` on this path is a MACHINE CODE -- `DRAFT_NOT_FOUND`, not prose
+ * (api/_draftStore.js:83-94 via errorBody at api/drafts.js:343-344). The list
+ * screen's absorb does `text: b.error || <fallback>`, which is correct there
+ * because the list path's 503 ships real prose ('Could not load your drafts',
+ * api/drafts.js:132). Reusing that line here would print `DRAFT_NOT_FOUND` to
+ * the seller. So this screen maps codes to copy and NEVER renders body.error.
+ *
+ * WHY A SECOND TABLE, GIVEN _DRAFT_STUB_COPY EXISTS
+ * -------------------------------------------------
+ * Not because the vocabularies differ. A vocabulary difference would not
+ * license a second copy table, and these two are not even independent: the list
+ * translates store errors into row reasons, so for the overlapping subset both
+ * surfaces are reporting the SAME store condition under two names (contract
+ * §2.5, naming trap #1).
+ *
+ * The license is a difference of CONSEQUENCE. On the list, an unreadable record
+ * means one row is a stub and the rest of the list still works. Here, the same
+ * store condition means the seller has nothing -- no fields, no verdict, no fee
+ * breakdown. Same cause, different situation, so the copy has to tell them
+ * different things about what to do next. An alias would assert these surfaces
+ * should say the same thing, and they should not.
+ *
+ * See audit/DECISION_REVIEW_ERROR_VOCABULARY.md.
+ */
+const _REVIEW_ERR_COPY = {
+  DRAFT_NOT_FOUND: {
+    text: "This draft is no longer in storage, so there's nothing to review. Your other drafts are unaffected.",
+    action: null,
+  },
+  // The list vocabulary cannot express this at all -- it never shows tombstoned
+  // rows. A tombstone is positive evidence the seller deleted it, and it is
+  // terminal, so there is no action to offer.
+  DRAFT_DELETED: {
+    text: 'You deleted this draft. Deleting is final, so there is nothing here to review.',
+    action: null,
+  },
+  DRAFT_RECORD_UNREADABLE: {
+    text: "This draft's saved data can't be read, so none of its fields can be shown. It is still saved.",
+    action: null,
+  },
+  // Deliberately NOT the server's `body.message`, which says "Refresh to load
+  // the latest version" (api/drafts.js:355). The list screen already decided
+  // the opposite for this same code: a canary-written record cannot be read no
+  // matter how often the seller reloads, so that advice is a button that lies.
+  // Two surfaces must not give opposite advice about one condition.
+  DRAFT_SCHEMA_TOO_NEW: {
+    text: 'This draft was saved by a newer version of CardResell, so this version cannot show its fields.',
+    action: null,
+  },
+  DRAFT_STORE_UNAVAILABLE: {
+    text: "Couldn't load this draft just now. It's still saved.",
+    action: 'Try again',
+  },
+};
+
+function _reviewErrCopy(code, retryable) {
+  const copy = _REVIEW_ERR_COPY[code] || {
+    // A code this client has not been taught is a gap in this table, not
+    // evidence about the draft.
+    text: "This draft can't be shown right now. It's still saved.", action: null,
+  };
+  // The server's flag is the only authority on retry, exactly as on the list
+  // rows. An action is offered only when the server said retryable AND the copy
+  // has one to offer.
+  return { text: copy.text, action: (retryable === true && copy.action) ? copy.action : null };
+}
+
+const _reviewState = {
+  signedIn: true,
+  loading: false,
+  draftId: null,
+  draft: null,
+  // Readiness as the server sent it. NEVER derived here: `validation` is on the
+  // same response and filtering its `.violations` on `.blocking` would be a
+  // second implementation of readinessOf in the browser, re-authoring copy the
+  // server owns (contract §2.9, §3.4).
+  readiness: null,
+  error: null,
+};
+
+/** GET /api/drafts?id=<draftId>. Hand-rolled Bearer, per contract §3.2. */
+async function _reviewFetch(draftId) {
+  let token = '';
+  try { token = await _crIdToken(); } catch (_) { token = ''; }
+  if (!token) return { status: 401, body: {} };
+
+  const r = await fetch('/api/drafts?' + new URLSearchParams({ id: draftId }).toString(), {
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer ' + token },
+  });
+  let body = {};
+  try { body = await r.json(); } catch (_) { body = {}; }
+  return { status: r.status, body: body || {} };
+}
+
+function _reviewAbsorb(resp) {
+  if (resp.status === 401) {
+    _reviewState.signedIn = false;
+    _reviewState.error = null;
+    return;
+  }
+  _reviewState.signedIn = true;
+
+  if (resp.status !== 200) {
+    const b = resp.body || {};
+    _reviewState.draft = null;
+    _reviewState.readiness = null;
+    _reviewState.error = _reviewErrCopy(b.code || b.error, b.retryable);
+    return;
+  }
+
+  const b = resp.body || {};
+  _reviewState.error = null;
+  _reviewState.draft = (b.draft && typeof b.draft === 'object') ? b.draft : null;
+  // Absent readiness is UNKNOWN, not "publishable" and not "blocked". A build
+  // that predates contract §2.9 omits the key; the honest response is to say
+  // nothing about readiness rather than reconstruct it from `validation`.
+  _reviewState.readiness = (b.readiness && typeof b.readiness === 'object') ? b.readiness : null;
+}
+
+function _reviewEsc(s) { return _draftsEsc(s); }
+
+/** Header: back out to the list, and the draft's own title. */
+function _reviewHeadHtml() {
+  const d = _reviewState.draft;
+  const title = d && d.title ? d.title : 'Draft';
+  return `
+    <div class="review-head">
+      <button type="button" class="review-back" id="reviewBackBtn">← All drafts</button>
+      <div class="review-title">${_reviewEsc(title)}</div>
+    </div>`;
+}
+
+/**
+ * Identity block. Real fields off the record, not placeholders.
+ *
+ * Step 4 adds the by-reason rendering of every missing field; step 5 adds the
+ * fee breakdown. Nothing here previews those with dummy content.
+ */
+function _reviewIdentityHtml() {
+  const d = _reviewState.draft || {};
+  const bits = [];
+  if (d.setName || d.setCode) bits.push(_reviewEsc(d.setName || d.setCode));
+  if (d.number) bits.push('#' + _reviewEsc(String(d.number)));
+  if (d.slot) bits.push(_reviewEsc(String(d.slot)));
+  const price = _draftPriceText(d.price);
+
+  const r = _reviewState.readiness;
+  let verdict = '';
+  if (r && typeof r.publishable === 'boolean') {
+    const blockers = Array.isArray(r.blockers) ? r.blockers : [];
+    verdict = r.publishable
+      ? '<div class="review-verdict review-verdict-ok">Ready to list</div>'
+      : `<div class="review-verdict review-verdict-blocked">${blockers.length === 1 ? '1 thing to fix' : blockers.length + ' things to fix'}</div>`;
+  }
+
+  return `
+    <div class="review-card">
+      <div class="review-row">
+        <div class="review-meta">${bits.join(' · ')}</div>
+        <div class="review-price">${_reviewEsc(price)}</div>
+      </div>
+      ${verdict}
+    </div>`;
+}
+
+function _reviewBodyHtml() {
+  if (!_reviewState.signedIn) {
+    return `
+      <div class="empty-flips">
+        <div class="empty-flips-icon">🔒</div>
+        <div class="empty-flips-h">Sign in to see this draft</div>
+        <div class="empty-flips-p">Drafts are saved to your account so they follow you across devices.</div>
+      </div>`;
+  }
+
+  // A failure renders as a failure. There is no path from here to a rendered
+  // draft, however the load went wrong.
+  if (_reviewState.error) {
+    return `
+      <div class="empty-flips">
+        <div class="empty-flips-icon">⚠️</div>
+        <div class="empty-flips-h">Couldn't open this draft</div>
+        <div class="empty-flips-p">${_reviewEsc(_reviewState.error.text)}</div>
+        ${_reviewState.error.action
+          ? `<div class="draft-paging"><button type="button" class="draft-more-btn" id="reviewRetryBtn">${_reviewEsc(_reviewState.error.action)}</button></div>`
+          : ''}
+      </div>`;
+  }
+
+  if (_reviewState.loading) {
+    return '<div class="draft-spinner" role="status" aria-label="Loading this draft"></div>';
+  }
+
+  if (!_reviewState.draft) {
+    return `
+      <div class="empty-flips">
+        <div class="empty-flips-icon">🗂️</div>
+        <div class="empty-flips-h">Nothing to show</div>
+        <div class="empty-flips-p">Open a draft from your list to review it.</div>
+      </div>`;
+  }
+
+  return _reviewIdentityHtml();
+}
+
+function _reviewPaint() {
+  const wrap = document.getElementById('reviewWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `${_reviewHeadHtml()}${_reviewBodyHtml()}`;
+}
+
+/** Load one draft. */
+async function loadDraftReview(draftId) {
+  _reviewState.draftId = draftId || null;
+  _reviewState.draft = null;
+  _reviewState.readiness = null;
+  _reviewState.error = null;
+
+  if (!_reviewState.draftId) {
+    _reviewState.loading = false;
+    _reviewPaint();
+    return;
+  }
+
+  _reviewState.loading = true;
+  _reviewPaint();
+
+  let resp;
+  try {
+    resp = await _reviewFetch(_reviewState.draftId);
+  } catch (e) {
+    resp = { status: 0, body: { code: 'DRAFT_STORE_UNAVAILABLE', retryable: true } };
+  }
+  _reviewState.loading = false;
+  _reviewAbsorb(resp);
+  _reviewPaint();
+}
+
+/** Delegated, bound once -- same reason as the list: rows outlive handlers. */
+function _reviewBindOnce() {
+  const wrap = document.getElementById('reviewWrap');
+  if (!wrap || wrap.dataset.crBound === '1') return;
+  wrap.dataset.crBound = '1';
+  wrap.addEventListener('click', (ev) => {
+    const back = ev.target.closest && ev.target.closest('#reviewBackBtn');
+    if (back) { switchView('drafts'); return; }
+    const retry = ev.target.closest && ev.target.closest('#reviewRetryBtn');
+    if (retry) { loadDraftReview(_reviewState.draftId); }
+  });
+}
+
+/** Set by openDraftReview so switchView has an id to load. */
+let _reviewPendingId = null;
+
+/** Entry point. `switchView('review')` calls this. */
+function renderReviewView() {
+  _reviewBindOnce();
+  const id = _reviewPendingId || _reviewState.draftId || null;
+  _reviewPendingId = null;
+  loadDraftReview(id);
+}
+
+/**
+ * Open the review screen for one draft.
+ *
+ * Guarded: a review view with no draft id is not a screen, it is a blank. The
+ * seller goes back to their list rather than looking at an empty container.
+ */
+function openDraftReview(draftId) {
+  if (!draftId) { switchView('drafts'); return; }
+  _reviewPendingId = draftId;
+  switchView('review');
+}
+
+try {
+  window.renderReviewView = renderReviewView;
+  window.openDraftReview  = openDraftReview;
+  window.loadDraftReview  = loadDraftReview;
+  window._reviewState     = _reviewState;
 } catch (_) {}

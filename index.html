@@ -1054,6 +1054,20 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   font-size:.74rem;line-height:1.5;margin-bottom:.7rem}
 .draft-banner{background:rgba(196,122,0,.1);border:1px solid rgba(196,122,0,.3);color:var(--gold-text)}
 .draft-notice{background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted)}
+.review-head{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+.review-back{padding:.35rem .7rem;background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text-muted);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer}
+.review-back:hover{color:var(--text)}
+.review-title{font-size:.95rem;font-weight:800;color:var(--text);letter-spacing:-.01em;
+  min-width:0;flex:1;word-break:break-word}
+.review-card{background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius-md);padding:.7rem .8rem}
+.review-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}
+.review-meta{font-size:.72rem;color:var(--text-muted);min-width:0;word-break:break-word}
+.review-price{font-size:.82rem;font-weight:800;color:var(--gold-text);white-space:nowrap}
+.review-verdict{margin-top:.45rem;font-size:.72rem;font-weight:700}
+.review-verdict-ok{color:#4ade80}
+.review-verdict-blocked{color:var(--gold-text)}
 .draft-spinner{width:26px;height:26px;margin:2.5rem auto;border-radius:50%;
   border:2px solid var(--border);border-top-color:var(--gold-text);animation:draftSpin .8s linear infinite}
 @keyframes draftSpin{to{transform:rotate(360deg)}}
@@ -1126,7 +1140,7 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
      paging control. `.draft-row` is deliberately absent -- giving a
      non-interactive row a touch-target rule would assert a tap affordance the
      screen does not have. */
-  .draft-row-action,.draft-more-btn{min-height:44px;padding-inline:.9rem}
+  .draft-row-action,.draft-more-btn,.review-back{min-height:44px;padding-inline:.9rem}
 }
 
 /* Monthly/Annual pill toggle */
@@ -2569,6 +2583,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
   </div>
   <div id="draftsWrap"></div>
+</div>
+
+<!-- DRAFT REVIEW VIEW — Block D3. Reached from a draft row, not from a tab. -->
+<div id="reviewView" style="display:none">
+  <div id="reviewWrap"></div>
 </div>
 
 <!-- MY COLLECTION VIEW -->

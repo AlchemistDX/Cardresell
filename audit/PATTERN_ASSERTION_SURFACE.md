@@ -112,3 +112,42 @@ documents superseding old ones. A superseded doc that stays readable is a citati
 Practice rule: **a document asserting that work is complete is evidence about the document,
 not about the work.** Re-derive the claim from the code or the suite before citing it,
 including when the document is this one.
+
+---
+
+## A sibling pattern: the implementation with an unstated invariant
+
+Found 2026-09-06, building D3 step 2. Recorded here as a **sibling, not a seventh instance** —
+the distinction is the remedy.
+
+Every instance above is a **check** whose name claims more than its evidence samples. This one
+is an **implementation** that is correct because of a property of its own endpoint, with that
+dependency stated nowhere.
+
+`_draftsAbsorb` renders `body.error` straight to the seller:
+
+```js
+text: b.error || "Something went wrong loading your drafts."
+```
+
+Correct — the list endpoint's failures ship human prose (`'Could not load your drafts'`,
+`api/drafts.js:132,174`). Read as *"how this app absorbs a draft-endpoint error,"* wrong: the
+single-draft read **in the same file** ships machine codes (`errorBody`, `api/drafts.js:343-344`),
+so the same line copied there prints `DRAFT_NOT_FOUND` at a seller. Nothing in the function said
+which reading was intended, and the reuse was one line away.
+
+Both patterns are failures of **unstated scope**, which is why they feel like one thing. The
+remedies differ:
+
+| | Failure | Remedy |
+|---|---|---|
+| Assertion | evidence samples less than the name claims | **name the reach** — "…in the drafts screen region", not "the client" |
+| Implementation | correctness rests on an unstated local property | **state the invariant at the site**, and say the line is not portable |
+
+Both were applied: `tests/draft-list-screen.mjs` now names its region and reads a declared
+sentinel rather than slicing to end-of-bundle, and `_draftsAbsorb` now carries a NOT PORTABLE
+note naming the endpoint property it depends on.
+
+**Corollary on narrowing.** Repairing an over-wide assertion by re-inferring its boundary from
+adjacent code just reschedules the failure — the next append widens it again, silently, which is
+how the original got there. Declare the boundary so that widening it becomes a visible edit.
