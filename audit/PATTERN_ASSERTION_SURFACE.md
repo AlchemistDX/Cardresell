@@ -31,6 +31,7 @@ written deliberately by someone trying to be careful.
 | 4 | the contract's DONE stamp | D2.1 complete | a doc line saying so | `DRAFT_LIST_API_CONTRACT.md` |
 | 5 | case 15, original form | rows navigate nowhere | no row carries a click handler — **delegation defeats it** | `tests/draft-list-screen.mjs`, commit `f8a8248` |
 | 6 | `no maintenance wording` / `no beta wording` | a **site-wide** copy rule | the text of `readAppSource()` output | `tests/a11y-mobile-2026-09-04.mjs:409-410`, `DECISION_MAINTENANCE_COPY.md` |
+| 17 | `setListing` helper | a seller editing a listing field | **assignment to `.value`**, dispatching no event, so `oninput="calc()"` never ran | `tests/trs-listing-scope.mjs`, commit `f747e9e` |
 
 Instance 5 is the one to keep in mind when writing new checks: it was the
 *careful* version of the assertion. "No row has a handler" sounds stricter than
@@ -498,3 +499,55 @@ a property of the seller. The old text is recorded inside the test file, marked
 comparison `<= 7500` → `< 7500` changes nothing, because both branches compute
 the same value at exactly 7500. That is a real equivalence, not a pinned bug,
 and it is recorded in the test file so nobody invents an assertion to chase it.
+
+## The impossible-world subclass — instances 2 and 17
+
+Instance 17 is the same failure as instance 2, and naming the pair is worth more
+than either tally mark, because the second instance is what proves it is a shape
+rather than an accident.
+
+**Instance 2** ran a paging assertion against an index that had been emptied.
+**Instance 17** ran five state-invalidation assertions against a DOM mutated by
+direct assignment. Both were green. Both proved nothing. In both cases the
+fixture had constructed a world the program does not run in, and every assertion
+inside that world was true and irrelevant.
+
+The difference between them is the axis of the impossibility, and that is why
+one instance did not inoculate us against the other:
+
+| | Instance 2 | Instance 17 |
+|---|---|---|
+| What was impossible | the **data** — an index no user has | the **interaction mechanism** — an edit no user can make |
+| Looked correct because | the fixture was real code, freshly generated | the values were real, and the final state was right |
+| Why it passed | nothing contradicted it | the *endpoint* matched; only the *path* was fictional |
+
+Instance 2 taught us to check what state a fixture creates. That check passes
+cleanly on instance 17: the state was right, the values were right, the
+selectors were right. What was wrong was the *verb*. A DOM is not a data
+structure with an incidental event system bolted on; the event system is the
+program. Setting `input.value = '450'` in JavaScript does not fire `input`, so
+every handler the application hangs off that event is absent from the test, and
+what remains is a test of the assignment operator.
+
+**The line for the catalogue:** *a fixture that drives the DOM by assignment is
+testing a program nobody runs.*
+
+**The tell**, and it generalises past the DOM: ask whether the fixture reaches
+the state through the same **mechanism** the user does, not merely whether it
+reaches the same state. Endpoint equality is not path equality. Any assertion
+about *invalidation*, *ordering*, or *reaction* is an assertion about the path,
+and a fixture that skips the path cannot evidence it — which is precisely why
+all five state-3 cases were green while two genuinely reachable defects sat
+behind them.
+
+**The remedy in force:** `setListing` dispatches real `input` and `change`
+events. That single change turned one assertion red immediately, and the red was
+informative rather than a regression — the production handler had already
+cleared the control, so the test's manual cleanup call correctly found nothing
+to do. An assertion written against a fictional path had been describing the
+test's own housekeeping as if it were the application's behaviour.
+
+**Cost of the class, so far:** instance 2 hid a paging defect; instance 17 hid
+two reachable ones (an eligibility read below `calc()`'s `price <= 0` early
+return, and a search listener that debounced without ever recalculating). Two
+instances, three defects, zero red assertions.

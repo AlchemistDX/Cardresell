@@ -511,7 +511,13 @@ function setSelectedCard(card) {
   // here as well as being invisible to the context comparison, so the two
   // guards fail independently rather than both resting on the same read.
   if (typeof _trsListingConfirm !== 'undefined') {
-    _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+    /* ONE OF TWO INDEPENDENT GUARDS for listing identity. Removing this alone
+     will NOT fail the suite: _listingInstance leads trsListingContext(), so the
+     comparison catches a new listing even without this clear. Mutation C (drop
+     the instance from the context) and D (drop this clear) are a pair -- either
+     alone stays green, both together lose the case where two scans of the same
+     card agree on every visible field. */
+  _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
   }
   return selectedCard;
 }
@@ -5674,6 +5680,16 @@ function touchListingContext() {
   const ctx = trsListingContext();
   if (_trsListingSeenCtx !== null && ctx !== _trsListingSeenCtx) {
     _trsListingRev += 1;
+    /* ONE OF TWO INDEPENDENT GUARDS. Removing this line alone will NOT fail the
+       suite, because the revision check in trsListingConfirmed() also closes
+       the hole on its own. Do not read that green run as evidence this is dead
+       code. Removing BOTH this line and that check turns three assertions in
+       tests/trs-listing-scope.mjs red (mutation G in that file's header), which
+       is the hole the second review of c18e455 asked us to close: confirm at
+       one price, edit away, edit back, and the stale confirmation survives.
+       If you are deliberately consolidating to one guard, delete the other
+       first and watch the suite stay green -- then you are choosing which one
+       survives rather than discovering that neither matters. */
     _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
   }
   _trsListingSeenCtx = ctx;
@@ -5736,6 +5752,13 @@ function trsListingConfirmed() {
   if (_trsListingConfirm.ctx === null) return false;
   // Guard one: the revision. Independent of whether anyone observed the
   // intermediate state, and it cannot go backwards.
+  /* ONE OF TWO INDEPENDENT GUARDS. Removing this check alone will NOT fail the
+     suite, because touchListingContext() also drops the stamp when the context
+     it sees has changed. Do not read that green run as evidence this is dead
+     code -- see the mutation matrix in tests/trs-listing-scope.mjs (E, F, G).
+     A revision cannot go backwards, so this is the guard that survives an edit
+     being undone; the context comparison is the one that survives a stamp that
+     was never revised. They fail for different reasons and that is the point. */
   if (_trsListingConfirm.rev !== _trsListingRev) {
     _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
     return false;
@@ -6713,14 +6736,32 @@ document.addEventListener('keydown', e => {
  * THE NUMBER. We were lowering a seller's quoted fee on the strength of two
  * conditions they had never affirmed and we had never checked. So the
  * confirmation now covers the benefit rather than one input to it, and names
- * all three conditions being confirmed: same- or 1-business-day handling, US
- * ship-from, and not local-pickup-only.
+ * all three conditions being confirmed: same- or 1-business-day handling, the
+ * seller being RESIDENT in the US, and not local-pickup-only.
  *
- * One condition remains genuinely unasked: the seller not being rated Very
- * High for "item not as described" in the category. That is an eBay-side
- * service metric the seller cannot reliably self-report and we cannot see, and
- * it gates Top Rated STATUS, which the seller answers separately above. It is
- * not a listing term.
+ * That middle condition read "US ship-from" until 2026-09-07 and was wrong.
+ * The policy says the discount "is only available to sellers resident in the
+ * country in which they're Top Rated". Residency is a fact about the seller;
+ * ship-from is a fact about the parcel. Item location IS in the policy, but
+ * only as the basis for which free-returns variant a listing needs -- and that
+ * condition is waived for Trading Cards, so item location does not bear on us
+ * at all. The old wording would have been answered yes by a seller resident
+ * abroad shipping from a US warehouse, who does not qualify.
+ *
+ * ONE CONDITION IS DELIBERATELY NOT ASKED, and the policy's wording about it is
+ * narrower than it first looks. The exclusion is:
+ *
+ *   The discount does not apply to any additional final value fees applied to
+ *   sales in categories where you're rated as Very High in your service
+ *   metrics for 'item not as described' returns
+ *
+ * That removes the discount from ADDITIONAL final value fees, not from the
+ * ordinary percentage fee. We do not model any additional final value fee, so
+ * there is nothing here for the discount to be excluded from and nothing to
+ * ask. Recorded because the tempting misreading -- that a Very High rating
+ * costs the seller the whole discount -- would have us either asking a question
+ * we do not need or withholding a discount the seller is owed. It is also a
+ * service metric the seller cannot reliably self-report and we cannot see.
  *
  * Both inputs are required, and the confirmation is never inferred from the
  * status. It is a seller-confirmed assumption about a listing, so it defaults
@@ -6842,9 +6883,9 @@ const FEE_DISCLOSURE = {
   // which understated what a draft is missing: the discount needs the whole
   // listing to qualify, and a draft records none of it.
   trsWithheldNote: 'No Top Rated Plus discount is applied here. That 10% off the percentage fee '
-              + 'depends on the listing itself qualifying -- same- or 1-business-day handling, a US '
-              + 'ship-from location, and not local-pickup only -- none of which this draft records '
-              + 'yet, so your fee may be lower than shown.',
+              + 'depends on the listing itself qualifying -- same- or 1-business-day handling, a '
+              + 'seller resident in the US, and not local-pickup only -- none of which this draft '
+              + 'records yet, so your fee may be lower than shown.',
 };
 
 const FEE_MODEL_REVISION = 1;

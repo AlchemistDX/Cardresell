@@ -666,9 +666,25 @@ try {
          "same- or 1-business-day handling" as the missing condition. The
          confirmation now covers the whole benefit, so the note names all three
          conditions and the assertion checks each of them -- a note that
-         mentioned only handling would now be understating what a draft lacks. */
+         mentioned only handling would now be understating what a draft lacks.
+
+         CHANGED AGAIN 2026-09-07 (same day, second pass): the second condition
+         was asserted as /US ship-from/ and is now /resident in the US/. This
+         assertion did its job -- it went red the moment the copy was corrected,
+         which is what a disclosure-parity check is for. But it had been pinning
+         a WRONG predicate. eBay's condition is that the seller is resident in
+         the country they are Top Rated in; ship-from is a property of the
+         parcel, not the seller. Item location appears in the policy only as the
+         basis for the free-returns condition, which is waived for Trading
+         Cards. So the old regex was faithfully protecting an error, and a green
+         run here was evidence of consistency rather than correctness.
+         (https://www.ebay.com/help/policies/selling-policies/seller-standards-policy?id=4347)
+
+         The lesson is narrow and worth keeping: a parity assertion proves two
+         surfaces agree. It cannot prove they are right, and it will defend a
+         shared mistake as energetically as a shared truth. */
       }).then((t) => /Top Rated Plus/.test(t) && /same- or 1-business-day handling/.test(t)
-                     && /US ship-from/.test(t) && /local-pickup only/.test(t)
+                     && /resident in the US/.test(t) && /local-pickup only/.test(t)
                      && /may be lower/.test(t)),
       'silence about a withheld discount reads as a fee that is simply high');
     await ctx.close();

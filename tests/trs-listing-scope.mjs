@@ -353,7 +353,16 @@ await T.section('the confirmation never survives a reload', async () => {
      case failed intermittently -- and it failed on the assertion that says the
      durable status survived, i.e. it looked like the scope fix had eaten the
      seller's status. A flake that impersonates a regression is worse than a
-     flake, so the wait is on the observable state rather than a timeout. */
+     flake, so the wait is on the observable state rather than a timeout.
+
+     There is a second reason this one mattered, worth stating because it is the
+     more expensive failure mode. A flake that fails in a RANDOM shape gets
+     investigated. A flake that fails in the exact shape of the bug the change
+     under test could plausibly have caused gets pattern-matched to "known
+     flaky, re-run it" -- and then the day the scope fix genuinely does eat the
+     seller's durable status, the assertion that catches it is the one everybody
+     has been trained to dismiss. The wait is not just about green runs; it is
+     about keeping this assertion's failures meaningful. */
   await page.waitForFunction(
     () => (document.getElementById('ebayTopRated') || {}).value === 'yes',
     { timeout: 15000 },

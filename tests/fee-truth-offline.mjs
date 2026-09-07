@@ -481,5 +481,43 @@ eq('and over the commission tier as well',
    fvf(_feeEbayB(7499.99, 4.99, 'none', 0, false)),
    7500 * 0.1325 + (7504.98 - 7500) * 0.0235);
 
+// ---------------------------------------------------------------------------
+// The Top Rated Plus discount base. Added 2026-09-07 after a reviewer asked
+// which component the 10% comes off. The policy is explicit and splits the
+// fee in two:
+//
+//   A 10% discount on your final value fees, which is calculated on the total
+//   amount of the sale, including shipping and tax
+//   The discount does not apply to the per order portion of the final value fee
+//   (https://www.ebay.com/help/policies/selling-policies/seller-standards-policy?id=4347)
+//
+// So the percentage component is discounted and the per-order component is
+// not. Getting this wrong is a FOUR CENT error on a $400 card -- under the
+// nickel gate, so no existing assertion would have failed, which is exactly
+// why it needs its own. The rule is fix the function, not the label, and that
+// applies to a function that is already right: it needs an assertion saying so
+// or the next refactor is free to fold the two components together.
+const trs400   = _feeEbayB(400, 0, 'none', 0, true);
+const plain400 = _feeEbayB(400, 0, 'none', 0, false);
+eq('the discount comes off the percentage component only',
+   fvf(trs400), 400 * 0.1325 * 0.9);
+eq('the per-order fee is charged in full to a Top Rated seller',
+   pOrd(trs400), 0.40);
+eq('and it is the same per-order fee an ordinary seller pays',
+   pOrd(trs400), pOrd(plain400));
+// The wrong implementation -- 10% off the whole fee, per-order included -- and
+// the right one differ by 10% of the per-order fee. Naming the amount makes
+// the assertion legible: if someone folds the components together, this says
+// what it will cost.
+eq('discounting the whole fee instead would understate by four cents',
+   Math.round(((400 * 0.1325 + 0.40) * 0.9 - sum(trs400)) * 100) / 100, -0.04);
+assert('and the two implementations are not equal, which is the point',
+  Math.abs(sum(trs400) - (400 * 0.1325 + 0.40) * 0.9) > 0.03);
+// Shipping is inside the discounted base, because the percentage is charged on
+// the total. Tax is also inside it per the policy, but we do not model tax, and
+// that limitation is disclosed rather than silently rolled in.
+eq('buyer-paid shipping is inside the discounted base',
+   fvf(_feeEbayB(400, 10, 'none', 0, true)), 410 * 0.1325 * 0.9);
+
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

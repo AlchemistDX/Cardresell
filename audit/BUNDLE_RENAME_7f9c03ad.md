@@ -31,6 +31,22 @@ whole job is catching it. **The name is derived from the bytes at rename time, n
 from a plan.** A hash written down in advance is a prediction, and a prediction that ages
 across two commits is stale by default.
 
+**Recurred 2026-09-07, in a packet rather than a document.** A review response reported
+`asset-fingerprints` as "14/1, expected `FAIL ... (sha256[:8] = f9de26a1)`" — quoting a
+specific hash as the expected end state. Two commits later the bundle hashes to `bea24540`,
+and it will hash to something else again before the closing rename. The suite itself never
+had this bug: it re-derives the hash on every run and prints the current one, so the failure
+message is always true. The staleness was entirely in the prose around it.
+
+Worth being precise about the consequence, because it is easy to overstate. The held-red
+does **not** acquire a second cause when the bytes move — there is one cause, a stale
+filename, with a moving hash, and one rename closes it whatever the bytes did on the way.
+What a quoted hash costs is *recognisability*: a reader comparing a fresh run against a
+packet that names `f9de26a1` sees a mismatch and cannot tell "expected red, bytes moved
+since" from "new failure". Attribution survives at the count — 14/1 naming this one file is
+the expected state, anything else is new — so the fix is in how it is reported, not in the
+suite. **Report the held-red by its file and count, never by a hash.**
+
 This is `PATTERN_ASSERTION_SURFACE.md`'s instance-4 shape again, in the mildest possible
 form: a document stating a fact about work not yet done, which a later reader would have
 executed on trust. The remedy is the same one already in practice — re-derive, then stamp.
