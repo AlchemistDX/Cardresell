@@ -189,8 +189,17 @@ passing standing assertion and a shipped design comment.
 
 ## 5. Two mechanical consequences, not yet done
 
-1. **The bundle fingerprint is stale.** `js/core.8bd8277a.js` now hashes to
-   `8e24cab9`; `tests/asset-fingerprints.mjs` fails on exactly that. Per the
+1. **The bundle fingerprint is stale.** ~~`js/core.8bd8277a.js` now hashes to `8e24cab9`~~;
+   `tests/asset-fingerprints.mjs` fails on exactly that.
+
+   > **DONE 2026-09-06 — and the hash above was wrong.** The rename went to
+   > **`core.7f9c03ad.js`**, not `8e24cab9`. `8e24cab9` was measured from the review
+   > container *as first written*, before the decision was applied; dropping the alias,
+   > rewording the comment, adding the region sentinel and adding the `_draftsAbsorb` note
+   > all moved the bytes again. Renaming to the number this document predicted would have
+   > produced a filename that hashes to something else. **A hash written down in advance is
+   > a prediction, and this one aged across two commits.** Re-derive, then stamp — see
+   > `audit/BUNDLE_RENAME_7f9c03ad.md`, which records the offset map. Per the
    standing rule the live file gets renamed to `js/core.8e24cab9.js` (new
    bytes), `8bd8277a` is restored to its committed bytes and retired, and
    `index.html`'s `<script src>` is repointed — never `git mv`. Deliberately
@@ -201,14 +210,21 @@ passing standing assertion and a shipped design comment.
 
 ## 6. State
 
-**Committed.** The only remaining red is the stale bundle fingerprint (§5.1), which is
-mechanical and deliberately deferred until the error table settled — it now has.
+**Committed, and step 2 is closed.** No reds remain.
 
 | Suite | Result |
 |---|---|
+| `tests/asset-fingerprints.mjs` | **15 / 0** — rename done, §5.1 |
 | `tests/draft-list-screen.mjs` | **81 / 0** (was 80; the region-bounds guard is new) |
+| `tests/draft-focus.mjs` | 56 / 0 |
+| `tests/draft-crud-e2e.mjs` | 130 / 0 |
+| `tests/draft-list-cap.mjs` | 130 / 0 |
+| `tests/draft-readiness.mjs` | PASS |
 | review container verification (scratch, unregistered) | **30 / 0** |
-| `tests/asset-fingerprints.mjs` | 14 / 1 — the deferred rename, §5.1 |
+
+Live bundle is now **`js/core.7f9c03ad.js`**. New work cites that hash; the paths quoted
+throughout this document were written against `8bd8277a` and map forward via the offset
+table in `audit/BUNDLE_RENAME_7f9c03ad.md`.
 
 Six mutations caught in total: four on the review screen's own copy and readiness handling,
 plus **M5** removing the sentinel (the bounds guard fires, so a deleted marker cannot silently
