@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**21 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 21; that number, not this sentence, is the
+**22 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 22; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1041,3 +1041,56 @@ sounds wrong and is actually right costs just as much attention the second time.
 contradicted it, then cited the contradiction as proof the function was unbiased.
 A check that reads the code but not the code's own user-facing claims is not a
 check.
+
+
+## 22. A fact encoded as a line is invisible everywhere the implementation is not (2026-09-07)
+
+`items.taxNote = true` sits hardcoded inside `feeEbay`
+(`js/core.7f9c03ad.js:6840`). The fact it encodes — *this venue charges its
+commission on a total that includes buyer sales tax* — is a **venue fact**, and
+every other venue fact in this codebase lives in the `PLATFORMS` table.
+
+The consequence was that eleven of twelve venues showed a fee total with no tax
+disclosure, and **not one of them was a decision.** Nobody assessed Mercari and
+concluded it needed no note. There was no field to leave blank, so there was
+nothing to leave blank.
+
+> **A fact encoded as a line inside one implementation is invisible everywhere
+> that implementation is not.**
+
+### Why this is worse than a bug
+
+An absence with a representation is reviewable. `taxOn: null` on eleven venues is
+greppable, countable, rendered as unverified, and catchable by a guard — and it
+shows up in a diff the moment a twelfth venue is added without it.
+
+An absence with **no** representation is none of those things. It cannot be
+audited, because there is no field to audit. It cannot be counted, because
+counting requires something to count. It does not appear in any diff, because
+nothing changed. And critically, **it does not distinguish "checked, does not
+apply" from "never considered"** — the two states that a reviewer most needs
+separated collapse into an identical, silent, entirely normal-looking blank.
+
+This is why Q3-E's shape was what it was. The audit had to reverse-engineer a
+twelve-venue disclosure gap by grepping twelve function bodies for an assignment,
+because the thing that should have been a table column was a statement.
+
+### The tell
+
+Ask of any per-entity fact: **if this were wrong or missing for entity N, what
+would show me?** If the answer is "read entity N's implementation," the fact is
+in the wrong place. Facts that vary per entity belong in the per-entity table,
+where absence is a value and the guard can see it.
+
+Related but distinct from instance 5 and 21, which are about claims that *stop* a
+check. This is about a fact positioned so that **no check ever starts** — there is
+no surface on which the question could be asked.
+
+### The corresponding fix rule
+
+When moving such a fact into its table, the unverified value must **fail toward
+disclosure**: `'unknown'` renders the note rather than suppressing it, matching
+`feeAuditAgeDays()` returning `Infinity` (stale) for a date it cannot parse. Both
+fail toward telling the seller more. A tri-state that treats `'unknown'` as
+`false` reintroduces the original defect with a field attached — worse than
+before, because now it looks audited.

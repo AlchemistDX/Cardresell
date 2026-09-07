@@ -199,3 +199,32 @@ An earlier note on this list claimed shipped code had already breached rule 5. *
 **Conclusion: rule 5 is intact and nothing needs to be filed.** No numbered item, no owner decision. The parenthetical footnote was a misreading of "marketplace" as "any," and it propagated for several sessions unchallenged — worth noting as a reminder that an unsourced aside on a rules list is exactly where a false claim hides.
 
 Do-not-touch: Ultimate (retired), Grade gold-set, Wallpaper, homepage feature-grid blurb.
+
+## T2.9 — venue tax-treatment audit (BIAS-10)  [due 2026-09-21 or next fee re-audit, whichever is first]
+
+Deadline recorded HERE and not only in `audit/d3/DISCLOSURE_PARITY_Q3.md`, because
+a date that lives only in an audit document is a date nobody greps.
+
+`taxNote` is hardcoded inside `feeEbay` (`js/core.7f9c03ad.js:6840`); eleven of
+twelve venues consequently show a fee total with no tax disclosure, none of it a
+decision. Full analysis: `DISCLOSURE_PARITY_Q3.md` § Q3-E revised. Pattern
+instance 22.
+
+Steps, citations first and publication last:
+
+1. Re-read all fifteen published fee pages from **raw page text** (not a summary
+   of one); record per venue whether commission applies to a tax-inclusive total.
+2. `taxOn: true | false | 'unknown'` in each `PLATFORMS` entry; bump
+   `feeAuditedOn` in the same commit, because step 1 is a real re-audit.
+3. Derive `taxNote` from `taxOn`, delete the hardcoded line. **`'unknown'` renders
+   the disclosure, never suppresses it.**
+4. Extend `tests/accuracy-fee-parity.mjs`: every venue carries `taxOn`; `taxNote`
+   set iff `taxOn !== false`.
+5. Then, and only then, restate it on `accuracy.html`.
+
+**Do not add a tax rate to any model** — no invented input to a fee model.
+**Do not bump `feeAuditedOn` for a tax-only check.**
+
+Ordering: this sits with the re-audit, after D3 closes, the bundle rename lands,
+and BIAS-1 is implemented. The independent date exists so a slipped re-audit
+cannot silently carry it.
