@@ -93,7 +93,23 @@ ok(contrast(DARK['gold-text'], DARK.bg) >= 4.5,
 const textGold = [...idx.matchAll(/(?<![-a-zA-Z])color:var\(--gold\)/g)].length;
 eq(textGold, 0, '011: no `color:var(--gold)` text usage may remain — it fails AA on light');
 const textGoldToken = [...idx.matchAll(/(?<![-a-zA-Z])color:var\(--gold-text\)/g)].length;
-eq(textGoldToken, 125, '011: expected 125 gold text usages repointed to --gold-text');
+/* 2026-09-07: this asserted `eq(textGoldToken, 125)` and went red at 130.
+   Nothing regressed -- five MORE text usages had been repointed to the
+   accessible token, which is the direction 011 wanted. The assertion pinned an
+   occurrence COUNT, so it reported drift and named it a defect, and it would
+   have reported the same failure for a removal as for an addition.
+   An exact count is a change-detector wearing a behaviour's name. The behaviour
+   011 is about is already asserted immediately above -- zero raw
+   `color:var(--gold)` text usages remain -- so what this line adds is only that
+   the repointing is broad rather than token. A floor says that and stays true
+   under further repointing. Recorded here rather than only in the commit
+   message, because commit messages are the one part of the corpus nobody greps.
+   Discovered because this suite was never wired into run-all.sh and so had gone
+   red unobserved; see tests/test-registry.mjs. */
+ok(textGoldToken >= 125,
+  `011: gold text usages repointed to --gold-text must not fall below 125 ` +
+  `(found ${textGoldToken}); growth is fine, shrinkage means text went back to ` +
+  `the raw token`);
 
 // Fills, borders and accents must keep the original brand colour.
 eq((idx.match(/background:var\(--gold\)/g) || []).length, 63, '011: background:var(--gold) count must be unchanged');

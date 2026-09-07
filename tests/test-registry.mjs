@@ -1,0 +1,159 @@
+/*
+ * test-registry — "registered" must be a derived fact, not a remembered one.
+ *
+ * WHY THIS EXISTS
+ *
+ * On 2026-09-07 `contrast-tokens` was reported as registered in run-all.sh when
+ * it had never been wired in. Only its pass count had been observed, by hand,
+ * once. That suite was itself the fix for instance 8 -- a hand-listed token
+ * check replaced by a real derivation -- so the remedy for one instance of the
+ * pattern arrived carrying another: a hand-observed green count reported as a
+ * gate. A suite the runner never invokes is a file, not a guard.
+ *
+ * This file makes the claim runnable. Same move as the bundle citation map: the
+ * tables are a cache, the tool is the source of truth. Here, the runner is the
+ * source of truth for what is registered, and nobody's memory is.
+ *
+ * IT ALSO RETIRES THE SLOT BOOKKEEPING. run-all.sh prints "[n/N]" as literal
+ * strings. N was hand-maintained across every addition. This derives N from the
+ * actual invocation count and checks the numbering is contiguous, so a renumber
+ * that is forgotten fails here instead of quietly misreporting progress.
+ *
+ * EVERY SET COMPARISON CARRIES ITS OWN FLOOR. Not the suite's -- its own. Two
+ * empty sets compare equal, so a broken parser makes every diff below report
+ * health. That happened for real in accuracy-fee-parity on 2026-09-07: in a
+ * single run, the parsed-count floor failed while a set-equality assertion
+ * reported ok from the identical broken state. One assertion knew and another
+ * did not. The generalisation is that non-emptiness belongs inside the
+ * assertion, never assumed around it.
+ */
+
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { harness } from './_assert.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '..');
+const T = harness('test-registry');
+
+const runner = readFileSync(join(HERE, 'run-all.sh'), 'utf8');
+
+/* ── what the runner actually invokes ───────────────────────────────────── */
+
+const invoked = new Set(
+  [...runner.matchAll(/\$ROOT\/tests\/([\w.-]+)/g)].map(m => m[1]));
+
+T.check(`runner: parsed ${invoked.size} invocations from run-all.sh (floor 20)`,
+  invoked.size >= 20,
+  `parsed ${invoked.size} -- the invocation pattern changed and every diff ` +
+  `below would compare against an empty set and report health`);
+
+/* ── what exists on disk ────────────────────────────────────────────────── */
+
+/* Leading underscore = shared helper, not a suite. Helpers are imported by
+   suites, so they are covered transitively and must not be invoked directly. */
+const present = new Set(readdirSync(HERE)
+  .filter(f => /\.(mjs|js)$/.test(f))
+  .filter(f => !f.startsWith('_')));
+
+T.check(`disk: found ${present.size} suite files (floor 20)`,
+  present.size >= 20,
+  `found ${present.size} -- the glob is wrong`);
+
+/* ── declared exclusions ────────────────────────────────────────────────────
+ *
+ * A file may sit outside the runner ONLY with a reason written here. The point
+ * is not to permit exclusions; it is to stop them from being accidental. An
+ * undeclared absence fails. Adding a line to this list is a visible act in a
+ * diff, which is the property the previous arrangement lacked -- eleven
+ * regression suites had drifted out of the runner with nothing recording it.
+ */
+const EXCLUDED = {
+  'ebay-live.mjs':
+    'Hits api.ebay.com for real and needs EBAY_LIVE=1 plus live credentials. ' +
+    'It is the push-gate check, run deliberately by hand, never in the ' +
+    'default suite. Currently 18/19; the gate requires 19/19.',
+  'test-scan.mjs':
+    'Integration suite for /api/scan. Fails offline with "Assertion failed: ' +
+    '200" -- it expects a live handler environment this runner does not stand ' +
+    'up. UNRESOLVED, not benign: it is excluded because it cannot pass here, ' +
+    'not because it should not run. Needs an offline harness or an explicit ' +
+    'env gate like the DRAFT_KV_LIVE pattern already used at slot 24.',
+};
+
+/* A stale exclusion is its own drift: it grants an exemption to a file that no
+   longer exists, and reads as coverage-by-explanation. */
+const staleExclusions = Object.keys(EXCLUDED).filter(f => !present.has(f));
+T.check('every declared exclusion names a file that exists',
+  staleExclusions.length === 0,
+  `declared but absent from disk: ${staleExclusions.join(', ')}`);
+
+const contradictory = Object.keys(EXCLUDED).filter(f => invoked.has(f));
+T.check('no file is both invoked and declared excluded',
+  contradictory.length === 0,
+  `invoked by the runner yet listed as excluded: ${contradictory.join(', ')}`);
+
+/* ── direction 1: every suite on disk is invoked or declared ────────────── */
+
+const undeclared = [...present].filter(f => !invoked.has(f) && !EXCLUDED[f]);
+T.check('every suite on disk is either invoked by the runner or declared excluded',
+  present.size > 0 && undeclared.length === 0,
+  `present but neither invoked nor declared (${undeclared.length}): ` +
+  `${undeclared.join(', ')} -- each is a file, not a guard`);
+
+/* ── direction 2: every invocation resolves to a real file ─────────────── */
+
+const phantom = [...invoked].filter(f => !present.has(f));
+T.check('every file the runner invokes exists on disk',
+  invoked.size > 0 && phantom.length === 0,
+  `invoked but missing (the runner would fail at run time): ${phantom.join(', ')}`);
+
+/* ── slot numbering is derived, not remembered ─────────────────────────── */
+
+const slots = [...runner.matchAll(/\u25b6 \[(\d+)\/(\d+)\]/g)]
+  .map(m => ({ n: +m[1], d: +m[2] }));
+
+T.check(`runner: parsed ${slots.length} slot labels (floor 20)`,
+  slots.length >= 20,
+  `parsed ${slots.length} -- the label format changed`);
+
+const denominators = new Set(slots.map(s => s.d));
+T.check('every slot label uses the same denominator',
+  denominators.size === 1,
+  `mixed denominators: ${[...denominators].join(', ')} -- a partial renumber`);
+
+const declaredTotal = [...denominators][0];
+const uniqueSlots = [...new Set(slots.map(s => s.n))].sort((a, b) => a - b);
+
+T.check(`the declared total (${declaredTotal}) equals the number of distinct slots (${uniqueSlots.length})`,
+  declaredTotal === uniqueSlots.length,
+  `run-all.sh claims ${declaredTotal} checks but prints ${uniqueSlots.length} ` +
+  `distinct slot numbers`);
+
+const gaps = [];
+for (let i = 0; i < uniqueSlots.length; i++) {
+  if (uniqueSlots[i] !== i + 1) { gaps.push(`expected ${i + 1}, saw ${uniqueSlots[i]}`); break; }
+}
+T.check('slot numbers run 1..N with no gap',
+  uniqueSlots.length > 0 && gaps.length === 0,
+  `numbering breaks: ${gaps.join(' · ')}`);
+
+/* A slot number may legitimately appear twice: the gated checks print one label
+   on the run branch and another on the SKIPPED branch, sharing a slot. Three do
+   this today (24 draft-kv-live, 25 endpoints-smoke, 26 condition-applicability).
+   More than twice means a copy-paste that duplicated a number. */
+const overUsed = [...new Set(slots.map(s => s.n))]
+  .filter(n => slots.filter(s => s.n === n).length > 2);
+T.check('no slot number is printed more than twice (run + SKIPPED branch)',
+  overUsed.length === 0,
+  `slots printed 3+ times: ${overUsed.join(', ')} -- a duplicated number`);
+
+/* The declared total must also equal the number of distinct invoked files, or a
+   label exists with no test behind it. */
+T.check(`the declared total (${declaredTotal}) equals the number of invoked files (${invoked.size})`,
+  declaredTotal === invoked.size,
+  `${declaredTotal} labels against ${invoked.size} invoked files -- a slot ` +
+  `label with no suite behind it, or a suite invoked without a label`);
+
+T.done();
