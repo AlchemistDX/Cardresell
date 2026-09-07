@@ -709,14 +709,145 @@ The count assertion and the unregistered suite are the same failure viewed from
 two sides: a check nobody runs, and a check that cannot tell you anything when
 it does run. See `tests/test-registry.mjs`.
 
-**Related but unverified.** This was described in review as the same family as
-"the flake that impersonated the regression." That precedent is **not recorded
-anywhere in `audit/`** — grep finds no entry for it. Either it predates this
-catalogue or it was never written down. Recording the family resemblance as
-claimed rather than as established, and noting the gap.
+**The precedent, now located.** The "flake that impersonated the regression" is
+real and recorded — in a **test body**, not in `audit/`, which is why the corpus
+grep missed it. It is `tests/trs-listing-scope.mjs:353-365`, from `f747e9e`: the
+reload case read `ebayTopRated` before the saved profile had rehydrated into the
+controls, so it failed intermittently *on the assertion that says the durable
+status survived* — i.e. it failed in the exact shape of the bug the scope fix
+could plausibly have caused. The note there states the cost directly: "A flake
+that fails in a RANDOM shape gets investigated. A flake that fails in the exact
+shape of the bug the change under test could plausibly have caused gets
+pattern-matched to 'known flaky, re-run it' — and then the day the scope fix
+genuinely does eat the seller's durable status, the assertion that catches it is
+the one everybody has been trained to dismiss." Fixed by waiting on observable
+state rather than a timeout. That it lives in the test rather than here is the
+standing practice working as intended; the pointer is what was missing.
 
-**Generalisation, unswept:** how many other assertions in the corpus pin an
-exact count or an exact length rather than a bound? `eq(x, <literal>)` over a
-`.length` or a `matchAll().length` is the signature. Not swept — recorded as
-unswept, per instance 18's lesson that a narrow sweep reported as clean is its
-own instance of the pattern.
+**The family boundary, tightened.** These are *not* the same defect, and saying
+"same family" loosely would let the family absorb anything annoying. The flake
+was **nondeterministic** and failed in the shape of a real bug. The count
+assertion is **deterministic** and states the wrong proposition. What they
+actually share is narrower and worth naming as exactly this:
+
+> **The failure signal does not distinguish the case you care about from a case
+> you do not, and the damage in both is trained dismissal.**
+
+That is the membership test. Not "the assertion was annoying," not "it failed
+when nothing was broken" — specifically that the *signal itself* is unable to
+separate the two, so the correct response to the noise and the correct response
+to the signal are the same action. Everything else about the two instances
+differs: cause, determinism, and fix.
+
+**The sweep, run rather than deferred (2026-09-07).** Instance 18's sweep stayed
+narrow because guard *shapes* vary and `x > y * k` is one form among many — an
+open-ended search reported as clean would have been its own instance. This one
+is different in kind: `eq(` with `.length` or `matchAll().length` and a literal
+integer is an **exact textual signature** in files we own, so the sweep is a
+complete enumeration of the construct rather than an approximation of a shape.
+Deferring a closed sweep is overcaution, not caution.
+
+Result: **15 `eq(` sites involving a length; 8 with a literal integer.** All 8
+in `tests/minors-011-012-013-2026-09-04.mjs`. Triaged, and the triage is the
+useful output:
+
+| Site | Assertion | Verdict |
+|---|---|---|
+| `:115-118` | gold `background` / `border-color` / `border-top-color` / `accent-color` counts = 63 / 35 / 8 / 3 | **instance 19 — converted to floors** |
+| `:129` | `accent-color:#8b5cf6` = 1 | **instance 19 — split into a floor plus an absence assertion** |
+| `:138-139` | `twitter:card` = 1, `og:image` = 1 | **not instance 19 — kept exact** |
+| `:175` | `<form>` count = 0 | **not instance 19 — kept exact** |
+
+The counter-examples fix the boundary. For a duplicate `og:image`, **1 is the
+proposition, not a proxy for one** — duplicate meta tags are the defect
+SOL-PLAT-012 was filed for, because scrapers pick unpredictably between them,
+and a floor would pass the exact bug being guarded. Likewise `<form>` count `0`:
+absence *is* the behaviour. So the test for instance 19 is **not** "is the
+expected value a literal integer." It is **"is that integer the proposition, or
+a stand-in for one."**
+
+Note the four at `:115-118` were **not stale** — 63/35/8/3 all still held. They
+were converted anyway, because a passing count assertion is the same defect as a
+failing one that simply has not been asked yet. What they guard is one
+direction: 011 repointed gold *text*, and the risk was that the sweep also
+converted a fill or border, which shows up as the count **dropping**. Someone
+adding a new gold border later is not a defect, and the exact form fails on it
+identically. Floors say the real thing. Negative controls: repointing one fill
+takes 63 → 62 and fails the floor; adding one takes it to 64 and passes;
+injecting a text use of `#8b5cf6` trips the new absence assertion; injecting an
+*accent* use does not. 106/106.
+
+A stronger inverse — "`--gold-text` is never used for a non-text property" — was
+tried first and **rejected on evidence**: `border-color:var(--gold-text)` and
+`border-top-color:var(--gold-text)` each appear once and both are deliberate.
+Recorded rather than asserted.
+
+**A third methodological failure worth its own line.** Three times now an
+ad-hoc `grep` of mine has been less careful than the assertion it was checking.
+(1) A `color:var(--gold)` grep without the negative lookbehind counted 40
+AA-failing text usages that do not exist — they are `border-color`,
+`accent-color`, `background-color`. (2) A grep of `index.html` alone contradicted
+the `:115-118` counts and looked like proof they were stale; they were not —
+`read('index.html')` in that suite is `readAppSource()`, the **combined app
+source** (1,587,651 bytes vs 334,586), because SOL-PLAT-007 split inline JS and
+CSS into hashed files. (3) A regex meant to *derive* this file's instance count
+returned 4, then 13, against an actual 19. Each time the careful artifact was
+right and the quick check of it was wrong. **Ad-hoc verification of a careful
+test reproduces neither its scope nor its precision, and its confident wrong
+answer is indistinguishable from a finding.** The rule: re-run the artifact, or
+reuse its own helpers — do not re-implement its query by hand.
+
+### The sweep widened, and the "complete enumeration" claim was wrong
+
+The `eq(` sweep was complete **for `eq(`**, and I called that a complete
+enumeration of the construct. It was not. The same defect written
+`ok(… .length === N)` does not match that signature, and sweeping for it found
+**196 `=== <literal>` comparisons on a `.length`** — two orders of magnitude more
+than the 8. Calling a sweep complete when it enumerated one spelling of the
+construct is the same error as instance 18's narrow sweep, committed in the same
+session that recorded the lesson.
+
+Classified, because the raw 196 is not a defect count:
+
+| Class | Count | Verdict |
+|---|---|---|
+| `=== 0` — absence | 68 | **Not instance 19.** Absence *is* the proposition. |
+| `=== 1` on a value the test did not read from source | 58 | Not instance 19. |
+| `=== N>1` on a value **the test itself produced** (two taps → `sent.length === 2`) | 39 | **Not instance 19.** Cannot go stale from unrelated edits; the number is the behaviour the test drove. |
+| **source-text occurrence count against a literal** | **29** | the actual risk surface |
+
+The 29 split again, and this split is the one that matters:
+
+- **~6 are rule-1 assertions and must stay exact.**
+  `(code.match(/function _buildSportsCard\(/g)).length === 1`, and the same
+  shape for `_pcVariantKeyForGrade`, `_renderPriceCaption`, `_esc`,
+  `_trimmedMean`, `_renderGradeOpportunity_withdrawn`. Here **1 is the
+  architectural rule** — one business behaviour, exactly one implementation, the
+  rule this project has been bitten by eight times. A floor would pass a second
+  implementation, which is the precise defect. These are the strongest
+  exact-count assertions in the corpus, not the weakest.
+- **~13 are counts of incidental call sites and are instance-19 shaped.**
+  `_qpReapplyChosenTier();calc()` === 5, `setVenueEnabled(` === 2,
+  `await _fetchPriceForEntry(p)` === 2, `mode: 'grade'` === 2,
+  `writing-mode:vertical-lr;direction:rtl` === 2, `class="pack"` === 6,
+  `_applyPendingUpgradeInterval` === 2, `tcgNumberMismatch(number,` === 2. A
+  legitimate sixth call site fails these identically to a deleted one.
+- **The remainder are structural counts** tied to a real fact —
+  `sub: 'Any grader'` === 3 and `any grader (PriceCharting)` === 3 track the
+  three columns BIAS-3/7/8 are about; `feeAuditedOn` === 15 tracks the venue
+  count, which now has a *derived* guard in `tests/accuracy-fee-parity.mjs`
+  (15/0) that does not depend on the literal. Judgement per site, not a sweep.
+
+**Status: enumerated, classified, NOT converted.** Only the 8 `eq(` sites were
+changed. Converting 13 assertions inside `launch-audit-regressions.mjs` and
+`copy-truth-offline.mjs` in the same pass that widened the sweep would be a
+large edit to two load-bearing suites justified by a signature match rather than
+a reading of each case — and the rule-1 subclass above is proof that the
+signature alone gets the verdict wrong. Recorded as the standing follow-up with
+its list, which is the honest state: **the boundary is now known, the work is
+not done.**
+
+The durable rule from all of it: **the test for instance 19 is never the
+syntax.** It is whether the integer is the proposition or a stand-in for one.
+`=== 1` for "one implementation" and `=== 0` for "none exist" are propositions.
+`=== 5` for "five call sites happen to exist today" is a stand-in.

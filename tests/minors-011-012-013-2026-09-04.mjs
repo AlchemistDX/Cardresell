@@ -111,11 +111,35 @@ ok(textGoldToken >= 125,
   `(found ${textGoldToken}); growth is fine, shrinkage means text went back to ` +
   `the raw token`);
 
-// Fills, borders and accents must keep the original brand colour.
-eq((idx.match(/background:var\(--gold\)/g) || []).length, 63, '011: background:var(--gold) count must be unchanged');
-eq((idx.match(/border-color:var\(--gold\)/g) || []).length, 35, '011: border-color:var(--gold) count must be unchanged');
-eq((idx.match(/border-top-color:var\(--gold\)/g) || []).length, 8, '011: border-top-color:var(--gold) count must be unchanged');
-eq((idx.match(/accent-color:var\(--gold\)/g) || []).length, 3, '011: accent-color:var(--gold) count must be unchanged');
+/* Fills, borders and accents must keep the original brand colour.
+
+   2026-09-07: these four asserted exact counts (63 / 35 / 8 / 3) with the
+   message "count must be unchanged". All four still hold -- unlike the
+   textGoldToken line above, they had NOT gone stale. They are converted anyway,
+   because a passing count assertion is the same defect as a failing one; it just
+   hasn't been asked yet.
+
+   What these actually guard is one direction. 011 repointed gold TEXT to
+   --gold-text, and the risk was that the sweep also converted a fill, border or
+   accent. That shows up as the count DROPPING. A new gold border added later is
+   not a defect, and the exact-count form fails on it identically -- which is
+   instance 19: equally loud for the thing you fear and the thing you want.
+
+   So: a floor per property. Shrinkage means a non-text usage got repointed;
+   growth is somebody styling something gold, which is allowed.
+
+   An inverse assertion was tried first and rejected on evidence: "--gold-text is
+   never used for a non-text property" would be stronger, but it is false --
+   border-color:var(--gold-text) and border-top-color:var(--gold-text) each
+   appear once, and both are deliberate. Recorded rather than asserted. */
+ok((idx.match(/background:var\(--gold\)/g) || []).length >= 63,
+  '011: background:var(--gold) must not fall below 63 (a drop means a fill was repointed to the text token)');
+ok((idx.match(/border-color:var\(--gold\)/g) || []).length >= 35,
+  '011: border-color:var(--gold) must not fall below 35 (a drop means a border was repointed)');
+ok((idx.match(/border-top-color:var\(--gold\)/g) || []).length >= 8,
+  '011: border-top-color:var(--gold) must not fall below 8 (a drop means a border was repointed)');
+ok((idx.match(/accent-color:var\(--gold\)/g) || []).length >= 3,
+  '011: accent-color:var(--gold) must not fall below 3 (a drop means an accent was repointed)');
 
 // Purple button: white label on a purple fill.
 const btn = idx.match(/background:(#[0-9a-fA-F]{6});color:#fff;border:none;border-radius:8px;padding:\.55rem 1rem;font-weight:700;font-size:\.85rem;cursor:pointer">Scan again anyway/);
@@ -125,8 +149,14 @@ if (btn) {
   ok(r >= 4.5, `011: white label on ${btn[1]} is ${r.toFixed(2)}:1, below AA 4.5`);
   ok(btn[1].toLowerCase() !== '#8b5cf6', '011: button must not use the original #8b5cf6 (4.23:1 with white)');
 }
-// The slider accent is not text and must be left alone.
-eq((idx.match(/accent-color:#8b5cf6/g) || []).length, 1, '011: slider accent-color:#8b5cf6 must be untouched (not text)');
+/* The slider accent is not text and must be left alone. Two assertions rather
+   than one count: the accent survives (floor), AND the colour never becomes a
+   text colour (absence). The second is the one 011 cares about -- #8b5cf6 is
+   4.23:1 on white and fails AA as text -- and it is a proposition, not a tally. */
+ok((idx.match(/accent-color:#8b5cf6/g) || []).length >= 1,
+  '011: slider accent-color:#8b5cf6 must survive (it is an accent, not text)');
+eq((idx.match(/(?<![-a-zA-Z])color:#8b5cf6/g) || []).length, 0,
+  '011: #8b5cf6 must never be used as a text colour (4.23:1 on white, below AA)');
 
 /* ═══ SOL-PLAT-012 ═══════════════════════════════════════════════════ */
 
@@ -135,6 +165,14 @@ for (const f of ['index.html', 'pricing.html', 'about.html', 'contact.html', 'ac
   const h = read(f);
   ok(h.includes(`<meta property="og:image" content="${OG_IMG}"`), `012: ${f} must declare og:image`);
   ok(/<meta name="twitter:image" content="https:\/\/www\.cardresell\.org\/og-image\.png"/.test(h), `012: ${f} must declare twitter:image`);
+  /* These two stay exact counts, deliberately. The 2026-09-07 sweep for
+     instance 19 flagged them by signature, and they are the counter-example
+     that fixes the boundary: "exactly one" IS the proposition here. A duplicate
+     og:image is the bug SOL-PLAT-012 was filed for -- scrapers pick
+     unpredictably between them -- so 1 is not a proxy for a behaviour, it is
+     the behaviour. A floor would pass the exact defect being guarded.
+     The test for instance 19 is not "is the expected value a literal integer";
+     it is "is that integer the proposition, or a stand-in for one". */
   eq((h.match(/name="twitter:card"/g) || []).length, 1, `012: ${f} must declare exactly one twitter:card (no duplicate)`);
   eq((h.match(/property="og:image"/g) || []).length, 1, `012: ${f} must declare exactly one og:image`);
   ok(/content="https:\/\//.test(h.match(/<meta property="og:image"[^>]*>/)[0]), `012: ${f} og:image must be an absolute https URL`);
