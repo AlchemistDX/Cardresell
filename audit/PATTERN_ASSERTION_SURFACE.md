@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**23 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 23; that number, not this sentence, is the
+**24 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 24; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1245,3 +1245,59 @@ while two test files assert it. A field with no reader, green in the suite.
 **Rule:** when reusing a mechanism as precedent, its *shape* transfers; its
 *coverage* does not. Check the new case against the mechanism's own guard
 conditions before citing it as the place the disclosure will live.
+
+## 24. A removal justified by a replacement, where the replacement was never made reachable
+
+The first instance in this catalogue whose defect exists in **neither** commit.
+
+**2026-09-03**, `api/tcg-price.js:640-662`: the "sanity valve" is removed. The
+comment states the reason and names what takes over — *"Where the two disagree
+sharply we say so (see marketAskDivergence in the payload) instead of quietly
+swapping in a number that answers a different question."* The removal is correct.
+The valve was publishing holdout asks as sale prices; its worked case, EX Dragon
+Frontiers Charizard Star #100, served $19,800 against a $1,000 sales figure.
+
+**Separately**, `_marketAskDivergence` exists, is computed, is serialized into the
+payload, and is asserted by two tests. Building it was correct.
+
+**No client reads it.** So the valve's behaviour is gone and its replacement has
+never reached a seller. That card today serves the correct $1,000 with no
+indication that the ask book says roughly twenty times more — which is precisely
+what the comment promised the app would say.
+
+### Why this is not any of the existing entries
+
+Coverage is not the problem: the valve fired at `>3×`, the guard fires at `>3×`
+in both directions, so the substitution is **1:1 on the trigger**. It is not
+instance 18 (unreachable threshold), not 23 (threshold bounding the defect), and
+not "name your reach" — the reach was named correctly and the mechanism was built
+to match.
+
+**Each half is defensible read alone.** Removing a valve you have replaced is
+hygiene. Shipping a payload field with tests is normal. Neither commit contains a
+mistake. The loss lives in the space *between* two commits, and that space has no
+reviewer, no test, and no file.
+
+### Remedy — different from every other entry here
+
+Others say *measure the branch* or *name your reach*. This one says:
+
+> **A removal justified by a replacement is incomplete until the replacement is
+> reachable by a user. The commit that removes must not land before that is
+> true.**
+
+Not "until the replacement exists" — existence is what happened here. Reachable
+by a user. A serialized field, a passing test, and a green suite are all
+compatible with the seller seeing nothing.
+
+**Test:** when a diff removes a behaviour and cites a substitute, grep the
+substitute from the render path backwards, not from the payload forwards. If the
+only readers are tests, the removal is not ready to land.
+
+### Detection, generalised
+
+This class is invisible to per-commit review by construction, so it needs a
+corpus-level check: for each field the codebase serializes, does any non-test
+consumer read it? A field with tests and no readers is either premature or a
+half-shipped trade — and the commit that references it says which.
+`marketAskDivergence` is the known case; the sweep has not been run.

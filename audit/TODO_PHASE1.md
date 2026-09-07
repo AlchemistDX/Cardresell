@@ -290,3 +290,46 @@ cases. The weighting was validated at ~3.4x the real admission rate.
 called and what is disclosed about its composition. Pairs with T2.11 (two
 consumers, one constant) and with `marketBasis`, which now names this branch
 `'ask_blend'` on the wire.
+
+### T2.13 — is a four-point trimmed mean the right SHAPE for a usually-three-point statistic?
+
+Raised as: with `mid` at 55.1% of weight and the high ask excluded 88.2% of the
+time, is the function really a mid/market average wearing a four-point costume?
+
+**Measured, and the clean version of that is wrong.** Comparing the live blend
+against a two-point `(mid*2 + market)/3` over 13,638 products:
+
+| | |
+|---|---|
+| median gap | 2.71% |
+| p75 / p90 / p95 | 13.97% / 18.45% / 20.13% |
+| agree within 1% | 48.4% |
+| absolute gap over $0.05 | **44.4%** of products |
+| max gap | $24,091 |
+
+So it does **not** collapse to two points. The reason is the low ask, which is
+admitted **52.18%** of the time — the vestigial term is the *high* ask, not the
+ask book generally. The honest description of the shape is a **mid-anchored
+average that usually includes the low ask and rarely the high one**, i.e. three
+points about half the time and two points the other half.
+
+**The two trim gates are asymmetric in both admission and effect:**
+
+| gate | admits | own effect on the headline | consistent direction |
+|---|---|---|---|
+| `L >= mid * 0.3` | 52.18% | median **-11.01%** | pulls DOWN in 97.3% |
+| `H <= mid * 3` | 11.81% | median **+18.65%** | pulls UP in 96.7% |
+
+Net of the asymmetry: the four-point blend sits **below** the two-point centre in
+41.8% of products and above in 10.6%, mean shift **-3.99%**.
+
+**The real question, restated.** Not "are the weights right" but: the two gates
+were written as one symmetric idea ("drop firesales, drop holdouts") and they are
+not symmetric in practice — one is the common path with a downward pull, the
+other is rare with a larger upward pull. Nothing in the code or the origin commit
+says they behave differently. Pairs with T2.11: same failure of a symmetric-
+looking pair of constants having asymmetric consequences.
+
+**Not a request to change the arithmetic.** Deciding this needs a view on whether
+the low ask belongs in a headline at all, which is Q7-adjacent. Do not resolve
+unilaterally.

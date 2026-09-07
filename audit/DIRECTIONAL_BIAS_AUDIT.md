@@ -767,3 +767,34 @@ doing. Option (a) is safe.
 Worth noting what that means on its own: a belt-and-suspenders clamp added on
 2026-08-30 cannot fire on the rung where the data is least trustworthy. It is
 not wrong, but it is not protection there either.
+
+## 2026-09-07 — a candidate that runs OPPOSITE to the seven, and why it is not yet filed as one
+
+All seven simplifications above are optimistic on the audit's metric (net
+proceeds = `price − fees − costs`): an omitted cost or understated fee can only
+make net look better.
+
+The headline blend's trim gates run the other way. Measured over 13,638 products
+(`tools/threshold-distribution.mjs`, and see T2.13):
+
+- the low-ask gate admits **52.18%** of the time and pulls the headline down a
+  median **11.01%**, in the same direction **97.3%** of the time
+- the high-ask gate admits **11.81%** and pulls up a median **18.65%**
+- net: the blend sits below a `(mid*2 + market)/3` centre in **41.8%** of
+  products, above in 10.6%, mean shift **−3.99%**
+
+A lower headline price lowers net, so this is **pessimistic** on the audit's
+metric — the first term found that leans against the other seven.
+
+**It is deliberately NOT added to the table of seven.** Those directions are
+measured against a truth: a fee that exists and is omitted. This one is measured
+against an *alternative shape*, and `(mid*2 + market)/3` is not the truth either.
+Calling a −3.99% shift a bias would be asserting that the low ask does not belong
+in the headline, which is exactly the unresolved question in T2.13.
+
+What can be said without deciding that: **the two gates are not symmetric, they
+were written as though they were, and their net effect on the published number
+has never been stated anywhere.** If T2.13 resolves toward excluding the low ask,
+this becomes BIAS-11 with a direction already measured. If it resolves the other
+way, the finding is that the seven-item table was incomplete in a direction the
+audit had not looked for, which is worth knowing either way.
