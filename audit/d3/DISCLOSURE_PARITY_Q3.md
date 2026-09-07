@@ -986,3 +986,37 @@ to justify removing the sanity valve. **The blend it left standing was named in
 the terms the comment rules out**, three weeks earlier, and nobody reconciled the
 two. Filed as **T2.12** — a naming and disclosure question about what the
 headline is, not a request to change the arithmetic.
+
+### The 2026-09-03 removal is justified by a disclosure the seller never sees
+
+Reading `api/tcg-price.js:640-662` in full, rather than the one line I first
+quoted, changes what the finding is.
+
+The comment removes the sanity valve and says what replaces it: *"Where the two
+disagree sharply we say so (see marketAskDivergence in the payload) instead of
+quietly swapping in a number that answers a different question."*
+
+**Scoped honestly, the substitution is coherent.** The removed valve fired when
+Market disagreed with the median ask by more than 3×. `_marketAskDivergence`
+fires at the same 3×, both directions. So the guard covers the valve's trigger
+1:1 — my instinct to read this as a coverage failure was wrong, and the
+1.18×–3.0× band the inversion lives in was never inside the valve either. That
+band predates both the valve and its removal.
+
+**The defect is that the replacement is not rendered.** `marketAskDivergence` is
+computed, serialized into the payload, and asserted by two tests, and no client
+reads it — already open on the non-blocking list. What the full comment adds is
+that this is not a loose end: **it is the stated justification for removing a
+production behaviour.** The valve was real and firing; the disclosure offered in
+its place has never reached a seller. The trade was made in good faith and only
+half of it shipped.
+
+That is a stronger reason to wire it than the inversion is. The inversion argues
+for it and gets 13 of 417; the removal argues for it and gets the whole case the
+comment was written about — including EX Dragon Frontiers Charizard Star #100,
+where the valve published $19,800 against a $1,000 sales figure. A seller looking
+at that card today gets the correct $1,000 and no indication that the ask book
+says twenty times more, which is the thing the comment promised to say.
+
+Not filed as new work — it raises the priority of the existing unwired-divergence
+item and gives it a reason that does not depend on the inversion.

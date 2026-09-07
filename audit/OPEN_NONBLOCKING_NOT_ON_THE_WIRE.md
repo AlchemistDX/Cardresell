@@ -92,3 +92,24 @@ carrying no information either.
    that happens by inaction.
 
 No option is chosen, and none should be until step 1 of the ordering above is done.
+
+## Priority raised: marketAskDivergence is the stated justification for a removal
+
+Previously logged as "computed, serialized, asserted by two tests, read by
+nobody." `api/tcg-price.js:640-662` makes it more than an unwired field: it is
+the named replacement for the sanity valve removed on 2026-09-03 — *"Where the
+two disagree sharply we say so (see marketAskDivergence in the payload) instead
+of quietly swapping in a number that answers a different question."*
+
+The valve was live and firing. Its replacement has never reached a seller. The
+comment's own worked case (EX Dragon Frontiers Charizard Star #100, product
+84198: market $1,000 against low $18,500 / mid $20,000 / high $39,500) now
+serves the correct $1,000 with no indication that the ask book says ~20x more.
+
+Scope check, so this is not overstated: the valve fired at >3x and the guard
+fires at >3x both directions, so coverage of the valve's trigger is 1:1. The
+substitution was sound in design. Only half of it shipped.
+
+See `audit/d3/DISCLOSURE_PARITY_Q3.md` for the measured direction split (the
+guard's coverage is anticorrelated with the floor-inversion defect, 13 of 417 —
+a separate argument for wiring it, and the weaker of the two).
