@@ -476,6 +476,45 @@ async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
 
 // ── State ──
 let selectedCard = null;
+
+/* Every listing gets a number, and the number only ever goes up.
+ *
+ * WHY THIS EXISTS. The Top Rated Plus confirmation is scoped to one listing,
+ * and the first two attempts at that scope both leaked. Attempt one stored the
+ * answer in the seller profile, so it applied to every card. Attempt two
+ * compared a stamped snapshot of the pricing inputs against the live ones,
+ * which is better but relies on two things that are not guaranteed: that the
+ * comparison is actually performed between the two edits, and that catalog
+ * identity is the same thing as listing identity. Neither holds.
+ *
+ *   - Catalog identity is not listing identity. Scan the same Charizard twice
+ *     and both scans agree on id, name, game, grade and price. A confirmation
+ *     about the first listing must not attach to the second one just because
+ *     every visible field matches.
+ *   - A comparison only fires when someone reads it. calc() returns early when
+ *     there is no usable price, BEFORE it reads eligibility, so clearing the
+ *     price field and retyping the same number is a supported path on which no
+ *     comparison is ever performed against the intermediate state.
+ *
+ * A monotonic counter closes both, because it does not depend on any observer
+ * running at the right moment and it cannot return to a previous value. The
+ * whole point of routing every assignment through here rather than bumping the
+ * counter at each of the eleven call sites is rule 1: one business behaviour,
+ * one implementation. A counter that has to be remembered at eleven sites is a
+ * counter that will be forgotten at the twelfth. */
+let _listingInstance = 0;
+
+function setSelectedCard(card) {
+  _listingInstance += 1;
+  selectedCard = card;
+  // A new listing cannot inherit the previous listing's confirmation. Cleared
+  // here as well as being invisible to the context comparison, so the two
+  // guards fail independently rather than both resting on the same read.
+  if (typeof _trsListingConfirm !== 'undefined') {
+    _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+  }
+  return selectedCard;
+}
 let currentPrices = {};      // { variantKey: { market, low, mid, high } }
 let activeGame = 'pokemon';
 try { window.activeGame = 'pokemon'; } catch(_) {} // 2026-08-22: expose for FastPath IIFE
@@ -581,7 +620,7 @@ function _restoreLastLoadedCard() {
     const doHydrate = () => {
       if (snap._fullCard && typeof loadCardUI === 'function') {
         try {
-          selectedCard = snap._fullCard;
+          setSelectedCard(snap._fullCard);
           loadCardUI(snap._fullCard);
           console.log('[restoreLastCard] hydrated via _fullCard');
           window._crRestoreInFlight = false;
@@ -757,7 +796,7 @@ function onGameSelectChange(game) {
   // Clear search state
   dropList.classList.remove('open');
   dropList.innerHTML = '';
-  selectedCard = null;
+  setSelectedCard(null);
   resetCardPanel();
   // Sports hides the Condition / Graded Slab pills. Switching game does not
   // load a card, so without this the pills stayed hidden on the way back to
@@ -837,7 +876,7 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
 
     // Clear selected card state for non-sports
     if (!isSports) {
-      selectedCard = null;
+      setSelectedCard(null);
       resetCardPanel();
     } else {
       // Show sports placeholder in card panel
@@ -850,6 +889,13 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
 
 // ── Search debounce ──
 searchInput.addEventListener('input', () => {
+  /* The search box is a listing input as far as eligibility is concerned, and
+     it was the one path that never reached the boundary: this listener debounces
+     a search and never calls calc(), so typing a different card name and typing
+     the original one back produced no comparison against anything in between.
+     Touched synchronously, ahead of the debounce, because the debounce is
+     exactly the deferral that made the gap reachable. */
+  touchListingContext();
   clearTimeout(searchTimeout);
   const q = searchInput.value.trim();
   if (q.length < 2) { dropList.classList.remove('open'); return; }
@@ -1600,7 +1646,7 @@ function attachDropHandlers(cardFactory) {
     el.setAttribute('tabindex', '0');
     el.addEventListener('click', () => {
       const card = cardFactory(parseInt(el.dataset.idx));
-      selectedCard = card;
+      setSelectedCard(card);
       dropList.classList.remove('open');
       searchInput.value = card.name;
       // 2026-09-01 (launch gate): do NOT prefill the override from this row.
@@ -2726,7 +2772,7 @@ function openEbayComps() {
   // until 2026-09-03; this one additionally passed a blank image instead of
   // the scan photo the other two used, so opening comps wiped the card art.
   const sportCard = _buildSportsCard(player || 'Sports Card');
-  selectedCard = sportCard;
+  setSelectedCard(sportCard);
   loadCardUI(sportCard);
   _loadSportsVariants(sportCard);
 }
@@ -3178,7 +3224,7 @@ function _spAgeLabel(sec) {
 
 function loadSportsCardFromSearch(playerName) {
   const sportCard = _buildSportsCard(playerName);
-  selectedCard = sportCard;
+  setSelectedCard(sportCard);
   loadCardUI(sportCard);
   _loadSportsVariants(sportCard);
 }
@@ -3218,7 +3264,7 @@ function loadSportsCardFromSearch(playerName) {
       }
     }
     const sportCard = _buildSportsCard(player);
-    selectedCard = sportCard;
+    setSelectedCard(sportCard);
     loadCardUI(sportCard);
     _loadSportsVariants(sportCard);
   });
@@ -5598,7 +5644,41 @@ function _crSellerProfile() {
  * The context is deliberately over-specified. Every input listed makes the
  * answer expire MORE often, and expiring too often costs a seller one extra
  * click while expiring too rarely quotes a fee that is too low. */
-let _trsListingConfirm = { ctx: null, ok: false };
+let _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+
+/* The revision is the part that does not need an observer to be correct.
+ *
+ * `_trsListingSeenCtx` is the last context touchListingContext() saw. When it
+ * sees a different one it bumps `_trsListingRev` and drops the stamp. Because
+ * the revision only increases, returning to an earlier set of field values
+ * cannot restore an earlier revision, so a confirmation cannot be revived by
+ * undoing an edit -- which a context comparison on its own permits whenever the
+ * intermediate state is never read.
+ *
+ * The comparison in trsListingConfirmed() is KEPT as a second guard rather than
+ * replaced. The revision catches transitions through the boundary; the
+ * comparison catches a context that differs from the stamp for any reason the
+ * boundary never saw, including a field added to the context later by someone
+ * who did not know this file existed. Neither is sufficient alone and they fail
+ * for different reasons, which is the property worth having. */
+let _trsListingRev = 0;
+let _trsListingSeenCtx = null;
+
+/* Call before doing anything with eligibility, and call it on every path that
+   can change a listing input -- INCLUDING paths that then bail out. calc()
+   returns early when there is no usable price, so if this were only reached
+   after that return, clearing the price field and retyping the same value would
+   pass unnoticed. tests/trs-listing-scope.mjs pins that exact sequence through
+   real input events. */
+function touchListingContext() {
+  const ctx = trsListingContext();
+  if (_trsListingSeenCtx !== null && ctx !== _trsListingSeenCtx) {
+    _trsListingRev += 1;
+    _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+  }
+  _trsListingSeenCtx = ctx;
+  return _trsListingRev;
+}
 
 function trsListingContext() {
   const v = (id) => {
@@ -5626,7 +5706,10 @@ function trsListingContext() {
     : '';
   const game = (typeof activeGame !== 'undefined' && activeGame) ? String(activeGame) : '';
   const grade = document.querySelector('#gradedPills .pill.sel')?.dataset.val || '';
-  return [card, v('searchInput'), game, grade, v('shipCharge'), v('shipCost'), v('priceOverride')].join('|');
+  /* The instance number leads, because it is the only component that
+     distinguishes two listings whose every other component is identical. */
+  return [_listingInstance, card, v('searchInput'), game, grade,
+          v('shipCharge'), v('shipCost'), v('priceOverride')].join('|');
 }
 
 /* True only if a confirmation was given AND it was given about what is being
@@ -5651,8 +5734,15 @@ function trsListingContext() {
 function trsListingConfirmed() {
   if (!_trsListingConfirm || _trsListingConfirm.ok !== true) return false;
   if (_trsListingConfirm.ctx === null) return false;
+  // Guard one: the revision. Independent of whether anyone observed the
+  // intermediate state, and it cannot go backwards.
+  if (_trsListingConfirm.rev !== _trsListingRev) {
+    _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+    return false;
+  }
+  // Guard two: the live comparison, for anything the boundary never saw.
   if (_trsListingConfirm.ctx === trsListingContext()) return true;
-  _trsListingConfirm = { ctx: null, ok: false };
+  _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
   return false;
 }
 
@@ -5661,7 +5751,16 @@ function trsListingConfirmed() {
 function noteTrsListingAnswer() {
   const el = document.getElementById('ebayTrsListing');
   const yes = !!(el && el.value === 'yes');
-  _trsListingConfirm = yes ? { ctx: trsListingContext(), ok: true } : { ctx: null, ok: false };
+  /* Touch first, so the answer is stamped against the revision that is current
+     at the moment it is given rather than one the boundary has not caught up
+     to. If the seller changed a field and then answered without any recalc in
+     between, that change bumps the revision here, and the answer they just gave
+     is stamped after the bump -- which is right, because they answered about
+     what is on screen now. */
+  const rev = touchListingContext();
+  _trsListingConfirm = yes
+    ? { ctx: trsListingContext(), ok: true, rev }
+    : { ctx: null, ok: false, rev: -1 };
 }
 
 /* Keeps the visible select honest when the answer has expired. Without this
@@ -7315,6 +7414,13 @@ function daysToCashText(pid) {
 }
 
 function calc() {
+  /* Ahead of the early return on purpose. This used to sit further down, next
+     to the eligibility read, which meant an empty price field skipped it: the
+     seller could clear the price, retype the same number, and the Top Rated
+     Plus confirmation would still be standing because nothing ever compared
+     against the empty intermediate state. Reached on every recalculation now,
+     including the ones that bail. */
+  touchListingContext();
   const price = getEffectivePrice();
   if (price <= 0) {
     showIntro();
@@ -7332,7 +7438,8 @@ function calc() {
   const ebayStore     = _prof.ebayStore;
   const ebayPromo     = _prof.ebayPromo;
   // Clear a visibly-stale "Yes" before reading it, so the control and the fee
-  // rows cannot disagree about the same card.
+  // rows cannot disagree about the same card. The boundary was already touched
+  // at the top of this function.
   syncTrsListingControl();
   const ebayTrsElig   = trsDiscountApplies(_prof, trsListingConfirmed());
   const tcgLevel      = _prof.tcgLevel;
@@ -12315,7 +12422,7 @@ function _loadScannedNonPokemonCard(pending) {
       updatedAt: 'Grounded via scan',
     };
     try {
-      selectedCard = ygoCard;
+      setSelectedCard(ygoCard);
       if (typeof loadCardUI === 'function') loadCardUI(ygoCard);
     } catch(e) { console.warn('[_loadScannedNonPokemonCard] loadCardUI failed', e); }
   }
@@ -12872,7 +12979,7 @@ async function _loadScannedCardExactImpl(pending) {
         source: 'TCGPlayer',
         updatedAt: match.tcgplayer?.updatedAt || '',
       };
-      selectedCard = card;
+      setSelectedCard(card);
       if (si) si.value = card.name;
       dropList.classList.remove('open');
       loadCardUI(card);
@@ -12916,7 +13023,7 @@ async function _loadScannedCardExactImpl(pending) {
           if (tplMatch) {
             try { console.info('[scan] TPL match via', tplReason, tplMatch.name, tplMatch.number); } catch(e) {}
             const card = tplCardToNormalized(tplMatch, 'pokemon', tplMatch.image_url || '');
-            selectedCard = card;
+            setSelectedCard(card);
             if (si) si.value = card.name;
             dropList.classList.remove('open');
             loadCardUI(card);
@@ -13057,7 +13164,7 @@ async function _loadScannedCardExactImpl(pending) {
         updatedAt: '',
         _synthetic: true, // flag so downstream code knows this is a scan echo
       };
-      selectedCard = synthCard;
+      setSelectedCard(synthCard);
       if (si) si.value = synthCard.name;
       try { loadCardUI(synthCard); } catch(uiErr) { console.warn('[synth loadCardUI]', uiErr); }
       const mainCard = document.getElementById('cardHero');

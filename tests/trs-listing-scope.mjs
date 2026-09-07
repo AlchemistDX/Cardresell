@@ -38,6 +38,29 @@
  * "does the rule compute the right number", the other asks "does the answer
  * belong to this card".
  *
+ * MUTATION EVIDENCE (2026-09-07, recorded here rather than only in a commit
+ * message, because the shape of this table is the argument for the design and
+ * commit messages are the one part of the corpus nobody greps).
+ *
+ *   A  remove touchListingContext() from the top of calc()      -> 2 red
+ *   B  remove touchListingContext() from the search listener    -> 1 red
+ *   C  drop _listingInstance from trsListingContext()           -> 1 red
+ *   D  stop clearing the stamp in setSelectedCard()             -> GREEN
+ *   E  drop the revision check in trsListingConfirmed()         -> GREEN
+ *   F  keep the revision bump, remove the clear inside touch    -> GREEN
+ *   G  remove BOTH the clear inside touch and the revision check-> 3 red
+ *
+ * D, E and F staying green is not a gap, and it is worth being precise about
+ * why. E and F are the two halves of the same pair: the revision check alone
+ * closes the round-trip hole (F), the clear-on-mismatch alone closes it (E),
+ * and removing both opens it (G). Two mechanisms that are each individually
+ * sufficient is the definition of defence in depth, and G is the proof that
+ * neither is decorative. C and D are the same pair for listing identity.
+ *
+ * What no test here isolates is a single mechanism as NECESSARY, because none
+ * of them is. If a future change removes one, this suite stays green by design;
+ * G is the case that fails if someone removes two.
+ *
  * Run: node tests/trs-listing-scope.mjs
  */
 
@@ -105,7 +128,18 @@ async function boot() {
    exactly why the context also reads the search input. */
 async function setListing(page, over = {}) {
   await page.evaluate((o) => {
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    /* Dispatches the real event, because the first version of this helper
+       assigned .value and dispatched nothing. Every assertion below still
+       passed, which is the problem: priceOverride, shipCharge and shipCost
+       carry oninput="calc()" in the markup, so a silent assignment tested a
+       code path no seller can take and proved nothing about the wiring. */
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
     set('searchInput', o.card ?? 'Charizard VMAX');
     set('priceOverride', o.price ?? '400');
     set('shipCharge', o.shipCharge ?? '0');
@@ -216,13 +250,26 @@ for (const mv of MOVES) {
     /* And the visible control stops saying Yes. A control still reading "Yes"
        beside an undiscounted fee is worse than the original bug: the seller
        would see a confirmation and a full fee and have no way to reconcile
-       them. syncTrsListingControl is what the ranking recalculation calls. */
-    const synced = await page.evaluate(() => {
-      const cleared = window.syncTrsListingControl();
-      return { cleared, value: document.getElementById('ebayTrsListing').value };
-    });
-    T.check('the control clears itself rather than showing a stale Yes',
-      synced.cleared === true && synced.value === 'no', JSON.stringify(synced));
+       them.
+
+       CHANGED 2026-09-07 (second pass). This used to call
+       syncTrsListingControl() itself and assert it returned true, i.e. that it
+       found something to clear. That passed only because the helper driving
+       these edits assigned .value without dispatching an event, so the real
+       oninput="calc()" handler never ran and the control was still sitting on a
+       stale "Yes" waiting for the test to clean up after it. With real events
+       dispatched, calc() clears the control during the edit and the explicit
+       call correctly finds nothing to do. The assertion now checks the state
+       the seller would actually see, which is what it should have checked
+       first: after a real edit, the control reads "no" already. */
+    const shown = await page.evaluate(() => ({
+      value: document.getElementById('ebayTrsListing').value,
+      furtherWorkNeeded: window.syncTrsListingControl(),
+    }));
+    T.check('the control has already cleared itself by the time the edit settles',
+      shown.value === 'no', JSON.stringify(shown));
+    T.check('and nothing is left for a later sync to fix',
+      shown.furtherWorkNeeded === false, JSON.stringify(shown));
     await ctx.close();
   });
 }
@@ -300,6 +347,17 @@ await T.section('the confirmation never survives a reload', async () => {
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof window.trsListingConfirmed === 'function', { timeout: 15000 });
+  /* Wait for the profile to be REHYDRATED, not merely for the bundle to have
+     evaluated. Restoring the saved profile into the controls happens after
+     load, so reading ebayTopRated too early sees the markup default and this
+     case failed intermittently -- and it failed on the assertion that says the
+     durable status survived, i.e. it looked like the scope fix had eaten the
+     seller's status. A flake that impersonates a regression is worse than a
+     flake, so the wait is on the observable state rather than a timeout. */
+  await page.waitForFunction(
+    () => (document.getElementById('ebayTopRated') || {}).value === 'yes',
+    { timeout: 15000 },
+  );
   const after = await page.evaluate(() => ({
     confirmed: window.trsListingConfirmed(),
     status: window._crSellerProfile().ebayTopRated,
@@ -330,6 +388,206 @@ await T.section('an answer carries the context it was given in', async () => {
   const back = await fees(page);
   T.check('🔴 returning to the original listing does not resurrect the answer',
     back.confirmed === false && back.eligible === false, JSON.stringify(back));
+  await ctx.close();
+});
+
+// ── The ordering hole ──────────────────────────────────────────────────────
+/* The follow-up review's blocker. Deleting the stamp when a stale read happens
+   protects nothing if no read happens between the two edits. These cases make
+   the round trip through real events with NO eligibility call in between, and
+   the discount must still be off at the end. */
+
+await T.section('a price round-trip with no read in between does not revive the answer', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', price: '400' });
+  await answer(page, 'yes');
+  T.check('confirmed at the starting price', (await fees(page)).eligible === true);
+
+  /* Emptying the field is the interesting move, not changing the number.
+     calc() returns early when the price is <= 0, and the eligibility read sits
+     below that return, so this is the one supported edit on which no comparison
+     used to be performed. Both edits go through the real oninput handler and
+     nothing in this test calls the reader between them. */
+  await page.evaluate(() => {
+    const el = document.getElementById('priceOverride');
+    el.value = '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.value = '400';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  const after = await fees(page);
+  T.check('🔴 clearing the price and retyping it requires a fresh confirmation',
+    after.confirmed === false && after.eligible === false, JSON.stringify(after));
+  T.check('the full percentage fee is charged again', near(after.fvf, 400 * 0.1325), `fvf=${after.fvf}`);
+  await ctx.close();
+});
+
+await T.section('a search round-trip through the debounce does not revive the answer', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', card: 'Charizard VMAX' });
+  await answer(page, 'yes');
+  T.check('confirmed on the original query', (await fees(page)).eligible === true);
+
+  /* The search listener debounces by 180ms and never calls calc(), so this path
+     had no synchronous reader at all. Both keystrokes are dispatched back to
+     back, inside one evaluate, so the debounce cannot have fired in between and
+     the test cannot accidentally supply the read it is meant to do without. */
+  await page.evaluate(() => {
+    const el = document.getElementById('searchInput');
+    el.value = 'Pikachu VMAX';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.value = 'Charizard VMAX';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  const after = await fees(page);
+  T.check('🔴 typing away and back requires a fresh confirmation',
+    after.confirmed === false && after.eligible === false, JSON.stringify(after));
+  await ctx.close();
+});
+
+await T.section('the revision only ever moves forward', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', price: '400' });
+  const seen = await page.evaluate(() => {
+    const el = document.getElementById('priceOverride');
+    const revs = [window.touchListingContext()];
+    for (const v of ['450', '400', '450', '400']) {
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      revs.push(window.touchListingContext());
+    }
+    return revs;
+  });
+  T.check('🔴 returning to an earlier context does not return to an earlier revision',
+    seen.every((r, i) => i === 0 || r >= seen[i - 1]) && seen[seen.length - 1] > seen[0],
+    JSON.stringify(seen));
+  await ctx.close();
+});
+
+// ── The identity axis, one component at a time ─────────────────────────────
+/* Moving the query does not test selectedCard.id: the suite would still pass
+   with the id removed from the stamp entirely. Each component is therefore
+   moved on its own, with everything else held constant. setSelectedCard is the
+   real production boundary all eleven assignment sites go through, not a
+   test-only global. */
+
+await T.section('changing the selected card while the query text is unchanged invalidates', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', card: 'Charizard' });
+  await page.evaluate(() => window.setSelectedCard({ id: 'sv-001', name: 'Charizard', game: 'pokemon' }));
+  await answer(page, 'yes');
+  T.check('confirmed against the first card', (await fees(page)).eligible === true);
+
+  const held = await page.evaluate(() => {
+    const before = document.getElementById('searchInput').value;
+    // Same visible name, different catalog id. Nothing else moves.
+    window.setSelectedCard({ id: 'base-004', name: 'Charizard', game: 'pokemon' });
+    return { before, after: document.getElementById('searchInput').value };
+  });
+  T.check('the query text really was held constant',
+    held.before === held.after && held.after === 'Charizard', JSON.stringify(held));
+  const after = await fees(page);
+  T.check('🔴 a different catalog id is a different listing',
+    after.confirmed === false && after.eligible === false, JSON.stringify(after));
+  await ctx.close();
+});
+
+await T.section('changing only the query while the selected card is unchanged invalidates', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', card: 'Charizard' });
+  await page.evaluate(() => window.setSelectedCard({ id: 'sv-001', name: 'Charizard', game: 'pokemon' }));
+  await answer(page, 'yes');
+  T.check('confirmed against the first query', (await fees(page)).eligible === true);
+  await page.evaluate(() => {
+    const el = document.getElementById('searchInput');
+    el.value = 'Charizard ex';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const after = await fees(page);
+  T.check('🔴 the seller starting to type another card expires the answer',
+    after.confirmed === false && after.eligible === false, JSON.stringify(after));
+  await ctx.close();
+});
+
+await T.section('a new scan of an identical card does not inherit the confirmation', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', card: 'Charizard VMAX', price: '400' });
+  const card = { id: 'swsh-020', name: 'Charizard VMAX', game: 'pokemon' };
+  await page.evaluate((c) => window.setSelectedCard({ ...c }), card);
+  await answer(page, 'yes');
+  T.check('confirmed on the first scan', (await fees(page)).eligible === true);
+
+  /* Catalog identity is not listing identity. This second object is equal to
+     the first on every field the context can see -- id, name, game -- and every
+     DOM input is untouched, so the context comparison cannot tell them apart.
+     Only the instance counter can, which is the reason it exists. */
+  const same = await page.evaluate((c) => {
+    const before = window.trsListingContext();
+    window.setSelectedCard({ ...c });
+    return { before, after: window.trsListingContext() };
+  }, card);
+  T.check('every visible component of the two contexts is identical',
+    same.before.split('|').slice(1).join('|') === same.after.split('|').slice(1).join('|'),
+    JSON.stringify(same));
+  T.check('🔴 only the listing instance distinguishes them, and it did',
+    same.before !== same.after, JSON.stringify(same));
+  const after = await fees(page);
+  T.check('🔴 the second scan starts unconfirmed',
+    after.confirmed === false && after.eligible === false, JSON.stringify(after));
+  await ctx.close();
+});
+
+await T.section('an ordinary repaint keeps a valid confirmation', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', price: '400' });
+  await answer(page, 'yes');
+  /* The guards must expire an answer that no longer applies without expiring
+     one that does. Recalculating, touching the boundary and re-reading
+     eligibility are all things the app does many times per listing, and if any
+     of them consumed the answer the seller would have to re-confirm to see a
+     number they had already earned. */
+  const reads = await page.evaluate(() => {
+    const out = [];
+    for (let i = 0; i < 5; i++) {
+      window.touchListingContext();
+      window.syncTrsListingControl();
+      try { window.calc(); } catch (e) { /* ranking needs more state than this fixture has */ }
+      out.push(window.trsListingConfirmed());
+    }
+    return out;
+  });
+  T.check('🔴 five repaints in a row do not consume the answer',
+    reads.every((r) => r === true), JSON.stringify(reads));
+  T.check('and the control still shows Yes',
+    (await fees(page)).selectValue === 'yes');
+  await ctx.close();
+});
+
+// ── Boundary coverage ──────────────────────────────────────────────────────
+await T.section('every context input reaches the mutation boundary', async () => {
+  const { ctx, page } = await boot();
+  await setListing(page, { status: 'yes', price: '400' });
+  /* The revision guard is only as good as the set of paths that reach the
+     boundary. Rather than trusting that, each DOM input in the context is moved
+     through its real event and the revision must advance. A future edit that
+     removes oninput="calc()" from one of these, or adds an input to the context
+     without a handler, fails here -- which is the failure mode the two previous
+     attempts at this feature both had. */
+  const inputs = ['priceOverride', 'shipCharge', 'shipCost', 'searchInput'];
+  for (const id of inputs) {
+    const moved = await page.evaluate((elId) => {
+      const el = document.getElementById(elId);
+      if (!el) return { missing: true };
+      const before = window.touchListingContext();
+      el.value = elId === 'searchInput' ? 'Some Other Card' : '77';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return { missing: false, before, after: window.touchListingContext() };
+    }, id);
+    T.check(`${id} advances the revision through its own event`,
+      moved.missing === false && moved.after > moved.before, `${id} — ${JSON.stringify(moved)}`);
+  }
   await ctx.close();
 });
 
