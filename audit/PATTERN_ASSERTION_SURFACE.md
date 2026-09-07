@@ -1,7 +1,9 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**21 instances.** The highest-numbered entry is instance 21; that number, not
-this sentence, is the thing to check.
+**21 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 21; that number, not this sentence, is the
+thing to check. A subclass shares a mechanism with its parent and is filed under
+it rather than counted separately — see 18b for the reasoning.
 
 > 2026-09-07: this header read **"Six instances"** while the file carried 19 — a
 > stamped count, stale by thirteen, in the document about claims that outlive
@@ -751,6 +753,33 @@ Corollary for the contrast work in the same session: this is why
 sweep matching zero nodes and a guard whose threshold is unreachable are the
 same failure — a check that passes because nothing arrived, not because
 everything was fine.
+
+## 18b. Second form — a margin that holds because two errors happen to be equal (2026-09-07)
+
+Instance 18 was a guard whose threshold no reachable input could cross. This is
+the same mechanism seen from the other side: **a margin that is safe only because
+two independent errors are currently the same size, with nothing recording that
+the equality is what makes it safe.**
+
+The venue comparison ranks eBay $0.10 above TCGplayer. Both venue models omit
+buyer sales tax from the fee base, understating each fee by **$3.18** on a $400
+sale at 6% — **32× the margin.** The order survives only because the two
+understatements are equal, which is an accident of their near-identical fee rates
+(13.25% and effectively the same). Diverge either rate, or establish that one
+venue charges commission on tax and the other does not, and a $0.10 ordering
+flips with **no test failing** — because no test asserts the equality, and the
+equality is not written down anywhere as a premise.
+
+The tell is the same as instance 18: a number that looks like a safety margin but
+is actually a coincidence of inputs. The difference is only where the unwritten
+assumption sits — in 18 it was the reachable input range, here it is the relative
+size of two errors elsewhere in the system.
+
+**Deliberately not numbered as instance 22.** The mechanism is instance 18's; a
+new integer would overstate how many distinct things this file has found, and
+this is the file that documents its own count going stale by thirteen. Filed as a
+subclass with its own greppable heading so it can be found without being
+double-counted.
 
 ## 19. An assertion that pins an occurrence count (2026-09-07)
 

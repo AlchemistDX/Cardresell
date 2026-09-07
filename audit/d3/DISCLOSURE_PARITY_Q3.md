@@ -344,3 +344,108 @@ Filed as **BIAS-10**. The work it needs, in order:
 **Do not add a tax rate to any model.** Tax depends on the buyer and the ship-to
 state; a draft and a comparison row both have neither. The fix is disclosure and
 citation, exactly as with BIAS-9 — the estimate stays a lower bound on the fee.
+
+### Q3-E revised — the compression is the finding, and the stamp design has a fork
+
+**Reframed after review 2026-09-07.** The headline above was wrong about which
+result mattered. "Order survives" is the reassuring number and it led. The finding
+is the other one:
+
+> **The omission scales with the fee rate, so it always flatters the more
+> expensive venue more, and therefore compresses the gap the product exists to
+> report.**
+
+"You'd keep $51 more on Fanatics" is the sentence a seller acts on. The ordering
+is a means to that sentence, not the product. A spread compressed by up to $3.36
+on a $400 card makes every expensive venue look closer to acceptable than it is —
+**a lean in the number the product exists to produce**, not in a supporting
+figure. BIAS-10 is a magnitude bias, not a ranking bug, and it should be read
+that way in the register.
+
+#### The $0.10 margin is instance 18 from the other side
+
+The eBay ↔ TCGplayer gap of $0.10 survives a $3.18 per-venue error **only because
+the two errors are equal.** Nothing in the code, the tests, or this document
+records that the equality is load-bearing. It is a safety margin that holds by
+coincidence of two near-identical fee rates, and it would stop holding the moment
+either venue's tax treatment or rate diverged — with no test failing.
+
+Same shape as pattern instance 18: a threshold whose safety depends on an input
+range nobody wrote down. Recorded there as a second form rather than a new
+instance, because the mechanism is identical and inflating the count is the exact
+failure that file already documents about itself.
+
+#### The general rule, stated once
+
+**No invented input to a fee model.** Not "no invented tax rate" — the narrower
+form invites the next person to invent something else. A tax rate needs a buyer
+and a ship-to state; neither exists at draft time or at comparison time. And the
+specific reason this rule is stricter for fee inputs than elsewhere: **an
+invented input propagates into every venue's number simultaneously and silently**,
+so it cannot show up as an outlier. It moves the whole board and looks like
+consistency. Disclosure and citation close a gap of this kind; modeling does not.
+
+#### The stamp: one date or two?
+
+The suggestion to date each tax-treatment citation the way `feeAuditedOn` dates
+each fee schedule is right about the need. **It has a fork in it, and the
+one-date branch is the correct one.**
+
+The existing machinery is already fail-closed and reusable — `feeAuditAgeDays()`
+returns `Infinity` for missing, unparseable, future, and calendar-rollover dates;
+`isFeeAmber()` at >30 days, `isFeeStale()` at >45. All 15 venues carry
+`feeAuditedOn: '2026-09-01'` (6 days old today; amber 2026-10-01, stale
+2026-10-16). `tests/accuracy-fee-parity.mjs` already enforces that every venue
+carries a stamp and that the model and `accuracy.html` agree on it.
+
+**Against a separate `taxCheckedOn`:** the field's own docblock defines
+`feeAuditedOn` as *"when did we last READ the venue's published schedule."* Tax
+treatment is on that schedule — it is the same page, read in the same sitting.
+A second date for one reading event is two hand-maintained copies of one fact,
+which is the duplicate-implementation bug in date form and the precise failure
+the parity guard was written to catch. It would also make an inconsistent pair
+representable: fees read Sep 1, tax read Oct 15, with no way to say which reading
+the row reflects.
+
+**So: one date, and the tax audit IS a fee-schedule re-audit.** Re-read all
+fifteen published pages, record the tax answer alongside the fee values, bump
+`feeAuditedOn` in the same commit. That keeps one date meaning one thing.
+
+A second date earns its place only under one condition: if tax treatment is ever
+published somewhere other than the fee schedule, so the two facts genuinely have
+different sources and can go stale independently. Until that is true of a real
+venue, do not add the field.
+
+**And do not bump `feeAuditedOn` without actually re-reading.** Bumping it to
+cover a tax-only check would stamp a schedule re-verification that did not
+happen — a lie in the field whose whole purpose is to not lie about that.
+
+#### `taxNote` is in the wrong place, and that is why the guard cannot see it
+
+`items.taxNote = true` is hardcoded inside `feeEbay` (`js/core.7f9c03ad.js:6840`).
+The fact "this venue charges its commission on a tax-inclusive total" is a
+**venue fact**, and every other venue fact lives in `PLATFORMS`. Encoding it as a
+line inside one fee function is rule-1 wrong in the same shape as the duplicate
+fee model, and it is the mechanical reason eleven venues silently have no note:
+there was never a field to leave blank.
+
+Sequenced fix — **citations first, publication last:**
+
+1. Re-read all fifteen published fee pages from **raw page text**. Record, per
+   venue, whether commission applies to a tax-inclusive total.
+2. Add `taxOn: true | false | 'unknown'` to each `PLATFORMS` entry, bumping
+   `feeAuditedOn` in the same commit because step 1 was a real re-audit.
+3. Derive `taxNote` from `PLATFORMS[pid].taxOn` and delete the hardcoded line —
+   one behaviour, one implementation. `'unknown'` must render the disclosure, not
+   suppress it: an unverified treatment presents as unverified, matching how
+   `feeAuditAgeDays` fails closed.
+4. Extend `tests/accuracy-fee-parity.mjs`: every venue carries a `taxOn`, and
+   `taxNote` is set if and only if `taxOn !== false`.
+5. Only then restate tax treatment on `accuracy.html`, so the guard covers it the
+   way it covers venue and date. **Do not publish a tax claim before step 1
+   supplies its citation.**
+
+Step 1 is genuine research and it goes stale, which is the argument for folding it
+into the next scheduled re-read rather than running it as a one-off: the next
+re-audit is due before **2026-10-01** to stay out of amber, and doing tax then
+costs one extra field per page instead of fifteen separate visits.

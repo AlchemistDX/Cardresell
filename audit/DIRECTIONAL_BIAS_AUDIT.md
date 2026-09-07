@@ -663,8 +663,18 @@ Nothing in this document has been changed in code. Recorded as findings:
   **eBay ↔ TCGplayer gap is $0.10 against a $3.18 per-venue effect (32×)**. Order
   survives only because those two are flattered equally, which is an accident of
   their near-identical rates.
-  **The uniformity assumption is verified for exactly one venue.** Full write-up
-  and the four-step remedy: `audit/d3/DISCLOSURE_PARITY_Q3.md` § Q3-E.
+  **The uniformity assumption is verified for exactly one venue.**
+  **BIAS-10 is a MAGNITUDE bias, not a ranking bug** — order-survival was the
+  reassuring result and it should not lead. The finding is that the omission
+  scales with fee rate, so it always flatters the more expensive venue more and
+  compresses the very gap the product exists to report. Full write-up, the
+  one-date stamp decision, and the five-step sequenced remedy:
+  `audit/d3/DISCLOSURE_PARITY_Q3.md` § Q3-E revised.
+- **Binding rule established here:** **no invented input to a fee model.** Not
+  the narrower "no invented tax rate" — an invented fee input propagates into
+  every venue simultaneously and silently, so it cannot surface as an outlier. It
+  moves the whole board and looks like consistency. Gaps of this kind close by
+  disclosure and citation, never by modelling.
 - **BIAS-5** `GRADING_FEE = 25` contradicts the server's own `getGradingCost`
   tier table (`api/grade-opportunity.js:44-52`). The fix is the tier table, and
   it needs a stated grader default — an owner call. **This is the one BIAS item
