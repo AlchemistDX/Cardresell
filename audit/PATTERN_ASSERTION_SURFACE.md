@@ -450,3 +450,51 @@ a column at all. The instruction was *no column header*; the assertion enforced
 *no table semantics*.
 
 > **An assertion that bans a spelling cannot tell a disclosure from a column.**
+
+---
+
+## 15 — a negative source assertion cannot tell code from a comment about that code
+
+**Found:** 2026-09-07, D3 step 5 rev2.
+
+An assertion banned a spelling by searching the bundle source for it. The
+spelling was absent from the code and present in a comment *explaining why the
+code avoids it*. The assertion failed on a correct file.
+
+**The shape:** a source-text assertion reads the file as one flat string, so it
+cannot distinguish an implementation from prose about that implementation.
+Comments that document a constraint will trip the assertion that enforces it —
+the better the comment, the more likely it trips.
+
+**Fix:** strip comment-only lines before asserting on source text.
+
+---
+
+## 16 — an assertion can pin a bug in place
+
+**Found:** 2026-09-07, D3 step 5 rev3, Blocker 3.
+
+`draft-review-screen.mjs` asserted **'a Top Rated seller keeps strictly more of
+the same price'**. It was green. It was green *because* the review screen was
+inheriting a global seller status into a per-listing fee discount — which was
+the bug. The assertion did not merely fail to catch it; the assertion
+**required** it, and would have gone red the moment the bug was fixed.
+
+**The shape:** an assertion written from the implementation's behaviour rather
+than from the *behaviour the business owes* becomes a lock. Fixing the code
+breaks the test, the test looks authoritative because it is old and green, and
+the pressure is to revert the fix.
+
+**The tell:** ask what source the assertion's expectation came from. Here the
+expectation came from the code. Nothing external ever said a Top Rated *seller*
+should get a per-listing discount — eBay's own page says the opposite.
+
+**Fix:** the assertion's real intent — the screen reads the profile rather than
+hardcoding defaults — is now proved with the **store tier**, which genuinely is
+a property of the seller. The old text is recorded inside the test file, marked
+`CHANGED 2026-09-07`, because a flip and a silencing look identical in a diff.
+
+**Related:** a mutation that cannot be observed is *not* this. The tier
+comparison `<= 7500` → `< 7500` changes nothing, because both branches compute
+the same value at exactly 7500. That is a real equivalence, not a pinned bug,
+and it is recorded in the test file so nobody invents an assertion to chase it.
