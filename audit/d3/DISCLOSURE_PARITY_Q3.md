@@ -741,3 +741,93 @@ Two extraction bugs, both silent, recorded because the technique is reused:
   `new Function(code + 'return {…}')` and destructure. The previously recorded
   version of this technique ("eval all at top level in one string") only worked
   in a sloppy-mode context.
+
+## Q3-C implemented — one inversion mechanism closed, a second one found
+
+Three items landed without a policy call. The rule is installed on one branch and
+**the inversion is not gone.** Reporting the residue rather than the headline.
+
+### What landed
+
+**1. Synthesize a spread only around an observed centre.** `_headlinePrice`
+(`api/tcg-price.js:611`) now returns `{ value, basis }` where `basis` is
+`'sales'` when upstream `marketPrice` is present and usable, `'ask_blend'` when
+the centre fell back to `_trimmedMean`, and `null` when there is no value at all.
+The tcgcsv path (`:236-277`) synthesizes `low`/`high` only when
+`basis === 'sales'`; otherwise it publishes `null` and the headline alone.
+
+**2. Origin published per endpoint.** `marketBasis`, `lowBasis`, `highBasis`
+(`'observed' | 'derived' | null`) — instance 22's asymmetry, closed for these
+three fields. `datedBySource` on the client will derive from `marketBasis`
+rather than being hardcoded `true`; that half is the client change, not yet made.
+
+**3. Behavioural assertion.** `tests/quick-pricing.mjs:89-172` extracts and runs
+the real `_headlinePrice` / `_trimmedMean` / `_clampHighPriceInPlace` and sweeps
+`high = 100..600` at `mid = 100`, crossing `_HIGH_CAP_MULT` deliberately.
+
+Measured before → after, upstream `{low: null, market: null, mid: 100, high: 300}`:
+
+| field | before | after |
+|---|---|---|
+| `market` | `166.67` | `166.67` (unchanged) |
+| `low` | **`141.67`** | `null` |
+| `mid` | `100.00` | `100.00` |
+| `high` | `300.00` | `300.00` |
+| rendered | `Low $141.67 · Mid $100.00 · High $300.00` | `Mid $100.00 · High $300.00` |
+
+Derived-centre inversions across the swept range: **0 / 501**, from 148 / 501.
+
+Suites: `quick-pricing` **46/0** (was 38/0; +8, four retargeted) ·
+`launch-audit-regressions` **432/0** (one retargeted) · `fee-truth-offline`,
+`copy-truth-offline`, `accuracy-fee-parity` 15/0, `test-registry` 12/0 all green.
+
+### The residue — the same inversion survives on the observed-centre branch
+
+The rule fixes the branch where the *centre* is derived. It does nothing about the
+branch where the centre is observed and `low` is still `0.85 × market`, because
+that endpoint is compared against a `mid` that comes from **a different book**:
+
+```
+0.85 · market > mid   ⇔   market > 1.1765 · mid
+```
+
+`low` is derived from completed sales; `mid` is the median active ask. Measured,
+upstream `{low: null, market: 300, mid: 100, high: 300}`:
+
+```
+published  low $255.00   mid $100.00   high $300.00
+renders    Low $255.00 · Mid $100.00 · High $300.00
+```
+
+57 of 61 sampled `market` values in `100..400` at `mid = 100` invert. This is a
+**different mechanism** from the one just fixed — not "the fix was incomplete"
+but "there were two", and only one was measured before implementing.
+
+**And its upper bound is 3.0 again.** `_marketAskDivergence` (`:672`) returns
+`null` when `ratio <= 3` (`:683`). Its `direction: 'sales_above_asks'` names
+exactly this condition. So the undisclosed inversion band on this branch is
+`1.176 × mid < market ≤ 3.0 × mid` — the region below the threshold, which is
+where the defect lives. Third occurrence of instance 23's mechanism, third time
+with the constant `3.0`.
+
+### Why this is not an arithmetic fix
+
+`Low · Mid · High` is printed as an ordered triple. Two of its members are
+derived from the sales book and one is an observed median of the ask book. Three
+numbers answering different questions do not have an ordering, so no choice of
+multiplier makes the triple sound — a smaller floor multiplier moves the
+threshold, it does not remove it.
+
+That is an argument for Q7's *"show only the comp"*, now from measurement rather
+than taste. **Not deciding it here.** Q7 is open, this is its evidence, and the
+decision is yours. Filed as **T2.10**.
+
+### Correction to my own earlier framing
+
+I wrote in § Q3-C revised that on the tcgcsv path "only the spread is synthetic",
+which was the basis for treating that rung as the safer one. That was already
+wrong once — the centre is a blend too, which is what the measurement showed. It
+is wrong a second way: on the *observed*-centre branch the spread is synthetic
+**and drawn from a different book than the `mid` it is printed beside**. The
+"only the spread is synthetic" framing was doing more work than it could support,
+in both directions.

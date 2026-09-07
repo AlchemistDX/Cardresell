@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**22 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 22; that number, not this sentence, is the
+**23 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 23; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1094,3 +1094,114 @@ disclosure**: `'unknown'` renders the note rather than suppressing it, matching
 fail toward telling the seller more. A tri-state that treats `'unknown'` as
 `false` reintroduces the original defect with a field attached — worse than
 before, because now it looks audited.
+
+## 23. A guard whose threshold bounds the defect instead of catching it (2026-09-07)
+
+`_HIGH_CAP_MULT = 3.0` (`api/tcg-price.js:530`) drops the high ask from the
+trimmed-mean blend when `high > 3 × mid`, and `_clampHighPriceInPlace`
+(`:531`) clamps a published high on the same multiple. Both are outlier guards:
+their stated job is to stop a holdout listing from contaminating a headline.
+
+On the tcgcsv path, when upstream omits `marketPrice` **and** `low`, the centre
+becomes `_trimmedMean` — which includes the high ask at weight 1 against `mid` at
+weight 2 — and `low` is then synthesized as `0.85 ×` that centre. The floor is
+taken off a number the high ask has already lifted, so:
+
+```
+0.85 · (2·mid + high)/3 > mid   ⇔   high > 1.5294 · mid
+```
+
+Measured with the real functions: `mid 100 / high 300` publishes
+`low $141.67, mid $100.00` — the row titled **"Lowest listing"** renders 42%
+*above* the median ask, and the range line renders Low above Mid.
+
+**The inversion band is `1.53 × mid < high ≤ 3.0 × mid`, and its upper bound is
+the guard.** Above `3.0 × mid` the high ask is dropped, the centre collapses to
+`mid`, and `low` returns to a well-behaved `$85.00`. So the guard does not fail
+to catch the inversion — **it defines the region the inversion lives in.**
+Loosening the threshold would produce *fewer* inverted renders, not more.
+Tightening it would produce more. **The guard's parameter is monotonically
+backwards with respect to this defect**, which means no amount of tuning it in
+the direction its name suggests improves the outcome.
+
+### Why it isn't instance 18, and why it shares 18's blind spot
+
+Instance 18 is a guard whose threshold **no reachable input can cross** — the
+protection is structurally dead where it is most needed. This is a guard whose
+threshold **delimits where the defect occurs** — the protection is alive, fires
+correctly, and its firing is what makes the surrounding range the dangerous one.
+Opposite relationships between threshold and input range; distinct mechanisms.
+
+They share the blind spot, which is the reason both belong here: **neither is
+visible from reading the guard.** In both cases the guard's logic is correct, its
+threshold is defensible, its comment is accurate, and every local check passes.
+What is wrong is a relationship between the threshold and the distribution of
+inputs — a fact that exists in neither the guard nor the caller, and therefore in
+no single place a reviewer reads.
+
+Worth recording that this is the **same constant** — `3.0` — implicated in both,
+on two different rungs, with two opposite pathologies:
+
+| rung | relationship | consequence |
+|---|---|---|
+| fallback (`market × 1.15`) | `1.15 < 3` always | threshold unreachable — guard never fires (18) |
+| tcgcsv (`market` absent) | inversion at `1.53×`–`3.0×` | threshold bounds the defect region (23) |
+
+A single constant reviewed once, correct in isolation, wrong in two
+non-overlapping ways depending on which caller reaches it.
+
+**Third occurrence, found while implementing the fix for the second.** With the
+centre *observed*, `low = 0.85 × market` is compared against a `mid` that is the
+median active ask, and inverts whenever `market > 1.1765 × mid`. Measured:
+upstream `mid 100 / market 300` publishes `low $255.00` beside `mid $100.00`.
+`_marketAskDivergence` (`api/tcg-price.js:672`) is the mechanism that would
+disclose this — its `direction: 'sales_above_asks'` names exactly the condition —
+and it returns `null` when `ratio <= 3` (`:683`). So the undisclosed band is
+`1.176 × mid < market ≤ 3.0 × mid`: again the region *below* the threshold, again
+the constant `3.0`.
+
+| branch | guard | threshold | defect region |
+|---|---|---|---|
+| fallback (`market × 1.15`) | `_clampHigh` | `× 3` | none — unreachable (18) |
+| tcgcsv, centre derived | `_HIGH_CAP_MULT` | `× 3` | `1.53×`–`3.0×` (23) |
+| tcgcsv, centre observed | `_marketAskDivergence` | `ratio ≤ 3` | `1.18×`–`3.0×` (23) |
+
+Three guards, one constant, and in every case the interesting inputs are the ones
+the threshold declares uninteresting. Worth asking whether `3.0` was ever chosen
+against a measured distribution, or copied.
+
+**Process note, which is the part that generalises.** The derived-centre
+mechanism was measured before it was fixed, so the fix was correct. The
+observed-centre mechanism was *not* measured, because the rule "synthesize only
+around an observed centre" made that branch sound safe by construction — the
+same reasoning error as citing `marketAskDivergence` as working disclosure. It
+surfaced only because the post-fix sweep was extended to a branch the rule said
+was fine. **A rule that explains why a branch is safe is the reason nobody
+measures that branch.**
+
+### The tell
+
+For any guard, the reachability question (18) and the region question (23) are
+the same question asked from two ends: **over the actual range of inputs, what
+does this threshold partition?** Not "is the threshold right" — that is answerable
+locally and was answerable locally in both cases. Ask instead which inputs fall
+either side, and what happens to each side. A guard that never fires and a guard
+whose firing marks the boundary of a bug both answer "the threshold is 3.0, and
+3.0 is a reasonable number for a holdout listing."
+
+### Corollary — a disclosure mechanism can be silent by construction
+
+Filed here because it was found in the same pass and has the same shape. The
+file's one existing disclosure mechanism, `_marketAskDivergence`
+(`api/tcg-price.js:628`), requires **both** `market` and `mid` and returns `null`
+if either is absent (`:637`). The branch that inverts is the **market-absent**
+branch. So the mechanism is not merely unwired — it is *definitionally silent on
+the case that most needs it*, and would remain silent if wired tomorrow.
+
+Separately: it is computed and serialized (`:266-267`) and **read nowhere
+client-side** — zero occurrences across `js/`, `index.html`, `accuracy.html` —
+while two test files assert it. A field with no reader, green in the suite.
+
+**Rule:** when reusing a mechanism as precedent, its *shape* transfers; its
+*coverage* does not. Check the new case against the mechanism's own guard
+conditions before citing it as the place the disclosure will live.

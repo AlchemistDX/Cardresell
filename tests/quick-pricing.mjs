@@ -46,17 +46,130 @@ console.log('\n[Headline price]');
 {
   const code = tcgPrice.replace(/\/\*[\s\S]*?\*\//g, '');
 
+  // 2026-09-07 RETARGETED (Q3-C). These three used to pin the old bare-number
+  // return shape:
+  //   /const displayMarket = _headlinePrice\(/
+  //   /return Math\.round\(M \* 100\) \/ 100;/
+  //   /if \(M == null\) return _trimmedMean\(/
+  // _headlinePrice now returns { value, basis } so the two branches -- a
+  // completed sale vs an aggregate of active asks -- are distinguishable by a
+  // consumer. Before the basis existed there was no field in which that
+  // difference could be represented, and every reader defaulted to the more
+  // authoritative of the two (pattern instance 22). The behaviour each of these
+  // three protects is unchanged; only the shape carrying it moved.
   check('the headline comes from _headlinePrice, not the ask blend',
-        /const displayMarket = _headlinePrice\(/.test(code),
+        /const _head = _headlinePrice\(/.test(code)
+          && /const displayMarket = _head\.value;/.test(code),
         'reverting to _trimmedMean re-publishes $424.90 on a $500.12 card');
 
   check('_headlinePrice returns the market price when it is sane',
-        /return Math\.round\(M \* 100\) \/ 100;/.test(code),
+        /return \{ value: Math\.round\(M \* 100\) \/ 100, basis: 'sales' \};/.test(code),
         'the sale price must be published verbatim, not averaged with asks');
 
   check('the blend survives as the no-market fallback',
-        /if \(M == null\) return _trimmedMean\(/.test(code),
+        /if \(M == null\) \{/.test(code)
+          && /const blended = _trimmedMean\(/.test(code),
         'cards without a market price still need a number');
+
+  check('the ask blend is labelled as an ask blend, not as a sale',
+        /basis: blended == null \? null : 'ask_blend'/.test(code),
+        'the code says market and asks must never be relabelled as each other');
+
+  check('a spread is synthesized only around an observed centre',
+        /const _spreadOk = _head\.basis === 'sales';/.test(code)
+          && /_spreadOk \? displayMarket \* 0\.85 : null/.test(code)
+          && /_spreadOk \? displayMarket \* 1\.15 : null/.test(code),
+        'a 0.85 floor off an ask blend published low ABOVE mid');
+
+  check('each published endpoint carries its origin',
+        /marketBasis: _head\.basis/.test(code)
+          && /lowBasis:/.test(code) && /highBasis:/.test(code),
+        'a derived endpoint must not render under a label asserting observation');
+
+  // 2026-09-07 (Q3-C). BEHAVIOURAL, not textual. Every assertion above greps
+  // source text, and the inversion this protects against was live for the whole
+  // period they were green -- a published `low` 42% ABOVE `mid`. None of them
+  // could have caught it, because none of them ran the function. This one runs
+  // the real _headlinePrice / _trimmedMean / _clampHighPriceInPlace over the
+  // input range and asserts the ORDERING the seller sees.
+  //
+  // Extraction notes, both bugs found the hard way: brace-matching from
+  // `function <name>` closes on the DESTRUCTURED PARAMETER LIST and yields a
+  // one-line fragment, so walk the parameter parens to their match first. And
+  // under ESM (strict mode) eval'd function declarations never reach module
+  // scope -- use new Function(code + 'return {...}').
+  {
+    const grab = (name) => {
+      const i = tcgPrice.indexOf('function ' + name);
+      if (i < 0) return null;
+      let p = tcgPrice.indexOf('(', i), pd = 0, close = -1;
+      for (let k = p; k < tcgPrice.length; k++) {
+        if (tcgPrice[k] === '(') pd++;
+        else if (tcgPrice[k] === ')') { pd--; if (!pd) { close = k; break; } }
+      }
+      let d = 0; const j = tcgPrice.indexOf('{', close);
+      for (let k = j; k < tcgPrice.length; k++) {
+        if (tcgPrice[k] === '{') d++;
+        else if (tcgPrice[k] === '}') { d--; if (!d) return tcgPrice.slice(i, k + 1); }
+      }
+      return null;
+    };
+    const names = ['_isSentinelPrice', '_trimmedMean', '_headlinePrice', '_clampHighPriceInPlace'];
+    const bodies = names.map(grab);
+    check('the pricing functions are extractable for behavioural testing',
+          bodies.every(b => b && b.split('\n').length > 2),
+          'a one-line body means the brace matcher closed on the parameter list');
+
+    if (bodies.every(Boolean)) {
+      const pre = 'const _PRICE_SENTINELS = new Set([99999, 999999, 99999.99]);'
+                + ' const _HIGH_CAP_MULT = 3.0;';
+      const F = new Function(pre + '\n' + bodies.join('\n')
+                             + '\nreturn {' + names.join(',') + '};')();
+      const publish = (r) => {
+        const head = F._headlinePrice({ low: r.low, market: r.market, mid: r.mid, high: r.high });
+        const dm = head.value;
+        const ok = head.basis === 'sales';
+        const data = {
+          market: dm,
+          low:  r.low  ?? (ok ? dm * 0.85 : null),
+          mid:  r.mid  ?? dm,
+          high: r.high ?? (ok ? dm * 1.15 : null),
+        };
+        F._clampHighPriceInPlace(data);
+        return data;
+      };
+
+      // The measured case: upstream omitted marketPrice and low, mid 100 /
+      // high 300. Published low $141.67 against mid $100.00 and rendered
+      // "Lowest listing $141.67" -- a floor 42% above the median ask.
+      const m = publish({ low: null, market: null, mid: 100, high: 300 });
+      check('the measured inversion case publishes no floor at all',
+            m.low === null,
+            'a 0.85 floor off an ask blend that already contains the high ask');
+      check('the ask-blend centre is still published',
+            m.market === 166.67,
+            'withholding the spread must not withhold the headline');
+
+      // Whole inversion band, 1.53x mid < high <= 3.0x mid, plus both sides of
+      // _HIGH_CAP_MULT. The guard BOUNDS this defect rather than catching it
+      // (pattern instance 23), so the sweep must cross 3.0x deliberately.
+      let inverted = 0;
+      for (let h = 100; h <= 600; h++) {
+        const d = publish({ low: null, market: null, mid: 100, high: h });
+        if (d.low != null && d.mid != null && d.low > d.mid) inverted++;
+      }
+      check('no derived-centre input publishes low above mid',
+            inverted === 0,
+            `${inverted} of 501 high values invert the published range`);
+
+      // An observed centre keeps its band -- roadmap Q7 is still open and this
+      // change deliberately does not answer it.
+      const q7 = publish({ low: null, market: 110, mid: 100, high: 300 });
+      check('an observed centre still carries its derived band',
+            q7.low === 93.5,
+            'this change withholds around a derived centre only, not everywhere');
+    }
+  }
 
   // 2026-09-03 REVERSED. This used to assert the ask-blend fallback fired when
   // Market disagreed with the median ask by >3x. The audit showed the valve's

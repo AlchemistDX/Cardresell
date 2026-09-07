@@ -947,8 +947,15 @@ try {
         (headline.match(/_trimmedMean/g) || []).length === 1
           && /No sale price to trust/.test(headline),
         'an absent marketPrice is the one case where an ask is the best signal');
-  check('a present Market is returned unchanged',
-        /return Math\.round\(M \* 100\) \/ 100;/.test(headline));
+  // 2026-09-07 RETARGETED (Q3-C). Used to assert
+  // /return Math\.round\(M \* 100\) \/ 100;/ -- the old bare-number return.
+  // _headlinePrice now returns { value, basis } so a consumer can tell a
+  // completed sale from an aggregate of active asks; the sale price is still
+  // published verbatim, which is the behaviour this protects. The stricter
+  // pattern also pins the label, so returning the blend under basis 'sales'
+  // fails here rather than passing on the arithmetic alone.
+  check('a present Market is returned unchanged, and labelled as a sale',
+        /return \{ value: Math\.round\(M \* 100\) \/ 100, basis: 'sales' \};/.test(headline));
   check('the $1,000 -> $19,800 case is documented in code',
         /19,?800/.test(headline) && /84198/.test(headline),
         'the worked example must stay next to the code it explains');

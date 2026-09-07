@@ -233,14 +233,47 @@ export default async function handler(req, res) {
       //   Elsa    (low $0.01 / mkt $0.07 / mid $0.15 / high $2.29) → $0.12
       //   Harpy   (low $0.02 / mkt $0.28 / mid $0.30 / high $3.98) → $0.29
       //   Normal  (low $1.00 / mkt $1.10 / mid $1.15 / high $1.30) → $1.14
-      const displayMarket = _headlinePrice({
+      const _head = _headlinePrice({
         low: r.low, market: r.market, mid: r.mid, high: r.high,
       });
+      const displayMarket = _head.value;
+      // 2026-09-07 (Q3-C): synthesize a spread only around an OBSERVED centre.
+      //
+      // When marketPrice is absent the centre is _trimmedMean, which includes
+      // the high ask (weight 1, against mid at weight 2). Taking a 0.85 floor
+      // off a centre the high ask has already lifted published `low` ABOVE
+      // `mid` whenever high > 1.5294 x mid. Measured with these functions:
+      // upstream mid 100 / high 300 published low 141.67 against mid 100 -- a
+      // row titled "Lowest listing" rendering 42% above the median ask, and a
+      // range line reading Low $141.67 - Mid $100.00 - High $300.00.
+      //
+      // The inversion band is 1.53x mid < high <= 3.0x mid, and its UPPER bound
+      // is _HIGH_CAP_MULT: above 3x the high ask is dropped from the blend, the
+      // centre collapses to mid, and low returns to a well-behaved 85.00. The
+      // outlier guard therefore bounds the defect rather than catching it, and
+      // loosening it would invert fewer renders, not more. Do not "fix" this by
+      // tuning that threshold.
+      //
+      // Withholding is safe on the client: _rangeParts() omits absent parts and
+      // the "Lowest listing" row is already conditional on low != null.
+      //
+      // Whether a symmetric band around an OBSERVED sale price is acceptable is
+      // still open -- roadmap Q7, filed under "If you are a reviewer, argue with
+      // these" (:847), NOT a settled rule. This change deliberately does not
+      // answer it; it only stops synthesizing around a centre that is itself
+      // derived.
+      const _spreadOk = _head.basis === 'sales';
       const data = {
         market: displayMarket,
-        low:    r.low  ?? (displayMarket * 0.85),
+        low:    r.low  ?? (_spreadOk ? displayMarket * 0.85 : null),
         mid:    r.mid  ?? displayMarket,
-        high:   r.high ?? (displayMarket * 1.15),
+        high:   r.high ?? (_spreadOk ? displayMarket * 1.15 : null),
+        // Origin of each published figure. Absent-vs-"checked, does not apply"
+        // was previously indistinguishable because there was no field to leave
+        // blank (pattern instance 22).
+        marketBasis: _head.basis,
+        lowBasis:  r.low  != null ? 'observed' : (_spreadOk ? 'derived' : null),
+        highBasis: r.high != null ? 'observed' : (_spreadOk ? 'derived' : null),
         source: 'tcgcsv',
         game,
         categoryId: r.categoryId ?? categoryId,
@@ -592,7 +625,18 @@ function _headlinePrice({ low, market, mid, high }) {
   const D = num(mid);
 
   // No sale price to trust -- fall back to the blend.
-  if (M == null) return _trimmedMean({ low, market, mid, high });
+  // 2026-09-07 (Q3-C): returns { value, basis } rather than a bare number. The
+  // two branches below answer different questions -- a completed sale vs an
+  // aggregate of active asks -- and the comment thirty lines down says one must
+  // never be relabelled as the other. Until this returned a basis there was no
+  // field in which that distinction could be represented, so every consumer
+  // defaulted to the more authoritative of the two readings. `basis` is null
+  // when there is no value at all, so a consumer cannot read a basis for a
+  // price that does not exist.
+  if (M == null) {
+    const blended = _trimmedMean({ low, market, mid, high });
+    return { value: blended, basis: blended == null ? null : 'ask_blend' };
+  }
 
   // 2026-09-03 REMOVED: the "sanity valve" that fell back to the ask blend
   // whenever Market disagreed with the median ask by more than 3x.
@@ -617,7 +661,7 @@ function _headlinePrice({ low, market, mid, high }) {
   //
   // The blend remains the fallback for when marketPrice is genuinely absent,
   // which is the one case where an ask is the best available signal.
-  return Math.round(M * 100) / 100;
+  return { value: Math.round(M * 100) / 100, basis: 'sales' };
 }
 
 // Reports a sharp disagreement between the completed-sales Market and the

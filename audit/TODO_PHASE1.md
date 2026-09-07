@@ -228,3 +228,23 @@ Steps, citations first and publication last:
 Ordering: this sits with the re-audit, after D3 closes, the bundle rename lands,
 and BIAS-1 is implemented. The independent date exists so a slipped re-audit
 cannot silently carry it.
+
+### T2.10 — Observed-centre band inverts against the ask median (Q3-C residue)
+
+`low = 0.85 × market` is derived from the **sales** book; `mid` is the median
+**active ask**. They render as an ordered triple. `low > mid` whenever
+`market > 1.1765 × mid`. Measured: upstream `mid 100 / market 300` publishes
+`low $255.00` beside `mid $100.00`.
+
+Undisclosed band is `1.176 × mid < market ≤ 3.0 × mid`, because
+`_marketAskDivergence` (`api/tcg-price.js:672`) returns `null` at `ratio <= 3`
+(`:683`) — the guard bounds the region the defect lives in, for the third time
+with the constant `3.0` (pattern instance 23).
+
+Not an arithmetic fix: a smaller multiplier moves the threshold, it does not
+remove it. Three numbers from two different books have no ordering. **This is
+roadmap Q7's evidence** (`audit/CARDRESELL_PLAN_AND_ROADMAP.md:847`, item 7) and
+Q7 is an open reviewer question — needs a decision, not a patch.
+
+Q3-C closed the derived-centre mechanism only. **Do not read Q3-C as "the
+inversion is fixed".**
