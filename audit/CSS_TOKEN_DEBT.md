@@ -156,3 +156,38 @@ still actually referenced**, so a fixed token cannot linger in the list — a ra
 grows is a list where fixed debt accumulates, which is the same "number someone maintains for no
 benefit" failure this file refuses elsewhere. Verified by mutation: adding a fixed entry to the
 baseline fails the suite (81 passed → 80/1).
+
+## 2026-09-07 — `--text-muted` fails AA in dark, passes in light
+
+Measured, not eyeballed. A reviewer said the dark-theme fee labels "look faint";
+the instruction was to measure before judging compliance, so:
+
+| pairing | ratio | AA (4.5:1) |
+| --- | --- | --- |
+| `--text-muted` `#6b6960` on light `--bg` `#f2f1ed` | **4.87** | pass |
+| `--text-muted` `#78766f` on dark surface `#21201a` | **3.59** | **fail** |
+| `--text-muted` `#78766f` on dark `--bg` `#111009` | **4.19** | **fail** |
+| `--text` on dark surface `#21201a` | 10.80 | pass |
+| `--orange` on `--orange-bg` (dark) | 6.59 | pass |
+
+The failure is not the fee block's. `--text-muted` has **242 usages** across
+`index.html` and the bundle, and it is below AA on *both* dark backgrounds, so
+every muted label in the app is affected in dark mode and none are in light.
+The fee breakdown only made it visible by putting five muted labels in a row.
+
+Nothing about the text is "large" for WCAG purposes — the fee labels are
+`.9rem` and the note is `.8rem`, both well under the 18.66px-bold / 24px
+threshold, so 3:1 does not apply and 4.5:1 is the bar.
+
+**Not changed here, deliberately.** Lifting one token value in the dark block
+would repaint 242 usages in a step-5 fee commit, and some of them are on the
+do-not-touch list. Candidates, measured against both dark backgrounds:
+
+| candidate | on `#21201a` | on `#111009` |
+| --- | --- | --- |
+| `#8a887f` | 4.59 | 5.36 |
+| `#918f86` | 5.04 | 5.88 |
+| `#95938a` | 5.30 | 6.19 |
+
+`#8a887f` is the minimum that clears AA on the tighter of the two. Awaiting a
+decision before touching it.

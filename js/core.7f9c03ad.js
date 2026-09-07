@@ -19431,6 +19431,57 @@ function _reviewFeeRow(kind, label, amount) {
         </div>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   2026-09-07: this block was rewritten onto the ranking surface's existing fee
+   vocabulary. The first version invented its own: "What you keep" for the net,
+   a prose sentence for the shipping exclusion, and no tax disclosure at all --
+   while `_platTileHtml` had, since 2026-09-01, been rendering a "Fee base
+   (item)" qualifier row, a "Buyer sales tax (not modeled)" row and a dated
+   Verified/Stale pill for exactly the same three jobs. That is rule 1: one
+   business behaviour (disclosing what a fee estimate does and does not cover)
+   had grown a second implementation, and the second one disclosed less.
+
+   The house labels are reused verbatim where the basis matches. The total row
+   is the one place it CANNOT be: the ranking surface says "Net after all
+   deductions" because it models seller shipping, and this screen does not, so
+   borrowing that label would claim a completeness the number lacks. Hence
+   "Estimated net (item only)" -- the qualifier mechanism, not the label.
+
+   Tax stays unmodelled on purpose. eBay charges the final value fee on the
+   total sale INCLUDING sales tax (ebay.com/help/selling/fees-credits-invoices/
+   selling-fees?id=4822), but the buyer's tax rate is a function of a buyer and
+   an address that do not exist while the card is a draft. Inventing one would
+   be a freshness/precision claim the data cannot support (plan §5.5). So the
+   engine-wide position -- "we do not model buyer-paid tax anywhere" -- holds,
+   and the row states it rather than the estimate implying otherwise.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// The qualifier-in-parentheses row from the ranking surface's fee recipe. The
+// parenthetical is what makes a zero honest: "$0.00" is a claim, "(not
+// modeled) $0.00" is a disclosure.
+function _reviewBasisRow(label, qualifier, amount) {
+  return `
+        <div class="review-fee-row review-fee-basis-row" data-fee-row="basis">
+          <div class="review-fee-label">${_reviewEsc(label)}<span class="review-fee-qual">(${_reviewEsc(qualifier)})</span></div>
+          <div class="review-fee-amount">${_reviewEsc(amount)}</div>
+        </div>`;
+}
+
+// Same staleness thresholds, same source of truth, same methodology link as
+// the ranking surface. Reading PLATFORMS/isFeeStale rather than restating the
+// window means a re-verification moves both screens at once.
+function _reviewFeeVerifiedHtml(pid) {
+  const info = (typeof PLATFORMS === 'object' && PLATFORMS) ? PLATFORMS[pid] : null;
+  if (!info || !info.verified) return '';
+  const stale = isFeeStale(pid);
+  const cls   = (stale || isFeeAmber(pid)) ? 'review-fee-pill stale' : 'review-fee-pill';
+  const label = stale ? 'Stale' : 'Verified';
+  const title = stale
+    ? 'These fees haven\u2019t been re-verified in over 45 days. Click for methodology.'
+    : 'View methodology + full fee sources';
+  return `<a href="/accuracy#fees" class="${cls}" data-fee-verified="${stale ? 'stale' : 'fresh'}" title="${_reviewEsc(title)}">${label} ${_reviewEsc(info.verified)}</a>`;
+}
+
 function _reviewFeesHtml() {
   const d = _reviewState.draft || {};
   const slot = d.slot ? String(d.slot) : '';
@@ -19438,25 +19489,28 @@ function _reviewFeesHtml() {
   if (slot !== CR_REVIEW_FEE_SLOT) {
     return `
       <div class="review-fees" data-review-fees="unmodelled">
-        <div class="review-fees-h">What you keep</div>
+        <div class="review-fees-h">Estimated net</div>
         <div class="review-fees-note">No fee model for ${_reviewEsc(slot || 'this marketplace')} yet, so this draft has no breakdown.</div>
       </div>`;
   }
 
-  const c = _reviewFeeCalc();
+  const pid  = CR_REVIEW_FEE_SLOT.split(':')[0];
+  const pill = _reviewFeeVerifiedHtml(pid);
+  const c    = _reviewFeeCalc();
 
   if (!c) {
     // Still the table, still the same rows. An empty shape tells the seller
     // what adding a price will buy them; hiding it tells them nothing.
     return `
       <div class="review-fees" data-review-fees="unpriced">
-        <div class="review-fees-h">What you keep</div>
+        <div class="review-fees-h">Estimated net<span class="review-fees-basis">item price only</span></div>
         <div class="review-fees-net" data-fee-net-headline="">\u2014</div>
         <div class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', '\u2014')}
-${_reviewFeeRow('net', 'You keep', '\u2014')}
+${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
         </div>
         <div class="review-fees-note">Add a price to see the fee breakdown. Shipping is not included.</div>
+        ${pill}
       </div>`;
   }
 
@@ -19464,13 +19518,16 @@ ${_reviewFeeRow('net', 'You keep', '\u2014')}
 
   return `
       <div class="review-fees" data-review-fees="priced">
-        <div class="review-fees-h">What you keep</div>
+        <div class="review-fees-h">Estimated net<span class="review-fees-basis">item price only</span></div>
         <div class="review-fees-net" data-fee-net-headline="">${_reviewEsc(_reviewMoney(c.net))}</div>
         <div class="review-fees-table">
-${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}${feeRows}
-${_reviewFeeRow('net', 'You keep', _reviewMoney(c.net))}
+${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
+${_reviewBasisRow('Fee base', 'item', _reviewMoney(c.price))}
+${_reviewBasisRow('Buyer sales tax', 'not modeled', _reviewMoney(0))}${feeRows}
+${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </div>
-        <div class="review-fees-note">Fees on the item price only. Shipping is not included, because a draft does not carry one yet.</div>
+        <div class="review-fees-note">An estimate, not a payout. Fees are charged on the item price only \u2014 a draft does not carry shipping yet, and buyer sales tax is not modelled.</div>
+        ${pill}
       </div>`;
 }
 

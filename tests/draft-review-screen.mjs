@@ -449,6 +449,11 @@ try {
     if (!box) return null;
     return {
       state: box.getAttribute('data-review-fees'),
+      heading: (box.querySelector('.review-fees-h') || {}).textContent || '',
+      pill: (() => {
+        const p = box.querySelector('[data-fee-verified]');
+        return p ? { state: p.getAttribute('data-fee-verified'), text: p.textContent || '' } : null;
+      })(),
       headline: (box.querySelector('[data-fee-net-headline]') || {}).textContent || null,
       note: (box.querySelector('.review-fees-note') || {}).textContent || '',
       rows: [...box.querySelectorAll('.review-fee-row')].map((r) => ({
@@ -564,20 +569,38 @@ try {
     T.check('all rows have the same cell count, so a column can be added at once',
       new Set(f.rows.map((r) => r.cells)).size === 1);
 
-    // No header of any kind. A header with nothing under it is a promise, and
-    // the column it would promise is blocked on the packet wiring.
+    // No COLUMN header. A column header with nothing under it is a promise,
+    // and the column it would promise is blocked on the packet wiring.
+    //
+    // 2026-09-07: this used to assert `querySelectorAll('th, thead').length === 0`
+    // and, separately, that the strings "Source" and "Provenance" appeared
+    // nowhere in the block. Both were wrong, in the same way: they asserted
+    // the absence of a spelling rather than the absence of a behaviour.
+    //   - Banning `th` outright also bans `th scope="row"`, which is a ROW
+    //     header -- the accessible way to label a row, and not a column at all.
+    //     The instruction was no column header; the assertion enforced no
+    //     table semantics.
+    //   - Banning the word "Source" would fail the moment the block legitimately
+    //     names the fee source, which is the direction this screen is going.
+    //     A word ban cannot tell a disclosure from a column.
+    // What actually matters is that no header sits above a column that does not
+    // exist, so that is what is asserted now.
     const header = await page.evaluate(() => {
       const box = document.querySelector('#reviewWrap .review-fees');
       return {
-        th: box.querySelectorAll('th, thead').length,
-        headerish: box.querySelectorAll('[class*="header"], [class*="col-head"]').length,
+        thead:  box.querySelectorAll('thead').length,
+        thCol:  box.querySelectorAll('th:not([scope="row"])').length,
+        headerish: box.querySelectorAll('[class*="col-head"], [class*="column-header"]').length,
         text: box.innerText,
       };
     });
-    T.check('no th or thead in the breakdown', header.th === 0);
-    T.check('no header-classed element in the breakdown', header.headerish === 0);
-    T.check('the word Source does not appear', !/\bSource\b/i.test(header.text), header.text);
-    T.check('the word Provenance does not appear', !/provenance/i.test(header.text), header.text);
+    T.check('no thead in the breakdown', header.thead === 0);
+    T.check('no column-scoped th in the breakdown', header.thCol === 0);
+    T.check('no column-header-classed element in the breakdown', header.headerish === 0);
+    // The real guard the word bans were reaching for: every row is a label and
+    // an amount, so there is nothing a column header could be heading.
+    T.check('no row carries a third cell a header could describe',
+      f.rows.every((r) => r.cells === 2));
     await ctx.close();
   });
 
@@ -587,13 +610,118 @@ try {
     const f = await feesOf(page);
 
     T.check('a note is present', (f.note || '').length > 0);
-    T.check('it says shipping is not included', /shipping is not included/i.test(f.note), f.note);
-    T.check('it says why', /draft does not carry one/i.test(f.note), f.note);
-    // The failure this guards: a zero that reads as a fact. Nothing in the
-    // breakdown may present shipping as a modelled line worth $0.00.
+    T.check('the number is called an estimate, not a payout',
+      /estimate/i.test(f.note) && /not a payout/i.test(f.note), f.note);
+    T.check('the note names shipping as excluded', /shipping/i.test(f.note), f.note);
+    T.check('the note says why shipping is excluded', /draft does not carry/i.test(f.note), f.note);
+    T.check('the note names buyer sales tax as unmodelled',
+      /sales tax is not modell?ed/i.test(f.note), f.note);
+
+    // The failure this guards: a zero that reads as a fact. Shipping is not
+    // modelled AND its value is unknown, so it gets no row at all.
     T.check('shipping is not rendered as a $0.00 fee row',
       !f.rows.some((r) => /ship|postage/i.test(r.label)),
       JSON.stringify(f.rows.map((r) => r.label)));
+
+    // Tax is the opposite case and must not be collapsed into the same rule.
+    // eBay charges the final value fee on a total that INCLUDES sales tax
+    // (ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822), so an
+    // estimate that silently omits tax is understating the fee, not merely
+    // scoping it. The engine does not model tax anywhere and cannot -- the
+    // rate belongs to a buyer address that does not exist yet -- so the row
+    // exists to say so. A zero is a claim; a zero next to "(not modeled)" is a
+    // disclosure. The qualifier is the whole point, so assert it, not the row.
+    const tax = f.rows.find((r) => /sales tax/i.test(r.label));
+    T.check('buyer sales tax is disclosed as a row', !!tax,
+      JSON.stringify(f.rows.map((r) => r.label)));
+    T.check('the tax row is qualified as not modelled',
+      !!tax && /not modell?ed/i.test(tax.label), tax && tax.label);
+    T.check('the tax row shows no invented amount',
+      !!tax && /^\$?0\.00$/.test((tax.amount || '').replace(/[^0-9.$]/g, '')), tax && tax.amount);
+
+    // The fee base states the scope structurally, where prose can be skimmed past.
+    const base = f.rows.find((r) => /fee base/i.test(r.label));
+    T.check('a fee base row is present', !!base,
+      JSON.stringify(f.rows.map((r) => r.label)));
+    T.check('the fee base is qualified as item-only',
+      !!base && /\(item\)/i.test(base.label), base && base.label);
+    await ctx.close();
+  });
+
+  await T.section('the estimate carries the fee schedule\u2019s age, from the shared source', async () => {
+    // 2026-09-07. The gap this closes: the ranking surface has shown a dated
+    // Verified/Stale pill since 2026-09-01, and this screen showed an
+    // unqualified dollar amount. Same fee schedule, same staleness rules, one
+    // surface disclosing them and one not -- so a seller who reached the
+    // estimate through Sell rather than through the ranking list could not see
+    // that the schedule behind it had expired.
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+
+    const fresh = await feesOf(page);
+    T.check('a verification pill is present', !!fresh.pill,
+      JSON.stringify(fresh.pill));
+    T.check('it carries the schedule\u2019s stamped date',
+      !!fresh.pill && /\b(19|20)\d{2}\b/.test(fresh.pill.text), fresh.pill && fresh.pill.text);
+
+    // The pill must be a READING of the shared staleness rule, not a second
+    // copy of the 45-day window. A single-state check cannot tell those apart:
+    // a pill hardcoded to "fresh" passes every assertion above. So move the
+    // upstream value and require the screen to change its mind.
+    //
+    // The upstream value here is the CLOCK, not the config. `PLATFORMS` is a
+    // lexical `const`, so it is not reachable as `window.PLATFORMS` and
+    // rewriting the stamped date would have meant adding a production global
+    // that exists only for this test. `verifiedAgeDays` measures the stamp
+    // against `Date.now()`, so advancing the browser clock moves the real
+    // input through the real rule against the real config, and leaves the
+    // bundle untouched.
+    const agreedFresh = await page.evaluate(() => window.isFeeStale('ebay'));
+    T.check('the shared rule and the pill agree before the clock moves',
+      agreedFresh === (fresh.pill.state === 'stale'),
+      `isFeeStale=${agreedFresh} pill=${fresh.pill.state}`);
+    T.check('the schedule is fresh at the real clock, so staleness is the moved state',
+      agreedFresh === false, `isFeeStale=${agreedFresh}`);
+
+    // 200 days past the end of the stamped month clears the 45-day window with
+    // room to spare, without depending on what today happens to be.
+    await page.clock.setFixedTime(new Date(Date.now() + 200 * 86400000));
+    await page.evaluate(() => window._reviewPaint());
+    const stale = await feesOf(page);
+
+    T.check('an expired schedule flips the pill to stale',
+      !!stale.pill && stale.pill.state === 'stale', JSON.stringify(stale.pill));
+    T.check('the stale pill says so in words, not only in colour',
+      !!stale.pill && /stale/i.test(stale.pill.text), stale.pill && stale.pill.text);
+    T.check('the stale pill still shows which date expired',
+      !!stale.pill && stale.pill.text.includes(fresh.pill.text.replace(/^\s*Verified\s*/, '').trim()),
+      stale.pill && stale.pill.text);
+    T.check('the shared rule moved too, so the pill tracked it',
+      (await page.evaluate(() => window.isFeeStale('ebay'))) === true);
+    // Staleness qualifies the estimate; it does not delete it. A seller who
+    // came here to read a number must still get the number.
+    T.check('the estimate itself survives the stale state',
+      /^\$\d/.test(stale.headline || ''), stale.headline);
+
+    await ctx.close();
+  });
+
+  await T.section('the headline names itself an estimate on its face', async () => {
+    // The footnote said "estimate"; the headline said "What you keep", which
+    // is a payout promise. A seller who reads one line reads the big one.
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const f = await feesOf(page);
+
+    T.check('the heading calls it an estimate', /estimat/i.test(f.heading), f.heading);
+    T.check('the heading does not promise a payout',
+      !/what you keep|you keep|you.ll get|take home/i.test(f.heading), f.heading);
+    T.check('the heading states the basis on its face',
+      /item price only/i.test(f.heading), f.heading);
+
+    const net = f.rows.find((r) => r.kind === 'net');
+    T.check('the total row is qualified too, not just the heading',
+      !!net && /estimat/i.test(net.label) && /item only/i.test(net.label), net && net.label);
     await ctx.close();
   });
 

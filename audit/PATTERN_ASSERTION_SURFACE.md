@@ -389,3 +389,64 @@ re-paints, and requires the seller to keep strictly more of the same price while
 stays put. That fails if the screen hardcodes the defaults, which is exactly the regression a
 future edit would introduce, and it does not care how the value gets there. **Assert the
 coupling by moving the upstream value, not by naming the function that reads it.**
+
+## Instance 14 — a surface that reimplements a disclosure discloses less
+
+**2026-09-07, the review screen's fee block (D3 step 5).**
+
+Step 5 shipped a fee breakdown that invented its own vocabulary: **"What you
+keep"** for the net, a prose sentence for the shipping exclusion, and no tax
+disclosure at all. `_platTileHtml` had, since 2026-09-01, been rendering a
+**"Fee base (item)"** qualifier row, a **"Buyer sales tax (not modeled)"** row
+and a dated **Verified/Stale pill** — three mechanisms for exactly those three
+jobs, against the same fee model.
+
+This is rule 1's sixth occurrence, and the step-5 write-up claimed to have
+caught the sixth prospectively (the `_crSellerProfile()` extraction). It caught
+*a* sixth. It introduced another in the same commit.
+
+What makes this instance worth its own entry is the direction of the damage.
+The previous five duplicate implementations could **drift** — two copies of a
+rule that might disagree later. This one was wrong **on arrival**, because the
+duplicate was not a copy. It was a *reduction*:
+
+| the ranking surface disclosed | the review screen disclosed |
+| --- | --- |
+| fee base, with an `(item)` / `(item + shipping)` qualifier | a prose sentence |
+| buyer sales tax, `(not modeled)`, $0.00 | nothing |
+| the schedule's stamped date, Verified/Stale | nothing |
+
+A seller who reached the estimate through the ranking list could see the fee
+schedule had expired. A seller who reached the same number through Sell could
+not. Same model, same staleness rules, one surface honouring them.
+
+The tax omission is the sharpest of the three, because it is not merely a
+scoping choice. eBay charges the final value fee on a total that **includes
+sales tax** ([published schedule](https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822)),
+so an estimate that silently drops tax is *understating the fee*, not narrowing
+its scope. The engine cannot model it — the rate belongs to a buyer address
+that does not exist while the card is a draft — which is precisely why the row
+has to say so. **A zero is a claim; a zero next to "(not modeled)" is a
+disclosure.** The qualifier is the load-bearing part, so the assertion is on the
+qualifier, not on the row.
+
+### The generalisation
+
+> **Before building a disclosure, grep for the disclosure.** A second
+> implementation of a *rule* drifts; a second implementation of a *disclosure*
+> starts out weaker, because the reimplementation only carries the caveats its
+> author happened to think of, and no test can miss a caveat that was never
+> written down.
+
+### Corollary — a word ban is not a behaviour assertion
+
+Two step-5 assertions were removed as part of this, for the same underlying
+reason they were written: *"the word Source does not appear"* and *"the word
+Provenance does not appear"*. Both would have failed the moment the block
+legitimately named its fee source — which is the direction the screen was
+already going. A third, `querySelectorAll('th, thead').length === 0`, banned
+`th scope="row"`: a **row** header, the accessible way to label a row, and not
+a column at all. The instruction was *no column header*; the assertion enforced
+*no table semantics*.
+
+> **An assertion that bans a spelling cannot tell a disclosure from a column.**
