@@ -138,3 +138,111 @@ rendered twice. The suite asserts each wire blocker appears **exactly once** on 
 `draft-review-screen` **80/0 (new)** · `draft-list-screen` 101/0 · `draft-focus` 56/0 ·
 `draft-list-cap` 130/0 · `draft-crud-e2e` 130/0 · `draft-readiness` PASS ·
 `asset-fingerprints` 14/1 (held).
+
+---
+
+# Follow-ups from review — `d66c6f0`
+
+Four items raised on review. All four found something; two corrected me.
+
+## 1. The harness was the bigger half of finding 3 — fixed there
+
+The rule I drew ("don't dereference the value whose absence you're testing") fixes the instance
+and leaves the mechanism. **The reason eleven failures became one is that a throw ends the run,
+and that is a property of `harness()`.** The next dereference bug won't be one anyone is watching
+for — if it were, it would have been written correctly.
+
+The direction matters: a runner that aborts reports **less damage than there is**. A broad
+regression reads as narrow, and every other regression the same change caused is invisible
+because those cases never execute. An instrument that under-reports confidently is worse than one
+that's absent.
+
+Two changes in `tests/_assert.mjs`:
+
+- **`section(name, fn)`** — per-case error boundary. A throw is recorded as a failure, labelled
+  `[case threw, remaining assertions in this case did not run]`, and the suite continues. The
+  label is load-bearing: the resulting count is a **lower bound** and the report should say so.
+- **`check` accepts a thunk** — a bare function was already always-truthy, the same class as the
+  Promise bug the harness exists to refuse. Evaluating it in a try/catch is the only way an
+  assertion *about* absence can avoid dereferencing in the caller's expression, where the harness
+  can't see the throw.
+
+**Verified by putting the buggy assertion back and re-running the mutation: 1 reported failure
+became 12, and the run completed** (54 passed, 12 failed) instead of exiting mid-suite. All six
+suites hold exact baselines, so the change is additive.
+
+## 2. The constancy argument, mechanised
+
+Your check is right and it's executable. The sentence claims a property is **constant**, and a
+constancy argument can only license dropping keys that **record** that property.
+
+`tests/draft-readiness.mjs` **case 14**, over a fixture set spanning all four blocking codes:
+
+| Key | Result | Consequence |
+|---|---|---|
+| `severity` | constant | omitting it is licensed |
+| `blocking` | constant | omitting it is licensed |
+| `field` | **varies** | no constancy argument can omit it — **the assertion that would have refused the edit** |
+| `detail` | varies | pinned, so nobody re-files its exclusion under the constancy sentence |
+
+It also asserts the set still spans all four codes, so the variance checks can't pass vacuously.
+Cross-referenced from Amendment 6, which makes the contract's own reasoning executable rather
+than re-readable. General form: **when a justification is a quantified claim, the quantifier is
+testable.**
+
+## 3. `--amber` — hypothesis disconfirmed, worse defect found next door
+
+**No degraded or maintenance banner uses either class.** The three `🛠️` sites in the bundle are
+the legitimate "List now" / "List & ship yourself" workflow icon. So the degraded state is not
+affected.
+
+**But `.warning-banner` has exactly one caller** (`js/core.7f9c03ad.js:7289`) and it is the
+stale-fee-schedule warning:
+
+> "All marketplace fee schedules are past the 45-day verification window. Rankings are shown for
+> reference only until the next fee audit."
+
+`border:1px solid var(--amber)` and `background:var(--amber-bg)` are both dead, so only margin,
+padding, radius, colour, font-size and line-height survive. **The banner that tells a seller the
+entire ranking is unreliable renders as an ordinary paragraph of body text.** Same conclusion you
+were reaching for, on the fee-audit surface instead of the degraded one — and arguably worse,
+since this one is disclaiming the numbers the seller is about to act on.
+
+`role="status"` is intact, so assistive technology announces it correctly. Appearance was the one
+property no assertion covered. `.clamp-note` degrades gracefully — it keeps its box and loses
+only the 3px amber caution bar.
+
+Still not fixed: there is no warning token in the palette, so this is a design call.
+
+## 4. INFO — two corrections to my own filing, and you're right about ordering
+
+**Correction (a):** `DRAFT_NO_PRICE_PROVENANCE` is **WARNING**, not INFO
+(`api/_draftStore.js:210`). Only `SELLER_PRICED` is INFO. My packet, the open-decision doc, and
+my working notes all said both were INFO. The conclusion is unchanged — only ERROR blocks — but
+the severity is exactly what makes correction (b) serious.
+
+**Correction (b):** the wire is the second problem. Confirmed in code:
+
+- `draft.packet` is set **only** from `input.packet` (`api/_draftStore.js:485-489`).
+- `buildListingPacket()` (`api/_listingPacket.js:315`) has **no production caller** — every other
+  reference is in `tests/listing-packet-offline.mjs`.
+- The client never sends one: `packet` appears **3 times in 19,348 lines**, none in a create body.
+
+So no production draft carries a packet, every priced draft raises exactly one of the two
+findings always and never neither, and widening the wire today would put a **WARNING asserting a
+data-quality defect that does not exist** on every priced draft — telling a seller "we cannot say
+where this price came from" about a consensus price whose only missing piece is a snapshot nobody
+writes. Stamping a lie, and the copy being technically true of the stored row doesn't rescue it.
+
+**A finding whose trigger is an unwired code path measures the code path, not the data.**
+
+Same defect one layer out: `summarize()` already ships `hasPacket` (`api/_draftService.js:516`)
+with a comment justifying it as one cheap boolean. It is — and it is `false` for **every row in
+production**, so it carries no information either.
+
+**Ordering, revised:** wire `buildListingPacket` into the create path **first**; decide the
+non-blocking wire shape **after**, with varying data to look at. Step 5 is blocked twice over by
+one root cause, so it builds the table, states the limitation, and does **not** write a column
+header.
+
+Renamed to `audit/OPEN_NONBLOCKING_NOT_ON_THE_WIRE.md` — "INFO" was wrong in the title too.
