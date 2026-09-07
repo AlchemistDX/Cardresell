@@ -551,3 +551,42 @@ test's own housekeeping as if it were the application's behaviour.
 two reachable ones (an eligibility read below `calc()`'s `price <= 0` early
 return, and a search listener that debounced without ever recalculating). Two
 instances, three defects, zero red assertions.
+
+---
+
+## Directional bias — a class a correctness audit cannot see (2026-09-07)
+
+A correctness audit clears estimates one at a time. It cannot see a **lean**,
+because every individual simplification passes as "a rough estimate".
+
+The check that finds it is cheap and different: for each number the seller sees,
+ask **which direction the error runs when it is wrong**, and line the answers up
+in a column. `renderGradingUpside` returned seven independent simplifications,
+all overstating the seller's outcome, none running the other way. Seven
+independent choices landing on the same side is not coincidence.
+
+Full audit: `audit/DIRECTIONAL_BIAS_AUDIT.md`.
+
+Three things this class teaches:
+
+1. **A lean is worse than an error.** An error is a bug and gets fixed. A lean
+   reads as marketing rather than arithmetic and attacks credibility directly.
+2. **The lean lives in persuasive surfaces, not in the core.** `feeEbay` is
+   honest; the grading-upside *pitch panel* drifted 57% at $20. Audit effort
+   follows correctness risk, so it pools where the math is hard — and the math
+   is easy exactly where the incentive to flatter is strongest.
+3. **Rule 1 needs an external binding.** Consolidating to one owner gives that
+   owner the same property a parity assertion has: no second opinion. So the
+   single owner's assertions must bind to the external source. `feeEbay` is
+   trustworthy because it names eBay's clauses. `renderGradingUpside` names
+   nothing, cites nothing, and is the one that drifted.
+
+Also recorded, from the same pass: **a comment asserting a cost is included over
+code that excludes it is worse than no comment** — `FEES_PCT = 13; // eBay +
+shipping typical` never subtracts shipping. The comment answers the reviewer's
+question wrongly and stops the check.
+
+And on verification hygiene: **a mutation that mutates nothing is a false clean
+bill of health.** Mutation M-M in `tests/contrast-tokens.mjs` first ran against a
+blank line and returned 12/0, which is indistinguishable from a test that cannot
+fail. Verify the mutation applied before recording its result.
