@@ -1026,6 +1026,39 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .empty-flips-h{font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:.35rem}
 .empty-flips-p{font-size:.8rem;color:var(--text-muted);max-width:30ch;margin:0 auto;line-height:1.6}
 
+/* ─── DRAFTS LIST (Block D2.1) ─── */
+/* Secondary text is --text-muted throughout. --text-faint is deliberately not
+   used anywhere in this block: it is an open contrast finding at 1.90:1, and a
+   blocker sentence is the only place a seller learns what is wrong with a
+   draft, so it is the last text on the site that should be hard to read. */
+.draft-list{display:flex;flex-direction:column;gap:.5rem}
+.draft-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;
+  padding:.7rem .85rem;background:var(--surface-2);border:1px solid var(--border);
+  border-left:3px solid var(--border);border-radius:var(--radius-md)}
+/* Rows are informational in D2.1 -- no cursor:pointer and no hover lift, because
+   both advertise a tap that does nothing. D3 is the screen that opens a draft. */
+.draft-row-main{min-width:0;flex:1}
+.draft-row-title{font-size:.82rem;font-weight:700;color:var(--text);line-height:1.35;word-break:break-word}
+.draft-row-meta{font-size:.68rem;color:var(--text-muted);margin-top:.15rem}
+.draft-row-blocker{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-top:.25rem}
+.draft-row-price{font-size:.82rem;font-weight:800;color:var(--gold-text);white-space:nowrap}
+.draft-row-stub{background:transparent;border-style:dashed}
+.draft-row-stub-text{font-weight:600;color:var(--text-muted)}
+.draft-row-focused{border-color:var(--gold-text);box-shadow:0 0 0 1px var(--gold-text) inset}
+.draft-row-action,.draft-more-btn{padding:.4rem .8rem;background:var(--surface-2);
+  border:1px solid var(--border);color:var(--gold-text);border-radius:var(--radius-md);
+  font-size:.72rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.draft-more-btn[disabled]{opacity:.55;cursor:default}
+.draft-paging{display:flex;justify-content:center;margin-top:.85rem}
+.draft-banner,.draft-notice{padding:.55rem .8rem;border-radius:var(--radius-md);
+  font-size:.74rem;line-height:1.5;margin-bottom:.7rem}
+.draft-banner{background:rgba(196,122,0,.1);border:1px solid rgba(196,122,0,.3);color:var(--gold-text)}
+.draft-notice{background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted)}
+.draft-spinner{width:26px;height:26px;margin:2.5rem auto;border-radius:50%;
+  border:2px solid var(--border);border-top-color:var(--gold-text);animation:draftSpin .8s linear infinite}
+@keyframes draftSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.draft-spinner{animation-duration:2.4s}}
+
 /* ─── FL HEADER ─── */
 .fl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem}
 .fl-title{font-size:1.05rem;font-weight:700;letter-spacing:-.02em;color:var(--text)}
@@ -1088,6 +1121,12 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   .promo-banner-close,.pricing-close,.pricing-close-btn,.auth-modal-close,.modal-close{
     min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center
   }
+  /* Block D2.1. These two selectors are the ONLY interactive elements the
+     drafts screen ships: the Try again / Reload actions on stub rows, and the
+     paging control. `.draft-row` is deliberately absent -- giving a
+     non-interactive row a touch-target rule would assert a tap affordance the
+     screen does not have. */
+  .draft-row-action,.draft-more-btn{min-height:44px;padding-inline:.9rem}
 }
 
 /* Monthly/Annual pill toggle */
@@ -1668,6 +1707,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <button type="button" class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</button>
   <button type="button" class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</button>
   <button type="button" class="view-tab" data-view="collection" onclick="switchView('collection')">📦 Collection</button>
+  <button type="button" class="view-tab" data-view="drafts" onclick="switchView('drafts')">🛠️ Drafts</button>
   <button type="button" class="view-tab" data-view="admin" id="adminTab" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
 </div>
 <!-- SEARCH -->
@@ -2511,6 +2551,25 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </div>
 
 </div><!-- /flipsView -->
+
+<!-- DRAFTS VIEW (Block D2.1) -->
+<!--
+  Deliberately NOT class="flips-view". That class carries display:none in CSS
+  (see .flips-view above), which is what made the Collection tab render blank
+  when switchView set style.display=''. Keeping this container out of the class
+  removes the trap rather than working around it.
+
+  Labels here are exactly "Drafts" (the tab) and "All drafts" (this heading).
+  Not Recent, Latest, My Drafts, or Saved -- see Part 3.5 of
+  audit/DRAFT_LIST_API_CONTRACT.md. Nothing in the codebase polices wording.
+-->
+<div id="draftsView" style="display:none">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.4rem">
+    <div style="font-size:.95rem;font-weight:800;color:var(--text);letter-spacing:-.01em">All drafts</div>
+    <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
+  </div>
+  <div id="draftsWrap"></div>
+</div>
 
 <!-- MY COLLECTION VIEW -->
 <div id="collectionView" class="flips-view" style="display:none">

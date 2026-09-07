@@ -316,6 +316,20 @@ for (const id of ['scanStatus', 'bulkProgressLabel', 'bulkGradeProgressLabel']) 
      /min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center/.test(b));
   ok('the close-button rule names classes that exist',
      HTML.includes('class="promo-banner-close"') && HTML.includes('class="pricing-close"'));
+  // ── Block D2.1: the drafts screen's two interactive elements ────────────
+  ok('the stub-row action gets a 44px target', b.includes('.draft-row-action'));
+  ok('the paging control gets a 44px target', b.includes('.draft-more-btn'));
+  ok('both drafts selectors name classes the screen really renders',
+     HTML.includes('.draft-row-action,.draft-more-btn{')
+     && HTML.includes('class="draft-row-action"')
+     && HTML.includes('class="draft-more-btn"'));
+  // Per contract 3.6 the row itself is NOT a touch target. Asserting its
+  // ABSENCE is the point: a min-height on .draft-row would promise a tap that
+  // D2.1 deliberately does not implement, and the rule would look like an
+  // improvement while making the screen lie.
+  ok('the non-interactive row is NOT given a touch target',
+     !/\.draft-row[,{\s]/.test(b));
+
   // No selector invented out of thin air.
   for (const ghost of ['.ov-close', '.promo-close{']) {
     ok(`the block does not reference the nonexistent ${ghost}`, !b.includes(ghost));
