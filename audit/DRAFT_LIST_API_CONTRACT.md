@@ -954,6 +954,22 @@ write down without being told. It is not true of the other two, and the clause n
   blocker belongs. It was excluded by proximity: four keys were dropped in one edit and one
   sentence was stretched over all four.
 
+### The check that would have refused the edit
+
+The original clause is a claim that a property is **constant**, and a constancy argument can only
+license dropping keys that **record** that property. `severity` and `blocking` do. `field` varies
+per finding, so the sentence could not have covered it — and that is checkable without judgment.
+
+`tests/draft-readiness.mjs` case 14 now executes exactly that, over a fixture set spanning all
+four blocking codes: `severity` constant, `blocking` constant, `field` varying, `detail` varying.
+The contract's own reasoning is therefore asserted rather than trusted, and if `severity` ever
+stops being constant over `v.blocking`, the justification for omitting it is void and the suite
+says so. The case also pins that the fixture set still spans all four codes, so the variance
+checks cannot pass vacuously.
+
+**When a justification is a quantified claim, the quantifier is testable.** Prefer justifications
+whose scope can be executed over ones that can only be re-read.
+
 This is worth recording as a class of defect, not just a fix. **A shared reason can be stretched
 over a key it does not cover.** Grouping decisions into one line is how a justification silently
 loses its scope, and the resulting clause reads as more considered than it was — four keys, one

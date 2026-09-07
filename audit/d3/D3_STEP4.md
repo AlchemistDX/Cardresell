@@ -122,7 +122,7 @@ rendered twice. The suite asserts each wire blocker appears **exactly once** on 
   together meaning the review screen **cannot render a provenance notice today**.
   **Surfaced, not fixed** — widening `blockers` to hold non-blocking findings makes the key a lie
   and puts `publishable: true` next to a non-empty `blockers` array. Three unchosen options in
-  `audit/OPEN_INFO_NOT_ON_THE_WIRE.md`. **Step 5 inherits this**: the fee table can grow a
+  `audit/OPEN_NONBLOCKING_NOT_ON_THE_WIRE.md`. **Step 5 inherits this**: the fee table can grow a
   provenance column but cannot fill it, and step 5 should say so rather than implying the column
   is one query away.
 - **`asset-fingerprints` 14/1**, held deliberately. Bundle bytes changed again. The single rename

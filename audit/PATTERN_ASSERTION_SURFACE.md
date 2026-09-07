@@ -247,3 +247,69 @@ Two supporting rules learned here:
   "nothing *outside* this set", so a new offender fails on arrival while fixing an old one does
   not break the suite. Deliberately not a count: a count is a number someone maintains for no
   benefit, and it fails in the unsafe direction as often as the safe one.
+
+---
+
+## Instance 9 — the harness was the bigger half of instance 7
+
+Instance 7 recorded a crashing assertion and drew a rule at the assertion: don't dereference the
+value whose absence you are testing. That rule is correct and it is the smaller half.
+
+**The reason eleven failures became one is that a throw ends the run.** That is a property of
+`harness()`, not of the assertion. The assertion bug was one instance; "a throw ends the run" is
+the mechanism that converts *any* future dereference bug into the same misreport — and the next
+one will not be one anybody is watching for, because if it were, it would have been written
+correctly.
+
+The direction of failure is what makes this urgent. A test runner that aborts reports **less
+damage than there is**. A broad regression reads as a narrow one, and every other regression the
+same change caused is invisible, because those cases never execute. An instrument that
+under-reports confidently is worse than one that is merely absent.
+
+Fixed in two places in `tests/_assert.mjs`:
+
+- **`section(name, fn)`** — a per-case error boundary. A throw is recorded as a failure of the
+  case, explicitly labelled `[case threw, remaining assertions in this case did not run]`, and
+  the suite continues. The label matters: the resulting count is a **lower bound**, and the
+  report should say so rather than presenting a number that looks complete.
+- **`check` accepts a thunk.** A bare function was already always-truthy — the same class as the
+  Promise bug the harness was built to refuse. Rather than refuse it, evaluate it in a try/catch,
+  because a lazy condition is the only way an assertion *about* a value's absence can avoid
+  dereferencing that value in the caller's expression, where the harness cannot see the throw.
+
+Verified by restoring the original dereferencing assertion and re-running the mutation: **1
+reported failure became 12, and the run completed** (54 passed, 12 failed) instead of exiting
+mid-suite. All six existing suites hold their exact baselines, so the change is additive.
+
+The general form: **when an instance is fixable at two levels, fixing only the instance leaves
+the mechanism.** Ask which level the next occurrence will arrive through.
+
+---
+
+## Instance 10 — a constancy argument, mechanised
+
+Contract §1.2 dropped four keys from the blocker wire under one sentence: they are "redundant on
+the wire, since every element of `v.blocking` is by construction blocking and of error severity."
+
+The author of that edit identified the mechanical check hiding in it. **The sentence is a claim
+that a property is constant, and a constancy argument can only license dropping keys that record
+that property.** `severity` and `blocking` do. `field` varies per finding, so the sentence could
+not have covered it. Four keys, one quantifier, two of them actually quantified over — and no
+judgment is required to see it.
+
+That is now asserted rather than trusted, in `tests/draft-readiness.mjs` case 14. Over a fixture
+set spanning all four blocking codes:
+
+- `severity` is constant → omitting it is licensed.
+- `blocking` is constant → omitting it is licensed.
+- `field` **varies** → no constancy argument can omit it. *This is the assertion that would have
+  refused the original edit.*
+- `detail` also varies → pinned, so nobody later re-files its exclusion under the constancy
+  sentence. Its real reason is that it is an internal diagnostic.
+
+The case also asserts the fixture set spans all four codes, because if it stopped spanning them
+the variance checks would pass vacuously and prove nothing.
+
+The reusable move: **when a justification is a quantified claim, the quantifier is testable.**
+Reasons written in prose get stretched over keys they don't cover, and the stretch is invisible in
+the prose but not in the data. Prefer justifications whose scope can be executed.

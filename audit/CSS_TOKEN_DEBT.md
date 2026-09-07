@@ -30,6 +30,38 @@ Deriving the list from the stylesheet found four more offenders in the same run.
 |---|---|---|---|
 | `--amber` | 2 | `.clamp-note` (`index.html:844`), `.warning-banner` (`:846`) | `border` / `border-left` never renders — **a warning banner with no warning styling** |
 | `--amber-bg` | 2 | `.clamp-note` (`:844`), `.warning-banner` (`:846`) | `background` never applies (one of the two has a `--surface-2` fallback and is fine) |
+
+## Which live surfaces are actually affected
+
+Raised on review: if D2.1's degraded banner was built off the existing banner styling, the
+degraded state would ship with no warning treatment — a live defect in current work rather than
+legacy. **Checked, and the hypothesis is disconfirmed as stated:** there is no degraded or
+maintenance banner using either class. The three `🛠️` occurrences in the bundle are the
+legitimate "List now" / "List & ship yourself" workflow icon, not a maintenance indicator.
+
+**The check found something worse on a different surface.** `.warning-banner` has exactly one
+caller (`js/core.7f9c03ad.js:7289`), and it is the stale-fee-schedule warning:
+
+> "All marketplace fee schedules are past the 45-day verification window. Rankings are shown for
+> reference only until the next fee audit."
+
+Both of its identity declarations are dead. `border:1px solid var(--amber)` and
+`background:var(--amber-bg)` are invalid, so only `margin`, `padding`, `border-radius`,
+`color:var(--text)`, `font-size` and `line-height` survive. It renders as **an ordinary
+paragraph of body text** — no border, no fill, no colour distinction from surrounding copy.
+
+So the banner that tells a seller the entire ranking is unreliable is styled to look like the
+ranking's own prose. That is the live defect the review was reaching for; it is on the fee-audit
+surface rather than the degraded surface.
+
+`.clamp-note` (`:7328`, the High-clamp explanation) degrades more gracefully: its
+`border:1px solid var(--divider)` and `background:var(--surface-2, …)` both resolve, so it keeps
+its box and loses only the 3px amber left bar that marks it as a caution.
+
+`role` attributes are unaffected — both carry `role="status"` / `role="note"`, so assistive
+technology still announces them correctly. The failure is visual only, which is precisely why
+nothing caught it: the accessible name and role are right, the behaviour is right, and the
+appearance is the one property no assertion covered.
 | `--muted` | 3 | inline styles on `#rSellBlocked` (`:2078`), `#cardSellTip` (`:2094`), a TCGplayer note (`:3436`) | text keeps the inherited colour instead of the muted one |
 | `--text-primary` | 1 | `.density-btn:hover:not(.active)` (`:767`) | hover text colour never changes |
 

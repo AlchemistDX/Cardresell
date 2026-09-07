@@ -128,8 +128,7 @@ try {
      between. It is asserted against a GENERATED envelope, so it is a claim
      about what the handler emits, not about what a fixture author believed.
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ the read response body carries readiness');
-  {
+  await T.section('the read response body carries readiness', async () => {
     for (const k of ['publishable', 'blockedTitle', 'blockedPrice', 'blockedBoth']) {
       const b = F[k].body;
       T.check(`${k}: status 200`, F[k].status === 200, String(F[k].status));
@@ -154,7 +153,7 @@ try {
         b.readiness.blockers.every((x) => typeof x.field === 'string' && x.field.length > 0),
         JSON.stringify(b.readiness.blockers.map((x) => x.field)));
     }
-  }
+  });
 
   /* ─────────────────────────────────────────────────────────────────────────
      Design tokens actually resolve
@@ -168,8 +167,7 @@ try {
      focus indicator was missing, because "Enter opens the row" is true with or
      without a visible ring.
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ every token the stylesheet references is declared');
-  {
+  await T.section('every token the stylesheet references is declared', async () => {
     // DERIVED, NOT LISTED. The first version of this case hand-listed seven
     // token names and asserted they resolved. That would have caught
     // `--accent` only because the author already knew to look for it -- a
@@ -232,13 +230,12 @@ try {
       }
     }
     await ctx.close();
-  }
+  });
 
   /* ─────────────────────────────────────────────────────────────────────────
      Fields render, with each blocker under the field it names
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ a clean draft renders its fields with nothing attached');
-  {
+  await T.section('a clean draft renders its fields with nothing attached', async () => {
     const { ctx, page, hits } = await boot(serveRead(F.publishable));
     await openReview(page, F.ids.publishable);
     const fields = await fieldsOf(page);
@@ -259,10 +256,9 @@ try {
     T.check('the marketplace field shows the raw slot, as the list does',
       ((fields[2] || {}).value || '') === F.publishable.body.draft.slot, ((fields[2] || {}).value || ''));
     await ctx.close();
-  }
+  });
 
-  console.log('\n▶ a title blocker lands on the title field and nowhere else');
-  {
+  await T.section('a title blocker lands on the title field and nowhere else', async () => {
     const { ctx, page } = await boot(serveRead(F.blockedTitle));
     await openReview(page, F.ids.blockedTitle);
     const fields = await fieldsOf(page);
@@ -291,10 +287,9 @@ try {
       ((byName.title || {}).blockers || [{}])[0].code === 'SLOT_TITLE_TOO_LONG'
       && !((byName.title || {}).blockers || [{}])[0].text.includes('SLOT_TITLE_TOO_LONG'));
     await ctx.close();
-  }
+  });
 
-  console.log('\n▶ a price blocker lands on the price field');
-  {
+  await T.section('a price blocker lands on the price field', async () => {
     const { ctx, page } = await boot(serveRead(F.blockedPrice));
     await openReview(page, F.ids.blockedPrice);
     const byName = Object.fromEntries((await fieldsOf(page)).map((f) => [f.field, f]));
@@ -303,10 +298,9 @@ try {
     T.check('the price value renders as absent, not as zero',
       ((byName.price || {}).value || '') !== '$0.00', ((byName.price || {}).value || ''));
     await ctx.close();
-  }
+  });
 
-  console.log('\n▶ two blockers on two fields go to two places');
-  {
+  await T.section('two blockers on two fields go to two places', async () => {
     const { ctx, page } = await boot(serveRead(F.blockedBoth));
     await openReview(page, F.ids.blockedBoth);
     const fields = await fieldsOf(page);
@@ -332,7 +326,7 @@ try {
       JSON.stringify(renderedCodes) === JSON.stringify(wire.map((b) => b.code).sort()),
       JSON.stringify(renderedCodes));
     await ctx.close();
-  }
+  });
 
   /* ─────────────────────────────────────────────────────────────────────────
      Nothing is dropped
@@ -346,8 +340,7 @@ try {
      testing. It is the branch production cannot currently reach and the next
      new violation code will.
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ a blocker for an unrendered field is still shown');
-  {
+  await T.section('a blocker for an unrendered field is still shown', async () => {
     const fx = clone(F.blockedTitle);
     fx.body.readiness.blockers[0].field = 'photos';
     const { ctx, page } = await boot(serveRead(fx));
@@ -361,10 +354,9 @@ try {
     T.check('and it was not silently dropped',
       fields.reduce((n, f) => n + f.blockers.length, 0) === 1);
     await ctx.close();
-  }
+  });
 
-  console.log('\n▶ a blocker with no field at all is still shown');
-  {
+  await T.section('a blocker with no field at all is still shown', async () => {
     const fx = clone(F.blockedPrice);
     delete fx.body.readiness.blockers[0].field;
     const { ctx, page } = await boot(serveRead(fx));
@@ -375,7 +367,7 @@ try {
     T.check('nothing was dropped', fields.reduce((n, f) => n + f.blockers.length, 0) === 1);
     T.check('no field group claims it', ['title', 'price', 'slot'].every((k) => (((byName[k] || {}).blockers) || []).length === 0));
     await ctx.close();
-  }
+  });
 
   /* ─────────────────────────────────────────────────────────────────────────
      The client does not own the code→field association
@@ -386,8 +378,7 @@ try {
      sent under a DIFFERENT field than the one a table would map it to. The
      screen must follow the wire.
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ the field association comes off the wire, not from a client table');
-  {
+  await T.section('the field association comes off the wire, not from a client table', async () => {
     const fx = clone(F.blockedTitle);
     // SLOT_TITLE_TOO_LONG, sent under `price`. A code→field table would put
     // this on the title field and be wrong.
@@ -402,13 +393,12 @@ try {
       ((byName.title || {}).blockers || []).length === 0,
       'the client is mapping code to field itself — a second implementation of a server fact');
     await ctx.close();
-  }
+  });
 
   /* ─────────────────────────────────────────────────────────────────────────
      `validation` is not a rendering source
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ validation never reaches the DOM');
-  {
+  await T.section('validation never reaches the DOM', async () => {
     const SENTINEL = 'ZZ-VALIDATION-LEAK-8871';
     const fx = clone(F.blockedBoth);
     for (const v of fx.body.validation.violations) v.message = SENTINEL;
@@ -420,10 +410,9 @@ try {
     T.check('the readiness messages are present instead',
       fx.body.readiness.blockers.every((b) => t.includes(b.message)));
     await ctx.close();
-  }
+  });
 
-  console.log('\n▶ readiness absent means unknown, never derived from validation');
-  {
+  await T.section('readiness absent means unknown, never derived from validation', async () => {
     const fx = clone(F.blockedBoth);
     delete fx.body.readiness;
     const { ctx, page } = await boot(serveRead(fx));
@@ -436,7 +425,7 @@ try {
     T.check('with no blocker lines invented from validation',
       fields.reduce((n, f) => n + f.blockers.length, 0) === 0);
     await ctx.close();
-  }
+  });
 
 } finally {
   await browser.close();

@@ -154,5 +154,55 @@ console.log('\nOnly ERROR severity may block');
   ok('publishable is false when errors exist', r.publishable === false);
 }
 
+console.log('\nCase 14 — the constancy argument, mechanised');
+{
+  /* WHY THIS CASE EXISTS
+   *
+   * Contract §1.2 excluded four keys from the blocker wire with one sentence:
+   * they are "redundant on the wire, since every element of `v.blocking` is by
+   * construction blocking and of error severity."
+   *
+   * That is a claim that a property is CONSTANT. And a constancy argument can
+   * only license dropping keys that RECORD that property. `severity` and
+   * `blocking` do. `field` varies per finding, so the sentence could not have
+   * covered it -- and that is checkable without judgment, which is the point.
+   * Four keys, one quantifier, two of them actually quantified over.
+   *
+   * So the reasoning is asserted rather than trusted. If `severity` or
+   * `blocking` ever stops being constant over `v.blocking`, the justification
+   * for omitting it is void and this fails. If `field` ever becomes constant,
+   * that is worth knowing too -- it would mean the fixture set stopped
+   * spanning the codes, so the case would be proving nothing.
+   */
+  const spanning = [
+    base({ price: null, priceSource: undefined, packet: undefined }), // PRICE_REQUIRED
+    base({ price: 0 }),                                              // ZERO_PRICE
+    base({ slot: 'nosuch:slot' }),                                   // UNKNOWN_SLOT
+    base({ title: 'x'.repeat(400) }),                                // TITLE_TOO_LONG
+  ];
+  const blocking = spanning.flatMap((d) => validateDraftForSlot(d, d.slot).blocking);
+  const distinct = (k) => [...new Set(blocking.map((x) => JSON.stringify(x[k])))];
+
+  ok('the fixture set spans all four blocking codes',
+     distinct('code').length === 4, distinct('code').join(', '));
+
+  // The two keys the sentence actually quantified over.
+  ok('severity is constant over v.blocking, so omitting it is licensed',
+     distinct('severity').length === 1, distinct('severity').join(', '));
+  ok('blocking is constant over v.blocking, so omitting it is licensed',
+     distinct('blocking').length === 1, distinct('blocking').join(', '));
+
+  // The key the sentence was stretched over. This is the assertion that would
+  // have refused the original edit.
+  ok('field VARIES over v.blocking, so no constancy argument can omit it',
+     distinct('field').length > 1, distinct('field').join(', '));
+
+  // `detail` also varies, which is why its exclusion needed -- and has -- a
+  // different stated reason: it is an internal diagnostic. Pinned so nobody
+  // later re-files it under the constancy sentence by mistake.
+  ok('detail also varies, so its exclusion rests on a different reason',
+     distinct('detail').length > 1, distinct('detail').join(', '));
+}
+
 console.log(FAIL ? '\nRESULT: FAIL\n' : '\nRESULT: PASS\n');
 process.exit(FAIL);
