@@ -119,6 +119,30 @@ it ships alongside the arithmetic fixes instead of waiting on data we have
 decided not to publish. A conditional payoff labelled conditional is honest at
 any level of data.
 
+**SCOPE, checked before writing the words.** "If it grades 10" would be the
+wrong label, because the panel does not render one column. It renders **six**
+(`core:11452-11463`): Raw, 7, 8, 9, 9.5, 10. Each column already carries its own
+grade assumption, so a single global label would replace one unstated assumption
+with a *wrong stated* one on five of them. The label must be **per column** —
+each column says what it pays if the card grades *that*. The Raw column is not
+conditional at all and must not be labelled as if it were; it is the baseline
+the other five are measured against.
+
+Checking that also surfaced a defect the label would otherwise have papered
+over. The `9.5` column's own subtitle is **`BGS/CGC`** — PriceCharting only
+breaks out a grader at the 10, and the code comments say so explicitly. But
+`GRADING_FEE = 25` is PSA's cheapest tier, and the server's table prices
+`BGS 50` and `CGC 18`. **The 9.5 column applies a PSA fee to a grade it labels
+as BGS/CGC.**
+
+Recorded as **BIAS-7**, and it is the one item in this document that does *not*
+lean optimistic in both branches: against BGS ($50) the flat $25 overstates
+upside as usual, but against CGC ($18) it *understates* it. That is a genuine
+counter-example to the lean — and it earns its place precisely because it is
+one. It is a grader mismatch rather than an omission, which is exactly why it is
+free to run either way. **It corroborates the mechanism: the omissions are
+one-directional, the judgment calls are not.**
+
 Note #3 specifically. The comment says "eBay + shipping typical" while the code
 applies a bare percentage and never subtracts shipping. **A comment asserting a
 cost is included, over code that excludes it, is worse than no comment** — it
@@ -228,6 +252,11 @@ Nothing in this document has been changed in code. Recorded as findings:
   tier table (`api/grade-opportunity.js:44-52`). The fix is the tier table, and
   it needs a stated grader default — an owner call. **This is the one BIAS item
   that T2.7's existing fix line actually covers.**
+- **BIAS-7** The `9.5` column is labelled `BGS/CGC` but is charged PSA's flat
+  `$25`. Overstates against BGS `$50`, understates against CGC `$18`. Must be
+  resolved before any per-column conditional label ships, or the label states a
+  grader the fee contradicts.
+
 - **BIAS-6** Remaining estimate surfaces not yet walked for direction:
   aggregator service-fee rows, the payout bar chart, and the `msProfitPreview`
   panel. **Absence of a finding there is absence of a check, not a clean

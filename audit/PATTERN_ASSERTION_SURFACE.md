@@ -608,3 +608,43 @@ And on verification hygiene: **a mutation that mutates nothing is a false clean
 bill of health.** Mutation M-M in `tests/contrast-tokens.mjs` first ran against a
 blank line and returned 12/0, which is indistinguishable from a test that cannot
 fail. Verify the mutation applied before recording its result.
+
+---
+
+## 18. A guard whose threshold no reachable input can cross (2026-09-07)
+
+`_clampHigh` (`js/core.7f9c03ad.js:1758`) clamps a high price to `market × 3`.
+The synthesized fallback band is `market × 1.15`. **1.15 is never greater than
+3**, so on the fallback rung the clamp is structurally unreachable — it cannot
+fire on the rung where the data is least trustworthy. The server's
+`_clampHighPriceInPlace` (`api/tcg-price.js:531`, applied at `:131 :268 :305
+:511`) uses the same `× 3` and is unreachable there for the same reason.
+`:305` is the call that runs immediately after the band is synthesized.
+
+This is the catalogue pattern in a new costume. The other 17 entries are about
+*assertions* naming a behaviour and evidencing a surface. This one is about a
+**guard** naming a protection and evidencing a condition that cannot occur where
+the protection is most needed. Same defect, different artifact: the name
+promises coverage the code cannot deliver, and reading the guard tells you
+nothing — its logic is correct, its threshold is sound, and its comment is
+accurate. Every local check passes.
+
+**It was not found by reading the clamp. It was found by proving a removal was
+safe.** Discharging T2.5's "unless we have a downstream consumer" condition
+forced the question "what happens to `_clampHigh` if `high` disappears?", and
+the answer was "nothing, because it never fired here." A guard's reachability is
+invisible from the guard; it is only visible from the range of its input.
+
+**Generalisation worth a sweep:** which other guards have thresholds no
+reachable input can cross? A first pass over multiplier-thresholds found only
+two comparison sites (`core:1761` at `× 3`, `core:3969` at `× 1.02`), the second
+of which is reachable. That is a narrow sweep — it only catches
+`x > y * k` shapes, not absolute thresholds, enum guards, or length floors. **A
+guard is only as good as the widest input that reaches it, and nothing in the
+codebase records what that range is.**
+
+Corollary for the contrast work in the same session: this is why
+`tests/contrast-tokens.mjs` asserts its node-count floor *before* its ratios. A
+sweep matching zero nodes and a guard whose threshold is unreachable are the
+same failure — a check that passes because nothing arrived, not because
+everything was fine.
