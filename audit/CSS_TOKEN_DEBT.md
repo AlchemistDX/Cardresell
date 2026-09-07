@@ -191,3 +191,53 @@ do-not-touch list. Candidates, measured against both dark backgrounds:
 
 `#8a887f` is the minimum that clears AA on the tighter of the two. Awaiting a
 decision before touching it.
+
+### Decided and closed 2026-09-07 — `#918f86`, in its own commit
+
+Taken: **`--text-muted` in the dark block is now `#918f86`.** Light mode is
+untouched. Measured after the change, in a real browser, reading computed
+colours and walking up to the first non-transparent ancestor background rather
+than assuming which surface a label sits on:
+
+| pairing | ratio | AA |
+| --- | --- | --- |
+| `#918f86` on dark `--bg` `#111009` | **5.88** | pass |
+| `#918f86` on dark `--surface` `#1a1915` | **5.43** | pass |
+| `#918f86` on dark `--surface-2` `#21201a` | **5.04** | pass |
+
+Every text pair on the review screen in dark now clears AA, tightest being
+5.04 (`.review-back` on `--surface-2`). `.field-hint` measures 5.43.
+
+**Why `#918f86` over the cheaper `#8a887f`.** `#8a887f` passes at 4.59 on the
+tighter surface — 0.09 above the bar. A token used 242 times, sitting nine
+hundredths above a compliance floor, fails the moment any surface darkens by a
+shade, and nothing in the build would catch it. That is not a fix, it is a fix
+with an expiry date.
+
+The cost of the extra headroom is a small loss of muted-ness, and it is worth
+stating in numbers rather than hand-waving. Contrast between the muted token
+and `--text` `#d4d2cc`, i.e. how clearly muted text reads as subordinate:
+
+| dark muted | vs `--text` |
+| --- | --- |
+| `#78766f` (old, failing) | 3.01 |
+| `#8a887f` | 2.35 |
+| `#918f86` (taken) | 2.14 |
+
+For reference, **light mode already ships 3.29** (`#6b6960` vs `#18160f`). Both
+candidates land well below that, so neither one meaningfully preserves the
+separation light mode has — dark muted is inherently less distinguishable here
+whichever value is picked. The choice between them moves separation by 0.21 and
+moves contrast headroom by 0.45. Only one of those two numbers is a compliance
+risk, so the decision goes to contrast.
+
+**Scope actually touched.** One declaration in the dark `:root` block. The
+do-not-touch items were checked and none of them resolve through this token:
+the Grade gold-set and the wallpaper are gold- and image-driven, and the
+homepage feature-grid blurb was inspected in dark after the change and reads
+unchanged in layout. No copy, no layout, no light-mode value moved.
+
+**Still open, separately:** `--text-faint` measures **1.92** in dark
+(`#4a4840` on `--surface`), confirmed again in the browser this round across
+~61 usages. It is a much larger and more invasive change than one token
+substitution, it is not what this commit is about, and it stays logged here.
