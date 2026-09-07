@@ -726,16 +726,16 @@ console.log('\nthe refusal reason survives the HTTP boundary');
 reset();
 {
   const created = await SVC.createDraft(kv, SUB, input({ title: 'z'.repeat(120) }), K('too-long'));
-  const p = created.result.publishable;
+  const p = created.result.validation;
   check('an unpublishable draft still SAVES', created.result.saved === true,
         'a draft is allowed to be incomplete; it is not allowed to be published incomplete');
   check('and carries its blocking reason', p.ok === false && p.blocking.length >= 1);
 
   const res = fakeRes();
   await EP.default(fakeReq({ method: 'GET', query: { id: created.result.draftId } }), res);
-  check('GET returns the publishable verdict', res.statusCode === 200 && res.body.publishable.ok === false);
+  check('GET returns the publishable verdict', res.statusCode === 200 && res.body.validation.ok === false);
   check('🔴 with the message, severity and field for each finding',
-        res.body.publishable.violations.every((v) => v.message && v.severity && v.field),
+        res.body.validation.violations.every((v) => v.message && v.severity && v.field),
         'the review screen must not have to re-derive why the handoff is blocked');
 }
 

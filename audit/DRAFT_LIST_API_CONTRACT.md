@@ -239,7 +239,16 @@ unproven. Show the list plus a non-blocking banner; never hide the list.
 
 `api/drafts.js:219-235`. Nine keys, **byte-identical between fresh and replay**:
 `draft, draftId, saved, replayed, idempotencyState, degraded, repairRequired, index,
-publishable`.
+validation`.
+
+> **Amendment 3 (2026-09-06).** The ninth key was `publishable` and is now `validation`.
+> The key count and the byte-identical guarantee are unchanged. The value was always the
+> full `validateDraftForSlot` result, never a boolean, and the adjective-shaped name got
+> it read as one: `if (body.publishable)` evaluated `true` for a draft with two blocking
+> errors. Renamed on all three paths that ship the full object — create, edit, and the
+> single-draft read. The boolean named `publishable` inside `readiness` (§1.2) is
+> unchanged and is the only field by that name on the wire. Rationale in
+> `audit/DECISION_D3_ENTRY.md`.
 
 - **201 = fresh, 200 = replay.** Treat both as success and open `body.draftId`.
 - The `draftId` is identical on replay — minted inside the protected operation
@@ -253,6 +262,35 @@ publishable`.
 Failure shapes worth distinguishing: 409 `mismatch` carries `code` and `retryable: false`;
 409 `in-flight` omits `code` and carries `retryable: true`. On a 409, absence of `code` means
 in-flight.
+
+---
+
+### 2.9 The single-draft read
+
+Added by Amendment 3. `GET /api/drafts?id=<draftId>` was never specified here — the
+contract referenced `?id=` only for draft-id validation (§ at `:317`, `:734`) — and D3 is
+its first client consumer.
+
+`api/drafts.js:190`. Three keys:
+
+```js
+{ draft, validation, readiness }
+```
+
+- **`draft`** — the full record **including `packet`**. The list path omits the packet
+  deliberately (`api/_draftService.js:505-511`); this is the path that carries it, and it
+  is how the review screen gets pricing provenance.
+- **`readiness`** — identical shape and derivation to `summary.readiness` (§1.2):
+  `{ publishable: <boolean>, blockers: [{code, message}] }`, from `readinessOf`.
+  **Clients read this and only this.**
+- **`validation`** — the full `validateDraftForSlot` result (`ok`, `violations`,
+  `blocking`, `errors`/`warnings`/`infos` counts). Server-side inspection and tests.
+  **Not for clients.** A client that filters `validation.violations` on `.blocking` has
+  reimplemented `readinessOf` in the browser and re-authored copy the server owns — the
+  rule-1 duplication §3.4 exists to prevent.
+
+Both fields come from one `validateDraftForSlot` call site, `readiness` via `readinessOf`.
+Two projections of one derivation, not two implementations.
 
 ---
 

@@ -187,7 +187,7 @@ async function handleGet(req, res, kv, googleSub, draftId) {
 
   const got = await readDraft(kv, googleSub, draftId);
   if (got.ok) {
-    return res.status(200).json({ draft: got.draft, publishable: got.publishable });
+    return res.status(200).json({ draft: got.draft, validation: got.validation, readiness: got.readiness });
   }
   return res.status(statusForStoreError(got.error)).json(errorBody(got));
 }
@@ -244,7 +244,7 @@ async function handleCreate(req, res, kv, googleSub) {
     degraded: !!r.degraded,
     repairRequired: !!r.repairRequired,
     index: r.index || null,
-    publishable: r.publishable || null,
+    validation: r.validation || null,
   });
 }
 
@@ -270,7 +270,7 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
   const patch = normalizePatch(body);
   const out = await updateDraft(kv, googleSub, draftId, patch, expectedRev, key);
   if (out.ok) {
-    return res.status(200).json({ draft: out.draft, replayed: !!out.replayed, publishable: out.publishable });
+    return res.status(200).json({ draft: out.draft, replayed: !!out.replayed, validation: out.validation });
   }
   return res.status(statusForStoreError(out.error)).json(errorBody(out));
 }

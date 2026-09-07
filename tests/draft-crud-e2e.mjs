@@ -190,7 +190,7 @@ check('the create was NOT reported degraded', created.result.degraded === false)
 
 const readBack = await SVC.readDraft(kv, SUB, id);
 check('read returns the draft at rev 1', readBack.ok === true && readBack.draft.rev === 1);
-check('read reports publish-readiness', readBack.publishable.ok === true);
+check('read reports publish-readiness', readBack.validation.ok === true);
 check('the price round-tripped exactly', readBack.draft.price === 400);
 
 const edited = await SVC.updateDraft(kv, SUB, id, { price: 375 }, 1, K('edit-1'));
@@ -589,7 +589,7 @@ reset();
       // and break its intent, so publish-readiness is checked too. A
       // seller-entered price is INFO, not blocking — that distinction is the
       // whole reason `blocking` exists rather than a violation count.
-      const blocking = (res.result.publishable?.violations || []).filter((v) => v.blocking);
+      const blocking = (res.result.validation?.violations || []).filter((v) => v.blocking);
       if (blocking.length) {
         firstProblem ||= `row ${i}/${priceSource} created with ${blocking.map((v) => v.code).join(',')}`; continue;
       }
@@ -669,7 +669,7 @@ reset();
         res.state === IDEM.IDEMPOTENCY_STATE.FRESH && res.result?.saved === true,
         `${res.state} ${res.result?.error || ''}`);
 
-  const v = res.result.publishable?.violations || [];
+  const v = res.result.validation?.violations || [];
   const blocking = v.filter((x) => x.blocking);
   // Exact code, not /PRICE/. A regex here would pass on ZERO_PRICE too, and
   // "your price is zero" is a different sentence from "add your price".
@@ -679,7 +679,7 @@ reset();
   check('the finding names the price field rather than counting problems',
         blocking.some((x) => x.field === 'price'), JSON.stringify(blocking));
   check('so the draft exists but is not publishable',
-        res.result.publishable?.ok !== true);
+        res.result.validation?.ok !== true);
 
   // The seller then supplies the price on the review screen, and the same
   // draft becomes publishable. That is the whole point of allowing it to exist.
@@ -688,7 +688,7 @@ reset();
     price: 400, priceSource: 'seller',
   });
   const res2 = await SVC.createDraft(kv, SUB, priced, K('nowpriced'));
-  const blocking2 = (res2.result.publishable?.violations || []).filter((x) => x.blocking);
+  const blocking2 = (res2.result.validation?.violations || []).filter((x) => x.blocking);
   check('🔴 once a price exists, nothing blocks it',
         res2.result?.saved === true && blocking2.length === 0,
         JSON.stringify(blocking2.map((x) => x.code)));
@@ -773,7 +773,7 @@ reset();
     price: undefined, priceSource: undefined,
   });
   const res = await SVC.createDraft(kv, SUB, norm, K('inv'));
-  const v = res.result.publishable?.violations || [];
+  const v = res.result.validation?.violations || [];
   const blocking = v.filter((x) => x.blocking);
   const codes = v.map((x) => x.code);
 
@@ -788,9 +788,9 @@ reset();
   check('\ud83d\udd34 so the whole finding set is one blocker and nothing else',
         v.length === 1, JSON.stringify(codes));
   check('\ud83d\udd34 zero warnings — this is incomplete, not defective',
-        res.result.publishable.warnings === 0
-        && res.result.publishable.infos === 0,
-        `w=${res.result.publishable.warnings} i=${res.result.publishable.infos}`);
+        res.result.validation.warnings === 0
+        && res.result.validation.infos === 0,
+        `w=${res.result.validation.warnings} i=${res.result.validation.infos}`);
 
   // No fabricated provenance ANYWHERE in the persisted record.
   const stored = res.result.draft;
@@ -817,7 +817,7 @@ reset();
   check('normalize accepts 0 — the slot registry owns this rule, not the parser',
         norm.price === 0);
   const res = await SVC.createDraft(kv, SUB, norm, K('zero'));
-  const codes = (res.result.publishable?.violations || []).map((x) => x.code);
+  const codes = (res.result.validation?.violations || []).map((x) => x.code);
   check('\ud83d\udd34 $0 on eBay fixed-price is ZERO_PRICE',
         codes.includes(DS.VIOLATION.ZERO_PRICE), JSON.stringify(codes));
   check('\ud83d\udd34 and is NOT reported as a missing price',
@@ -843,7 +843,7 @@ reset();
     price: 0, priceSource: 'seller',
   });
   const res3 = await SVC.createDraft(kv, SUB, wn, K('zerown'));
-  const c3 = (res3.result.publishable?.violations || []).map((x) => x.code);
+  const c3 = (res3.result.validation?.violations || []).map((x) => x.code);
   check('\ud83d\udd34 the same $0 is fine on a venue whose rules allow it',
         !c3.includes(DS.VIOLATION.ZERO_PRICE) && !c3.includes(DS.VIOLATION.PRICE_REQUIRED),
         JSON.stringify(c3) + ' — proves the refusal belongs to the slot');

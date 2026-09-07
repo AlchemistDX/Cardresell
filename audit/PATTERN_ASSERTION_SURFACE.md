@@ -91,3 +91,24 @@ as inventing a number.
   mutation that the suite does not catch is the same finding.
 - Mutation-test anything load-bearing. The delegated-handler mutation is what
   separated #5's careful-but-wrong form from the version that works.
+
+---
+
+## Instance 4 is the one this project is most exposed to
+
+Five of the six instances are checks in test files. **Instance 4 — the contract's own DONE
+stamp, which named D2.1 complete and evidenced a doc line saying so — is the only one that
+is not.** That makes it the most dangerous of the six here, not the least.
+
+There are eighteen audit documents and one codebase. A false claim in a test gets caught
+when the test runs. **A false claim in a document gets cited.** Nothing re-executes a
+document; the next reader inherits it as established, and every later doc that cites it
+inherits it too. The stamp had no mechanism that could ever have contradicted it.
+
+This is why the amendment to `DECISION_MAINTENANCE_COPY.md` and Amendment 3 to
+`DRAFT_LIST_API_CONTRACT.md` were both written as amendments-in-place rather than as new
+documents superseding old ones. A superseded doc that stays readable is a citation trap.
+
+Practice rule: **a document asserting that work is complete is evidence about the document,
+not about the work.** Re-derive the claim from the code or the suite before citing it,
+including when the document is this one.

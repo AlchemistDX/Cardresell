@@ -254,7 +254,12 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
       index,
       // Publish-readiness is informational at create time. A draft is allowed
       // to be saved incomplete; it is not allowed to be published incomplete.
-      publishable: validateDraftForSlot(written.draft),
+      //
+      // Named `validation`, not `publishable`: it is the whole validator result
+      // (ok, violations, blocking, counts), and an adjective-named field holding
+      // an object gets read as a boolean. `if (body.publishable)` was true for a
+      // draft with two blocking errors. See audit/DECISION_D3_ENTRY.md.
+      validation: validateDraftForSlot(written.draft),
       // What the seller has room for after this save. `null` when the count
       // could not be read — the UI says nothing rather than guessing.
       // The reservation already counts this draft, so remaining is measured
@@ -293,7 +298,7 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
         degraded: true,
         repairRequired: true,
         index: { indexed: null, degraded: true, repairRequired: true, recovery: 'reconcileDraftIndex' },
-        publishable: validateDraftForSlot(cur.draft),
+        validation: validateDraftForSlot(cur.draft),
       };
     },
   });
@@ -303,7 +308,7 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
 export async function readDraft(kv, googleSub, draftId) {
   const cur = await getDraft(kv, googleSub, draftId);
   if (!cur.ok) return cur;
-  return { ok: true, draft: cur.draft, publishable: validateDraftForSlot(cur.draft) };
+  return { ok: true, draft: cur.draft, validation: validateDraftForSlot(cur.draft), readiness: readinessOf(cur.draft) };
 }
 
 /**
@@ -335,7 +340,7 @@ export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, id
     replayed: !!written.replayedWrite,
     // An edit does not change draftId or sku, so no index write is required.
     // Re-indexing on every edit would multiply the failure surface for no gain.
-    publishable: validateDraftForSlot(written.draft),
+    validation: validateDraftForSlot(written.draft),
   };
 }
 
