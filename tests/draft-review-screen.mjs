@@ -14,10 +14,10 @@
  * file's hand-written envelope had no `field`, because the person writing it
  * did not know there was one to write.
  *
- * NOT YET REGISTERED in tests/run-all.sh. That wiring belongs to D3 step 6
- * along with the rest of the suite-ladder decision. The assertions are durable
- * now; only the runner entry is deferred, and this comment is the record that
- * the deferral is deliberate.
+ * REGISTERED as slot 30 of 31 on 2026-09-07. This comment used to say the
+ * registration was deferred to D3 step 6 and that the deferral was deliberate.
+ * It was, and it was also the wrong call: for five days this file was green on
+ * whichever branch its author last ran it on and could not fail anyone else.
  *
  * Run: node tests/draft-review-screen.mjs
  */
@@ -456,12 +456,43 @@ try {
       })(),
       headline: (box.querySelector('[data-fee-net-headline]') || {}).textContent || null,
       note: (box.querySelector('.review-fees-note') || {}).textContent || '',
-      rows: [...box.querySelectorAll('.review-fee-row')].map((r) => ({
-        kind: r.getAttribute('data-fee-row'),
-        label: (r.querySelector('.review-fee-label') || {}).textContent || '',
-        amount: (r.querySelector('.review-fee-amount') || {}).textContent || '',
-        cells: r.children.length,
-      })),
+      /* CHANGED 2026-09-07 (third review). Was:
+             rows: [...box.querySelectorAll('.review-fee-row')].map(r => ({
+               ..., cells: r.children.length }))
+         reading a wrapper div with two child divs, and asserting cells === 2.
+         The fee rows are now a <dl> of alternating <dt>/<dd> DIRECT children,
+         so there is no per-row wrapper left to count children on. Rows are
+         paired by DOM order instead, which is the property that actually
+         matters for a definition list: `pairOk` below fails if the sequence
+         is anything other than dt,dd,dt,dd..., which is the same guarantee
+         `cells === 2` used to give, expressed against the real markup. */
+      dlTag: (box.querySelector('.review-fees-table') || {}).tagName || null,
+      dlChildTags: [...(box.querySelector('.review-fees-table') || { children: [] }).children].map((c) => c.tagName),
+      rows: (() => {
+        const dl = box.querySelector('.review-fees-table');
+        if (!dl) return [];
+        const kids = [...dl.children];
+        const out = [];
+        for (let i = 0; i + 1 < kids.length; i += 2) {
+          const dt = kids[i], dd = kids[i + 1];
+          out.push({
+            kind: dt.getAttribute('data-fee-row'),
+            label: dt.textContent || '',
+            amount: dd.textContent || '',
+            // A dt whose amount carries a different data-fee-row would mean the
+            // grid had visually paired a label with someone else's number.
+            kindMatches: dt.getAttribute('data-fee-row') === dd.getAttribute('data-fee-row'),
+          });
+        }
+        return out;
+      })(),
+      pairOk: (() => {
+        const dl = box.querySelector('.review-fees-table');
+        if (!dl) return false;
+        const tags = [...dl.children].map((c) => c.tagName);
+        if (tags.length === 0 || tags.length % 2 !== 0) return false;
+        return tags.every((t, i) => t === (i % 2 === 0 ? 'DT' : 'DD'));
+      })(),
     };
   });
 
@@ -578,20 +609,49 @@ try {
     await openReview(page, F.ids.publishable);
     const before = await feesOf(page);
 
+    /* CHANGED 2026-09-07 (third review). Was:
+             const p = window._crSellerProfile();
+             return { status: p.ebayTopRated, listing: p.ebayTrsListing };
+       and asserted `flipped.listing === 'yes'` -- i.e. that the confirmation
+       had landed in the seller profile. It had, and that was the bug: a
+       per-listing answer in a persisted global store. The assertion documented
+       the defect as if it were the contract.
+
+       It now asserts the opposite: the profile must NOT carry the key at all,
+       and the confirmation must be stamped and live in memory only. The
+       downstream red checks are unchanged, so the discount-leak guard they
+       provide is untouched by this flip. */
     const flipped = await page.evaluate(() => {
       const st = document.getElementById('ebayTopRated');
       const lg = document.getElementById('ebayTrsListing');
       if (!st || !lg) return null;
       st.value = 'yes'; lg.value = 'yes';
+      // Stamp it the way the real change handler does, so this is the strongest
+      // form of the leak: a genuinely valid confirmation for the ranking
+      // surface's current context, which the draft must still not inherit.
+      window.noteTrsListingAnswer();
       window._reviewPaint();
       const p = window._crSellerProfile();
-      return { status: p.ebayTopRated, listing: p.ebayTrsListing };
+      let persisted = null;
+      try { persisted = localStorage.getItem('cr_seller_profile_v1'); } catch (e) { persisted = 'THREW'; }
+      return {
+        status: p.ebayTopRated,
+        profileHasListingKey: ('ebayTrsListing' in p),
+        confirmedNow: window.trsListingConfirmed(),
+        persisted: String(persisted || ''),
+      };
     });
     const after = await feesOf(page);
 
-    T.check('the confirmation control exists and both answers took',
-      flipped && flipped.status === 'yes' && flipped.listing === 'yes',
-      JSON.stringify(flipped));
+    T.check('the status answer took', flipped && flipped.status === 'yes', JSON.stringify(flipped));
+    T.check('🔴 the seller profile carries no listing-confirmation key',
+      flipped && flipped.profileHasListingKey === false,
+      'a per-listing answer in the seller profile is the defect itself');
+    T.check('the confirmation is genuinely live, so this is the real leak case',
+      flipped && flipped.confirmedNow === true, JSON.stringify(flipped));
+    T.check('🔴 the confirmation never reaches localStorage',
+      flipped && !/ebayTrsListing/.test(flipped.persisted),
+      `persisted profile was ${flipped && flipped.persisted}`);
     T.check('🔴 the draft net did not move',
       amt(after.headline) === amt(before.headline),
       `${before.headline} -> ${after.headline} — a global answer leaked into a per-listing benefit`);
@@ -602,21 +662,50 @@ try {
       await page.evaluate(() => {
         const el = document.querySelector('[data-fee-trs="withheld"]');
         return el ? el.textContent.trim() : '';
+      /* CHANGED 2026-09-07: previously required the note to name
+         "same- or 1-business-day handling" as the missing condition. The
+         confirmation now covers the whole benefit, so the note names all three
+         conditions and the assertion checks each of them -- a note that
+         mentioned only handling would now be understating what a draft lacks. */
       }).then((t) => /Top Rated Plus/.test(t) && /same- or 1-business-day handling/.test(t)
+                     && /US ship-from/.test(t) && /local-pickup only/.test(t)
                      && /may be lower/.test(t)),
       'silence about a withheld discount reads as a fee that is simply high');
     await ctx.close();
   });
 
-  await T.section('the table is shaped for a provenance column and does not claim one', async () => {
+  /* RENAMED AND REPREMISED 2026-09-07 (third review).
+     Was: 'the table is shaped for a provenance column and does not claim one'.
+     Its first two assertions were `cells === 2` on every row and "all rows have
+     the same cell count, so a column can be added at once" -- both written to
+     hold a THIRD fee-row column open for D4 price provenance.
+
+     That plan is withdrawn. Price provenance describes the asking price, not
+     the fee schedule, so it belongs beside the Price field; fee provenance
+     applies to the schedule as a whole and is already the dated audit pill.
+     A third column would have put a price-shaped fact in a fee-shaped slot.
+
+     Instance 16 in audit/PATTERN_ASSERTION_SURFACE.md is exactly this: an
+     assertion can pin a design in place. Those two checks came from the plan,
+     not from a source, and had they survived they would have argued against
+     the <dl> conversion on the grounds that a dl has no cells to count.
+
+     What survives is the part that was never about the column: no header sits
+     above a column that does not exist. What is added is the definition-list
+     structure the review chose. */
+  await T.section('the fee rows are a definition list, and no column is promised', async () => {
     const { ctx, page } = await boot(serveRead(F.publishable));
     await openReview(page, F.ids.publishable);
     const f = await feesOf(page);
 
-    T.check('every row has exactly two cells, label and amount',
-      f.rows.every((r) => r.cells === 2), JSON.stringify(f.rows.map((r) => r.cells)));
-    T.check('all rows have the same cell count, so a column can be added at once',
-      new Set(f.rows.map((r) => r.cells)).size === 1);
+    T.check('the breakdown container is a <dl>', f.dlTag === 'DL', String(f.dlTag));
+    T.check('its children alternate dt, dd, dt, dd with none left over',
+      f.pairOk === true, JSON.stringify(f.dlChildTags));
+    T.check('every label is paired with an amount carrying the same row kind',
+      f.rows.length > 0 && f.rows.every((r) => r.kindMatches),
+      JSON.stringify(f.rows.map((r) => [r.kind, r.kindMatches])));
+    T.check('no wrapper element sits between the dl and its terms',
+      f.dlChildTags.every((t) => t === 'DT' || t === 'DD'), JSON.stringify(f.dlChildTags));
 
     // No COLUMN header. A column header with nothing under it is a promise,
     // and the column it would promise is blocked on the packet wiring.
@@ -646,10 +735,70 @@ try {
     T.check('no thead in the breakdown', header.thead === 0);
     T.check('no column-scoped th in the breakdown', header.thCol === 0);
     T.check('no column-header-classed element in the breakdown', header.headerish === 0);
-    // The real guard the word bans were reaching for: every row is a label and
-    // an amount, so there is nothing a column header could be heading.
-    T.check('no row carries a third cell a header could describe',
-      f.rows.every((r) => r.cells === 2));
+    // The real guard the word bans were reaching for, restated for a dl: the
+    // list holds nothing but terms and definitions, so there is no third
+    // element a column header could be heading.
+    T.check('the breakdown holds nothing but terms and definitions',
+      f.dlChildTags.length > 0 && f.dlChildTags.every((t) => t === 'DT' || t === 'DD'));
+
+    /* Announcement, not just markup. A dl can be structurally correct and still
+       be announced as a flat run of text if something upstream overrides its
+       role, so this reads the accessibility tree the browser actually exposes
+       rather than the tags we wrote. Checks the roles are present and that the
+       first term announced is the first term in the DOM -- i.e. reading order
+       matches visual order. */
+    /* Read through CDP rather than page.accessibility, which Playwright removed
+       in 1.59 (this repo runs 1.59.0, and the first draft of this check threw
+       "Cannot read properties of undefined"). Accessibility.getFullAXTree is
+       the same tree the removed helper wrapped, so this is a stronger read,
+       not a weaker substitute: it returns Chromium's computed roles for the
+       whole document and the pairing is filtered out of it by name. */
+    const cdp = await page.context().newCDPSession(page);
+    const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+    const roleOf = (n) => String((n.role && n.role.value) || '');
+    const nameOf = (n) => String((n.name && n.name.value) || '').trim();
+    const labels = f.rows.map((r) => r.label.trim());
+    const terms = nodes.filter((n) => /DescriptionListTerm|term/i.test(roleOf(n)));
+    const defs  = nodes.filter((n) => /DescriptionListDetail|definition/i.test(roleOf(n)));
+    T.check('Chromium computes a term role for every fee row',
+      terms.length === f.rows.length,
+      `${terms.length} terms vs ${f.rows.length} rows — roles seen: ${[...new Set(nodes.map(roleOf))].filter((r) => /desc|term|defin|list/i.test(r)).join(',')}`);
+    T.check('Chromium computes a definition role for every term',
+      defs.length === terms.length, `${defs.length} definitions vs ${terms.length} terms`);
+    /* Announced order matches visual order. Compares the sequence of computed
+       term names against the sequence of dt text, so a dl that is structurally
+       valid but announced out of order still fails. */
+    T.check('the announced term order is the visual row order',
+      terms.length > 0 && terms.every((n, i) => labels[i] && labels[i].startsWith(nameOf(n).slice(0, 8))),
+      `${JSON.stringify(terms.map(nameOf))} vs ${JSON.stringify(labels)}`);
+    /* Each amount is reachable UNDER its own definition node.
+       First attempt asserted `nameOf(def).length > 0` and failed with six empty
+       strings -- correctly. A `definition` role does not take its accessible
+       name from its contents (unlike the term role, which does and is why the
+       order check above works on names alone), so the amount is exposed as a
+       descendant static-text node rather than as the definition's name. The
+       assertion was measuring a property the role does not have; the markup was
+       fine. Kept as a note because the failure looked exactly like broken
+       markup, and the next person to touch this will hit it too.
+       Walks childIds instead, which is where the text actually lives. */
+    const byId = new Map(nodes.map((n) => [n.nodeId, n]));
+    /* LEAF names only. Collecting every name on the way down duplicated each
+       amount ("$400.00 $400.00"), because a container and its static-text child
+       both report the same computed name. Only the leaves carry text a screen
+       reader actually reads out once. */
+    const textUnder = (n, depth = 0) => {
+      if (!n || depth > 4) return '';
+      const kids = (n.childIds || []).map((id) => byId.get(id)).filter(Boolean);
+      if (kids.length === 0) return nameOf(n);
+      return kids.map((k) => textUnder(k, depth + 1)).filter(Boolean).join(' ').trim();
+    };
+    const defTexts = defs.map((n) => textUnder(n));
+    T.check('every amount is reachable under its own definition node',
+      defTexts.length > 0 && defTexts.every((t) => t.length > 0),
+      JSON.stringify(defTexts));
+    T.check('the announced amounts are the visual amounts, in order',
+      defTexts.every((t, i) => f.rows[i] && t.replace(/\s+/g, '') === f.rows[i].amount.trim().replace(/\s+/g, '')),
+      `${JSON.stringify(defTexts)} vs ${JSON.stringify(f.rows.map((r) => r.amount.trim()))}`);
     await ctx.close();
   });
 

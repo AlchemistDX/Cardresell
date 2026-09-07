@@ -5526,7 +5526,7 @@ function toggleAdv() {
    so they should outlive a single scan. Persisted to localStorage and
    restored on load. Wrapped in try/catch because the /computer/a preview
    iframe runs on an opaque origin where localStorage access throws. */
-const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo', 'ebayTrsListing'];
+const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo'];
 const SELLER_PROFILE_LS   = 'cr_seller_profile_v1';
 
 /* The profile as the fee engine wants it, read in exactly ONE place.
@@ -5554,13 +5554,133 @@ function _crSellerProfile() {
   return {
     ebayStore:    val('ebayStore',    'none'),
     ebayTopRated: val('ebayTopRated', 'no'),
-    // Deliberately its OWN key, defaulting to 'no'. See trsDiscountApplies.
-    // A profile saved before this key existed yields 'no' here, so an old
-    // saved "I am Top Rated" can never be read as a listing confirmation.
-    ebayTrsListing: val('ebayTrsListing', 'no'),
+    // ebayTrsListing is NOT read here. It describes one listing, not the
+    // seller, so it is not a profile key at all -- see trsListingConfirmed.
     ebayPromo:    parseInt(val('ebayPromo', '0'), 10) || 0,
     tcgLevel:     val('tcgLevel',     'l14'),
   };
+}
+
+/* ── The Top Rated Plus confirmation is a property of ONE LISTING ──────────
+ *
+ * 2026-09-07, third review. This value was briefly a fifth SELLER_PROFILE_KEY.
+ * That was wrong, and the doc comment three functions up says why in its own
+ * words: those selects "describe WHO the seller is, not what they are pricing,
+ * so they should outlive a single scan." A same-or-next-day handling promise is
+ * exactly what is being priced. Giving it its own key and a 'no' default
+ * stopped an old saved "I am Top Rated" from being re-read as a listing
+ * confirmation, which is a MIGRATION property -- and I called it scope. It was
+ * not scope. The value still persisted to localStorage, so a seller who
+ * confirmed while pricing one card kept confirming for every card after it,
+ * and a reload silently turned a previous card's answer into this card's
+ * eligibility. Rule 1, seventh bite.
+ *
+ * The precedent already existed and I walked past it: shipCharge / shipCost /
+ * itemCost are per-scan and deliberately excluded from the profile. This
+ * follows them.
+ *
+ * Two properties, and the order matters:
+ *
+ *   1. It never reaches localStorage. There is no key, no save, no load.
+ *      A reload starts from unconfirmed.
+ *   2. Validity is DERIVED by comparing the context the answer was given in
+ *      against the context live right now. It is not reset by a hook.
+ *
+ * (2) is the part that makes this safe. A reset hook has to be remembered at
+ * every site that changes the priced card, and the failure mode of forgetting
+ * one is a silent discount on the wrong card -- money, in the seller's
+ * disfavour when we overstate their payout. Deriving cannot be forgotten: if
+ * the context does not match, the answer does not count, and any new mutation
+ * site added later is covered for free. Any error lands on "not confirmed",
+ * which is the direction that understates the seller's proceeds rather than
+ * promising something eBay will not honour.
+ *
+ * The context is deliberately over-specified. Every input listed makes the
+ * answer expire MORE often, and expiring too often costs a seller one extra
+ * click while expiring too rarely quotes a fee that is too low. */
+let _trsListingConfirm = { ctx: null, ok: false };
+
+function trsListingContext() {
+  const v = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value) : '';
+  };
+  /* Card identity comes from BOTH the selected-card object and the search
+     input, and both on purpose.
+       - selectedCard.id is the precise identity: two cards can share a name
+         across sets, and a name-only context would let a Base Set Charizard's
+         confirmation carry over to a reprint.
+       - searchInput.value is the identity the SELLER can see and change. If
+         they start typing a different card, they have begun moving off the one
+         they confirmed, and the answer should expire at that point rather than
+         at the moment a new object is finally assigned.
+     Including both means either one moving expires the answer, which is the
+     fail-safe direction. It is also what makes this function reachable from a
+     test: selectedCard is a top-level `let` in a classic script, so it is a
+     lexical binding and not a window property, and no test can assign it
+     without driving the whole search flow. The search input is a real upstream
+     input a test can move -- the same reason the freshness tests move the clock
+     instead of adding a test-only global. */
+  const card = (typeof selectedCard !== 'undefined' && selectedCard)
+    ? String(selectedCard.id || selectedCard.name || '')
+    : '';
+  const game = (typeof activeGame !== 'undefined' && activeGame) ? String(activeGame) : '';
+  const grade = document.querySelector('#gradedPills .pill.sel')?.dataset.val || '';
+  return [card, v('searchInput'), game, grade, v('shipCharge'), v('shipCost'), v('priceOverride')].join('|');
+}
+
+/* True only if a confirmation was given AND it was given about what is being
+   priced right now. Anything else -- no answer, an answer about another card,
+   an answer from before a reload -- is false.
+ *
+ * CLEARS ON A STALE READ, which is not incidental. The first version only
+ * COMPARED the stamped context against the live one and left the stamp in
+ * place. tests/trs-listing-scope.mjs caught what that allows: a seller confirms
+ * at $400, edits the price to $450 (answer correctly stops counting), edits it
+ * back to $400 -- and the stamp matches again, so a dead answer comes back to
+ * life without anyone re-confirming. The review's wording was "clears or
+ * re-derives", and re-deriving is the weaker of the two: it assumes returning
+ * to the same numbers means returning to the same intent. Once an answer has
+ * been invalidated we ask again. Deleting the stamp is what makes that true no
+ * matter which surface reads it first.
+ *
+ * A predicate with a side effect deserves the suspicion, so: the state being
+ * dropped is state that is ALREADY unusable by the line above it. This evicts a
+ * dead answer; it cannot change a live one, and it cannot make a false read
+ * true. */
+function trsListingConfirmed() {
+  if (!_trsListingConfirm || _trsListingConfirm.ok !== true) return false;
+  if (_trsListingConfirm.ctx === null) return false;
+  if (_trsListingConfirm.ctx === trsListingContext()) return true;
+  _trsListingConfirm = { ctx: null, ok: false };
+  return false;
+}
+
+/* Called from the select's change handler. Stamps the context the answer was
+   given in, so the answer carries its own scope with it. */
+function noteTrsListingAnswer() {
+  const el = document.getElementById('ebayTrsListing');
+  const yes = !!(el && el.value === 'yes');
+  _trsListingConfirm = yes ? { ctx: trsListingContext(), ok: true } : { ctx: null, ok: false };
+}
+
+/* Keeps the visible select honest when the answer has expired. Without this
+   the control would still read "Yes" for a card the discount is no longer
+   being applied to, which is a worse lie than the original bug: the seller
+   would see a confirmation and a full fee and have no way to reconcile them.
+   Returns true if it had to clear the control. */
+function syncTrsListingControl() {
+  const el = document.getElementById('ebayTrsListing');
+  // Called for its eviction side effect even when there is no control to fix,
+  // so a surface without the select cannot leave a stale stamp behind for the
+  // next surface to read.
+  const live = trsListingConfirmed();
+  if (!el) return false;
+  if (el.value === 'yes' && !live) {
+    el.value = 'no';
+    return true;
+  }
+  return false;
 }
 
 function saveSellerProfile() {
@@ -6482,22 +6602,45 @@ document.addEventListener('keydown', e => {
  *
  * Every item this app prices is in that set. So the 30-day-free-returns
  * condition is waived for our category -- the seal is not extended, but the
- * fee discount is -- and the only per-listing condition left to satisfy is
- * SAME- OR 1-BUSINESS-DAY HANDLING. Asking a card seller to confirm free
- * returns would be asking them to confirm something eBay does not require of
- * them here, and would suppress a discount they are owed.
+ * fee discount is. Asking a card seller to confirm free returns would be
+ * asking them to confirm something eBay does not require of them here, and
+ * would suppress a discount they are owed.
  *
- * Standing conditions we do NOT ask about and therefore disclose as
- * assumptions: US residency (the documented seller default), the listing not
- * being local-pickup-only, and the seller not being rated Very High for
- * "item not as described" in the category.
+ * WHAT THE SELLER CONFIRMS (revised 2026-09-07 after third review). The
+ * question used to ask about handling time alone, and disclose US residency
+ * and the local-pickup exclusion as assumptions in small print underneath.
+ * That was not good enough, and the reason is worth keeping: a disclosed
+ * assumption is fine when it explains a limitation, but this one was CHANGING
+ * THE NUMBER. We were lowering a seller's quoted fee on the strength of two
+ * conditions they had never affirmed and we had never checked. So the
+ * confirmation now covers the benefit rather than one input to it, and names
+ * all three conditions being confirmed: same- or 1-business-day handling, US
+ * ship-from, and not local-pickup-only.
+ *
+ * One condition remains genuinely unasked: the seller not being rated Very
+ * High for "item not as described" in the category. That is an eBay-side
+ * service metric the seller cannot reliably self-report and we cannot see, and
+ * it gates Top Rated STATUS, which the seller answers separately above. It is
+ * not a listing term.
  *
  * Both inputs are required, and the confirmation is never inferred from the
  * status. It is a seller-confirmed assumption about a listing, so it defaults
- * to off and has to be actively stated. */
-function trsDiscountApplies(prof) {
+ * to off and has to be actively stated.
+ *
+ * TWO EXPLICIT ARGUMENTS, deliberately. The status comes from the seller
+ * profile; the confirmation comes from trsListingConfirmed(), which is scoped
+ * to the card being priced and never persisted. Reading the confirmation off
+ * `prof` here is what let a global answer discount an unrelated card, so this
+ * function can no longer reach it: a caller has to say, at its own call site,
+ * which listing's confirmation it means. The review screen passes false and
+ * says so on screen.
+ *
+ * `listingConfirmed === true` rather than a truthy test, so a 'yes' string,
+ * a select element, or a stale profile object cannot stand in for a
+ * confirmation. */
+function trsDiscountApplies(prof, listingConfirmed) {
   if (!prof) return false;
-  return prof.ebayTopRated === 'yes' && prof.ebayTrsListing === 'yes';
+  return prof.ebayTopRated === 'yes' && listingConfirmed === true;
 }
 
 function feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible) {
@@ -6595,9 +6738,14 @@ const FEE_DISCLOSURE = {
   // no draft carries one yet. Errs toward a fee that is too high rather than a
   // payout that is too high, and says which way it errs so the number is not
   // silently pessimistic.
+  // Revised the same day after the third review widened what the seller
+  // confirms. It used to name handling time alone as the missing condition,
+  // which understated what a draft is missing: the discount needs the whole
+  // listing to qualify, and a draft records none of it.
   trsWithheldNote: 'No Top Rated Plus discount is applied here. That 10% off the percentage fee '
-              + 'depends on the listing offering same- or 1-business-day handling, which this draft '
-              + 'does not record yet, so your fee may be lower than shown.',
+              + 'depends on the listing itself qualifying -- same- or 1-business-day handling, a US '
+              + 'ship-from location, and not local-pickup only -- none of which this draft records '
+              + 'yet, so your fee may be lower than shown.',
 };
 
 const FEE_MODEL_REVISION = 1;
@@ -6621,7 +6769,12 @@ function netEbayForPrice(price, ctx) {
   // silently dropped the discount from the payout row and the target-net
   // bisection while the fee rows above still showed it -- the two would have
   // disagreed about the same listing.
-  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, trsDiscountApplies(c));
+  // ctx carries a RESOLVED boolean. Eligibility depends on a per-listing
+  // confirmation that lives outside the seller profile, so this function
+  // cannot re-derive it from ctx's seller fields without reaching for a
+  // global answer -- which is the bug the third review caught. The surface
+  // that knows which listing it is resolves it once and puts it here.
+  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, c.trsEligible === true);
   const totalFees  = items.reduce(function (s, f) { return s + f.a; }, 0);
   return price + shipCharge - totalFees - shipCost;
 }
@@ -7178,7 +7331,10 @@ function calc() {
   const _prof = _crSellerProfile();
   const ebayStore     = _prof.ebayStore;
   const ebayPromo     = _prof.ebayPromo;
-  const ebayTrsElig   = trsDiscountApplies(_prof);
+  // Clear a visibly-stale "Yes" before reading it, so the control and the fee
+  // rows cannot disagree about the same card.
+  syncTrsListingControl();
+  const ebayTrsElig   = trsDiscountApplies(_prof, trsListingConfirmed());
   const tcgLevel      = _prof.tcgLevel;
   const tcgIsDirect   = !!(TCG_LEVELS[tcgLevel] && TCG_LEVELS[tcgLevel].direct);
   const comcService   = document.getElementById('comcService').value;
@@ -19568,7 +19724,10 @@ function _reviewFeeCalc() {
   // undiscounted one: an estimate that is too LOW is a disappointment, an
   // estimate that is too HIGH is a promise we made for eBay and cannot keep.
   // The breakdown says so rather than leaving the seller to wonder.
-  const ctx  = { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, ebayTopRated: 'no', ebayTrsListing: 'no' };
+  // trsEligible is hard false, not 'no' strings that a future reader might
+  // re-derive from. A draft does not record its own handling promise yet, and
+  // a global answer must never stand in for one. See the withheld note below.
+  const ctx  = { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, trsEligible: false };
   const items = feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, false);
   return {
     price,
@@ -19580,12 +19739,20 @@ function _reviewFeeCalc() {
   };
 }
 
+/* A fee row is a term and its value, so it is a <dt>/<dd> pair -- chosen over
+   a table with th[scope=row] in the third review, because the surface has no
+   column headers and a header-less table with row headers is announced
+   inconsistently across assistive tech.
+ *
+ * dt and dd are emitted as DIRECT children of the <dl>. No wrapper element per
+ * row: the visual row is reconstructed by the grid in CSS. `data-fee-row`
+ * therefore goes on BOTH halves, which is also what lets a test pair a label
+ * with its amount without relying on document order alone. */
 function _reviewFeeRow(kind, label, amount) {
+  const k = _reviewEsc(kind);
   return `
-        <div class="review-fee-row" data-fee-row="${_reviewEsc(kind)}">
-          <div class="review-fee-label">${_reviewEsc(label)}</div>
-          <div class="review-fee-amount">${_reviewEsc(amount)}</div>
-        </div>`;
+          <dt class="review-fee-label" data-fee-row="${k}">${_reviewEsc(label)}</dt>
+          <dd class="review-fee-amount" data-fee-row="${k}">${_reviewEsc(amount)}</dd>`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -19618,10 +19785,8 @@ function _reviewFeeRow(kind, label, amount) {
 // modeled) $0.00" is a disclosure.
 function _reviewBasisRow(label, qualifier, amount) {
   return `
-        <div class="review-fee-row review-fee-basis-row" data-fee-row="basis">
-          <div class="review-fee-label">${_reviewEsc(label)}<span class="review-fee-qual">(${_reviewEsc(qualifier)})</span></div>
-          <div class="review-fee-amount">${_reviewEsc(amount)}</div>
-        </div>`;
+          <dt class="review-fee-label" data-fee-row="basis">${_reviewEsc(label)}<span class="review-fee-qual">(${_reviewEsc(qualifier)})</span></dt>
+          <dd class="review-fee-amount" data-fee-row="basis">${_reviewEsc(amount)}</dd>`;
 }
 
 // Same staleness thresholds, same source of truth, same methodology link as
@@ -19671,10 +19836,10 @@ function _reviewFeesHtml() {
       <div class="review-fees" data-review-fees="unpriced">
         <div class="review-fees-h">Estimated net<span class="review-fees-basis">item price only</span></div>
         <div class="review-fees-net" data-fee-net-headline="">\u2014</div>
-        <div class="review-fees-table">
+        <dl class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', '\u2014')}
 ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
-        </div>
+        </dl>
         <div class="review-fees-note">Add a price to see the fee breakdown. Shipping is not included.</div>
         ${pill}
       </div>`;
@@ -19686,12 +19851,12 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
       <div class="review-fees" data-review-fees="priced">
         <div class="review-fees-h">Estimated net<span class="review-fees-basis">item price only</span></div>
         <div class="review-fees-net" data-fee-net-headline="">${_reviewEsc(_reviewMoney(c.net))}</div>
-        <div class="review-fees-table">
+        <dl class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN)}${feeRows}
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
-        </div>
+        </dl>
         <div class="review-fees-note">${_reviewEsc(FEE_DISCLOSURE.estimateNote)}</div>
         <div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>
         ${pill}

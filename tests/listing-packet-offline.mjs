@@ -319,21 +319,29 @@ console.log('\nB4 — target net inverted by bisection on the real feeEbay');
 check('FEE_MODEL_REVISION exists and is an integer',
       Number.isInteger(FEE_MODEL_REVISION) && FEE_MODEL_REVISION >= 1);
 
-// CHANGED 2026-09-07. These contexts used to set `ebayTopRated: 'yes'` alone
-// and expect the 10% discount. They no longer get it from status alone: the
-// discount is a per-LISTING benefit, so `ebayTrsListing: 'yes'` -- the seller's
-// confirmation that the listing offers qualifying handling -- is now required
-// too. The 'top rated status only' row below is new and pins the case the old
-// contexts silently mis-modelled: status without a qualifying listing pays the
-// FULL fee.
+// CHANGED TWICE ON 2026-09-07, and the second change is the interesting one.
+//
+// First: these contexts used to set `ebayTopRated: 'yes'` alone and expect the
+// 10% discount. They no longer get it from status alone, because the discount
+// is a per-LISTING benefit. `ebayTrsListing: 'yes'` was added as a second
+// required field. The 'top rated status only' row was added at the same time
+// and pins the case the old contexts silently mis-modelled: status without a
+// qualifying listing pays the FULL fee.
+//
+// Second, after the third review: `ebayTrsListing` was the wrong shape. It read
+// as one more seller field, and in production it really was one -- persisted,
+// global, and therefore able to discount a card the seller never answered
+// about. These contexts now carry `trsEligible`, a resolved boolean that the
+// surface pricing the listing must supply. A ctx that omits it is not eligible,
+// which is the correct default and the reason this field is not optional-truthy.
 const CTXS = [
   { name: 'default no-store',      shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'no' },
-  { name: 'top rated + listing ok', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', ebayTrsListing: 'yes' },
+  { name: 'top rated + listing ok', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', trsEligible: true },
   { name: 'basic store',           shipCharge: 0, shipCost: 0, ebayStore: 'basic', ebayPromo: 0, ebayTopRated: 'no' },
   { name: 'buyer-paid shipping',   shipCharge: 5, shipCost: 4.50, ebayStore: 'none', ebayPromo: 0, ebayTopRated: 'no' },
   { name: 'promoted 3%',           shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 3, ebayTopRated: 'no' },
-  { name: 'everything at once',    shipCharge: 5.95, shipCost: 5.10, ebayStore: 'basic', ebayPromo: 4, ebayTopRated: 'yes', ebayTrsListing: 'yes' },
-  { name: 'top rated status only', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', ebayTrsListing: 'no' },
+  { name: 'everything at once',    shipCharge: 5.95, shipCost: 5.10, ebayStore: 'basic', ebayPromo: 4, ebayTopRated: 'yes', trsEligible: true },
+  { name: 'top rated status only', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', trsEligible: false },
 ];
 const TARGETS = [1, 4.99, 8, 9.5, 10, 10.5, 12, 25, 60, 99.99, 250, 900, 2499, 2501, 5000, 7499, 7501, 12000];
 
@@ -965,35 +973,50 @@ console.log('\nB7 — unverified aspect values');
 // discount must NOT cross.
 {
   console.log('\nB8 — Top Rated Plus is a listing benefit, not a seller status');
+  /* CHANGED 2026-09-07 (third review). These cases used to carry the listing
+     confirmation as a profile field -- `{ ebayTopRated: 'yes', ebayTrsListing:
+     'yes' }` -- and call `trsDiscountApplies(prof)` with one argument. The
+     review's finding was that a per-listing answer cannot live in the profile
+     at all, so the confirmation is now the rule's SECOND argument and the
+     profile carries only the seller's status. Every expected verdict below is
+     unchanged; only where the confirmation comes from has moved. The retired
+     case 'a profile saved before the listing key existed is not eligible' is
+     replaced by two stronger ones: the rule ignores a profile-borne
+     confirmation entirely, and it refuses a truthy non-boolean. */
   const base = { shipCharge: 0, shipCost: 0, ebayStore: 'none', ebayPromo: 0 };
-  const statusOnly = { ...base, ebayTopRated: 'yes', ebayTrsListing: 'no'  };
-  const confirmed  = { ...base, ebayTopRated: 'yes', ebayTrsListing: 'yes' };
-  const withdrawn  = { ...confirmed, ebayTrsListing: 'no' };
-  const neither    = { ...base, ebayTopRated: 'no',  ebayTrsListing: 'no'  };
-  const listingOnly= { ...base, ebayTopRated: 'no',  ebayTrsListing: 'yes' };
+  const topRated  = { ...base, ebayTopRated: 'yes' };
+  const notRated  = { ...base, ebayTopRated: 'no'  };
+  // ctx for the payout/inversion helpers now carries a resolved boolean.
+  const statusOnly = { ...topRated, trsEligible: false };
+  const confirmed  = { ...topRated, trsEligible: true  };
 
   check('🔴 Top Rated status alone does not earn the discount',
-        trsDiscountApplies(statusOnly) === false,
+        trsDiscountApplies(topRated, false) === false,
         'the discount is a per-listing benefit; status is necessary, not sufficient');
   check('a confirmed qualifying listing does earn it',
-        trsDiscountApplies(confirmed) === true);
+        trsDiscountApplies(topRated, true) === true);
   check('🔴 withdrawing the confirmation withdraws the discount',
-        trsDiscountApplies(withdrawn) === false,
+        trsDiscountApplies(topRated, false) === false,
         'a stale yes must not outlive the answer that produced it');
   check('a qualifying listing from a non-Top-Rated seller earns nothing',
-        trsDiscountApplies(listingOnly) === false,
+        trsDiscountApplies(notRated, true) === false,
         'handling time alone is not Top Rated Plus');
   check('an absent profile is not eligible',
-        trsDiscountApplies(undefined) === false && trsDiscountApplies({}) === false);
-  check('🔴 a profile saved before the listing key existed is not eligible',
-        trsDiscountApplies({ ebayTopRated: 'yes' }) === false,
-        'an old saved "I am Top Rated" must never be read as a listing confirmation');
+        trsDiscountApplies(undefined, true) === false && trsDiscountApplies({}, true) === false);
+  check('🔴 a confirmation carried on the profile is ignored',
+        trsDiscountApplies({ ebayTopRated: 'yes', ebayTrsListing: 'yes' }) === false,
+        'the rule must not be able to reach a global answer, even if one is handed to it');
+  check('🔴 a truthy non-boolean is not a confirmation',
+        trsDiscountApplies(topRated, 'yes') === false
+        && trsDiscountApplies(topRated, 1) === false
+        && trsDiscountApplies(topRated, {}) === false,
+        'only an explicit true counts, so a select element or a status string cannot stand in');
 
   // The discount is 10% of the PERCENTAGE fee only. eBay: "The discount does
   // not apply to the per order portion of the final value fee."
   const P = 184.99;
-  const fFull = feeEbay(P, 0, 'none', 0, trsDiscountApplies(statusOnly));
-  const fDisc = feeEbay(P, 0, 'none', 0, trsDiscountApplies(confirmed));
+  const fFull = feeEbay(P, 0, 'none', 0, trsDiscountApplies(topRated, false));
+  const fDisc = feeEbay(P, 0, 'none', 0, trsDiscountApplies(topRated, true));
   const fvfOf = (rows) => rows.find((r) => /Final Value Fee/.test(r.l));
   const perOrderOf = (rows) => rows.find((r) => !/Final Value Fee/.test(r.l) && r.a > 0 && r.a < 1);
 

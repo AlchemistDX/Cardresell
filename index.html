@@ -1066,21 +1066,26 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .review-fees{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)}
 .review-fees-h{font-size:.8rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
 .review-fees-net{margin-top:2px;font-size:1.45rem;font-weight:650;color:var(--text);font-variant-numeric:tabular-nums}
-.review-fees-table{margin-top:10px;display:flex;flex-direction:column}
-.review-fee-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--divider)}
-.review-fee-row:last-child{border-bottom:0}
-.review-fee-label{font-size:.9rem;color:var(--text-muted)}
-.review-fee-amount{font-size:.9rem;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
-.review-fee-row[data-fee-row="net"]{margin-top:2px;border-top:1px solid var(--border);padding-top:8px}
-.review-fee-row[data-fee-row="net"] .review-fee-label,
-.review-fee-row[data-fee-row="net"] .review-fee-amount{font-weight:650;color:var(--text)}
+/* 2026-09-07, third review. Was a div grid with two child divs per row; now a
+   definition list, which is what a label/amount pair actually is. dt and dd are
+   DIRECT children of the dl -- no per-row wrapper -- because the row grouping
+   lives in the grid, not in the markup, and a wrapper between a dl and its
+   terms is exactly the thing with patchy assistive-tech support. The visual row
+   is reconstructed by giving each pair the same grid row and matching borders. */
+.review-fees-table{margin-top:10px;display:grid;grid-template-columns:1fr auto;column-gap:12px;margin-bottom:0}
+.review-fee-label,.review-fee-amount{align-self:baseline;padding:6px 0;border-bottom:1px solid var(--divider);margin:0}
+.review-fee-label{grid-column:1;font-size:.9rem;color:var(--text-muted)}
+.review-fee-amount{grid-column:2;font-size:.9rem;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.review-fees-table > :nth-last-child(-n+2){border-bottom:0}
+.review-fee-label[data-fee-row="net"],
+.review-fee-amount[data-fee-row="net"]{margin-top:2px;border-top:1px solid var(--border);padding-top:8px;font-weight:650;color:var(--text)}
 .review-fees-note{margin-top:8px;font-size:.8rem;line-height:1.4;color:var(--text-muted)}
 /* Basis rows carry a parenthetical qualifier, matching the ranking surface's
    fee recipe. They are deliberately quieter than the fee rows they precede:
    they state the shape of the estimate, not money leaving the seller. */
 .review-fees-basis{margin-left:6px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-muted)}
 .review-fee-qual{margin-left:5px;font-size:.8rem;color:var(--text-muted);opacity:.85}
-.review-fee-basis-row .review-fee-amount{color:var(--text-muted)}
+.review-fee-amount[data-fee-row="basis"]{color:var(--text-muted)}
 .review-fee-pill{display:inline-block;margin-top:10px;padding:3px 9px;font-size:.72rem;
   border-radius:999px;text-decoration:none;background:var(--surface-2);
   border:1px solid var(--border);color:var(--text-muted)}
@@ -2445,24 +2450,41 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
                 <option value="yes">Yes</option>
               </select>
             </div>
-            <!-- 2026-09-07. Top Rated is a seller status; the 10% fee discount
-                 is a per-LISTING benefit that also needs same- or 1-business-day
-                 handling. eBay waives the free-returns condition for Trading
-                 Cards, so handling is the only listing condition left for us,
-                 and it is the only thing we ask. This is a seller-confirmed
-                 assumption, so it defaults to No and is never inferred from the
-                 status above. The "−10% FVF" note moved here from the status
-                 select, because this is the answer that actually earns it. -->
+            <!-- 2026-09-07, revised same day after third review.
+                 Top Rated is a seller status; the 10% fee discount is a
+                 per-LISTING benefit. Two corrections from the review:
+
+                 (1) SCOPE. This is NOT a seller-profile key and is never
+                     persisted. It is held in memory against the card being
+                     priced and expires when that changes -- see
+                     trsListingConfirmed(). onchange stamps the context first,
+                     THEN recalculates.
+
+                 (2) COVERAGE. It used to ask only about handling time and
+                     disclose US-residency and local-pickup as unstated
+                     assumptions underneath. A disclosed assumption is not
+                     enough when it changes the number: an assumption the
+                     seller never affirmed was still lowering their quoted fee.
+                     The question now asks them to confirm the listing
+                     QUALIFIES, and names all three conditions they are
+                     confirming. eBay waives the free-returns condition for
+                     Trading Cards, so that one is correctly absent.
+
+                 Defaults to No and is never inferred from the status above.
+                 The "-10% FVF" note lives here because this is the answer that
+                 earns it. -->
             <div>
-              <div class="field-label" style="margin-top:0">This listing ships same or next business day</div>
-              <select id="ebayTrsListing" onchange="calc()">
+              <div class="field-label" style="margin-top:0">Does this listing qualify for Top Rated Plus?</div>
+              <select id="ebayTrsListing" onchange="noteTrsListingAnswer(); calc();">
                 <option value="no">No / not sure</option>
-                <option value="yes">Yes — confirmed (−10% FVF)</option>
+                <option value="yes">Yes — all three confirmed (−10% FVF)</option>
               </select>
-              <div class="field-hint">Your answer, not a checked fact. Top Rated Plus
-                needs same- or 1-business-day handling on the listing itself; eBay
-                waives the free-returns rule for trading cards. Assumes you are US
-                resident and not local-pickup only.</div>
+              <div class="field-hint">Your answer, not a checked fact. Answer yes only
+                if all three are true: same- or 1-business-day handling, the item ships
+                from the US, and the listing is not local-pickup only. eBay waives the
+                free-returns rule for trading cards, so that one does not apply to you.
+                This answer covers the card you are pricing now and clears when you
+                price a different one.</div>
             </div>
 
             <div>
