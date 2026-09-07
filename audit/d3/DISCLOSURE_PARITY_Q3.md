@@ -895,6 +895,29 @@ The guard's coverage is anticorrelated with the defect it would be asked to
 disclose. That is a stronger statement than "unwired": wiring it up would
 disclose 3% of the inversions.
 
+### The 3% is not the exposure — read this before ranking it
+
+**3.00% is a catalog rate, and the catalog is the wrong population for incidence.**
+It is the right evidence for choosing a threshold, because a threshold has to
+hold across the whole book. It is the wrong evidence for how often a seller
+meets this, because sellers do not scan the catalog uniformly.
+
+Scanning skews toward cards worth listing. Thin books — few active listings, a
+stale or sparse sales record, wide `market/mid` separation — are plausibly
+overrepresented in what gets scanned, and wide `market/mid` separation is exactly
+the condition that inverts the floor. So the scan-weighted rate is plausibly
+*higher* than 3.00%, and nothing here bounds how much higher.
+
+**This gap cannot be closed with the data we hold.** `api/scan-miss.js` records no
+price fields, `api/events.js` allowlists six low-cardinality prop keys, and
+"no high-cardinality telemetry" is binding. Closing it would mean collecting
+per-scan price ratios, which is not worth doing for this question.
+
+So: **do not quote 3.00% as the exposure, and do not rank this finding by it.**
+The catalog rate says the defect is not exotic. The scan rate is unknown and
+unknowable without collection we have declined. Rank the finding on the fact that
+it is undisclosed on the healthy path, not on a frequency we do not have.
+
 ### Checked, not a gap
 
 `highClamped` / `highRaw` **are** read client-side — 5 occurrences in
@@ -902,3 +925,64 @@ disclose 3% of the inversions.
 assertions in `listing-packet-offline` and `fee-truth-offline`. Given the clamp
 fires on 88.2% of products this would have been a disclosure gap on almost every
 card. It is not one. Recording the negative result so nobody re-opens it.
+
+## Was the blend evaluated against the split? No — its validation set had the high ask 3.4× too often
+
+Your question: is `_trimmedMean`'s weighting describing a case that occurs 11.8%
+of the time, or was it reasoned about as if the high ask were normally present?
+
+**Answered from the origin commit's own worked examples.** `5382861`
+("trimmed-weighted-mean pricing") lists five priced verification cases in its
+body. Recomputing each against the two admission gates (`L >= D * 0.3`,
+`H <= D * 3`):
+
+| case | low / market / mid / high | high enters? | low enters? | blend is |
+|---|---|---|---|---|
+| Elsa | 0.01 / 0.07 / 0.15 / 2.29 | no (15.3×) | no | `mid+market` |
+| Harpy | 0.02 / 0.28 / 0.30 / 3.98 | no (13.3×) | no | `mid+market` |
+| Hound | 0.08 / 0.11 / 0.11 / 2.00 | no (18.2×) | yes | `mid+market+low` |
+| Normal | 1.00 / 1.10 / 1.15 / 1.30 | **yes** (1.13×) | yes | all four |
+| Chase | 50 / 65 / 70 / 95 | **yes** (1.36×) | yes | all four |
+
+**The high ask entered in 2 of 5 validation cases — 40%, against a measured
+11.81%.** And the two where it entered are the tidy-book cases the commit labels
+"Normal" and "Chase". The design was validated on a set where the high ask is
+present at roughly 3.4× its real rate, and where its presence coincides with the
+books that need the least help.
+
+### What the blend actually is, measured (n = 13,638)
+
+| admitted sample | share |
+|---|---|
+| `mid + market` | **46.85%** |
+| `mid + market + low` | 41.08% |
+| `mid + market + low + high` | 10.19% |
+| `mid + market + high` | 0.79% |
+| everything else (no market) | 1.10% |
+
+- high ask enters: **11.81%** · low ask enters: **52.18%**
+- `mid` carries **55.1%** of all weight across the sample
+
+So "trimmed weighted mean across all 4 TCGcsv price points" is, nearly half the
+time, a two-point weighted average of the median ask and the market price, with
+`mid` holding two thirds of that. The trimming is not trimming an occasional
+outlier; **it is removing the high ask as the default and the low ask about half
+the time.** A reader of the function would not guess this, and neither the code
+comment nor the commit body says it.
+
+### A separate finding in the same commit: it calls asks "sales"
+
+The commit is titled *"avg of non-outlier **sales**"* and its body records the
+motivating feedback as *"prices should be averages across non-outlier **sales**,
+not picks of a single field."* But of the four inputs, only `market` is
+sales-derived — `low`, `mid`, and `high` are the active ask book. The feature was
+built to answer a request about sales, using a statistic that is majority-ask by
+weight (`mid` alone is 55.1%).
+
+This is the exact relabelling the file later forbids in its own words at
+`api/tcg-price.js:641-660`: *"Market and asks are different quantities and one
+must never be relabelled as the other."* That comment was written on 2026-09-03
+to justify removing the sanity valve. **The blend it left standing was named in
+the terms the comment rules out**, three weeks earlier, and nobody reconciled the
+two. Filed as **T2.12** — a naming and disclosure question about what the
+headline is, not a request to change the arithmetic.

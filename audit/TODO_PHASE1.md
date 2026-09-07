@@ -268,3 +268,25 @@ grows the inversion band. **Needs two constants, each chosen against its own
 distribution**, plus a comment at each naming its single consumer.
 
 Pattern instance 23, root-cause section.
+
+### T2.12 — the blend is majority-ask and was specified as "sales"
+
+`5382861` titled the blend "avg of non-outlier sales" and recorded the motivating
+feedback as averages "across non-outlier sales". Of its four inputs only `market`
+is sales-derived; `low`/`mid`/`high` are the active ask book. Measured over
+13,638 products, `mid` alone carries **55.1%** of all weight and the composition
+is `mid+market` **46.85%** of the time.
+
+`api/tcg-price.js:641-660` (2026-09-03) states: "Market and asks are different
+quantities and one must never be relabelled as the other." The blend predates
+that comment by three weeks and is named in the terms it rules out. Never
+reconciled.
+
+Also: the high ask enters only **11.81%** of the time, but the origin commit's
+five worked examples admit it in **2 of 5 (40%)**, and both are its tidy-book
+cases. The weighting was validated at ~3.4x the real admission rate.
+
+**Not a request to change the arithmetic.** The question is what the headline is
+called and what is disclosed about its composition. Pairs with T2.11 (two
+consumers, one constant) and with `marketBasis`, which now names this branch
+`'ask_blend'` on the wire.
