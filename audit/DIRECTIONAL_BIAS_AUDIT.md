@@ -257,6 +257,43 @@ Nothing in this document has been changed in code. Recorded as findings:
   resolved before any per-column conditional label ships, or the label states a
   grader the fee contradicts.
 
+- **BIAS-8** *(the trap BIAS-5's fix walks into)* When the tier table lands, the
+  panel must ask "which grader" in order to price a fee. **A concrete grader is
+  already sitting in each column — and it is not an answer to that question.**
+
+  ```js
+  { key:'grade_7',  sub:'Any grader', syncKey:'psa:7'   }
+  { key:'grade_8',  sub:'Any grader', syncKey:'psa:8'   }
+  { key:'grade_9',  sub:'Any grader', syncKey:'psa:9'   }
+  { key:'grade_95', sub:'BGS/CGC',    syncKey:'bgs:9.5' }
+  ```
+
+  The comment directly above these lines already draws the distinction and was
+  written to protect it: *"syncKey still picks a concrete grader for the UI to
+  switch to — that is a selection default, not a claim about the price."*
+
+  A fee lookup keyed off `syncKey` is the obvious implementation and it is
+  wrong. It silently converts a documented **selection default** into an
+  unstated **price claim**, on four columns at once — charging PSA rates to
+  three columns whose own subtitle says "Any grader", and BGS `$50` to a column
+  whose subtitle says "BGS/CGC". The result looks *more* precise than today's
+  flat `$25` while asserting something the feed does not support. PriceCharting
+  only breaks out a grader at the 10; below that the number is "graded N by a
+  grading company", so **no per-column grader fee is derivable from the feed at
+  all** for grades 7 through 9.5.
+
+  The 9.5 column is the sharpest case because it is genuinely two graders at two
+  prices sharing one cell (`BGS 50` vs `CGC 18`, a 2.8× spread). It either
+  splits, or it names which grader its fee assumes. **A single grader default
+  silently picks one and the column will look precise.**
+
+  Decide this when the tier table goes in, not after. The safe shapes are: state
+  the assumed grader in the caption per column; or show a fee range where the
+  grader is unresolved; or withhold the upside number on columns whose grader the
+  feed does not name — which is the same "withhold until confirmed" direction
+  already taken for the TRS discount, and the only one of the three that does not
+  invent precision.
+
 - **BIAS-6** Remaining estimate surfaces not yet walked for direction:
   aggregator service-fee rows, the payout bar chart, and the `msProfitPreview`
   panel. **Absence of a finding there is absence of a check, not a clean
