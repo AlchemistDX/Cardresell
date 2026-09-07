@@ -1,6 +1,6 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**19 instances.** The highest-numbered entry is instance 19; that number, not
+**20 instances.** The highest-numbered entry is instance 20; that number, not
 this sentence, is the thing to check.
 
 > 2026-09-07: this header read **"Six instances"** while the file carried 19 — a
@@ -99,6 +99,40 @@ tell here was cheap and mechanical — look at the adjacent line. That is a bett
 move than reconstructing intent, which produces a plausible rationale for a rule
 that never had one, and inventing a reason for a rule is the same class of error
 as inventing a number.
+
+### Instance 20 — a direction asserted from the mechanism, never computed (2026-09-07)
+
+Q3-A found the grading panel running a second fee model on `FEES_PCT = 13` and a
+flat `GRADING_FEE = 25`. I then wrote that **both simplifications push the same
+way** and inflate upside, reasoning from the mechanism: understating a cost
+raises a profit. The reasoning is sound and the conclusion is **false for three
+of the four seller profiles.**
+
+`feeEbay` reads the profile — 12.35% with a store, 13.25% without, ×0.9 for Top
+Rated, plus an additive per-order fee. Flat 13 understates at every price under
+the default no-store/not-TRS profile, and **crosses over** at $61.54, $37.21 and
+$21.22 for the other three. On the grading side `getGradingCost` is
+grader-specific, so flat $25 understates PSA above $200 and BGS always, and
+**overstates CGC and SGC by $7 at every price.**
+
+Computed, the finding is worse than the one I asserted: **the error changes sign
+across the grader columns rendered side by side in the same panel.** A single
+stated basis is simultaneously too low for the PSA column and too high for the
+CGC column next to it. "Consistently optimistic" is a *predictable* defect a
+reader can discount; sign-flipping inside one widget is not.
+
+The pattern, and it is the catalogue's own theme pointed at a bias claim rather
+than a test: **a directional claim is a claim about the whole input space, and a
+mechanism argument only establishes direction at a point.** Two costs being
+understated somewhere does not make a lean. The check is cheap — tabulate the
+signed error across the real parameters (here profile × grader × price, twenty
+cells, one script) — and it inverted the conclusion.
+
+Corollary for `audit/DIRECTIONAL_BIAS_AUDIT.md`: **"7 of 7 lean optimistic" was
+established the same way**, by reading mechanisms, and BIAS-1 is now known to be
+mis-signed for two of four columns. The other six findings have not been
+tabulated and that headline should not be repeated as though they had been.
+
 
 ## Practice
 

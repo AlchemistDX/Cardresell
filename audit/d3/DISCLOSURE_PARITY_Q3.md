@@ -171,12 +171,17 @@ the rule is that the model changes first and the stamp second.
 
 ---
 
-## Confirmed clean — the two fee surfaces
+## Narrowed — what the fee-surface guard actually proves
 
 `accuracy.html`'s fee table and the review screen's fee breakdown are backed by
 the same model and now hold a **bidirectional venue + date parity guard**:
 `tests/accuracy-fee-parity.mjs`, **15/0**, all 15 venues agreeing at
-`2026-09-01`. Separate markup for the two surfaces is an accepted decision; the
+`2026-09-01`. **Scope of that proof, corrected after review:** it establishes
+venue-set and date parity between the two projections, in both directions. It
+does **not** establish equivalence of fee bases, tax treatment, discounts,
+shipping cost, or source qualifications on the rendered surfaces — and Q3-A is a
+live example of a fee-basis divergence the date guard cannot see. Those checks
+are unfinished. Separate markup for the two surfaces is an accepted decision; the
 parity test is what closes the drift risk. Note the two surfaces are backed by
 *two* tables — `PLATFORMS` (fee table) and `CROSS_BORDER` (cross-border table),
 where one row groups four buylist venues, so **12 rows carry 15 venues**. Row
