@@ -278,9 +278,28 @@ assert('Winner tile renders the derived fee formula',
   /winner-sub">\$\{[\s\S]{0,600}?bannerResult\.feeFormula/.test(src));
 assert('feeFormula is derived from the fee line items',
   /const feeFormula = p\.feeItems\.map\(f => f\.f\)/.test(src));
-assert('Expand shows fee base and the not-modeled tax line',
-  /Fee base <span class="fee-basis">/.test(src) &&
-  /Buyer sales tax <span class="fee-basis">\(not modeled\)/.test(src));
+// CHANGED 2026-09-07. This used to require the literal markup
+//   /Buyer sales tax <span class="fee-basis">\(not modeled\)/
+// which pinned the ranking tile's own hand-typed copy. That was the mechanism
+// by which the two surfaces drifted apart: each spelled the disclosure out
+// inline, and each test pinned its own spelling, so the ranking tile could say
+// "not modeled" with a $0.00 while the review screen said something else and
+// both suites stayed green. The copy now lives in one place, so the assertion
+// checks (a) that the shared vocabulary says the right thing and (b) that the
+// tile READS it rather than restating it.
+assert('the tax disclosure copy is defined once, in the shared vocabulary',
+  /taxLabel:\s*'Buyer sales tax'/.test(src) &&
+  /taxQualifier:\s*'not estimated'/.test(src));
+assert('the ranking tile reads the shared tax vocabulary, not its own copy',
+  /\$\{FEE_DISCLOSURE\.taxLabel\}[\s\S]{0,120}\$\{FEE_DISCLOSURE\.taxQualifier\}/.test(src));
+assert('Expand shows a fee base row', /Fee base'/.test(src) || /baseLabel:\s*'Fee base'/.test(src));
+// The amount is an em dash, not a zero. eBay's fee base includes buyer-paid
+// shipping and sales tax, so the tax we are not modelling is an unknown
+// POSITIVE amount; $0.00 asserted it was zero, and the "(not modeled)"
+// parenthetical did not retract that.
+assert('the unmodelled tax row shows an em dash, not an invented zero',
+  /\$\{FEE_UNKNOWN\}/.test(src) && /const FEE_UNKNOWN = '\\u2014'/.test(src) &&
+  !/fee-basis">\(not modeled\)<\/span><\/span><span class="fee-val">\$\{fmt\(0\)\}/.test(src));
 assert('Clamp note says payout prices off Market, not High',
   /not the raw High/.test(src) && /highClamped/.test(src));
 

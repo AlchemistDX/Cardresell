@@ -452,7 +452,7 @@ try {
       heading: (box.querySelector('.review-fees-h') || {}).textContent || '',
       pill: (() => {
         const p = box.querySelector('[data-fee-verified]');
-        return p ? { state: p.getAttribute('data-fee-verified'), text: p.textContent || '' } : null;
+        return p ? { state: p.getAttribute('data-fee-verified'), text: p.textContent || '', cls: p.className || '' } : null;
       })(),
       headline: (box.querySelector('[data-fee-net-headline]') || {}).textContent || null,
       note: (box.querySelector('.review-fees-note') || {}).textContent || '',
@@ -613,9 +613,26 @@ try {
     T.check('the number is called an estimate, not a payout',
       /estimate/i.test(f.note) && /not a payout/i.test(f.note), f.note);
     T.check('the note names shipping as excluded', /shipping/i.test(f.note), f.note);
-    T.check('the note says why shipping is excluded', /draft does not carry/i.test(f.note), f.note);
-    T.check('the note names buyer sales tax as unmodelled',
-      /sales tax is not modell?ed/i.test(f.note), f.note);
+    T.check('the note names buyer sales tax', /sales tax/i.test(f.note), f.note);
+
+    // CHANGED 2026-09-07. These two used to read:
+    //   'the note says why shipping is excluded' -> /draft does not carry/
+    //   'the note names buyer sales tax as unmodelled' -> /sales tax is not modell?ed/
+    // They passed against a note that said "Fees are charged on the item price
+    // only". That sentence describes OUR estimate but is phrased as a fact
+    // about eBay, and as a fact about eBay it is false: eBay charges on the
+    // total sale including buyer-paid shipping and sales tax. The assertions
+    // could not catch it because they only checked that the exclusions were
+    // NAMED, not that the sentence attributed them to the right party. So the
+    // replacement asserts attribution and direction of error.
+    T.check('the note attributes the item-only base to this estimate, not to eBay',
+      /this estimate calculates fees on the item price only/i.test(f.note), f.note);
+    T.check('the note states eBay\u2019s base is broader',
+      /ebay charges .*total sale/i.test(f.note), f.note);
+    T.check('the note states the direction of the error',
+      /may be lower/i.test(f.note), f.note);
+    T.check('the note does not assert the item-only base as eBay\u2019s rule',
+      !/^(?!.*this estimate).*fees are charged on the item price only/i.test(f.note), f.note);
 
     // The failure this guards: a zero that reads as a fact. Shipping is not
     // modelled AND its value is unknown, so it gets no row at all.
@@ -629,15 +646,28 @@ try {
     // estimate that silently omits tax is understating the fee, not merely
     // scoping it. The engine does not model tax anywhere and cannot -- the
     // rate belongs to a buyer address that does not exist yet -- so the row
-    // exists to say so. A zero is a claim; a zero next to "(not modeled)" is a
-    // disclosure. The qualifier is the whole point, so assert it, not the row.
+    // exists to say so.
+    //
+    // CHANGED 2026-09-07. 'the tax row shows no invented amount' used to
+    // require /^\$?0\.00$/ -- it REQUIRED the invented amount it was named
+    // after. The reasoning it recorded was "a zero is a claim; a zero next to
+    // (not modeled) is a disclosure", and that reasoning is wrong: the tax we
+    // are not modelling is an unknown POSITIVE amount, so a zero is a claim the
+    // parenthetical does not retract. A reader reconciling gross minus fees
+    // reads a zero as a line that was counted and found empty. An em dash says
+    // the amount is not known, which is what is true, and keeps the
+    // informational row out of the arithmetic.
     const tax = f.rows.find((r) => /sales tax/i.test(r.label));
     T.check('buyer sales tax is disclosed as a row', !!tax,
       JSON.stringify(f.rows.map((r) => r.label)));
-    T.check('the tax row is qualified as not modelled',
-      !!tax && /not modell?ed/i.test(tax.label), tax && tax.label);
-    T.check('the tax row shows no invented amount',
-      !!tax && /^\$?0\.00$/.test((tax.amount || '').replace(/[^0-9.$]/g, '')), tax && tax.amount);
+    T.check('the tax row is qualified as not estimated',
+      !!tax && /not estimated/i.test(tax.label), tax && tax.label);
+    T.check('the tax row shows no amount at all, not a zero',
+      !!tax && !/\d/.test(tax.amount || '') && /\u2014|-{2,}|n\/a/i.test(tax.amount || ''),
+      tax && JSON.stringify(tax.amount));
+    T.check('no row anywhere in the breakdown prints a zero amount',
+      !f.rows.some((r) => /^[\u2212-]?\$?0(\.00)?$/.test((r.amount || '').trim())),
+      JSON.stringify(f.rows.map((r) => [r.label, r.amount])));
 
     // The fee base states the scope structurally, where prose can be skimmed past.
     const base = f.rows.find((r) => /fee base/i.test(r.label));
@@ -663,6 +693,23 @@ try {
       JSON.stringify(fresh.pill));
     T.check('it carries the schedule\u2019s stamped date',
       !!fresh.pill && /\b(19|20)\d{2}\b/.test(fresh.pill.text), fresh.pill && fresh.pill.text);
+
+    // CHANGED 2026-09-07: was 'the pill reads Verified <date>'. An unqualified
+    // "Verified" sat inches from a price the seller typed and a comp we did not
+    // verify, so it was the nearest thing on screen to a claim about the price.
+    // It verifies the FEE SCHEDULE and must say which noun it means.
+    T.check('the pill names the fee schedule, not the price',
+      !!fresh.pill && /fee schedule/i.test(fresh.pill.text), fresh.pill && fresh.pill.text);
+    T.check('the pill does not claim a verified price',
+      !!fresh.pill && !/verified price|price verified/i.test(fresh.pill.text),
+      fresh.pill && fresh.pill.text);
+
+    // The date must be a real day, not a month name standing in for one. A
+    // month-granularity stamp was measured from the LAST day of that month,
+    // which always rounded toward fresh and hid up to 29 days of age.
+    T.check('the stamped date names a day, not just a month',
+      !!fresh.pill && /\b[A-Z][a-z]{2}\s+\d{1,2},\s+(19|20)\d{2}\b/.test(fresh.pill.text),
+      fresh.pill && fresh.pill.text);
 
     // The pill must be a READING of the shared staleness rule, not a second
     // copy of the 45-day window. A single-state check cannot tell those apart:
@@ -693,8 +740,9 @@ try {
       !!stale.pill && stale.pill.state === 'stale', JSON.stringify(stale.pill));
     T.check('the stale pill says so in words, not only in colour',
       !!stale.pill && /stale/i.test(stale.pill.text), stale.pill && stale.pill.text);
+    const _stampedDate = (fresh.pill.text.match(/[A-Z][a-z]{2}\s+\d{1,2},\s+(?:19|20)\d{2}/) || [''])[0];
     T.check('the stale pill still shows which date expired',
-      !!stale.pill && stale.pill.text.includes(fresh.pill.text.replace(/^\s*Verified\s*/, '').trim()),
+      !!stale.pill && !!_stampedDate && stale.pill.text.includes(_stampedDate),
       stale.pill && stale.pill.text);
     T.check('the shared rule moved too, so the pill tracked it',
       (await page.evaluate(() => window.isFeeStale('ebay'))) === true);
@@ -702,6 +750,43 @@ try {
     // came here to read a number must still get the number.
     T.check('the estimate itself survives the stale state',
       /^\$\d/.test(stale.headline || ''), stale.headline);
+
+    // ---- both sides of both thresholds, through the real render path ----
+    // The audit date is a real day, so an offset from it lands on a known age.
+    // 45 is the stale cutoff (`> 45`) and 30 the amber cutoff (`> 30`), so the
+    // interesting pairs are 45/46 and 30/31. A rule written with >= would pass
+    // a one-sided test and fail here.
+    const _base = Date.now();
+    const atAge = async (days) => {
+      await page.clock.setFixedTime(new Date(_base + (days - 6) * 86400000));
+      await page.evaluate(() => window._reviewPaint());
+      return await feesOf(page);
+    };
+    for (const [days, wantStale, wantAmber] of [[30, false, false], [31, false, true], [45, false, true], [46, true, true]]) {
+      const p = await atAge(days);
+      T.check(`at ${days} days the schedule is ${wantStale ? 'stale' : 'not stale'}`,
+        !!p.pill && (p.pill.state === 'stale') === wantStale,
+        `${days}d -> ${JSON.stringify(p.pill)}`);
+      T.check(`at ${days} days the pill is ${wantAmber ? 'flagged' : 'unflagged'}`,
+        !!p.pill && /\bstale\b/.test(p.pill.cls || '') === wantAmber,
+        `${days}d -> cls=${p.pill && p.pill.cls}`);
+    }
+
+    // ---- a future audit date has not happened, so it cannot be fresh ----
+    // Winding the clock back before the recorded audit makes that recorded date
+    // a future one, without touching the config. The old rule clamped a future
+    // age to 0 and reported FRESH, so `Sep 2099` bought permanent verification.
+    await page.clock.setFixedTime(new Date(_base - 400 * 86400000));
+    await page.evaluate(() => window._reviewPaint());
+    const future = await feesOf(page);
+    T.check('an audit date in the future does not read as verified',
+      !!future.pill && future.pill.state !== 'fresh', JSON.stringify(future.pill));
+    T.check('an audit date in the future is not presented as a date at all',
+      !!future.pill && !/\b(19|20)\d{2}\b/.test(future.pill.text), future.pill && future.pill.text);
+    T.check('an unusable audit date says so in words',
+      !!future.pill && /not verified/i.test(future.pill.text), future.pill && future.pill.text);
+    T.check('the estimate still survives an unusable audit date',
+      /^\$\d/.test(future.headline || ''), future.headline);
 
     await ctx.close();
   });

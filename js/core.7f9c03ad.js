@@ -5618,29 +5618,29 @@ function esc(s) {
 // The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
 // downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
 const PLATFORMS = {
-  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Sep 2026',
+  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
     redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible', '💸 Ship + Sell route charges a 10% service fee (5% at $10,000+) — payout above models the fee-free Sell List'] },
-  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Sep 2026',
+  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer fields customer service on your behalf, so most sales need no follow-up from you.',
     redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
-  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Sep 2026',
+  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Cards are not a supported Poshmark category — there is no Trading Cards browse path, so card buyers are not shopping here.',
     bestFor: '💵 Best for cards under $15 — flat $2.95 fee (jumps to 20% at $15+)',
     redFlags: ['👗 Clothing-first — tiny card audience', '📦 $5 packaging fee if the buyer picks Priority Mail (since Oct 2025)', '🇺🇸 US domestic only — no cross-border selling', '📬 You ship the card yourself', '🚫 Listing risk — Poshmark policy says items outside its supported categories may not be sold'] },
-  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Sep 2026',
+  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', feeAuditedOn: '2026-09-01',
     effort: 'hard',   effortLabel: 'Hard · ship-in service, they process and list it',
     workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
     bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
     redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale', '⏱️ Enhanced Security Fee: 1¢ per $1,000 of list price per day on items over $50'] },
-  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Sep 2026',
+  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', feeAuditedOn: '2026-09-01',
     // 2026-08-19: user feedback — old label undersold the real friction.
     // Fanatics Collect requires you to physically ship the card in to their
     // vault before it can be listed via Buy Now / Weekly Auction. That's
@@ -5650,13 +5650,13 @@ const PLATFORMS = {
     hassle: 'You mail the card to Fanatics’ vault BEFORE it can list. Sports-heavy audience, weekly auction + Buy Now cycle.',
     bestFor: '💵 Best for cards $75+ — ship-in overhead not worth it below this',
     redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted', '⚠️ 12% seller fee (not 6%) if you list at or above 120% of Card Ladder market value', '🧾 $3 one-time fee on sub-$50 vault items still unsold after 30 days'] },
-  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Sep 2026',
+  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
     bestFor: '💵 Best for cards $5,000+ — 8% commission caps at $1,500 (or any price via live shows)',
     redFlags: ['🎙️ Best results require hosting live shows', '📦 You ship the card yourself', '📉 Slower for solo sellers without an audience'] },
-  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', verified: 'Sep 2026',
+  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · cross-category, high volume',
     workflow: 'list', payoutTime: '2–5 days after buyer confirms',
     hassle: 'High-volume general resale. Card buyers exist but ad spend is where TCG-focused platforms win.',
@@ -5669,7 +5669,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
   //     https://manapool.com/affiliates (referral program open, 5% first sale)
-  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', verified: 'Sep 2026',
+  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast payouts (per-order)',
     hassle: 'MTG-only marketplace with the lowest fees of any listing platform. You ship directly to buyers.',
@@ -5680,7 +5680,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://trademagic.gg/compare
   //     https://www.reddit.com/r/mtgfinance/comments/1kzab2o/
-  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', verified: 'Sep 2026',
+  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buyer-offer model, low fees',
     workflow: 'list', payoutTime: 'Instant credit; 10% fee to cash out to PayPal',
     hassle: 'Buyers post offers for cards they want; you decide whether to sell at their price. Lowest per-sale fee anywhere but 10% cashout hurts.',
@@ -5695,7 +5695,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
   //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
-  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', verified: 'Sep 2026',
+  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', feeAuditedOn: '2026-09-01',
     // 2026-09-01: region flag. Cardmarket's 5% commission is the LOWEST of all
     // 15 venues, so it ranks near the top on raw net payout — but a US seller
     // can't realistically capture that number. International postage, ~3% FX
@@ -5726,7 +5726,7 @@ const PLATFORMS = {
   // Modeled with a buylistRatio field: cash ≈ 50% of retail, credit ≈ 65%.
   // These are estimates — the tile discloses this clearly and pushes the user
   // to verify against the live quote before shipping.
-  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', verified: 'Sep 2026',
+  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buylist — instant offer, lower payout',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Buylist model — they quote you a fixed offer, no fees but ~50% of retail for cash (or ~65% for store credit). CSV bulk upload supported.',
@@ -5739,7 +5739,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://www.coolstuffinc.com/main_fullservice_selllist.php (verified)
   //     https://www.reddit.com/r/yugioh/comments/ngtcqa/ (community confirmation of 25% bonus)
-  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', verified: 'Sep 2026',
+  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buylist — strong for YGO + MTG',
     workflow: 'buylist', payoutTime: '1–2 business days after approval',
     hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
@@ -5754,7 +5754,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://sellyourcards.starcitygames.com/  (fee tiers verified 2026-08-29)
   //     https://help.starcitygames.com/en-US/articles/sell-to-us-229858
-  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', verified: 'Sep 2026',
+  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buylist — 0% fee on sorted lists',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Sell List (sorted): NO service fee, ~55% of retail cash / ~72% store credit. Ship + Sell (unsorted): 10% service fee (5% over $10K). MTG + Pokemon + Lorcana + FAB + Riftbound.',
@@ -5770,7 +5770,7 @@ const PLATFORMS = {
   //     https://help.cardnexus.com/articles/9938652-fee-structure-overview
   //     https://help.cardnexus.com/articles/1754380-selling-faq
   //     https://cardnexus.com/en/blog/cardnexus-marketplace-is-live
-  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', verified: 'Sep 2026',
+  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast — Stripe Connect payouts',
     hassle: 'Multi-TCG peer-to-peer marketplace with a flat 8% commission (NA). 10+ games. New in 2026 — audience is smaller than TCGplayer but growing fast.',
@@ -5783,7 +5783,7 @@ const PLATFORMS = {
   // We estimate 10% aggregator fee as an honest baseline; the tile flags this.
   //   Sources:
   //     https://tcgbulk.com/  (workflow + games verified 2026-08-29)
-  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', verified: 'Sep 2026',
+  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
     workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
     hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
@@ -5895,20 +5895,69 @@ function crossBorderHtml(pid) {
 // means "sometime in August" and we should measure from the fairest read of that stamp.
 // This still makes the >60d ceiling fire correctly (a Jun 2026 stamp is 63d on Sep 1)
 // while avoiding noisy Day-1 amber pills for a venue verified in the previous month.
-const _MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
-function verifiedAgeDays(stamp) {
-  if (!stamp || typeof stamp !== 'string') return Infinity;
-  const m = stamp.trim().toLowerCase().match(/^([a-z]{3})[a-z]*\s+(\d{4})$/);
+// 2026-09-07: the stamp is a REAL AUDIT DATE, not a display month.
+//
+// It used to be `verified: 'Sep 2026'` -- a month string -- and the age was
+// measured from the LAST DAY of that month, on the reasoning that "Aug 2026"
+// most fairly means "sometime in August". Two things were wrong with that:
+//
+//   1. A future anchor was CLAMPED TO ZERO (`ms < 0 ? 0 : ...`), so it read as
+//      perfectly fresh. `Sep 2099` returned 0 days old. A typo in the year, or
+//      an aspirational stamp, bought permanent freshness -- the guardrail
+//      failed in the direction of silence. Missing and unparseable stamps
+//      already returned Infinity (stale), so the clamp was also inconsistent
+//      with the function's own fail-closed instinct.
+//   2. Month granularity understated real age by up to 29 days. On 7 Sep a
+//      'Sep 2026' stamp anchored to Sep 30 and reported 0 days; the audit
+//      actually ran on 1 Sep, so the honest age was 6 days. Anchoring to the
+//      end of a month cannot be conservative -- it always rounds toward fresh.
+//
+// The audit is a dated event, so it is recorded as a date. All 15 venues carry
+// `feeAuditedOn: '2026-09-01'` because that is when their published schedules
+// were read, one venue at a time, in `fee_audit_full_2026-09-01.md`. That file
+// links the exact page each value came from. The date is not a guess and it is
+// not this month's name.
+//
+// Three fields, three questions, deliberately not merged:
+//   feeAuditedOn      when did we last READ the venue's published schedule
+//   FEE_MODEL_REVISION which version of OUR arithmetic produced a number
+//   priceSource       where a PRICE came from  (never fee verification)
+//
+// Fail-closed: missing, unparseable, or future dates return Infinity, which is
+// stale. An unverified schedule must never present as a verified one.
+function feeAuditAgeDays(pid) {
+  const raw = PLATFORMS[pid]?.feeAuditedOn;
+  if (!raw || typeof raw !== 'string') return Infinity;
+  const m = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return Infinity;
-  const mo = _MONTHS[m[1]]; const yr = parseInt(m[2], 10);
-  if (mo === undefined || !Number.isFinite(yr)) return Infinity;
-  // Last day of the stamped month at 00:00 UTC.
-  const anchor = Date.UTC(yr, mo + 1, 0);
+  const yr = +m[1], mo = +m[2] - 1, dy = +m[3];
+  const anchor = Date.UTC(yr, mo, dy);
+  // Reject dates the calendar rolled over (2026-02-31 -> 2026-03-03).
+  const back = new Date(anchor);
+  if (back.getUTCFullYear() !== yr || back.getUTCMonth() !== mo || back.getUTCDate() !== dy) return Infinity;
   const ms = Date.now() - anchor;
-  return ms < 0 ? 0 : Math.floor(ms / 86400000);
+  if (ms < 0) return Infinity;          // a future audit has not happened yet
+  return Math.floor(ms / 86400000);
 }
-function isFeeStale(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 45; }
-function isFeeAmber(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 30; }
+// Kept for the two callers below and for anything that wants the number.
+function verifiedAgeDays(pid) { return feeAuditAgeDays(pid); }
+function isFeeStale(pid)  { return feeAuditAgeDays(pid) > 45; }
+function isFeeAmber(pid)  { return feeAuditAgeDays(pid) > 30; }
+// The date the schedule was read, for display. Empty when there is no usable
+// date -- callers must render "not verified", never a bare absence that reads
+// as fresh.
+const _AUDIT_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function feeAuditedLabel(pid) {
+  // A date we refuse to measure from is a date we refuse to show. Without this
+  // gate a future stamp rendered as "Fee schedule stale \u00b7 Dec 1, 2026" and a
+  // calendar-rollover stamp rendered as "Feb 31, 2026" -- both fail closed on
+  // colour while still displaying the bad value as if it were an audit.
+  if (!Number.isFinite(feeAuditAgeDays(pid))) return '';
+  const raw = PLATFORMS[pid]?.feeAuditedOn;
+  const m = typeof raw === 'string' ? raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  if (!m) return '';
+  return `${_AUDIT_MON[+m[2] - 1]} ${+m[3]}, ${m[1]}`;
+}
 
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
 const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere', 'cardmarket', 'cardnexus']);
@@ -6461,11 +6510,43 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
 // Our own integer, unrelated to any venue's published schedule.
 // BUMP THIS whenever the arithmetic inside any fee* function changes.
 //
-// PLATFORMS.<venue>.verified answers "when did we last read eBay's published
-// rate card" — currently 'Sep 2026'. It cannot answer "which version of our
-// code did this arithmetic": fix a fee bug on Sep 18 and both stamps still
-// read 'Sep 2026', so two packets computed by different logic look identical.
+// PLATFORMS.<venue>.feeAuditedOn answers "when did we last read eBay's
+// published rate card" — currently '2026-09-01'. It cannot answer "which
+// version of our code did this arithmetic": fix a fee bug on Sep 18 and the
+// audit date still reads 2026-09-01, so two packets computed by different
+// logic look identical.
 // Two questions, two fields. This one is cheap now and impossible to backfill.
+// ── Fee disclosure vocabulary (shared by both surfaces) ───────────────────
+// 2026-09-07. The ranking surface and the review screen had each spelled these
+// out inline, which is how they came to disagree in the first place. The COPY
+// lives here even though the two surfaces still render different markup, so a
+// correction lands in both places at once. Collapsing the markup itself is the
+// remaining half of that fix and is not done.
+//
+// Why the tax amount is an em dash and not $0.00:
+//   eBay charges its final value fee on the TOTAL amount of the sale, and that
+//   total includes buyer-paid shipping and sales tax, with stated exceptions
+//   (https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822).
+//   We bill against the item price alone, so our estimate is LOW, not merely
+//   narrow. The tax we are not modelling is an unknown positive amount -- it
+//   depends on a buyer's delivery address that a draft does not have. Printing
+//   $0.00 asserted that unknown was zero; the parenthetical did not undo it,
+//   because a reader reconciling gross minus fees sees a zero as a line that
+//   was counted and found empty. An em dash says the amount is not known here,
+//   which is the true statement, and keeps the row out of the arithmetic.
+const FEE_UNKNOWN = '\u2014';
+const FEE_DISCLOSURE = {
+  taxLabel:     'Buyer sales tax',
+  taxQualifier: 'not estimated',
+  baseLabel:    'Fee base',
+  // Describes OUR estimate, not the venue's rule. The earlier wording -- "Fees
+  // are charged on the item price only" -- read as a statement about eBay, and
+  // as a statement about eBay it was false.
+  estimateNote: 'An estimate, not a payout. This estimate calculates fees on the item price only. '
+              + 'eBay charges its fee on the total sale, which includes buyer-paid shipping and buyer '
+              + 'sales tax, so your actual proceeds may be lower.',
+};
+
 const FEE_MODEL_REVISION = 1;
 
 // ── Target net → list price, by bisection (Block B4) ─────────────────────
@@ -7703,26 +7784,35 @@ function calc() {
           <div class="fee-row fee-recipe-row"><span>Price used <span class="fee-basis">(${esc(r.priceLabel)})</span></span><span class="fee-val">${fmt(r.priceUsed)}</span></div>
           ${r.shipCharge > 0 ? `<div class="fee-row fee-recipe-row"><span>Buyer-paid shipping</span><span class="fee-val">${fmt(r.shipCharge)}</span></div>` : ''}
           ${r.feeBase != null ? `<div class="fee-row fee-recipe-row"><span>Fee base <span class="fee-basis">(${esc(r.feeBaseLabel || 'item')})</span></span><span class="fee-val">${fmt(r.feeBase)}</span></div>` : ''}
-          ${r.taxNote ? `<div class="fee-row fee-recipe-row"><span>Buyer sales tax <span class="fee-basis">(not modeled)</span></span><span class="fee-val">${fmt(0)}</span></div>` : ''}
+          ${r.taxNote ? `<div class="fee-row fee-recipe-row"><span>${FEE_DISCLOSURE.taxLabel} <span class="fee-basis">(${FEE_DISCLOSURE.taxQualifier})</span></span><span class="fee-val">${FEE_UNKNOWN}</span></div>` : ''}
           ${r.feeFormula ? `<div class="fee-row fee-recipe-row"><span>Fee formula</span><span class="fee-val">${esc(r.feeFormula)}</span></div>` : ''}
         </div>
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your ship-out cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Net after all deductions</span><span class="fee-val">${fmt(r.netPayout)}</span></div>
         ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Payout time after it sells</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
-        ${info.verified ? (() => {
+        ${(() => {
           // 2026-09-01: pill color reflects staleness. >45d = amber + "Stale" text (venue also
           // demoted from #1 by the payout ranker); 31-45d = amber pill but still "Verified";
           // ≤30d = green. All three link to /accuracy#fees for the methodology.
+          // 2026-09-07: the pill names FEE SCHEDULE verification explicitly. "Verified Sep 2026"
+          // sat directly under a price and could be read as verifying the price, which nothing
+          // here does. It is also rendered unconditionally now: a venue with no usable audit
+          // date says so, because a missing pill is silence and silence reads as fine.
+          const _date  = feeAuditedLabel(r.pid);
           const _stale = isFeeStale(r.pid);
           const _amber = isFeeAmber(r.pid);
           const _cls   = _stale || _amber ? 'fee-verified-pill stale' : 'fee-verified-pill';
-          const _label = _stale ? 'Stale' : 'Verified';
-          const _title = _stale
+          const _text  = !_date ? 'Fee schedule not verified'
+                       : _stale ? `Fee schedule stale · ${_date}`
+                       : `Fee schedule verified ${_date}`;
+          const _title = !_date
+            ? 'We have no recorded date for reading this venue\'s published fee schedule, so we won\'t rank it #1. Click for methodology.'
+            : _stale
             ? 'This venue\'s fees haven\'t been re-verified in over 45 days, so we won\'t rank it #1. Click for methodology.'
             : 'View methodology + full fee sources';
-          return `<div class="fee-verified-row"><a href="/accuracy#fees" class="${_cls}" title="${_title}"><span class="fee-verified-dot">•</span>${_label} ${info.verified}</a></div>`;
-        })() : ''}
+          return `<div class="fee-verified-row"><a href="/accuracy#fees" class="${_cls}" title="${_title}"><span class="fee-verified-dot">•</span>${_text}</a></div>`;
+        })()}
       </div>
       <button class="plat-details-toggle" type="button" onclick="event.preventDefault();event.stopPropagation();this.closest('.plat-card').classList.toggle('expanded');">
         <span class="toggle-text">Details</span>
@@ -19472,14 +19562,23 @@ function _reviewBasisRow(label, qualifier, amount) {
 // window means a re-verification moves both screens at once.
 function _reviewFeeVerifiedHtml(pid) {
   const info = (typeof PLATFORMS === 'object' && PLATFORMS) ? PLATFORMS[pid] : null;
-  if (!info || !info.verified) return '';
+  if (!info) return '';
+  const date  = feeAuditedLabel(pid);
   const stale = isFeeStale(pid);
   const cls   = (stale || isFeeAmber(pid)) ? 'review-fee-pill stale' : 'review-fee-pill';
-  const label = stale ? 'Stale' : 'Verified';
-  const title = stale
+  // "Fee schedule", not "Verified". This pill sits inches from a price the
+  // seller typed and from a comp we did not verify; an unqualified "Verified"
+  // was the nearest thing on screen to a claim about the price itself.
+  const text = !date ? 'Fee schedule not verified'
+             : stale ? `Fee schedule stale \u00b7 ${date}`
+             : `Fee schedule verified ${date}`;
+  const title = !date
+    ? 'We have no recorded date for reading this venue\u2019s published fee schedule. Click for methodology.'
+    : stale
     ? 'These fees haven\u2019t been re-verified in over 45 days. Click for methodology.'
     : 'View methodology + full fee sources';
-  return `<a href="/accuracy#fees" class="${cls}" data-fee-verified="${stale ? 'stale' : 'fresh'}" title="${_reviewEsc(title)}">${label} ${_reviewEsc(info.verified)}</a>`;
+  const state = !date ? 'unverified' : stale ? 'stale' : 'fresh';
+  return `<a href="/accuracy#fees" class="${cls}" data-fee-verified="${state}" title="${_reviewEsc(title)}">${_reviewEsc(text)}</a>`;
 }
 
 function _reviewFeesHtml() {
@@ -19522,11 +19621,11 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
         <div class="review-fees-net" data-fee-net-headline="">${_reviewEsc(_reviewMoney(c.net))}</div>
         <div class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
-${_reviewBasisRow('Fee base', 'item', _reviewMoney(c.price))}
-${_reviewBasisRow('Buyer sales tax', 'not modeled', _reviewMoney(0))}${feeRows}
+${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
+${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN)}${feeRows}
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </div>
-        <div class="review-fees-note">An estimate, not a payout. Fees are charged on the item price only \u2014 a draft does not carry shipping yet, and buyer sales tax is not modelled.</div>
+        <div class="review-fees-note">${_reviewEsc(FEE_DISCLOSURE.estimateNote)}</div>
         ${pill}
       </div>`;
 }

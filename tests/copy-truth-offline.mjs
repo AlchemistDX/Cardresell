@@ -20,6 +20,25 @@ for (const f of ['index.html','accuracy.html','pricing.html']) {
   ok(o===c, `${f} div balance ${o}/${c} (${n} scripts parsed)`);
 }
 const idx=readAppSource();
+
+// 2026-09-07. Negative source assertions ("no copy still says X") cannot tell
+// executable code from a COMMENT ABOUT that code. Documenting a fixed bug
+// accurately -- quoting the old expression so the next reader knows what was
+// wrong -- re-broke three assertions in this file, because the banned spelling
+// reappeared inside the explanation of why it was banned. That is the same
+// failure mode as an assertion that bans a spelling instead of a behaviour,
+// one level up: it now bans a spelling in prose.
+//
+// So negative and counting assertions read `code`, which drops comment-only
+// lines. Deliberately conservative: it strips lines whose trimmed form opens
+// with // or /* or *, and leaves everything else untouched, so no string
+// literal on a code line can be corrupted. Trailing comments on code lines
+// survive -- if that ever matters, the assertion should move to a behaviour
+// test instead of being patched here.
+const code = idx.split('\n').filter((l) => {
+  const t = l.trim();
+  return !(t.startsWith('//') || t.startsWith('/*') || t.startsWith('*'));
+}).join('\n');
 const pr=fs.readFileSync('pricing.html','utf8');
 const ac=fs.readFileSync('accuracy.html','utf8');
 JSON.parse(fs.readFileSync('vercel.json','utf8'));
@@ -363,18 +382,62 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'the Sep 1 terms rewrite changelog entry exists');
   ok(/TCGplayer and eBay fee corrections/.test(ac),
      'the Aug 31 fee-correction changelog entry exists');
-  ok(/<td>Poshmark<\/td>[^<]*<td>[^<]*\$2\.95[^<]*<\/td>[^<]*<td>Sep 2026<\/td>/.test(ac.replace(/\s+/g,' ')),
-     'Poshmark row keeps $2.95/20% and stamps Sep 2026');
+  // CHANGED 2026-09-07: the stamp column was `<td>Sep 2026</td>`. A month is not
+  // a date; see the block below.
+  ok(/<td>Poshmark<\/td>[^<]*<td>[^<]*\$2\.95[^<]*<\/td>[^<]*<td>Sep 1, 2026<\/td>/.test(ac.replace(/\s+/g,' ')),
+     'Poshmark row keeps $2.95/20% and stamps the Sep 1, 2026 audit date');
   ok(/6% below 120%, 12% at or above/.test(ac.replace(/&nbsp;/g,' ')),
      'Fanatics tiered 6/12 fee stated (checklist 8% was wrong)');
 
   // Issue 1b - stale threshold tightened 60 -> 45
-  ok(/verifiedAgeDays\(PLATFORMS\[pid\]\?\.verified\) > 45/.test(idx),
-     'stale threshold is 45 days (was 60)');
+  //
+  // CHANGED 2026-09-07. This block used to assert the exact source spelling
+  //   /verifiedAgeDays\(PLATFORMS\[pid\]\?\.verified\) > 45/
+  // which pinned a FUNCTION NAME and an ARGUMENT SHAPE, not a behaviour. It
+  // broke the moment the reader was renamed `feeAuditAgeDays(pid)` and started
+  // taking a platform id instead of a month string -- a change that made the
+  // rule strictly more correct. An assertion that fails on a correct refactor
+  // and passes on a wrong date is measuring the wrong thing.
+  //
+  // What it can honestly check from source is that the threshold is stated
+  // ONCE and that no 60-day copy survives. Whether the rule actually flips at
+  // the right day is a behaviour, and it is asserted against the rendered
+  // screen on both sides of 45 and 30 in tests/draft-review-screen.mjs.
+  ok(/feeAuditAgeDays\(pid\) > 45/.test(idx),
+     'the stale threshold is stated as 45 days (was 60)');
+  ok((code.match(/> 45;/g) || []).length === 1,
+     'the 45-day threshold is stated exactly once');
   ok(/haven\\'t been re-verified in over 45 days/.test(idx),
      'the stale tooltip agrees with the 45-day rule');
-  ok(!/re-verified in over 60 days/.test(idx),
+  ok(!/re-verified in over 60 days/.test(code),
      'no stale copy still claims the 60-day threshold');
+
+  // 2026-09-07 - the stamp is a date, and no month-granularity stamp survives.
+  // A month string cannot be measured without choosing a day inside it, and
+  // every choice is either optimistic (last day) or arbitrary (first day).
+  ok(!/verified:\s*'[A-Z][a-z]{2} \d{4}'/.test(code),
+     'no venue still carries a month-only verification stamp');
+  ok((code.match(/feeAuditedOn:\s*'\d{4}-\d{2}-\d{2}'/g) || []).length === 15,
+     'all 15 venues carry an ISO fee-audit date');
+  ok(!/ms < 0 \? 0/.test(code),
+     'a future audit date is no longer clamped to zero age (it read as fresh)');
+
+  // The pill names the noun it verifies. "Verified Sep 2026" sat under a price
+  // and was the nearest thing on screen to a claim about that price.
+  ok(/Fee schedule verified/.test(idx),
+     'the ranking pill says which thing was verified');
+  ok(/Fee schedule not verified/.test(idx),
+     'a venue with no usable audit date says so instead of rendering nothing');
+
+  // Blocker 2: the note describes our estimate, not eBay's rule.
+  ok(/This estimate calculates fees on the item price only/.test(idx),
+     'the fee note attributes the item-only base to our estimate');
+  ok(/eBay charges its fee on the total sale/.test(idx),
+     'the fee note states that eBay\u2019s own base is broader');
+  ok(!/Fees are charged on the item price only/.test(code),
+     'no copy still states the item-only base as eBay\u2019s rule');
+  ok(/taxQualifier:\s*'not estimated'/.test(idx),
+     'the unmodelled tax row is qualified as not estimated');
 
   // Issue 2 - fee recipe rows on every eligible tile
   ok(/const DAYS_TO_CASH = \{/.test(idx), 'per-venue days-to-cash table exists');
