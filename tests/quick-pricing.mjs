@@ -407,5 +407,73 @@ console.log('\n[Quick Pricing — wiring]');
         'reported symptom was switching grades leaving the bar unchanged');
 }
 
+
+// ── Q3-C client: the Lowest-listing row, exercised as BEHAVIOUR ──────────────
+// 2026-09-07. The three assertions that previously pinned this copy
+// (tests/copy-truth-offline.mjs and tests/draft-review-screen.mjs) all pass
+// against a build where the guarding logic is deleted, because they grep for the
+// string "Lowest listing" and the string is still in the file. That is instance
+// 1 of audit/PATTERN_ASSERTION_SURFACE.md: an assertion that names a behaviour
+// and evidences a surface. This block extracts the real row builder out of the
+// live bundle and runs it, so the assertion fails when the behaviour changes.
+{
+  const core = readAppSource('js/core.7f9c03ad.js');
+  const i = core.indexOf('const _lowIsObserved');
+  const j = core.indexOf('if (basis.market != null)', i);
+  check('the row builder is still locatable in the bundle',
+        i !== -1 && j > i,
+        'if this fails the extraction below is silently testing nothing');
+
+  const rowFn = new Function('basis', 'condMult', 'fmt', 'rows',
+                             core.slice(i, j) + '; return rows;');
+  const money = (v) => '$' + v.toFixed(2);
+  const label = (basis) => {
+    const r = rowFn(basis, 1, money, []);
+    return r.length ? r[0][0] : null;   // null === row withheld
+  };
+
+  // Condition (1): provenance decides the NAME.
+  check('an observed floor is called a listing',
+        label({ low: 80, mid: 100, lowBasis: 'observed' }) === 'Lowest listing',
+        'the healthy path must keep its plain name');
+
+  check('a DERIVED floor is not called a listing',
+        label({ low: 80, mid: 100, lowBasis: 'derived' }) === 'Estimated low',
+        'no listing exists at a synthesized price, so listing language is a lie');
+
+  // Condition (2): the relation decides whether it is a floor AT ALL, and this
+  // must hold on OBSERVED endpoints too -- that is the whole point of it being
+  // a separate condition. If someone folds (2) into (1), this is the assertion
+  // that fails.
+  check('an observed floor above the median ask is withheld, not relabelled',
+        label({ low: 255, mid: 100, lowBasis: 'observed' }) === null,
+        'a floor above an observed ask is not a floor; T2.10, healthy path');
+
+  check('a derived floor above the median ask is also withheld',
+        label({ low: 255, mid: 100, lowBasis: 'derived' }) === null,
+        'both conditions can fire at once and the row must still vanish');
+
+  check('no low means no row',
+        label({ low: null, mid: 100, lowBasis: null }) === null,
+        'baseline -- guards must not invent a row');
+
+  check('an observed floor with no median ask keeps its name',
+        label({ low: 80, mid: null, lowBasis: 'observed' }) === 'Lowest listing',
+        'condition (2) cannot be evaluated without mid, so provenance alone '
+        + 'decides; an observed low IS a real listing, so the name is true');
+
+  // Condition (3) lives at the basis, not in this function. Assert it there so
+  // nobody "tidies" it into the row builder, where it would be keyed off the
+  // wrong provenance field.
+  check('datedBySource is derived from marketBasis, not hardcoded',
+        /datedBySource:\s*tcg\.marketBasis === 'sales'/.test(core),
+        'it is a claim about the CENTRE, so centre provenance is its input');
+
+  check('the row builder does not read marketBasis',
+        !/marketBasis/.test(core.slice(i, j)),
+        'keying the row off centre provenance leaves it mislabelled on the '
+        + 'healthy path -- the exact defect this change fixes');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

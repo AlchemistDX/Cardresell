@@ -2514,9 +2514,24 @@ async function fetchAndApplySoldComps(forceRefresh) {
                        highClamped: !!_tcgC.highClamped,
                        cacheAgeSec: tcg.cacheAgeSec ?? null,
                        sourceUrl: tcg.url || null,
-                       // TCGplayer market is derived from completed sales, so a
-                       // retrieval age is a fair freshness signal for it.
-                       datedBySource: true };
+                       // 2026-09-07 (Q3-C client): per-endpoint provenance, straight
+                       // off the wire. Read from `tcg`, not `_tcgC` -- _clampHigh
+                       // rewrites `high` and does not carry these fields.
+                       marketBasis: tcg.marketBasis ?? null,
+                       lowBasis:    tcg.lowBasis    ?? null,
+                       highBasis:   tcg.highBasis   ?? null,
+                       // Was hardcoded `true`. That was a claim about the CENTRE --
+                       // "this number came from completed sales, so its age means
+                       // something" -- and the centre is only sales-derived when
+                       // marketBasis says so. On the ask-blend rung there is no sale
+                       // behind the number, so a retrieval age is not a freshness
+                       // signal for it and the caption must not imply one.
+                       // Deliberately keyed off marketBasis and nothing else:
+                       // datedBySource is a statement about the centre, so centre
+                       // provenance is the correct input here. It is the WRONG input
+                       // for the Lowest-listing row -- see the three conditions in
+                       // _renderQuickPriceRows().
+                       datedBySource: tcg.marketBasis === 'sales' };
       } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
         _basisMeta = { label: `eBay sold median · ${ebay.count} comps`,
@@ -2543,6 +2558,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
         mid:  _basisMeta ? _basisMeta.mid  : null,
         high: _basisMeta ? _basisMeta.high : null,
         highClamped: !!(_basisMeta && _basisMeta.highClamped),
+        marketBasis: _basisMeta ? (_basisMeta.marketBasis ?? null) : null,
+        lowBasis:    _basisMeta ? (_basisMeta.lowBasis    ?? null) : null,
+        highBasis:   _basisMeta ? (_basisMeta.highBasis   ?? null) : null,
         // Freshness contract: the caption under the headline names the source
         // AND how old it is. Carrying these on the basis means the caption can
         // never disagree with the row it was derived from.
@@ -4378,8 +4396,36 @@ function renderQuickPricing() {
   // returns 1.0 for graded slabs, so slabs stay unscaled.
   const condMult = (typeof getCondMultiplier === 'function') ? getCondMultiplier() : 1;
   const rows = [];
-  if (basis.low != null) {
-    rows.push(['Lowest listing', fmt(Math.round(basis.low * condMult * 100) / 100), '']);
+
+  // 2026-09-07 (Q3-C client). Three SEPARATE conditions on this one row. They
+  // are not collapsed into one test on purpose: each covers a case the other
+  // two miss, and any pair of them leaves the row lying on the third.
+  //
+  //  (1) PROVENANCE -- what the number is. "Lowest listing" asserts that a real
+  //      listing at this price exists. That is only true when the endpoint was
+  //      observed upstream. Where the server synthesized it (lowBasis is
+  //      'derived') the row is an estimate and must not use listing language.
+  //      Keyed off lowBasis, NEVER marketBasis: centre provenance says nothing
+  //      about whether THIS endpoint was observed, and keying off it would leave
+  //      the row mislabelled on the healthy path, which is the common case.
+  //  (2) RELATION -- whether it is a floor at all, independent of (1). A floor
+  //      that sits above an observed ask is not a floor. `mid` is the median
+  //      active ask, so low > mid means at least half the visible book is
+  //      cheaper than the "lowest" price we would print. This fires on observed
+  //      endpoints too, which is why it cannot be folded into (1). Measured at
+  //      3.00% of the catalog and plausibly higher scan-weighted -- see
+  //      audit/d3/DISCLOSURE_PARITY_Q3.md.
+  //  (3) datedBySource -- handled at the basis, not here, and correctly keyed
+  //      off marketBasis, because it is a claim about the centre.
+  //
+  // Remedy for (2) is to withhold rather than relabel, matching what the server
+  // does on a derived centre: a number with no defensible name does not get a
+  // worse name, it goes away. The range line still carries the spread.
+  const _lowIsObserved  = basis.lowBasis === 'observed';
+  const _lowExceedsAsk  = (basis.low != null && basis.mid != null && basis.low > basis.mid);
+  if (basis.low != null && !_lowExceedsAsk) {
+    rows.push([_lowIsObserved ? 'Lowest listing' : 'Estimated low',
+               fmt(Math.round(basis.low * condMult * 100) / 100), '']);
   }
   if (basis.market != null) {
     rows.push(['Market price', fmt(Math.round(basis.market * condMult * 100) / 100),
