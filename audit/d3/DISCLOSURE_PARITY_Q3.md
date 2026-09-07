@@ -617,3 +617,127 @@ number looking better sourced than it is (an ask blend presenting as sales, a
 calculated endpoint presenting as a listing, a freshness signal presenting as
 source-dated). None of the four changes a dollar figure; all four change how much
 weight a seller gives one.
+
+### Q3-C revised — a retraction, and a measured inversion
+
+#### Retraction: Q7 is open, and I cited it as settled
+
+**"The ±15% band is a deliberate standing policy (roadmap Q7)" is withdrawn.**
+Q7 is item 7 under `# 11. If you are a reviewer, argue with these`
+(`audit/CARDRESELL_PLAN_AND_ROADMAP.md:847`), verbatim:
+
+> *"**Derived ±15% Quick Pricing band.** Is a symmetric estimate acceptable when
+> measured spread is unavailable, or should the UI show only the comp?"*
+
+That is the open form of exactly the question Q3-C asks. The mechanic — band =
+comp ±15% — is real and implemented; **its settled status is not.** I carried the
+mechanic forward as a rule and supplied the status myself, then used that status
+as the load-bearing argument for option (a).
+
+Consequence: **(b) does not narrow a standing policy. It answers a question the
+plan doc explicitly leaves open**, in the same direction T2.5 already answered it
+for the fallback rung. (b) is the conservative option; I had it backwards.
+
+Instance 22's tell, pointed at my own writing: *the status of a claim is a fact
+with no representation.* "Q7" cites a location, not a state — and nothing in the
+citation distinguishes a decision from an open question filed at the same
+address.
+
+#### The label fix is unconditional — correct, and it lands independently
+
+"Lowest listing" labelling a synthesized value is wrong under (a) and moot under
+(b). It carries no Q7 dependency and does not wait on the band decision.
+
+#### Measured: the band can render Low above Mid
+
+Ran the real `_headlinePrice` / `_trimmedMean` / `_clampHighPriceInPlace`.
+**Upstream tcgcsv omits `marketPrice` and `low`; `mid` and `high` present:**
+
+| upstream | published | renders as |
+|---|---|---|
+| `low null, market null, mid 100, high 300` | `market 166.67, low 141.67, mid 100, high 300` | `Lowest listing $141.67` · `Market price $166.67` · `Low $141.67 · Mid $100.00 · High $300.00` |
+
+**`low` is 1.42× `mid`.** The row titled "Lowest listing" prints a number 42%
+*above* the median ask, and the range line prints Low above Mid.
+`_rangeParts()` does not sort or validate, so it renders in that order.
+
+Mechanism: with `market` absent the centre is `_trimmedMean`, which **includes
+the high ask** (weight 1, `mid` weight 2). The ±15% floor is then taken off a
+centre that the high ask has already lifted. Exact condition:
+
+```
+0.85 · (2·mid + high)/3 > mid   ⇔   high > 1.5294 · mid
+```
+
+Swept numerically: flips between `high=152` and `high=153` at `mid=100`. So the
+inversion band is **1.53× mid < high ≤ 3.0× mid**.
+
+**The upper bound is the outlier guard.** Above `3.0 × mid`
+(`_HIGH_CAP_MULT`) the high ask is dropped from the blend, the centre collapses
+to `mid`, and `low` returns to a well-behaved `$85.00`. **The guard prevents the
+inversion; the bug lives entirely inside the range the guard considers healthy.**
+A wider outlier tolerance would produce *fewer* inverted renders than the current
+one — the failure is not a data-quality escape.
+
+#### This refines the rung distinction rather than confirming it
+
+The proposed defensible reason for T2.5 and Q3-C differing was that on the
+fallback rung the centre is also untrustworthy, whereas on the tcgcsv path only
+the spread is synthetic. **The second half does not hold:** the tcgcsv path has a
+branch where the centre is a derived ask blend, and that is precisely the branch
+that inverts.
+
+So the correct condition is **not the rung — it is whether the centre was
+observed.** Stated once, it covers both:
+
+> Synthesize a spread only around an observed centre. Where the centre is itself
+> derived, publish no endpoints.
+
+That gives one answer to one question, and the rung difference falls out as a
+consequence instead of standing as an exception needing justification.
+
+#### The precedent mechanism has never reached a seller — and cannot fire here
+
+`marketAskDivergence` is computed and serialized in `api/tcg-price.js:266-267`
+and **read nowhere client-side** — zero occurrences in `js/`, `index.html`,
+`accuracy.html`. Its only other references are two test files
+(`tests/launch-audit-regressions.mjs`, `tests/quick-pricing.mjs`), which assert
+it. **A field with no reader, green in the suite.**
+
+Worse for the reuse argument: it requires **both** `market` and `mid`
+(`:637`, returns `null` if either is missing), so on the market-absent branch it
+returns `null` **by construction**. The one disclosure mechanism in the file is
+definitionally silent on the branch that needs it most.
+
+Reusing its *shape* is still right. Citing its *existence* as evidence that
+market-vs-ask disagreement is disclosed today would be false.
+
+#### Resolution
+
+**Lands now, no policy judgment required:**
+
+1. Withhold synthesized `low`/`high` when the centre is derived (`market`
+   absent). Kills the inversion at source. `_rangeParts` and the conditional
+   "Lowest listing" row already degrade correctly on null.
+2. "Lowest listing" must not label a synthesized value.
+3. Findings 2 + 3 as one change: `marketBasis: 'sales' | 'ask_blend'`, with
+   `datedBySource` derived from it rather than hardcoded `true`.
+
+**Stays open, narrowed:** whether a symmetric ±15% band around an *observed*
+sale price is acceptable — the genuine Q7 question, now scoped to the only case
+where it is a judgment call rather than an inversion.
+
+#### Methods note
+
+Two extraction bugs, both silent, recorded because the technique is reused:
+
+- Brace-matching from `function <name>` closes on the **destructured parameter
+  list** (`function _trimmedMean({ low, market, mid, high })`) and returns a
+  1-line fragment. Walk the parameter parens to their match first, then find the
+  body brace. The first attempt returned three truncated fragments and a
+  `SyntaxError` that pointed at the *next* function.
+- Under ESM (strict mode), `eval` of function declarations does **not** publish
+  them to module scope — `ReferenceError` at call time. Use
+  `new Function(code + 'return {…}')` and destructure. The previously recorded
+  version of this technique ("eval all at top level in one string") only worked
+  in a sloppy-mode context.
