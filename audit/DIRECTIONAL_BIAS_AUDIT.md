@@ -650,6 +650,21 @@ Nothing in this document has been changed in code. Recorded as findings:
   bound on net, and it says so.** What was missing was not a calculation. It was
   this audit reading its own app's disclosure before calling the function
   unbiased.
+- **BIAS-10** *(filed 2026-09-07)* The tax disclosure BIAS-9 relies on exists on
+  **one venue of twelve.** `taxNote` is set only by `feeEbay`; `feeBase` /
+  `feeBaseLabel` only by `feeEbay` and `feeTCGPlayer`. Both rows are conditional
+  at the render (`js/core.7f9c03ad.js:8154-8155`), so ten venues show a fee total
+  with **no stated base and no tax note.** The venue ranking is therefore
+  computed on bases that omit a real cost everywhere while disclosing it in one
+  place.
+  Measured at $400 / 6% tax: order is unchanged, but the omission is
+  **proportional to fee rate** — Poshmark flattered $4.80, Fanatics $1.44 —
+  compressing the apparent cheap-vs-expensive spread by up to **$3.36**, and the
+  **eBay ↔ TCGplayer gap is $0.10 against a $3.18 per-venue effect (32×)**. Order
+  survives only because those two are flattered equally, which is an accident of
+  their near-identical rates.
+  **The uniformity assumption is verified for exactly one venue.** Full write-up
+  and the four-step remedy: `audit/d3/DISCLOSURE_PARITY_Q3.md` § Q3-E.
 - **BIAS-5** `GRADING_FEE = 25` contradicts the server's own `getGradingCost`
   tier table (`api/grade-opportunity.js:44-52`). The fix is the tier table, and
   it needs a stated grader default — an owner call. **This is the one BIAS item

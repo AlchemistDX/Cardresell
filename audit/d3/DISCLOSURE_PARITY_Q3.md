@@ -259,3 +259,88 @@ ratio. **Not scoped here.** Filed.
 
 - [eBay selling fees](https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822)
 - Server grading tiers: `api/grade-opportunity.js:44-52`
+
+---
+
+## Q3-E — the comparison surface, walked for tax (2026-09-07)
+
+**Asked by the reviewer, and the answer is no: the tax half is eBay-only.**
+
+BIAS-9 does not block D3 because the review screen discloses its narrower base.
+That is a disclosure on **one** surface. The venue comparison surface is where the
+seller is told which marketplace to use, and it was never walked for this.
+
+### Measured — which venue fee functions carry which disclosure
+
+| field | venues that set it | of 12 |
+|---|---|---:|
+| `feeBase` / `feeBaseLabel` | `feeEbay`, `feeTCGPlayer` | **2** |
+| `taxNote` | `feeEbay` | **1** |
+
+Both rows are conditional at the render (`js/core.7f9c03ad.js:8154`,
+`:8155` — `r.feeBase != null` and `r.taxNote`), so for the other ten venues the
+comparison table prints **no fee-base row and no tax row at all.** Poshmark,
+COMC, Fanatics, Whatnot, Mercari, ManaPool, Cardsphere, Cardmarket, the three
+buylists and CardNexus each show a fee total whose base is unstated.
+
+So the answer to the parity question: **the shipping half is present for two
+venues, the tax half for one, and the equivalent-fact test fails.** eBay's seller
+is told the estimate excludes buyer sales tax. Eleven venues' sellers are not,
+and the ranking that chooses between them is computed on bases that omit it
+everywhere.
+
+### Does it move the ranking? Order: no. Magnitude: yes.
+
+$400 card, 6% buyer sales tax ($24), no shipping charged, default profile:
+
+| venue | fee now | net now | net if fee also charged on tax | flattered by |
+|---|---:|---:|---:|---:|
+| Fanatics | 29.00 | 371.00 | 369.56 | +1.44 |
+| Mercari | 40.00 | 360.00 | 357.60 | +2.40 |
+| Whatnot | 43.90 | 356.10 | 353.48 | +2.62 |
+| TCGplayer L1 | 53.30 | 346.70 | 343.52 | +3.18 |
+| eBay (no store) | 53.40 | 346.60 | 343.42 | +3.18 |
+| Poshmark | 80.00 | 320.00 | 315.20 | +4.80 |
+
+Ranking order is **identical** before and after. But two numbers matter more than
+the order:
+
+1. **The omission is proportional to the fee rate, so it always flatters the
+   more expensive venue more** — $4.80 for Poshmark against $1.44 for Fanatics.
+   It **compresses the apparent spread between cheap and expensive venues by up
+   to $3.36** on a $400 card. The product's value claim is the *size* of the
+   difference ("you'd keep $51 more"), not just the order, and that size is
+   understated in the direction of making an expensive venue look acceptable.
+2. **The eBay ↔ TCGplayer gap is $0.10, against a per-venue omission of $3.18 —
+   32×.** Order survives here only because those two happen to be flattered by
+   the same amount. **If their real tax treatment differs at all, a $0.10 gap
+   flips.**
+
+### What is actually unverified, and it is the load-bearing part
+
+The order-survives result above assumes the omission is **uniform** — that every
+venue charges commission on a tax-inclusive total, exactly as eBay does. **That
+is asserted nowhere and verified for exactly one venue.** eBay is confirmed from
+raw page text. For the other eleven, this repo has no citation either way.
+
+So the honest statement of the current state is not "the ranking is fine." It is:
+**the ranking is correct if and only if an unverified uniformity assumption
+holds, and the margin protecting the #4/#5 boundary is $0.10 against a $3.18
+per-venue effect.**
+
+Filed as **BIAS-10**. The work it needs, in order:
+
+1. Per-venue, from **raw page text** and not a summary: does the venue charge its
+   commission on a total that includes buyer sales tax? One citation per venue.
+2. Wherever the answer is yes and the model omits it, the venue owes the **same**
+   disclosure eBay already carries — equivalent fact, not identical string.
+   `taxNote` is already a per-venue flag on the fee-items object, so this is a
+   flag plus a citation per venue, not a new mechanism.
+3. Wherever the answer is no, record that too — an accurate model with no note is
+   correct, and the next reader needs to know it was checked rather than missed.
+4. Only then is the compression figure meaningful, because only then is the
+   per-venue delta real rather than assumed.
+
+**Do not add a tax rate to any model.** Tax depends on the buyer and the ship-to
+state; a draft and a comparison row both have neither. The fix is disclosure and
+citation, exactly as with BIAS-9 — the estimate stays a lower bound on the fee.
