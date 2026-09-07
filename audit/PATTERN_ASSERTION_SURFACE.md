@@ -117,6 +117,37 @@ as inventing a number.
 
 ---
 
+
+### Re-ask "complete by what definition" on anything stamped complete (2026-09-07)
+
+Instance 18's lesson — a narrow sweep reported as clean is its own instance of
+the pattern — was **written down, and then the same error was committed in the
+same session that recorded it.** The `eq(` sweep was called a complete
+enumeration; it was complete over one spelling of the construct, and the other
+spelling held two orders of magnitude more sites, including a subclass where the
+signature **inverts** and recommends weakening the assertions rule 1 most needs
+exact.
+
+The generalisable part is not "sweep better." It is that **writing down a rule
+does not install it.** What caught this was neither a better sweep nor the rule
+being on record — it was a second look at a claim already marked done, prompted
+from outside. So the habit worth having is narrow and cheap:
+
+> When something is stamped **complete**, **clean**, **registered**, **verified**
+> or **swept**, ask *complete by what definition* — and specifically, what
+> spelling, what corpus, what range of inputs. Then check that the definition is
+> the one the claim needs, not the one the check happened to implement.
+
+Every instance in this catalogue answers that question badly in some way:
+instance 8 was complete over a hand-listed set, 18 over one guard shape, 19 over
+one call spelling, and the registry work found eleven suites "registered" by
+memory. The claim was never false about what it measured. It was false about
+what it was taken to mean.
+
+Corollary, from the three ad-hoc greps: **the checker is part of the claim.**
+"Complete" asserted by a fresh hand-written query inherits that query's scope and
+precision, not the artifact's. Re-run the artifact or reuse its helpers.
+
 ## Instance 4 is the one this project is most exposed to
 
 Five of the six instances are checks in test files. **Instance 4 — the contract's own DONE
