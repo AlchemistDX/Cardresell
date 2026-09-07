@@ -151,3 +151,32 @@ note naming the endpoint property it depends on.
 **Corollary on narrowing.** Repairing an over-wide assertion by re-inferring its boundary from
 adjacent code just reschedules the failure — the next append widens it again, silently, which is
 how the original got there. Declare the boundary so that widening it becomes a visible edit.
+
+---
+
+## A document that names a derived value before the derivation runs
+
+Found 2026-09-06, renaming the bundle. **A distinct entry, not a variant of instance 4** — the
+two differ in when they can be caught, which is what makes this one worse.
+
+Instance 4 was a document claiming **completed** work. False, but checkable: the code exists,
+so anyone suspicious can re-derive the claim today.
+
+This is a document claiming a **future** fact. `audit/d3/D3_STEP2.md` §5.1 stated that the
+pending rename would go to `core.8e24cab9.js`. That was true when measured and stopped being
+true four edits later, and nothing about the sentence changed to say so. A predicted derived
+value is **unfalsifiable until someone acts on it — and acting on it is what makes it wrong.**
+Executing it would have created a file whose name disagrees with its contents, which is
+precisely the condition `tests/asset-fingerprints.mjs` exists to detect, arrived at by trusting
+a document instead of the bytes.
+
+Practice rule: **re-derive, then stamp.** A document may record that a derived value *will be
+needed*; it must not record what the value *will be*. Names it cannot know: content hashes,
+line numbers in files still being edited, commit counts, offsets.
+
+Corollary — where a derived table is genuinely useful, ship the derivation next to it and let
+the derivation be runnable, so the stamped copy can be contradicted rather than inherited. Done
+for the citation offsets: `audit/BUNDLE_CITATION_MAP.md` carries the tables,
+`tools/bundle-citation-map.mjs` re-derives them and fails on any citation that no longer
+resolves. The tool reads the live bundle name out of `index.html` instead of hard-coding it, so
+the next rename ages the tables and not the check.
