@@ -8114,11 +8114,13 @@ function switchView(view) {
   const lookup     = document.getElementById('lookupView');
   const flips      = document.getElementById('flipsView');
   const collection = document.getElementById('collectionView');
+  const drafts     = document.getElementById('draftsView');
 
   // Hide all
   if (lookup)     lookup.classList.remove('hidden');
   if (flips)      flips.classList.remove('active');
   if (collection) collection.style.display = 'none';
+  if (drafts)     drafts.style.display = 'none';
   const adminViewEl = document.getElementById('adminView');
   if (adminViewEl) adminViewEl.style.display = 'none';
 
@@ -8134,6 +8136,14 @@ function switchView(view) {
     // render as a completely blank area (wall hidden, content hidden by CSS default).
     if (collection) collection.style.display = 'block';
     renderCollectionView();
+  } else if (view === 'drafts') {
+    if (lookup) lookup.classList.add('hidden');
+    // #draftsView is deliberately NOT in .flips-view, so '' would work here.
+    // It is still set explicitly: the class is the only thing standing between
+    // this line and the blank-tab bug documented above, and "works because of a
+    // class someone might add later" is not a property worth depending on.
+    if (drafts) drafts.style.display = 'block';
+    renderDraftsView();
   } else if (view === 'admin') {
     // Extra guard: only inject & show admin UI after confirming owner sub server-side.
     if (window._userSub !== window._OWNER_SUB) { switchView('lookup'); return; }
@@ -18524,3 +18534,468 @@ async function startListingDraftForEntry(entryId) {
     source: 'collection',
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Drafts view — Block D2.1, the client half of GET /api/drafts
+//
+// Contract: audit/DRAFT_LIST_API_CONTRACT.md Part 3. That document is frozen;
+// where a comment here restates a rule it is a pointer, not a second copy of
+// the decision.
+//
+// Appended at the END of the bundle on purpose. Every audit document cites
+// this file by line number (renderCollectionView, showToast, _crIdToken, the
+// switchView trap), and inserting ~300 lines mid-file would silently drift all
+// of them. Function declarations hoist, so position carries no meaning here.
+//
+// Three rules are load-bearing enough to name at the top, because each one has
+// a plausible-looking implementation that is wrong:
+//
+//   1. Paging terminates on `nextCursor === null` and nothing else. `count`
+//      can be 0 on a page that still has successors (a fully tombstoned middle
+//      page), so an empty page is not the end of the list.
+//   2. `total === 0` is the ONLY route to the empty state. A 503 renders as
+//      "couldn't load", never as "you have no drafts" — a failure that reads as
+//      emptiness tells a seller their work is gone.
+//   3. A price of 0 is a PRESENT price. `if (!price)` is the f0324d4 regression
+//      in list form: !0 === true, so a legitimately free whatnot:auction draft
+//      would render as though it needed a price.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DRAFTS_PAGE_LIMIT = 25;
+
+/**
+ * Stub-row copy. The client authors THIS table and no other copy on the screen.
+ *
+ * The server ships no text for the four stub kinds, and routing a stub reason
+ * through reasonMessage() hits its default branch and returns a sentence about
+ * something else entirely (contract §2.5). Blocker copy is the mirror image:
+ * the server owns it, the client renders it verbatim, and there is no table for
+ * it here on purpose.
+ *
+ * Keys are the ROW values. The store's own error constant is
+ * 'DRAFT_RECORD_UNREADABLE', which the service maps to 'DRAFT_UNREADABLE'
+ * before it reaches the wire; matching the store's spelling here would leave
+ * every unreadable draft falling through to the unknown-reason branch.
+ *
+ * 'Deleted' appears nowhere. The server has not established deletion for a
+ * vanished row, and drafts that really were deleted are filtered out upstream.
+ */
+const _DRAFT_STUB_COPY = {
+  DRAFT_READ_FAILED:    { text: "Couldn't load this draft. It's still saved.",              action: 'Try again' },
+  DRAFT_VANISHED:       { text: 'This draft is no longer in storage.',                      action: null },
+  // No action, and no "reload to update" advice. The server says retryable:false
+  // for this kind, and it is right: if the record was written by a canary build
+  // the deployed client cannot read it no matter how many times the seller
+  // reloads. Telling them to reload would be a button that lies -- the exact
+  // thing the gate below refuses to render.
+  DRAFT_SCHEMA_TOO_NEW: { text: 'This draft was saved by a newer version of CardResell.',    action: null },
+  DRAFT_UNREADABLE:     { text: "This draft's saved data can't be read.",                   action: null },
+};
+
+const _draftsState = {
+  rows: [],          // accumulated across pages, in server order, never re-sorted
+  total: null,
+  cursor: null,      // cursor for the NEXT page; null means no further page
+  degraded: false,
+  loading: false,
+  error: null,       // { text, retryable } — a load failure, never an empty list
+  focusId: null,     // created draft to highlight on this render
+  focusMissing: false,
+  signedIn: true,
+};
+
+function _draftsEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Absent price vs zero price. See rule 3 at the top of this block.
+ *
+ * whatnot:auction sets allowsZeroPrice (api/_draftStore.js:136), so $0 is a
+ * real, publishable price there. Every other slot refuses it as
+ * SLOT_ZERO_PRICE_NOT_ALLOWED — which arrives as a server-authored blocker
+ * sentence, not as something this function decides.
+ */
+function _draftPriceText(price) {
+  if (price === null || price === undefined) return 'No price yet';
+  const n = Number(price);
+  if (!Number.isFinite(n)) return 'No price yet';
+  return '$' + n.toFixed(2);
+}
+
+/**
+ * Marker colour for a row, chosen by branching on blocker `code`.
+ *
+ * Contract §3.4: a non-textual marker is encouraged, a text chip is not. The
+ * distinction is that a chip re-authors the server's sentence in four words and
+ * dead-ends the seller, while a coloured border adds no copy. So `code` is
+ * allowed to pick a colour and is never mapped to a string.
+ */
+function _draftRowMarker(summary) {
+  if (!summary || !summary.readiness) return 'var(--border)';
+  return summary.readiness.publishable ? '#4ade80' : '#c47a00';
+}
+
+/** One summary row. */
+function _draftSummaryRowHtml(row, isFocused) {
+  const s = row.summary;
+  const blockers = (s.readiness && s.readiness.blockers) || [];
+  const marker = _draftRowMarker(s);
+
+  // Every blocker, each on its own line, rendered verbatim. Showing the first
+  // and hiding the rest is omission dressed as brevity (contract §3.4); there
+  // are at most four, so there is no volume argument for truncating.
+  const blockerLines = blockers.map((b) => (
+    `<div class="draft-row-blocker">${_draftsEsc(b.message)}</div>`
+  )).join('');
+
+  return `
+    <div class="draft-row${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" style="border-left-color:${marker}">
+      <div class="draft-row-main">
+        <div class="draft-row-title">${_draftsEsc(s.title || '(untitled draft)')}</div>
+        <div class="draft-row-meta">${_draftsEsc(s.slot || '')} · qty ${_draftsEsc(s.quantity == null ? 1 : s.quantity)}</div>
+        ${blockerLines}
+      </div>
+      <div class="draft-row-price">${_draftsEsc(_draftPriceText(s.price))}</div>
+    </div>`;
+}
+
+/**
+ * One stub row.
+ *
+ * A stub is always a VISIBLE row. Filtering one out would turn "we could not
+ * read this draft" into "this draft does not exist", which is the one thing the
+ * service goes out of its way not to say (api/_draftService.js:611-627).
+ */
+function _draftStubRowHtml(row) {
+  const copy = _DRAFT_STUB_COPY[row.reason] || {
+    // Unknown reason: still a visible row. A reason this client has not been
+    // taught is a gap in this table, not evidence about the draft.
+    text: "This draft can't be shown right now. It's still saved.", action: null,
+  };
+  // ONE authority: the server's `retryable`. This line previously read
+  //
+  //   !!copy.action && (row.reason !== 'DRAFT_READ_FAILED' || row.retryable === true)
+  //
+  // which inverted the rule for every other kind -- any stub that was not
+  // DRAFT_READ_FAILED satisfied the left side of the `||` and got its action
+  // regardless of what the server said. It read as if it were enforcing "only
+  // DRAFT_READ_FAILED retries" while enforcing nearly the opposite, and the
+  // browser suite caught it on DRAFT_SCHEMA_TOO_NEW.
+  //
+  // The defect was keying on the code NAME instead of the flag that carries the
+  // authority -- naming a behaviour while evidencing a surface, the same shape
+  // as the four cases catalogued in audit/DECISION_SOURCE_DISAGREEMENT.md.
+  // `retryable` is the server's call; a code name is not a substitute for it.
+  const showAction = !!copy.action && row.retryable === true;
+  const action = showAction
+    ? `<button type="button" class="draft-row-action" data-draft-action="${_draftsEsc(row.reason)}" data-draft-id="${_draftsEsc(row.draftId)}">${_draftsEsc(copy.action)}</button>`
+    : '';
+  return `
+    <div class="draft-row draft-row-stub" data-draft-id="${_draftsEsc(row.draftId)}" data-draft-reason="${_draftsEsc(row.reason || '')}">
+      <div class="draft-row-main">
+        <div class="draft-row-title draft-row-stub-text">${_draftsEsc(copy.text)}</div>
+      </div>
+      ${action}
+    </div>`;
+}
+
+/**
+ * Row dispatch. Discriminate on `summary` being truthy FIRST, then on `reason`.
+ *
+ * The other order looks equivalent and is not: a summary row has no `reason`,
+ * so `switch (row.reason)` on a healthy row lands in the default branch.
+ */
+function _draftRowHtml(row, focusId) {
+  if (row && row.summary) return _draftSummaryRowHtml(row, focusId && row.draftId === focusId);
+  return _draftStubRowHtml(row || {});
+}
+
+function _draftsBannerHtml() {
+  if (!_draftsState.degraded) return '';
+  // degraded:true on a 200 means the rows are real AND something behind them is
+  // not fully healthy. Both halves get shown; suppressing the list would hide
+  // work the seller has already done (contract §2.6).
+  //
+  // Wording note. Contract §3.5 reserves the under-repair phrasing for
+  // UNFINISHED states, and this is not one: `degraded` is a transient data
+  // condition, so that phrasing would describe the wrong thing. It also
+  // collides with a standing copy tripwire at
+  // tests/a11y-mobile-2026-09-04.mjs:409, which forbids that word site-wide and
+  // predates the contract rule. The collision is real and unresolved; this
+  // banner sidesteps it rather than settling it, because a screen is the wrong
+  // place to overturn a standing copy rule. The word is kept out of this
+  // comment too -- the tripwire reads the inlined bundle, so a comment
+  // explaining the ban would itself trip it.
+  return `
+    <div class="draft-banner" role="status">
+      🛠️ Some draft details couldn’t be refreshed just now. Your drafts are saved.
+    </div>`;
+}
+
+function _draftsFocusNoticeHtml() {
+  if (!_draftsState.focusMissing) return '';
+  // One sentence for all three ways the row can be missing — reconcile lag, a
+  // tombstone race, an index that has not caught up. The client does not try to
+  // name the cause, because it cannot establish one and the server does not
+  // send it (contract §3.1a principle 3).
+  return `
+    <div class="draft-notice" role="status">
+      Your draft is saved. It may take a moment to appear in this list.
+    </div>`;
+}
+
+function _draftsPagingHtml() {
+  // Rule 1. `nextCursor === null` is the only end-of-list signal; an empty page
+  // with a successor is a real server response.
+  if (_draftsState.cursor === null || _draftsState.cursor === undefined) return '';
+  return `
+    <div class="draft-paging">
+      <button type="button" class="draft-more-btn" id="draftsMoreBtn"${_draftsState.loading ? ' disabled' : ''}>${_draftsState.loading ? 'Loading…' : 'Load more'}</button>
+    </div>`;
+}
+
+function _draftsBodyHtml() {
+  if (!_draftsState.signedIn) {
+    return `
+      <div class="empty-flips">
+        <div class="empty-flips-icon">🔒</div>
+        <div class="empty-flips-h">Sign in to see your drafts</div>
+        <div class="empty-flips-p">Drafts are saved to your account so they follow you across devices.</div>
+      </div>`;
+  }
+
+  // Rule 2. A failure renders as a failure. The empty state is unreachable from
+  // here, no matter how the load went wrong.
+  if (_draftsState.error) {
+    return `
+      <div class="empty-flips">
+        <div class="empty-flips-icon">⚠️</div>
+        <div class="empty-flips-h">Couldn't load your drafts</div>
+        <div class="empty-flips-p">${_draftsEsc(_draftsState.error.text)}</div>
+        ${_draftsState.error.retryable ? '<div class="draft-paging"><button type="button" class="draft-more-btn" id="draftsRetryBtn">Try again</button></div>' : ''}
+      </div>`;
+  }
+
+  if (_draftsState.loading && !_draftsState.rows.length) {
+    return '<div class="draft-spinner" role="status" aria-label="Loading your drafts"></div>';
+  }
+
+  // Rule 2, the other half: `total === 0` is the only thing that earns this.
+  if (_draftsState.total === 0) {
+    return `
+      <div class="empty-flips">
+        <div class="empty-flips-icon">🗂️</div>
+        <div class="empty-flips-h">No drafts yet</div>
+        <div class="empty-flips-p">Scan a card and choose “List now” to save your first draft.</div>
+      </div>`;
+  }
+
+  return `
+    <div class="draft-list">${_draftsState.rows.map((r) => _draftRowHtml(r, _draftsState.focusId)).join('')}</div>
+    ${_draftsPagingHtml()}`;
+}
+
+function _draftsPaint() {
+  const wrap = document.getElementById('draftsWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    ${_draftsBannerHtml()}
+    ${_draftsFocusNoticeHtml()}
+    ${_draftsBodyHtml()}`;
+
+  const count = document.getElementById('draftsCount');
+  if (count) {
+    const t = _draftsState.total;
+    count.textContent = (t === null || t === undefined) ? '' : (t === 1 ? '1 draft' : t + ' drafts');
+  }
+}
+
+/**
+ * The one hand-rolled authenticated fetch on this screen.
+ *
+ * Contract §3.2: there is no canonical wrapper, ~25 call sites hand-roll the
+ * header, and the bundle already carries six inline force-refresh blocks. This
+ * adds a seventh to nothing — _crIdToken() already owns refreshing.
+ */
+async function _draftsFetch(params) {
+  let token = '';
+  try { token = await _crIdToken(); } catch (_) { token = ''; }
+  if (!token) return { status: 401, body: {} };
+
+  const qs = new URLSearchParams(params).toString();
+  const r = await fetch('/api/drafts' + (qs ? '?' + qs : ''), {
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer ' + token },
+  });
+  let body = {};
+  try { body = await r.json(); } catch (_) { body = {}; }
+  return { status: r.status, body: body || {} };
+}
+
+/**
+ * Fold one response into state.
+ *
+ * `nextCursor` is ECHOED, never computed. Deriving it as cursor+limit is wrong
+ * on exactly the pages that matter: a page whose rows were filtered out returns
+ * fewer rows than it consumed offsets (contract §2.3).
+ */
+function _draftsAbsorb(resp, { append }) {
+  if (resp.status === 401) {
+    _draftsState.signedIn = false;
+    _draftsState.error = null;
+    return;
+  }
+  _draftsState.signedIn = true;
+
+  if (resp.status !== 200) {
+    const b = resp.body || {};
+    _draftsState.error = {
+      text: b.error || "Something went wrong loading your drafts.",
+      // `retryable` is the server's word. Absent means absent, not false-y
+      // guesswork — a 503 without it is not retryable and must not offer one.
+      retryable: b.retryable === true,
+    };
+    return;
+  }
+
+  const b = resp.body || {};
+  const rows = Array.isArray(b.rows) ? b.rows : [];
+  _draftsState.error = null;
+  _draftsState.rows = append ? _draftsState.rows.concat(rows) : rows;
+  _draftsState.total = (typeof b.total === 'number') ? b.total : _draftsState.total;
+  _draftsState.cursor = (b.nextCursor === undefined) ? null : b.nextCursor;
+  _draftsState.degraded = b.degraded === true;
+
+  if (_draftsState.focusId) {
+    // A non-null focusOffset does NOT guarantee the row is on the page — the
+    // draft can be tombstoned between the index read and hydration. So the
+    // notice is decided by looking for the ROW, never by reading the offset
+    // (contract §2.8: focusOffset is a found/not-found signal, never row
+    // arithmetic).
+    _draftsState.focusMissing = !_draftsState.rows.some((r) => r.draftId === _draftsState.focusId);
+  }
+}
+
+/** Load the first page. `focus` highlights a just-created draft. */
+async function loadDraftsFirstPage(focus) {
+  _draftsState.rows = [];
+  _draftsState.total = null;
+  _draftsState.cursor = null;
+  _draftsState.degraded = false;
+  _draftsState.error = null;
+  _draftsState.focusId = focus || null;
+  _draftsState.focusMissing = false;
+  _draftsState.loading = true;
+  _draftsPaint();
+
+  const params = { limit: String(DRAFTS_PAGE_LIMIT) };
+  // focus and cursor cannot be combined — the server refuses the pair with
+  // LIST_FOCUS_CURSOR_CONFLICT, and there is no cursor on a first page anyway.
+  if (focus) params.focus = focus;
+
+  let resp;
+  try {
+    resp = await _draftsFetch(params);
+  } catch (e) {
+    resp = { status: 0, body: { error: 'Check your connection and try again.', retryable: true } };
+  }
+
+  // An invalid or conflicting focus is a client bug, not a reason to deny the
+  // seller their list. Drop the focus and load the list plainly.
+  const code = resp.body && resp.body.code;
+  if (resp.status === 400 && (code === 'LIST_FOCUS_INVALID' || code === 'LIST_FOCUS_CURSOR_CONFLICT')) {
+    _draftsState.focusId = null;
+    try {
+      resp = await _draftsFetch({ limit: String(DRAFTS_PAGE_LIMIT) });
+    } catch (e) {
+      resp = { status: 0, body: { error: 'Check your connection and try again.', retryable: true } };
+    }
+  }
+
+  _draftsState.loading = false;
+  _draftsAbsorb(resp, { append: false });
+  _draftsPaint();
+}
+
+/** Load one more page. Never called in a loop; only a tap gets here. */
+async function loadDraftsNextPage() {
+  if (_draftsState.loading) return;
+  if (_draftsState.cursor === null || _draftsState.cursor === undefined) return;
+  _draftsState.loading = true;
+  _draftsPaint();
+
+  let resp;
+  try {
+    resp = await _draftsFetch({ limit: String(DRAFTS_PAGE_LIMIT), cursor: String(_draftsState.cursor) });
+  } catch (e) {
+    resp = { status: 0, body: { error: 'Check your connection and try again.', retryable: true } };
+  }
+  _draftsState.loading = false;
+
+  if (resp.status !== 200) {
+    // A failed page must not discard the pages already on screen, and must not
+    // look like the end of the list either.
+    if (_draftsState.rows.length) {
+      try { showToast("Couldn't load more drafts. Try again.", 'error'); } catch (_) {}
+      _draftsPaint();
+      return;
+    }
+  }
+  _draftsAbsorb(resp, { append: true });
+  _draftsPaint();
+}
+
+/**
+ * Delegated row handling.
+ *
+ * Bound once on the container rather than per row. Note what is NOT here: no
+ * handler opens a draft. Rows are informational in D2.1 — D3 is the screen that
+ * renders a draft, and a half-detail view here is what D3 would have to tear
+ * out (contract §3.1a).
+ */
+function _draftsBindOnce() {
+  const wrap = document.getElementById('draftsWrap');
+  if (!wrap || wrap.dataset.crBound === '1') return;
+  wrap.dataset.crBound = '1';
+  wrap.addEventListener('click', (ev) => {
+    const more = ev.target.closest && ev.target.closest('#draftsMoreBtn');
+    if (more) { loadDraftsNextPage(); return; }
+    const retry = ev.target.closest && ev.target.closest('#draftsRetryBtn');
+    if (retry) { loadDraftsFirstPage(_draftsState.focusId); return; }
+    const act = ev.target.closest && ev.target.closest('[data-draft-action]');
+    if (act) {
+      const reason = act.getAttribute('data-draft-action');
+      if (reason === 'DRAFT_SCHEMA_TOO_NEW') { try { location.reload(); } catch (_) {} return; }
+      loadDraftsFirstPage(_draftsState.focusId);
+    }
+  });
+}
+
+/**
+ * Set by the create path so the list can highlight the new draft on arrival.
+ * One request, one render — see contract §3.1a principle 1.
+ */
+let _draftsPendingFocus = null;
+
+/** Entry point. `switchView('drafts')` calls this. */
+function renderDraftsView(focus) {
+  _draftsBindOnce();
+  loadDraftsFirstPage(focus || _draftsPendingFocus || null);
+  _draftsPendingFocus = null;
+}
+
+function openDraftsFocused(draftId) {
+  _draftsPendingFocus = draftId || null;
+  switchView('drafts');
+}
+
+try {
+  window.renderDraftsView   = renderDraftsView;
+  window.openDraftsFocused  = openDraftsFocused;
+  window.loadDraftsNextPage = loadDraftsNextPage;
+  window.loadDraftsFirstPage = loadDraftsFirstPage;
+  window._draftsState       = _draftsState;
+} catch (_) {}
