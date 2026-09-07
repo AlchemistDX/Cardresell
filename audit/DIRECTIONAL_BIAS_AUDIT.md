@@ -13,11 +13,30 @@ systematic lean. What follows walks each number the seller sees.
 
 ## Verdict
 
-**There is a systematic optimism lean, and it is concentrated in one function.**
+## CURRENT FINDING (2026-09-07, third revision — read this, not the history below)
 
-`renderGradingUpside` (`js/core.7f9c03ad.js:11426`) contains **seven
-simplifications. All seven overstate the seller's outcome. None run the other
-way.**
+**The panel uses duplicate fee and grading-cost calculations. Its
+incremental-upside error depends on both sale scenarios, the applicable fee
+bands, the grader-cost assumptions, and expenses incurred only by the grading
+option.**
+
+That is the whole claim. It is deliberately not a direction, because the
+direction is not a property of the panel — it is a property of the inputs.
+
+Everything below the line marked **HISTORICAL** is superseded and kept only to
+show how the claim moved. In particular, the original headline — "seven
+simplifications, all seven overstate, none run the other way" — **is withdrawn.**
+It was wrong about the count, wrong about the mechanism, and wrong about which
+term matters.
+
+---
+
+## HISTORICAL — superseded framings, kept for the record
+
+**Superseded opening (2026-09-07, first pass):** "There is a systematic optimism
+lean, and it is concentrated in one function. `renderGradingUpside`
+(`js/core.7f9c03ad.js:11426`) contains seven simplifications. All seven overstate
+the seller's outcome. None run the other way."
 
 ### AMENDED 2026-09-07 — the mechanism, corrected
 
@@ -76,7 +95,7 @@ which does two separate things wrong:
    claimed the column "applies what `feeEbay` implements." **`feeEbay` has no tax
    parameter** — `feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible)`,
    `total = price + shipCharge`. Tax in the fee base is a real eBay behaviour and
-   a real gap in `feeEbay`, which is BIAS-4's subject; it is not something
+   a real gap in `feeEbay`, filed as **BIAS-9** below; it is not something
    `feeEbay` does, so the column described a model that does not exist here.
 
 **Modeled proceeds under stated assumptions** — `feeEbay`-faithful, no store, not
@@ -162,52 +181,153 @@ shipping charge cancels out of the *difference* identically, whatever it is.
 
 #### What that does to "four sign-fixed by construction"
 
-**It refutes it.** Rows 2, 3 and 6 — the per-order fee, shipping cost, and
-ship-to-grader / return postage / insurance — are **flat** costs that fall on both
-legs. On the widget's metric they contribute **zero**, not a positive optimistic
-bias. My "omitting a non-negative cost cannot flip sign" argument was sound for a
-single sale's net and irrelevant to the number actually on screen.
+**It refutes it, but my first replacement axis was also wrong.** Corrected again
+after review.
 
-The property that matters is not sign-fixedness. It is **whether the omission
-differs between the two legs.** Flat omissions cancel; proportional ones do not.
+Rows 2 and 3 — the per-order fee and the cost of shipping the sold card — fall on
+**both** options. Whether you sell the card raw or sell it graded, you ship one
+card and pay one per-order fee. Those cancel in the difference and contribute
+**zero**.
 
-Only row 4 (tax absent from the fee base) survives as directional on the
-incremental metric, and only because tax scales with the sale amount and the
-graded leg is the larger sale — so it is proportional, not flat.
+**Row 6 does not cancel, and I was wrong to group it with them.** Ship-to-grader
+postage, return postage and insurance are incurred **only by the grading
+option**. Selling the existing raw card avoids them entirely. So row 6 belongs
+with the grading-cost term, and on the incremental metric it is
+**unconditionally optimistic** — a cost that lands on one leg only and is omitted
+can only overstate the difference.
 
-#### The exact decomposition
+Measured, raw $50 → PSA-10 $500, internal $25 grading cost:
 
-For the default profile below the tier boundary, the whole panel-versus-model gap
-is two terms and nothing else:
+| additional grading postage | modeled incremental upside | panel | overstated by |
+|---:|---:|---:|---:|
+| $0 | 365.375 | 366.50 | +1.125 |
+| $10 | 355.375 | 366.50 | +11.125 |
+| $20 | 345.375 | 366.50 | **+21.125** |
+| $35 | 330.375 | 366.50 | +36.125 |
+
+At $20 of grading postage the panel's overstatement is **$21.125, not $1.125** —
+the grading-only expense is an order of magnitude larger than the fee-rate term
+it was mistakenly cancelled against.
+
+**The correct axis is which option incurs the expense, not whether it is flat or
+proportional.** Costs common to both options cancel; costs specific to one do
+not. Flat-versus-proportional was a coincidence of the examples I picked.
+
+Row 4 (tax absent from the fee base) also survives, on the separate ground that
+it scales with the sale amount and the graded leg is the larger sale.
+
+**And my "asymmetric" test was not asymmetric.** I applied shipping charged $5 /
+cost $9 to *both* legs, so `(charge − cost)` was −$4 on each and cancelled — it
+tested nothing. A genuine test varies the cost *between options*:
+
+| raw postage / graded postage | modeled incremental upside |
+|---|---:|
+| $5 / $5 | 365.3750 |
+| $5 / $9 | 361.3750 |
+
+which differs by exactly the $4 postage delta, as it must.
+
+#### The decomposition — sign corrected, exclusions stated
+
+**Published with the grading term's sign reversed.** I wrote
+`(25 − actual grading cost)`, which gives +7 for CGC while the table beside it
+correctly showed −7. The table was right and the formula was wrong:
 
 ```
-panel − model = (graded − raw) × (0.1325 − 0.13)  +  (25 − actual grading cost)
+panel − model = (graded − raw) × (0.1325 − 0.13)  +  (modeled grading cost − 25)
 ```
 
-Verified exactly at several points:
+CGC `18 − 25 = −7` · PSA at $200–499 raw `50 − 25 = +25` · PSA at $500+ raw
+`100 − 25 = +75`. All three now agree with the table.
 
-| raw → graded | grader | panel | model | gap | rate-delta term | grading term |
+Also corrected: **"modeled" grading cost, not "actual."** `getGradingCost` is
+this repository's own cost assumption. Nothing here establishes it matches any
+grading service's published charges.
+
+**This two-term form holds only under stated exclusions**, and it is not general:
+
+- both sales inside the **same linear fee band** (no tier crossing),
+- **equal per-order fees** on both legs,
+- **no tax** in the fee base,
+- **no unequal selling shipping**, and
+- **no expenses incurred only by the grading option** (row 6).
+
+Break any one and the two-term form is wrong.
+
+| raw → graded | grader | panel | model | gap (unrounded) | rate term | grading term |
 |---|---|---:|---:|---:|---:|---:|
-| 20 → 60 | PSA | 9.80 | 9.70 | **+0.10** | +0.10 | 0 |
-| 20 → 60 | CGC | 9.80 | 16.70 | **−6.90** | +0.10 | −7 |
-| 50 → 500 | PSA | 366.50 | 365.38 | **+1.12** | +1.13 | 0 |
-| 50 → 500 | CGC | 366.50 | 372.38 | **−5.88** | +1.13 | −7 |
-| 200 → 2,000 | PSA | 1,541.00 | 1,511.50 | **+29.50** | +4.50 | +25 |
-| 500 → 3,000 | PSA | 2,150.00 | 2,068.75 | **+81.25** | +6.25 | +75 |
+| 20 → 60 | PSA | 9.80 | 9.70 | **+0.100** | +0.10 | 0 |
+| 20 → 60 | CGC | 9.80 | 16.70 | **−6.900** | +0.10 | −7 |
+| 50 → 500 | PSA | 366.50 | 365.375 | **+1.125** | +1.125 | 0 |
+| 50 → 500 | CGC | 366.50 | 372.375 | **−5.875** | +1.125 | −7 |
+| 200 → 2,000 | PSA | 1,541.00 | 1,511.50 | **+29.500** | +4.50 | +25 |
+| 500 → 3,000 | PSA | 2,150.00 | 2,068.75 | **+81.250** | +6.25 | +75 |
 
-#### The finding this reorders
+**Unrounded, deliberately.** The previous version printed the $50 → $500 gap as
+`+1.12`, which is what you get by subtracting the *displayed* 365.38 from 366.50.
+The actual difference is **$1.125**. A difference between rounded columns is not
+the rounded difference, and this document should not model the error it audits.
 
-**The fee simplification is the small term.** It contributes
-`0.25% × (graded − raw)` — $6.25 on a $2,500 spread. **The grading-cost
-simplification contributes up to $75, and it is the only term that can flip the
-sign.** Every negative gap in the table above is grader-driven.
+#### The fee term can flip the sign on its own — "only grading cost" is false
 
-This audit has been treating BIAS-1 (the duplicate fee model) and BIAS-5 (the
-flat grading fee) as peers. On the metric the widget displays they differ by
-roughly an order of magnitude, and the one I filed first is the lesser one.
-Rule 1 still requires deleting the duplicate fee model — that is a code-health
-requirement independent of magnitude — but **the number on screen is wrong mostly
-because of the grading cost, not the fee rate.**
+I claimed the grading term was the only one capable of reversing direction.
+**Counterexample, with the grading cost held identical in both models so its
+error is exactly zero:**
+
+| | |
+|---|---:|
+| raw sale | $5,000 |
+| graded sale | $10,000 |
+| panel upside | $4,325.00 |
+| canonical-model upside | $4,585.00 |
+| **panel − model** | **−$260.00** |
+
+The entire $260 comes from the fee calculation, because the graded leg crosses
+the $7,500 boundary into the 2.35% band while the raw leg does not. Verified two
+ways — the model difference and the closed form below both give exactly −260.00.
+
+**The general fee contribution**, replacing the band-limited rate-delta term:
+
+```
+[canonical fee on graded sale − canonical fee on raw sale] − 13% × (graded − raw)
+```
+
+This also kills a claim I made one paragraph earlier: that an equal shipping
+charge "cancels identically, whatever it is." It cancels **within a band**. Across
+a boundary it does not — upside for $5,000 → $10,000 moves from 4,585.00 to
+4,585.545 to 4,590.45 as the shipping charge goes $0 → $5 → $50.
+
+#### Acceptance cases for the BIAS-1 / BIAS-5 fix (frozen here, to be encoded as tests)
+
+The fix is not accepted on "routes through `feeEbay`." It is accepted on these
+cases, which are the ones that broke the analysis above. Each must be a
+registered assertion naming the behaviour and evidencing the rendered surface.
+
+| # | case | why it exists |
+|---|---|---|
+| 1 | raw $50 → PSA-10 $500, no store, not TRS | baseline; rate term only |
+| 2 | same, grader CGC | grading term **inverts** the sign |
+| 3 | raw $500 → PSA $3,000 | grading term at its $75 maximum |
+| 4 | **raw $5,000 → graded $10,000, grading cost equal** | **cross-tier: fee term alone flips the sign, −$260** |
+| 5 | **raw postage $5 vs graded postage $9** | unequal cost between options must not cancel |
+| 6 | **grading postage $20 added** | grading-only expense; overstatement $1.125 → $21.125 |
+| 7 | Basic Store, and TRS, at $25 / $200 / $1,000 | profile crossovers at $61.54 / $37.21 / $21.22 |
+| 8 | item total $8,000, default profile | single-sale crossover above $7,679.8122 |
+| 9 | negative upside (graded comp below raw + costs) | ratio sign inversion, `core:11504` branch |
+| 10 | unresolved grader column (`sub: 'Any grader'`) | number withheld, not defaulted — BIAS-7/8 |
+
+Cases 4, 5 and 6 are the ones a "route it through the shared function" fix passes
+while still being wrong, because none of them is a fee-rate problem.
+
+#### What survives about dominance
+
+**Narrowed.** "Grading cost dominates the fee term" is supported **within the
+example range I selected** — raw comps of $20–$500 against graded comps below the
+tier boundary, which is the common case for the cards this app indexes. It is
+**not general**: the cross-tier counterexample above has a $260 fee-driven error
+and zero grading error.
+
+Both must be fixed, and neither fix substitutes for the other.
 
 #### Row 1's default-profile claim, corrected again
 
@@ -239,12 +359,14 @@ figures matched to the cent.
 | 3 — no shipping cost | optimistic | **cancels — zero** |
 | 4 — tax absent from fee base | optimistic | optimistic (proportional, larger on graded leg) |
 | 5 — flat $25 grading fee | optimistic for PSA; **pessimistic $7 for CGC/SGC** | **dominant term; sign varies by grader** |
-| 6 — no grading postage | optimistic | **cancels if symmetric — zero** |
+| 6 — no grading postage | optimistic | **optimistic — grading-only cost, never cancels** |
 | 7 — `upside / raw` ratio | optimistic while upside > 0 | inverts on losses, which `core:11504` renders |
 
-**So: on the metric that is actually displayed, three of the seven contribute
-nothing, one is small, one inverts by grader and dominates, and one inverts on
-losses.** "Seven simplifications all leaning optimistic" was wrong about the
+**So: on the metric that is actually displayed, two of the seven contribute
+nothing (rows 2 and 3, common to both options), row 6 is unconditionally
+optimistic because it is grading-only, row 9's tax gap is optimistic because it
+is proportional, row 1 can flip the sign by crossing a fee band, row 5 can flip
+it by grader, and row 7 inverts on losses.** "Seven simplifications all leaning optimistic" was wrong about the
 count, wrong about the mechanism, and wrong about which one matters.
 
 An eighth, arguably the largest, is structural rather than arithmetic: the
@@ -394,7 +516,21 @@ Nothing in this document has been changed in code. Recorded as findings:
   it. Fix the code, and do not fix the comment alone.
 - **BIAS-3** Grade risk is unrepresented — a conditional payoff is displayed as
   an expected one.
-- **BIAS-4** `upsidePct` denominator excludes invested grading fee.
+- **BIAS-4** `upsidePct` denominator excludes invested grading fee. **Scope
+  corrected 2026-09-07:** before changing the denominator, define the metric.
+  `upside / raw` is a defensible *uplift relative to raw value*; it is not
+  automatically ROI, and true ROI needs a matching profit numerator over
+  acquisition plus relevant costs — not merely raw comp plus grading fee. Prefer
+  dollar upside until the percentage is defined. Test positive, zero and
+  negative outcomes; a negative ratio alone does not establish directional bias.
+- **BIAS-9** *(filed 2026-09-07, previously mis-cited as BIAS-4)* Sales tax is
+  absent from `feeEbay`'s fee base. `feeEbay(price, shipCharge, ebayStore,
+  ebayPromo, trsEligible)` computes `total = price + shipCharge` and takes **no
+  tax parameter**. eBay's published fee base does include buyer-paid tax subject
+  to its exceptions. Any earlier statement in this document that the canonical
+  function includes tax is **wrong** — it does not, and packets saying buyer tax
+  was not modeled were correct. Demonstrate the actual tax input and the
+  resulting fee before claiming otherwise.
 - **BIAS-5** `GRADING_FEE = 25` contradicts the server's own `getGradingCost`
   tier table (`api/grade-opportunity.js:44-52`). The fix is the tier table, and
   it needs a stated grader default — an owner call. **This is the one BIAS item
