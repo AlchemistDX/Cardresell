@@ -109,8 +109,52 @@ rather than observed sales**.
 methodology page does not record. This is a genuine parity gap, not a wording
 difference.
 
-**Proposed remedy — copy NOT yet written, wants your call, because this is
-`accuracy.html`.** Two parts:
+### The T2.5 collision, resolved: two mechanisms, not one
+
+**They are separate.** T2.5 does not touch the band this paragraph would
+describe.
+
+| | Mechanism 1 — synthesized `low`/`high` | Mechanism 2 — the strategy band |
+|---|---|---|
+| Lives | server, `api/tcg-price.js:241,243` (TCGplayer rung) and `:293,295` (fallback rung) | client, `core:3859` → `:3884` |
+| Operates on | `displayMarket` / `fb.market`, filling absent upstream fields | `comp` |
+| Renders as | `· range $low–$high` next to the source row (`core:1911-1912`, `:1990-1991`) | Sell Now / Comp / Patient tiers |
+| Coefficient | `0.85` / `1.15`, hardcoded 4× | `_QP_DERIVED_SPREAD = 0.15`, hardcoded 1× |
+| T2.5 | drops it **on the fallback rung only** | untouched |
+
+So T2.5 removes one instance of mechanism 1 and leaves mechanism 1 alive on the
+TCGplayer rung and mechanism 2 entirely alive. Copy about the strategy band
+survives T2.5 intact.
+
+Mechanism 2 is also the better-documented of the two: `core:3875-3883` records
+why a symmetric band beat the measured alternative — `basis.low/mid` are active
+listing asks across *all* conditions, so "Sell Now" undercut the cheapest ask,
+which on a Base Set Charizard was a $125 heavily-played copy. A band around the
+comp is an estimate and says so; it never quotes a different card's condition
+back at the seller. That reasoning is worth preserving in whatever copy lands.
+
+**But the collision resolves the guard question against naming the number.**
+One magnitude — 15% — is hardcoded **five times across two unrelated
+mechanisms**. A paragraph on `accuracy.html` saying "15%" would read as covering
+both, which is precisely the failure mode flagged: it would describe one
+derivation in words that appear to cover another, and after T2.5 it would appear
+to cover a rung that no longer has a range. Naming the *mechanism* — arithmetic
+on the comp, not observed sales — is both more accurate and invariant to the
+number changing.
+
+**Decision: the fact is what is missing, not the number.** Copy states the
+derivation and omits the magnitude; the figure stays in-app where it is
+interpolated from the constant and cannot go stale. No literal, no stamp, no
+guard to maintain. The copy-plus-guard option remains available if the figure is
+ever wanted on the page, scoped exactly as below — but it is not the cheaper
+path and it is not the one the gap calls for.
+
+**Copy still NOT written**, for a new reason: Q3-C below means the paragraph
+should cover *both* derivations, which changes its shape. One coherent proposal
+after Q3-C is triaged, rather than a paragraph about the strategy band that
+would need rewriting a day later.
+
+For the record, had the figure been wanted on the page, the guard was:
 
 1. A short paragraph under **Live pricing** stating that when no listing spread
    is available, Sell Now and Patient are computed as a fixed percentage either
@@ -147,8 +191,64 @@ count is not venue count.
 - Aggregator service-fee rows.
 - Whether the "estimate, not a guarantee" language on `pricing.html` and
   `about.html` is equivalent to the in-app disclosures or weaker.
-- `_renderGradeOpportunity` (`:11400`-ish, separate from `renderGradingUpside`)
-  uses estimate language but also never calls `feeEbay` — flagged, not analysed.
+(`_renderGradeOpportunity` resolved — see Q3-D.)
+
+---
+
+## Finding Q3-C — a displayed "range" can be arithmetic, with a Market price pill on it
+
+Same defect family as Q3-A, different surface, and arguably worse.
+
+`core:1911-1912` renders `· range $<low>–$<high>` next to the TCGplayer source
+row, immediately after a green **"Market price"** trust pill. Those values come
+straight from the price payload — where `api/tcg-price.js:241,243` fills them in
+as `displayMarket * 0.85` / `* 1.15` whenever upstream omits `low`/`high`:
+
+```js
+low:  r.low  ?? (displayMarket * 0.85),
+high: r.high ?? (displayMarket * 1.15),
+```
+
+**Nothing on the surface distinguishes an observed range from a synthesized
+one.** A range is inherently a claim about observed dispersion, and this one is
+presented under a pill that asserts market data. When the fallback fires, the
+number is arithmetic wearing the costume of a measurement — the Q3-A pattern
+exactly: a stated basis that survives a reader checking it, and hands them a
+wrong answer with no signal.
+
+Note the synthesized case is **mechanically detectable**: a fabricated range is
+exactly symmetric, `high / low === 1.15 / 0.85 ≈ 1.3529`, so a tripwire is
+possible. Not asserted here — a genuine range could coincidentally hit that
+ratio, so it is a tripwire and not a proof, the same standing as the drift guard.
+
+The honest fix is upstream: the payload should mark a synthesized range so the
+caption can withhold it or label it, rather than the client inferring from a
+ratio. **Not scoped here.** Filed.
+
+---
+
+## Finding Q3-D — BIAS-1 stays one function
+
+`_renderGradeOpportunity` is **not** a third fee model. Resolved:
+
+- Its real name is `_renderGradeOpportunity_withdrawn` (`core:2178`), and it has
+  **no callers** — the only other reference in the repo is the assertion that
+  keeps it that way.
+- That assertion is `tests/launch-audit-regressions.mjs:833`:
+  `(code.match(/_renderGradeOpportunity_withdrawn/g) || []).length === 1`. **This
+  is one of the six rule-1 exact counts the widened sweep classified as
+  must-stay-exact, and it is the clearest possible vindication of that call.**
+  The `1` is the definition and nothing else; a floor would pass a re-added call
+  site, which is the precise defect the guard exists to catch. A signature-driven
+  conversion would have broken it.
+- Worth recording the irony: the withdrawn surface had the **correct** basis. Its
+  caption reads `est. profit after $${gradingCost} grading + eBay fees
+  (${g.edgePct}% edge)`, and both values are server-supplied from
+  `api/grade-opportunity.js:128-131`, which tiers grading cost via
+  `getGradingCost(rawPrice, grader)` and subtracts a computed `platformFees`.
+  The surface that survived is the one that hardcodes `25` and `13`.
+
+**BIAS-1's scope is unchanged: one function, `renderGradingUpside`.**
 
 ## Sources
 
