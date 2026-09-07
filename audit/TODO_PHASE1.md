@@ -117,14 +117,35 @@ Ordered by cost of leaving them broken, not by ease.
 
 - **Where:** `js/core.d9e1b484.js:10926` (`GRADING_FEE = 25`), applied `:10975`,
   printed to the seller `:11043`. Tier table: `api/grade-opportunity.js:44-52`.
-- **Why:** our own numbers say PSA is $50 over $200 raw and $100 over $500.
-  The panel overstates upside by $25–75 on expensive cards, always toward
-  "grade it." One-directional bias, not just an inconsistency. Rule 2.
-- **Fix:** extract the tier table to one shared place; point the live panel
-  at it. Collapses the dormant duplication as a side effect.
-- **Watch:** the panel's flat 13% fee assumption doesn't come from the real
-  fee calculator either. Same fix, ride it along. Needs a grader default —
-  PSA, stated in the caption — which is an owner call.
+- **Why:** our own server model says PSA is $50 over $200 raw and $100 over
+  $500. **"Always toward grade it" is withdrawn — corrected 2026-09-07.** The
+  flat $25 *overstates* CGC and SGC cost by $7 at every price, and on the
+  panel's own incremental metric that is enough to flip the displayed upside
+  pessimistic. Direction varies by grader; see the 2026-09-07 section of
+  `audit/DIRECTIONAL_BIAS_AUDIT.md`. It is still a rule-2 inconsistency and
+  still the **dominant** error term, an order of magnitude larger than the fee
+  simplification.
+- **Fix — this item now names all four things, not just the tier table:**
+  1. **One fee implementation.** Route the panel through `feeEbay`; delete the
+     second model. Rule 1.
+  2. **One grader-cost policy owner.** Reuse `getGradingCost` rather than a
+     local constant. Note what this does *not* buy: reuse removes duplication,
+     it does **not** establish that the reused charges or thresholds match any
+     grading service's published prices.
+  3. **The comparison baseline.** The metric is graded **net** versus raw
+     **net** under one consistent set of seller assumptions. Not graded net vs
+     raw gross.
+  4. **The cost inputs.** Shipping charged, seller postage, tax treatment and
+     grader must be stated inputs. Shared fee arithmetic cannot supply a
+     missing input, and reusing a function does not validate its data.
+- **Watch:** `getGradingCost` thresholds are keyed on **raw price**. PSA's own
+  service ladder is keyed on **maximum insured value** — a different rule with
+  a different base. Verified structurally 2026-09-07: the PSA service page does
+  publish a max-insured-value ladder ($500/$500/$500/$1,000/$1,500/$2,500/
+  $5,000/$10,000). Do not treat a raw-price threshold as a declared-value cap.
+- **Watch:** a grader default is an owner call, and per BIAS-7/8 the columns
+  subtitled "Any grader" cannot carry a grader-specific cost at all — withhold
+  the number there rather than pick a default for it.
 
 **Citations verified 2026-09-06 at tip `95435b4`:**  `:10926` is `const GRADING_FEE = 25;   // PSA value tier ~$25 all-in`; `:10927` is `const FEES_PCT    = 13;   // eBay + shipping typical`; `:10975` is `g.upsideNet = gradedNet - rawNet - GRADING_FEE;`; `:11043` prints `net after $${GRADING_FEE} fee + ${FEES_PCT}% sale fees` to the seller. Server tiers at `api/grade-opportunity.js:48-51` are PSA `<200 → 25`, `<500 → 50`, else `100`, with `BGS 50`, `CGC 18`, `SGC 18`. The $25–75 overstatement and the one-directional bias are both confirmed.
 
