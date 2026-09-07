@@ -537,25 +537,74 @@ try {
     await openReview(page, F.ids.publishable);
     const before = await feesOf(page);
 
-    // Move the profile the way a seller would, then re-render. If the screen
-    // had hardcoded the documented defaults instead of reading the profile,
-    // this number would not move.
+    // CHANGED 2026-09-07. This case used to move `ebayTopRated` to 'yes' and
+    // assert the net went UP, i.e. that the review screen inherited a global
+    // seller status into a per-listing fee discount. That inheritance is the
+    // bug -- Top Rated is a seller status, the 10% discount is a Top Rated
+    // Plus LISTING benefit -- so the assertion was pinning it in place. The
+    // case's real claim, that the screen reads the profile rather than
+    // hardcoding the documented defaults, is now proved with the store tier,
+    // which genuinely is a property of the seller: no store pays 13.25%, a
+    // Basic store pays 12.35%. Old assertion text: 'a Top Rated seller keeps
+    // strictly more of the same price'.
     const moved = await page.evaluate(() => {
-      const el = document.getElementById('ebayTopRated');
+      const el = document.getElementById('ebayStore');
       if (!el) return false;
-      el.value = 'yes';
+      el.value = 'basic';
       window._reviewPaint();
-      return window._crSellerProfile().ebayTopRated === 'yes';
+      return window._crSellerProfile().ebayStore === 'basic';
     });
     const after = await feesOf(page);
 
     T.check('the profile select moved', moved === true);
-    T.check('a Top Rated seller keeps strictly more of the same price',
+    T.check('a Basic Store seller keeps strictly more of the same price',
       amt(after.headline) > amt(before.headline),
       `${before.headline} -> ${after.headline}`);
     T.check('the gross did not move, only the fees did',
       amt(after.rows.find((r) => r.kind === 'gross').amount)
         === amt(before.rows.find((r) => r.kind === 'gross').amount));
+    await ctx.close();
+  });
+
+  // 2026-09-07. The other half of the same fix, and the more important half:
+  // the profile is global, the Top Rated Plus discount is per-listing, so a
+  // confirmation the seller made while pricing some unrelated scan must not
+  // follow them into this draft. Until a draft records its own confirmation
+  // the screen shows the undiscounted fee and says so -- a fee estimated too
+  // high is a disappointment, a payout estimated too high is a promise made
+  // on eBay's behalf that we cannot keep.
+  await T.section('a global Top Rated answer never discounts a draft', async () => {
+    const { ctx, page } = await boot(serveRead(F.publishable));
+    await openReview(page, F.ids.publishable);
+    const before = await feesOf(page);
+
+    const flipped = await page.evaluate(() => {
+      const st = document.getElementById('ebayTopRated');
+      const lg = document.getElementById('ebayTrsListing');
+      if (!st || !lg) return null;
+      st.value = 'yes'; lg.value = 'yes';
+      window._reviewPaint();
+      const p = window._crSellerProfile();
+      return { status: p.ebayTopRated, listing: p.ebayTrsListing };
+    });
+    const after = await feesOf(page);
+
+    T.check('the confirmation control exists and both answers took',
+      flipped && flipped.status === 'yes' && flipped.listing === 'yes',
+      JSON.stringify(flipped));
+    T.check('🔴 the draft net did not move',
+      amt(after.headline) === amt(before.headline),
+      `${before.headline} -> ${after.headline} — a global answer leaked into a per-listing benefit`);
+    T.check('🔴 no fee row claims the discount',
+      !after.rows.some((r) => /Top Rated/.test(r.label || '')),
+      after.rows.map((r) => r.label).join(' | '));
+    T.check('the screen says the discount is withheld, and which way that errs',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-fee-trs="withheld"]');
+        return el ? el.textContent.trim() : '';
+      }).then((t) => /Top Rated Plus/.test(t) && /same- or 1-business-day handling/.test(t)
+                     && /may be lower/.test(t)),
+      'silence about a withheld discount reads as a fee that is simply high');
     await ctx.close();
   });
 

@@ -5526,7 +5526,7 @@ function toggleAdv() {
    so they should outlive a single scan. Persisted to localStorage and
    restored on load. Wrapped in try/catch because the /computer/a preview
    iframe runs on an opaque origin where localStorage access throws. */
-const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo'];
+const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo', 'ebayTrsListing'];
 const SELLER_PROFILE_LS   = 'cr_seller_profile_v1';
 
 /* The profile as the fee engine wants it, read in exactly ONE place.
@@ -5554,6 +5554,10 @@ function _crSellerProfile() {
   return {
     ebayStore:    val('ebayStore',    'none'),
     ebayTopRated: val('ebayTopRated', 'no'),
+    // Deliberately its OWN key, defaulting to 'no'. See trsDiscountApplies.
+    // A profile saved before this key existed yields 'no' here, so an old
+    // saved "I am Top Rated" can never be read as a listing confirmation.
+    ebayTrsListing: val('ebayTrsListing', 'no'),
     ebayPromo:    parseInt(val('ebayPromo', '0'), 10) || 0,
     tcgLevel:     val('tcgLevel',     'l14'),
   };
@@ -6457,7 +6461,46 @@ document.addEventListener('keydown', e => {
 //
 // Per-order fee: $0.30 for orders ≤ $10 total, $0.40 above.
 // Top Rated Seller (TRS) discount: 10% off the FVF only (not per-order).
-function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
+/* Does the Top Rated Plus 10% FVF discount apply to THIS listing?
+ *
+ * 2026-09-07. Top Rated is a SELLER status. The 10% discount is a LISTING
+ * benefit -- eBay's own wording is "Once you've reached Top Rated status, you
+ * CAN QUALIFY YOUR LISTINGS for these exclusive Top Rated Plus benefits IF you
+ * offer same- or 1-business-day handling time and 30-day or longer free
+ * returns". Status is necessary and not sufficient, so a seller-status
+ * dropdown alone was never the right input, and treating it as one discounted
+ * every estimate by 10% for a Top Rated seller whose listings do not qualify.
+ * (https://www.ebay.com/help/policies/selling-policies/seller-standards-policy?id=4347)
+ *
+ * What actually binds FOR US is narrower than the general rule, and worth
+ * getting right rather than copying. That same page lists the categories where
+ * "You don't have to accept returns" for the discount benefit to still apply,
+ * and the list includes verbatim:
+ *
+ *   Trading Cards (Sports Trading Cards, Non-Sports Trading Cards, and
+ *   Collectible Card Games)
+ *
+ * Every item this app prices is in that set. So the 30-day-free-returns
+ * condition is waived for our category -- the seal is not extended, but the
+ * fee discount is -- and the only per-listing condition left to satisfy is
+ * SAME- OR 1-BUSINESS-DAY HANDLING. Asking a card seller to confirm free
+ * returns would be asking them to confirm something eBay does not require of
+ * them here, and would suppress a discount they are owed.
+ *
+ * Standing conditions we do NOT ask about and therefore disclose as
+ * assumptions: US residency (the documented seller default), the listing not
+ * being local-pickup-only, and the seller not being rated Very High for
+ * "item not as described" in the category.
+ *
+ * Both inputs are required, and the confirmation is never inferred from the
+ * status. It is a seller-confirmed assumption about a listing, so it defaults
+ * to off and has to be actively stated. */
+function trsDiscountApplies(prof) {
+  if (!prof) return false;
+  return prof.ebayTopRated === 'yes' && prof.ebayTrsListing === 'yes';
+}
+
+function feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible) {
   const total = price + shipCharge;
   const items = [];
   // Basic Store and above uses 12.35% with $2,500 tier boundary.
@@ -6468,7 +6511,9 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   let fvf = 0;
   if (total <= tierBoundary) fvf = total * baseRate;
   else                       fvf = tierBoundary * baseRate + (total - tierBoundary) * 0.0235;
-  const trs = ebayTopRated === 'yes';
+  // Already resolved by trsDiscountApplies -- this function does not re-derive
+  // eligibility, so there is exactly one place that decides it.
+  const trs = trsEligible === true;
   if (trs) fvf *= 0.9;
   const rateLabel = (baseRate * 100).toFixed(2).replace(/\.?0+$/,'');
   // 2026-09-02: the rate signature must describe the rate ACTUALLY charged.
@@ -6492,11 +6537,11 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   // one-liner is assembled from these strings rather than hand-written copy.
   items.push({
     l: `Final Value Fee (${rateLabel}% trading cards`
-       + (trs ? ', \u221210% Top Rated' : '')
+       + (trs ? ', \u221210% Top Rated Plus' : '')
        + (tiered ? `, 2.35% above $${tierBoundary.toLocaleString()}` : '') + ')',
     a: fvf,
     f: tiered ? `${effLabel}% effective`
-              : (trs ? `${rateLabel}% \u221210% Top Rated` : `${rateLabel}%`) });
+              : (trs ? `${rateLabel}% \u221210% Top Rated Plus` : `${rateLabel}%`) });
   const perOrder = total <= 10 ? 0.30 : 0.40;
   items.push({ l: 'Per-order fee', a: perOrder, f: `$${perOrder.toFixed(2)}` });
   if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100, f: `${ebayPromo}%` });
@@ -6545,6 +6590,14 @@ const FEE_DISCLOSURE = {
   estimateNote: 'An estimate, not a payout. This estimate calculates fees on the item price only. '
               + 'eBay charges its fee on the total sale, which includes buyer-paid shipping and buyer '
               + 'sales tax, so your actual proceeds may be lower.',
+  // 2026-09-07. Said on the review screen, where the Top Rated Plus discount is
+  // deliberately NOT applied because the confirmation belongs to a listing and
+  // no draft carries one yet. Errs toward a fee that is too high rather than a
+  // payout that is too high, and says which way it errs so the number is not
+  // silently pessimistic.
+  trsWithheldNote: 'No Top Rated Plus discount is applied here. That 10% off the percentage fee '
+              + 'depends on the listing offering same- or 1-business-day handling, which this draft '
+              + 'does not record yet, so your fee may be lower than shown.',
 };
 
 const FEE_MODEL_REVISION = 1;
@@ -6562,7 +6615,13 @@ function netEbayForPrice(price, ctx) {
   const c          = ctx || {};
   const shipCharge = Number(c.shipCharge) || 0;
   const shipCost   = Number(c.shipCost)   || 0;
-  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, c.ebayTopRated);
+  // Resolved through the same rule the ranking surface uses, not by reading
+  // the status field directly. feeEbay's last argument became a resolved
+  // boolean on 2026-09-07; passing the raw 'yes'/'no' status here would have
+  // silently dropped the discount from the payout row and the target-net
+  // bisection while the fee rows above still showed it -- the two would have
+  // disagreed about the same listing.
+  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, trsDiscountApplies(c));
   const totalFees  = items.reduce(function (s, f) { return s + f.a; }, 0);
   return price + shipCharge - totalFees - shipCost;
 }
@@ -7119,7 +7178,7 @@ function calc() {
   const _prof = _crSellerProfile();
   const ebayStore     = _prof.ebayStore;
   const ebayPromo     = _prof.ebayPromo;
-  const ebayTopRated  = _prof.ebayTopRated;
+  const ebayTrsElig   = trsDiscountApplies(_prof);
   const tcgLevel      = _prof.tcgLevel;
   const tcgIsDirect   = !!(TCG_LEVELS[tcgLevel] && TCG_LEVELS[tcgLevel].direct);
   const comcService   = document.getElementById('comcService').value;
@@ -7134,7 +7193,7 @@ function calc() {
     {
       pid: 'ebay',
       eligible: true,
-      feeItems: feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated),
+      feeItems: feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTrsElig),
       sellerShip: shipCost,
       note: ''
     },
@@ -19501,8 +19560,16 @@ function _reviewFeeCalc() {
   const price = Number(d.price);
   if (!Number.isFinite(price)) return null;
   const prof = _crSellerProfile();
-  const ctx  = { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, ebayTopRated: prof.ebayTopRated };
-  const items = feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, prof.ebayTopRated);
+  // 2026-09-07. The Top Rated Plus discount is NOT applied here, and that is
+  // deliberate. It is a per-listing benefit, so the confirmation belongs to
+  // THIS draft; the seller profile is global and would carry a confirmation
+  // made while pricing some unrelated scan into every draft afterwards. Draft
+  // -bound confirmation is not built yet, so the honest reading is the
+  // undiscounted one: an estimate that is too LOW is a disappointment, an
+  // estimate that is too HIGH is a promise we made for eBay and cannot keep.
+  // The breakdown says so rather than leaving the seller to wonder.
+  const ctx  = { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, ebayTopRated: 'no', ebayTrsListing: 'no' };
+  const items = feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, false);
   return {
     price,
     items,
@@ -19626,6 +19693,7 @@ ${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKN
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </div>
         <div class="review-fees-note">${_reviewEsc(FEE_DISCLOSURE.estimateNote)}</div>
+        <div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>
         ${pill}
       </div>`;
 }

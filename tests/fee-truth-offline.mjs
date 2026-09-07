@@ -361,19 +361,30 @@ assert('Direct nets more than Level 1-4 on the same card',
 // eBay Top Rated: the rate signature must state the EFFECTIVE rate, not the
 // headline rate. Before this fix a Top Rated seller saw "13.25%" while paying
 // 11.93%, i.e. the recipe line claimed a rate the math did not apply.
-const trsItems  = _feeEbayB(P, 0, 'none', 0, 'yes');
-const baseItems = _feeEbayB(P, 0, 'none', 0, 'no');
-eq('eBay Top Rated pays 13.25% less 10%', sum(trsItems), 13.25 * 0.9 + 0.40);
-assert('Top Rated formula states the discount, not a bare 13.25%',
-  trsItems.some(f => f.f === '13.25% \u221210% Top Rated') &&
+// CHANGED 2026-09-07. These three passed 'yes'/'no' -- the raw seller-status
+// string -- as feeEbay's fifth argument. That argument is now a RESOLVED
+// boolean, because Top Rated is a seller status while the 10% discount is a
+// per-LISTING benefit that also needs same- or 1-business-day handling, and
+// reading the status as though it were the listing's eligibility discounted
+// every estimate a Top Rated seller ever saw. The old assertion text was
+// 'eBay Top Rated pays 13.25% less 10%'; it is now named for the listing,
+// and the label it looks for moved from 'Top Rated' to 'Top Rated Plus',
+// which is what eBay calls the listing-level programme.
+const trsItems  = _feeEbayB(P, 0, 'none', 0, true);
+const baseItems = _feeEbayB(P, 0, 'none', 0, false);
+eq('a qualifying eBay listing pays 13.25% less 10%', sum(trsItems), 13.25 * 0.9 + 0.40);
+eq('a Top Rated seller with a non-qualifying listing pays the full fee',
+  sum(_feeEbayB(P, 0, 'none', 0, false)), sum(baseItems));
+assert('Top Rated Plus formula states the discount, not a bare 13.25%',
+  trsItems.some(f => f.f === '13.25% \u221210% Top Rated Plus') &&
   !trsItems.some(f => f.f === '13.25%'));
 // Above the tier boundary the rate really is a blend, so the blend is shown.
 assert('above the $7,500 boundary the formula reports the blended rate',
   _feeEbayB(9000, 0, 'none', 0, 'no').some(f => /% effective$/.test(f.f || '')));
 assert('non-Top-Rated formula still states the plain headline rate',
   baseItems.some(f => f.f === '13.25%'));
-assert('Top Rated fee line discloses the discount',
-  trsItems.some(f => /Top Rated/.test(f.l)));
+assert('the fee line names Top Rated Plus, the listing benefit that grants it',
+  trsItems.some(f => /Top Rated Plus/.test(f.l)));
 
 
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);

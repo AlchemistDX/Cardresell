@@ -539,6 +539,12 @@ img{display:block;max-width:100%;height:auto}
 .card-body{padding:1.1rem 1.25rem}
 .field-label{font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.4rem;margin-top:.875rem}
 .field-label:first-child{margin-top:0}
+/* 2026-09-07. A sentence-case explanation under a select, for inputs where the
+   honest answer needs a caveat the label cannot carry. Deliberately NOT
+   .field-label (uppercase micro-caps at --text-faint, which is 1.90:1 and
+   already logged as contrast debt); this is reading copy, so it is sentence
+   case at --text-muted and a readable size. */
+.field-hint{margin-top:.4rem;font-size:.72rem;line-height:1.4;color:var(--text-muted)}
 
 /* price display */
 .price-display{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);padding:.875rem 1rem;margin-bottom:.25rem}
@@ -2436,8 +2442,27 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
               <div class="field-label" style="margin-top:0">eBay Top Rated Seller</div>
               <select id="ebayTopRated" onchange="calc()">
                 <option value="no">No</option>
-                <option value="yes">Yes (−10% FVF)</option>
+                <option value="yes">Yes</option>
               </select>
+            </div>
+            <!-- 2026-09-07. Top Rated is a seller status; the 10% fee discount
+                 is a per-LISTING benefit that also needs same- or 1-business-day
+                 handling. eBay waives the free-returns condition for Trading
+                 Cards, so handling is the only listing condition left for us,
+                 and it is the only thing we ask. This is a seller-confirmed
+                 assumption, so it defaults to No and is never inferred from the
+                 status above. The "−10% FVF" note moved here from the status
+                 select, because this is the answer that actually earns it. -->
+            <div>
+              <div class="field-label" style="margin-top:0">This listing ships same or next business day</div>
+              <select id="ebayTrsListing" onchange="calc()">
+                <option value="no">No / not sure</option>
+                <option value="yes">Yes — confirmed (−10% FVF)</option>
+              </select>
+              <div class="field-hint">Your answer, not a checked fact. Top Rated Plus
+                needs same- or 1-business-day handling on the listing itself; eBay
+                waives the free-returns rule for trading cards. Assumes you are US
+                resident and not local-pickup only.</div>
             </div>
 
             <div>

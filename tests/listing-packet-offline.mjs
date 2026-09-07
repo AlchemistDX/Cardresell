@@ -86,16 +86,17 @@ function extractConstRaw(name) {
 }
 
 const {
-  feeEbay, netEbayForPrice, listPriceForTargetNet,
+  trsDiscountApplies, feeEbay, netEbayForPrice, listPriceForTargetNet,
   FEE_MODEL_REVISION, FEE_TOTAL_DISCONTINUITIES,
 } = new Function(`
   ${extractConstInt('FEE_MODEL_REVISION')}
   ${extractConstRaw('FEE_TOTAL_DISCONTINUITIES')}
+  ${extractFn('trsDiscountApplies')}
   ${extractFn('feeEbay')}
   ${extractFn('netEbayForPrice')}
   ${extractFn('listPriceForTargetNet')}
   return {
-    feeEbay, netEbayForPrice, listPriceForTargetNet,
+    trsDiscountApplies, feeEbay, netEbayForPrice, listPriceForTargetNet,
     FEE_MODEL_REVISION, FEE_TOTAL_DISCONTINUITIES,
   };
 `)();
@@ -318,13 +319,21 @@ console.log('\nB4 — target net inverted by bisection on the real feeEbay');
 check('FEE_MODEL_REVISION exists and is an integer',
       Number.isInteger(FEE_MODEL_REVISION) && FEE_MODEL_REVISION >= 1);
 
+// CHANGED 2026-09-07. These contexts used to set `ebayTopRated: 'yes'` alone
+// and expect the 10% discount. They no longer get it from status alone: the
+// discount is a per-LISTING benefit, so `ebayTrsListing: 'yes'` -- the seller's
+// confirmation that the listing offers qualifying handling -- is now required
+// too. The 'top rated status only' row below is new and pins the case the old
+// contexts silently mis-modelled: status without a qualifying listing pays the
+// FULL fee.
 const CTXS = [
   { name: 'default no-store',      shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'no' },
-  { name: 'top rated',             shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes' },
+  { name: 'top rated + listing ok', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', ebayTrsListing: 'yes' },
   { name: 'basic store',           shipCharge: 0, shipCost: 0, ebayStore: 'basic', ebayPromo: 0, ebayTopRated: 'no' },
   { name: 'buyer-paid shipping',   shipCharge: 5, shipCost: 4.50, ebayStore: 'none', ebayPromo: 0, ebayTopRated: 'no' },
   { name: 'promoted 3%',           shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 3, ebayTopRated: 'no' },
-  { name: 'everything at once',    shipCharge: 5.95, shipCost: 5.10, ebayStore: 'basic', ebayPromo: 4, ebayTopRated: 'yes' },
+  { name: 'everything at once',    shipCharge: 5.95, shipCost: 5.10, ebayStore: 'basic', ebayPromo: 4, ebayTopRated: 'yes', ebayTrsListing: 'yes' },
+  { name: 'top rated status only', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', ebayTrsListing: 'no' },
 ];
 const TARGETS = [1, 4.99, 8, 9.5, 10, 10.5, 12, 25, 60, 99.99, 250, 900, 2499, 2501, 5000, 7499, 7501, 12000];
 
@@ -683,7 +692,15 @@ function feeOutputHash() {
         for (const price of [0.01, 4.99, 9.99, 10.00, 10.01, 25, 99.99, 2499, 2500,
                              2501, 7499, 7500, 7501, 12000]) {
           for (const shipCharge of [0, 4.99]) {
-            const fees = feeEbay(price, shipCharge, store, promo, topRated);
+            // CHANGED 2026-09-07. This used to pass `topRated` -- the string
+            // 'no'/'yes' -- straight into feeEbay's last argument. That
+            // argument is now a RESOLVED boolean, so the string would have
+            // silently landed as not-eligible and quietly re-frozen this hash
+            // over undiscounted output. The row label stays 'no'/'yes' so the
+            // frozen hash is comparable across the change: if it still
+            // matches, the fee ARITHMETIC is byte-identical and only the
+            // eligibility plumbing moved, which is exactly the claim.
+            const fees = feeEbay(price, shipCharge, store, promo, topRated === 'yes');
             const total = fees.reduce((s, f) => s + Number(f.a || 0), 0);
             rows.push([store, topRated, promo, price, shipCharge,
                        total.toFixed(6), fees.feeBase, fees.length].join('|'));
@@ -936,6 +953,84 @@ console.log('\nB7 — unverified aspect values');
   check('an absent required aspect is provenance-tracked too',
         missing.aspects.provenance?.Sport?.source === 'missing'
         && missing.aspects.provenance?.Sport?.value === null);
+}
+
+// ── Top Rated Plus: a listing benefit, not a seller status ───────────────
+// 2026-09-07. feeEbay's last argument used to be the raw seller-status string,
+// so every estimate for a Top Rated seller was discounted 10% regardless of
+// whether the listing qualified. eBay's own wording is that a Top Rated seller
+// CAN QUALIFY THEIR LISTINGS if the listing offers same- or 1-business-day
+// handling (free returns being waived for Trading Cards). Status is necessary,
+// not sufficient. These cases pin all three states and the boundary the
+// discount must NOT cross.
+{
+  console.log('\nB8 — Top Rated Plus is a listing benefit, not a seller status');
+  const base = { shipCharge: 0, shipCost: 0, ebayStore: 'none', ebayPromo: 0 };
+  const statusOnly = { ...base, ebayTopRated: 'yes', ebayTrsListing: 'no'  };
+  const confirmed  = { ...base, ebayTopRated: 'yes', ebayTrsListing: 'yes' };
+  const withdrawn  = { ...confirmed, ebayTrsListing: 'no' };
+  const neither    = { ...base, ebayTopRated: 'no',  ebayTrsListing: 'no'  };
+  const listingOnly= { ...base, ebayTopRated: 'no',  ebayTrsListing: 'yes' };
+
+  check('🔴 Top Rated status alone does not earn the discount',
+        trsDiscountApplies(statusOnly) === false,
+        'the discount is a per-listing benefit; status is necessary, not sufficient');
+  check('a confirmed qualifying listing does earn it',
+        trsDiscountApplies(confirmed) === true);
+  check('🔴 withdrawing the confirmation withdraws the discount',
+        trsDiscountApplies(withdrawn) === false,
+        'a stale yes must not outlive the answer that produced it');
+  check('a qualifying listing from a non-Top-Rated seller earns nothing',
+        trsDiscountApplies(listingOnly) === false,
+        'handling time alone is not Top Rated Plus');
+  check('an absent profile is not eligible',
+        trsDiscountApplies(undefined) === false && trsDiscountApplies({}) === false);
+  check('🔴 a profile saved before the listing key existed is not eligible',
+        trsDiscountApplies({ ebayTopRated: 'yes' }) === false,
+        'an old saved "I am Top Rated" must never be read as a listing confirmation');
+
+  // The discount is 10% of the PERCENTAGE fee only. eBay: "The discount does
+  // not apply to the per order portion of the final value fee."
+  const P = 184.99;
+  const fFull = feeEbay(P, 0, 'none', 0, trsDiscountApplies(statusOnly));
+  const fDisc = feeEbay(P, 0, 'none', 0, trsDiscountApplies(confirmed));
+  const fvfOf = (rows) => rows.find((r) => /Final Value Fee/.test(r.l));
+  const perOrderOf = (rows) => rows.find((r) => !/Final Value Fee/.test(r.l) && r.a > 0 && r.a < 1);
+
+  check('status-only pays the full percentage fee',
+        Math.abs(fvfOf(fFull).a - P * 0.1325) < 0.005,
+        `fvf=${fvfOf(fFull).a.toFixed(4)} expected=${(P * 0.1325).toFixed(4)}`);
+  check('confirmed pays exactly 90% of it',
+        Math.abs(fvfOf(fDisc).a - P * 0.1325 * 0.9) < 0.005,
+        `fvf=${fvfOf(fDisc).a.toFixed(4)} expected=${(P * 0.1325 * 0.9).toFixed(4)}`);
+  check('🔴 the per-order fee is identical either way',
+        perOrderOf(fFull).a === perOrderOf(fDisc).a,
+        `full=${perOrderOf(fFull).a} disc=${perOrderOf(fDisc).a} — eBay excludes the per-order portion`);
+  check('the discounted row names the programme that grants it',
+        /Top Rated Plus/.test(fvfOf(fDisc).l) && !/Top Rated Plus/.test(fvfOf(fFull).l),
+        `CHANGED 2026-09-07: was 'Top Rated'. The seal and the discount are `
+        + `LISTING-level and eBay calls that Top Rated Plus; "Top Rated" alone `
+        + `named the seller status, which is not what earns the row.`);
+  check('the rate signature states the two exact operations, not a rounded blend',
+        fvfOf(fDisc).f === '13.25% \u221210% Top Rated Plus',
+        `13.25% less 10% is exactly 11.925%, which does not survive 2dp rounding; got ${JSON.stringify(fvfOf(fDisc).f)}`);
+
+  // A string where a boolean is expected is the exact bug that would silently
+  // drop the discount from the payout row while the fee rows still showed it.
+  check('🔴 feeEbay refuses a raw status string as eligibility',
+        fvfOf(feeEbay(P, 0, 'none', 0, 'yes')).a === fvfOf(fFull).a,
+        'the argument is a resolved boolean; a truthy string must not discount');
+
+  // And the inversion has to agree with the forward function, or the payout row
+  // and the suggested list price would disagree about the same listing.
+  const netFull = netEbayForPrice(P, statusOnly);
+  const netDisc = netEbayForPrice(P, confirmed);
+  check('the payout row sees the discount too',
+        netDisc > netFull && Math.abs((netDisc - netFull) - P * 0.1325 * 0.1) < 0.01,
+        `full=${netFull.toFixed(4)} disc=${netDisc.toFixed(4)}`);
+  check('and the target-net inversion does as well',
+        listPriceForTargetNet(150, confirmed).listPrice < listPriceForTargetNet(150, statusOnly).listPrice,
+        'a cheaper fee must mean a cheaper list price for the same payout');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
