@@ -87,7 +87,28 @@
   --divider:       #e4e1da;
   --text:          #18160f;
   --text-muted:    #6b6960;
-  --text-faint:    #b3b1ab;
+  /* AA 2026-09-07. Was #b3b1ab = 1.90 on --bg, 2.00 on --surface, 2.14 on
+     --surface-2, 1.78 on --surface-off: failing AA-normal AND AA-large on every
+     surface it is used on, across 105 references.
+
+     THIS VALUE IS DELIBERATELY IDENTICAL TO --text-muted, and that is a finding
+     rather than a copy-paste error. Solving for the faintest colour on this
+     hue ramp that still clears 4.5:1 on the darkest surface it lands on
+     (#efe9dc, the strong stop of the #howItWorksBar gold gradient) returns
+     exactly #6b6960 -- --text-muted itself. #6c6a61, one step lighter, measures
+     4.48 there. So in the light palette there is no room for a third text tier
+     at AA: the ramp supports --text and one readable secondary, full stop.
+     What we had was not a hierarchy of three, it was two tiers and an
+     illegible one.
+
+     Two tokens resolving to one value is rule 1's duplicate-implementation
+     smell and should not survive as a permanent state. It is left standing
+     rather than collapsed across 105 references mid-D3, and is logged in
+     CSS_TOKEN_DEBT.md as a decision to take deliberately: collapse the tokens,
+     or re-cut the neutral ramp so a third tier can exist at AA. Hierarchy at
+     these sizes is carried by size, weight and letterspacing anyway -- the
+     micro-caps labels read as subordinate without needing to be faint. */
+  --text-faint:    #6b6960;
   --text-inv:      #f8f7f4;
 
   --gold:          #c47a00;
@@ -121,7 +142,22 @@
   --divider:       #272521;
   --text:          #d4d2cc;
   --text-muted:    #918f86;  /* AA: 5.88 on --bg, 5.43 on --surface, 5.04 on --surface-2. Was #78766f = 4.19/3.87/3.59, failing all three. */
-  --text-faint:    #4a4840;
+  /* AA 2026-09-07. Was #4a4840 = 2.08 on --bg, 1.92 on --surface, 1.78 on
+     --surface-2, 1.96 on --surface-off: failing every surface.
+
+     Solved against SIX surfaces, not four. The four flat ones admit #89877e,
+     but two tinted gradient panels sit under this token as well --
+     .plan-card.tier-max (rgba(102,187,255,.06) over --surface, effective
+     #1f2323) and .plan-card.tier-ultimate (rgba(196,122,0,.10), effective
+     #2b2313) -- and #89877e measures 4.41 and 4.31 on those. A tint lowers the
+     contrast a flat-surface measurement promised, so the flat surfaces are not
+     the worst case and solving on them alone ships a failure.
+
+     #8d8b82 is the faintest value clearing 4.5:1 on all six. That leaves four
+     steps between this and --text-muted (#918f86), so the dark ramp does admit
+     a third tier -- barely, and not perceptibly. The light ramp admits none at
+     all; see the light-mode note above. */
+  --text-faint:    #8d8b82;
   --text-inv:      #18160f;
 
   --gold:          #e8a020;
@@ -541,9 +577,13 @@ img{display:block;max-width:100%;height:auto}
 .field-label:first-child{margin-top:0}
 /* 2026-09-07. A sentence-case explanation under a select, for inputs where the
    honest answer needs a caveat the label cannot carry. Deliberately NOT
-   .field-label (uppercase micro-caps at --text-faint, which is 1.90:1 and
-   already logged as contrast debt); this is reading copy, so it is sentence
-   case at --text-muted and a readable size. */
+   .field-label: this is reading copy, so it is sentence case at --text-muted and
+   a readable size, rather than uppercase letterspaced micro-caps.
+   UPDATED later the same day: this comment used to justify the choice by noting
+   --text-faint was 1.90:1 and logged as contrast debt. That debt is now paid --
+   the token is AA on every surface -- so the reason is purely typographic and
+   the contrast argument has been removed rather than left to rot into a claim
+   that is no longer true. */
 .field-hint{margin-top:.4rem;font-size:.72rem;line-height:1.4;color:var(--text-muted)}
 
 /* price display */
@@ -3556,15 +3596,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <!-- Deal breakdown — the three numbers a flipper actually cares about. -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem;margin-bottom:.75rem">
       <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
-        <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Bought</div>
+        <div style="font-size:.6rem;color:#8d8b82;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Bought</div>
         <div id="fdmBought" style="font-size:.95rem;font-weight:800;color:#fff">$0.00</div>
       </div>
       <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
-        <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Sold</div>
+        <div style="font-size:.6rem;color:#8d8b82;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Sold</div>
         <div id="fdmSold" style="font-size:.95rem;font-weight:800;color:var(--gold-text)">$0.00</div>
       </div>
       <div style="background:#0a0a0a;border:1px solid #1f1f1f;border-radius:8px;padding:.5rem .4rem;text-align:center">
-        <div style="font-size:.6rem;color:var(--text-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Platform</div>
+        <div style="font-size:.6rem;color:#8d8b82;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem">Platform</div>
         <div id="fdmPlatform" style="font-size:.8rem;font-weight:700;color:#fff">—</div>
       </div>
     </div>
@@ -3671,7 +3711,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div style="font-size:.62rem;color:var(--text-faint);margin:-.3rem 0 .7rem;line-height:1.4">Platform fees, shipping you paid, and grading cost. Leave blank if none.</div>
 
-    <div id="msProfitPreview" style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;text-align:center;padding:.5rem;background:#0a0a0a;border-radius:8px;border:1px dashed #1f1f1f">Enter a sold price to see profit</div>
+    <div id="msProfitPreview" style="font-size:.75rem;color:#8d8b82;margin-bottom:.75rem;text-align:center;padding:.5rem;background:#0a0a0a;border-radius:8px;border:1px dashed #1f1f1f">Enter a sold price to see profit</div>
 
     <div style="display:flex;gap:.5rem">
       <button type="button" onclick="document.getElementById('markSoldModal').classList.remove('open')" style="flex:1;padding:.7rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.85rem;font-weight:700;cursor:pointer">Cancel</button>

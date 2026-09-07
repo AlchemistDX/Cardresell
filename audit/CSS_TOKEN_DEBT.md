@@ -241,3 +241,96 @@ unchanged in layout. No copy, no layout, no light-mode value moved.
 (`#4a4840` on `--surface`), confirmed again in the browser this round across
 ~61 usages. It is a much larger and more invasive change than one token
 substitution, it is not what this commit is about, and it stays logged here.
+
+---
+
+## 2026-09-07 — `--text-faint` paid, and what it cost to find out
+
+### Resolved
+
+`--text-faint` was the single token behind the `.field-label` release blocker.
+The reported 1.90:1 and 1.92:1 were never two problems: 1.90 is the light value
+on `--bg`, 1.92 is the dark value on `--surface`. One token, one fix, and the
+fix clears every use of it at once. Inventory at the time of the fix was **105
+references** (index.html 53, core bundle 13, remainder in CSS rules), grown from
+the ~61 recorded in the original audit.
+
+| theme | was | measured | now | measured |
+|---|---|---|---|---|
+| light | `#b3b1ab` | 1.90 / 2.00 / 2.14 / 1.78 | `#6b6960` | 4.87 / 5.14 / 5.51 / 4.58 |
+| dark  | `#4a4840` | 2.08 / 1.92 / 1.78 / 1.96 | `#8d8b82` | 5.58 / 5.12 / 4.75 / 5.20 |
+
+(surfaces: `--bg` / `--surface` / `--surface-2` / `--surface-off`)
+
+Verified live at 720px in both themes: **219 rendered nodes at the token, 0
+below AA, 0 skipped.** The instrument was proved falsifiable by reverting both
+values and confirming it reports 35/35 dark failures at exactly 1.92 on
+`--surface` — which independently corroborates the originally reported figure.
+
+### Finding 1 — the light ramp cannot support a third text tier
+
+Solving for the faintest value on this hue ramp that still clears 4.5:1 on the
+darkest surface the token lands on returns **`#6b6960`, which is `--text-muted`
+itself**. One step lighter (`#6c6a61`) measures 4.48 there. So light-mode
+`--text-faint` is now *deliberately identical* to `--text-muted`.
+
+What we believed was a three-tier hierarchy was two tiers and an illegible one.
+The token's entire distinguishing property was being less readable than muted,
+which is not a property worth having a name for.
+
+**Two token names resolving to one value is rule 1's duplicate-implementation
+smell** and should not be a permanent state. Left standing rather than collapsed
+across 105 references mid-D3. **Decision owed:** collapse the tokens, or re-cut
+the neutral ramp so a third tier can exist at AA. Note that hierarchy at these
+sizes is already carried by size, weight, letterspacing and casing — the
+micro-caps labels read as subordinate without being faint.
+
+Dark retains four steps between faint and muted, so a third tier is technically
+available there and imperceptible in practice.
+
+### Finding 2 — a flat-surface contrast measurement is not a worst case
+
+The dark value was first solved to `#89877e` against the four flat surfaces. It
+then measured **4.41 and 4.31** on two tinted gradient panels that also sit
+under this token — `.plan-card.tier-max` (`rgba(102,187,255,.06)` over
+`--surface`, effective `#1f2323`) and `.plan-card.tier-ultimate`
+(`rgba(196,122,0,.10)`, effective `#2b2313`). A tint lowers the contrast a
+flat-surface measurement promised, so solving on flat surfaces alone ships a
+failure. Re-solved against six surfaces.
+
+**This applies to `--text-muted` too.** That token was fixed earlier with
+flat-surface measurements only and its comment still records only those. It
+happens to pass the two gradients (4.90 / 4.79), so there is no live defect —
+but it passed by luck, not by having been checked. Contrast tooling that skips
+gradient backdrops is measuring the easy case.
+
+### Finding 3 — the always-dark surface bug
+
+Four nodes paired a *theme-aware* text token with a *theme-fixed* `#0a0a0a`
+background, so raising the light token turned a passing combination into a
+failing one (9.23 → 3.65). These were regressions **caused by** the fix, caught
+because the sweep reran, and pinned to `#8d8b82`:
+
+- `index.html` flip-detail panel ×3 — `Bought` / `Sold` / `Platform`
+- `#msProfitPreview` — `Enter a sold price to see profit` (was `--text-muted`, 3.60)
+
+Root cause is a hex-literal surface where a token belongs. `#0a0a0a` appears at
+many more sites in `index.html`; only those currently rendered were measurable,
+so **this class is not closed.** Modal-only surfaces were never in the sweep.
+
+### Coverage limits, stated plainly
+
+- Only the default rendered state was swept. Nodes inside closed modals, error
+  states, and empty states were never measured.
+- Once light `--text-faint` equalled `--text-muted`, an instrument that selects
+  by *computed colour* can no longer tell the two tokens apart in light mode.
+  The light figure of 179 nodes therefore covers both tokens, not just this one.
+  That is fine for an AA sweep and wrong for attribution.
+
+### Incidental, and the most alarming thing in this pass
+
+The affiliate disclosure — `⚠️ Some sell buttons are affiliate…` — measured
+**2.08:1** in dark mode. A disclosure that exists to be conspicuous was the
+least readable text on the page. Now 5.58. Nothing about the contrast debt
+flagged it as different from decorative micro-copy, because contrast tooling
+sorts by ratio and not by what the text is *for*.
