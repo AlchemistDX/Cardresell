@@ -18660,7 +18660,7 @@ function _draftSummaryRowHtml(row, isFocused) {
   )).join('');
 
   return `
-    <div class="draft-row${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" style="border-left-color:${marker}">
+    <div class="draft-row draft-row-open${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" data-draft-open="1" role="button" tabindex="0" aria-label="Review draft: ${_draftsEsc(s.title || '(untitled draft)')}" style="border-left-color:${marker}">
       <div class="draft-row-main">
         <div class="draft-row-title">${_draftsEsc(s.title || '(untitled draft)')}</div>
         <div class="draft-row-meta">${_draftsEsc(s.slot || '')} · qty ${_draftsEsc(s.quantity == null ? 1 : s.quantity)}</div>
@@ -18986,7 +18986,25 @@ function _draftsBindOnce() {
       const reason = act.getAttribute('data-draft-action');
       if (reason === 'DRAFT_SCHEMA_TOO_NEW') { try { location.reload(); } catch (_) {} return; }
       loadDraftsFirstPage(_draftsState.focusId);
+      return;
     }
+    // Row navigation (D3). Tested last, so a stub's own action button above
+    // wins the event before this line ever sees it -- the button sits INSIDE a
+    // row, and a stub row is not openable anyway.
+    const open = ev.target.closest && ev.target.closest('[data-draft-open]');
+    if (open) { openDraftReview(open.getAttribute('data-draft-id')); }
+  });
+
+  // A div with role="button" owes what a real <button> gives for free: Enter
+  // AND Space, and Space must not scroll the page. Binding click alone ships a
+  // control that a pointer can reach and a keyboard cannot -- which no visual
+  // check and no click-only test would ever show.
+  wrap.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    const open = ev.target.closest && ev.target.closest('[data-draft-open]');
+    if (!open) return;
+    ev.preventDefault();
+    openDraftReview(open.getAttribute('data-draft-id'));
   });
 }
 

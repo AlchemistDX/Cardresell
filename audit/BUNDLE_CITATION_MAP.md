@@ -32,17 +32,26 @@ byte-identical counterpart in the live bundle.
 Anything at or below 18,527 in the live bundle is new since `d9e1b484` — the D2.1 drafts screen
 and the D3 review screen — and has no `d9e1b484` address at all.
 
-## `core.8bd8277a.js` (19,001 lines) → `core.7f9c03ad.js`
+## `core.8bd8277a.js` (19,001 lines)
 
-| `8bd8277a` lines | Add |
-|---|---|
-| 1 – 8,117 | **+0** |
-| 8,118 – 8,123 | **+1** |
-| 8,124 – 8,146 | **+2** |
-| 8,147 – 18,854 | **+8** |
-| 18,855 – 19,001 | **+16** |
+**No longer tabulated — and the reason is worth more than the table was.**
 
-Live 19,017 – 19,329 is the review screen, new in `f443597`.
+This document originally carried a five-interval table for `8bd8277a`. **It went stale one
+commit later.** D3 step 3 inserted lines inside the region that table described, and the true
+alignment is now nine intervals. Nothing announced that; the table simply became wrong while
+continuing to look authoritative.
+
+`d9e1b484`'s table survived the same commit unchanged, because every D3 insertion lands below
+the last line `d9e1b484` has an address for. So one stamped table aged and one did not, in the
+same edit, for reasons no reader could infer from either.
+
+That is the whole argument for cache-versus-source-of-truth, demonstrated on this page rather
+than asserted. `8bd8277a` has **one** line-citation in the corpus, so the table was never
+earning its keep. Derive it:
+
+```
+node tools/bundle-citation-map.mjs 8bd8277a <line>
+```
 
 ## `core.569ff536.js` (17,723 lines)
 
@@ -71,7 +80,7 @@ The tool discovers the live bundle from the single `<script defer src>` in `inde
 than taking it as a constant, so the next rename needs **no edit here** — the tables go stale
 and the tool does not.
 
-## Verified 2026-09-06
+## Verified 2026-09-06 (re-verified after D3 step 3)
 
 `6,629 / 6,629` cited lines are byte-identical at their mapped position, across all
 `audit/**/*.md` and `tests/*.mjs`.
@@ -95,4 +104,10 @@ both tabulated generations.
   meaning moved because its callers changed.
 - **It is not a registered suite.** It is runnable and mutation-tested, but nothing runs it
   automatically, so a future edit can rot the corpus without going red. Registering it is a
-  decision, not an oversight — it belongs to whoever next opens `tests/run-all.sh`.
+  decision, not an oversight — it belongs to whoever next opens `tests/run-all.sh`. When that
+  happens the natural home is **alongside `tests/asset-fingerprints.mjs`, not as its own slot
+  on the suite ladder**: both answer "do the artifacts and their references still agree", both
+  fail for the same cause — bytes edited without following through — and the ladder is for
+  behaviour checks. Slot 1 already owns half the question.
+- **The tables on this page are a snapshot and can be wrong without warning.** One of them
+  already was, within a single commit. Run the tool.

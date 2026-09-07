@@ -423,6 +423,39 @@ display value, or keep `#draftsView` out of `.flips-view`.
 
 ### 3.1a Rows are not tappable in D2.1
 
+> **Amendment 5 (2026-09-06) — superseded by D3 step 3, as this clause predicted.**
+> **Summary rows are now tappable** and open the review screen (`openDraftReview`).
+> `tests/draft-list-screen.mjs` case 15, which pinned this clause, is inverted; the
+> inversion and its reasoning are recorded inside the test file itself.
+>
+> This clause is kept rather than rewritten because it is the record that row inertness was
+> a **deliberate, time-boxed state** and not an oversight — and because the paragraph below
+> is what makes the inversion legitimate instead of a silenced tripwire. Read the clause as
+> history and the amendment as current.
+>
+> **What did not change:**
+> - **Stub rows still open nothing.** New decision, see below.
+> - **No hash routing.** Navigation is in-app state; `location.href` does not change, so a
+>   reload does not land a seller on a review screen.
+> - **Principle 2's no-`rows[0]` rule.** The id that travels is the clicked row's own
+>   `data-draft-id`. Case 15 clicks row **1**, never row 0, so a first-row regression
+>   cannot hide behind a passing test.
+>
+> **Why stub rows are excluded.** A stub means the record could not be read, so the review
+> screen behind it can only restate the row's own sentence with fewer words around it. The
+> navigation costs a request to arrive at a worse version of what the seller is already
+> looking at. Where a remedy exists the stub's action button already owns it; where none
+> does, the row is the whole answer. Stub rows therefore carry no `data-draft-open`, no
+> `role="button"` and no `tabindex` — **a `role="button"` that does nothing is worse than a
+> plain `div`, because it promises activation.**
+>
+> **What a row owes as a control.** A summary row is a `div`, so it owes by hand what a real
+> `<button>` gives for free: `role="button"`, `tabindex="0"`, an `aria-label` naming the
+> destination, activation on **Enter *and* Space**, and `preventDefault()` on Space so the
+> page does not scroll. Click-only bindings ship a control a pointer can reach and a
+> keyboard cannot, and neither a screenshot nor a click test can see it — so Enter and Space
+> are asserted separately.
+
 **The drafts list is informational. No row opens anything.**
 
 D3 is the screen that renders a full draft, and it is not built. The alternatives were a

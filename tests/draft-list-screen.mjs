@@ -213,6 +213,14 @@ async function withPage(plan, fn) {
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const serve = (fx) => () => ({ status: fx.status, body: fx.body });
 
+// Stub fixture for the list call; an `id` read must never happen in that block,
+// so it answers 500 to make an accidental one loud rather than plausible.
+const plan2Stubs = () => (params) => (
+  params.get('id')
+    ? { status: 500, body: { error: 'the stub block must not read a draft' } }
+    : { status: F.stubs.status, body: F.stubs.body }
+);
+
 try {
 
   /* ─────────────────────────────────────────────────────────────────────────
@@ -451,64 +459,216 @@ try {
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
-     Case 15 — a row click navigates nowhere (behaviour, not handler absence)
+     Case 15 — a row click OPENS THE REVIEW SCREEN
+
+     THIS ASSERTION IS INVERTED FROM WHAT IT USED TO CLAIM.
+
+     Until D3 step 3 this case was titled "clicking a row navigates nowhere"
+     and asserted the opposite of everything below: switchView not called,
+     location.hash unchanged, the drafts view still visible, data-view still
+     'drafts'. It was pinning contract §3.1a — "the drafts list is
+     informational, no row opens anything" — which was true and deliberate for
+     the whole of D2.1, because the screen a row would open did not exist yet.
+
+     D3 built that screen, and §3.1a's own text says D3 "adds row navigation
+     when it lands". So this is the planned end of a temporary invariant, not a
+     tripwire being silenced to go green. The distinction matters because the
+     two are indistinguishable in a diff: both look like an assertion being
+     flipped. What separates them is whether the contract predicted it.
+
+     Recorded here rather than only in the commit body, because the commit
+     message is the one part of the corpus nobody greps. A future reader
+     wondering whether rows were ever meant to be inert can find the answer at
+     the assertion itself.
+
+     What did NOT invert, and is still asserted below:
+       - stub rows still open nothing (a new decision, see the block comment)
+       - location.hash is still unchanged (no hash routing — accepted decision)
+       - the id that travels is still the CLICKED row's, never rows[0]
      ───────────────────────────────────────────────────────────────────────── */
-  console.log('\n▶ case 15 — clicking a row navigates nowhere');
+  console.log('\n▶ case 15 — clicking a row opens the review screen');
   {
-    await withPage(serve(F.page1), async (page) => {
+    // The `id` read has no generated fixture, so this plan does not invent a
+    // response body for it. It serves the real list envelope to the list call
+    // and an empty 200 to the read, and the case asserts on the REQUEST the
+    // review screen makes. That is the assertion worth having anyway: it pins
+    // which id travelled, which a fabricated body could not.
+    const plan = (params) => (
+      params.get('id')
+        ? { status: 200, body: {} }
+        : { status: F.page1.status, body: F.page1.body }
+    );
+
+    await withPage(plan, async (page, hits) => {
       await showDrafts(page);
+
+      const target = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll('#draftsWrap .draft-row')];
+        // Deliberately NOT rows[0]. If the screen ever navigates by first row
+        // instead of by the row that was clicked, row 0 would hide it.
+        const r = rows[1] || rows[0];
+        return {
+          count: rows.length,
+          index: rows.indexOf(r),
+          id: r.getAttribute('data-draft-id'),
+          firstId: rows[0].getAttribute('data-draft-id'),
+          role: r.getAttribute('role'),
+          tabindex: r.getAttribute('tabindex'),
+          label: r.getAttribute('aria-label'),
+        };
+      });
+      T.check('there is more than one row, so rows[0] is not the clicked row',
+        target.count > 1 && target.index === 1);
+      T.check('the row is exposed as an activatable control', target.role === 'button');
+      T.check('the row is keyboard reachable', target.tabindex === '0');
+      T.check('the row names its destination for a screen reader',
+        typeof target.label === 'string' && /review/i.test(target.label),
+        'role=button with no label announces itself as an unnamed button');
 
       const before = await page.evaluate(() => {
         window.__swCalls = [];
         window.__realSwitchView = window.switchView;
         window.switchView = function (...a) { window.__swCalls.push(a); return window.__realSwitchView.apply(this, a); };
-        return {
-          hash: location.hash,
-          href: location.href,
-          view: document.body.getAttribute('data-view'),
-          rows: document.querySelectorAll('#draftsWrap .draft-row').length,
-        };
+        return { hash: location.hash, href: location.href, listCalls: 0 };
       });
-      T.check('there are rows to click', before.rows > 0);
 
-      // Dispatched on the row, bubbling — so it travels the real path upward
-      // and a delegated listener on #draftsWrap is exercised. The test never
-      // needs to know whether delegation is used, which is the point.
-      const after = await page.evaluate(() => {
-        const row = document.querySelector('#draftsWrap .draft-row');
-        row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-        row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      // Dispatched on a DESCENDANT of the row, bubbling. The delegated
+      // listener has to find the row by closest(), and a handler bound to the
+      // row itself would also pass — the test stays ignorant of which.
+      await page.evaluate(() => {
+        const row = [...document.querySelectorAll('#draftsWrap .draft-row')][1];
         const inner = row.querySelector('.draft-row-title') || row.firstElementChild;
-        if (inner) {
-          inner.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-          inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        }
-        return { calls: window.__swCalls.length };
+        inner.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
       });
-      await page.waitForTimeout(250);
+      await page.waitForFunction(() => {
+        const el = document.getElementById('reviewView');
+        return !!el && getComputedStyle(el).display !== 'none';
+      }, { timeout: 15000 });
 
-      const now = await page.evaluate(() => ({
+      const after = await page.evaluate(() => ({
+        calls: window.__swCalls.map((a) => a[0]),
+        reviewVisible: (() => { const el = document.getElementById('reviewView'); return !!el && getComputedStyle(el).display !== 'none'; })(),
+        draftsVisible: (() => { const el = document.getElementById('draftsView'); return !!el && getComputedStyle(el).display !== 'none'; })(),
         hash: location.hash,
         href: location.href,
-        view: document.body.getAttribute('data-view'),
-        draftsVisible: (() => {
-          const el = document.getElementById('draftsView');
-          return !!el && getComputedStyle(el).display !== 'none';
-        })(),
-        calls: window.__swCalls.length,
       }));
 
-      T.check('switchView was not called', now.calls === 0 && after.calls === 0);
-      T.check('location.hash is unchanged', now.hash === before.hash);
-      T.check('the full URL is unchanged', now.href === before.href);
-      T.check('the drafts view is still the visible one', now.draftsVisible === true);
-      T.check('data-view still reads drafts', now.view === 'drafts');
+      T.check('switchView was called for the review view', after.calls.includes('review'));
+      T.check('the review view is the visible one', after.reviewVisible === true);
+      T.check('the drafts view is hidden', after.draftsVisible === false);
+
+      // Unchanged from the old case, and still a real claim: navigation is
+      // in-app state, not a URL. Accepted decision — no hash routing for
+      // review. A reload does not land a seller back on a review screen.
+      T.check('location.hash is still unchanged', after.hash === before.hash);
+      T.check('the full URL is still unchanged', after.href === before.href);
+
+      const read = hits.filter((h) => h.params.id);
+      T.check('the review screen issued exactly one read', read.length === 1);
+      T.check('it read the id of the row that was clicked',
+        read.length === 1 && read[0].params.id === target.id);
+      T.check('and NOT the id of the first row',
+        read.length === 1 && read[0].params.id !== target.firstId,
+        'navigating by rows[0] instead of the clicked row — the §3.1a no-rows[0] rule');
+      T.check('the read used id, not ids',
+        read.length === 1 && read[0].params.ids === undefined);
 
       await page.evaluate(() => { window.switchView = window.__realSwitchView; });
       T.check('switchView was restored', await page.evaluate(() => window.switchView === window.__realSwitchView));
+    });
 
-      // The spy has to be capable of failing, or the four assertions above are
-      // decoration. Prove it fires on a call the screen really makes.
+    // ── keyboard: a div with role=button owes Enter AND Space ──────────────
+    // Binding click alone ships a control a pointer can reach and a keyboard
+    // cannot. Nothing visual would show it, and the click test above passes
+    // either way, so each key gets its own activation.
+    for (const key of ['Enter', ' ']) {
+      await withPage(plan, async (page, hits) => {
+        await showDrafts(page);
+        const id = await page.evaluate(() => {
+          const row = [...document.querySelectorAll('#draftsWrap .draft-row')][1];
+          row.focus();
+          return row.getAttribute('data-draft-id');
+        });
+        const scrolledBefore = await page.evaluate(() => window.scrollY);
+        const defaultPrevented = await page.evaluate((k) => {
+          const row = [...document.querySelectorAll('#draftsWrap .draft-row')][1];
+          const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+          row.dispatchEvent(ev);
+          return ev.defaultPrevented;
+        }, key);
+        await page.waitForFunction(() => {
+          const el = document.getElementById('reviewView');
+          return !!el && getComputedStyle(el).display !== 'none';
+        }, { timeout: 15000 }).catch(() => {});
+        const st = await page.evaluate(() => ({
+          reviewVisible: (() => { const el = document.getElementById('reviewView'); return !!el && getComputedStyle(el).display !== 'none'; })(),
+          scrollY: window.scrollY,
+        }));
+        const label = key === ' ' ? 'Space' : key;
+        T.check(`${label} on a focused row opens the review screen`, st.reviewVisible === true);
+        T.check(`${label} read the focused row's id`,
+          hits.filter((h) => h.params.id).map((h) => h.params.id).includes(id));
+        if (key === ' ') {
+          T.check('Space calls preventDefault, so the page does not scroll',
+            defaultPrevented === true && st.scrollY === scrolledBefore);
+        }
+      });
+    }
+
+    // ── stub rows open nothing ─────────────────────────────────────────────
+    // A DECISION, not an omission. A stub row means the record could not be
+    // read, so the review screen behind it can only restate the same sentence
+    // with fewer words around it. Sending a seller there costs a navigation
+    // and a request to arrive at a worse version of what they were already
+    // looking at. The stub's own action button owns the remedy where one
+    // exists, and where none does the row is already the whole answer.
+    await withPage(plan2Stubs(), async (page, hits) => {
+      await showDrafts(page);
+      const shape = await page.evaluate(() => {
+        const stubs = [...document.querySelectorAll('#draftsWrap .draft-row-stub')];
+        return {
+          count: stubs.length,
+          anyOpenable: stubs.some((r) => r.hasAttribute('data-draft-open')),
+          anyRole: stubs.some((r) => r.getAttribute('role') === 'button'),
+          anyTabbable: stubs.some((r) => r.getAttribute('tabindex') === '0'),
+        };
+      });
+      T.check('the stub fixture rendered stub rows', shape.count > 0);
+      T.check('no stub row is marked openable', shape.anyOpenable === false);
+      T.check('no stub row claims the button role', shape.anyRole === false,
+        'a role=button that does nothing is worse than a div — it promises activation');
+      T.check('no stub row is in the tab order', shape.anyTabbable === false);
+
+      const before = await page.evaluate(() => {
+        window.__swCalls = [];
+        window.__realSwitchView = window.switchView;
+        window.switchView = function (...a) { window.__swCalls.push(a); return window.__realSwitchView.apply(this, a); };
+        return document.querySelectorAll('#draftsWrap .draft-row-stub').length;
+      });
+      T.check('stubs are still present with the spy installed', before > 0);
+
+      await page.evaluate(() => {
+        const stub = document.querySelector('#draftsWrap .draft-row-stub');
+        const inner = stub.querySelector('.draft-row-title') || stub;
+        inner.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        stub.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      });
+      await page.waitForTimeout(250);
+
+      const after = await page.evaluate(() => ({
+        calls: window.__swCalls.map((a) => a[0]),
+        reviewVisible: (() => { const el = document.getElementById('reviewView'); return !!el && getComputedStyle(el).display !== 'none'; })(),
+      }));
+      T.check('clicking a stub row did not switch to review', !after.calls.includes('review'));
+      T.check('the review view never became visible', after.reviewVisible === false);
+      T.check('and no draft read was issued', hits.filter((h) => h.params.id).length === 0);
+
+      await page.evaluate(() => { window.switchView = window.__realSwitchView; });
+
+      // The spy has to be capable of failing, or the assertions above are
+      // decoration. Unchanged in substance from the old case 15 — the reason
+      // it existed survives the inversion.
       const spyWorks = await page.evaluate(() => {
         window.__swCalls = [];
         window.switchView = function (...a) { window.__swCalls.push(a); return window.__realSwitchView.apply(this, a); };
@@ -518,7 +678,7 @@ try {
         return n;
       });
       T.check('the spy does detect a real switchView call', spyWorks === 1,
-        'the spy could not observe a call it was watching for — case 15 proved nothing');
+        'the spy could not observe a call it was watching for — the stub assertions proved nothing');
     });
   }
 
