@@ -38,9 +38,16 @@ console.log('\nCase 10 — readiness present and correctly typed on every row');
        `got ${typeof r.publishable}`);
     ok(`${label}: blockers is an array`, Array.isArray(r.blockers));
     for (const b of r.blockers) {
-      ok(`${label}: blocker has exactly {code,message}`,
-         Object.keys(b).sort().join(',') === 'code,message',
+      // CHANGED IN D3 STEP 4: this asserted exactly 'code,message' and fired
+      // when `field` was added. Kept as an EXACT key-set check rather than a
+      // "has at least" check, because the point of the assertion is that the
+      // wire shape is closed -- `severity`, `blocking` and `detail` must stay
+      // off it, and a subset check would let all three back on silently.
+      ok(`${label}: blocker has exactly {code,field,message}`,
+         Object.keys(b).sort().join(',') === 'code,field,message',
          `got ${Object.keys(b).sort().join(',')}`);
+      ok(`${label}: field is a non-empty string`,
+         typeof b.field === 'string' && b.field.length > 0, `got ${JSON.stringify(b.field)}`);
       ok(`${label}: code is a non-empty string`,
          typeof b.code === 'string' && b.code.length > 0);
       ok(`${label}: message is a non-empty string`,
@@ -62,7 +69,18 @@ console.log('\nCase 12 — derivation pin: readiness is derived, never recompute
       const r = readinessOf(d);
       ok(`${slot} ${JSON.stringify(variant).slice(0, 28)}: publishable === v.ok`,
          r.publishable === v.ok, `readiness ${r.publishable} vs validator ${v.ok}`);
-      const expect = v.blocking.map((x) => ({ code: x.code, message: x.message }));
+      // THIS PIN CHANGED IN D3 STEP 4. It used to be
+      //   ({ code: x.code, message: x.message })
+      // and it fired, correctly, the moment `field` was added to the wire.
+      //
+      // Checked the adjacent question before touching it, per the standing
+      // rule: is `readiness` still a pure projection of `v.blocking` with no
+      // recomputation? Yes -- adding `field` makes it MORE of a projection,
+      // because the field association now comes from the validator that
+      // raised the finding instead of from a table the client would have had
+      // to keep. The tripwire did its job by refusing to let the wire shape
+      // change quietly; it is not being silenced.
+      const expect = v.blocking.map((x) => ({ code: x.code, field: x.field, message: x.message }));
       ok(`${slot} ${JSON.stringify(variant).slice(0, 28)}: blockers === derivation`,
          JSON.stringify(r.blockers) === JSON.stringify(expect),
          `${JSON.stringify(r.blockers)} vs ${JSON.stringify(expect)}`);

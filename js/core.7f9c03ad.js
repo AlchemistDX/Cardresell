@@ -18626,6 +18626,14 @@ function _draftsEsc(s) {
  * SLOT_ZERO_PRICE_NOT_ALLOWED — which arrives as a server-authored blocker
  * sentence, not as something this function decides.
  */
+// How an absent title displays, in one place. This existed twice in the row
+// template alone -- the visible title and the aria-label -- and the review
+// screen would have made three. Three literals is three chances for the label
+// a screen reader reads to drift from the text beside it.
+function _draftTitleText(title) {
+  return (title && String(title).trim()) ? String(title) : '(untitled draft)';
+}
+
 function _draftPriceText(price) {
   if (price === null || price === undefined) return 'No price yet';
   const n = Number(price);
@@ -18660,9 +18668,9 @@ function _draftSummaryRowHtml(row, isFocused) {
   )).join('');
 
   return `
-    <div class="draft-row draft-row-open${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" data-draft-open="1" role="button" tabindex="0" aria-label="Review draft: ${_draftsEsc(s.title || '(untitled draft)')}" style="border-left-color:${marker}">
+    <div class="draft-row draft-row-open${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" data-draft-open="1" role="button" tabindex="0" aria-label="Review draft: ${_draftsEsc(_draftTitleText(s.title))}" style="border-left-color:${marker}">
       <div class="draft-row-main">
-        <div class="draft-row-title">${_draftsEsc(s.title || '(untitled draft)')}</div>
+        <div class="draft-row-title">${_draftsEsc(_draftTitleText(s.title))}</div>
         <div class="draft-row-meta">${_draftsEsc(s.slot || '')} · qty ${_draftsEsc(s.quantity == null ? 1 : s.quantity)}</div>
         ${blockerLines}
       </div>
@@ -19230,6 +19238,95 @@ function _reviewIdentityHtml() {
     </div>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Fields, and the blockers that concern them
+   ---------------------------------------------------------------------------
+   A seller looking at "3 things to fix" has to be told WHICH three things and
+   WHERE. The verdict count alone is a number with no address.
+
+   The association between a blocker and a field comes off the wire as
+   `blocker.field`. There is deliberately NO code->field table here. The server
+   already computes the field when it raises the finding
+   (validateDraftForSlot's push(code, field, ...)), and a client table would be
+   a second implementation of that fact -- one that goes silently wrong the
+   moment a new code is added, because a table only knows the codes that
+   existed when it was written.
+
+   NOTHING IS DROPPED. A blocker whose field is empty, unrecognised, or not one
+   of the fields shown here renders in a draft-level group below the fields.
+   That is the same rule the stub rows follow: an unexplained condition is
+   still a visible condition. The count assertion in the suite is what keeps it
+   honest -- every blocker on the wire appears exactly once on screen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Repair order, not data order. Title before price because a title is always
+// present to be judged, whereas a price may legitimately not exist yet.
+const _REVIEW_FIELDS = [
+  { key: 'title', label: 'Title' },
+  { key: 'price', label: 'Price' },
+  { key: 'slot',  label: 'Marketplace' },
+];
+
+function _reviewFieldValue(key) {
+  const d = _reviewState.draft || {};
+  if (key === 'title') return _draftTitleText(d.title);
+  if (key === 'price') return _draftPriceText(d.price);
+  // The raw slot, exactly as the list shows it. A friendlier label would mean
+  // a client-side venue copy table, and the list would then disagree with this
+  // screen about what the same draft is called.
+  if (key === 'slot') return d.slot ? String(d.slot) : '\u2014';
+  return '\u2014';
+}
+
+function _reviewGroupBlockers() {
+  const r = _reviewState.readiness;
+  const list = (r && Array.isArray(r.blockers)) ? r.blockers : [];
+  const known = new Set(_REVIEW_FIELDS.map((f) => f.key));
+  const byField = new Map();
+  const loose = [];
+  for (const b of list) {
+    if (!b || typeof b !== 'object') continue;
+    const f = (typeof b.field === 'string') ? b.field : '';
+    if (f && known.has(f)) {
+      if (!byField.has(f)) byField.set(f, []);
+      byField.get(f).push(b);
+    } else {
+      loose.push(b);
+    }
+  }
+  return { byField, loose };
+}
+
+// Server copy, rendered verbatim. Same rule as the list: the client authors no
+// blocker text, and SLOT_TITLE_TOO_LONG's message is interpolated server-side
+// ("Shorten it by N"), which a client table could not reproduce without
+// duplicating the length arithmetic.
+function _reviewBlockerLine(b) {
+  return `<div class="review-blocker" data-blocker-code="${_reviewEsc(String(b.code || ''))}">${_reviewEsc(String(b.message || ''))}</div>`;
+}
+
+function _reviewFieldsHtml() {
+  const { byField, loose } = _reviewGroupBlockers();
+  const rows = _REVIEW_FIELDS.map((f) => {
+    const bs = byField.get(f.key) || [];
+    const blocked = bs.length > 0 ? ' review-field-blocked' : '';
+    return `
+      <div class="review-field${blocked}" data-review-field="${_reviewEsc(f.key)}">
+        <div class="review-field-label">${_reviewEsc(f.label)}</div>
+        <div class="review-field-value">${_reviewEsc(_reviewFieldValue(f.key))}</div>
+        ${bs.map(_reviewBlockerLine).join('')}
+      </div>`;
+  }).join('');
+
+  const looseHtml = loose.length === 0 ? '' : `
+      <div class="review-field review-field-blocked" data-review-field="__draft">
+        <div class="review-field-label">This draft</div>
+        ${loose.map(_reviewBlockerLine).join('')}
+      </div>`;
+
+  return `<div class="review-fields">${rows}${looseHtml}</div>`;
+}
+
 function _reviewBodyHtml() {
   if (!_reviewState.signedIn) {
     return `
@@ -19267,7 +19364,7 @@ function _reviewBodyHtml() {
       </div>`;
   }
 
-  return _reviewIdentityHtml();
+  return `${_reviewIdentityHtml()}${_reviewFieldsHtml()}`;
 }
 
 function _reviewPaint() {

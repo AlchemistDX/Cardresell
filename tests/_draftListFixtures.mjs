@@ -66,6 +66,45 @@ function plantUnreadable(id, kind) {
   }
 }
 
+/**
+ * Read-path fixtures for the review screen (`GET /api/drafts?id=`).
+ *
+ * The review screen's checks lived in a scratch file that hand-wrote its
+ * envelope, which Part 4 forbids for exactly the reason above. Generating them
+ * costs one function, and it immediately buys the thing a hand-written
+ * envelope cannot: whatever `readiness.blockers[n]` actually carries on the
+ * read path, including keys nobody remembered to write down.
+ */
+export async function generateReadFixtures() {
+  await reset();
+
+  // Blocked on TITLE: over the slot limit, so the message is the interpolated
+  // one ("Shorten it by N") that a client copy table could not reproduce.
+  const longIds = await seedPublishable(1, () => ({ title: 'L'.repeat(140) }));
+  const blockedTitle = await call({ id: longIds[0] });
+
+  // Blocked on PRICE, a different field, so the screen has to place two
+  // findings in two places rather than pile them under one heading.
+  await reset();
+  const noPriceIds = await seedPublishable(1, () => ({ price: null }));
+  const blockedPrice = await call({ id: noPriceIds[0] });
+
+  // Blocked on BOTH, one per field, in a single envelope.
+  await reset();
+  const bothIds = await seedPublishable(1, () => ({ title: 'B'.repeat(140), price: null }));
+  const blockedBoth = await call({ id: bothIds[0] });
+
+  // Clean: no blockers at all, so the fields render with nothing attached.
+  await reset();
+  const okIds = await seedPublishable(1);
+  const publishable = await call({ id: okIds[0] });
+
+  return {
+    blockedTitle, blockedPrice, blockedBoth, publishable,
+    ids: { blockedTitle: longIds[0], blockedPrice: noPriceIds[0], blockedBoth: bothIds[0], publishable: okIds[0] },
+  };
+}
+
 export async function generateFixtures() {
   const fx = {};
 

@@ -180,3 +180,70 @@ for the citation offsets: `audit/BUNDLE_CITATION_MAP.md` carries the tables,
 `tools/bundle-citation-map.mjs` re-derives them and fails on any citation that no longer
 resolves. The tool reads the live bundle name out of `index.html` instead of hard-coding it, so
 the next rename ages the tables and not the check.
+
+---
+
+## Instance 7 — the assertion crashed on the condition it existed to detect
+
+D3 step 4. The new suite checked that no blocker arrives without a `field`:
+
+```js
+b.readiness.blockers.every((x) => x.field.length > 0)
+```
+
+Mutation-testing removed `field` from the wire. The check did not fail — it threw
+`TypeError: Cannot read properties of undefined (reading 'length')`, and the throw
+propagated out of the case, past `finally`, and ended the process.
+
+The output was **one** reported failure. The real damage was eleven, and every case after the
+first was never run. So the mutation looked narrowly contained when it was broad, and any
+*other* regression the mutation caused was invisible. The correct read is worse than "the
+assertion was buggy": a crashing assertion converts a wide regression into a single line and
+silently cancels the remainder of the suite. It is a strictly worse instrument than no
+assertion at all, because it reports a small number confidently.
+
+The fix is `typeof x.field === 'string' && x.field.length > 0` — check the shape before the
+property. The general rule: **an assertion about a value's absence must not dereference it.**
+Absence is the case it is built for, so it is the one input guaranteed to reach it.
+
+This was only visible because the mutation was run. A green suite would never have shown it;
+the crash requires exactly the condition production does not currently produce.
+
+---
+
+## Instance 8 — a hand-listed check is a hand-maintained table wearing a test's clothes
+
+Same step. D3 step 3 shipped `outline:2px solid var(--accent)` where `--accent` is not a
+declared token. An undefined custom property invalidates the **whole declaration**, so the
+focus ring did not render at all — on the one control whose entire justification was keyboard
+reachability. Every behaviour assertion passed, because "Enter opens the row" is true with or
+without a visible ring. That is instance 1's shape again: the assertion named a behaviour and
+the defect was in a different surface.
+
+The interesting part is the first attempted fix. It listed seven token names and asserted each
+resolved:
+
+```js
+const TOKENS = ['--gold', '--red', '--border', '--text', '--text-muted', '--surface-2', '--radius-md'];
+```
+
+That check is green forever and would have caught `--accent` only because the author already
+knew to look for it. A hand-maintained list of what is worth checking has the same failure mode
+as the dropped offset table: it is a **cache of a derivation**, it goes stale the moment
+something new is referenced, and its staleness is invisible from inside it.
+
+Replacing it with a scan of the stylesheet — extract every `var(--x)` reference, extract every
+`--x:` declaration, assert the first set is contained in the second — found **four more
+undeclared tokens in the same run**, including `.warning-banner`, which renders with no border
+or background. Eight dead declarations, none of which any hand-written list would have named,
+because nobody knew they were there. Recorded in `audit/CSS_TOKEN_DEBT.md`.
+
+Two supporting rules learned here:
+
+- **A derivation needs a negative control.** A broken regex returns an empty set, which reads
+  as a clean bill of health. The suite asserts the scan found >100 references and >20
+  declarations, that a known-declared token is in the set, and that `--accent` is not.
+- **A ratchet, not an exemption.** Pre-existing debt is enumerated and the assertion is
+  "nothing *outside* this set", so a new offender fails on arrival while fixing an old one does
+  not break the suite. Deliberately not a count: a count is a number someone maintains for no
+  benefit, and it fails in the unsafe direction as often as the safe one.

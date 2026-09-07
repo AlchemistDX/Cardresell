@@ -33,7 +33,7 @@ Added to `summarize()` (`api/_draftService.js:493-513`), making thirteen keys:
 ```js
 readiness: {
   publishable: <boolean>,
-  blockers: [{ code: <VIOLATION code>, message: <string> }, ...]
+  blockers: [{ code: <VIOLATION code>, field: <string>, message: <string> }, ...]
 }
 ```
 
@@ -43,15 +43,20 @@ Derived, not recomputed (§1.2a):
 const v = validateDraftForSlot(draft, draft.slot);
 readiness = {
   publishable: v.ok,
-  blockers: v.blocking.map((x) => ({ code: x.code, message: x.message }))
+  blockers: v.blocking.map((x) => ({ code: x.code, field: x.field, message: x.message }))
 };
 ```
 
 `v.blocking` is exactly the ERROR set, because only `error` blocks:
 `blocks(severity) { return severity === SEVERITY.ERROR; }` (`api/_draftStore.js:152-154`).
-Take `code` and `message` only — `field`, `detail`, `severity`, and `blocking` are redundant on
-the wire, since every element of `v.blocking` is by construction blocking and of error
-severity.
+Take `code`, `field` and `message`. **Amended by Amendment 6 (D3 step 4).** The original clause
+read "take `code` and `message` only — `field`, `detail`, `severity`, and `blocking` are
+redundant on the wire, since every element of `v.blocking` is by construction blocking and of
+error severity." That reason is sound for `severity` and `blocking` and does not reach the other
+two. `detail` is excluded on a different and stated ground: it is an internal diagnostic.
+`field` was excluded on no ground at all — it was carried along by a list it did not belong to,
+and the one argument offered covered neither of the two keys it was grouped with. See
+Amendment 6.
 
 `message` is already interpolated server-side. The client performs no substitution.
 
@@ -96,7 +101,7 @@ Each violation is `{ code, field, detail, severity, blocking, message }`, constr
 const v = validateDraftForSlot(draft, draft.slot);
 readiness = {
   publishable: v.ok,
-  blockers: v.blocking.map((x) => ({ code: x.code, message: x.message }))
+  blockers: v.blocking.map((x) => ({ code: x.code, field: x.field, message: x.message }))
 };
 ```
 
@@ -300,7 +305,7 @@ its first client consumer.
   deliberately (`api/_draftService.js:505-511`); this is the path that carries it, and it
   is how the review screen gets pricing provenance.
 - **`readiness`** — identical shape and derivation to `summary.readiness` (§1.2):
-  `{ publishable: <boolean>, blockers: [{code, message}] }`, from `readinessOf`.
+  `{ publishable: <boolean>, blockers: [{code, field, message}] }`, from `readinessOf`.
   **Clients read this and only this.**
 - **`validation`** — the full `validateDraftForSlot` result (`ok`, `violations`,
   `blocking`, `errors`/`warnings`/`infos` counts). Server-side inspection and tests.
@@ -690,10 +695,10 @@ Cases:
 8. `degraded: true` renders rows plus a banner, never a hidden list.
 9. A 200 replay resolves to the same `draftId` a 201 would have, and surfaces no error.
 10. `readiness` is present and correctly typed on every summary row, with `blockers` an array
-    of `{ code, message }` objects.
+    of `{ code, field, message }` objects.
 11. Every blocker on a multi-blocker row is rendered, not just the first.
 12. `readiness.publishable === v.ok` and `readiness.blockers` equals
-    `v.blocking.map(x => ({ code: x.code, message: x.message }))` for a fixture set spanning
+    `v.blocking.map(x => ({ code: x.code, field: x.field, message: x.message }))` for a fixture set spanning
     all four blocking codes — pins §1.2a against a reintroduced second formula.
 13. Source-text tripwire: the drafts-screen code contains none of the four blocking codes
     mapped to a literal string. This is a tripwire, not proof — it catches the obvious
@@ -912,3 +917,77 @@ fine. Test `draft-readiness.mjs` now asserts every emitted code is a declared
 `DRAFT_PRICE_SELLER_ENTERED` is INFO (`api/_draftStore.js:192-193`), so neither reaches
 `blockers`. The reasoning is in the code comment at `:180-191`: a price the seller typed *has*
 provenance — the seller — and blocking on it would refuse to list a draft priced by hand.
+
+---
+
+## Amendment 6 (2026-09-06) — `field` joins the blocker wire shape
+
+**Applied in place at §1.2, §1.2a, §2.9 and acceptance items 10 and 12. Not superseding.**
+
+### What changed
+
+The blocker wire shape is now three keys, not two:
+
+```js
+blockers: [{ code: <VIOLATION code>, field: <string>, message: <string> }, ...]
+```
+
+`field` is the field name the validator attached to the finding when it raised it. It is taken
+from `x.field` on the same `v.blocking` element the other two keys come from, so §1.2a's
+"derived, not recomputed" rule is unchanged — in fact strengthened, since the association is
+now projected from the validator rather than reconstructed downstream.
+
+### Why the original exclusion was wrong
+
+The original clause excluded four keys with one sentence: `field`, `detail`, `severity` and
+`blocking` were "redundant on the wire, since every element of `v.blocking` is by construction
+blocking and of error severity."
+
+That reason is exactly true of two of them. `severity` is always `error` and `blocking` is
+always `true` for every element of `v.blocking`, so both are constants that a client could
+write down without being told. It is not true of the other two, and the clause never noticed:
+
+- `detail` is excluded, but on a **different** ground — it is an internal diagnostic, not a
+  constant. The clause happens to reach the right answer for the wrong reason.
+- `field` is **not redundant by any construction**. It varies per finding, it cannot be derived
+  from anything else on the wire, and it is the only thing on the wire that says where a
+  blocker belongs. It was excluded by proximity: four keys were dropped in one edit and one
+  sentence was stretched over all four.
+
+This is worth recording as a class of defect, not just a fix. **A shared reason can be stretched
+over a key it does not cover.** Grouping decisions into one line is how a justification silently
+loses its scope, and the resulting clause reads as more considered than it was — four keys, one
+confident sentence, and no way to tell from the text that the sentence only argued for two.
+
+### What its absence cost
+
+Without `field`, a client that wants to show a blocker next to the thing it is about has exactly
+one option: keep a code→field table of its own. That is a second implementation of a fact the
+server already holds, which is the duplication rule this project has been bitten by four times.
+It fails in the specific way that class always fails — silently, and only for new inputs. Add a
+fifth `VIOLATION` code and the server raises it correctly, the wire carries it correctly, the
+screen renders it in the wrong place or in a fallback group, and every existing test passes,
+because every existing test uses the four codes already in the table.
+
+`tests/draft-review-screen.mjs` pins this directly: it sends a real code under a deliberately
+mismatched `field` and asserts the screen follows the wire. A client-side table passes every
+other case in that file, because the other cases use fixtures where the table would agree.
+
+### Client obligation
+
+A client must treat `field` as an opaque routing hint, not an enumeration:
+
+- Group blockers by `field` and render each group against the corresponding input.
+- A `field` the client does not render — unknown, new, or empty — must still be **shown**, at
+  draft level. It must never be dropped and must never be reassigned to a field the client
+  guesses at. An unexplained condition is still a visible condition.
+- Never map `code` to a field. The wire is the only authority for that association.
+
+### Pins
+
+Two independent guards in `tests/draft-readiness.mjs` fired on this change, as designed — the
+projection check at `:65` and the exact key-set check at `:41`. Both were updated, and both
+record their previous claim and the reason for the change **inside the test file**, not only in
+the commit message. The key-set check remains an exact-equality assertion rather than a "has at
+least" check, because its purpose is that the wire stays closed: a subset check would let
+`severity`, `blocking` and `detail` back on without a word.

@@ -526,6 +526,16 @@ function summarize(draft) {
 // `ok` and `blocking` come straight from validateDraftForSlot -- this maps them
 // into a wire shape, it does not recompute them.
 //
+// `field` ships too, and it is NOT the same kind of key as the three that stay
+// behind. `severity` and `blocking` are constant across the whole array by
+// construction, and `detail` is an internal diagnostic; those three are
+// genuinely redundant on the wire. `field` varies per element and is derivable
+// from nothing else the client receives -- the only way to reconstruct it
+// client-side is a code->field table, which is a rule-1 duplication of a fact
+// this function already holds. The review screen groups blockers under the
+// field each one concerns, so it needs the association, and the server is the
+// one place that should own it.
+//
 // `message` ships next to `code` because the server already owns this copy.
 // reasonMessage() has specific text for all four blocking codes, and
 // SLOT_TITLE_TOO_LONG's is computed ("Shorten it by N"), which a client-side
@@ -536,7 +546,7 @@ export function readinessOf(draft) {
   const v = validateDraftForSlot(draft);
   return {
     publishable: v.ok,
-    blockers: v.blocking.map((x) => ({ code: x.code, message: x.message })),
+    blockers: v.blocking.map((x) => ({ code: x.code, field: x.field, message: x.message })),
   };
 }
 
