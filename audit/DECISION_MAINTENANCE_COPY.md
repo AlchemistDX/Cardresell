@@ -18,6 +18,29 @@ that exact wording for unfinished states, and forbids "beta" as the alternative.
 
 Both cannot stand as written.
 
+## Amendment (2026-09-06, same day)
+
+The decision below adjudicates a collision. On the owner's reading, confirmed by
+the adjacent-line evidence in "Two findings" and now catalogued as instance 6 in
+`audit/PATTERN_ASSERTION_SURFACE.md`, **there was no collision to adjudicate.**
+
+Two consecutive assertions where one implements §5.8 and the other inverts it are
+not a considered rule. Nobody weighed "under maintenance" against §5.8 and
+decided against it — the pair was written from a different instinct entirely and
+§5.8 was never in the room. So there was never a competing rule to lose, only an
+artifact.
+
+The outcome is unchanged and the reasoning below still holds as written. What
+changes is its weight: §5.8 does not *win* a contest, it was never in one. The
+narrowing is repair of an artifact, not a ruling against a rule. That matters for
+anyone who later reads the assertion and assumes someone had a reason for it.
+
+Generalised in `PATTERN_ASSERTION_SURFACE.md`: before adjudicating a conflict
+between a check and a spec, establish that the check is a considered position at
+all.
+
+---
+
 ## Decision: §5.8 is the standing rule. The assertion narrows.
 
 Three reasons, in order of weight.
@@ -108,6 +131,11 @@ So the pair is simultaneously overbroad (it polices code comments) and underbroa
 problem and leaves the half that is causing one now.
 
 **The narrowing should land with that extension**, not before it.
+
+This blindness is why instance 6 is catalogued as the first in the class to fail
+in *both* directions. The first five were uniformly too weak. This one polices a
+code comment no user will read and cannot see the one string a user actually
+gets. See `audit/PATTERN_ASSERTION_SURFACE.md`.
 
 ---
 

@@ -21,6 +21,12 @@ proved nothing — after the `SLOT_` prefix trap and the offset-518 fixture. In 
 the assertion was structurally incapable of failing for the reason it named. That pattern is
 now worth treating as a class rather than three coincidences.
 
+**Update:** the class reached six instances and is catalogued in
+`audit/PATTERN_ASSERTION_SURFACE.md`. Cite that file for the count and the
+practice rules; the three cases named here are instances 1-3. Instance 6 is the
+first to fail in both directions at once, over-broad and under-broad
+simultaneously, which the one-directional reading below does not anticipate.
+
 The test label has been corrected to "the detection function definition is still present in the
 bundle (text only)", with a comment stating that it does not exercise the thresholds. The
 assertion itself is kept — it does have one real job, which is to stop a cleanup pass from
