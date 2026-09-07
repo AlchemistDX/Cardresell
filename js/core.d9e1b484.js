@@ -18583,7 +18583,12 @@ const DRAFTS_PAGE_LIMIT = 25;
 const _DRAFT_STUB_COPY = {
   DRAFT_READ_FAILED:    { text: "Couldn't load this draft. It's still saved.",              action: 'Try again' },
   DRAFT_VANISHED:       { text: 'This draft is no longer in storage.',                      action: null },
-  DRAFT_SCHEMA_TOO_NEW: { text: 'Saved by a newer version of CardResell. Reload to update.', action: 'Reload' },
+  // No action, and no "reload to update" advice. The server says retryable:false
+  // for this kind, and it is right: if the record was written by a canary build
+  // the deployed client cannot read it no matter how many times the seller
+  // reloads. Telling them to reload would be a button that lies -- the exact
+  // thing the gate below refuses to render.
+  DRAFT_SCHEMA_TOO_NEW: { text: 'This draft was saved by a newer version of CardResell.',    action: null },
   DRAFT_UNREADABLE:     { text: "This draft's saved data can't be read.",                   action: null },
 };
 
@@ -18670,10 +18675,21 @@ function _draftStubRowHtml(row) {
     // taught is a gap in this table, not evidence about the draft.
     text: "This draft can't be shown right now. It's still saved.", action: null,
   };
-  // `retryable` is the server's call, not this table's. Only DRAFT_READ_FAILED
-  // carries it, and offering a retry on a row where nothing will change is a
-  // button that lies.
-  const showAction = !!copy.action && (row.reason !== 'DRAFT_READ_FAILED' || row.retryable === true);
+  // ONE authority: the server's `retryable`. This line previously read
+  //
+  //   !!copy.action && (row.reason !== 'DRAFT_READ_FAILED' || row.retryable === true)
+  //
+  // which inverted the rule for every other kind -- any stub that was not
+  // DRAFT_READ_FAILED satisfied the left side of the `||` and got its action
+  // regardless of what the server said. It read as if it were enforcing "only
+  // DRAFT_READ_FAILED retries" while enforcing nearly the opposite, and the
+  // browser suite caught it on DRAFT_SCHEMA_TOO_NEW.
+  //
+  // The defect was keying on the code NAME instead of the flag that carries the
+  // authority -- naming a behaviour while evidencing a surface, the same shape
+  // as the four cases catalogued in audit/DECISION_SOURCE_DISAGREEMENT.md.
+  // `retryable` is the server's call; a code name is not a substitute for it.
+  const showAction = !!copy.action && row.retryable === true;
   const action = showAction
     ? `<button type="button" class="draft-row-action" data-draft-action="${_draftsEsc(row.reason)}" data-draft-id="${_draftsEsc(row.draftId)}">${_draftsEsc(copy.action)}</button>`
     : '';
