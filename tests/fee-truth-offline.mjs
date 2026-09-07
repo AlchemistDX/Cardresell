@@ -387,5 +387,99 @@ assert('the fee line names Top Rated Plus, the listing benefit that grants it',
   trsItems.some(f => /Top Rated Plus/.test(f.l)));
 
 
+
+// ══ Scenario I: both fee steps, at the cent, from published figures ════════
+// 2026-09-07, D3 step 6. feeEbay has two discontinuities and every assertion
+// above sits comfortably inside a band. A step tested only from the middle is
+// a step whose EDGE is untested, and an off-by-one-cent comparison (`<` where
+// `<=` belongs) is invisible from the middle and wrong for exactly one price.
+//
+// The expectations below are not re-derived from our own code. Sources:
+//
+//  - Per-order fee, quoted verbatim from eBay's fees page and re-fetched
+//    2026-09-07: "For orders $10.00 or less the per order fee is $0.30, for
+//    orders over $10.00 the per order fee is $0.40."
+//    https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822
+//    Note "$10.00 OR LESS" -- $10.00 exactly takes the LOW fee. That is the
+//    cent this section exists to pin.
+//
+//  - Trading-card commission, 13.25% up to $7,500 + 2.35% above, from eBay's
+//    dated 2025-02-14 fee-change table, which explicitly left Sports Trading
+//    Cards, Non-Sport Trading Cards and Collectible Card Games at 13.25% while
+//    most categories rose to 13.6%.
+//    https://www.ebay.com/sellercenter/resources/seller-updates/2025-january/final-value-fee
+//    eBay's live category table on the fees page is rendered dynamically and
+//    does not return in fetched content -- confirmed again 2026-09-07 -- so
+//    that dated update is the anchor, as recorded in
+//    fee_audit_full_2026-09-01.md.
+console.log('\nI — the two fee steps, at the cent, against published figures');
+
+const pOrd = (rows) => {
+  const r = rows.find((f) => /per.order/i.test(f.l));
+  return r ? r.a : null;
+};
+const noStore = (total) => _feeEbayB(total, 0, 'none', 0, false);
+
+// Step 1: the per-order fee, at "$10.00 or less".
+eq('$9.99 takes the $0.30 per-order fee',  pOrd(noStore(9.99)),  0.30);
+eq('$10.00 exactly still takes $0.30',     pOrd(noStore(10.00)), 0.30);
+eq('$10.01 crosses to $0.40',              pOrd(noStore(10.01)), 0.40);
+
+// Step 2: the commission tier, at "up to $7,500".
+const fvf = (rows) => rows.find((f) => /Final Value Fee/.test(f.l)).a;
+eq('$7,499.99 is entirely at 13.25%',  fvf(noStore(7499.99)), 7499.99 * 0.1325);
+eq('$7,500.00 exactly is still all at 13.25%',
+   fvf(noStore(7500.00)), 7500 * 0.1325);
+eq('$7,500.01 pays 2.35% on exactly one cent',
+   fvf(noStore(7500.01)), 7500 * 0.1325 + 0.01 * 0.0235);
+// Recorded because the next person to mutation-test this will find it and
+// assume a gap: flipping the tier comparison from `<=` to `<` changes NOTHING
+// observable. At exactly $7,500 the else branch computes
+// 7500*0.1325 + (7500-7500)*0.0235, which is the same number the then branch
+// computes. The two branches are genuinely equal at the boundary, so no
+// assertion can distinguish them and none should be invented to try. The
+// per-order step is different -- $0.30 and $0.40 are not equal at $10.00 --
+// and that mutation IS caught above. A mutation that cannot be observed is
+// not a missing test.
+
+// eBay publishes a worked example for this exact case, using a trading card:
+// "13.25% of $7,500, + 2.35% of $2,570, + $0.40" -- i.e. a $10,070 sale. This
+// reproduces the venue's own arithmetic rather than our reading of it, which
+// is the strongest form this assertion can take.
+const EBAY_EXAMPLE_TOTAL = 10070;
+const EBAY_EXAMPLE_FEE   = 7500 * 0.1325 + 2570 * 0.0235 + 0.40;
+eq("eBay's own $10,070 worked example reproduces to the cent",
+   sum(noStore(EBAY_EXAMPLE_TOTAL)), EBAY_EXAMPLE_FEE);
+eq('and that example is $1,054.55 when shown to the seller',
+   Math.round(sum(noStore(EBAY_EXAMPLE_TOTAL)) * 100) / 100, 1054.55);
+
+// Well above the boundary the marginal rate must genuinely be 2.35%, not the
+// headline rate. Measuring it as a DIFFERENCE over a wide span is the point:
+// a per-price effective rate rounded to 2dp cannot distinguish 2.35% marginal
+// from 13.25% marginal near the boundary, because the blend is dominated by
+// the first $7,500. Over $2,500 of span the marginal rate is unmistakable.
+const marginal = (sum(noStore(12500)) - sum(noStore(10000))) / 2500;
+eq('the marginal rate above the boundary is 2.35%', marginal, 0.0235);
+assert('and it is not the headline rate', Math.abs(marginal - 0.1325) > 0.10);
+
+// The tier boundary is a property of the STORE tier, not a constant. A Basic
+// store subscriber crosses at $2,500, per the same dated update.
+const basic = (total) => _feeEbayB(total, 0, 'basic', 0, false);
+eq('a Basic store pays 12.35% at $2,500.00 exactly',
+   fvf(basic(2500.00)), 2500 * 0.1235);
+eq('and 2.35% on the cent above it',
+   fvf(basic(2500.01)), 2500 * 0.1235 + 0.01 * 0.0235);
+assert('the two store tiers do not share a boundary',
+  fvf(basic(7500.01)) !== fvf(noStore(7500.01)));
+
+// Buyer-paid shipping is part of the total the venue charges on, so it can
+// push a sale over either step. This is the cross-check that the step is
+// applied to the TOTAL and not to the item price.
+eq('shipping can carry a $9.99 item over the per-order step',
+   pOrd(_feeEbayB(9.99, 4.99, 'none', 0, false)), 0.40);
+eq('and over the commission tier as well',
+   fvf(_feeEbayB(7499.99, 4.99, 'none', 0, false)),
+   7500 * 0.1325 + (7504.98 - 7500) * 0.0235);
+
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
