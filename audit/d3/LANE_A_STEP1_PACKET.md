@@ -7,7 +7,7 @@
 >
 > **The sections below are a running record, written as the work happened, and
 > the early ones have been overtaken.** Nothing in them has been rewritten to
-> look prescient. What is true as of **2026-09-08, commit `4f9cbc7`**:
+> look prescient. What is true as of **2026-09-08, commit `0cc4477`**:
 >
 > | Section | Says | Actually |
 > |---|---|---|
