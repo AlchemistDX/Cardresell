@@ -624,6 +624,53 @@ check('missing feeModelRevision is a blocking ERROR, never defaulted to 0',
       })(),
       'a silent fallback would let core.js and the packet drift — the exact ambiguity this field removes');
 
+// ---------------------------------------------------------------------------
+// The no-default rule, pinned against the pressure that will be applied to it.
+//
+// MISSING_FEE_MODEL_REVISION is an ERROR by design, and once the producer is
+// connected it will appear in logs whenever a client omits the field. An error
+// in logs reads as a thing to silence, and the cheapest silence is a default —
+// `ctx.feeModelRevision ?? 1`, or `?? FEE_MODEL_REVISION` re-declared
+// server-side. Either one makes every affected packet claim it was priced by a
+// fee revision that never priced it, and the claim is unfalsifiable afterwards
+// because the packet no longer records that it did not know.
+//
+// A default here is worse than the error it hides: the error is loud and
+// recoverable, the default is quiet and permanent. These checks exist so that
+// change cannot be made without a test going red and someone reading this.
+// ---------------------------------------------------------------------------
+for (const [label, bad] of [
+  ['absent',          {}],
+  ['undefined',       { feeModelRevision: undefined }],
+  ['null',            { feeModelRevision: null }],
+  ['zero-as-absent',  { feeModelRevision: NaN }],
+  ['string "3"',      { feeModelRevision: '3' }],
+  ['float 3.5',       { feeModelRevision: 3.5 }],
+]) {
+  check(`feeModelRevision ${label} blocks rather than defaulting`,
+        (() => {
+          const p = buildListingPacket(slab, { ...bad, feeScheduleVerified: 'Sep 2026', now: NOW });
+          return p.metadata.feeModelRevision === null
+            && p.blocked === true
+            && p.blockingCodes.includes(PACKET_CODES.MISSING_FEE_MODEL_REVISION);
+        })(),
+        'a packet that cannot say which fee logic priced it must say so, not guess');
+}
+
+// The other half of the rule: a revision that IS supplied is recorded verbatim
+// and not normalised, floored, or replaced by the server's idea of current.
+// Without this, "no default" could be satisfied by a producer that quietly
+// overwrites a stale-but-honest client value with a fresh-but-wrong one.
+check('a supplied feeModelRevision is recorded verbatim, not normalised',
+      (() => {
+        const p = buildListingPacket(slab, {
+          feeModelRevision: 1, feeScheduleVerified: 'Sep 2026', now: NOW,
+        });
+        return p.metadata.feeModelRevision === 1
+          && !p.blockingCodes.includes(PACKET_CODES.MISSING_FEE_MODEL_REVISION);
+      })(),
+      'an older revision honestly reported beats a current one asserted on its behalf');
+
 check('a complete graded packet is NOT blocked',
       packet.blocked === false,
       'blocking codes: ' + packet.blockingCodes.join(', '));

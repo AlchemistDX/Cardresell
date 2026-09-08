@@ -308,6 +308,21 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
 export async function readDraft(kv, googleSub, draftId) {
   const cur = await getDraft(kv, googleSub, draftId);
   if (!cur.ok) return cur;
+
+  // DELIBERATE, NOT AN OVERSIGHT: getDraft resolves five packet fields here —
+  // packet, packetStatus, packetUsable, packetReason, packetRaw — and this
+  // return drops all five. It looks exactly like a bug, and the next person to
+  // notice will be tempted to spread `...cur` and "restore" the forwarding.
+  //
+  // Do not, yet. buildListingPacket() has no production caller, api/drafts.js
+  // does not forward these, and the client bundle has no consumer for them.
+  // Forwarding them now ships a serialised field that nothing produces and
+  // nothing reads — the failure mode this repo already has an open item for,
+  // and one that is much harder to remove later than to not add.
+  //
+  // Producer, forwarding and consumer land together, so the field arrives with
+  // something that reads it. Until then the honest response shape is the one
+  // whose every field has a reader. See audit/d3/LANE_A_STEP1_PACKET.md §5.
   return { ok: true, draft: cur.draft, validation: validateDraftForSlot(cur.draft), readiness: readinessOf(cur.draft) };
 }
 

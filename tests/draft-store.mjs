@@ -534,6 +534,32 @@ check('a title edit also makes the packet stale',
 // good snapshot, and re-earn a NO_PROVENANCE warning, for editing a note.
 const la_qty   = DS.applyEdit(la_fresh, { quantity: 4 },        { expectedRev: la_fresh.rev });
 const la_notes = DS.applyEdit(la_fresh, { notes: 'ship Monday' }, { expectedRev: la_fresh.rev });
+// ===========================================================================
+// THE OVER-INVALIDATION CONTROL — READ BEFORE WIDENING PACKET_INPUT_FIELDS
+//
+// The two checks below assert that a packet SURVIVES a quantity or notes edit.
+// They are not slack in the staleness guard. They are the guard against the
+// opposite defect, and they are the only thing enforcing it.
+//
+// Mutation evidence: adding 'quantity' to PACKET_INPUT_FIELDS turns exactly ONE
+// check red — the first one below. Nothing else in the suite notices. So if
+// this assertion is deleted, the design silently becomes "any edit invalidates",
+// which throws away a good snapshot and re-earns a DRAFT_NO_PRICE_PROVENANCE
+// warning for changing a note. The packet is a snapshot of PRICE PROVENANCE; a
+// note is not an input to it, and invalidating on one is not caution, it is a
+// wrong answer that happens to fail safe-looking.
+//
+// This is a guard against being TOO CONSERVATIVE, which is rare here — almost
+// every other assertion in this file guards against being too permissive. That
+// rarity is the risk: a reviewer scanning for missing invalidations reads this
+// as an oversight, widens the field list "to be safe", sees one red, and
+// deletes it as stale. The one red IS the design. See instance 40a in
+// audit/PATTERN_ASSERTION_SURFACE.md before changing either of these.
+//
+// Widening the list is correct only when the packet's OUTPUT actually depends
+// on the new field. Ask: would buildListingPacket() produce different bytes?
+// For quantity and notes today the answer is no.
+// ===========================================================================
 check('a quantity edit does NOT invalidate the packet',
       DS.readStoredDraft(JSON.stringify(la_qty)).packetUsable === true);
 check('nor does a notes edit',

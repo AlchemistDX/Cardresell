@@ -1,11 +1,18 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**39 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 39; that number, not this sentence, is the
+**40 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 40; that number, not this sentence, is the
 thing to check. (This sentence said 35 while 36 was already filed below it —
 which is the pattern this page documents, committed against the page itself: a
 hand-kept count asserted as the set. Instance 32 is the same shape.) A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
+
+The file also carries a third kind of entry, added at instance 40: a **Remedy**.
+The catalogue is thick with defects and thin on the shapes that fix them, which
+makes it good at recognising a failure and poor at suggesting the move. Remedies
+are numbered as instances because they were each found the same way — by an
+assertion that named a behaviour and evidenced a surface — but they record what
+was done rather than what was wrong.
 
 The file also carries two entries that are **not** instances and are not counted:
 a **Rule** (withhold rather than relabel, and its riders) and a **Class** (states
@@ -2250,3 +2257,82 @@ spelling it pins. Pin the smallest fragment that would differ if the behaviour
 differed. Where the behaviour is executable, execute it instead — the nine new
 T2.10 checks slice `_rangeParts` out of the bundle and **call it**, and not one
 of them would have failed for an added parameter.
+
+
+## Instance 40 — REMEDY: an invalidation that must be remembered fails on the write site nobody has written yet (2026-09-08)
+
+**Filed as a remedy, not a defect.** The corpus is thin on these, and a
+catalogue that only records failures teaches recognition without teaching the
+move.
+
+**The defect it came from.** A listing packet is a snapshot of a draft's price
+provenance. `applyEdit` builds the next revision with `next = { ...current }`,
+so the packet was carried across a reprice byte-for-byte, and the reader
+validated only the schema version — which a reprice does not touch. A draft
+created at $100 with a packet reporting `listPrice: 100`, edited to $500,
+read back as `CURRENT` / `usable: true`, still reporting $100. Nothing was
+wrong with the packet. It described a price that no longer existed.
+
+**The obvious fix, and why it was refused.** Drop the packet in `applyEdit`
+when the price changes. That fix is exactly one write path wide. `applyEdit` is
+not the only thing that can change a price: a migration, a repair script, a
+future bulk reprice, and — the load-bearing case — **the next write path
+someone adds** are each free to write a draft record without knowing packets
+exist. Each one silently reintroduces the same stale display, and none of them
+fails a test, because the test was written against the write path that
+remembered.
+
+**The remedy: derive the invalidation at read time from data already stored.**
+
+  - the writer records a fingerprint of the fields the snapshot is a function
+    of, beside the snapshot (`api/_draftStore.js:526`);
+  - the reader recomputes that fingerprint from the record as it actually is
+    and refuses the snapshot on mismatch (`api/_draftStore.js:416,418`);
+  - the write path is not consulted and does not need to cooperate.
+
+A writer that has never heard of packets cannot defeat it. Changing the price
+changes the recomputed fingerprint, and the mismatch is what makes the snapshot
+unusable. **Nothing has to remember to invalidate.**
+
+**The generalisation, which is the reason this is filed.** Whenever correctness
+depends on every writer performing a step, the guarantee is only as strong as
+the least informed writer — including the ones not yet written. Prefer deriving
+the condition at read time from state the writer cannot avoid changing. The
+same shape applies to cache invalidation, denormalised counters, and
+"remember to bump the version" conventions.
+
+**Two placement details that are load-bearing, not stylistic.**
+
+1. The list of inputs the snapshot depends on (`PACKET_INPUT_FIELDS`) lives in
+   the module that owns the snapshot (`api/_listingPacket.js:93`), not in the
+   store that persists it. Whoever adds a field to the packet is already editing
+   that file. Put the list in the store and the person who needs to update it is
+   the one person who has no reason to open it.
+2. The fingerprint is computed from the record being written, never accepted
+   from the caller. A caller that can supply its own fingerprint can declare a
+   stale snapshot fresh.
+
+**Absence is not agreement.** A snapshot stored with no recorded fingerprint
+cannot be shown to still match, so it reads stale rather than current — the same
+rule the version check already applied to a malformed version. This is the
+recurring move in this catalogue: an unknown is not a match.
+
+### 40a — the over-invalidation control, and why it needs defending
+
+The mutation that matters most here is not one that breaks the guard. It is
+adding `quantity` to `PACKET_INPUT_FIELDS`, which produces **one red**: an
+assertion that a quantity edit does **not** invalidate the packet.
+
+That assertion is the only thing standing between this design and a version
+that throws away good snapshots — and re-earns a `NO_PROVENANCE` warning — for
+editing a note or a quantity. **It is a guard against being too conservative**,
+which is rare in a corpus almost entirely composed of guards against being too
+permissive.
+
+Recorded here because that rarity is the risk. A future reviewer scanning for
+missing invalidations will read "a quantity edit does NOT invalidate the packet"
+as an oversight, widen the field list to be safe, see one test go red, and
+delete it as stale. That is instances 36, 37 and 39 again — red-while-intact,
+pressure to delete a real guard — and this is the entry to point at when it
+happens. **The assertion is the specification. The one red is the design being
+enforced, not a test lagging behind it.**
