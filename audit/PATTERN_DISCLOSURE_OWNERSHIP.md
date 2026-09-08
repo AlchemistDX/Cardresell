@@ -63,3 +63,49 @@ and record where that check lives.
   evidences a surface.
 - `audit/DECISION_SOURCE_DISAGREEMENT.md` — disagreement is disclosed, never
   averaged; same instinct applied to two sources rather than one boundary.
+
+---
+
+## The internal corollary — a summary is where a fact goes to stop being checkable
+
+Added 2026-09-08, after this pattern's own remedy failed inside the corpus on
+the day it was written.
+
+The pattern above is about disclosures to users. The same asymmetry runs inside
+the audit corpus, and it caused a false claim within hours: **there is one
+authority per fact and many restatements of it, and restatements are not
+re-read when the authority changes.**
+
+`audit/DECISION_94dc777.md` was the authority. `CARDRESELL_PLAN_AND_ROADMAP.md`
+§8.2 held a summary that was accurate when written and outlived the decision by
+two days. `audit/ROTATION_RUNBOOK.md` then inherited the summary — while citing
+the authority that refuted it, in the same sentence.
+
+Note the direction. The authority was correct the whole time; **nothing went
+wrong at the source.** The failure is entirely in the copies, which is why it is
+invisible from the source: updating a decision record does not notify its
+restatements, and there is no signal that would make one go red.
+
+That is the "keyed to their behaviour" shape one layer in. A restatement's
+correctness depends on a document it does not control and cannot watch.
+
+### The remedy, and its limit
+
+`tests/decision-restatements.mjs`. For every `audit/DECISION_*.md`, it requires
+a verdict heading and a checkable date in the first 40 lines, and it fails any
+document that cites a decision record while describing that question as open, at
+paragraph scope, with retraction notes exempted. Verified against the actual
+regression: reinserting the original sentence fails the suite; removing it
+passes. 32 checks.
+
+**What it cannot do:** verify that a restatement summarises a decision
+*correctly*. It catches "decided question restated as undecided" — the drift
+that happened — and nothing subtler. A restatement that gets the verdict
+backwards still passes. So the standing rule is unchanged and the suite only
+narrows the gap:
+
+> **Cite the authority, do not paraphrase its status.** If a document needs to
+> say what was decided, it links the record and quotes the verdict line. A
+> restatement that would go stale silently should not exist; where one must,
+> the sentence carries the authority's filename so the drift is at least
+> grep-able.
