@@ -999,25 +999,57 @@ the advice**, which is the same shape BIAS-11 settled into.
 not of the surface — a grid stopping at $2,000 would report a far smaller maximum. It is
 not a headline.
 
-### The direction is NOT uniform, and the reversal is structural
+### CORRECTED 2026-09-07: the reversal is not a boundary crossing
 
-This is the part worth keeping. The old flat rate was optimistic in 261 pairs and
-**pessimistic in 38**, and the 38 are not scattered — every one of them has a graded price
-of $8,000 or $9,000, and **no** optimistic pair has a graded price at or above $7,500.
+**An earlier version of this section claimed the direction reverses exactly at the $7,500
+tier boundary, and that a flat rate therefore "could not be tuned conservatively." Both
+claims were wrong. They are withdrawn.** The corrected statement is at the end of this
+section.
 
-The boundary is exact: for a no-store seller `feeEbay` charges 13.25% up to a **$7,500**
-value tier and 2.35% on the excess. Below the tier a flat 13% understates the fee (13% <
-13.25%, plus a per-order fee the flat rate ignored entirely) so the old number overstated
-upside. Above the tier the model charges 2.35% on the excess, so the model nets *more* than
-a flat 13% and the old number understated upside.
+The tier changes the *marginal* rate at $7,500. It does not change the sign of the
+*accumulated* difference there, because the comparison is incremental — it subtracts a raw
+net from a graded net, and both sides carry their own fee. Reviewer counterexample,
+reproduced here to the cent against the live model:
 
-> A flat rate could not have been "tuned conservatively" out of this. It errs in opposite
-> directions on either side of a tier boundary, so any single percentage is optimistic on
-> one side of $7,500 and pessimistic on the other. **A threshold with two consumers cannot
-> be tuned conservatively for both** — here the two consumers are the two sides of eBay's
-> own fee schedule. That is why this had to become a call into the model rather than a
-> better constant, and it is the reason BIAS-1 was filed as a bias rather than as an
-> inaccuracy.
+| Raw → graded | Old panel | Corrected model | Old − corrected |
+|---|---|---|---|
+| $1,000 → $7,500 | $5,630.00 | $5,613.75 | **+$16.25** |
+| $1,000 → $7,501 | $5,630.87 | $5,614.73 | **+$16.14** |
+| $1,000 → $9,000 | $6,935.00 | $7,078.50 | **−$143.50** |
+
+The old calculation stays **optimistic** at and just past $7,500. Where the sign actually
+turns, holding the default no-store profile, depends on the raw price too:
+
+| Raw | Graded price where old − corrected turns negative |
+|---|---|
+| $1 | $7,678 |
+| $100 | $7,674 |
+| $1,000 | $7,653 |
+| $2,000 | $7,630 |
+| $5,000 | $7,559 |
+
+And the **profile moves it far more than the prices do.** For a Basic Store seller the base
+rate is 12.35%, *below* a flat 13%, so the old calculation was **pessimistic almost
+everywhere** — the crossover sits immediately above the raw price ($101 for a $100 raw),
+not near a tier at all.
+
+So there is no single boundary, and no fixed direction. The grid result reported above (261
+optimistic, 38 pessimistic, 1 verdict change) is a valid statement **about that grid on the
+default profile** and is retained as such. It is not a general property of the surface.
+
+**The supported claim:**
+
+> A single flat percentage cannot reproduce the tiered fee schedule across these scenarios.
+> Error direction depends on both sale amounts and the applicable profile.
+
+*Cannot reproduce accurately* is established. *Cannot be made conservative* is a different
+and stronger claim, was never tested, and is not asserted. A flat rate chosen low enough
+might well be conservative across some stated range; that question was not examined and
+nothing here answers it.
+
+This remains sufficient reason to route through the model rather than pick a better
+constant: the surface has no single rate to pick, because the rate depends on the seller's
+store tier, both sale amounts, and any promoted-listing campaign.
 
 ### Copy
 
