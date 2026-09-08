@@ -81,6 +81,12 @@ check('Shared sell-start builder defined once',             (INDEX.match(/functi
 check('Shared seed composer defined once',                  (INDEX.match(/function ebaySellSeed\s*\(/g) || []).length === 1);
 check('Builder targets prelist/identify with title+caty',   /sl\/prelist\/identify\?/.test(INDEX) && /title=\$\{encodeURIComponent\(s\)\}/.test(INDEX) && /caty=\$\{encodeURIComponent\(cat\)\}/.test(INDEX));
 check('Scan-miss sell link goes through the builder',       /buildEbaySellStartUrl\(ebaySellSeed\(\{ name, number, setName \}\), '183454'\)/.test(INDEX));
+// The scan-miss panel is the WEAKER identity case, not the stronger one: this
+// panel renders because identification failed, so the seed is only what the
+// scan read. The instruction to look is therefore mandatory here too, and it
+// says why. Added 2026-09-08 with the review-screen copy change.
+check('Scan-miss sell CTA tells the seller to check the match', /Check that eBay picked the right card before you continue/.test(INDEX));
+check('and both surfaces carry that same instruction',      (INDEX.match(/Check that eBay picked the right card before you continue/g) || []).length === 2);
 // The sell path carries NO EPN parameters, deliberately: EPN pays on a buyer's
 // qualifying purchase and a seller opening a listing form is not one. Asserted
 // as the builder not wrapping in buildEbayUrl, because that wrapper is the only

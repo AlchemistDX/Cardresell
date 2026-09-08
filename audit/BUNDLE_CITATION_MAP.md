@@ -1,6 +1,14 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.7629ec69.js` (22,714 lines).** New work cites that hash.
+**Live bundle: `js/core.a7e7422d.js` (22,744 lines).** New work cites that hash.
+
+> ### Generation 10 — the instruction to look
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 10 | `7629ec69` → `a7e7422d` | *(this commit)* | D5 review response: both eBay continuation surfaces now lead with an imperative — "Check that eBay picked the right card before you continue" — in its own non-muted element above the seed, naming the collector number to compare against. See `audit/d5/D5_ENTRY_GATE.md` §8. |
+>
+> **`7629ec69` is retained on disk** with bytes matching its own name.
 
 > ### Generation 9 — the eBay continuation control
 >

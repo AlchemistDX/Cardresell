@@ -1573,11 +1573,42 @@ try {
     });
     T.check('\ud83d\udd34 the seed is shown to the seller, not just hyperlinked',
       !!seedShown && seedShown.includes(expectSeed), seedShown);
-    T.check('and the copy promises the flow opens, never that eBay will match',
-      !!seedShown && /opens/i.test(seedShown) && !/(prefill|pre-fill|fills in|filled in|we.ll list)/i.test(seedShown),
+    T.check('and the copy never promises eBay will match',
+      !!seedShown && !/(prefill|pre-fill|fills in|filled in|we.ll list)/i.test(seedShown),
       seedShown);
     T.check('and it says nothing is published until the seller does it there',
       !!seedShown && /nothing is listed or published/i.test(seedShown), seedShown);
+
+    /* The instruction, asserted separately from the seed and BEFORE it.
+     *
+     * CHANGED 2026-09-08. The earlier assertion here was satisfied by the word
+     * "opens" appearing in a sentence describing eBay's process, which is what
+     * the copy then said: "eBay decides what that matches ... check the card it
+     * offers before you continue", the check buried inside a description. A
+     * description of a process is not a thing to do, and the seed printed
+     * beside it then reads as reassurance that something was sent rather than
+     * as the seller's own comparison. So the assertion now requires an
+     * IMPERATIVE, in its own element, above the seed, naming the collector
+     * number -- the axis the hand-off can lose. Everything upstream can be
+     * right and a seller who accepts eBay's match unread has still listed
+     * against a different number than the one they scanned.
+     */
+    const check1 = await page.evaluate(() => {
+      const els = [...document.querySelectorAll('.review-packet-sell .review-packet-note')];
+      const el = document.querySelector('[data-sell-start-check]');
+      return el ? { text: el.innerText, severity: el.getAttribute('data-packet-note-severity'),
+                    first: els.indexOf(el) === 0 } : null;
+    });
+    const expectNum = one('Card Number');
+    T.check('\ud83d\udd34 the seller is TOLD TO LOOK, in the imperative',
+      !!check1 && /^check that ebay picked the right card before you continue/i.test(check1.text.trim()),
+      check1 && check1.text);
+    T.check('\ud83d\udd34 and the check names the collector number to compare against',
+      !!check1 && !!expectNum && check1.text.includes(expectNum), `${check1 && check1.text} / ${expectNum}`);
+    T.check('the instruction sits ABOVE the seed, not inside it',
+      !!check1 && check1.first === true, JSON.stringify(check1));
+    T.check('and it is not rendered as muted secondary text',
+      !!check1 && check1.severity === 'WARNING', check1 && check1.severity);
 
     const before = apiCalls.length;
     const [popup] = await Promise.all([

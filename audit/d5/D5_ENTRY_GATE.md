@@ -276,3 +276,123 @@ is worse than an absent one, and the suite said so in those words.
 
 **Push and deployment remain blocked.** The Cert ID rotation gate is unchanged and
 gates pushing, not editing.
+
+---
+
+## 8. Review response — the instruction, the seed's real job, and two reclassifications
+
+A review of §7 made four points. Three changed the code or this document's
+classification of an open item; the fourth changed what is recorded about a
+decision without changing the decision.
+
+### 8.1 "eBay decides the match" was a description, not an instruction — fixed
+
+The finding, in the reviewer's words: the note gave the seller the *means* to
+catch a mismatch and never told them to look. `232/165 → 205/165` is the identity
+failure the scanner exists to prevent, arriving at the last step — everything
+upstream can be correct and a seller who accepts eBay's match unread has still
+listed against a different collector number than the one they scanned.
+
+Worse, the seed printed beside a process description reads as reassurance that
+something was sent, which is the opposite of its purpose. It only works if the
+seller knows it is theirs to compare against.
+
+**Both surfaces now lead with an imperative, in its own element, above the seed:**
+
+> **Check that eBay picked the right card before you continue.** Compare the
+> collector number on eBay's match to **074/073**.
+>
+> We send eBay this search: **Charizard VMAX 074/073 Champions Path**. Their
+> matcher decides what it matches, it does not always answer the same way twice,
+> and their catalogue sometimes disagrees with ours. Nothing is listed or
+> published until you do it there yourself.
+
+The number is named on its own rather than asking the seller to eyeball a
+five-word string, because the number is the axis the hand-off can lose. The line
+carries `data-packet-note-severity="WARNING"`, so it renders at full text weight
+rather than as muted secondary copy — a warning that reads as a footnote is a
+warning nobody performs.
+
+The scan-miss panel gets the same imperative and says why it is *weaker* there:
+that panel renders **because identification failed**, so the seed is only what
+the scan read.
+
+Assertions changed accordingly (`tests/draft-review-screen.mjs`, 338/338). The
+old check was satisfied by the word "opens" appearing anywhere in the note — it
+would have passed the copy the review just rejected. It now requires the
+imperative, requires it *first* in the block, requires the collector number in
+it, and requires the non-muted severity. `tests/deeplink-companions.js` asserts
+the instruction exists on **both** surfaces (178/178).
+
+### 8.2 Decision 3 is reclassified: the seed is the honesty mechanism
+
+§7.1 justified showing the seed as letting a seller catch a mismatch on arrival.
+That is true and too small. With a matcher that answered two different ways to
+one identical request, **the seed is the only artifact CardResell can be held
+to.** Past the link we cannot describe eBay's behaviour, cannot promise its
+result, and cannot detect its failure. What we can do is state exactly what we
+sent, in the seller's presence, and tell them to check the answer.
+
+So decision 3 is not a UX nicety and must not be reversed as one. Removing the
+seed from the screen would leave the feature making an identity claim it has no
+means to support. Recorded here so a future tidy-up of "extra text under the
+button" meets this paragraph first.
+
+### 8.3 Signed-in behaviour is on the critical path — reclassified from footnote
+
+§6 and §7.5 listed this as a qualifier. It is not: **every probe was logged out
+and every real seller is signed in.** If eBay routes a signed-in seller
+differently — Seller Hub, a restored draft, a different identify screen — then
+the note naming the exact search describes something they never see, and §8.1's
+instruction asks them to compare against a screen that is not in front of them.
+That invalidates the feature's central claim rather than qualifying it.
+
+**What indirect evidence exists** (indirect, and it does not close the question):
+sellers report that listing creation now forces them to
+`https://www.ebay.com/sl/prelist/suggest?sr=cubstart` ([eBay community thread](https://community.ebay.com/forum/selling-57920/topic/ebay-once-again-forcing-simplified-view-for-listing-creation-without-thinking-about-consequences-446013/)),
+and creating a listing requires being signed in — so the `/sl/prelist/` family is
+the signed-in seller path, and eBay's own account of the flow describes a catalog
+match step feeding the listing page ([eBay Innovation Stories](https://innovation.ebayinc.com/stories/ebays-new-feature-lets-you-list-items-in-seconds/)).
+That makes it *likely* `identify` is reachable signed in. It says nothing about
+whether the `title` and `caty` parameters survive for a signed-in seller, which
+is the part that matters, and the last link died precisely by dropping a query.
+
+**Why I cannot close it from here.** A signed-in probe needs a real eBay seller
+account. This project does not collect marketplace passwords and the cloud
+browser has no logins, so the only instrument is the owner's own signed-in
+browser. That is a five-minute check and it is the highest-value one left in D5:
+
+1. Signed in to eBay, open
+   `https://www.ebay.com/sl/prelist/identify?title=Charizard%20VMAX%20074%2F073%20Champions%20Path&caty=183454`
+2. Does the identify/match screen appear, and does it show that search rather
+   than an empty box or a restored draft?
+3. Is the collector number on the offered match the one in the URL?
+
+**Status: Unverified.** No claim in this document or in the shipped copy asserts
+signed-in behaviour, and the shipped copy is written to survive being wrong about
+it — it says what we send and tells the seller to check what arrives, neither of
+which depends on which screen eBay chooses.
+
+### 8.4 EPN — the load-bearing argument is compliance, not revenue
+
+§7.1 gave two arguments for dropping EPN on the seller link and treated them as
+one. They reverse differently, and the review is right that this matters:
+
+| argument | if it turns out to be wrong | reversibility |
+|---|---|---|
+| **Revenue:** a seller opening a listing form is not a commissionable action, so tracking earns nothing | the tag would earn something | makes the tag *optional*, not forbidden — a recalculation, reversible |
+| **Compliance:** tagging non-purchase seller traffic puts traffic of a kind the program does not describe under the account that does earn | the tag would be permitted | **load-bearing** — this is the one that forbids it |
+
+**The compliance argument is the one holding the decision up.** "Reversible in
+one line" is a statement about the code, not about the authority to make the
+change: reversing it requires the program-terms question answered — is
+seller-flow traffic under an EPN campaign acceptable to the program — not a
+revenue recalculation. Recorded so this does not later read as reversible on a
+whim.
+
+### 8.5 What changed on disk in this pass
+
+Bundle generation 10, `7629ec69` → new fingerprint, previous generation retained
+on disk. Copy changes in `_reviewSellStartHtml` and `_renderScanMissPanel`;
+assertions in `tests/draft-review-screen.mjs` and `tests/deeplink-companions.js`.
+No server change, no publish path, and push and deployment remain blocked.
