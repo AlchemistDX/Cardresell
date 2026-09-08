@@ -519,6 +519,21 @@ The phase sequence is the frozen product roadmap (`audit/CARDRESELL_WHERE_WERE_G
 
 ## 6.2 Phase 1 blocks: verified now/next/later
 
+> **The basis of this column has not been checked (2026-09-08).** The statuses
+> below were assigned on the strength of code existing and suites passing.
+> Two reachability sweeps (`audit/d3/LANE_A_STEP1_PACKET.md` §10) found that
+> those two things do not establish that a seller can reach the behaviour:
+> `listPriceForTargetNet` has 25 test calls and, across every commit in
+> history, no production call site; `buildListingPacket` had no caller until
+> `3db7169`; and the packet's output is still discarded before it reaches HTTP.
+> Block B is the demonstrated case and is marked **Implemented** here.
+>
+> Every status in this table therefore inherits that doubt until a per-block
+> reachability pass runs. **The prior "roughly 80–85% implemented" estimate is
+> withdrawn pending that pass** — not revised downward, withdrawn, because the
+> sweeps invalidated its basis without establishing a replacement. Do not quote
+> a Phase 1 percentage from this document until the pass is recorded.
+
 | Block | State | What is present | Exit or next-entry criterion |
 |---|---|---|---|
 | A — Foundations | **Implemented** | Canonical identity, SKU/valuation distinction, inventory instance helpers, draft indexes, idempotency | Keep golden identity tests and server authority intact. |

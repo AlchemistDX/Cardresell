@@ -264,3 +264,227 @@ One consequence worth stating: `audit/CARDRESELL_PLAN_AND_ROADMAP.md:452-454` §
 Stale comment `core:2657-2659` and the duplicate clamp remain separate cleanup, per instruction. D3, BIAS-1, BIAS-6 and Q7 remain closed. §8 of the T2.9 packet — `feeBase`/`feeBaseLabel` on only 2 of 15 venues, **BIAS-10's remaining half, no ranking effect ruled out** — is untouched by this work. `DRAFT_NO_PRICE_PROVENANCE` still fires on every priced non-seller draft, now for the accurate reason that no packet covers the price.
 
 Push and deployment gates remain closed. Phase 1: roughly 80–85% implemented; release validation outstanding.
+
+---
+
+## §8 — The taxonomy mirror defect, fixed (commit `b66d6a7`)
+
+### Why it was a different severity class
+
+Every other row in the §7e sweep table is a failure to **state** something: a
+field could not be read, resolved to `null`, and nothing said so. The taxonomy
+row inverted that. The old line was:
+
+```js
+const treeVersionLive = ctx.taxonomyTreeVersion ? String(ctx.taxonomyTreeVersion) : null;
+```
+
+Any truthy value became `treeVersionLive`. That did three things at once:
+
+1. recorded the unvalidated string as `metadata.taxonomyTreeVersion`;
+2. stamped `metadata.taxonomyTreeVersionSource: 'live'` — an affirmative claim
+   that we performed a live read;
+3. **suppressed `TAXONOMY_VERSION_ASSUMED`**, because that code only fires when
+   `treeVersionLive` is falsy.
+
+So an unvalidated input was treated as *stronger evidence than the verified
+constant*, and the honest fallback notice was silenced by the dishonest input.
+The other silent nulls fail to speak. This one spoke falsely and gagged the
+line that would have been correct.
+
+### The format contract
+
+eBay's `get_default_category_tree_id?marketplace_id=EBAY_US` returns
+`{ categoryTreeId: "0", categoryTreeVersion: "134" }` — a numeric string,
+recorded at `api/_ebayTaxonomy.js:46` as `VERIFIED_TREE_VERSION = '134'`.
+Validation is `/^\d+$/` against the trimmed value. Deliberately not widened
+into a lenient parser: the point is to refuse what we cannot recognize, not to
+salvage it.
+
+### Behaviour now
+
+| Input | Recorded | Source | Codes |
+|---|---|---|---|
+| absent | `134` | `verified-constant` | `TAXONOMY_VERSION_ASSUMED` |
+| `'134'` | `134` | `live` | — |
+| `134` (number) | `134` | `live` | — |
+| `'   '` | `134` | `verified-constant` | `TAXONOMY_VERSION_ASSUMED` |
+| `'13.4'` | `134` | `verified-constant` | `UNPARSEABLE` + `ASSUMED` |
+| `'complete garbage'` | `134` | `verified-constant` | `UNPARSEABLE` + `ASSUMED` |
+
+The two codes are **allowed to co-occur**, and that co-occurrence is the fix.
+Whitespace counts as absent rather than drift — same rule as
+`FEE_SCHEDULE_DATE_ABSENT` vs `FEE_SCHEDULE_DATE_UNPARSEABLE`. Neither blocks.
+
+### Reachability caveat, stated rather than buried
+
+`api/drafts.js:580` lists `taxonomyTreeVersion` among the fields **refused**
+from the client, and no server-side caller supplies it. So `treeVersionLive` is
+`null` on every production create today and `TAXONOMY_VERSION_ASSUMED` always
+fires. The garbage path is reachable only by the future caller that wires the
+live eBay taxonomy read — which is exactly who the old code would have misled.
+Fixing it now is a trap removed before anyone steps in it, not a live bug
+closed.
+
+---
+
+## §9 — Producer-side normalizer second pass: `stampPriceBasis`
+
+Five silent nulls, now split absent-from-unparseable throughout.
+
+`stampPriceBasis` was refactored into `stampPriceBasisReporting`, which returns
+`{ basis, findings }`; `stampPriceBasis` is now defined as a thin wrapper that
+returns `.basis`. The parse rules therefore exist **once**. The alternative —
+re-deriving the same conditions in `buildListingPacket` — would have put two
+implementations of "is this age readable" in the codebase, which is how a stamp
+and its findings start disagreeing.
+
+| Code | Fires when | Severity |
+|---|---|---|
+| `PRICE_BASIS_ABSENT` | no basis **and** `priceSource` is `comp`/`venue` | WARNING |
+| `PRICE_BASIS_AGE_ABSENT` | no `cacheAgeSec` | WARNING |
+| `PRICE_BASIS_AGE_UNPARSEABLE` | `cacheAgeSec` present, not a finite ≥0 number | WARNING |
+| `PRICE_BASIS_INCOMPLETE` | `label` or `sourceUrl` missing (named in `.missing`) | WARNING |
+| `PRICE_BASIS_DATING_UNPARSEABLE` | `datedBySource` present, not a boolean | WARNING |
+
+None block. Two judgement calls worth recording:
+
+- **A seller who typed their own number owes no market basis.** So
+  `PRICE_BASIS_ABSENT` is conditional on the price *claiming* to be derived.
+  Firing it on `priceSource: 'seller'` would have made the common case noisy,
+  and a warning that always fires is a warning nobody reads.
+- **`datedBySource` non-boolean → `false` was a claim, not an omission.**
+  `false` asserts *the source did not date this*. Coercing an unreadable value
+  to `false` states that assertion without having established it.
+
+### This is the live shape, not a hypothetical
+
+The bundle assigns `window._crBasis` in three places. Two of them — the
+SportsCardsPro paths at `js/core.541c4c39.js:3326` and `:4845` — set exactly:
+
+```js
+{ value: d.median, low: null, mid: null, high: null,
+  label: `SportsCardsPro guide · ${v.productName}` }
+```
+
+No `cacheAgeSec`, no `sourceUrl`, no `datedBySource`. **Every sports-card price
+produces a basis with a label and nothing else**, and the packet recorded that
+as a clean stamp. The main path at `:2701` passes `cacheAgeSec ?? null`, so it
+can be null there too when upstream omits it.
+
+### A correction, recorded rather than made quietly
+
+An earlier note in this file attributed `retrievedAt: null` to **PriceCharting**
+publishing no as-of date. That was wrong, and is corrected here rather than
+edited away. PriceCharting's gap is `datedBySource: false` — which the stamp
+**already handled honestly** and which is a different failure from having no
+retrieval time at all. The provider with no retrieval time is SportsCardsPro.
+The conclusion ("this is a whole provider's normal path, not an edge") survives;
+the attribution did not.
+
+**Tests:** `listing-packet-offline` 188 → **207/0** (19 checks), including one
+asserting `stampPriceBasis` is byte-identical to `stampPriceBasisReporting().basis`
+so the wrapper cannot drift from what it wraps.
+
+---
+
+## §10 — The two reachability sweeps
+
+Run because "never wired" changed what the roadmap's completion column means.
+Both sweeps are scripted, not read by eye.
+
+### §10a — Functions with no production call site
+
+**Method.** Every `export function` in `api/*.js` plus every top-level
+`function` in the live bundle `js/core.541c4c39.js` — **610 definitions**.
+Call sites counted across `api/*.js`, the live bundle, and `index.html`, with
+the definition line itself, comments, and dotted forms excluded. Retired
+bundles are deliberately **not** counted as call sites: they are not served.
+`index.html:3753` loads exactly one bundle.
+
+**Guard against the obvious false positive.** Handlers wired by string — 
+`onclick="foo()"` in generated markup, `data-callback="foo"`, `window[name]()` — 
+would look uncalled to a naive scan. Checked: the bundle contains **zero**
+`window[` dynamic dispatch and no interpolated `onclick="${...}()"`. A second
+pass counted bare-name references (functions passed as values, e.g.
+`rows.map(_crWireRow)`) separately.
+
+**Result: 64 of 610 have no production call site**, in three groups:
+
+| Group | Count | Meaning |
+|---|---|---|
+| A — called only by tests | 9 | the Block B pattern: lands as a library, tested, no seller reaches it |
+| B — referenced but not called | 17 | passed as a value, re-exported, or named only in a comment |
+| C — appears **only** at its own definition | 38 | unreferenced anywhere in production |
+
+**Group A — tested, unreachable.** `listPriceForTargetNet` (25 test calls),
+`ageFromRetrievedAt` (12), `stampPriceBasis` (4), `_resetTokenMemo` (4),
+`buildConditionPayload` (2), `verifiedAgeDays` (2), `conditionHandoffLines`,
+`getDefaultCategoryTreeId`, `getRequiredAspectNames` (1 each). This is the
+group that bears on the completion estimate: **test-call count is not
+reachability**, and a high one can actively disguise its absence.
+
+**Group C — checked before being characterised.** Four of the 38 looked alarming
+and turned out not to be:
+
+- `startProCheckout`, `startAnnualCheckout`, `startScanCheckout` — the live
+  subscription entry point is `startTierCheckout(tier)`, wired at
+  `index.html:3232` (`'pro'`) and `:3256` (`'pro_max'`). Checkout **works**.
+  These three are **superseded duplicates**.
+- `handleGoogleSignIn`, `applyGoogleUser`, `loadUserData` — auth runs through
+  `window._waitForAuth()` / `window.googleUser`. Also superseded.
+
+So Group C is predominantly **rule-1 debt, not missing capability**: one
+business behaviour with a dead second implementation sitting beside the live
+one. The hazard is that someone "fixes" the dead copy. That is a real
+maintenance risk and a different problem from Group A.
+
+**Conclusion for the estimate:** Group C does *not* deflate Phase 1 — those
+behaviours ship. **Group A does**, and `listPriceForTargetNet` is its
+exemplar: 25 test calls, a correctness fix in `ce616c8`, and no seller path.
+
+### §10b — Serialized fields with no reader
+
+**Method and its honest limit.** A real packet was built and walked to
+**70 field paths**. Readers were counted by leaf name across production,
+excluding the producing module.
+
+**This method can prove absence, not presence.** A leaf like `title`, `price`,
+or `condition` appears all over the bundle for unrelated reasons, so "has
+readers" from a name match is worth nothing. Reported as a limitation rather
+than dressed up as a result. It flagged 6 paths with zero name matches
+(`aspects.missingRequired`, `aspects.optional.Card Number`,
+`aspects.valuesVerified`, `metadata.packetSchemaVersion`,
+`metadata.taxonomyTreeVersionSource`, `blockingCodes`).
+
+**A decisive structural finding supersedes the field-level count.**
+`buildListingPacket` has exactly **one** call site in the entire codebase —
+`api/drafts.js:618`, `out.packet = buildListingPacket(card, packetCtx)` — and
+`api/_draftService.js:317` carries the deliberate-discard comment that drops
+the packet fields before `readDraft` returns. Nothing downstream of the create
+reads any of it.
+
+**Therefore all 70 packet fields are currently unread outside the producer and
+its tests.** The per-field sweep is moot until the packet reaches HTTP at all,
+which is the next queued item. It should be re-run **after** the consumer
+exists, when a per-field answer will mean something.
+
+### §10c — What the sweeps license about the Phase 1 estimate
+
+They do **not** license a new percentage, and no number is offered here.
+
+What they establish is that the roadmap's completion column measures the wrong
+thing. `audit/CARDRESELL_PLAN_AND_ROADMAP.md:520-528` marks blocks A, B, C, D1
+and D2.0 **Implemented** on the strength of code existing and suites passing.
+Block B is the demonstrated counter-example: `buildListingPacket` had no caller
+until `3db7169`, `listPriceForTargetNet` still has none, and the packet's output
+is discarded before it reaches a seller — while the block reads *Implemented,
+with external fields gated* and the suite reads 207/0.
+
+The sweeps give the tool for a per-block reachability pass; they do not
+constitute one. Until that pass runs block by block, the honest statement is
+still the one that prompted them: **the basis of the 80–85% has not been
+checked**, and any block marked Implemented inherits that doubt.
+
+Recorded in the roadmap itself so the doubt travels with the claim rather than
+living only here.
