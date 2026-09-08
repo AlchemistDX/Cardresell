@@ -7,8 +7,10 @@
 > sweep differenced *fees*; the metric reported was *upside*; the two move in
 > opposite directions. Corrected in full in §Q-C-corrected below. The
 > disclosure sentence we both then agreed on is backwards for the same reason.
+> **Second correction:** the `$11.00` worst case in that correction was itself an
+> artifact of sampling a `$100` shipping charge. See §Q-C-revised again.
 
-**Written at:** `b5a24af` · branch `phase1-block-d` · tree clean · nothing pushed
+**Written at:** `a90dd9c` · branch `phase1-block-d` · tree clean · nothing pushed
 **Answering:** your "Answers — D3 Step 5 review questions Q-A through Q-D", written against tip `59a971f`
 **Tip drift:** `59a971f` → `c4a733c` is four commits, all documentation. No code
 changed between your tip and this one, so nothing you read is stale. Stating it
@@ -341,6 +343,92 @@ complaint, it is the finding: confident presentation with correct numbers
 attached is what review validates against, so an inverted sign is close to
 invisible to it. If you have a cheap check for direction specifically, I would
 take it — I now have three instances and no defence.
+
+
+---
+
+## Q-C-revised again — your advice-invariance point generalises, and my $11 was an artifact
+
+Three of your four items are installed verbatim. The fourth turned out to be
+stronger than you stated it, and testing it caught one more bad number of mine.
+
+### Your point generalises past the 108
+
+You noted the optimistic pairs all sit where `upsideNet@0` is already negative,
+so the overstatement cannot change the advice. Correct — and it is not confined
+to those 108. `renderGradingUpside` renders three verdicts: `upsideNet > 5`
+(green, plus the "Best case" line), `> -5` (yellow), else red. Across **all
+1,704** shipping-dependent price pairs at every sampled shipping charge:
+
+> **pairs where shipping changes the seller-facing verdict: 0**
+
+Not rare — zero. **The panel's advice does not depend on the shipping charge
+anywhere in the sampled space.** That is a better bound than any dollar figure,
+because it is a property of the rendered output measured against its own
+thresholds rather than a magnitude that moves with what you sample.
+
+### Which exposed that my `$11.00` was an artifact
+
+Testing verdict-crossing meant varying the shipping grid, and the split moved:
+
+| shipping grid sampled | understates | overstates | no dependence | max understatement |
+|---|---|---|---|---|
+| `$0`–`$20` (realistic) | 1,500 | 108 | 672 | **$2.28** |
+| `$0`–`$100` | 1,500 | 108 | 672 | $11.00 |
+| `$0`–`$500` | 1,596 | 108 | 576 | $54.60 |
+
+**The `$11.00` I quoted came from sampling a `$100` shipping charge on a trading
+card.** Retracted. Grid-invariant across all three: the 108 optimistic pairs, the
+`$0.10` overstatement, all optimistic pairs having graded price `<= $10`, and
+zero mixed-direction pairs. Everything else needs its grid quoted with it.
+
+At realistic shipping, graded price `<= $300`: **deviation `<= $0.10` in either
+direction.** All prices: **`<= $2.28`**.
+
+So the corrected finding is smaller than the corrected version claimed. Third
+revision of one entry; the audit keeps all three, because two of the three
+versions were shared before being right.
+
+### The checks, installed
+
+1. **Producer-side, two calls** — a directional claim is produced by evaluating
+   the *rendered* expression at both endpoints, both numbers quoted inline.
+   Adopted verbatim, and the two-point pair for this claim now sits in the entry.
+2. **A direction cannot be carried across a subtraction** — count inversions
+   between the measured and claimed quantity; odd means the inherited sign is
+   wrong, and counting at all means re-evaluate the output instead. Filed as the
+   structural rule, with your framing that the count is the smell rather than the
+   fix.
+3. **Reviewer-side noun match** — does the conclusion sentence use the same noun
+   as the column header? Mine said "incremental fee difference" above and "the
+   figure" below.
+
+**I think (3) is the one that will actually hold.** (1) and (2) are producer
+discipline, so they fail precisely when the producer is confident — which is the
+state that produced all three wrong directions. (3) is a text comparison
+performed while reading, needs no recomputation, and the mismatch was visible in
+the shared document with no repo access. It is the only one of the three that
+does not depend on the person most likely to be wrong.
+
+### On your accounting
+
+Taking it, with one amendment: the noun mismatch was in the document, so it was
+findable from the artifact you had. But the join was also the part I presented
+with the most confidence and the least shown work — the tables had columns and
+grids, and the sentence connecting them had neither. **A reviewer re-deriving
+every join is a reviewer redoing the work; the fix is that the producer shows the
+join, which is exactly what check (1) forces.** That is why I would not describe
+this as a review failure with a producer contribution. It is a producer failure
+with a review layer that could not have been expected to absorb it.
+
+### Where this leaves BIAS-1
+
+Unchanged and unblocked. `S` cancels exactly for the FVF and promo terms; the
+residual is the `$10` per-order step and the store-dependent tier boundary; the
+residual never changes the rendered verdict; the copy states the assumption with
+no direction. **Building next, in the order already agreed** — parity guard, then
+the `<dl>` conversion with T2.14, then the visual re-verify, then the rename, and
+BIAS-1 after it because it edits the bundle.
 
 ## Sources
 
