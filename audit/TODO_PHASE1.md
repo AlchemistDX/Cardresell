@@ -163,15 +163,22 @@ Ordered by cost of leaving them broken, not by ease.
 - **PUSH GATE — do not push before the Cert ID is rotated.** `94dc777` is unreachable from `origin/main`, so the credential fragments exist only in unpushed history. The push is the publishing event. This is additive to the deploy-authorization rule below, not a replacement: rotation removes one blocker, it does not authorize a push. Recorded at `audit/DECISION_94dc777.md`.
 - **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory and now gates the first push. Sequence, environment dependencies, and the 18/19-vs-19/19 distinction are in `audit/DECISION_94dc777.md`. Once rotated and verified, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
 - **Run `tests/asset-fingerprints.mjs` after ANY edit to a hashed bundle — before reporting suites green.** Missing this let T2.9 rev3 land in `0c759cd` with `js/core.59d4b1ab.js` no longer hashing to its own bytes; the fix is recorded at `audit/BUNDLE_RENAME_9f0f6b30.md` and the mechanism at `audit/PATTERN_ASSERTION_SURFACE.md` instance 38. Suite selection driven by *what changed semantically* does not cover a defect whose mechanism is *the file changed*. Rename method is copy-to-new-address + restore the retired name's own bytes — **never `git mv`**, because `vercel.json:47` serves `/js/*.<8hex>.js` `immutable` for a year.
-- **Local history rewrite must also drop the tax captures.** Commit `6011b67`
-  added 25 full external page captures (2,569,243 bytes) under
-  `audit/d3/sources/taxaudit/`. They have been `git rm`'d and replaced by a
-  52 KB provenance record (`PROVENANCE.md`, `manifest.json`, generator
-  `tools/reduce-captures.py`), but the blobs remain **reachable from `6011b67`
-  on `phase1-block-d`, which has never been pushed**. Dropping them is the same
-  operation as the credential scrub and must happen in the **same rewrite** —
-  a later commit does not remove a blob from history. Rationale and the four
-  provenance properties are in §19 of `audit/d3/TAX_TREATMENT_T2_9.md`.
+- **WITHDRAWN 2026-09-08 — the tax captures do *not* require a history rewrite.**
+  Commit `6011b67` added 25 full external page captures (2,569,243 bytes) under
+  `audit/d3/sources/taxaudit/`; they were `git rm`'d and replaced by a 52 KB
+  provenance record (`PROVENANCE.md`, `manifest.json`, generator
+  `tools/reduce-captures.py`), and the blobs remain reachable from `6011b67` on
+  `phase1-block-d`, **which has never been pushed**. This entry previously said
+  dropping them was "the same operation as the credential scrub" and had to ride
+  the same rewrite. **That conflated two different questions.** A credential in
+  history is a secret that must not exist; an unpushed third-party page capture
+  is *private evidence retention*, which is not the same act as *public
+  redistribution* and does not become one until a push. The reviewer who
+  originally asked for the removal has since narrowed the request on exactly
+  this ground. **No history rewriting is planned or authorized on the captures'
+  account.** The pre-existing credential rewrite obligation is unrelated and
+  unchanged — do not let this withdrawal touch it. Provenance properties are in
+  §19 of `audit/d3/TAX_TREATMENT_T2_9.md`.
 - **Commit `94dc777` — DECIDED, option A, keep the history** (2026-09-06). The message contains no full credential and no credential-shaped fragment; rewriting the branch (36 commits when the decision was taken, more since) would invalidate every stamp in the audit corpus to redact a fragment of a credential being retired anyway. Conditional on rotation actually happening. Full record at `audit/DECISION_94dc777.md`.
 - **41 outgoing commits, nothing pushed.** `origin/main` = `9aaf326`. Verify with
   `git rev-list --count origin/main..HEAD`; a count is not pinned to a hash here because the

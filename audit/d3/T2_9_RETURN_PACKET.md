@@ -1,24 +1,57 @@
-# T2.9 / BIAS-10 — Return packet, revision 3
+# T2.9 / BIAS-10 — Return packet, revision 4
 
-**Scope of this revision:** the **two blocking corrections** from the second
-review — the TCGplayer debit conclusion (§1, §9) and the committed raw-page
-captures (§9, and §19 of the tax document) — plus the accepted refinements to
+**Revision 4** applies three consistency corrections requested on revision 3:
+the debit conclusion is now stated once and identically in §0/§1/§3/§8, the
+tested artifact is identified by content hash, and the capture description
+matches what is actually in the tree. No new audit work; amounts, disclosures
+and calculations are unchanged.
+
+**Scope of revision 3:** the **two blocking corrections** from the second
+review — the TCGplayer debit conclusion (§1, §9) and the raw-page captures
+(§9, and §19 of the tax document) — plus the accepted refinements to
 buylist wording, the eBay sentence, and the labelling of non-eBay rendered
 states. Revision 2's resolution of the original six rejections is retained. Nothing was pushed and nothing was deployed. `D3`, `BIAS-1` and
 `BIAS-6` remain closed and untouched.
 
-**Live bundle: `js/core.9f0f6b30.js` (21,491 lines).** Every line citation below
-was re-derived against that file after the rename. The superseded revision cited
-`core.2c7cf451.js`; the offset between them is recorded in
-`audit/BUNDLE_CITATION_MAP.md`.
+## The artifact these results were measured against
+
+Revision 2's bundle name was retained in error while the production copy and
+TRS-gating changes were made. Resolved:
+
+| | |
+|---|---|
+| Commit under review | `0c759cd` |
+| Bundle `index.html` resolved at that commit | `js/core.59d4b1ab.js` |
+| **SHA-256[:8] of those bytes** | **`9f0f6b30`** — the name was stale, the bytes are the tested ones |
+| Live bundle name today | `js/core.9f0f6b30.js` (21,491 lines), **byte-identical** to the above (`diff` clean) |
+| Retired name | `js/core.59d4b1ab.js` retained in-tree with its **own** `6011b67` bytes |
+
+So the focused results below were measured against the bytes now called
+`core.9f0f6b30.js`, and every `:NNNN` citation in this packet resolves against
+them unchanged. **No committed immutable bundle was overwritten:** the rename
+copied the edited bytes to their true content address and restored the retired
+name's own bytes, because `vercel.json:47` serves `/js/*.<8hex>.js` as
+`immutable` for a year. Full record in `audit/BUNDLE_RENAME_9f0f6b30.md`;
+mechanism in `audit/PATTERN_ASSERTION_SURFACE.md` instance 38.
+
+I did not detect this myself. A read-only snapshot tool reported
+`filenameMatchesBytes: false`, and our own `tests/asset-fingerprints.mjs` — which
+I had not run, because I selected suites by what I changed semantically rather
+than by the fact that a bundle file had changed — then failed 14/1.
 
 **Suites, run individually (`tests/run-all.sh` not run):**
 
 | Suite | Result |
 |---|---|
-| `tests/review-fee-dl.mjs` | **19 passed, 0 failed** |
+| `tests/review-fee-dl.mjs` | **21 passed, 0 failed** |
 | `tests/draft-review-screen.mjs` | **180 passed, 0 failed** |
 | `tests/accuracy-fee-parity.mjs` | **41 passed, 0 failed** |
+| `tests/asset-fingerprints.mjs` | **15 passed, 0 failed** (added after the miss above) |
+
+**The `19` in revision 2's copy of this table was stale, not a second run.**
+`review-fee-dl` was 19 before the TRS gate; registering `venueTrsNote` as
+behaviour added 2 checks, and §6 correctly reported 21. The summary table was
+not updated with the body. 21/0 is the count against the `9f0f6b30` bytes.
 
 ---
 
@@ -26,7 +59,7 @@ was re-derived against that file after the rename. The superseded revision cited
 
 | # | Your finding | Disposition |
 |---|---|---|
-| R1 | TCGplayer debit exception unreconciled | **Claim withdrawn.** Passage located and quoted; the assertion it was supposed to support is now an open item running in the *opposite* direction (§1) |
+| R1 | TCGplayer debit exception unreconciled | **Claim withdrawn, and no replacement claim is made.** Our two retrievals of the fee page return different text, so debit-specific processing treatment is unresolved. No fee-model change follows (§1) |
 | R2 | "No buyer checkout" is not a tax exemption | **Class dissolved.** TCG Bulk split out to `'unknown'`; the other three re-grounded on a fee finding, not a tax finding; `no-buyer-tax` and "confirmed zero" retired (§2) |
 | R3 | Unknown treatment cannot support magnitude or direction | **Three statements narrowed**, including withdrawing the claim that ranking was unaffected (§3) |
 | R4 | Wording must be state-appropriate; the helper cannot supply the explanation | **New `venueEstimateNote(pid)`.** Surfaced a latent defect of my own in the process (§4) |
@@ -35,43 +68,57 @@ was re-derived against that file after the rename. The superseded revision cited
 
 ---
 
-## 1. R1 — TCGplayer: the claim is withdrawn, and it fails toward overstatement
+## 1. R1 — TCGplayer: the claim is withdrawn, and our two retrievals disagree
 
-**The passage is real and I have it.** `audit/d3/sources/taxaudit/tcgplayer.txt:9`
-— an italic Note directly above the Marketplace Fees table on
-[TCGplayer's fees article](https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees):
+**Finding: the retrieved versions of the fee page disagree. Debit-specific
+processing treatment remains unresolved. No fee-model change follows.**
+
+Revision 3 framed this as two readings of one text. That was wrong, and your
+fresh retrieval is why. We are not reading the same page.
+
+**What both retrievals agree on.** A `2.5% + $.30` figure sits on the
+Marketplace Seller (Level 1–4) row. Neither of us disputes the row, the tier, or
+the amount.
+
+**What they disagree on.** The column heading, which is the only thing that
+scopes that figure to a payment method.
+
+| | Your retrieval | My capture (2026-09-08T13:39:17Z, SHA-256 `1d2aa480…`) |
+|---|---|---|
+| Column heading | **Transaction Fee** | **`Domestic CC/Paypal Processing Fee*`** (line 13) |
+| Occurrences of "transaction fee" | present | **0** (case-insensitive, whole file) |
+
+**Why the disagreement is the whole question.** Under your heading the fee is
+unconditional and our 100%-of-orders model is right. Under mine it is scoped to
+credit card and PayPal, and the debit case is unaddressed. The heading decides
+it, and the heading is what moved.
+
+**I am not asserting my capture is the correct one.** It is 2,824 bytes of
+markdown-converted text and could be a partial or variant rendering; a page can
+also be edited between two same-day fetches, or served differently by region or
+account context. I have no basis to rank the two retrievals, and the earlier
+version of this section which argued from *my* text toward a possible
+**overstatement on debit** is withdrawn — that argument required treating one
+retrieval as authoritative, which is exactly what is in dispute.
+
+**The Note is in my capture and is not itself contested** (`tcgplayer.txt:9`,
+[TCGplayer fees](https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees)):
 
 > *Note: TCGplayer charges fees based on the subtotal (item amount + shipping
 > cost). We do not charge fees on taxes for orders paid by debit card. However,
 > credit cards and PayPal do include taxes when determining the fee …*
 
-**Applicable configuration:** the buyer's **payment method**, and nothing else.
-The passage names no seller tier, no store configuration, no region.
-
-**What I cannot establish is precisely what I asserted.** "The processing base is
-correct for debit" requires knowing that a debit order carries a 2.5% + $0.30
-processing fee computed on the tax-exclusive subtotal. The Note establishes only
-that **taxes are not in the base** on debit. It does not establish that the
-processing fee **exists** on debit orders. **All eight worked configurations** in
+It establishes that taxes are outside the base on debit. It does not settle
+whether a processing fee applies on debit, and neither retrieval supplies a
+debit worked example — all eight in
 `audit/d3/sources/taxaudit/tcgplayer_examples.txt` are credit card or PayPal.
-There is no debit worked example in either capture.
 
-**Our model charges 2.5% + $0.30 on 100% of orders.** So if debit orders carry no
-processing fee, we **overstate** TCGplayer fees on every debit order — the
-opposite direction from the credit-card case, on the same venue. Expressed
-against the boundary rather than as a number: **TCGplayer's error is not signed**,
-because the sign depends on a payment method that does not exist until checkout,
-after the draft is written.
-
-Recorded as an **open item, not a finding**. Neither branch is published.
-`taxOn: 'unknown'`, `taxBasis: 'payment-method'` (`js/core.9f0f6b30.js:6312`) is
-unchanged and is the correct record for a conditional that resolves after we
-estimate.
-
-**Reproducibility.** Your fetch of that article did not return the Note. The 25
-raw captures are therefore now **committed to the repo** at
-`audit/d3/sources/taxaudit/` (2.6 MB), so every quotation in this packet can be
-checked against the bytes I read rather than against a re-fetch.
+**No fee-model change.** `taxOn: 'unknown'`, `taxBasis: 'payment-method'`
+(`js/core.9f0f6b30.js:6312`) is unchanged and remains the correct record for a
+conditional that resolves at checkout, after the draft is written. Recorded as
+an open item with **no direction stated**. Resolving it needs a retrieval both
+parties can pin — a dated archival snapshot, or TCGplayer confirming the current
+heading — not a third reading by either of us.
 
 ---
 
@@ -144,8 +191,8 @@ Adopted as three standing constraints, written into
    The published phrasing is now your wording verbatim: **"may understate fees
    when buyer-paid tax applies."**
 2. **No net direction is claimed across the venue set.** §1 above is the reason —
-   TCGplayer alone may run in both directions. A signed total needs the unknowns
-   resolved.
+   TCGplayer's debit treatment is unresolved between two retrievals, so its
+   contribution is not signed. A signed total needs the unknowns resolved.
 3. **No ranking effect has been ruled out.** My earlier statement that ranking was
    unaffected is **withdrawn**. Different corrections across venues can change
    ordering near a tie, and this work did not test for it. The ranking question
@@ -291,8 +338,10 @@ suite would have failed to construct rather than failed to assert.
 
 ## 8. Still open — not closed by this work
 
-- **Does a TCGplayer processing fee exist on debit orders at all?** §1. Possible
-  **overstatement**. No source either way.
+- **TCGplayer debit processing treatment is unresolved (§1).** Two same-day
+  retrievals of the fee page disagree on the heading that scopes the
+  2.5% + $0.30 column. Direction of any error is **not stated**, because the
+  scope question is what would determine it. No fee-model change.
 - **`feeBase` / `feeBaseLabel` still emit on 2 of 15** (eBay, TCGplayer) —
   BIAS-10's other half, untouched by T2.9. Thirteen venues show a fee total with
   no stated base, split-basis venues cannot express which component, and **no
@@ -330,9 +379,39 @@ Lines cited by number are **pinned** — retained in full, exempt from truncatio
 and the per-page cap — so the reduction cannot break an existing citation.
 Final redirected URL is **Unverified** on every row: it was not recorded at
 capture time, and re-fetching would record today's redirect, not that one.
-`git rm` clears the tree and index but the blobs stay reachable from `6011b67`,
-so this is **folded into the required local history rewrite** rather than left to
-a follow-up commit. Nothing has been pushed. See §19 of the tax document.
+**Tree versus history, stated plainly** — §1 and Sources previously described
+the full captures as committed evidence and are now corrected:
+
+| Where | What is there now |
+|---|---|
+| Working tree / `HEAD` | `PROVENANCE.md` + `manifest.json` only (~52 KB). **No `*.txt` captures.** |
+| Unpushed history (`6011b67`) | The 25 full captures remain reachable as blobs. `git rm` cleared tree and index, not history. |
+| Outside the repo | Originals retained at a local path, unversioned. |
+| `origin/main` | Nothing. 158 commits outgoing, none pushed. |
+
+**Your correction accepted, and it changes the plan.** Private evidence
+retention and public redistribution are different questions, and revision 3
+conflated them by folding "drop the captures from `6011b67`" into the required
+history rewrite. Those blobs are unpushed and private; they are not a
+redistribution event. **That item is withdrawn — no additional history rewriting
+is planned or authorized on this account**, and `audit/TODO_PHASE1.md` has been
+corrected accordingly. The pre-existing rewrite obligation is unrelated and
+unchanged.
+
+**Pinned lines meet your condition: original numbering is preserved, not
+remapped.** Each excerpt block is headed *"line numbers from the original
+capture"* and every line carries its original number as a literal prefix, so
+`tcgplayer.txt:9` resolves to the line numbered `9`:
+
+```
+  9: *Note: TCGplayer charges fees based on the subtotal (item amount + shipping cost). We do not charge fees on taxes …*
+ 13: |Seller Type|Marketplace Commission Fee|Pro Fee|…|Domestic CC/Paypal Processing Fee*|
+ 15: |Marketplace Seller (Level 1-4 Account)|10.25%|N/A|N/A|N/A|2.5%+$.30|
+```
+
+Numbering is against the original capture, whose SHA-256 is recorded per file,
+so a quotation stays checkable against the bytes it came from. Nothing has been
+pushed. See §19 of the tax document.
 
 **Also applied:** the no-seller-fee scope is now exactly *"no modelled seller
 service fee has a tax-bearing base"* — never "the venue is confirmed to charge no
@@ -367,8 +446,8 @@ whether a provider low is withheld.
 
 ## Sources
 
-All quotations retrieved 2026-09-08. Raw captures committed at
-`audit/d3/sources/taxaudit/`.
+All quotations retrieved 2026-09-08. **What is in the tree is a provenance
+record, not the full captures** — see §9 and the note below.
 
 - eBay — https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822
 - TCGplayer fees — https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees
