@@ -1,6 +1,6 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.34fb750c.js` (21,494 lines).** New work cites that hash.
+**Live bundle: `js/core.34fb750c.js` (22,142 lines).** New work cites that hash.
 
 > ### Four generations this file did not record when they happened
 >
