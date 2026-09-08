@@ -303,8 +303,54 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
       if (!next.card || typeof next.card !== 'object') {
         throw new Error('PACKET_REBUILD_NO_CARD_ROW');
       }
+
+      // ── The quote's retrieval time is PRESERVED HERE, and only here ──────
+      //
+      // Refreshing a packet is not re-reading the price source. The rebuild
+      // reassembles a listing from values already stored; the quote underneath
+      // it was read once, earlier, and its age must not move because someone
+      // pressed a button. Re-deriving it from a duration at rebuild time walks
+      // an hour-old quote forward to ten minutes old, which is the defect this
+      // lane opened with.
+      //
+      // WHY THE SERVER AND NOT THE CLIENT. The client cannot do this. Once a
+      // packet goes stale the read gate withholds it -- correctly, it no longer
+      // describes the draft -- so the retrieval time is not in anything the
+      // client can see, and refreshing after an edit is the ordinary case. The
+      // record still has it. Reading it from the record is one implementation
+      // in the one place that always has the data, rather than a client
+      // round-trip that works only when the packet happened to be readable.
+      //
+      // The client's own basisMeta.retrievedAt still WINS when present, because
+      // that is a live read the client just performed and the server has no
+      // better source for it. This is a fallback, not an override.
+      let pc = body.pricingContext;
+      const priorRetrievedAt = (next.packet && next.packet.priceBasis
+        && typeof next.packet.priceBasis.retrievedAt === 'string')
+        ? next.packet.priceBasis.retrievedAt : null;
+      const declared = (pc && typeof pc === 'object' && pc.basisMeta && typeof pc.basisMeta === 'object')
+        ? pc.basisMeta : null;
+      if (priorRetrievedAt && !(declared && declared.retrievedAt)) {
+        // Carried WITH the rest of the prior basis, not alone: a retrieval time
+        // detached from the source it was read from documents nothing.
+        const prior = next.packet.priceBasis;
+        pc = {
+          ...(pc && typeof pc === 'object' ? pc : {}),
+          basisMeta: {
+            ...(prior.label ? { label: prior.label } : {}),
+            ...(prior.sourceUrl ? { sourceUrl: prior.sourceUrl } : {}),
+            ...(prior.low != null ? { low: prior.low } : {}),
+            ...(prior.mid != null ? { mid: prior.mid } : {}),
+            ...(prior.high != null ? { high: prior.high } : {}),
+            datedBySource: !!prior.datedBySource,
+            ...declared,
+            retrievedAt: priorRetrievedAt,
+          },
+        };
+      }
+
       return buildPacketFor(next.card, {
-        pricingContext: body.pricingContext,
+        pricingContext: pc,
         slot:        next.slot,
         price:       next.price,
         priceSource: next.priceSource,

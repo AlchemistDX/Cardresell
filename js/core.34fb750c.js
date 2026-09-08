@@ -2714,6 +2714,14 @@ async function fetchAndApplySoldComps(forceRefresh) {
         // AND how old it is. Carrying these on the basis means the caption can
         // never disagree with the row it was derived from.
         cacheAgeSec: _basisMeta ? (_basisMeta.cacheAgeSec ?? null) : null,
+        // 2026-09-08. The ABSOLUTE moment this quote was read, stamped HERE
+        // and once. cacheAgeSec is a duration, and a duration is only
+        // meaningful against the clock that read it -- re-converting it later
+        // (on a packet rebuild, say) walks the retrieval time forward and makes
+        // an hour-old quote read as ten minutes old. Converting at the moment
+        // of the read is the one place the conversion is correct, so it happens
+        // here and the answer is carried, not recomputed.
+        retrievedAt: _crRetrievedAtFrom(_basisMeta),
         sourceUrl:   _basisMeta ? (_basisMeta.sourceUrl   || null) : null,
         // PriceCharting publishes no as-of date; TCGplayer market is computed
         // from completed sales. The caption needs to know which it is holding.
@@ -20246,6 +20254,88 @@ async function startListingDraft() {
   }
 }
 
+/**
+ * The absolute moment a quote was read, from whatever the wire gave us.
+ *
+ * ONE converter, called at the moment of the read and nowhere else. Prefers an
+ * absolute time if the source supplied one; otherwise converts the duration
+ * against the clock that is reading it right now, which is the only clock the
+ * duration is meaningful against.
+ *
+ * Returns null rather than a guess. A basis with no age is reported as having
+ * no age -- the packet has PRICE_BASIS_AGE_ABSENT for exactly that, and
+ * inventing `Date.now()` here would turn "we don't know when this was read"
+ * into "it was read just now", which is the one wrong answer.
+ */
+function _crRetrievedAtFrom(meta) {
+  if (!meta || typeof meta !== 'object') return null;
+  if (typeof meta.retrievedAt === 'string' && meta.retrievedAt) {
+    const t = Date.parse(meta.retrievedAt);
+    return Number.isFinite(t) ? new Date(t).toISOString() : null;
+  }
+  const age = Number(meta.cacheAgeSec);
+  if (!Number.isFinite(age) || age < 0) return null;
+  return new Date(Date.now() - age * 1000).toISOString();
+}
+
+/**
+ * The client-declared pricing context, assembled in ONE place.
+ *
+ * Create and rebuild both come through here. Two copies of this object would
+ * drift the first time a fee revision moved, and the drift would be invisible:
+ * the packet would simply record a revision the client no longer runs, and a
+ * stored packet that disagrees with the app looks exactly like one that agrees.
+ *
+ * WHAT IS DECLARED, AND WHAT THAT MEANS. Everything here is the CLIENT's word.
+ * The server labels it as such inside the packet -- `feeMetadataSource:
+ * 'client-declared'`, plus a FEE_METADATA_CLIENT_DECLARED note -- and does not
+ * verify the arithmetic behind it. That label has to survive onto the review
+ * screen; see _reviewPacketDisclosuresHtml.
+ *
+ * `basisMeta` is only ever populated from a LIVE basis -- a price the app has
+ * just read. On a rebuild there is no live basis and none is sent: the quote's
+ * retrieval time is preserved server-side from the record, because a stale
+ * packet is withheld from the client and the client therefore cannot see the
+ * time it would need to forward. `retrievedAt` remains accepted here for a
+ * caller that genuinely holds one; it is not how the refresh path works.
+ */
+function _crPricingContext(opts) {
+  const o = opts || {};
+  const pid = CR_D1_SLOT.split(':')[0];
+  const venue = (typeof PLATFORMS === 'object' && PLATFORMS) ? PLATFORMS[pid] : null;
+  const b = (o.basis !== undefined) ? o.basis : (window._crBasis || null);
+
+  const ctx = { feeModelRevision: FEE_MODEL_REVISION };
+  // Omitted rather than nulled when the venue table has no audit date: a
+  // declared null is a claim about the schedule, an absent key is not.
+  if (venue && venue.feeAuditedOn) ctx.feeScheduleVerified = venue.feeAuditedOn;
+
+  // An explicit retrievedAt (the rebuild path) wins over anything derivable
+  // from the live basis, because on a rebuild the live basis is either absent
+  // or belongs to a different, later read.
+  const retrievedAt = (typeof o.retrievedAt === 'string' && o.retrievedAt)
+    ? _crRetrievedAtFrom({ retrievedAt: o.retrievedAt })
+    : _crRetrievedAtFrom(b);
+
+  if (b || retrievedAt) {
+    const meta = {};
+    if (b && b.label)     meta.label     = String(b.label);
+    if (b && b.sourceUrl) meta.sourceUrl = String(b.sourceUrl);
+    if (b) meta.datedBySource = !!b.datedBySource;
+    for (const k of ['low', 'mid', 'high']) {
+      if (b && b[k] != null && Number.isFinite(Number(b[k]))) meta[k] = Number(b[k]);
+    }
+    if (b && b.highClamped) meta.highClamped = true;
+    // The absolute form only. cacheAgeSec is deliberately NOT forwarded: the
+    // server prefers the absolute when both are present, so sending both would
+    // ship a field that can only ever be ignored or, if the preference ever
+    // regressed, silently win.
+    if (retrievedAt) meta.retrievedAt = retrievedAt;
+    if (Object.keys(meta).length) ctx.basisMeta = meta;
+  }
+  return ctx;
+}
+
 /* ── The create call ─────────────────────────────────────────────────────────
    Both entry points — the card panel and a Collection row — come through here.
    The first cut of this block had the fetch and the whole status ladder written
@@ -20272,6 +20362,11 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
         // or what its SKU is — the server derives both, and refuses a
         // client-supplied title or sku outright.
         card, instanceId, slot: CR_D1_SLOT, price, priceSource,
+        // Client-declared, and labelled as such by the server. Without this
+        // the packet is built with no fee revision at all, which BLOCKS it
+        // (MISSING_FEE_MODEL_REVISION) -- so every draft the app created
+        // carried a packet the seller could never use.
+        pricingContext: _crPricingContext(),
       }),
     });
 
@@ -21024,7 +21119,52 @@ const _reviewState = {
   // server owns (contract §2.9, §3.4).
   readiness: null,
   error: null,
+  // ── The stored listing packet, as the server forwarded it ──────────────
+  //
+  // FOUR fields, and all four are cleared together. They are one fact about
+  // one draft, so keeping them as one group is what makes "clear it" a single
+  // statement (_reviewClearPacket) instead of four the next editor can get
+  // three-quarters right.
+  //
+  // `usable` is the SERVER's verdict and is never re-derived here. The client
+  // has the fingerprint and the record and could compare them, and that second
+  // implementation would be wrong the first time the projection widened -- as
+  // it just did, from three fields to five.
+  packet: null,
+  packetStatus: null,
+  packetUsable: false,
+  packetReason: null,
+  // Set while a refresh is in flight, so the button can say so and cannot be
+  // pressed twice into two competing rebuilds.
+  refreshing: false,
+  // A refresh that failed. Rendered next to the refresh control, NOT in place
+  // of the draft: a rebuild that did not happen has not damaged anything.
+  refreshError: null,
 };
+
+/**
+ * Drop every trace of a packet.
+ *
+ * THE WHOLE POINT: this is called on every transition that could leave a
+ * previous packet's content on screen or in a copy button -- another draft
+ * loading, a failed read, a sign-out, an edit, a refresh. The requirement is
+ * not "warn that the packet is stale"; it is that the stale listing content and
+ * its copy payloads GO AWAY. A seller who copies a title into eBay does not
+ * re-read the banner above it first.
+ *
+ * There is no separate copy-payload store to clear, and that is deliberate:
+ * `_reviewCopyPayload` derives every payload from `_reviewState.packet` at
+ * click time and refuses when `packetUsable` is false. A cached payload string
+ * would be a second copy of the packet with its own lifetime, and clearing one
+ * of two copies is the shape of bug this codebase keeps paying for.
+ */
+function _reviewClearPacket() {
+  _reviewState.packet = null;
+  _reviewState.packetStatus = null;
+  _reviewState.packetUsable = false;
+  _reviewState.packetReason = null;
+  _reviewState.refreshError = null;
+}
 
 /** GET /api/drafts?id=<draftId>. Hand-rolled Bearer, per contract §3.2. */
 async function _reviewFetch(draftId) {
@@ -21045,6 +21185,9 @@ function _reviewAbsorb(resp) {
   if (resp.status === 401) {
     _reviewState.signedIn = false;
     _reviewState.error = null;
+    // Signed out is a transition too. Leaving a packet here would put the
+    // previous session's listing content one sign-in away from being repainted.
+    _reviewClearPacket();
     return;
   }
   _reviewState.signedIn = true;
@@ -21054,6 +21197,7 @@ function _reviewAbsorb(resp) {
     _reviewState.draft = null;
     _reviewState.readiness = null;
     _reviewState.error = _reviewErrCopy(b.code || b.error, b.retryable);
+    _reviewClearPacket();
     return;
   }
 
@@ -21064,6 +21208,23 @@ function _reviewAbsorb(resp) {
   // that predates contract §2.9 omits the key; the honest response is to say
   // nothing about readiness rather than reconstruct it from `validation`.
   _reviewState.readiness = (b.readiness && typeof b.readiness === 'object') ? b.readiness : null;
+
+  // ── The packet, read from the envelope and NOT reconstructed ────────────
+  //
+  // Absent keys mean "this build/server sent no packet fields", which is not
+  // the same as "the packet is fine" and not the same as "the draft is broken".
+  // The defaults are the fail-closed ones: no packet, not usable.
+  _reviewClearPacket();
+  _reviewState.packet       = (b.packet && typeof b.packet === 'object' && !Array.isArray(b.packet)) ? b.packet : null;
+  _reviewState.packetStatus = (typeof b.packetStatus === 'string') ? b.packetStatus : null;
+  // STRICT true. `packetUsable` absent, null, or any truthy non-true value all
+  // mean "the server did not say yes", and the answer to that is no.
+  _reviewState.packetUsable = (b.packetUsable === true) && !!_reviewState.packet;
+  // A STRING code, per the read envelope: PACKET_INPUTS_DIFFER,
+  // PACKET_INPUTS_NEVER_MATCHED, PACKET_INPUTS_UNRECORDED, or one of the
+  // readStoredPacket failures. Kept as the code, not resolved to copy here --
+  // see _REVIEW_PACKET_REASON.
+  _reviewState.packetReason = (typeof b.packetReason === 'string' && b.packetReason) ? b.packetReason : null;
 }
 
 function _reviewEsc(s) { return _draftsEsc(s); }
@@ -21097,9 +21258,33 @@ function _reviewIdentityHtml() {
   let verdict = '';
   if (r && typeof r.publishable === 'boolean') {
     const blockers = Array.isArray(r.blockers) ? r.blockers : [];
-    verdict = r.publishable
-      ? '<div class="review-verdict review-verdict-ok">Ready to list</div>'
-      : `<div class="review-verdict review-verdict-blocked">${blockers.length === 1 ? '1 thing to fix' : blockers.length + ' things to fix'}</div>`;
+    // ── The combination rule, written out ───────────────────────────────
+    //
+    // Draft readiness and packet usability are TWO different facts and neither
+    // implies the other. `readiness.publishable` says the stored fields pass
+    // the slot's validation; `packetUsable` says the prepared listing details
+    // describe those fields. A draft can be perfectly valid with a stale
+    // packet, and that is the common case after an edit.
+    //
+    // Stated explicitly rather than inferred either direction:
+    //
+    //   publishable && packetUsable  -> Ready to list
+    //   publishable && !packetUsable -> Details need a refresh   (NOT ready:
+    //                                   there is nothing correct to copy)
+    //   !publishable                 -> N things to fix          (the draft's
+    //                                   own blockers come first)
+    //
+    // The middle row is the one that matters. "Ready to list" beside listing
+    // details we have just refused to show would be the screen telling the
+    // seller to go do the thing it cannot help them do.
+    const detailsMissing = !_reviewState.packetUsable;
+    if (!r.publishable) {
+      verdict = `<div class="review-verdict review-verdict-blocked" data-review-verdict="blocked">${blockers.length === 1 ? '1 thing to fix' : blockers.length + ' things to fix'}</div>`;
+    } else if (detailsMissing) {
+      verdict = '<div class="review-verdict review-verdict-blocked" data-review-verdict="details-stale">Listing details need a refresh</div>';
+    } else {
+      verdict = '<div class="review-verdict review-verdict-ok" data-review-verdict="ready">Ready to list</div>';
+    }
   }
 
   return `
@@ -21436,6 +21621,255 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
       </div>`;
 }
 
+/* ── The stored listing packet ───────────────────────────────────────────
+ *
+ * WHAT THIS SCREEN IS FOR, restated because it is the whole point: a packet
+ * sitting in storage is not a feature. The seller reaches the feature when they
+ * can read the listing details, see what is qualified about them, refresh them,
+ * and copy them into the venue's form. Until then the producer has been talking
+ * to itself.
+ */
+
+/**
+ * Why a packet cannot be used, in the seller's terms.
+ *
+ * Reason codes are a SERVER vocabulary and this table is the client's reading
+ * of it. An unknown code falls through to a generic line that still says the
+ * true thing -- the details are out of date -- rather than printing the code at
+ * a seller or, worse, saying nothing and leaving the block looking fine.
+ *
+ * None of these say "an edit changed it". At revision 1 the packet demonstrably
+ * never matched; after an edit a mismatch is CONSISTENT with an edit without
+ * establishing one, because a packet that never matched and was then edited
+ * past arrives here identically. The copy states what is known.
+ */
+const _REVIEW_PACKET_REASON = {
+  PACKET_INPUTS_DIFFER: {
+    h: 'These listing details are out of date',
+    p: 'They were prepared from different values than this draft now holds. Refresh them before you copy anything.',
+  },
+  PACKET_INPUTS_NEVER_MATCHED: {
+    h: 'These listing details never matched this draft',
+    p: 'They were prepared from values this draft has never held, and the draft has not been edited since. Refresh them.',
+  },
+  PACKET_INPUTS_UNRECORDED: {
+    h: "We can't confirm these listing details match",
+    p: 'They were saved without a record of what they were prepared from, so we cannot tell. Refresh them.',
+  },
+  PACKET_NOT_AN_OBJECT: {
+    h: "We couldn't read the saved listing details",
+    p: 'The saved copy is unreadable. Refreshing prepares a new one.',
+  },
+  PACKET_VERSION_MALFORMED: {
+    h: "We couldn't read the saved listing details",
+    p: 'The saved copy has no readable version, so we will not show it. Refreshing prepares a new one.',
+  },
+  PACKET_VERSION_TOO_NEW: {
+    h: 'This app is too old to read the saved listing details',
+    p: 'They were prepared by a newer version. Reload the page to update, then try again.',
+  },
+};
+
+function _reviewPacketReasonCopy(code) {
+  return _REVIEW_PACKET_REASON[code] || {
+    h: 'These listing details are out of date',
+    p: 'We will not copy them into a listing until they are refreshed.',
+  };
+}
+
+/**
+ * The listing rows, derived from the packet at render time.
+ *
+ * Returns [] when there is no usable packet, which is what makes the clearing
+ * requirement structural rather than remembered: there is no branch that can
+ * render rows from an unusable packet, because the rows do not exist.
+ */
+function _reviewPacketRows() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  if (!pk) return [];
+  const rows = [];
+  const t = pk.title && typeof pk.title === 'object' ? pk.title : null;
+  if (t && typeof t.text === 'string') {
+    rows.push({ key: 'title', label: 'Listing title', value: t.text });
+  }
+  if (pk.category && pk.category.label) {
+    rows.push({ key: 'category', label: 'Category', value: String(pk.category.label) });
+  }
+  if (pk.condition && pk.condition.conditionLabel) {
+    rows.push({ key: 'condition', label: 'Condition', value: String(pk.condition.conditionLabel) });
+  }
+  const asp = pk.aspects && typeof pk.aspects === 'object' ? pk.aspects : null;
+  if (asp) {
+    for (const bag of ['required', 'optional']) {
+      const o = asp[bag] && typeof asp[bag] === 'object' ? asp[bag] : null;
+      if (!o) continue;
+      for (const name of Object.keys(o)) {
+        const vals = Array.isArray(o[name]) ? o[name] : [o[name]];
+        rows.push({
+          key: 'aspect:' + name, label: name, value: vals.join(', '),
+          // Required aspects are the ones the venue will reject a listing for.
+          required: bag === 'required',
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+/**
+ * Every payload a copy button can produce, derived at CLICK time.
+ *
+ * ONE gate, at the top, and every payload comes through it. Returning null for
+ * an unusable packet is what makes "the copy buttons stop working when the
+ * packet goes stale" true by construction instead of true by four remembered
+ * call sites. A cached payload string would be a second copy of the packet with
+ * its own lifetime, and this codebase's recurring bug is the second copy.
+ */
+function _reviewCopyPayload(kind) {
+  if (!_reviewState.packetUsable || !_reviewState.packet) return null;
+  const rows = _reviewPacketRows();
+  if (!rows.length) return null;
+  if (kind === 'title') {
+    const t = rows.find((r) => r.key === 'title');
+    return t ? t.value : null;
+  }
+  if (kind === 'aspects') {
+    const a = rows.filter((r) => r.key.startsWith('aspect:'));
+    return a.length ? a.map((r) => r.label + ': ' + r.value).join('\n') : null;
+  }
+  if (kind === 'all') {
+    return rows.map((r) => r.label + ': ' + r.value).join('\n');
+  }
+  return null;
+}
+
+/**
+ * The packet's own notes, rendered as disclosures.
+ *
+ * THE QUALIFICATION HAS TO SURVIVE TO HERE. `feeMetadataSource:
+ * 'client-declared'` and the FEE_METADATA_CLIENT_DECLARED note say that the fee
+ * revision and schedule date behind these details are the app's word and were
+ * not checked against a server-owned fee contract. A screen that printed
+ * "revision 1" next to a green tick would be asserting verified arithmetic that
+ * nobody performed -- matching a revision string is not the same as checking
+ * the numbers it names.
+ *
+ * Server copy, rendered verbatim, same rule as the blocker lines: the client
+ * authors none of this text.
+ */
+function _reviewPacketDisclosuresHtml() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  if (!pk) return '';
+  const notes = Array.isArray(pk.notes) ? pk.notes : [];
+  const meta  = pk.metadata && typeof pk.metadata === 'object' ? pk.metadata : {};
+
+  const lines = notes
+    .filter((n) => n && typeof n.message === 'string' && n.message)
+    .map((n) => {
+      const sev = String(n.severity || 'INFO').toUpperCase();
+      return `<div class="review-packet-note" data-packet-note="${_reviewEsc(String(n.code || ''))}" data-packet-note-severity="${_reviewEsc(sev)}">${_reviewEsc(n.message)}</div>`;
+    }).join('');
+
+  // The declared numbers are shown WITH the boundary attached, in one element,
+  // so no layout change can separate the figure from the qualification. The
+  // server's own FEE_METADATA_CLIENT_DECLARED note is rendered above; this row
+  // is what the note is about, and `data-fee-metadata-source` is the field a
+  // consumer branches on rather than parsing prose.
+  let declared = '';
+  if (meta.feeMetadataSource) {
+    const rev = meta.clientDeclaredFeeModelRevision;
+    const sch = meta.clientDeclaredFeeScheduleDate;
+    const bits = [];
+    if (rev != null) bits.push('fee model revision ' + String(rev));
+    if (sch) bits.push('fee schedule ' + String(sch));
+    declared = `
+        <div class="review-packet-note" data-packet-declared="${_reviewEsc(String(meta.feeMetadataSource))}">
+          Declared by this app${bits.length ? ': ' + _reviewEsc(bits.join(', ')) : ''} \u2014 not verified against a server-owned fee contract.
+        </div>`;
+  }
+  if (!lines && !declared) return '';
+  return `
+      <div class="review-packet-notes" data-packet-notes="">
+        <div class="review-field-label">Before you submit</div>
+        ${lines}${declared}
+      </div>`;
+}
+
+/** The refresh control, plus any error the last refresh produced. */
+function _reviewPacketRefreshHtml() {
+  const d = _reviewState.draft;
+  // No draft, or one whose revision we do not know, cannot be refreshed: the
+  // PATCH requires the rev the client actually saw.
+  if (!d || !Number.isInteger(d.rev)) return '';
+  const busy = _reviewState.refreshing;
+  const err  = _reviewState.refreshError;
+  return `
+      <div class="review-packet-actions">
+        <button type="button" class="draft-more-btn" id="reviewRefreshBtn" data-packet-refresh=""${busy ? ' disabled' : ''}>${busy ? 'Refreshing\u2026' : 'Refresh listing details'}</button>
+        ${err ? `<div class="review-packet-error" data-packet-refresh-error="${_reviewEsc(String(err.code || ''))}">${_reviewEsc(err.text)}${err.hint ? ' ' + _reviewEsc(err.hint) : ''}</div>` : ''}
+      </div>`;
+}
+
+/**
+ * The packet block: content when usable, the reason when not, and the refresh
+ * control in both cases.
+ *
+ * The unusable arm renders NO listing rows and NO copy buttons. That is the
+ * reviewer's requirement stated as structure: a warning printed above the old
+ * content leaves the old content copyable, and a seller who is about to paste a
+ * title into eBay is not re-reading the banner above it.
+ */
+function _reviewPacketHtml() {
+  const has = !!_reviewState.packet || !!_reviewState.packetStatus;
+  if (!has) {
+    // No packet fields on the envelope at all. Distinct from a stale packet:
+    // nothing has been prepared, so there is nothing to be out of date.
+    return `
+      <div class="review-packet" data-review-packet="absent">
+        <div class="review-packet-h">Listing details</div>
+        <div class="review-packet-p">No listing details have been prepared for this draft yet.</div>
+        ${_reviewPacketRefreshHtml()}
+      </div>`;
+  }
+
+  if (!_reviewState.packetUsable) {
+    const c = _reviewPacketReasonCopy(_reviewState.packetReason);
+    return `
+      <div class="review-packet review-packet-unusable" data-review-packet="unusable"
+           data-packet-status="${_reviewEsc(String(_reviewState.packetStatus || ''))}"
+           data-packet-reason="${_reviewEsc(String(_reviewState.packetReason || ''))}">
+        <div class="review-packet-h">${_reviewEsc(c.h)}</div>
+        <div class="review-packet-p">${_reviewEsc(c.p)}</div>
+        ${_reviewPacketRefreshHtml()}
+      </div>`;
+  }
+
+  const rows = _reviewPacketRows();
+  const rowHtml = rows.map((r) => `
+        <div class="review-field" data-packet-field="${_reviewEsc(r.key)}"${r.required ? ' data-packet-required=""' : ''}>
+          <div class="review-field-label">${_reviewEsc(r.label)}</div>
+          <div class="review-field-value">${_reviewEsc(r.value)}</div>
+        </div>`).join('');
+
+  const t = _reviewState.packet.title || {};
+  const dropped = Array.isArray(t.dropped) ? t.dropped : [];
+
+  return `
+      <div class="review-packet" data-review-packet="usable"
+           data-packet-status="${_reviewEsc(String(_reviewState.packetStatus || ''))}">
+        <div class="review-packet-h">Listing details</div>
+        <div class="review-packet-fields">${rowHtml}</div>
+        ${dropped.length ? `<div class="review-packet-p" data-packet-dropped="">The title was too long for this venue, so we left out: ${_reviewEsc(dropped.join(', '))}.</div>` : ''}
+        ${_reviewPacketDisclosuresHtml()}
+        <div class="review-packet-copy">
+          <button type="button" class="draft-more-btn" data-packet-copy="title">Copy title</button>
+          <button type="button" class="draft-more-btn" data-packet-copy="aspects">Copy card details</button>
+          <button type="button" class="draft-more-btn" data-packet-copy="all">Copy everything</button>
+        </div>
+        ${_reviewPacketRefreshHtml()}
+      </div>`;
+}
+
 function _reviewBodyHtml() {
   if (!_reviewState.signedIn) {
     return `
@@ -21473,7 +21907,7 @@ function _reviewBodyHtml() {
       </div>`;
   }
 
-  return `${_reviewIdentityHtml()}${_reviewFieldsHtml()}${_reviewFeesHtml()}`;
+  return `${_reviewIdentityHtml()}${_reviewFieldsHtml()}${_reviewPacketHtml()}${_reviewFeesHtml()}`;
 }
 
 function _reviewPaint() {
@@ -21488,6 +21922,14 @@ async function loadDraftReview(draftId) {
   _reviewState.draft = null;
   _reviewState.readiness = null;
   _reviewState.error = null;
+  _reviewState.refreshing = false;
+  // ANOTHER DRAFT IS LOADING. Cleared here, before the fetch, not in the
+  // response handler -- otherwise the previous draft's listing details stay on
+  // screen and stay copyable for the whole round trip, and on a slow connection
+  // that window is where a seller copies the wrong card's title. Cleared even
+  // when the id is unchanged: a reload is a re-read, and what comes back may
+  // no longer be usable.
+  _reviewClearPacket();
 
   if (!_reviewState.draftId) {
     _reviewState.loading = false;
@@ -21509,6 +21951,143 @@ async function loadDraftReview(draftId) {
   _reviewPaint();
 }
 
+/**
+ * Refresh the stored listing details: PATCH the draft with a pricing context
+ * and nothing else.
+ *
+ * NO EDIT FIELDS. This is the "explicit recompute" half of the server's one
+ * rule -- a PATCH carrying `pricingContext` rebuilds the packet from the values
+ * already stored. Sending a title or price here would make the refresh button
+ * an edit, and a button that silently writes the values currently on screen is
+ * how a stale render becomes a stored fact.
+ *
+ * The retrieval time is READ BACK OFF THE PACKET WE ARE REPLACING, when there
+ * is one. After a reload this app no longer holds the scan's basis, but the
+ * stored packet still records when the quote was read -- so the rebuild reuses
+ * that moment rather than letting the server derive a fresh one. Refreshing the
+ * bytes is not re-reading the source, and the retrieval time must not move as
+ * if it were.
+ *
+ * If there is NO readable retrieval time (an unreadable packet, or one stored
+ * without a basis), none is sent. The rebuilt packet then carries
+ * PRICE_BASIS_AGE_ABSENT, which is the truthful outcome: we cannot say how old
+ * this quote is. Substituting "now" would be an invented retrieval.
+ */
+async function _reviewRefreshPacket() {
+  const d = _reviewState.draft;
+  if (!d || !Number.isInteger(d.rev) || _reviewState.refreshing) return;
+  const draftId = _reviewState.draftId;
+
+  _reviewState.refreshing = true;
+  _reviewState.refreshError = null;
+  _reviewPaint();
+
+  // ── THE RETRIEVAL TIME IS NOT SENT FROM HERE, AND THAT IS THE FIX ───────
+  //
+  // The first version of this function read the prior packet's retrievedAt off
+  // `_reviewState.packet` and forwarded it. That is the obvious thing and it is
+  // wrong in the ordinary case: a packet only goes stale after an edit, and a
+  // stale packet is WITHHELD by the read gate -- so `_reviewState.packet` is
+  // null exactly when a refresh is most likely, and the quote's age would have
+  // been lost every time. The end-to-end test caught it; the PATCH went out
+  // with no retrieval time at all.
+  //
+  // The record still has it, so the server preserves it during the rebuild.
+  // One implementation, in the one place that always holds the data.
+
+  let resp;
+  try {
+    let token = '';
+    try { token = await _crIdToken(); } catch (_) { token = ''; }
+    if (!token) { _reviewState.refreshing = false; _reviewState.signedIn = false; _reviewPaint(); return; }
+
+    const r = await fetch('/api/drafts?' + new URLSearchParams({ id: draftId }).toString(), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token,
+        // Keyed on the draft AND the revision being refreshed, so a double tap
+        // or a retry after a dropped response replays the same rebuild instead
+        // of running a second one. A later revision is a different refresh.
+        'Idempotency-Key': 'pkt-' + draftId + '-r' + d.rev,
+      },
+      body: JSON.stringify({
+        expectedRev: d.rev,
+        // `basis: null` deliberately: the live basis, if any, belongs to
+        // whatever card the seller is looking at now, not to this draft, and
+        // sending it would swap this draft's quote for an unrelated one.
+        pricingContext: _crPricingContext({ basis: null }),
+      }),
+    });
+    let body = {};
+    try { body = await r.json(); } catch (_) { body = {}; }
+    resp = { status: r.status, body: body || {} };
+  } catch (_) {
+    resp = { status: 0, body: { code: 'DRAFT_STORE_UNAVAILABLE', retryable: true } };
+  }
+
+  _reviewState.refreshing = false;
+
+  if (resp.status === 200) {
+    // Re-READ rather than absorbing the PATCH response. The PATCH body carries
+    // the draft but not the packet envelope -- packetStatus and packetUsable
+    // are read-path fields, produced by the staleness gate on the way out. A
+    // client that assumed "the rebuild succeeded, so it must be current" would
+    // be re-deriving the server's verdict, which is the one thing this screen
+    // never does.
+    await loadDraftReview(draftId);
+    return;
+  }
+
+  _reviewState.refreshError = _reviewRefreshErrCopy(resp.status, resp.body || {});
+  _reviewPaint();
+}
+
+/**
+ * Why a refresh failed, in the seller's terms, with an ACTIONABLE instruction
+ * where one exists.
+ *
+ * PACKET_REBUILD_NO_CARD_ROW is the one that needs it. Drafts created before
+ * the card's details were stored on the record cannot be rebuilt: the server
+ * refuses rather than assembling a packet whose category and aspects came from
+ * nowhere. "Something went wrong" would leave the seller pressing a button that
+ * can never work, so the copy names the way out -- scan the card again, and
+ * says the existing draft is unharmed, because it is.
+ */
+function _reviewRefreshErrCopy(status, body) {
+  const code = String(body.code || body.error || '');
+  if (code === 'PACKET_REBUILD_NO_CARD_ROW') {
+    return {
+      code,
+      text: 'This draft was saved before we started keeping the card\u2019s listing details, so it can\u2019t be refreshed.',
+      hint: 'Scan the card again and start a new listing. This draft is unaffected and can still be edited.',
+    };
+  }
+  if (status === 409 && code === 'REV_CONFLICT') {
+    return { code, text: 'This draft changed somewhere else while you were looking at it.', hint: 'Reopen it to see the current version, then refresh again.' };
+  }
+  if (status === 410) return { code, text: 'This draft has been deleted.', hint: '' };
+  if (status === 404) return { code, text: "We couldn't find this draft.", hint: '' };
+  if (status === 401) return { code, text: 'Sign in again to refresh this draft.', hint: '' };
+  return { code, text: "We couldn't refresh the listing details just now.", hint: 'Your draft is unchanged. Try again in a moment.' };
+}
+
+/** Copy one payload to the clipboard, or refuse if there is nothing valid. */
+async function _reviewCopy(kind) {
+  const text = _reviewCopyPayload(kind);
+  // The gate lives in _reviewCopyPayload and this is what it buys: a button
+  // that survives into an unusable state copies NOTHING rather than the last
+  // good packet. The seller is told, because a copy button that silently does
+  // nothing reads as a broken app and invites a second press.
+  if (!text) { showToast('These listing details are out of date. Refresh them first.'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(kind === 'title' ? 'Title copied.' : 'Copied.');
+  } catch (_) {
+    showToast("Couldn't copy \u2014 select the text and copy it manually.");
+  }
+}
+
 /** Delegated, bound once -- same reason as the list: rows outlive handlers. */
 function _reviewBindOnce() {
   const wrap = document.getElementById('reviewWrap');
@@ -21518,7 +22097,11 @@ function _reviewBindOnce() {
     const back = ev.target.closest && ev.target.closest('#reviewBackBtn');
     if (back) { switchView('drafts'); return; }
     const retry = ev.target.closest && ev.target.closest('#reviewRetryBtn');
-    if (retry) { loadDraftReview(_reviewState.draftId); }
+    if (retry) { loadDraftReview(_reviewState.draftId); return; }
+    const refresh = ev.target.closest && ev.target.closest('[data-packet-refresh]');
+    if (refresh) { _reviewRefreshPacket(); return; }
+    const copy = ev.target.closest && ev.target.closest('[data-packet-copy]');
+    if (copy) { _reviewCopy(copy.getAttribute('data-packet-copy')); return; }
   });
 }
 
@@ -21550,4 +22133,10 @@ try {
   window.openDraftReview  = openDraftReview;
   window.loadDraftReview  = loadDraftReview;
   window._reviewState     = _reviewState;
+  // Nothing else is exported for the packet block, deliberately. A
+  // `window._reviewCopyPayload` would have made the copy assertions a one-line
+  // call, and it would have been a production global that exists only because
+  // a test wanted it. The suite grants clipboard permission and reads
+  // navigator.clipboard instead, which asserts what the seller actually gets
+  // rather than what the button would have produced.
 } catch (_) {}

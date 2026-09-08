@@ -20,7 +20,7 @@
 // and the day someone reads the suite. This cannot.
 
 import {
-  SUB, K, store, sets, reset, kv, SVC, DS, EP, input, fakeReq, fakeRes, fail,
+  SUB, K, store, sets, reset, kv, SVC, DS, EP, input, httpInput, fakeReq, fakeRes, fail,
 } from './_draftHarness.mjs';
 
 const call = async (query) => {
@@ -99,9 +99,72 @@ export async function generateReadFixtures() {
   const okIds = await seedPublishable(1);
   const publishable = await call({ id: okIds[0] });
 
+  // ── Packet-bearing envelopes ────────────────────────────────────────────
+  //
+  // Generated through the REAL POST handler with a pricingContext, per the
+  // fixture rule: nothing here is hand-written. A hand-built packet would be
+  // whatever its author believed the producer emits, and the last time this
+  // repo trusted that belief the version field turned out to live somewhere
+  // else entirely and every stored packet read back as incompatible.
+  //
+  // Three states, because the screen has three behaviours:
+  //   packetCurrent  — usable; the listing rows and copy buttons render
+  //   packetStale    — an edit moved a dependent input; content is WITHDRAWN
+  //   packetAbsent   — no packet fields at all; a different message
+  await reset();
+  const post = async (body, key) => {
+    const res = fakeRes();
+    await EP.default(fakeReq({
+      method: 'POST', body,
+      headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(key) },
+    }), res);
+    return { status: res.statusCode, body: res.body };
+  };
+  const patch = async (id, body, key) => {
+    const res = fakeRes();
+    await EP.default(fakeReq({
+      method: 'PATCH', query: { id }, body,
+      headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(key) },
+    }), res);
+    return { status: res.statusCode, body: res.body };
+  };
+
+  // The retrieval time is FIXED at 12:00 so a test can prove the rebuild did
+  // not walk it forward. Nothing downstream may recompute it.
+  const PRICING_CONTEXT = {
+    feeModelRevision: 1,
+    feeScheduleVerified: '2026-09-01',
+    basisMeta: {
+      label: 'PriceCharting loose',
+      sourceUrl: 'https://www.pricecharting.com/x',
+      retrievedAt: '2026-09-08T12:00:00.000Z',
+      low: 380, mid: 400, high: 430,
+    },
+  };
+
+  const madeCurrent = await post({ ...httpInput(), pricingContext: PRICING_CONTEXT }, 'pkt-current');
+  const currentId   = madeCurrent.body.draftId;
+  const packetCurrent = await call({ id: currentId });
+
+  // Stale: edit a dependent input WITHOUT a pricingContext, which is the one
+  // server rule -- an edit alone never rebuilds. The packet then describes a
+  // price the draft no longer holds and the read gate withdraws it.
+  await patch(currentId, { price: 555, expectedRev: packetCurrent.body.draft.rev }, 'pkt-stale-edit');
+  const packetStale = await call({ id: currentId });
+
+  // Absent: created through the service, which stores no packet at all.
+  await reset();
+  const bareIds = await seedPublishable(1);
+  const packetAbsent = await call({ id: bareIds[0] });
+
   return {
     blockedTitle, blockedPrice, blockedBoth, publishable,
-    ids: { blockedTitle: longIds[0], blockedPrice: noPriceIds[0], blockedBoth: bothIds[0], publishable: okIds[0] },
+    packetCurrent, packetStale, packetAbsent,
+    PRICING_CONTEXT,
+    ids: {
+      blockedTitle: longIds[0], blockedPrice: noPriceIds[0], blockedBoth: bothIds[0], publishable: okIds[0],
+      packetCurrent: currentId, packetStale: currentId, packetAbsent: bareIds[0],
+    },
   };
 }
 

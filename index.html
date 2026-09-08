@@ -1140,6 +1140,22 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .review-fee-label[data-fee-row="net"],
 .review-fee-amount[data-fee-row="net"]{margin-top:2px;border-top:1px solid var(--border);padding-top:8px;font-weight:650;color:var(--text)}
 .review-fees-note{margin-top:8px;font-size:.8rem;line-height:1.4;color:var(--text-muted)}
+/* ── Listing packet block ───────────────────────────────────────────────
+   Tokens only, and only tokens this stylesheet declares. Four undeclared
+   tokens (--accent, --danger, --surface-1, --text-dim) are already logged as
+   debt elsewhere; adding a fifth use of an undeclared name here would make a
+   known problem bigger while looking like new work. */
+.review-packet{margin-top:16px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
+.review-packet-unusable{border-style:dashed}
+.review-packet-h{font-weight:650;font-size:.95rem;margin-bottom:6px}
+.review-packet-p{font-size:.85rem;line-height:1.45;color:var(--text-muted)}
+.review-packet-fields{display:grid;gap:8px;margin-top:4px}
+.review-packet-notes{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.review-packet-note{margin-top:6px;font-size:.8rem;line-height:1.45;color:var(--text-muted)}
+.review-packet-note[data-packet-note-severity="WARNING"]{color:var(--text)}
+.review-packet-copy{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.review-packet-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.review-packet-error{font-size:.82rem;line-height:1.45;color:var(--text);flex:1 1 100%}
 /* Basis rows carry a parenthetical qualifier, matching the ranking surface's
    fee recipe. They are deliberately quieter than the fee rows they precede:
    they state the shape of the estimate, not money leaving the seller. */
@@ -3750,7 +3766,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </div><!-- /wrap -->
 
 <script defer src="/js/config.20ebe911.js"></script>
-<script defer src="/js/core.541c4c39.js"></script>
+<script defer src="/js/core.34fb750c.js"></script>
 <script defer src="/js/ui.6b3a528e.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.5cf1cd22.js"></script>

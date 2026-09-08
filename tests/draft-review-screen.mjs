@@ -265,7 +265,19 @@ try {
     T.check('no blocker lines anywhere', fields.every((f) => f.blockers.length === 0));
     T.check('no field is marked blocked', await page.evaluate(
       () => document.querySelectorAll('#reviewWrap .review-field-blocked').length === 0));
-    T.check('the verdict says ready', t.includes('Ready to list'), t);
+    // WAS: 'the verdict says ready', asserting t.includes('Ready to list').
+    // CHANGED 2026-09-08: "Ready to list" now requires TWO things, because it
+    // used to be a lie in one real case. This fixture's draft passes every
+    // readiness check and has no stored listing packet, so there is nothing to
+    // list WITH -- the old assertion approved a screen that told the seller to
+    // go ahead while withholding the title and aspects they would need. The
+    // readiness verdict itself is unchanged and still asserted, below.
+    T.check('every readiness check passes',
+      F.publishable.body.readiness.publishable === true
+      && F.publishable.body.readiness.blockers.length === 0,
+      JSON.stringify(F.publishable.body.readiness));
+    T.check('yet the verdict withholds "Ready to list", because there are no listing details yet',
+      !t.includes('Ready to list') && /refresh/i.test(t), t);
     T.check('the title field shows the draft title',
       ((fields[0] || {}).value || '').length > 0 && ((fields[0] || {}).value || '') !== '(untitled draft)', ((fields[0] || {}).value || ''));
     T.check('the price field shows a formatted price', /^\$/.test(((fields[1] || {}).value || '')), ((fields[1] || {}).value || ''));
@@ -1182,6 +1194,300 @@ try {
       f && !f.rows.some((r) => /\$/.test(r.amount)), JSON.stringify(f && f.rows.map((r) => r.amount)));
     T.check('no fee rows were invented', f && f.rows.every((r) => r.kind !== 'fee'));
     T.check('it tells the seller what to do', /add a price/i.test((f && f.note) || ''), f && f.note);
+    await ctx.close();
+  });
+
+  /* ── The seller-visible packet workflow, end to end ─────────────────────
+   *
+   * create -> reload -> review -> edit -> rebuild -> reload, in a real browser,
+   * asserting the values that are actually ON SCREEN and actually ON THE
+   * CLIPBOARD. Asserting the state object instead would prove the client
+   * absorbed the envelope, which is not the claim: the claim is that a seller
+   * reading this screen sees the right listing details and copies the right
+   * bytes.
+   *
+   * "Reload" here means a fresh page load with a fresh context -- no state
+   * carried in memory, which is exactly the condition under which the packet
+   * has to come back off the record rather than out of a variable.
+   */
+  await T.section('a packet reaches the seller, and survives a reload', async () => {
+    const { ctx, page } = await boot(serveRead(F.packetCurrent));
+    await openReview(page, F.ids.packetCurrent);
+
+    const rows = await page.evaluate(() => (
+      [...document.querySelectorAll('[data-review-packet="usable"] [data-packet-field]')].map((el) => ({
+        key: el.getAttribute('data-packet-field'),
+        label: (el.querySelector('.review-field-label') || {}).innerText || '',
+        value: (el.querySelector('.review-field-value') || {}).innerText || '',
+      }))
+    ));
+    const expectTitle = F.packetCurrent.body.packet.title.text;
+    const titleRow = rows.find((r) => r.key === 'title');
+
+    T.check('the listing title is on screen', !!titleRow, JSON.stringify(rows.map((r) => r.key)));
+    T.check('and it is the packet\u2019s title, character for character',
+      titleRow && titleRow.value === expectTitle,
+      `${titleRow && titleRow.value} !== ${expectTitle}`);
+    T.check('the category the packet chose is shown',
+      rows.some((r) => r.key === 'category' && r.value === F.packetCurrent.body.packet.category.label));
+    T.check('and the required aspects are shown as required',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-required]').length) > 0);
+
+    // THE QUALIFICATION. The fee revision behind these details is the client's
+    // own declaration and the screen has to say so -- a number shown without
+    // its boundary is a claim nobody checked.
+    const declared = await page.evaluate(() => {
+      const el = document.querySelector('[data-packet-declared]');
+      return el ? { src: el.getAttribute('data-packet-declared'), text: el.innerText } : null;
+    });
+    T.check('\ud83d\udd34 the client-declared fee qualification is visible', !!declared);
+    T.check('and it names the source as client-declared',
+      declared && declared.src === 'client-declared', declared && declared.src);
+    T.check('and says in words that it is not verified',
+      declared && /not verified/i.test(declared.text), declared && declared.text);
+    T.check("the server's own FEE_METADATA_CLIENT_DECLARED note is rendered verbatim",
+      await page.evaluate(() => !!document.querySelector('[data-packet-note="FEE_METADATA_CLIENT_DECLARED"]')));
+
+    // The clipboard, read back. Permission is granted rather than reaching
+    // past the button into a payload function: what the seller pastes is the
+    // thing under test, and a production global existing only for this
+    // assertion would be a test-only global.
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: page.url().replace(/\/[^/]*$/, '') });
+    await page.click('[data-packet-copy="title"]');
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    T.check('\ud83d\udd34 Copy title puts the packet\u2019s title on the clipboard',
+      copied === expectTitle, `${JSON.stringify(copied)} !== ${JSON.stringify(expectTitle)}`);
+
+    await page.click('[data-packet-copy="all"]');
+    const copiedAll = await page.evaluate(() => navigator.clipboard.readText());
+    T.check('Copy everything includes the title and the category',
+      copiedAll.includes(expectTitle) && copiedAll.includes(F.packetCurrent.body.packet.category.label));
+
+    // The quote's age, on the record the reload reads.
+    T.check('the retrieval time on the wire is the original 12:00',
+      F.packetCurrent.body.packet.priceBasis.retrievedAt === '2026-09-08T12:00:00.000Z',
+      F.packetCurrent.body.packet.priceBasis.retrievedAt);
+
+    T.check('and the draft reads as ready to list',
+      await page.evaluate(() => {
+        const v = document.querySelector('[data-review-verdict]');
+        return v && v.getAttribute('data-review-verdict');
+      }) === 'ready');
+    await ctx.close();
+
+    // ── RELOAD: a fresh context, nothing in memory ────────────────────────
+    const two = await boot(serveRead(F.packetCurrent));
+    await openReview(two.page, F.ids.packetCurrent);
+    const afterReload = await two.page.evaluate(() => {
+      const el = document.querySelector('[data-packet-field="title"] .review-field-value');
+      return el ? el.innerText : null;
+    });
+    T.check('\ud83d\udd34 after a reload the same title comes back off the record',
+      afterReload === expectTitle, `${afterReload} !== ${expectTitle}`);
+    await two.ctx.close();
+  });
+
+  await T.section('an edit withdraws the details rather than showing stale ones', async () => {
+    const { ctx, page } = await boot(serveRead(F.packetStale));
+    await openReview(page, F.ids.packetStale);
+
+    T.check('the packet block reports itself unusable',
+      await page.evaluate(() => !!document.querySelector('[data-review-packet="unusable"]')));
+    T.check('with the server\u2019s reason attached, not re-derived',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-review-packet="unusable"]');
+        return el && el.getAttribute('data-packet-reason');
+      }) === F.packetStale.body.packetReason,
+      F.packetStale.body.packetReason);
+
+    // THE REQUIREMENT, stated as an assertion: the content is GONE. Not
+    // labelled stale above unchanged rows -- gone.
+    T.check('\ud83d\udd34 no listing rows are rendered at all',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-field]').length) === 0);
+    T.check('\ud83d\udd34 no copy buttons are rendered at all',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 0);
+
+    // And the old title is nowhere in the packet block, in case some other
+    // element carried it forward.
+    const stalePriorTitle = F.packetCurrent.body.packet.title.text;
+    T.check('\ud83d\udd34 the previous packet\u2019s title appears nowhere in the block',
+      await page.evaluate((t) => {
+        const el = document.querySelector('[data-review-packet]');
+        return !el || !el.innerText.includes(t);
+      }, stalePriorTitle));
+
+    T.check('the seller is told what to do about it',
+      /refresh/i.test(await page.evaluate(() => {
+        const el = document.querySelector('[data-review-packet="unusable"]');
+        return el ? el.innerText : '';
+      })));
+    T.check('a refresh control is offered',
+      await page.evaluate(() => !!document.querySelector('[data-packet-refresh]')));
+
+    // The combination rule: the DRAFT is valid, the DETAILS are not, and the
+    // verdict must not say "Ready to list" beside details we refused to show.
+    T.check('the draft itself is publishable',
+      F.packetStale.body.readiness && F.packetStale.body.readiness.publishable === true,
+      JSON.stringify(F.packetStale.body.readiness && F.packetStale.body.readiness.publishable));
+    T.check('\ud83d\udd34 yet the verdict says the details need a refresh, not "Ready to list"',
+      await page.evaluate(() => {
+        const v = document.querySelector('[data-review-verdict]');
+        return v && v.getAttribute('data-review-verdict');
+      }) === 'details-stale');
+    await ctx.close();
+  });
+
+  await T.section('a rebuild restores the details and does not age the quote', async () => {
+    // The plan drives the whole sequence off one page: stale read, then a
+    // PATCH, then the re-read the client performs itself.
+    let patched = null;
+    const plan = (params, n) => {
+      if (params.get('__method') === 'PATCH') return null; // not used; see below
+      return n === 0
+        ? { status: 200, body: F.packetStale.body }
+        : { status: 200, body: F.packetCurrent.body };
+    };
+    void plan;
+
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    let gets = 0;
+    await page.route('**/api/drafts*', async (route) => {
+      const req = route.request();
+      if (req.method() === 'PATCH') {
+        patched = JSON.parse(req.postData() || '{}');
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ draft: F.packetCurrent.body.draft, packetRebuilt: true }) });
+        return;
+      }
+      gets += 1;
+      const body = gets === 1 ? F.packetStale.body : F.packetCurrent.body;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+
+    await openReview(page, F.ids.packetStale);
+    T.check('setup: the screen starts in the unusable state',
+      await page.evaluate(() => !!document.querySelector('[data-review-packet="unusable"]')));
+
+    await page.click('[data-packet-refresh]');
+    await page.waitForFunction(() => !!document.querySelector('[data-review-packet="usable"]'), { timeout: 15000 });
+
+    T.check('the refresh sent a PATCH', !!patched, JSON.stringify(patched));
+    T.check('\ud83d\udd34 carrying a pricingContext',
+      patched && patched.pricingContext && Number.isInteger(patched.pricingContext.feeModelRevision),
+      JSON.stringify(patched && patched.pricingContext));
+    T.check('and the revision the client actually saw',
+      patched && patched.expectedRev === F.packetStale.body.draft.rev,
+      `${patched && patched.expectedRev} vs ${F.packetStale.body.draft.rev}`);
+    // A refresh is not an edit. If this ever carries a title or a price, the
+    // button has quietly become a writer of whatever was last rendered.
+    T.check('\ud83d\udd34 and NO edit fields',
+      patched && !('title' in patched) && !('price' in patched) && !('quantity' in patched),
+      JSON.stringify(Object.keys(patched || {})));
+
+    // The whole reason the rebuild carries a retrieval time: refreshing the
+    // bytes is not re-reading the source.
+    // WAS: 'the pricingContext reuses the ORIGINAL retrieval time, not now',
+    // asserting patched.pricingContext.basisMeta.retrievedAt === 12:00.
+    // CHANGED 2026-09-08 because that assertion described a design this test
+    // disproved. The client cannot forward the prior retrieval time: a packet
+    // only goes stale after an edit, the read gate withholds a stale packet,
+    // and so the client holds nothing to forward in exactly the case where a
+    // refresh happens. The PATCH went out with no basisMeta at all and the
+    // assertion failed. Preservation moved to the server, which always has the
+    // record. The client's obligation is now the NEGATIVE one below -- send no
+    // basis it cannot vouch for -- and the preservation itself is asserted
+    // through the real handler in tests/draft-crud-e2e.mjs.
+    T.check('\ud83d\udd34 the refresh sends no price basis it cannot vouch for',
+      patched && (!patched.pricingContext.basisMeta
+        || !patched.pricingContext.basisMeta.retrievedAt),
+      `${JSON.stringify(patched && patched.pricingContext.basisMeta)} — a retrieval time invented by the client would age the quote wrongly in the one direction nobody notices`);
+
+    T.check('after the rebuild the client RE-READ rather than trusting the PATCH',
+      gets === 2, `GETs=${gets}`);
+    const restored = await page.evaluate(() => {
+      const el = document.querySelector('[data-packet-field="title"] .review-field-value');
+      return el ? el.innerText : null;
+    });
+    T.check('and the listing details are back on screen',
+      restored === F.packetCurrent.body.packet.title.text, restored);
+    T.check('with the copy buttons back',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 3);
+    await ctx.close();
+  });
+
+  await T.section('a refused rebuild says something the seller can act on', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    await page.route('**/api/drafts*', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        await route.fulfill({
+          status: 409, contentType: 'application/json',
+          body: JSON.stringify({
+            error: 'This draft was created before listing details were stored, so it cannot be refreshed.',
+            code: 'PACKET_REBUILD_NO_CARD_ROW', retryable: false,
+            hint: 'Scan the card again and start a new listing. The existing draft is unaffected and can still be edited.',
+          }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(F.packetAbsent.body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+    await openReview(page, F.ids.packetAbsent);
+
+    T.check('a draft with no packet says so, rather than saying the details are stale',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-review-packet]');
+        return el && el.getAttribute('data-review-packet');
+      }) === 'absent');
+
+    await page.click('[data-packet-refresh]');
+    await page.waitForFunction(() => !!document.querySelector('[data-packet-refresh-error]'), { timeout: 15000 });
+    const err = await page.evaluate(() => {
+      const el = document.querySelector('[data-packet-refresh-error]');
+      return { code: el.getAttribute('data-packet-refresh-error'), text: el.innerText };
+    });
+    T.check('\ud83d\udd34 the refusal is reported under its own code',
+      err.code === 'PACKET_REBUILD_NO_CARD_ROW', err.code);
+    T.check('\ud83d\udd34 and tells the seller to scan the card again',
+      /scan the card again/i.test(err.text), err.text);
+    T.check('and says the existing draft is unharmed',
+      /unaffected|still be edited/i.test(err.text), err.text);
+    T.check('the draft is still fully rendered beneath it',
+      await page.evaluate(() => document.querySelectorAll('#reviewWrap .review-field[data-review-field]').length) > 0);
+    await ctx.close();
+  });
+
+  await T.section('loading another draft leaves nothing of the first behind', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    let n = 0;
+    await page.route('**/api/drafts*', async (route) => {
+      const body = n++ === 0 ? F.packetCurrent.body : F.packetAbsent.body;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+
+    await openReview(page, F.ids.packetCurrent);
+    const first = F.packetCurrent.body.packet.title.text;
+    T.check('setup: the first draft\u2019s details are on screen',
+      await page.evaluate(() => !!document.querySelector('[data-packet-copy]')));
+
+    await openReview(page, F.ids.packetAbsent);
+    T.check('\ud83d\udd34 the second draft shows none of the first\u2019s listing content',
+      await page.evaluate((t) => !document.getElementById('reviewWrap').innerText.includes(t), first));
+    T.check('\ud83d\udd34 and the first draft\u2019s copy buttons are gone',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 0);
     await ctx.close();
   });
 

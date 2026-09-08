@@ -1165,4 +1165,97 @@ reset();
 }
 
 
+console.log('\nthe quote does not get younger because someone pressed refresh');
+reset();
+{
+  // WHAT THIS SECTION PINS, STATED AS MEASURED
+  // ------------------------------------------
+  // A rebuild reassembles a listing from values already stored, and it carries
+  // no price basis of its own: the quote underneath it was read ONCE, earlier.
+  // Disabling the server-side carry-forward below and re-running this section
+  // shows what actually happens without it -- `packet.priceBasis` comes back
+  // NULL. The packet still builds and still reads as CURRENT and usable; it
+  // simply stops saying where its price came from or when. That is the failure
+  // mode: not a wrong timestamp, a vanished provenance on an otherwise
+  // healthy-looking listing.
+  //
+  // (The forward-walking variant -- a duration re-derived against a later
+  // clock, which reported a 12:00 read as 12:50 -- is pinned separately in
+  // tests/listing-packet-offline.mjs, where the 12:50 result is kept as a
+  // negative control.)
+  //
+  // The client cannot supply this. A packet goes stale only after an edit, the
+  // read gate withholds a stale packet, so at refresh time the client holds no
+  // retrieval time to forward. The record does. This asserts the server reads
+  // it from there, through the real endpoint.
+  const HDRS = (k) => ({ authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(k) });
+  const call = async (req) => { const res = fakeRes(); await EP.default(fakeReq(req), res); return { status: res.statusCode, body: res.body }; };
+  const ORIGIN = '2026-09-08T12:00:00.000Z';
+
+  const made = await call({ method: 'POST', headers: HDRS('age-create'), body: {
+    ...httpInput(),
+    pricingContext: {
+      feeModelRevision: 1, feeScheduleVerified: '2026-09-01',
+      basisMeta: { label: 'PriceCharting loose', sourceUrl: 'https://www.pricecharting.com/x', retrievedAt: ORIGIN, low: 380, mid: 400, high: 430 },
+    },
+  } });
+  const id = made.body.draftId;
+  const read1 = await call({ method: 'GET', query: { id } });
+  check('setup: the created packet carries the retrieval time the client read',
+        read1.body.packet && read1.body.packet.priceBasis.retrievedAt === ORIGIN,
+        read1.body.packet && read1.body.packet.priceBasis.retrievedAt);
+
+  // An edit moves a dependent input. No pricingContext -- an edit never rebuilds.
+  const edited = await call({ method: 'PATCH', query: { id }, headers: HDRS('age-edit'),
+                              body: { price: 555, expectedRev: read1.body.draft.rev } });
+  const read2 = await call({ method: 'GET', query: { id } });
+  check('setup: the edit withheld the packet from the read',
+        edited.status === 200 && read2.body.packetUsable === false && read2.body.packet === null,
+        `${read2.body.packetStatus} / ${JSON.stringify(read2.body.packet)}`);
+
+  // The refresh the CLIENT actually sends: a revision, a fee revision, and
+  // nothing else. No basisMeta, because it has none to give.
+  const rebuilt = await call({ method: 'PATCH', query: { id }, headers: HDRS('age-rebuild'),
+                               body: { expectedRev: read2.body.draft.rev,
+                                       pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01' } } });
+  const read3 = await call({ method: 'GET', query: { id } });
+  check('the rebuild happened', rebuilt.status === 200 && rebuilt.body.packetRebuilt === true,
+        `${rebuilt.status} rebuilt=${rebuilt.body.packetRebuilt}`);
+  check('and the packet is usable again', read3.body.packetStatus === 'CURRENT' && read3.body.packetUsable === true,
+        read3.body.packetStatus);
+  // Reached defensively on purpose. The first version of these three read
+  // `read3.body.packet.priceBasis.retrievedAt` directly, and when the carry-
+  // forward was disabled to check they were load-bearing they did not fail --
+  // they threw, killing the run before the remaining sections. An assertion
+  // that crashes instead of failing reports nothing about the other claims.
+  const basis3 = (read3.body.packet && read3.body.packet.priceBasis) || null;
+  check('🔴 the rebuilt packet still reports a price basis at all',
+        basis3 !== null,
+        'a rebuild with no client basis silently dropped the provenance of its own price');
+  check('🔴 and its retrieval time is STILL the original 12:00',
+        basis3 && basis3.retrievedAt === ORIGIN,
+        `${basis3 && basis3.retrievedAt} !== ${ORIGIN}`);
+  check('the rebuild did pick up the edited price, so it is not simply the old packet',
+        read3.body.draft.price === 555, String(read3.body.draft.price));
+  check('the source the time was read from came with it, not a bare timestamp',
+        basis3 && typeof basis3.sourceUrl === 'string' && basis3.sourceUrl.length > 0,
+        JSON.stringify(basis3 && basis3.sourceUrl));
+
+  // A client that DOES hold a live read still wins: the server's copy is a
+  // fallback for the case where the client has nothing, not an override.
+  const LATER = '2026-09-08T18:30:00.000Z';
+  const read4 = await call({ method: 'GET', query: { id } });
+  const relive = await call({ method: 'PATCH', query: { id }, headers: HDRS('age-live'),
+                              body: { expectedRev: read4.body.draft.rev, pricingContext: {
+                                feeModelRevision: 1,
+                                basisMeta: { label: 'PriceCharting loose', sourceUrl: 'https://www.pricecharting.com/x', retrievedAt: LATER, low: 390, mid: 410, high: 440 },
+                              } } });
+  const read5 = await call({ method: 'GET', query: { id } });
+  const basis5 = (read5.body.packet && read5.body.packet.priceBasis) || null;
+  check('a live client read overrides the stored time rather than being ignored',
+        relive.status === 200 && basis5 && basis5.retrievedAt === LATER,
+        `${relive.status} / ${basis5 && basis5.retrievedAt}`);
+}
+
+
 done();
