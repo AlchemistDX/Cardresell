@@ -8,7 +8,7 @@ such sources are cited here.
 
 **Implementation commit: `19cb94c`** (local; nothing pushed). The integration
 case, the two narrowed claims and the mutation evidence in §4, §3 and §8c
-landed in a follow-up commit recorded at the end of this document.
+landed in **`00445d0`**.
 
 **Artifact.** Live bundle is now **`js/core.541c4c39.js`**; every `:NNNN`
 citation below is against that file. The bundle was re-addressed in the same
