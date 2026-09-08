@@ -476,6 +476,51 @@ async function fetchTPLGradedByNameNumber(name, number, gameSlug) {
 
 // ── State ──
 let selectedCard = null;
+
+/* Every listing gets a number, and the number only ever goes up.
+ *
+ * WHY THIS EXISTS. The Top Rated Plus confirmation is scoped to one listing,
+ * and the first two attempts at that scope both leaked. Attempt one stored the
+ * answer in the seller profile, so it applied to every card. Attempt two
+ * compared a stamped snapshot of the pricing inputs against the live ones,
+ * which is better but relies on two things that are not guaranteed: that the
+ * comparison is actually performed between the two edits, and that catalog
+ * identity is the same thing as listing identity. Neither holds.
+ *
+ *   - Catalog identity is not listing identity. Scan the same Charizard twice
+ *     and both scans agree on id, name, game, grade and price. A confirmation
+ *     about the first listing must not attach to the second one just because
+ *     every visible field matches.
+ *   - A comparison only fires when someone reads it. calc() returns early when
+ *     there is no usable price, BEFORE it reads eligibility, so clearing the
+ *     price field and retyping the same number is a supported path on which no
+ *     comparison is ever performed against the intermediate state.
+ *
+ * A monotonic counter closes both, because it does not depend on any observer
+ * running at the right moment and it cannot return to a previous value. The
+ * whole point of routing every assignment through here rather than bumping the
+ * counter at each of the eleven call sites is rule 1: one business behaviour,
+ * one implementation. A counter that has to be remembered at eleven sites is a
+ * counter that will be forgotten at the twelfth. */
+let _listingInstance = 0;
+
+function setSelectedCard(card) {
+  _listingInstance += 1;
+  selectedCard = card;
+  // A new listing cannot inherit the previous listing's confirmation. Cleared
+  // here as well as being invisible to the context comparison, so the two
+  // guards fail independently rather than both resting on the same read.
+  if (typeof _trsListingConfirm !== 'undefined') {
+    /* ONE OF TWO INDEPENDENT GUARDS for listing identity. Removing this alone
+     will NOT fail the suite: _listingInstance leads trsListingContext(), so the
+     comparison catches a new listing even without this clear. Mutation C (drop
+     the instance from the context) and D (drop this clear) are a pair -- either
+     alone stays green, both together lose the case where two scans of the same
+     card agree on every visible field. */
+  _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+  }
+  return selectedCard;
+}
 let currentPrices = {};      // { variantKey: { market, low, mid, high } }
 let activeGame = 'pokemon';
 try { window.activeGame = 'pokemon'; } catch(_) {} // 2026-08-22: expose for FastPath IIFE
@@ -581,7 +626,7 @@ function _restoreLastLoadedCard() {
     const doHydrate = () => {
       if (snap._fullCard && typeof loadCardUI === 'function') {
         try {
-          selectedCard = snap._fullCard;
+          setSelectedCard(snap._fullCard);
           loadCardUI(snap._fullCard);
           console.log('[restoreLastCard] hydrated via _fullCard');
           window._crRestoreInFlight = false;
@@ -757,7 +802,7 @@ function onGameSelectChange(game) {
   // Clear search state
   dropList.classList.remove('open');
   dropList.innerHTML = '';
-  selectedCard = null;
+  setSelectedCard(null);
   resetCardPanel();
   // Sports hides the Condition / Graded Slab pills. Switching game does not
   // load a card, so without this the pills stayed hidden on the way back to
@@ -837,7 +882,7 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
 
     // Clear selected card state for non-sports
     if (!isSports) {
-      selectedCard = null;
+      setSelectedCard(null);
       resetCardPanel();
     } else {
       // Show sports placeholder in card panel
@@ -850,6 +895,13 @@ document.querySelectorAll('#catRow .cat-pill').forEach(p => {
 
 // ── Search debounce ──
 searchInput.addEventListener('input', () => {
+  /* The search box is a listing input as far as eligibility is concerned, and
+     it was the one path that never reached the boundary: this listener debounces
+     a search and never calls calc(), so typing a different card name and typing
+     the original one back produced no comparison against anything in between.
+     Touched synchronously, ahead of the debounce, because the debounce is
+     exactly the deferral that made the gap reachable. */
+  touchListingContext();
   clearTimeout(searchTimeout);
   const q = searchInput.value.trim();
   if (q.length < 2) { dropList.classList.remove('open'); return; }
@@ -1600,7 +1652,7 @@ function attachDropHandlers(cardFactory) {
     el.setAttribute('tabindex', '0');
     el.addEventListener('click', () => {
       const card = cardFactory(parseInt(el.dataset.idx));
-      selectedCard = card;
+      setSelectedCard(card);
       dropList.classList.remove('open');
       searchInput.value = card.name;
       // 2026-09-01 (launch gate): do NOT prefill the override from this row.
@@ -2462,9 +2514,24 @@ async function fetchAndApplySoldComps(forceRefresh) {
                        highClamped: !!_tcgC.highClamped,
                        cacheAgeSec: tcg.cacheAgeSec ?? null,
                        sourceUrl: tcg.url || null,
-                       // TCGplayer market is derived from completed sales, so a
-                       // retrieval age is a fair freshness signal for it.
-                       datedBySource: true };
+                       // 2026-09-07 (Q3-C client): per-endpoint provenance, straight
+                       // off the wire. Read from `tcg`, not `_tcgC` -- _clampHigh
+                       // rewrites `high` and does not carry these fields.
+                       marketBasis: tcg.marketBasis ?? null,
+                       lowBasis:    tcg.lowBasis    ?? null,
+                       highBasis:   tcg.highBasis   ?? null,
+                       // Was hardcoded `true`. That was a claim about the CENTRE --
+                       // "this number came from completed sales, so its age means
+                       // something" -- and the centre is only sales-derived when
+                       // marketBasis says so. On the ask-blend rung there is no sale
+                       // behind the number, so a retrieval age is not a freshness
+                       // signal for it and the caption must not imply one.
+                       // Deliberately keyed off marketBasis and nothing else:
+                       // datedBySource is a statement about the centre, so centre
+                       // provenance is the correct input here. It is the WRONG input
+                       // for the Lowest-listing row -- see the three conditions in
+                       // _renderQuickPriceRows().
+                       datedBySource: tcg.marketBasis === 'sales' };
       } else if (ebay && ebay.count >= 2 && ebay.median != null) {
         bestPrice = ebay.median;
         _basisMeta = { label: `eBay sold median · ${ebay.count} comps`,
@@ -2491,6 +2558,9 @@ async function fetchAndApplySoldComps(forceRefresh) {
         mid:  _basisMeta ? _basisMeta.mid  : null,
         high: _basisMeta ? _basisMeta.high : null,
         highClamped: !!(_basisMeta && _basisMeta.highClamped),
+        marketBasis: _basisMeta ? (_basisMeta.marketBasis ?? null) : null,
+        lowBasis:    _basisMeta ? (_basisMeta.lowBasis    ?? null) : null,
+        highBasis:   _basisMeta ? (_basisMeta.highBasis   ?? null) : null,
         // Freshness contract: the caption under the headline names the source
         // AND how old it is. Carrying these on the basis means the caption can
         // never disagree with the row it was derived from.
@@ -2726,7 +2796,7 @@ function openEbayComps() {
   // until 2026-09-03; this one additionally passed a blank image instead of
   // the scan photo the other two used, so opening comps wiped the card art.
   const sportCard = _buildSportsCard(player || 'Sports Card');
-  selectedCard = sportCard;
+  setSelectedCard(sportCard);
   loadCardUI(sportCard);
   _loadSportsVariants(sportCard);
 }
@@ -3178,7 +3248,7 @@ function _spAgeLabel(sec) {
 
 function loadSportsCardFromSearch(playerName) {
   const sportCard = _buildSportsCard(playerName);
-  selectedCard = sportCard;
+  setSelectedCard(sportCard);
   loadCardUI(sportCard);
   _loadSportsVariants(sportCard);
 }
@@ -3218,7 +3288,7 @@ function loadSportsCardFromSearch(playerName) {
       }
     }
     const sportCard = _buildSportsCard(player);
-    selectedCard = sportCard;
+    setSelectedCard(sportCard);
     loadCardUI(sportCard);
     _loadSportsVariants(sportCard);
   });
@@ -4326,8 +4396,49 @@ function renderQuickPricing() {
   // returns 1.0 for graded slabs, so slabs stay unscaled.
   const condMult = (typeof getCondMultiplier === 'function') ? getCondMultiplier() : 1;
   const rows = [];
-  if (basis.low != null) {
-    rows.push(['Lowest listing', fmt(Math.round(basis.low * condMult * 100) / 100), '']);
+
+  // 2026-09-07 (Q3-C client). Three SEPARATE conditions on this one row. They
+  // are not collapsed into one test on purpose: each covers a case the other
+  // two miss, and any pair of them leaves the row lying on the third.
+  //
+  //  (1) PROVENANCE -- what the number is. "Lowest listing" asserts that a real
+  //      listing at this price exists. That is only true when the endpoint was
+  //      observed upstream. Where the server synthesized it (lowBasis is
+  //      'derived') the row is an estimate and must not use listing language.
+  //      Keyed off lowBasis, NEVER marketBasis: centre provenance says nothing
+  //      about whether THIS endpoint was observed, and keying off it would leave
+  //      the row mislabelled on the healthy path, which is the common case.
+  //  (2) RELATION -- whether it is a floor at all, independent of (1). A floor
+  //      that sits above an observed ask is not a floor. `mid` is the median
+  //      active ask, so low > mid means at least half the visible book is
+  //      cheaper than the "lowest" price we would print. This fires on observed
+  //      endpoints too, which is why it cannot be folded into (1). Measured at
+  //      3.00% of the catalog and plausibly higher scan-weighted -- see
+  //      audit/d3/DISCLOSURE_PARITY_Q3.md.
+  //  (3) datedBySource -- handled at the basis, not here, and correctly keyed
+  //      off marketBasis, because it is a claim about the centre.
+  //
+  // Remedy for (2) is to withhold rather than relabel, matching what the server
+  // does on a derived centre: a number with no defensible name does not get a
+  // worse name, it goes away. The range line still carries the spread.
+  //
+  // THIS ROW IS NOT FINISHED -- see T2.14 in audit/TODO_PHASE1.md.
+  // Withholding leaves the suppressed state (we HAVE a floor and distrust it)
+  // rendering identically to the never-had-it state (upstream sent no low). Those
+  // are the two cases a seller most needs separated, and they collapse into the
+  // same row-shaped absence -- instance 22 of audit/PATTERN_ASSERTION_SURFACE.md,
+  // reached here through a correct fix rather than a careless one (see 22c).
+  // A visible mislabel was traded for an invisible omission. That is progress and
+  // it is not closure. Do not read the assertions in tests/quick-pricing.mjs as
+  // evidence this row is honest; they verify the label logic, and all nine passed
+  // while this defect was live, because each checks one state in isolation.
+  // The disclosure copy is deliberately absent: it would assert something about
+  // WHY the book is inverted, which is T2.10's subject and needs the Q7 decision.
+  const _lowIsObserved  = basis.lowBasis === 'observed';
+  const _lowExceedsAsk  = (basis.low != null && basis.mid != null && basis.low > basis.mid);
+  if (basis.low != null && !_lowExceedsAsk) {
+    rows.push([_lowIsObserved ? 'Lowest listing' : 'Estimated low',
+               fmt(Math.round(basis.low * condMult * 100) / 100), '']);
   }
   if (basis.market != null) {
     rows.push(['Market price', fmt(Math.round(basis.market * condMult * 100) / 100),
@@ -5529,6 +5640,230 @@ function toggleAdv() {
 const SELLER_PROFILE_KEYS = ['tcgLevel', 'ebayStore', 'ebayTopRated', 'ebayPromo'];
 const SELLER_PROFILE_LS   = 'cr_seller_profile_v1';
 
+/* The profile as the fee engine wants it, read in exactly ONE place.
+ *
+ * The ranking surface used to read these selects inline at its own call site.
+ * The draft review screen needs the same three values, so writing a second
+ * inline read there would have been a second implementation of "what fee tier
+ * is this seller" -- the duplicate-implementation shape this codebase has now
+ * been caught by five times. Both callers go through here instead, so the two
+ * surfaces cannot disagree about the same seller.
+ *
+ * Defaults are the documented seller default: no store, not Top Rated, no
+ * Promoted Listings, TCGplayer Level 1-4. Each default is a value the select
+ * actually offers ('none'/'basic', 'no'/'yes', '0'..'12'), so the fee engine
+ * can never be handed a tier that does not exist.
+ *
+ * Only WHO keys live here. shipCharge / shipCost / itemCost describe what is
+ * being priced right now, are scoped to the open scan, and deliberately do
+ * NOT belong to the profile -- see the note on _reviewFeesHtml. */
+function _crSellerProfile() {
+  const val = (id, dflt) => {
+    const el = document.getElementById(id);
+    return (el && typeof el.value === 'string' && el.value !== '') ? el.value : dflt;
+  };
+  return {
+    ebayStore:    val('ebayStore',    'none'),
+    ebayTopRated: val('ebayTopRated', 'no'),
+    // ebayTrsListing is NOT read here. It describes one listing, not the
+    // seller, so it is not a profile key at all -- see trsListingConfirmed.
+    ebayPromo:    parseInt(val('ebayPromo', '0'), 10) || 0,
+    tcgLevel:     val('tcgLevel',     'l14'),
+  };
+}
+
+/* ── The Top Rated Plus confirmation is a property of ONE LISTING ──────────
+ *
+ * 2026-09-07, third review. This value was briefly a fifth SELLER_PROFILE_KEY.
+ * That was wrong, and the doc comment three functions up says why in its own
+ * words: those selects "describe WHO the seller is, not what they are pricing,
+ * so they should outlive a single scan." A same-or-next-day handling promise is
+ * exactly what is being priced. Giving it its own key and a 'no' default
+ * stopped an old saved "I am Top Rated" from being re-read as a listing
+ * confirmation, which is a MIGRATION property -- and I called it scope. It was
+ * not scope. The value still persisted to localStorage, so a seller who
+ * confirmed while pricing one card kept confirming for every card after it,
+ * and a reload silently turned a previous card's answer into this card's
+ * eligibility. Rule 1, seventh bite.
+ *
+ * The precedent already existed and I walked past it: shipCharge / shipCost /
+ * itemCost are per-scan and deliberately excluded from the profile. This
+ * follows them.
+ *
+ * Two properties, and the order matters:
+ *
+ *   1. It never reaches localStorage. There is no key, no save, no load.
+ *      A reload starts from unconfirmed.
+ *   2. Validity is DERIVED by comparing the context the answer was given in
+ *      against the context live right now. It is not reset by a hook.
+ *
+ * (2) is the part that makes this safe. A reset hook has to be remembered at
+ * every site that changes the priced card, and the failure mode of forgetting
+ * one is a silent discount on the wrong card -- money, in the seller's
+ * disfavour when we overstate their payout. Deriving cannot be forgotten: if
+ * the context does not match, the answer does not count, and any new mutation
+ * site added later is covered for free. Any error lands on "not confirmed",
+ * which is the direction that understates the seller's proceeds rather than
+ * promising something eBay will not honour.
+ *
+ * The context is deliberately over-specified. Every input listed makes the
+ * answer expire MORE often, and expiring too often costs a seller one extra
+ * click while expiring too rarely quotes a fee that is too low. */
+let _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+
+/* The revision is the part that does not need an observer to be correct.
+ *
+ * `_trsListingSeenCtx` is the last context touchListingContext() saw. When it
+ * sees a different one it bumps `_trsListingRev` and drops the stamp. Because
+ * the revision only increases, returning to an earlier set of field values
+ * cannot restore an earlier revision, so a confirmation cannot be revived by
+ * undoing an edit -- which a context comparison on its own permits whenever the
+ * intermediate state is never read.
+ *
+ * The comparison in trsListingConfirmed() is KEPT as a second guard rather than
+ * replaced. The revision catches transitions through the boundary; the
+ * comparison catches a context that differs from the stamp for any reason the
+ * boundary never saw, including a field added to the context later by someone
+ * who did not know this file existed. Neither is sufficient alone and they fail
+ * for different reasons, which is the property worth having. */
+let _trsListingRev = 0;
+let _trsListingSeenCtx = null;
+
+/* Call before doing anything with eligibility, and call it on every path that
+   can change a listing input -- INCLUDING paths that then bail out. calc()
+   returns early when there is no usable price, so if this were only reached
+   after that return, clearing the price field and retyping the same value would
+   pass unnoticed. tests/trs-listing-scope.mjs pins that exact sequence through
+   real input events. */
+function touchListingContext() {
+  const ctx = trsListingContext();
+  if (_trsListingSeenCtx !== null && ctx !== _trsListingSeenCtx) {
+    _trsListingRev += 1;
+    /* ONE OF TWO INDEPENDENT GUARDS. Removing this line alone will NOT fail the
+       suite, because the revision check in trsListingConfirmed() also closes
+       the hole on its own. Do not read that green run as evidence this is dead
+       code. Removing BOTH this line and that check turns three assertions in
+       tests/trs-listing-scope.mjs red (mutation G in that file's header), which
+       is the hole the second review of c18e455 asked us to close: confirm at
+       one price, edit away, edit back, and the stale confirmation survives.
+       If you are deliberately consolidating to one guard, delete the other
+       first and watch the suite stay green -- then you are choosing which one
+       survives rather than discovering that neither matters. */
+    _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+  }
+  _trsListingSeenCtx = ctx;
+  return _trsListingRev;
+}
+
+function trsListingContext() {
+  const v = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value) : '';
+  };
+  /* Card identity comes from BOTH the selected-card object and the search
+     input, and both on purpose.
+       - selectedCard.id is the precise identity: two cards can share a name
+         across sets, and a name-only context would let a Base Set Charizard's
+         confirmation carry over to a reprint.
+       - searchInput.value is the identity the SELLER can see and change. If
+         they start typing a different card, they have begun moving off the one
+         they confirmed, and the answer should expire at that point rather than
+         at the moment a new object is finally assigned.
+     Including both means either one moving expires the answer, which is the
+     fail-safe direction. It is also what makes this function reachable from a
+     test: selectedCard is a top-level `let` in a classic script, so it is a
+     lexical binding and not a window property, and no test can assign it
+     without driving the whole search flow. The search input is a real upstream
+     input a test can move -- the same reason the freshness tests move the clock
+     instead of adding a test-only global. */
+  const card = (typeof selectedCard !== 'undefined' && selectedCard)
+    ? String(selectedCard.id || selectedCard.name || '')
+    : '';
+  const game = (typeof activeGame !== 'undefined' && activeGame) ? String(activeGame) : '';
+  const grade = document.querySelector('#gradedPills .pill.sel')?.dataset.val || '';
+  /* The instance number leads, because it is the only component that
+     distinguishes two listings whose every other component is identical. */
+  return [_listingInstance, card, v('searchInput'), game, grade,
+          v('shipCharge'), v('shipCost'), v('priceOverride')].join('|');
+}
+
+/* True only if a confirmation was given AND it was given about what is being
+   priced right now. Anything else -- no answer, an answer about another card,
+   an answer from before a reload -- is false.
+ *
+ * CLEARS ON A STALE READ, which is not incidental. The first version only
+ * COMPARED the stamped context against the live one and left the stamp in
+ * place. tests/trs-listing-scope.mjs caught what that allows: a seller confirms
+ * at $400, edits the price to $450 (answer correctly stops counting), edits it
+ * back to $400 -- and the stamp matches again, so a dead answer comes back to
+ * life without anyone re-confirming. The review's wording was "clears or
+ * re-derives", and re-deriving is the weaker of the two: it assumes returning
+ * to the same numbers means returning to the same intent. Once an answer has
+ * been invalidated we ask again. Deleting the stamp is what makes that true no
+ * matter which surface reads it first.
+ *
+ * A predicate with a side effect deserves the suspicion, so: the state being
+ * dropped is state that is ALREADY unusable by the line above it. This evicts a
+ * dead answer; it cannot change a live one, and it cannot make a false read
+ * true. */
+function trsListingConfirmed() {
+  if (!_trsListingConfirm || _trsListingConfirm.ok !== true) return false;
+  if (_trsListingConfirm.ctx === null) return false;
+  // Guard one: the revision. Independent of whether anyone observed the
+  // intermediate state, and it cannot go backwards.
+  /* ONE OF TWO INDEPENDENT GUARDS. Removing this check alone will NOT fail the
+     suite, because touchListingContext() also drops the stamp when the context
+     it sees has changed. Do not read that green run as evidence this is dead
+     code -- see the mutation matrix in tests/trs-listing-scope.mjs (E, F, G).
+     A revision cannot go backwards, so this is the guard that survives an edit
+     being undone; the context comparison is the one that survives a stamp that
+     was never revised. They fail for different reasons and that is the point. */
+  if (_trsListingConfirm.rev !== _trsListingRev) {
+    _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+    return false;
+  }
+  // Guard two: the live comparison, for anything the boundary never saw.
+  if (_trsListingConfirm.ctx === trsListingContext()) return true;
+  _trsListingConfirm = { ctx: null, ok: false, rev: -1 };
+  return false;
+}
+
+/* Called from the select's change handler. Stamps the context the answer was
+   given in, so the answer carries its own scope with it. */
+function noteTrsListingAnswer() {
+  const el = document.getElementById('ebayTrsListing');
+  const yes = !!(el && el.value === 'yes');
+  /* Touch first, so the answer is stamped against the revision that is current
+     at the moment it is given rather than one the boundary has not caught up
+     to. If the seller changed a field and then answered without any recalc in
+     between, that change bumps the revision here, and the answer they just gave
+     is stamped after the bump -- which is right, because they answered about
+     what is on screen now. */
+  const rev = touchListingContext();
+  _trsListingConfirm = yes
+    ? { ctx: trsListingContext(), ok: true, rev }
+    : { ctx: null, ok: false, rev: -1 };
+}
+
+/* Keeps the visible select honest when the answer has expired. Without this
+   the control would still read "Yes" for a card the discount is no longer
+   being applied to, which is a worse lie than the original bug: the seller
+   would see a confirmation and a full fee and have no way to reconcile them.
+   Returns true if it had to clear the control. */
+function syncTrsListingControl() {
+  const el = document.getElementById('ebayTrsListing');
+  // Called for its eviction side effect even when there is no control to fix,
+  // so a surface without the select cannot leave a stale stamp behind for the
+  // next surface to read.
+  const live = trsListingConfirmed();
+  if (!el) return false;
+  if (el.value === 'yes' && !live) {
+    el.value = 'no';
+    return true;
+  }
+  return false;
+}
+
 function saveSellerProfile() {
   try {
     const out = {};
@@ -5587,30 +5922,36 @@ function esc(s) {
 //
 // The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
 // downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
+/* 2026-09-07: `feeAuditedOn` below is PUBLISHED. accuracy.html restates every
+ * one of these dates in its "Last verified" column, so changing a stamp here
+ * without changing the page (or the reverse) leaves a public claim the code no
+ * longer backs. tests/accuracy-fee-parity.mjs fails in both directions on venue
+ * set and on date. CROSS_BORDER below backs the page's second table and is held
+ * to the same venue set. */
 const PLATFORMS = {
-  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', verified: 'Sep 2026',
+  ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
     redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible', '💸 Ship + Sell route charges a 10% service fee (5% at $10,000+) — payout above models the fee-free Sell List'] },
-  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', verified: 'Sep 2026',
+  tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer fields customer service on your behalf, so most sales need no follow-up from you.',
     redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
-  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', verified: 'Sep 2026',
+  poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Cards are not a supported Poshmark category — there is no Trading Cards browse path, so card buyers are not shopping here.',
     bestFor: '💵 Best for cards under $15 — flat $2.95 fee (jumps to 20% at $15+)',
     redFlags: ['👗 Clothing-first — tiny card audience', '📦 $5 packaging fee if the buyer picks Priority Mail (since Oct 2025)', '🇺🇸 US domestic only — no cross-border selling', '📬 You ship the card yourself', '🚫 Listing risk — Poshmark policy says items outside its supported categories may not be sold'] },
-  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', verified: 'Sep 2026',
+  comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', feeAuditedOn: '2026-09-01',
     effort: 'hard',   effortLabel: 'Hard · ship-in service, they process and list it',
     workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
     bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
     redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale', '⏱️ Enhanced Security Fee: 1¢ per $1,000 of list price per day on items over $50'] },
-  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', verified: 'Sep 2026',
+  fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', feeAuditedOn: '2026-09-01',
     // 2026-08-19: user feedback — old label undersold the real friction.
     // Fanatics Collect requires you to physically ship the card in to their
     // vault before it can be listed via Buy Now / Weekly Auction. That's
@@ -5620,13 +5961,13 @@ const PLATFORMS = {
     hassle: 'You mail the card to Fanatics’ vault BEFORE it can list. Sports-heavy audience, weekly auction + Buy Now cycle.',
     bestFor: '💵 Best for cards $75+ — ship-in overhead not worth it below this',
     redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted', '⚠️ 12% seller fee (not 6%) if you list at or above 120% of Card Ladder market value', '🧾 $3 one-time fee on sub-$50 vault items still unsold after 30 days'] },
-  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', verified: 'Sep 2026',
+  whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
     bestFor: '💵 Best for cards $5,000+ — 8% commission caps at $1,500 (or any price via live shows)',
     redFlags: ['🎙️ Best results require hosting live shows', '📦 You ship the card yourself', '📉 Slower for solo sellers without an audience'] },
-  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', verified: 'Sep 2026',
+  mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · cross-category, high volume',
     workflow: 'list', payoutTime: '2–5 days after buyer confirms',
     hassle: 'High-volume general resale. Card buyers exist but ad spend is where TCG-focused platforms win.',
@@ -5639,7 +5980,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
   //     https://manapool.com/affiliates (referral program open, 5% first sale)
-  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', verified: 'Sep 2026',
+  manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast payouts (per-order)',
     hassle: 'MTG-only marketplace with the lowest fees of any listing platform. You ship directly to buyers.',
@@ -5650,7 +5991,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://trademagic.gg/compare
   //     https://www.reddit.com/r/mtgfinance/comments/1kzab2o/
-  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', verified: 'Sep 2026',
+  cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buyer-offer model, low fees',
     workflow: 'list', payoutTime: 'Instant credit; 10% fee to cash out to PayPal',
     hassle: 'Buyers post offers for cards they want; you decide whether to sell at their price. Lowest per-sale fee anywhere but 10% cashout hurts.',
@@ -5665,7 +6006,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
   //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
-  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', verified: 'Sep 2026',
+  cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', feeAuditedOn: '2026-09-01',
     // 2026-09-01: region flag. Cardmarket's 5% commission is the LOWEST of all
     // 15 venues, so it ranks near the top on raw net payout — but a US seller
     // can't realistically capture that number. International postage, ~3% FX
@@ -5696,7 +6037,7 @@ const PLATFORMS = {
   // Modeled with a buylistRatio field: cash ≈ 50% of retail, credit ≈ 65%.
   // These are estimates — the tile discloses this clearly and pushes the user
   // to verify against the live quote before shipping.
-  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', verified: 'Sep 2026',
+  cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buylist — instant offer, lower payout',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Buylist model — they quote you a fixed offer, no fees but ~50% of retail for cash (or ~65% for store credit). CSV bulk upload supported.',
@@ -5709,7 +6050,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://www.coolstuffinc.com/main_fullservice_selllist.php (verified)
   //     https://www.reddit.com/r/yugioh/comments/ngtcqa/ (community confirmation of 25% bonus)
-  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', verified: 'Sep 2026',
+  coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buylist — strong for YGO + MTG',
     workflow: 'buylist', payoutTime: '1–2 business days after approval',
     hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
@@ -5724,7 +6065,7 @@ const PLATFORMS = {
   //   Sources:
   //     https://sellyourcards.starcitygames.com/  (fee tiers verified 2026-08-29)
   //     https://help.starcitygames.com/en-US/articles/sell-to-us-229858
-  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', verified: 'Sep 2026',
+  scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · buylist — 0% fee on sorted lists',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Sell List (sorted): NO service fee, ~55% of retail cash / ~72% store credit. Ship + Sell (unsorted): 10% service fee (5% over $10K). MTG + Pokemon + Lorcana + FAB + Riftbound.',
@@ -5740,7 +6081,7 @@ const PLATFORMS = {
   //     https://help.cardnexus.com/articles/9938652-fee-structure-overview
   //     https://help.cardnexus.com/articles/1754380-selling-faq
   //     https://cardnexus.com/en/blog/cardnexus-marketplace-is-live
-  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', verified: 'Sep 2026',
+  cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', feeAuditedOn: '2026-09-01',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast — Stripe Connect payouts',
     hassle: 'Multi-TCG peer-to-peer marketplace with a flat 8% commission (NA). 10+ games. New in 2026 — audience is smaller than TCGplayer but growing fast.',
@@ -5753,7 +6094,7 @@ const PLATFORMS = {
   // We estimate 10% aggregator fee as an honest baseline; the tile flags this.
   //   Sources:
   //     https://tcgbulk.com/  (workflow + games verified 2026-08-29)
-  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', verified: 'Sep 2026',
+  tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
     workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
     hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
@@ -5865,20 +6206,69 @@ function crossBorderHtml(pid) {
 // means "sometime in August" and we should measure from the fairest read of that stamp.
 // This still makes the >60d ceiling fire correctly (a Jun 2026 stamp is 63d on Sep 1)
 // while avoiding noisy Day-1 amber pills for a venue verified in the previous month.
-const _MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
-function verifiedAgeDays(stamp) {
-  if (!stamp || typeof stamp !== 'string') return Infinity;
-  const m = stamp.trim().toLowerCase().match(/^([a-z]{3})[a-z]*\s+(\d{4})$/);
+// 2026-09-07: the stamp is a REAL AUDIT DATE, not a display month.
+//
+// It used to be `verified: 'Sep 2026'` -- a month string -- and the age was
+// measured from the LAST DAY of that month, on the reasoning that "Aug 2026"
+// most fairly means "sometime in August". Two things were wrong with that:
+//
+//   1. A future anchor was CLAMPED TO ZERO (`ms < 0 ? 0 : ...`), so it read as
+//      perfectly fresh. `Sep 2099` returned 0 days old. A typo in the year, or
+//      an aspirational stamp, bought permanent freshness -- the guardrail
+//      failed in the direction of silence. Missing and unparseable stamps
+//      already returned Infinity (stale), so the clamp was also inconsistent
+//      with the function's own fail-closed instinct.
+//   2. Month granularity understated real age by up to 29 days. On 7 Sep a
+//      'Sep 2026' stamp anchored to Sep 30 and reported 0 days; the audit
+//      actually ran on 1 Sep, so the honest age was 6 days. Anchoring to the
+//      end of a month cannot be conservative -- it always rounds toward fresh.
+//
+// The audit is a dated event, so it is recorded as a date. All 15 venues carry
+// `feeAuditedOn: '2026-09-01'` because that is when their published schedules
+// were read, one venue at a time, in `fee_audit_full_2026-09-01.md`. That file
+// links the exact page each value came from. The date is not a guess and it is
+// not this month's name.
+//
+// Three fields, three questions, deliberately not merged:
+//   feeAuditedOn      when did we last READ the venue's published schedule
+//   FEE_MODEL_REVISION which version of OUR arithmetic produced a number
+//   priceSource       where a PRICE came from  (never fee verification)
+//
+// Fail-closed: missing, unparseable, or future dates return Infinity, which is
+// stale. An unverified schedule must never present as a verified one.
+function feeAuditAgeDays(pid) {
+  const raw = PLATFORMS[pid]?.feeAuditedOn;
+  if (!raw || typeof raw !== 'string') return Infinity;
+  const m = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return Infinity;
-  const mo = _MONTHS[m[1]]; const yr = parseInt(m[2], 10);
-  if (mo === undefined || !Number.isFinite(yr)) return Infinity;
-  // Last day of the stamped month at 00:00 UTC.
-  const anchor = Date.UTC(yr, mo + 1, 0);
+  const yr = +m[1], mo = +m[2] - 1, dy = +m[3];
+  const anchor = Date.UTC(yr, mo, dy);
+  // Reject dates the calendar rolled over (2026-02-31 -> 2026-03-03).
+  const back = new Date(anchor);
+  if (back.getUTCFullYear() !== yr || back.getUTCMonth() !== mo || back.getUTCDate() !== dy) return Infinity;
   const ms = Date.now() - anchor;
-  return ms < 0 ? 0 : Math.floor(ms / 86400000);
+  if (ms < 0) return Infinity;          // a future audit has not happened yet
+  return Math.floor(ms / 86400000);
 }
-function isFeeStale(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 45; }
-function isFeeAmber(pid)  { return verifiedAgeDays(PLATFORMS[pid]?.verified) > 30; }
+// Kept for the two callers below and for anything that wants the number.
+function verifiedAgeDays(pid) { return feeAuditAgeDays(pid); }
+function isFeeStale(pid)  { return feeAuditAgeDays(pid) > 45; }
+function isFeeAmber(pid)  { return feeAuditAgeDays(pid) > 30; }
+// The date the schedule was read, for display. Empty when there is no usable
+// date -- callers must render "not verified", never a bare absence that reads
+// as fresh.
+const _AUDIT_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function feeAuditedLabel(pid) {
+  // A date we refuse to measure from is a date we refuse to show. Without this
+  // gate a future stamp rendered as "Fee schedule stale \u00b7 Dec 1, 2026" and a
+  // calendar-rollover stamp rendered as "Feb 31, 2026" -- both fail closed on
+  // colour while still displaying the bad value as if it were an audit.
+  if (!Number.isFinite(feeAuditAgeDays(pid))) return '';
+  const raw = PLATFORMS[pid]?.feeAuditedOn;
+  const m = typeof raw === 'string' ? raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  if (!m) return '';
+  return `${_AUDIT_MON[+m[2] - 1]} ${+m[3]}, ${m[1]}`;
+}
 
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
 const PRO_PLATFORMS      = new Set(['ebay', 'tcgplayer', 'poshmark', 'whatnot', 'mercari', 'manapool', 'cardsphere', 'cardmarket', 'cardnexus']);
@@ -6378,7 +6768,87 @@ document.addEventListener('keydown', e => {
 //
 // Per-order fee: $0.30 for orders ≤ $10 total, $0.40 above.
 // Top Rated Seller (TRS) discount: 10% off the FVF only (not per-order).
-function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
+/* Does the Top Rated Plus 10% FVF discount apply to THIS listing?
+ *
+ * 2026-09-07. Top Rated is a SELLER status. The 10% discount is a LISTING
+ * benefit -- eBay's own wording is "Once you've reached Top Rated status, you
+ * CAN QUALIFY YOUR LISTINGS for these exclusive Top Rated Plus benefits IF you
+ * offer same- or 1-business-day handling time and 30-day or longer free
+ * returns". Status is necessary and not sufficient, so a seller-status
+ * dropdown alone was never the right input, and treating it as one discounted
+ * every estimate by 10% for a Top Rated seller whose listings do not qualify.
+ * (https://www.ebay.com/help/policies/selling-policies/seller-standards-policy?id=4347)
+ *
+ * What actually binds FOR US is narrower than the general rule, and worth
+ * getting right rather than copying. That same page lists the categories where
+ * "You don't have to accept returns" for the discount benefit to still apply,
+ * and the list includes verbatim:
+ *
+ *   Trading Cards (Sports Trading Cards, Non-Sports Trading Cards, and
+ *   Collectible Card Games)
+ *
+ * Every item this app prices is in that set. So the 30-day-free-returns
+ * condition is waived for our category -- the seal is not extended, but the
+ * fee discount is. Asking a card seller to confirm free returns would be
+ * asking them to confirm something eBay does not require of them here, and
+ * would suppress a discount they are owed.
+ *
+ * WHAT THE SELLER CONFIRMS (revised 2026-09-07 after third review). The
+ * question used to ask about handling time alone, and disclose US residency
+ * and the local-pickup exclusion as assumptions in small print underneath.
+ * That was not good enough, and the reason is worth keeping: a disclosed
+ * assumption is fine when it explains a limitation, but this one was CHANGING
+ * THE NUMBER. We were lowering a seller's quoted fee on the strength of two
+ * conditions they had never affirmed and we had never checked. So the
+ * confirmation now covers the benefit rather than one input to it, and names
+ * all three conditions being confirmed: same- or 1-business-day handling, the
+ * seller being RESIDENT in the US, and not local-pickup-only.
+ *
+ * That middle condition read "US ship-from" until 2026-09-07 and was wrong.
+ * The policy says the discount "is only available to sellers resident in the
+ * country in which they're Top Rated". Residency is a fact about the seller;
+ * ship-from is a fact about the parcel. Item location IS in the policy, but
+ * only as the basis for which free-returns variant a listing needs -- and that
+ * condition is waived for Trading Cards, so item location does not bear on us
+ * at all. The old wording would have been answered yes by a seller resident
+ * abroad shipping from a US warehouse, who does not qualify.
+ *
+ * ONE CONDITION IS DELIBERATELY NOT ASKED, and the policy's wording about it is
+ * narrower than it first looks. The exclusion is:
+ *
+ *   The discount does not apply to any additional final value fees applied to
+ *   sales in categories where you're rated as Very High in your service
+ *   metrics for 'item not as described' returns
+ *
+ * That removes the discount from ADDITIONAL final value fees, not from the
+ * ordinary percentage fee. We do not model any additional final value fee, so
+ * there is nothing here for the discount to be excluded from and nothing to
+ * ask. Recorded because the tempting misreading -- that a Very High rating
+ * costs the seller the whole discount -- would have us either asking a question
+ * we do not need or withholding a discount the seller is owed. It is also a
+ * service metric the seller cannot reliably self-report and we cannot see.
+ *
+ * Both inputs are required, and the confirmation is never inferred from the
+ * status. It is a seller-confirmed assumption about a listing, so it defaults
+ * to off and has to be actively stated.
+ *
+ * TWO EXPLICIT ARGUMENTS, deliberately. The status comes from the seller
+ * profile; the confirmation comes from trsListingConfirmed(), which is scoped
+ * to the card being priced and never persisted. Reading the confirmation off
+ * `prof` here is what let a global answer discount an unrelated card, so this
+ * function can no longer reach it: a caller has to say, at its own call site,
+ * which listing's confirmation it means. The review screen passes false and
+ * says so on screen.
+ *
+ * `listingConfirmed === true` rather than a truthy test, so a 'yes' string,
+ * a select element, or a stale profile object cannot stand in for a
+ * confirmation. */
+function trsDiscountApplies(prof, listingConfirmed) {
+  if (!prof) return false;
+  return prof.ebayTopRated === 'yes' && listingConfirmed === true;
+}
+
+function feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible) {
   const total = price + shipCharge;
   const items = [];
   // Basic Store and above uses 12.35% with $2,500 tier boundary.
@@ -6389,7 +6859,9 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   let fvf = 0;
   if (total <= tierBoundary) fvf = total * baseRate;
   else                       fvf = tierBoundary * baseRate + (total - tierBoundary) * 0.0235;
-  const trs = ebayTopRated === 'yes';
+  // Already resolved by trsDiscountApplies -- this function does not re-derive
+  // eligibility, so there is exactly one place that decides it.
+  const trs = trsEligible === true;
   if (trs) fvf *= 0.9;
   const rateLabel = (baseRate * 100).toFixed(2).replace(/\.?0+$/,'');
   // 2026-09-02: the rate signature must describe the rate ACTUALLY charged.
@@ -6413,11 +6885,11 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
   // one-liner is assembled from these strings rather than hand-written copy.
   items.push({
     l: `Final Value Fee (${rateLabel}% trading cards`
-       + (trs ? ', \u221210% Top Rated' : '')
+       + (trs ? ', \u221210% Top Rated Plus' : '')
        + (tiered ? `, 2.35% above $${tierBoundary.toLocaleString()}` : '') + ')',
     a: fvf,
     f: tiered ? `${effLabel}% effective`
-              : (trs ? `${rateLabel}% \u221210% Top Rated` : `${rateLabel}%`) });
+              : (trs ? `${rateLabel}% \u221210% Top Rated Plus` : `${rateLabel}%`) });
   const perOrder = total <= 10 ? 0.30 : 0.40;
   items.push({ l: 'Per-order fee', a: perOrder, f: `$${perOrder.toFixed(2)}` });
   if (ebayPromo > 0) items.push({ l: `Promoted Listings (${ebayPromo}%)`, a: total * ebayPromo / 100, f: `${ebayPromo}%` });
@@ -6431,11 +6903,81 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated) {
 // Our own integer, unrelated to any venue's published schedule.
 // BUMP THIS whenever the arithmetic inside any fee* function changes.
 //
-// PLATFORMS.<venue>.verified answers "when did we last read eBay's published
-// rate card" — currently 'Sep 2026'. It cannot answer "which version of our
-// code did this arithmetic": fix a fee bug on Sep 18 and both stamps still
-// read 'Sep 2026', so two packets computed by different logic look identical.
+// PLATFORMS.<venue>.feeAuditedOn answers "when did we last read eBay's
+// published rate card" — currently '2026-09-01'. It cannot answer "which
+// version of our code did this arithmetic": fix a fee bug on Sep 18 and the
+// audit date still reads 2026-09-01, so two packets computed by different
+// logic look identical.
 // Two questions, two fields. This one is cheap now and impossible to backfill.
+// ── Fee disclosure vocabulary (shared by both surfaces) ───────────────────
+// 2026-09-07. The ranking surface and the review screen had each spelled these
+// out inline, which is how they came to disagree in the first place. The COPY
+// lives here even though the two surfaces still render different markup, so a
+// correction lands in both places at once. Collapsing the markup itself is the
+// remaining half of that fix and is not done.
+//
+// Why the tax amount is an em dash and not $0.00:
+//   eBay charges its final value fee on the TOTAL amount of the sale, and that
+//   total includes buyer-paid shipping and sales tax, with stated exceptions
+//   (https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822).
+//   We bill against the item price alone, so our estimate is LOW, not merely
+//   narrow. The tax we are not modelling is an unknown positive amount -- it
+//   depends on a buyer's delivery address that a draft does not have. Printing
+//   $0.00 asserted that unknown was zero; the parenthetical did not undo it,
+//   because a reader reconciling gross minus fees sees a zero as a line that
+//   was counted and found empty. An em dash says the amount is not known here,
+//   which is the true statement, and keeps the row out of the arithmetic.
+const FEE_UNKNOWN = '\u2014';
+const FEE_DISCLOSURE = {
+  taxLabel:     'Buyer sales tax',
+  taxQualifier: 'not estimated',
+  baseLabel:    'Fee base',
+  // Describes OUR estimate, not the venue's rule. The earlier wording -- "Fees
+  // are charged on the item price only" -- read as a statement about eBay, and
+  // as a statement about eBay it was false.
+  estimateNote: 'An estimate, not a payout. This estimate calculates fees on the item price only. '
+              + 'eBay charges its fee on the total sale, which includes buyer-paid shipping and buyer '
+              + 'sales tax, so your actual proceeds may be lower.',
+  // 2026-09-07. Said on the review screen, where the Top Rated Plus discount is
+  // deliberately NOT applied because the confirmation belongs to a listing and
+  // no draft carries one yet. Errs toward a fee that is too high rather than a
+  // payout that is too high, and says which way it errs so the number is not
+  // silently pessimistic.
+  // Revised the same day after the third review widened what the seller
+  // confirms. It used to name handling time alone as the missing condition,
+  // which understated what a draft is missing: the discount needs the whole
+  // listing to qualify, and a draft records none of it.
+  // 2026-09-07, T2.14. The withheld discount used to exist ONLY as the prose
+  // note below. That made a deliberate withholding render as an absent row, and
+  // an absent row already means something else on this surface: it means the
+  // venue has no such fee. A seller scanning the <dl> for what was applied saw
+  // no line for the discount at all, and the disclosure lived in a paragraph
+  // underneath that a screen reader reaches only after the total.
+  //
+  // Q-A settled the vocabulary for the whole class: WITHHELD renders as a
+  // present dt/dd pair carrying a stated non-value, NEVER-HAD renders as no
+  // pair. This is the withheld arm. The em dash plus a parenthetical qualifier
+  // is the tax row's existing mechanism, reused rather than reimplemented --
+  // "$0.00" would be a claim that the discount was computed and came to
+  // nothing, and it was not computed at all.
+  //
+  // The never-had arm is NOT exercised here. This screen models exactly one
+  // slot (CR_REVIEW_FEE_SLOT = 'ebay:fixed-price') and refuses every other one,
+  // so no venue on this surface lacks a Top Rated program. T2.14's two-arm
+  // contract is half-verified by construction; the second half needs a second
+  // modelled venue.
+  trsWithheldLabel:     'Top Rated Plus discount',
+  trsWithheldQualifier: 'not applied',
+  // The separators are em dashes, not the `--` this codebase uses in comments.
+  // The ASCII pair was reaching the seller literally, visible in
+  // audit/d3/ax-fee-priced-light.png as "qualifying -- same-". Typography only;
+  // no word, number or disclosure changed.
+  trsWithheldNote: 'No Top Rated Plus discount is applied here. That 10% off the percentage fee '
+              + 'depends on the listing itself qualifying \u2014 same- or 1-business-day handling, a '
+              + 'seller resident in the US, and not local-pickup only \u2014 none of which this draft '
+              + 'records yet, so your fee may be lower than shown.',
+};
+
 const FEE_MODEL_REVISION = 1;
 
 // ── Target net → list price, by bisection (Block B4) ─────────────────────
@@ -6451,7 +6993,18 @@ function netEbayForPrice(price, ctx) {
   const c          = ctx || {};
   const shipCharge = Number(c.shipCharge) || 0;
   const shipCost   = Number(c.shipCost)   || 0;
-  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, c.ebayTopRated);
+  // Resolved through the same rule the ranking surface uses, not by reading
+  // the status field directly. feeEbay's last argument became a resolved
+  // boolean on 2026-09-07; passing the raw 'yes'/'no' status here would have
+  // silently dropped the discount from the payout row and the target-net
+  // bisection while the fee rows above still showed it -- the two would have
+  // disagreed about the same listing.
+  // ctx carries a RESOLVED boolean. Eligibility depends on a per-listing
+  // confirmation that lives outside the seller profile, so this function
+  // cannot re-derive it from ctx's seller fields without reaching for a
+  // global answer -- which is the bug the third review caught. The surface
+  // that knows which listing it is resolves it once and puts it here.
+  const items      = feeEbay(price, shipCharge, c.ebayStore, Number(c.ebayPromo) || 0, c.trsEligible === true);
   const totalFees  = items.reduce(function (s, f) { return s + f.a; }, 0);
   return price + shipCharge - totalFees - shipCost;
 }
@@ -6992,6 +7545,13 @@ function daysToCashText(pid) {
 }
 
 function calc() {
+  /* Ahead of the early return on purpose. This used to sit further down, next
+     to the eligibility read, which meant an empty price field skipped it: the
+     seller could clear the price, retype the same number, and the Top Rated
+     Plus confirmation would still be standing because nothing ever compared
+     against the empty intermediate state. Reached on every recalculation now,
+     including the ones that bail. */
+  touchListingContext();
   const price = getEffectivePrice();
   if (price <= 0) {
     showIntro();
@@ -7004,10 +7564,16 @@ function calc() {
   const shipCharge    = parseFloat(document.getElementById('shipCharge').value) || 0;
   const shipCost      = parseFloat(document.getElementById('shipCost').value) || 0;
   const itemCost      = parseFloat(document.getElementById('itemCost').value) || 0;
-  const ebayStore     = document.getElementById('ebayStore').value;
-  const ebayPromo     = parseInt(document.getElementById('ebayPromo').value) || 0;
-  const ebayTopRated  = document.getElementById('ebayTopRated').value;
-  const tcgLevel      = document.getElementById('tcgLevel')?.value || 'l14';
+  // One reader for the seller profile; the review screen uses the same one.
+  const _prof = _crSellerProfile();
+  const ebayStore     = _prof.ebayStore;
+  const ebayPromo     = _prof.ebayPromo;
+  // Clear a visibly-stale "Yes" before reading it, so the control and the fee
+  // rows cannot disagree about the same card. The boundary was already touched
+  // at the top of this function.
+  syncTrsListingControl();
+  const ebayTrsElig   = trsDiscountApplies(_prof, trsListingConfirmed());
+  const tcgLevel      = _prof.tcgLevel;
   const tcgIsDirect   = !!(TCG_LEVELS[tcgLevel] && TCG_LEVELS[tcgLevel].direct);
   const comcService   = document.getElementById('comcService').value;
   const comcCashout   = document.getElementById('comcCashout').value;
@@ -7021,7 +7587,7 @@ function calc() {
     {
       pid: 'ebay',
       eligible: true,
-      feeItems: feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTopRated),
+      feeItems: feeEbay(price, shipCharge, ebayStore, ebayPromo, ebayTrsElig),
       sellerShip: shipCost,
       note: ''
     },
@@ -7671,26 +8237,35 @@ function calc() {
           <div class="fee-row fee-recipe-row"><span>Price used <span class="fee-basis">(${esc(r.priceLabel)})</span></span><span class="fee-val">${fmt(r.priceUsed)}</span></div>
           ${r.shipCharge > 0 ? `<div class="fee-row fee-recipe-row"><span>Buyer-paid shipping</span><span class="fee-val">${fmt(r.shipCharge)}</span></div>` : ''}
           ${r.feeBase != null ? `<div class="fee-row fee-recipe-row"><span>Fee base <span class="fee-basis">(${esc(r.feeBaseLabel || 'item')})</span></span><span class="fee-val">${fmt(r.feeBase)}</span></div>` : ''}
-          ${r.taxNote ? `<div class="fee-row fee-recipe-row"><span>Buyer sales tax <span class="fee-basis">(not modeled)</span></span><span class="fee-val">${fmt(0)}</span></div>` : ''}
+          ${r.taxNote ? `<div class="fee-row fee-recipe-row"><span>${FEE_DISCLOSURE.taxLabel} <span class="fee-basis">(${FEE_DISCLOSURE.taxQualifier})</span></span><span class="fee-val">${FEE_UNKNOWN}</span></div>` : ''}
           ${r.feeFormula ? `<div class="fee-row fee-recipe-row"><span>Fee formula</span><span class="fee-val">${esc(r.feeFormula)}</span></div>` : ''}
         </div>
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
         ${r.sellerShip > 0 ? `<div class="fee-row"><span>Your ship-out cost</span><span class="fee-val">−${fmt(r.sellerShip)}</span></div>` : ''}
         <div class="fee-row fee-total"><span>Net after all deductions</span><span class="fee-val">${fmt(r.netPayout)}</span></div>
         ${r.daysToCash ? `<div class="fee-row fee-days-row"><span>Payout time after it sells</span><span class="fee-val">${esc(r.daysToCash)}</span></div>` : ''}
-        ${info.verified ? (() => {
+        ${(() => {
           // 2026-09-01: pill color reflects staleness. >45d = amber + "Stale" text (venue also
           // demoted from #1 by the payout ranker); 31-45d = amber pill but still "Verified";
           // ≤30d = green. All three link to /accuracy#fees for the methodology.
+          // 2026-09-07: the pill names FEE SCHEDULE verification explicitly. "Verified Sep 2026"
+          // sat directly under a price and could be read as verifying the price, which nothing
+          // here does. It is also rendered unconditionally now: a venue with no usable audit
+          // date says so, because a missing pill is silence and silence reads as fine.
+          const _date  = feeAuditedLabel(r.pid);
           const _stale = isFeeStale(r.pid);
           const _amber = isFeeAmber(r.pid);
           const _cls   = _stale || _amber ? 'fee-verified-pill stale' : 'fee-verified-pill';
-          const _label = _stale ? 'Stale' : 'Verified';
-          const _title = _stale
+          const _text  = !_date ? 'Fee schedule not verified'
+                       : _stale ? `Fee schedule stale · ${_date}`
+                       : `Fee schedule verified ${_date}`;
+          const _title = !_date
+            ? 'We have no recorded date for reading this venue\'s published fee schedule, so we won\'t rank it #1. Click for methodology.'
+            : _stale
             ? 'This venue\'s fees haven\'t been re-verified in over 45 days, so we won\'t rank it #1. Click for methodology.'
             : 'View methodology + full fee sources';
-          return `<div class="fee-verified-row"><a href="/accuracy#fees" class="${_cls}" title="${_title}"><span class="fee-verified-dot">•</span>${_label} ${info.verified}</a></div>`;
-        })() : ''}
+          return `<div class="fee-verified-row"><a href="/accuracy#fees" class="${_cls}" title="${_title}"><span class="fee-verified-dot">•</span>${_text}</a></div>`;
+        })()}
       </div>
       <button class="plat-details-toggle" type="button" onclick="event.preventDefault();event.stopPropagation();this.closest('.plat-card').classList.toggle('expanded');">
         <span class="toggle-text">Details</span>
@@ -11978,7 +12553,7 @@ function _loadScannedNonPokemonCard(pending) {
       updatedAt: 'Grounded via scan',
     };
     try {
-      selectedCard = ygoCard;
+      setSelectedCard(ygoCard);
       if (typeof loadCardUI === 'function') loadCardUI(ygoCard);
     } catch(e) { console.warn('[_loadScannedNonPokemonCard] loadCardUI failed', e); }
   }
@@ -12535,7 +13110,7 @@ async function _loadScannedCardExactImpl(pending) {
         source: 'TCGPlayer',
         updatedAt: match.tcgplayer?.updatedAt || '',
       };
-      selectedCard = card;
+      setSelectedCard(card);
       if (si) si.value = card.name;
       dropList.classList.remove('open');
       loadCardUI(card);
@@ -12579,7 +13154,7 @@ async function _loadScannedCardExactImpl(pending) {
           if (tplMatch) {
             try { console.info('[scan] TPL match via', tplReason, tplMatch.name, tplMatch.number); } catch(e) {}
             const card = tplCardToNormalized(tplMatch, 'pokemon', tplMatch.image_url || '');
-            selectedCard = card;
+            setSelectedCard(card);
             if (si) si.value = card.name;
             dropList.classList.remove('open');
             loadCardUI(card);
@@ -12720,7 +13295,7 @@ async function _loadScannedCardExactImpl(pending) {
         updatedAt: '',
         _synthetic: true, // flag so downstream code knows this is a scan echo
       };
-      selectedCard = synthCard;
+      setSelectedCard(synthCard);
       if (si) si.value = synthCard.name;
       try { loadCardUI(synthCard); } catch(uiErr) { console.warn('[synth loadCardUI]', uiErr); }
       const mainCard = document.getElementById('cardHero');
@@ -18626,6 +19201,14 @@ function _draftsEsc(s) {
  * SLOT_ZERO_PRICE_NOT_ALLOWED — which arrives as a server-authored blocker
  * sentence, not as something this function decides.
  */
+// How an absent title displays, in one place. This existed twice in the row
+// template alone -- the visible title and the aria-label -- and the review
+// screen would have made three. Three literals is three chances for the label
+// a screen reader reads to drift from the text beside it.
+function _draftTitleText(title) {
+  return (title && String(title).trim()) ? String(title) : '(untitled draft)';
+}
+
 function _draftPriceText(price) {
   if (price === null || price === undefined) return 'No price yet';
   const n = Number(price);
@@ -18660,9 +19243,9 @@ function _draftSummaryRowHtml(row, isFocused) {
   )).join('');
 
   return `
-    <div class="draft-row${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" style="border-left-color:${marker}">
+    <div class="draft-row draft-row-open${isFocused ? ' draft-row-focused' : ''}" data-draft-id="${_draftsEsc(row.draftId)}" data-draft-open="1" role="button" tabindex="0" aria-label="Review draft: ${_draftsEsc(_draftTitleText(s.title))}" style="border-left-color:${marker}">
       <div class="draft-row-main">
-        <div class="draft-row-title">${_draftsEsc(s.title || '(untitled draft)')}</div>
+        <div class="draft-row-title">${_draftsEsc(_draftTitleText(s.title))}</div>
         <div class="draft-row-meta">${_draftsEsc(s.slot || '')} · qty ${_draftsEsc(s.quantity == null ? 1 : s.quantity)}</div>
         ${blockerLines}
       </div>
@@ -18986,7 +19569,25 @@ function _draftsBindOnce() {
       const reason = act.getAttribute('data-draft-action');
       if (reason === 'DRAFT_SCHEMA_TOO_NEW') { try { location.reload(); } catch (_) {} return; }
       loadDraftsFirstPage(_draftsState.focusId);
+      return;
     }
+    // Row navigation (D3). Tested last, so a stub's own action button above
+    // wins the event before this line ever sees it -- the button sits INSIDE a
+    // row, and a stub row is not openable anyway.
+    const open = ev.target.closest && ev.target.closest('[data-draft-open]');
+    if (open) { openDraftReview(open.getAttribute('data-draft-id')); }
+  });
+
+  // A div with role="button" owes what a real <button> gives for free: Enter
+  // AND Space, and Space must not scroll the page. Binding click alone ships a
+  // control that a pointer can reach and a keyboard cannot -- which no visual
+  // check and no click-only test would ever show.
+  wrap.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    const open = ev.target.closest && ev.target.closest('[data-draft-open]');
+    if (!open) return;
+    ev.preventDefault();
+    openDraftReview(open.getAttribute('data-draft-id'));
   });
 }
 
@@ -19212,6 +19813,303 @@ function _reviewIdentityHtml() {
     </div>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Fields, and the blockers that concern them
+   ---------------------------------------------------------------------------
+   A seller looking at "3 things to fix" has to be told WHICH three things and
+   WHERE. The verdict count alone is a number with no address.
+
+   The association between a blocker and a field comes off the wire as
+   `blocker.field`. There is deliberately NO code->field table here. The server
+   already computes the field when it raises the finding
+   (validateDraftForSlot's push(code, field, ...)), and a client table would be
+   a second implementation of that fact -- one that goes silently wrong the
+   moment a new code is added, because a table only knows the codes that
+   existed when it was written.
+
+   NOTHING IS DROPPED. A blocker whose field is empty, unrecognised, or not one
+   of the fields shown here renders in a draft-level group below the fields.
+   That is the same rule the stub rows follow: an unexplained condition is
+   still a visible condition. The count assertion in the suite is what keeps it
+   honest -- every blocker on the wire appears exactly once on screen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Repair order, not data order. Title before price because a title is always
+// present to be judged, whereas a price may legitimately not exist yet.
+const _REVIEW_FIELDS = [
+  { key: 'title', label: 'Title' },
+  { key: 'price', label: 'Price' },
+  { key: 'slot',  label: 'Marketplace' },
+];
+
+function _reviewFieldValue(key) {
+  const d = _reviewState.draft || {};
+  if (key === 'title') return _draftTitleText(d.title);
+  if (key === 'price') return _draftPriceText(d.price);
+  // The raw slot, exactly as the list shows it. A friendlier label would mean
+  // a client-side venue copy table, and the list would then disagree with this
+  // screen about what the same draft is called.
+  if (key === 'slot') return d.slot ? String(d.slot) : '\u2014';
+  return '\u2014';
+}
+
+function _reviewGroupBlockers() {
+  const r = _reviewState.readiness;
+  const list = (r && Array.isArray(r.blockers)) ? r.blockers : [];
+  const known = new Set(_REVIEW_FIELDS.map((f) => f.key));
+  const byField = new Map();
+  const loose = [];
+  for (const b of list) {
+    if (!b || typeof b !== 'object') continue;
+    const f = (typeof b.field === 'string') ? b.field : '';
+    if (f && known.has(f)) {
+      if (!byField.has(f)) byField.set(f, []);
+      byField.get(f).push(b);
+    } else {
+      loose.push(b);
+    }
+  }
+  return { byField, loose };
+}
+
+// Server copy, rendered verbatim. Same rule as the list: the client authors no
+// blocker text, and SLOT_TITLE_TOO_LONG's message is interpolated server-side
+// ("Shorten it by N"), which a client table could not reproduce without
+// duplicating the length arithmetic.
+function _reviewBlockerLine(b) {
+  return `<div class="review-blocker" data-blocker-code="${_reviewEsc(String(b.code || ''))}">${_reviewEsc(String(b.message || ''))}</div>`;
+}
+
+function _reviewFieldsHtml() {
+  const { byField, loose } = _reviewGroupBlockers();
+  const rows = _REVIEW_FIELDS.map((f) => {
+    const bs = byField.get(f.key) || [];
+    const blocked = bs.length > 0 ? ' review-field-blocked' : '';
+    return `
+      <div class="review-field${blocked}" data-review-field="${_reviewEsc(f.key)}">
+        <div class="review-field-label">${_reviewEsc(f.label)}</div>
+        <div class="review-field-value">${_reviewEsc(_reviewFieldValue(f.key))}</div>
+        ${bs.map(_reviewBlockerLine).join('')}
+      </div>`;
+  }).join('');
+
+  const looseHtml = loose.length === 0 ? '' : `
+      <div class="review-field review-field-blocked" data-review-field="__draft">
+        <div class="review-field-label">This draft</div>
+        ${loose.map(_reviewBlockerLine).join('')}
+      </div>`;
+
+  return `<div class="review-fields">${rows}${looseHtml}</div>`;
+}
+
+/* ── Fee breakdown ─────────────────────────────────────────────────────────
+ *
+ * ALWAYS VISIBLE, per the accepted decision. A breakdown behind a toggle is a
+ * breakdown most sellers never open, and net proceeds is the number the
+ * listing decision actually turns on. The headline is what you keep; the
+ * table underneath shows how the price got there.
+ *
+ * ONE FEE MODEL. feeEbay() is the only thing in this codebase that knows eBay
+ * fee arithmetic and netEbayForPrice() is the only thing that knows how the
+ * payout row combines it. This screen calls both and formats what comes back.
+ * It does no arithmetic of its own beyond summing the rows the model returned,
+ * and a registered test asserts that sum agrees with the model's own net to
+ * the cent -- if those two ever disagree the model is wrong, not the label.
+ *
+ * SHIPPING IS EXCLUDED, and that is a stated limitation rather than a zero
+ * dressed up as a fact. shipCharge and shipCost live on the scan surface and
+ * describe the card currently in hand; a draft record carries no shipping
+ * field at all. Reading those inputs here would quietly attribute the last
+ * scanned card's postage to an unrelated draft, which is precisely the
+ * invented figure Sec 5.5 refuses. So the basis is the item price alone and
+ * the screen says so, in the surface, not only in this comment.
+ *
+ * NO PROVENANCE COLUMN, AND NO HEADER FOR ONE. The table is shaped to grow a
+ * column -- fixed row structure, one amount cell per row -- but it does not
+ * have one today and does not advertise one. Both non-blocking findings that
+ * would populate it currently fire on every priced draft, because
+ * buildListingPacket() has no production caller; see
+ * audit/OPEN_NONBLOCKING_NOT_ON_THE_WIRE.md. A column that says the same
+ * thing about every row carries no information, and a header with nothing
+ * under it is a promise rather than a disclosure. */
+
+// Fees are modelled for exactly one slot in Phase 1. Any other slot gets an
+// honest refusal rather than eBay's numbers wearing another venue's name.
+const CR_REVIEW_FEE_SLOT = 'ebay:fixed-price';
+
+function _reviewMoney(n) {
+  // Deliberately not _draftPriceText: that answers "what does this draft's
+  // price field say" and returns 'No price yet' when absent. A fee of zero is
+  // a real amount, so a formatter that can print 'No price yet' is the wrong
+  // instrument for a fee cell.
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '\u2014';
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(2);
+}
+
+/** Model output for this draft, or null when there is no price to model. */
+function _reviewFeeCalc() {
+  const d = _reviewState.draft || {};
+  if (d.price === null || d.price === undefined) return null;
+  const price = Number(d.price);
+  if (!Number.isFinite(price)) return null;
+  const prof = _crSellerProfile();
+  // 2026-09-07. The Top Rated Plus discount is NOT applied here, and that is
+  // deliberate. It is a per-listing benefit, so the confirmation belongs to
+  // THIS draft; the seller profile is global and would carry a confirmation
+  // made while pricing some unrelated scan into every draft afterwards. Draft
+  // -bound confirmation is not built yet, so the honest reading is the
+  // undiscounted one: an estimate that is too LOW is a disappointment, an
+  // estimate that is too HIGH is a promise we made for eBay and cannot keep.
+  // The breakdown says so rather than leaving the seller to wonder.
+  // trsEligible is hard false, not 'no' strings that a future reader might
+  // re-derive from. A draft does not record its own handling promise yet, and
+  // a global answer must never stand in for one. See the withheld note below.
+  const ctx  = { ebayStore: prof.ebayStore, ebayPromo: prof.ebayPromo, trsEligible: false };
+  const items = feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, false);
+  return {
+    price,
+    items,
+    fees: items.reduce((sum, f) => sum + f.a, 0),
+    // The model's own net, not price minus the rows above. Same function the
+    // payout row and the target-net bisection use.
+    net: netEbayForPrice(price, ctx),
+  };
+}
+
+/* A fee row is a term and its value, so it is a <dt>/<dd> pair -- chosen over
+   a table with th[scope=row] in the third review, because the surface has no
+   column headers and a header-less table with row headers is announced
+   inconsistently across assistive tech.
+ *
+ * dt and dd are emitted as DIRECT children of the <dl>. No wrapper element per
+ * row: the visual row is reconstructed by the grid in CSS. `data-fee-row`
+ * therefore goes on BOTH halves, which is also what lets a test pair a label
+ * with its amount without relying on document order alone. */
+function _reviewFeeRow(kind, label, amount) {
+  const k = _reviewEsc(kind);
+  return `
+          <dt class="review-fee-label" data-fee-row="${k}">${_reviewEsc(label)}</dt>
+          <dd class="review-fee-amount" data-fee-row="${k}">${_reviewEsc(amount)}</dd>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2026-09-07: this block was rewritten onto the ranking surface's existing fee
+   vocabulary. The first version invented its own: "What you keep" for the net,
+   a prose sentence for the shipping exclusion, and no tax disclosure at all --
+   while `_platTileHtml` had, since 2026-09-01, been rendering a "Fee base
+   (item)" qualifier row, a "Buyer sales tax (not modeled)" row and a dated
+   Verified/Stale pill for exactly the same three jobs. That is rule 1: one
+   business behaviour (disclosing what a fee estimate does and does not cover)
+   had grown a second implementation, and the second one disclosed less.
+
+   The house labels are reused verbatim where the basis matches. The total row
+   is the one place it CANNOT be: the ranking surface says "Net after all
+   deductions" because it models seller shipping, and this screen does not, so
+   borrowing that label would claim a completeness the number lacks. Hence
+   "Estimated net (item only)" -- the qualifier mechanism, not the label.
+
+   Tax stays unmodelled on purpose. eBay charges the final value fee on the
+   total sale INCLUDING sales tax (ebay.com/help/selling/fees-credits-invoices/
+   selling-fees?id=4822), but the buyer's tax rate is a function of a buyer and
+   an address that do not exist while the card is a draft. Inventing one would
+   be a freshness/precision claim the data cannot support (plan §5.5). So the
+   engine-wide position -- "we do not model buyer-paid tax anywhere" -- holds,
+   and the row states it rather than the estimate implying otherwise.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// The literal space before the qualifier span is load-bearing, added
+// 2026-09-07. `.review-fee-qual{margin-left}` supplied the visual gap, but
+// margin is not text: the accessible name computed to "Fee base(item)" and
+// "Top Rated Plus discount(not applied)" with no separator, because the AX name
+// concatenates text content and CSS box spacing contributes nothing to it. The
+// ranking surface's equivalent row in _platTileHtml has always carried the
+// space; this one had drifted without it. Verified in the AX tree, not assumed.
+// The qualifier-in-parentheses row from the ranking surface's fee recipe. The
+// parenthetical is what makes a zero honest: "$0.00" is a claim, "(not
+// modeled) $0.00" is a disclosure.
+function _reviewBasisRow(label, qualifier, amount, kind) {
+  const k = _reviewEsc(kind || 'basis');
+  return `
+          <dt class="review-fee-label" data-fee-row="${k}">${_reviewEsc(label)} <span class="review-fee-qual">(${_reviewEsc(qualifier)})</span></dt>
+          <dd class="review-fee-amount" data-fee-row="${k}">${_reviewEsc(amount)}</dd>`;
+}
+
+// Same staleness thresholds, same source of truth, same methodology link as
+// the ranking surface. Reading PLATFORMS/isFeeStale rather than restating the
+// window means a re-verification moves both screens at once.
+function _reviewFeeVerifiedHtml(pid) {
+  const info = (typeof PLATFORMS === 'object' && PLATFORMS) ? PLATFORMS[pid] : null;
+  if (!info) return '';
+  const date  = feeAuditedLabel(pid);
+  const stale = isFeeStale(pid);
+  const cls   = (stale || isFeeAmber(pid)) ? 'review-fee-pill stale' : 'review-fee-pill';
+  // "Fee schedule", not "Verified". This pill sits inches from a price the
+  // seller typed and from a comp we did not verify; an unqualified "Verified"
+  // was the nearest thing on screen to a claim about the price itself.
+  const text = !date ? 'Fee schedule not verified'
+             : stale ? `Fee schedule stale \u00b7 ${date}`
+             : `Fee schedule verified ${date}`;
+  const title = !date
+    ? 'We have no recorded date for reading this venue\u2019s published fee schedule. Click for methodology.'
+    : stale
+    ? 'These fees haven\u2019t been re-verified in over 45 days. Click for methodology.'
+    : 'View methodology + full fee sources';
+  const state = !date ? 'unverified' : stale ? 'stale' : 'fresh';
+  return `<a href="/accuracy#fees" class="${cls}" data-fee-verified="${state}" title="${_reviewEsc(title)}">${_reviewEsc(text)}</a>`;
+}
+
+function _reviewFeesHtml() {
+  const d = _reviewState.draft || {};
+  const slot = d.slot ? String(d.slot) : '';
+
+  if (slot !== CR_REVIEW_FEE_SLOT) {
+    return `
+      <div class="review-fees" data-review-fees="unmodelled">
+        <div class="review-fees-h">Estimated net</div>
+        <div class="review-fees-note">No fee model for ${_reviewEsc(slot || 'this marketplace')} yet, so this draft has no breakdown.</div>
+      </div>`;
+  }
+
+  const pid  = CR_REVIEW_FEE_SLOT.split(':')[0];
+  const pill = _reviewFeeVerifiedHtml(pid);
+  const c    = _reviewFeeCalc();
+
+  if (!c) {
+    // Still the table, still the same rows. An empty shape tells the seller
+    // what adding a price will buy them; hiding it tells them nothing.
+    return `
+      <div class="review-fees" data-review-fees="unpriced">
+        <div class="review-fees-h">Estimated net<span class="review-fees-basis">item price only</span></div>
+        <div class="review-fees-net" data-fee-net-headline="">\u2014</div>
+        <dl class="review-fees-table">
+${_reviewFeeRow('gross', 'Item price', '\u2014')}
+${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
+        </dl>
+        <div class="review-fees-note">Add a price to see the fee breakdown. Shipping is not included.</div>
+        ${pill}
+      </div>`;
+  }
+
+  const feeRows = c.items.map((f) => _reviewFeeRow('fee', String(f.l || 'Fee'), '\u2212' + _reviewMoney(f.a))).join('');
+
+  return `
+      <div class="review-fees" data-review-fees="priced">
+        <div class="review-fees-h">Estimated net<span class="review-fees-basis">item price only</span></div>
+        <div class="review-fees-net" data-fee-net-headline="">${_reviewEsc(_reviewMoney(c.net))}</div>
+        <dl class="review-fees-table">
+${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
+${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
+${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN)}${feeRows}
+${_reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld')}
+${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
+        </dl>
+        <div class="review-fees-note">${_reviewEsc(FEE_DISCLOSURE.estimateNote)}</div>
+        <div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>
+        ${pill}
+      </div>`;
+}
+
 function _reviewBodyHtml() {
   if (!_reviewState.signedIn) {
     return `
@@ -19249,7 +20147,7 @@ function _reviewBodyHtml() {
       </div>`;
   }
 
-  return _reviewIdentityHtml();
+  return `${_reviewIdentityHtml()}${_reviewFieldsHtml()}${_reviewFeesHtml()}`;
 }
 
 function _reviewPaint() {

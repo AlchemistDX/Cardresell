@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs';
 
 import { readAppSource } from './_appsource.mjs';
+import { readCoreBundle } from './_assetRefs.mjs';
 const index = readAppSource();
 const tcgPrice = readFileSync(new URL('../api/tcg-price.js', import.meta.url), 'utf8');
 
@@ -417,7 +418,23 @@ console.log('\n[Quick Pricing — wiring]');
 // and evidences a surface. This block extracts the real row builder out of the
 // live bundle and runs it, so the assertion fails when the behaviour changes.
 {
-  const core = readAppSource('js/core.7f9c03ad.js');
+  /* CHANGED 2026-09-07 (D3 closeout). Was:
+
+         const core = readAppSource('js/core.7f9c03ad.js');
+
+     A hardcoded content-addressed filename. The D3 rename repointed
+     index.html to core.24cd52cb.js and left 7f9c03ad.js on disk as a retired
+     copy -- deliberately, because vercel.json serves /js/* immutable. So this
+     line kept reading a file that still existed, still parsed, and was no
+     longer the app. It would have gone on passing while asserting against
+     bytes the browser never loads, and the block's own comment above explains
+     that its whole purpose is to test the LIVE bundle rather than grep a
+     string. Found by grepping for the retired name after the rename, not by a
+     failure, because there is no failure to find.
+
+     resolveCoreBundle reads index.html, treats zero and two matches as errors,
+     and therefore cannot silently pick the retired file. */
+  const core = readCoreBundle().source;
   const i = core.indexOf('const _lowIsObserved');
   const j = core.indexOf('if (basis.market != null)', i);
   check('the row builder is still locatable in the bundle',
