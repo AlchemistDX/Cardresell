@@ -282,6 +282,123 @@ exhaustive, and two known-open things are not on it.
 
 ---
 
+## 6. Questions for you — implementation, not judgment
+
+We have been writing questions as judgment calls. Now that we know you read code,
+these are the four where a coder's answer would actually change what we build.
+Repo constraints that bound every answer: **no `package.json`, no
+`node_modules`, no bundler, no build step, no linter.** Node v20.20.1, ESM test
+files, a hand-rolled harness (`tests/_assert.mjs`), Playwright 1.59 available
+locally but not declared anywhere. Adding any of those is on the permanent
+do-not-do list, so "add a dependency" is not available as an answer.
+
+### Q-A · How should a withheld fee row be expressed in a definition list?
+
+Your `<dl>` guidance is accepted. It collides with T2.14 (Appendix D) and we do
+not know the right resolution.
+
+For the Lowest-listing row there are three states: present, absent upstream, and
+**withheld because we distrust it**. In a `<dl>` the options seem to be:
+
+1. **Omit the pair entirely** when withheld — clean markup, but this is exactly
+   the collapse T2.14 describes: identical to absent-upstream.
+2. **Emit the `<dt>` with a `<dd>` that carries a reason** — e.g.
+   `<dt>Lowest listing</dt><dd>Not shown — above the median ask</dd>`. Preserves
+   the distinction, but puts non-numeric prose in a `<dd>` whose siblings are all
+   currency amounts, and every screen reader will read it in a list of prices.
+3. **`<dd>` with an empty value plus a separate note** outside the `<dl>` —
+   keeps the amount column numeric, at the cost of separating the state from the
+   row it describes.
+
+**Which of these does a screen-reader user actually want?** We can measure DOM
+order and announcement with CDP `Accessibility.getFullAXTree`, but that tells us
+what is announced, not which is comprehensible. If (2), does the reason belong in
+the `<dd>` text or in an `aria-describedby` on the `<dt>`?
+
+### Q-B · Is a regex guard over static HTML an acceptable parity test here?
+
+The static-date parity guard you asked for has to extract every venue/date row
+from `accuracy.html` and compare both directions against the fee model. With no
+HTML parser available and none addable, that means **regex over
+`<tr><td>…</td></tr>`**.
+
+The rows are currently one line each, so it works today. It is also
+character-level coupling to markup, and it will break on a reflow that changes
+nothing semantic — a wrapped `<td>`, an added class. Our concern: a guard that
+fails on cosmetic edits gets weakened or deleted the third time it cries wolf,
+and then the duplication it was protecting is unguarded *and* believed guarded.
+
+Three options we can see:
+
+1. Regex, and accept the brittleness — document that a reflow means updating the
+   guard, not loosening it.
+2. Add `data-venue` / `data-verified` attributes to each `<tr>` and match on
+   those — stable against reflow, but it puts test affordances in production
+   markup, which we have refused elsewhere (no test-only production global).
+3. Normalize before matching — strip tags and entities, compare a flattened
+   text projection. Survives reflow, but a normalizer is itself untested code
+   that can mask a real mismatch.
+
+**Which failure mode would you rather own?** We lean (2) but it breaches a
+standing rule, and we would rather you tell us the rule is wrong than quietly
+make an exception.
+
+### Q-C · BIAS-1 needs an input the surface does not have
+
+The bias audit's largest single item is that `renderGradingUpside` computes its
+own fees instead of using the real model:
+
+```
+function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
+  const GRADING_FEE = 25;   // PSA value tier ~$25 all-in
+  const FEES_PCT    = 13;   // eBay + shipping typical
+```
+
+That is a second fee implementation, which breaks our rule-1 (one business
+behaviour, one implementation) and is the root of three other bias findings.
+The fix is obvious — route it through `feeEbay`. The obstacle is the signature:
+
+```
+function feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible)
+```
+
+`renderGradingUpside` receives no `shipCharge`, and the grading-upside surface
+never asks for one. So routing it through the real model requires **inventing a
+shipping charge**, which our own do-not-do list forbids ("no invented input to a
+fee model"). The options:
+
+1. Pass `shipCharge = 0` and relabel the output as fees-on-item-only — honest
+   about what it computes, but no longer comparable to the estimate elsewhere.
+2. Read the live `shipCharge` input if the seller has filled it, and **withhold
+   the whole upside metric** when they have not. Correct, and it makes a headline
+   number disappear for most sellers — which is the Class in Appendix B all over
+   again.
+3. Ask the seller for a shipping figure on this surface. A new input on a
+   surface that is currently read-only.
+4. Leave the flat 13% and disclose it as an approximation with a stated
+   direction.
+
+**We think (2) is right and (4) is what most products would ship.** Which would
+you defend? Note that (2) requires answering Q-A first, because it produces
+exactly the withheld-vs-absent collision.
+
+### Q-D · Should an assertion count as a guard before it is shown to fail?
+
+Section 3 reports that eight suites were green before the fix they supposedly
+guard, because three assertions grep for a string that never moves. We caught it
+by mutating the source two ways and confirming the new assertions fail.
+
+The candidate rule: **an assertion does not count as a guard until someone has
+demonstrated it failing against a deliberately broken build.** It would have
+caught this class at the source. It also roughly doubles the cost of writing a
+test, and there is no mutation-testing tool available (no dependencies).
+
+**Is that rule worth its cost, and if so should it apply to all new assertions or
+only to those guarding a fix?** We are aware that we are asking whether to
+institute a practice we have so far applied exactly once.
+
+---
+
 # Appendices — full text of everything cited above
 
 These are reproduced verbatim from our internal audit files so this response
