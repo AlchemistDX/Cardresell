@@ -987,3 +987,192 @@ tracked separately from functional release evidence.
 `codes` helper three times at different scopes (lines ~1205, ~1286, ~1376) plus
 a `codesOf` variant. One behaviour, four implementations — the architectural
 rule applies to test helpers too. Logged rather than folded into this pass.
+
+---
+
+## §15 — The client slice: a seller can see the listing details
+
+Server groundwork was reported complete in §14. This section covers the
+seller-visible workflow built on top of it, the two evidence points asked for
+by name, and the two places where building it disproved something §14 asserted.
+
+### §15.0 — Commits and the bundle
+
+| SHA | What it landed |
+|---|---|
+| `b8042ff` | Packet fingerprint bound to card identity + slot |
+| `16f4a29` | One builder + `attachPacket`; PATCH rebuild through the same route |
+| `b8aae07` | Rebuild excluded from the retry record; `pricingContext` declared |
+| `be84f6a` | A refused rebuild is a 409; revision-conflict and quote-age evidence |
+| **`a8dc3d6`** | **The client slice + the server-side quote-age carry-forward** |
+| `aa706dd`, `16653e8` | Bundle citation map brought current |
+
+**Live bundle: `js/core.34fb750c.js`** (22,142 lines), renamed from
+`js/core.541c4c39.js`. The single live reference is
+`index.html:3769 <script defer src="/js/core.34fb750c.js"></script>`, resolved
+from `index.html` rather than from the directory — `js/` holds fourteen retired
+generations and picking one by glob is how a scratch script earlier in this
+session edited the wrong file.
+
+**One naming hazard to record:** `core.fec7fb3a.js` was a valid fingerprint of
+a real intermediate file for part of one session and **appears in no commit**.
+The bundle was renamed to it, then changed again before the commit. Do not cite
+`fec7fb3a`; it names a file that was never version-controlled.
+
+Nothing is pushed. `origin/main` remains `9aaf326`. Push and deployment stay
+blocked, and the Cert ID rotation gate is unchanged and not satisfied.
+
+### §15.1 — Focused results
+
+| Suite | Result |
+|---|---|
+| `tests/draft-review-screen.mjs` | **220 passed, 0 failed** (was 180/0; +40) |
+| `tests/draft-crud-e2e.mjs` | **173 passed, 0 failed** (was 164/0; +9) |
+| `tests/listing-packet-offline.mjs` | **232 passed, 0 failed** |
+| `tests/asset-fingerprints.mjs` | **15 passed, 0 failed** |
+| `tests/draft-store.mjs` | **135 passed, 0 failed** |
+| `tests/draft-list-screen.mjs` | **101 passed, 0 failed** |
+| `tests/draft-readiness.mjs` | **PASS** |
+
+Run individually with `timeout <n> node tests/<name>.mjs`. `tests/run-all.sh`
+was not run. Running these individually does not by itself establish that they
+are offline; it establishes that these seven pass.
+
+### §15.2 — The five requested behaviours, and where each is asserted
+
+**1. `pricingContext` on create and rebuild, preserving the original absolute
+retrieval time.** One builder, `_crPricingContext(opts)`, serves both calls. It
+emits `feeModelRevision`, `feeScheduleVerified` (omitted, not nulled, when
+absent), and `basisMeta`. It sends an **absolute** `retrievedAt` and never a
+duration; `_crRetrievedAtFrom(meta)` prefers the absolute stamp and otherwise
+derives one from `cacheAgeSec` **at the moment of the price read**, returning
+`null` rather than inventing "now".
+
+**This requirement moved to the server, and the end-to-end test is why.** The
+first implementation read the prior packet's `retrievedAt` off `_reviewState`
+and forwarded it on rebuild. That is wrong in the ordinary case: a packet goes
+stale only after an edit, the read gate **withholds** a stale packet, so at the
+moment a refresh is most likely the client holds nothing to forward. The test
+caught the PATCH going out with no retrieval time at all. Preservation now
+happens in the rebuild closure in `api/drafts.js`, which always has the record.
+A live client basis still wins — the carry-forward is a fallback, not an
+override, asserted both ways.
+
+**2. Forwarded packet status and content, with the client-declared fee
+qualification visible.** `_reviewAbsorb` takes `packet`, `packetStatus`,
+`packetUsable`, `packetReason` from the read envelope; `packetUsable` requires
+strict `=== true` **and** a packet object. `_reviewPacketHtml()` renders one of
+three arms — `data-review-packet="absent" | "unusable" | "usable"`.
+`_reviewPacketDisclosuresHtml()` renders the server's notes verbatim and
+attaches `data-packet-declared="client-declared"` **to the same element that
+carries the declared revision and schedule numbers**, so the boundary travels
+with the claim instead of sitting in a footnote a seller scrolls past.
+`readiness` is still never derived client-side.
+
+**3. Stale content and copy payloads cleared whenever the packet becomes
+unusable or another draft loads.** Structural rather than remembered:
+`_reviewPacketRows()` returns `[]` unless the packet is usable, so an unusable
+state renders **no rows and no copy buttons** — there is nothing to forget to
+clear. `_reviewCopyPayload(kind)` derives its bytes from state **at click
+time** with one gate at the top; no payload is cached anywhere.
+`_reviewClearPacket()` clears the whole group as one unit and
+`loadDraftReview` calls it **before** the fetch.
+
+**4. Refresh/rebuild with an actionable `PACKET_REBUILD_NO_CARD_ROW`
+message.** `_reviewRefreshPacket()` PATCHes `{expectedRev, pricingContext}`
+and no edit fields, under `Idempotency-Key: 'pkt-'+draftId+'-r'+rev`, then
+**re-reads** via `loadDraftReview` rather than absorbing the PATCH body. On the
+409 the seller is told to scan the card again **and** that the existing draft
+is unaffected and still editable — the second half matters more than the first,
+because the failure sounds like data loss and is not.
+
+**5. create → reload → review → edit → rebuild → reload, on displayed and
+copied values.** In `tests/draft-review-screen.mjs`, real Chromium. "Reload"
+means a fresh browser context, so the packet has to come back off the record
+rather than out of a variable. The clipboard is read through
+`context.grantPermissions(['clipboard-read','clipboard-write'])` and
+`navigator.clipboard.readText()`; **no production global was exported for the
+test.** Assertions include: the on-screen title equals the packet's title
+character for character; Copy title puts exactly that on the clipboard; after
+an edit **zero** `[data-packet-field]` and **zero** `[data-packet-copy]`
+elements exist and the prior title appears nowhere in the block; the rebuild
+PATCH carries a `pricingContext` and no `title`/`price`/`quantity`; the client
+performed a second GET; a second draft loaded after the first shows none of the
+first's content and none of its copy buttons.
+
+The packet fixtures are generated through the **real POST/PATCH handlers**, not
+hand-written, per the fixture rule in that file's header.
+
+### §15.3 — Evidence point 1: the revision claim rejecting a concurrent write
+
+**The question as asked:** the absence of an `await` does not by itself prove
+safety across concurrent requests. Agreed — it does not.
+
+`tests/draft-crud-e2e.mjs` now interleaves two real `updateDraft` calls through
+the real service and storage path, using a **barrier promise rather than a
+sleep** (a sleep would make the test's timing the thing under test). Request A
+reads rev 7 and parks inside a gated kv wrapper. Request B proceeds, takes rev
+8 and price 999. A is released and builds its packet from the obsolete price
+70. The write is refused with `DRAFT_REVISION_CONFLICT`, the stored draft is
+B's at rev 8 / price 999, and **A's packet was never written** — asserted by
+its marker being absent from the stored record, not by inspecting a return
+value.
+
+### §15.4 — Evidence point 2: the quote timestamp, with its negative control kept
+
+The wrong result is preserved rather than deleted. In
+`tests/listing-packet-offline.mjs` the **12:50** outcome — a 12:00 read whose
+age was re-derived against a later clock — is kept as a reproduction, and two
+assertions pin the correct 12:00 answer against it at both the
+`stampPriceBasisReporting` and `buildListingPacket` levels. **Mutation-verified:**
+stubbing `rawAbs = undefined` fails 6 assertions.
+
+The server-side carry-forward added in `a8dc3d6` has its own mutation check in
+`tests/draft-crud-e2e.mjs`. Disabling it produces **3 clean failures**, and the
+failure mode is worth stating precisely because it is not the one I expected:
+without the carry-forward the timestamp does not go wrong, `packet.priceBasis`
+comes back **null entirely**. The packet still builds and still reads as
+`CURRENT` and usable — it simply stops saying where its price came from or
+when. A vanished provenance on an otherwise healthy-looking listing.
+
+The first version of those three assertions read
+`read3.body.packet.priceBasis.retrievedAt` directly and, under mutation,
+**threw instead of failing**, killing the run before the later sections. They
+now reach defensively, with that reason recorded in the file.
+
+### §15.5 — Two assertions changed, with their old text recorded in place
+
+Per the standing rule that a changed assertion records what it used to claim
+and why, both edits carry that note in the test file itself.
+
+**`draft-review-screen.mjs`, "the verdict says ready".** Previously asserted
+that a draft passing every readiness check displays "Ready to list". That
+approved a screen which told a seller to go ahead **while withholding the title
+and aspects they would need to do it** — the fixture's draft is fully
+publishable and has no stored packet. "Ready to list" now requires both. The
+readiness verdict itself is unchanged and still asserted separately. The rule
+is written out explicitly in `_reviewIdentityHtml`: `!publishable` → "N things
+to fix" (`blocked`); `publishable && !packetUsable` → "Listing details need a
+refresh" (`details-stale`); both → "Ready to list" (`ready`).
+
+**`draft-review-screen.mjs`, the retrieval-time assertion.** Previously
+asserted the PATCH's `pricingContext.basisMeta.retrievedAt` was the original
+12:00. It described the design §15.2 explains the test disproved. The client's
+obligation is now the negative one — **send no price basis it cannot vouch
+for** — and the preservation itself is asserted through the real handler in
+`draft-crud-e2e.mjs`.
+
+### §15.6 — What this section does not claim
+
+- **Completion percentage remains unverified.** Both Phase 1 figures are
+  superseded (§13) and no current figure replaces them.
+- The four undeclared CSS tokens (`--accent`, `--danger`, `--surface-1`,
+  `--text-dim`) remain outstanding debt. The packet stylesheet added here uses
+  only declared tokens — `--surface-2`, `--border`, `--text-muted`, `--text` —
+  verified by the token check already in the review-screen suite.
+- `applyEdit` still never updates `priceSource`; A-2 open; §8's
+  `feeBase`/`feeBaseLabel` still emit on only **2 of 15** venues.
+- `tests/listing-packet-offline.mjs` still carries 4 duplicate `codes` helpers,
+  logged and unfixed.
+- No source research was done for this section and no broad new suite was
+  added, as instructed.
