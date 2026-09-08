@@ -1,6 +1,6 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**34 instances**, plus one subclass (18b) deliberately not given its own number.
+**35 instances**, plus one subclass (18b) deliberately not given its own number.
 The highest-numbered entry is instance 34; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
@@ -1923,3 +1923,74 @@ correction pass introduces new copy, that copy is not exempt from the audit that
 prompted it — this instance, the dangling `"...entered as $0; not entered yet"`
 fragment, and the false `"no costs entered yet"` line were all authored during
 BIAS-6 remediation.
+
+## Instance 35 — the fact was in a comment, so it was in no field (2026-09-08)
+
+**Surface.** `feeWhatnot`, `js/core.4c65092e.js` (retired; now `9fd82d6e`).
+
+**What was written.** A code comment above `feeWhatnot`, added during the
+2026-09-01 fee audit, recorded that Whatnot's payment processing fee is charged
+on total order value *including buyer-paid tax*. Correct, sourced, and sitting
+directly above the function it described.
+
+**What the model contained.** Nothing. There was no `taxOn` field, because the
+only venue-level tax fact in the codebase was the statement
+`items.taxNote = true` inside `feeEbay`. So the comment was the whole record.
+
+**Why that is the same shape.** A comment evidences a *surface* — it is true
+about the lines beneath it and reaches nothing else. It cannot be read by the
+render, cannot be compared against `accuracy.html`, cannot be counted, and
+cannot appear in a diff as a gap, because a gap requires a slot. When T2.9 began
+enumerating the fifteen venues, the first pass read only Whatnot's commission
+sentence ("final price … does not include shipping or taxes") and recorded
+`taxOn: false` — a *confirmed zero*, established on a true reading of the wrong
+sentence, three paragraphs above a sentence that contradicted it. The correction
+did not come from the comment. It came from re-reading the source page. The
+comment had been right for seven days and changed nothing.
+
+**Consequence, measured.** The seller-facing "Buyer sales tax — not estimated"
+row reached **1 of 15** venues. Not because fourteen had been cleared: because
+there was no per-venue value for them to be missing. The disclosure now reaches
+**9 of 15** — 2 confirmed tax-inclusive, 7 unknown — and is suppressed on 6 only
+where a published base excludes tax or the venue is a buylist and no buyer tax
+exists at all.
+
+**Why the definition had to widen too.** The obvious question is "does the
+commission apply to a tax-inclusive base?" Whatnot answers *no* to that and
+*yes* to the question that matters, because a tax-inclusive **processing** fee
+understates the estimate exactly as a tax-inclusive commission would. `taxOn` is
+therefore defined as "does **any** fee this model charges the seller apply to a
+base that includes buyer-paid sales tax?" The narrow question is not a weaker
+version of the right one — it returns the opposite answer.
+
+**Corrected to.** `taxOn` + `taxBasis` on all fifteen venues; one shared
+`venueTaxNote(pid)` reading `taxOn !== false`; the hardcoded
+`items.taxNote = true` deleted rather than superseded. `taxBasis` exists because
+"the page says no" (`published-exclusive`), "no buyer checkout exists"
+(`no-buyer-tax`) and "the page is silent" (`unstated`) all collapse to `false`
+if you keep only the answer — and a test now rejects `taxOn: false` on any basis
+that does not establish a zero.
+
+**Three riders, all self-inflicted during this same remedy.**
+
+1. The check `!/items\.taxNote\s*=/.test(bundle)` **failed on the docblock that
+   explains the deletion**, because the docblock quotes the deleted line. A
+   substring search for removed code cannot distinguish code from prose about
+   code. Anchored to `^\s*`.
+2. The published fee table's parse slice ended at the cross-border header. The
+   new tax table was inserted between them, so the slice silently grew by
+   fifteen rows — and still reported `parsed 15 venues` and full parity, because
+   the tax rows' third cell contains an `<a>` and failed the row regex's
+   `([^<]+)`. **It passed on the markup shape of a neighbouring table.** Given an
+   explicit end marker, asserted.
+3. The first draft of the count assertions carried a fallback
+   (`includes('<strong>' + n + ' ')`) that would match any bold number anywhere
+   in the section. A check that cannot fail reports `ok`, which is worse than
+   absent. Replaced with exact strings, and all five mutations (flipped answer,
+   stripped field, `false` on `unstated`, fail-open helper, drifted page count)
+   were confirmed to turn the suite red before this was called done.
+
+**Rider.** Before writing a fact into a comment, ask which surface will read it.
+If the answer is "a person, later", it is not recorded — it is *mentioned*. And a
+comment describing a rule is the cheapest possible substitute for the field that
+would enforce it, which is precisely why it keeps getting chosen.

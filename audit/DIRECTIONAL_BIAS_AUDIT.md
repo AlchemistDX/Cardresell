@@ -739,6 +739,31 @@ Nothing in this document has been changed in code. Recorded as findings:
   compresses the very gap the product exists to report. Full write-up, the
   one-date stamp decision, and the five-step sequenced remedy:
   `audit/d3/DISCLOSURE_PARITY_Q3.md` § Q3-E revised.
+
+  **STATUS 2026-09-08 — the tax half is CLOSED, the fee-base half is NOT.**
+  T2.9 landed `taxOn` + `taxBasis` on all fifteen venues behind one shared
+  `venueTaxNote(pid)`, deleted the hardcoded `items.taxNote = true`, and took the
+  tax disclosure from **1 of 15 to 9 of 15** (2 confirmed tax-inclusive, 7
+  unknown; suppressed on 6 confirmed zeros — either a published base that
+  excludes tax, or a buylist where no buyer checkout exists). Per-venue tables
+  and source quotes: `audit/d3/TAX_TREATMENT_T2_9.md`. Restated on
+  `accuracy.html` and held to the model by `tests/accuracy-fee-parity.mjs`
+  (34 checks, mutation-tested).
+
+  Three corrections to *this entry's own numbers*, which were written against a
+  twelve-venue set and were already stale at fifteen: **"one venue of twelve"**
+  was 1 of 15, **"ten venues"** with no base and no tax note was 13 (`feeBase`
+  reaches 2 of 15), and **"eleven of twelve"** in the T2.9 to-do entry was 14 of
+  15. Corrected here rather than by rewriting the entry, per the standing rule
+  that a finding's history stays legible.
+
+  **Not closed by T2.9:** `feeBase` / `feeBaseLabel` still emit on only **2 of
+  15**, so the *stated base* row retains exactly the single-venue shape the tax
+  row just lost. Split-basis venues cannot yet say *which* component carries the
+  tax-inclusive base. The magnitude finding above stands unchanged: the omission
+  is still proportional to fee rate on the seven `'unknown'` venues, because
+  disclosing that we do not know does not make the estimate right — it makes it
+  honest. **No tax rate is modelled anywhere.**
 - **Binding rule established here:** **no invented input to a fee model.** Not
   the narrower "no invented tax rate" — an invented fee input propagates into
   every venue simultaneously and silently, so it cannot surface as an outlier. It

@@ -6244,6 +6244,49 @@ function esc(s) {
 //
 // The old `effort`/`effortLabel`/`hassle` fields are still emitted so nothing
 // downstream breaks, but the meat has moved to workflow/payoutTime/redFlags.
+/* 2026-09-08 (T2.9 / BIAS-10): `taxOn` + `taxBasis`.
+ *
+ *   taxOn     Does ANY fee this model charges the seller apply to a base that
+ *             includes buyer-paid sales tax? Deliberately not "does the
+ *             commission" -- a tax-inclusive PROCESSING fee understates the
+ *             estimate exactly as a tax-inclusive commission would, and
+ *             Whatnot is the venue that proves it: its commission excludes tax
+ *             and its processing fee includes it, both stated on the same page.
+ *             The narrower question would have recorded Whatnot as a confirmed
+ *             zero on a true reading of the wrong sentence.
+ *
+ *               true      the page states the base includes tax
+ *               false     the page states it does not, or the deal has no
+ *                         buyer-paid tax to include
+ *               'unknown' the page does not settle it
+ *
+ *   taxBasis  HOW the answer was established, kept separate because "we read
+ *             the page and it says no" and "the page never addresses it" both
+ *             spell `false` if you only keep the answer:
+ *
+ *               'published-inclusive'  page states tax is in the base
+ *               'published-exclusive'  page states, or closed-enumerates, that
+ *                                      it is not -- a CONFIRMED ZERO
+ *               'no-buyer-tax'         buylist: the venue IS the buyer, there
+ *                                      is no buyer checkout, so no buyer tax
+ *                                      exists -- a confirmed zero established
+ *                                      structurally, not by a sentence
+ *               'payment-method'       policy published, but the deciding
+ *                                      input (how the buyer paid) does not
+ *                                      exist until after the estimate is made
+ *               'unstated'             the published fee page is silent
+ *
+ * `'unknown'` RENDERS the disclosure; it never suppresses it. Silence on a fee
+ * page is not a zero, and this pair is the mechanism that keeps the two apart.
+ * NO TAX RATE IS MODELLED ANYWHERE -- the gap closes by disclosure, per the
+ * binding rule "no invented input to a fee model". Citations, verbatim quotes
+ * and the per-venue reasoning: audit/d3/TAX_TREATMENT_T2_9.md.
+ *
+ * `feeAuditedOn` is deliberately NOT bumped by that work. It means "when did we
+ * last read the venue's published SCHEDULE", and T2.9 verified the tax window
+ * only -- not one rate, cap or tier was re-checked. Bumping it would stamp a
+ * re-verification that did not happen. Reasoning: TAX_TREATMENT_T2_9.md sec 17.
+ */
 /* 2026-09-07: `feeAuditedOn` below is PUBLISHED. accuracy.html restates every
  * one of these dates in its "Last verified" column, so changing a stamp here
  * without changing the page (or the reverse) leaves a public claim the code no
@@ -6252,28 +6295,33 @@ function esc(s) {
  * to the same venue set. */
 const PLATFORMS = {
   ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', feeAuditedOn: '2026-09-01',
+    taxOn: true, taxBasis: 'published-inclusive',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
     redFlags: ['📬 You ship the card yourself', '⚖️ Buyer-protection disputes possible', '💸 Ship + Sell route charges a 10% service fee (5% at $10,000+) — payout above models the fee-free Sell List'] },
   tcgplayer: { name: 'TCGPlayer',         color: '#0070f3', emoji: '🔵', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'payment-method',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Payouts twice a month',
     hassle: 'TCG-singles hub with built-in buyers. TCGplayer fields customer service on your behalf, so most sales need no follow-up from you.',
     redFlags: ['📬 You ship the card yourself', '📅 Payouts twice a month, not per-sale', '🃏 TCG cards only (no sports, no collectibles)'] },
   poshmark:  { name: 'Poshmark',          color: '#c02b50', emoji: '👗', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'unstated',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '3–5 days after buyer confirms',
     hassle: 'Cards are not a supported Poshmark category — there is no Trading Cards browse path, so card buyers are not shopping here.',
     bestFor: '💵 Best for cards under $15 — flat $2.95 fee (jumps to 20% at $15+)',
     redFlags: ['👗 Clothing-first — tiny card audience', '📦 $5 packaging fee if the buyer picks Priority Mail (since Oct 2025)', '🇺🇸 US domestic only — no cross-border selling', '📬 You ship the card yourself', '🚫 Listing risk — Poshmark policy says items outside its supported categories may not be sold'] },
   comc:      { name: 'COMC',              color: '#1a5276', emoji: '🃏', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'unstated',
     effort: 'hard',   effortLabel: 'Hard · ship-in service, they process and list it',
     workflow: 'shipIn', payoutTime: '2–6 weeks after cards clear intake',
     hassle: 'You mail cards to their warehouse first — not a same-day flip.',
     bestFor: '💵 Best for cards $150+ — consignment overhead pays off at higher prices',
     redFlags: ['📦 Ship-in required (you mail cards to them first)', '⏳ 2–6 wk intake + processing before listing', '💰 Cash-out fee to withdraw funds', '🧾 Per-card sub fee even before sale', '⏱️ Enhanced Security Fee: 1¢ per $1,000 of list price per day on items over $50'] },
   fanatics:  { name: 'Fanatics Collect',  color: '#0a2540', emoji: '💎', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'unstated',
     // 2026-08-19: user feedback — old label undersold the real friction.
     // Fanatics Collect requires you to physically ship the card in to their
     // vault before it can be listed via Buy Now / Weekly Auction. That's
@@ -6284,12 +6332,14 @@ const PLATFORMS = {
     bestFor: '💵 Best for cards $75+ — ship-in overhead not worth it below this',
     redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted', '⚠️ 12% seller fee (not 6%) if you list at or above 120% of Card Ladder market value', '🧾 $3 one-time fee on sub-$50 vault items still unsold after 30 days'] },
   whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', feeAuditedOn: '2026-09-01',
+    taxOn: true, taxBasis: 'published-inclusive',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
     bestFor: '💵 Best for cards $5,000+ — 8% commission caps at $1,500 (or any price via live shows)',
     redFlags: ['🎙️ Best results require hosting live shows', '📦 You ship the card yourself', '📉 Slower for solo sellers without an audience'] },
   mercari:   { name: 'Mercari',           color: '#dc2626', emoji: '🛍️', feeAuditedOn: '2026-09-01',
+    taxOn: false, taxBasis: 'published-exclusive',
     effort: 'medium', effortLabel: 'Medium · cross-category, high volume',
     workflow: 'list', payoutTime: '2–5 days after buyer confirms',
     hassle: 'High-volume general resale. Card buyers exist but ad spend is where TCG-focused platforms win.',
@@ -6303,6 +6353,7 @@ const PLATFORMS = {
   //     https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees
   //     https://manapool.com/affiliates (referral program open, 5% first sale)
   manapool:  { name: 'Mana Pool',         color: '#5b21b6', emoji: '🔮', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'unstated',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast payouts (per-order)',
     hassle: 'MTG-only marketplace with the lowest fees of any listing platform. You ship directly to buyers.',
@@ -6314,6 +6365,7 @@ const PLATFORMS = {
   //     https://trademagic.gg/compare
   //     https://www.reddit.com/r/mtgfinance/comments/1kzab2o/
   cardsphere:{ name: 'Cardsphere',        color: '#0891b2', emoji: '🎯', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'unstated',
     effort: 'medium', effortLabel: 'Medium · buyer-offer model, low fees',
     workflow: 'list', payoutTime: 'Instant credit; 10% fee to cash out to PayPal',
     hassle: 'Buyers post offers for cards they want; you decide whether to sell at their price. Lowest per-sale fee anywhere but 10% cashout hurts.',
@@ -6329,6 +6381,7 @@ const PLATFORMS = {
   //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
   //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
   cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', feeAuditedOn: '2026-09-01',
+    taxOn: 'unknown', taxBasis: 'unstated',
     // 2026-09-01: region flag. Cardmarket's 5% commission is the LOWEST of all
     // 15 venues, so it ranks near the top on raw net payout — but a US seller
     // can't realistically capture that number. International postage, ~3% FX
@@ -6360,6 +6413,7 @@ const PLATFORMS = {
   // These are estimates — the tile discloses this clearly and pushes the user
   // to verify against the live quote before shipping.
   cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', feeAuditedOn: '2026-09-01',
+    taxOn: false, taxBasis: 'no-buyer-tax',
     effort: 'medium', effortLabel: 'Medium · buylist — instant offer, lower payout',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Buylist model — they quote you a fixed offer, no fees but ~50% of retail for cash (or ~65% for store credit). CSV bulk upload supported.',
@@ -6373,6 +6427,7 @@ const PLATFORMS = {
   //     https://www.coolstuffinc.com/main_fullservice_selllist.php (verified)
   //     https://www.reddit.com/r/yugioh/comments/ngtcqa/ (community confirmation of 25% bonus)
   coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', feeAuditedOn: '2026-09-01',
+    taxOn: false, taxBasis: 'no-buyer-tax',
     effort: 'medium', effortLabel: 'Medium · buylist — strong for YGO + MTG',
     workflow: 'buylist', payoutTime: '1–2 business days after approval',
     hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
@@ -6388,6 +6443,7 @@ const PLATFORMS = {
   //     https://sellyourcards.starcitygames.com/  (fee tiers verified 2026-08-29)
   //     https://help.starcitygames.com/en-US/articles/sell-to-us-229858
   scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', feeAuditedOn: '2026-09-01',
+    taxOn: false, taxBasis: 'no-buyer-tax',
     effort: 'medium', effortLabel: 'Medium · buylist — 0% fee on sorted lists',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Sell List (sorted): NO service fee, ~55% of retail cash / ~72% store credit. Ship + Sell (unsorted): 10% service fee (5% over $10K). MTG + Pokemon + Lorcana + FAB + Riftbound.',
@@ -6404,6 +6460,7 @@ const PLATFORMS = {
   //     https://help.cardnexus.com/articles/1754380-selling-faq
   //     https://cardnexus.com/en/blog/cardnexus-marketplace-is-live
   cardnexus:{ name: 'CardNexus',        color: '#4f46e5', emoji: '🌌', feeAuditedOn: '2026-09-01',
+    taxOn: false, taxBasis: 'published-exclusive',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: 'Fast — Stripe Connect payouts',
     hassle: 'Multi-TCG peer-to-peer marketplace with a flat 8% commission (NA). 10+ games. New in 2026 — audience is smaller than TCGplayer but growing fast.',
@@ -6447,6 +6504,7 @@ const PLATFORMS = {
   //     https://tcgbulk.com/page/terms-of-service  (fee text above, retrieved
   //       2026-09-08; terms effective 2026-08-26)
   tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', feeAuditedOn: '2026-09-01',
+    taxOn: false, taxBasis: 'no-buyer-tax',
     effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
     workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
     hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
@@ -6620,6 +6678,24 @@ function feeAuditedLabel(pid) {
   const m = typeof raw === 'string' ? raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
   if (!m) return '';
   return `${_AUDIT_MON[+m[2] - 1]} ${+m[3]}, ${m[1]}`;
+}
+
+/* Does the seller see the "Buyer sales tax (not estimated)" row for this venue?
+ *
+ * ONE implementation, reading ONE field. Until 2026-09-08 this was the line
+ * `items.taxNote = true` hardcoded inside `feeEbay`, which is why fourteen of
+ * fifteen venues silently had no disclosure: there was never a field to leave
+ * blank, so the absence appeared in no diff and could not be counted. BIAS-10,
+ * pattern instance 22 -- a fact encoded as a line inside one implementation is
+ * invisible everywhere that implementation is not.
+ *
+ * Renders unless the venue is a CONFIRMED zero. `'unknown'` renders, matching
+ * how `feeAuditAgeDays` fails closed: an unverified treatment presents as
+ * unverified. An unrecognised pid also renders -- failing closed here means
+ * showing the caveat, never hiding it.
+ */
+function venueTaxNote(pid) {
+  return PLATFORMS[pid]?.taxOn !== false;
 }
 
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
@@ -7248,7 +7324,6 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible) {
   // Fee base disclosure: eBay bills the whole order. Tax is not modeled.
   items.feeBase      = total;
   items.feeBaseLabel = shipCharge > 0 ? 'item + shipping' : 'item';
-  items.taxNote      = true;
   return items;
 }
 // ── Fee model revision (Block B5) ─────────────────────────────────────────
@@ -8220,7 +8295,7 @@ function calc() {
              feeFormula,
              feeBase: p.feeItems.feeBase,
              feeBaseLabel: p.feeItems.feeBaseLabel,
-             taxNote: !!p.feeItems.taxNote,
+             taxNote: venueTaxNote(p.pid),
              capFired: !!p.feeItems.capFired,
              cashoutAmt, daysToCash: daysToCashText(p.pid) };
   });

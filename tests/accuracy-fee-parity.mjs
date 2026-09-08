@@ -33,6 +33,18 @@
  * are correct". Recording that limit because a green parity test is exactly the
  * kind of thing that gets read as a broader guarantee than it is -- and a parity
  * assertion defends a shared mistake as energetically as a shared truth.
+ *
+ * WHAT THIS FILE USED TO ASSERT, AND WHY THAT CHANGED (2026-09-08, T2.9).
+ * Until today this file asserted venue identity and audit DATE only. It passed
+ * 17/17 across every run while the sales-tax disclosure reached exactly one of
+ * fifteen venues, because `taxNote` was not a venue field at all -- it was the
+ * statement `items.taxNote = true` inside `feeEbay`. A per-venue parity test
+ * cannot notice a missing per-venue value when no per-venue value exists; there
+ * was nothing for the fourteen others to disagree about. The tax block below is
+ * the assertion that would have caught it, and it is written against the FIELD
+ * so that the next venue added is either stamped or red. The date assertions are
+ * unchanged; `feeAuditedOn` deliberately did not move for this work, because
+ * T2.9 re-read the tax window and not one rate, cap or tier.
  */
 
 import { readFileSync } from 'node:fs';
@@ -93,11 +105,122 @@ T.check('model: every venue carries a feeAuditedOn stamp',
   undated.length === 0,
   `unstamped: ${undated.join(', ')}`);
 
+/* ── tax treatment (T2.9 / BIAS-10) ─────────────────────────────────────── */
+/*
+ * Two claims, and they are different claims:
+ *   1. every venue CARRIES a `taxOn` -- so "never considered" cannot masquerade
+ *      as "checked and does not apply", which is the hole BIAS-10 named;
+ *   2. the disclosure renders iff `taxOn !== false` -- so a confirmed zero is
+ *      the ONLY thing that can suppress the seller-facing caveat.
+ *
+ * Claim 2 is checked by EXECUTING the shipped `venueTaxNote` against the
+ * shipped PLATFORMS, not by regex-matching its body. A regex would assert the
+ * source looks right; evaluating asserts the function behaves right, and those
+ * come apart the moment anyone edits it. `taxBasis` is checked too, because an
+ * answer without a recorded basis is how `false` stops meaning what it says.
+ */
+const TAX_ON     = new Set(['true', 'false', "'unknown'"]);
+const TAX_BASIS  = new Set(['published-inclusive', 'published-exclusive',
+                            'no-buyer-tax', 'payment-method', 'unstated']);
+
+const taxFields = new Map();     // key -> { on, basis }
+for (const m of platformsBlk.matchAll(
+  /^ {2}(\w+)\s*:\s*\{[\s\S]*?\n\s*taxOn:\s*(true|false|'unknown'),\s*taxBasis:\s*'([^']*)'/gm)) {
+  taxFields.set(m[1], { on: m[2], basis: m[3] });
+}
+
+const noTax = [...modelVenues.keys()].filter(k => !taxFields.has(k));
+T.check('tax: every venue in PLATFORMS carries a taxOn + taxBasis',
+  modelVenues.size > 0 && noTax.length === 0,
+  `missing the field entirely: ${noTax.join(', ') || '(none -- but PLATFORMS parsed empty)'}`);
+
+const badVal = [...taxFields].filter(([, v]) => !TAX_ON.has(v.on) || !TAX_BASIS.has(v.basis));
+T.check('tax: every taxOn and taxBasis is one of the declared values',
+  badVal.length === 0,
+  `off-vocabulary: ${badVal.map(([k, v]) => `${k}=${v.on}/${v.basis}`).join(', ')}`);
+
+/* A `false` may only rest on a basis that actually establishes a zero. This is
+   the guard that keeps "the page never mentioned tax" from being written down
+   as a confirmed zero -- the exact substitution T2.9 exists to prevent. */
+const ZERO_BASES = new Set(['published-exclusive', 'no-buyer-tax']);
+const weakZero = [...taxFields].filter(([, v]) => v.on === 'false' && !ZERO_BASES.has(v.basis));
+T.check('tax: taxOn:false only ever rests on a basis that establishes a zero',
+  weakZero.length === 0,
+  `claimed zero on a non-establishing basis: ${weakZero.map(([k, v]) => `${k}=${v.basis}`).join(', ')}`);
+
+/* The hardcoded line must be GONE, not merely superseded. Two implementations
+   of one behaviour is the bug this repo has been bitten by nine times, and a
+   dead `items.taxNote = true` left in `feeEbay` would be exactly that. */
+/* ANCHORED TO LINE START, and that is not cosmetic. The first version of this
+   check was `/items\.taxNote\s*=/` and it FAILED -- on the docblock above
+   `venueTaxNote`, which explains the removal by quoting the removed line. The
+   assertion matched its own explanation. A substring search for deleted code
+   cannot tell code from prose about code, so it must be anchored where a
+   statement can actually appear. */
+T.check('tax: the hardcoded `items.taxNote = true` no longer exists as a statement',
+  !/^\s*items\.taxNote\s*=/m.test(bundle),
+  'feeEbay still sets taxNote directly -- two implementations of one venue fact');
+
+T.check('tax: the render reads the disclosure from venueTaxNote(pid)',
+  /taxNote:\s*venueTaxNote\(p\.pid\)/.test(bundle),
+  'the render no longer sources taxNote from the shared helper');
+
+/* Behaviour, executed. Build the shipped PLATFORMS and the shipped helper in a
+   sandbox and ask it about every venue. */
+let taxNoteFor = null;
+try {
+  const helperSrc = bundle.slice(bundle.indexOf('function venueTaxNote(pid)'));
+  const helper = helperSrc.slice(0, helperSrc.indexOf('\n}') + 2);
+  taxNoteFor = new Function(`${platformsBlk}\n${helper}\nreturn venueTaxNote;`)();
+} catch (e) {
+  taxNoteFor = null;
+}
+T.check('tax: PLATFORMS + venueTaxNote evaluate, so the check below is not vacuous',
+  typeof taxNoteFor === 'function',
+  'could not evaluate the shipped table and helper together');
+
+if (typeof taxNoteFor === 'function') {
+  const wrong = [...taxFields].filter(([k, v]) => taxNoteFor(k) !== (v.on !== 'false'));
+  T.check('tax: disclosure renders if and only if taxOn !== false, for all 15 venues',
+    taxFields.size > 0 && wrong.length === 0,
+    `disagreement on: ${wrong.map(([k, v]) => `${k} (taxOn=${v.on}, renders=${taxNoteFor(k)})`).join(', ')}`);
+
+  /* Fail-closed, asserted rather than assumed. An unrecognised venue must SHOW
+     the caveat; a helper that returned false here would hide a disclosure for
+     every venue it failed to find. */
+  T.check('tax: an unrecognised venue still renders the disclosure (fails closed)',
+    taxNoteFor('no-such-venue-xyz') === true,
+    'an unknown pid suppresses the caveat -- fails OPEN');
+
+  const rendering = [...taxFields.keys()].filter(k => taxNoteFor(k)).length;
+  T.check(`tax: the disclosure reaches ${rendering} venues, not one`,
+    rendering > 1,
+    `only ${rendering} venue(s) render it -- BIAS-10's single-venue state has returned`);
+}
+
 /* ── page side, table 1: fees ───────────────────────────────────────────── */
 
+/* SLICE END MOVED 2026-09-08, and it was passing by luck before that.
+ *
+ * The end marker used to be the cross-border table's header. T2.9 inserted a
+ * THIRD table (sales tax and the fee base) between the fee table and the
+ * cross-border one, so that slice silently grew to cover fifteen extra rows.
+ * The run still reported `parsed 15 venues` and full parity -- not because the
+ * slice was right, but because the tax rows' third cell contains an `<a>` and
+ * failed the row regex's `([^<]+)` on the date column. A parse that survives on
+ * the shape of a neighbouring table's markup is one edit away from counting
+ * thirty venues and comparing the wrong dates. Ending at the tax section makes
+ * the boundary a stated intent rather than an accident, and the floor + named
+ * anchors below still catch the case where this marker itself goes missing. */
+const FEE_TABLE_END = '<h3>Sales tax and the fee base</h3>';
+T.check('page: the fee table has an explicit end boundary before the tax table',
+  accuracy.includes(FEE_TABLE_END),
+  `"${FEE_TABLE_END}" not found -- the slice would run past the fee table again`);
 const feeTable = accuracy.slice(
   accuracy.indexOf('<th>Venue</th><th>Fee model</th>'),
-  accuracy.indexOf('<th>Venue</th><th>Operator</th>'));
+  accuracy.includes(FEE_TABLE_END)
+    ? accuracy.indexOf(FEE_TABLE_END)
+    : accuracy.indexOf('<th>Venue</th><th>Operator</th>'));
 
 const pageFees = new Map();      // display name -> date string
 for (const row of feeTable.matchAll(/<tr><td>([^<]+)<\/td><td>[\s\S]*?<\/td><td>([^<]+)<\/td>/g)) {
@@ -287,5 +410,72 @@ T.check('PLATFORMS and CROSS_BORDER cover the same non-empty venue set',
   `sizes ${modelVenues.size}/${crossVenues.size} · ` +
   `priced but no cross-border entry: [${platOnly.join(', ')}] · ` +
   `cross-border entry but not priced: [${crossOnly.join(', ')}]`);
+
+/* ── page side, table 3: sales tax and the fee base ─────────────────────── */
+/*
+ * T2.9 published the fifteen tax answers on accuracy.html, which makes them a
+ * SECOND HAND-MAINTAINED COPY of `taxOn` -- the exact shape this whole file
+ * exists to guard, created by the work that closes BIAS-10. Writing "the parity
+ * guard does not cover this table" in a comment would have been an accurate
+ * description of an avoidable gap; a fact recorded as prose next to the surface
+ * that could enforce it is instance 22 all over again. So it is enforced.
+ *
+ * Bidirectional, same three failures as the fee table: a venue the model taxes
+ * but the page omits, a venue the page publishes but the model does not carry,
+ * and a venue whose two surfaces give different answers.
+ */
+const taxSection = accuracy.slice(
+  accuracy.indexOf(FEE_TABLE_END),
+  accuracy.indexOf('<h3>International &amp; cross-border selling</h3>'));
+
+const PAGE_TAX = { yes: 'true', no: 'false', unknown: "'unknown'" };
+const pageTax = new Map();       // normalised display name -> taxOn literal
+for (const row of taxSection.matchAll(
+  /<tr><td>([^<]+)<\/td><td><strong>(Yes|No|Unknown)<\/strong><\/td>/g)) {
+  pageTax.set(norm(row[1]), PAGE_TAX[row[2].toLowerCase()]);
+}
+
+T.check(`page: parsed ${pageTax.size} venues from the sales-tax table (floor 10)`,
+  pageTax.size >= 10,
+  `parsed ${pageTax.size} -- the tax table markup changed shape, and every ` +
+  `comparison below would pass vacuously`);
+
+const modelTaxByName = new Map(
+  [...taxFields].map(([k, v]) => [norm(modelVenues.get(k)?.name || k), v.on]));
+
+const taxPageOnly  = [...pageTax.keys()].filter(k => !modelTaxByName.has(k));
+const taxModelOnly = [...modelTaxByName.keys()].filter(k => !pageTax.has(k));
+T.check('tax: the published tax table and the model cover the same venue set',
+  pageTax.size > 0 && modelTaxByName.size > 0 &&
+  taxPageOnly.length === 0 && taxModelOnly.length === 0,
+  `on the page but not in the model: [${taxPageOnly.join(', ')}] \u00b7 ` +
+  `in the model but not published: [${taxModelOnly.join(', ')}]`);
+
+const taxDisagree = [...pageTax].filter(([k, v]) =>
+  modelTaxByName.has(k) && modelTaxByName.get(k) !== v);
+T.check('tax: every venue gives the same tax answer on both surfaces',
+  taxDisagree.length === 0,
+  taxDisagree.map(([k, v]) => `${k}: page=${v} model=${modelTaxByName.get(k)}`).join(' \u00b7 '));
+
+/* The prose above the table states the split as a count. A number written by
+   hand beside a table generated from the same facts is a stamp, and a stamp
+   that disagrees with the model is a lie regardless of how small it is. */
+const counts = { true: 0, false: 0, "'unknown'": 0 };
+for (const [, v] of taxFields) counts[v.on]++;
+const renderCount = counts.true + counts["'unknown'"];
+/* EXACT strings, no lenient fallback. The first draft of this loop fell back to
+   `taxSection.includes(\`<strong>${n} \`)` when the phrased form did not match,
+   which passes on any bold number anywhere in the section -- a check that
+   cannot fail is worse than no check, because it reports `ok`. */
+for (const claim of [`<strong>${counts.true} are confirmed tax-inclusive</strong>`,
+                     `<strong>${counts.false} are confirmed zero</strong>`,
+                     `<strong>${counts["'unknown'"]} are unknown</strong>`,
+                     `<strong>${renderCount} of ${taxFields.size}</strong>`]) {
+  T.check(`tax: the page publishes the model's count \u2014 "${claim.replace(/<\/?strong>/g, '')}"`,
+    taxSection.includes(claim),
+    `the model's split is ${counts.true}/${counts.false}/${counts["'unknown'"]} ` +
+    `(${renderCount} of ${taxFields.size} disclosing), but the page does not state ` +
+    `"${claim.replace(/<\/?strong>/g, '')}"`);
+}
 
 T.done();

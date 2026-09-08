@@ -1,8 +1,31 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.4c65092e.js` (21,270 lines).** New work cites that hash.
+**Live bundle: `js/core.9fd82d6e.js` (21,345 lines).** New work cites that hash.
 `24cd52cb` joined the retired set at the BIAS-6 rename on 2026-09-08 (commit
 `fa4739b`); `7f9c03ad` joined it at the D3 closeout rename on 2026-09-07.
+
+> **`4c65092e` was renamed to `9fd82d6e` by T2.9 on 2026-09-08, and — like
+> `69b38a85` before it — it is NOT in the retired-generation tables below,
+> because no file with those bytes survives to align against.** T2.9 edited it
+> in place (a `taxOn`/`taxBasis` docblock, fifteen field lines, the `venueTaxNote`
+> helper, one deleted statement), which changed its bytes and therefore its
+> name. The tool now reports `9fd82d6e` as live because it derives the name from
+> `index.html` rather than from this file.
+>
+> **Concrete consequence, stated rather than left implicit:** the T2.9 insertions
+> land at the head of `PLATFORMS`, so a citation naming `4c65092e` at a line
+> **below ~6247** now points roughly **75 lines high** against live, and there is
+> no `4c65092e` snapshot for the verifier to measure that offset from. Citations
+> written during the BIAS-6 work name exactly that bundle. Per the standing
+> decision this is drift, not rot: a named bundle differing from live is not a
+> failure rule, no broad historical cleanup is being run, and citations
+> introduced by T2.9 cite `9fd82d6e` directly. What is new here is only that the
+> offset is now recorded instead of inferred.
+>
+> **Unresolved count re-derived with the tool after the rename: still 109**
+> (108 `d9e1b484`, 1 `8e031c8f`) — unchanged, because the T2.9 insertions landed
+> in a region no retired citation points at. Re-derived by running
+> `tools/bundle-citation-map.mjs`, not by re-implementing its query.
 
 `69b38a85` was live for less than a day and is **not** in the retired-generation
 tables below: the BIAS-6 review corrections edited it in place, which changed

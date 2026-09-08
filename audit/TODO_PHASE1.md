@@ -200,22 +200,48 @@ An earlier note on this list claimed shipped code had already breached rule 5. *
 
 Do-not-touch: Ultimate (retired), Grade gold-set, Wallpaper, homepage feature-grid blurb.
 
-## T2.9 — venue tax-treatment audit (BIAS-10)  [due 2026-09-21 or next fee re-audit, whichever is first]
+## T2.9 — venue tax-treatment audit (BIAS-10)  [DONE 2026-09-08, ahead of the 2026-09-21 deadline]
 
 Deadline recorded HERE and not only in `audit/d3/DISCLOSURE_PARITY_Q3.md`, because
 a date that lives only in an audit document is a date nobody greps.
 
-`taxNote` is hardcoded inside `feeEbay` (`js/core.7f9c03ad.js:6840`); eleven of
-twelve venues consequently show a fee total with no tax disclosure, none of it a
-decision. Full analysis: `DISCLOSURE_PARITY_Q3.md` § Q3-E revised. Pattern
-instance 22.
+**Outcome.** `taxOn` + `taxBasis` on all fifteen venues; one shared
+`venueTaxNote(pid)`; the hardcoded line deleted. Disclosure went **1 of 15 → 9
+of 15** (2 confirmed tax-inclusive, 7 unknown, suppressed on 6 confirmed zeros).
+Per-venue tables, verbatim source quotes and the reasoning:
+`audit/d3/TAX_TREATMENT_T2_9.md`. Restated publicly in a third table on
+`accuracy.html`, which the parity suite now holds to the model bidirectionally
+(34 checks, all five mutations confirmed to turn it red). Pattern instance 35.
+
+The **Whatnot** correction is the finding worth carrying forward: its commission
+excludes tax and its payment processing fee includes it, both on the same page.
+A first pass read only the commission sentence and recorded a confirmed zero, so
+`taxOn` is deliberately defined as "does **any** fee apply to a tax-inclusive
+base", not "does the commission". That fact had been sitting in a code comment
+above `feeWhatnot` since 2026-09-01 and changed nothing, because a comment is
+not a field.
+
+**Original statement of the defect, kept for the record:** `taxNote` is
+hardcoded inside `feeEbay` (`js/core.7f9c03ad.js:6840`); eleven of twelve venues
+consequently show a fee total with no tax disclosure, none of it a decision.
+(That count was written against a twelve-venue set and was already stale at a
+fifteen-venue one — the true ratio at closure was 14 of 15 undisclosed.) Full
+analysis: `DISCLOSURE_PARITY_Q3.md` § Q3-E revised. Pattern instance 22.
 
 Steps, citations first and publication last:
 
 1. Re-read all fifteen published fee pages from **raw page text** (not a summary
    of one); record per venue whether commission applies to a tax-inclusive total.
-2. `taxOn: true | false | 'unknown'` in each `PLATFORMS` entry; bump
-   `feeAuditedOn` in the same commit, because step 1 is a real re-audit.
+2. `taxOn: true | false | 'unknown'` in each `PLATFORMS` entry. ~~bump
+   `feeAuditedOn` in the same commit, because step 1 is a real re-audit.~~
+   **CONTRADICTED THIS LIST'S OWN FOOTER and was resolved against it: NOT
+   bumped.** Step 1 re-reads the pages but verifies only the *tax window* — not
+   one rate, cap or tier was re-checked, and `feeAuditedOn` means "when did we
+   last read the schedule". Bumping it would have stamped a re-verification that
+   did not happen and reset the amber/stale clock by six weeks. All fifteen stay
+   `'2026-09-01'`; the fee re-audit is still due (amber `2026-10-01`, stale
+   `2026-10-16`). No `taxCheckedOn` field was added — one date, per the standing
+   decision. Full reasoning: `TAX_TREATMENT_T2_9.md` § 17.
 3. Derive `taxNote` from `taxOn`, delete the hardcoded line. **`'unknown'` renders
    the disclosure, never suppresses it.**
 4. Extend `tests/accuracy-fee-parity.mjs`: every venue carries `taxOn`; `taxNote`
@@ -225,9 +251,18 @@ Steps, citations first and publication last:
 **Do not add a tax rate to any model** — no invented input to a fee model.
 **Do not bump `feeAuditedOn` for a tax-only check.**
 
-Ordering: this sits with the re-audit, after D3 closes, the bundle rename lands,
-and BIAS-1 is implemented. The independent date exists so a slipped re-audit
-cannot silently carry it.
+Ordering: this sat with the re-audit, after D3 closed, the bundle rename landed,
+and BIAS-1 was implemented. The independent date existed so a slipped re-audit
+could not silently carry it — and in the event it did not slip.
+
+**Still open, and NOT closed by T2.9** (BIAS-10's other half): `feeBase` /
+`feeBaseLabel` are still emitted by only 2 of 15 venues, so the *fee base* row
+has the same single-venue shape the *tax* row just had. Split-basis venues
+(Whatnot, TCGplayer) cannot yet express *which component* the tax-inclusive base
+belongs to. `Buyer sales tax` is also the wrong noun for Cardmarket's VAT. TCG
+Bulk's vendor-side fee base and Poshmark's fee base remain unconfirmed —
+Poshmark's fee policy page was unreachable across five URLs and is recorded as
+`unstated` rather than inferred.
 
 ### T2.10 — Observed-centre band inverts against the ask median (Q3-C residue)
 
