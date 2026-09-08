@@ -264,22 +264,65 @@ Bulk's vendor-side fee base and Poshmark's fee base remain unconfirmed —
 Poshmark's fee policy page was unreachable across five URLs and is recorded as
 `unstated` rather than inferred.
 
-### T2.10 — Observed-centre band inverts against the ask median (Q3-C residue)
+### T2.10 — RE-TRACED 2026-09-08 against live code. Original premise is HISTORICAL; one live finding replaces it.
 
-`low = 0.85 × market` is derived from the **sales** book; `mid` is the median
-**active ask**. They render as an ordered triple. `low > mid` whenever
-`market > 1.1765 × mid`. Measured: upstream `mid 100 / market 300` publishes
-`low $255.00` beside `mid $100.00`.
+**The mechanism T2.10 was filed against no longer exists.** Traced before
+investigating, per instruction.
 
-Undisclosed band is `1.176 × mid < market ≤ 3.0 × mid`, because
-`_marketAskDivergence` (`api/tcg-price.js:672`) returns `null` at `ratio <= 3`
-(`:683`) — the guard bounds the region the defect lives in, for the third time
-with the constant `3.0` (pattern instance 23).
+`low = 0.85 x market` and `high = 1.15 x market` are **deleted on both server
+paths**. Every remaining `0.85` in `api/tcg-price.js` (`:243`, `:267`, `:278`,
+`:347`) is **inside a comment recording the deletion**. Live code reads
+`low: r.low ?? null` (tcgcsv, `api/tcg-price.js:290`) and
+`low: fb.low ?? null` (free-API fallback, `:360`). `_spreadOk` is gone.
+**No regression: synthesis has not returned.**
 
-Not an arithmetic fix: a smaller multiplier moves the threshold, it does not
-remove it. Three numbers from two different books have no ordering. **This is
-roadmap Q7's evidence** (`audit/CARDRESELL_PLAN_AND_ROADMAP.md:847`, item 7) and
-Q7 is an open reviewer question — needs a decision, not a patch.
+The client hole closed with it. `js/core.59d4b1ab.js:3834` now reads
+`lowBasis: _dLow != null ? (d.lowBasis || null) : null` — attribution off the
+wire, replacing the value-presence stamp that relabelled derived numbers
+`'tcgplayer'`. `_crTplAskEndpoints` (`:334`) still stamps `'tcgplayer'` from
+presence, but its values are vendor-published `tp.low`/`tp.high` and it is
+structurally scoped to the condition (`:342`), so provenance is established by
+co-context rather than assumed. Not the same defect.
+
+**Therefore marked HISTORICAL:** the `$255.00 beside $100.00` worked example,
+the `market > 1.1765 x mid` threshold derived from the 0.85 multiplier, and the
+`1.176 x mid < market <= 3.0 x mid` undisclosed band. All three were properties
+of the deleted synthesizer. They are retained in
+`audit/d3/DISCLOSURE_PARITY_Q3.md` as history, not as current behaviour.
+**Q7 is not reopened and the deleted mechanism is not investigated further.**
+
+---
+
+**NEW, and live: `mid` crosses the whole path unattributed.**
+
+The Q7 (iii) remedy gave `low` and `high` basis fields and taught the client to
+read them. **`mid` did not get one on the primary path.**
+
+- `api/tcg-price.js:290` emits `mid: r.mid ?? displayMarket` and the payload has
+  `marketBasis`, `lowBasis`, `highBasis` — **no `midBasis`**. When `r.mid` is
+  absent, `mid` is `displayMarket`, i.e. the `_headlinePrice` blend: a derived
+  centre, shipped indistinguishable from an observed median ask.
+- The **fallback** path does better — `:367` sets
+  `midBasis: fb.mid != null ? 'provider' : 'derived'`. So the two paths disagree
+  about whether `mid` needs provenance, which is itself the rule-1 smell.
+- The client never carries it either: `js/core.59d4b1ab.js:2660-2662` and
+  `:2701-2703` copy `marketBasis`/`lowBasis`/`highBasis` and **not** `midBasis`.
+- `_rangeParts` (`js/core.59d4b1ab.js:5414`) prints `Mid $X` with **no basis
+  check and no ordering check against `low`**. `_crMeasuredRange` (`:4108`) gates
+  the pair well — it refuses unattributed, mixed-origin, derived, reversed and
+  degenerate endpoints — but it only ever compares `low` against `high`. **`mid`
+  is not one of the endpoints it gates.**
+
+**Stated against the boundary, not as a number:** a derived centre can render
+inside an ordered `Low · Mid · High` triple whose other two members passed a gate
+specifically built to refuse derived endpoints. The gate's guarantee is narrower
+than the rendered line implies. Whether an inversion is reachable from *observed*
+`r.low` and `r.mid` is a data question this trace did not settle — **not claimed
+either way**.
+
+**Not fixed here.** The remedy is a decision (add `midBasis` and gate the triple,
+or withhold `Mid`), not a patch, and the standing rule is one implementation per
+behaviour — so it should land as the same contract `low`/`high` already use.
 
 Q3-C closed the derived-centre mechanism only. **Do not read Q3-C as "the
 inversion is fixed".**

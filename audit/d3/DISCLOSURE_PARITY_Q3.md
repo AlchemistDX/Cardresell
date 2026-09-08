@@ -791,6 +791,15 @@ that endpoint is compared against a `mid` that comes from **a different book**:
 0.85 · market > mid   ⇔   market > 1.1765 · mid
 ```
 
+> **HISTORICAL as of 2026-09-08.** Everything in this subsection describes the
+> `low = 0.85 x market` synthesizer, which is **deleted** on both server paths
+> (Q7 option (iii)). The worked example, the `1.1765` threshold and the
+> `1.176x < market <= 3.0x` band are all properties of that multiplier and do
+> not describe current behaviour. Re-traced against live code; synthesis has not
+> returned. Retained as history. See `audit/TODO_PHASE1.md` § T2.10 for the
+> re-trace and for the one live finding that replaces it (`mid` ships with no
+> basis field on the tcgcsv path).
+
 `low` is derived from completed sales; `mid` is the median active ask. Measured,
 upstream `{low: null, market: 300, mid: 100, high: 300}`:
 
