@@ -31,11 +31,27 @@
  *
  * FALLIBILITY. Per the practice adopted 2026-09-07, and because this guards
  * behaviour that is currently correct rather than fixing a live defect,
- * mutation is the applicable route. Three mutations were run and reverted:
- * deleting the withheld row (withheld-pair check red), swapping the withheld
- * dt/dd for div/span (alternation check red), and removing the literal space
- * before the qualifier span (accessible-name check red). Each turned exactly
- * the intended assertion red and left the others green.
+ * mutation is the applicable route. Three mutations were run against commit
+ * b956c10 and reverted (`js/core.7f9c03ad.js` sha256 verified byte-identical
+ * afterwards). Measured, not predicted:
+ *
+ *   - delete the withheld row from the priced template -> 12 passed / 3 failed
+ *     (the three withheld checks, and only those).
+ *   - swap the dt/dd in _reviewBasisRow for div/span -> 12 passed / 3 failed:
+ *     alternation, the withheld pair, AND the qualifier floor, which reported
+ *     "0 qualifier terms found (floor 2)". That third failure is the negative
+ *     control doing its job -- without it the space check downstream would have
+ *     passed over an empty set and reported ok on markup with no dt at all.
+ *   - remove the literal space before the qualifier span -> 14 passed /
+ *     1 failed, exactly the space check.
+ *
+ * An earlier run of these three was INVALID and is recorded because the numbers
+ * were briefly believed: the mutation loop's `git checkout` reverted the bundle
+ * to HEAD while the T2.14 edits were still uncommitted, so mutations 2 and 3
+ * ran against a bundle that had no withheld row at all and their reported
+ * failures were artifacts. The work was reapplied and committed BEFORE
+ * re-running. Mutation testing requires a commit to revert to; the loss only
+ * exists in the space between two commits.
  */
 
 import { harness } from './_assert.mjs';
