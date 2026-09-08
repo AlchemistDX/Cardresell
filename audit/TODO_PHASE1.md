@@ -398,6 +398,17 @@ mislabel into an invisible omission, that this is an improvement and not a
 closure, and that anyone reading `9a3c7ac` as "the Lowest-listing row is now
 honest" is reading it too generously.
 
+**Cross-reference:** recorded as instance **22c** in
+`audit/PATTERN_ASSERTION_SURFACE.md`, and the withhold-rather-than-relabel rule
+now carries a mandatory rider there — withholding is only complete once the
+withheld state is distinguishable from the never-had-it state.
+
+**On the commit record:** `9a3c7ac`'s message does not carry this caveat and has
+not been reworded, because the hash is already cited in T2.14 and in the instance
+1 addendum, and a reword changes the hash those citations point at. The caveat
+instead sits in the code at the render site, which is where a reader who greps
+this row actually lands, and in the title of the follow-up commit.
+
 Detection note, generalisable: this was invisible to nine passing behavioural
 assertions because every one of them checks a single state in isolation. The
 defect is in the **collision between two states**, which only a side-by-side

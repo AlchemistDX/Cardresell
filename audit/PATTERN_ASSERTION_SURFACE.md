@@ -1095,6 +1095,54 @@ fail toward telling the seller more. A tri-state that treats `'unknown'` as
 `false` reintroduces the original defect with a field attached — worse than
 before, because now it looks audited.
 
+### 22c (2026-09-07) — the same collapse, produced deliberately by a correct fix
+
+Instance 22 reads as a carelessness pattern: a fact got written as a line instead
+of a table column, so eleven blanks existed that nobody had decided. T2.14 is the
+same collapse arriving through the front door.
+
+Condition (2) of `9a3c7ac` withholds the Lowest-listing row when the floor
+exceeds the median ask. That is the correct call — a floor above an observed ask
+is not a floor, and printing it was the worse option. The result is that
+"we have no floor for this card" and "we have a floor and judged it
+untrustworthy" render as the same row-shaped absence. Instance 22's sentence
+applies verbatim: the two states a seller most needs separated collapse into an
+identical, silent, entirely normal-looking blank.
+
+**Why this matters for how the pattern is understood.** Twenty-two was filed as a
+thing that happens when nobody is looking. This instance was produced by looking
+carefully, reasoning correctly, and choosing the better of two options. So the
+pattern is not a symptom of carelessness — it is a **structural consequence of
+suppression**, and it arrives just as reliably from good judgement as from bad.
+Filing it only under carelessness would mean the next correct withholding
+produces it again with nothing to catch it.
+
+## Rule — withhold rather than relabel, and its mandatory rider
+
+Stated three times as a remedy before it was ever written down as a rule
+(`DIRECTIONAL_BIAS_AUDIT.md:757` on the grading upside,
+`D3_STEP5_SECOND_REVIEW_RESPONSE.md:178` on the review-screen discount,
+condition (2) of `9a3c7ac` on the Lowest-listing row):
+
+> **A number with no defensible name does not get a worse name. It goes away.**
+
+The rule is right and stays. But it manufactures the instance-22 collapse **by
+design**: every correct refusal to mislabel creates a state that renders as
+absence, and absence already means something to the reader — usually "we don't
+have this." So the rule is incomplete on its own and carries a rider:
+
+> **Withholding is only complete once the withheld state is distinguishable from
+> the never-had-it state.** If suppressing the number makes the surface identical
+> to the surface where the number never existed, the mislabel has been traded for
+> a different false claim, not removed.
+
+Corollary for review: a withhold-on-condition fix is not assessable from its
+diff. The diff shows the suppression, which is the part that is correct. What has
+to be checked is the **rendered collision** between the suppressed state and the
+naturally-empty state, which only appears when the two are put next to each
+other. Per-state assertions cannot see it — T2.14 survived nine of them, each
+correct in isolation.
+
 ## 23. A guard whose threshold bounds the defect instead of catching it (2026-09-07)
 
 `_HIGH_CAP_MULT = 3.0` (`api/tcg-price.js:530`) drops the high ask from the

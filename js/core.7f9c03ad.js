@@ -4421,6 +4421,19 @@ function renderQuickPricing() {
   // Remedy for (2) is to withhold rather than relabel, matching what the server
   // does on a derived centre: a number with no defensible name does not get a
   // worse name, it goes away. The range line still carries the spread.
+  //
+  // THIS ROW IS NOT FINISHED -- see T2.14 in audit/TODO_PHASE1.md.
+  // Withholding leaves the suppressed state (we HAVE a floor and distrust it)
+  // rendering identically to the never-had-it state (upstream sent no low). Those
+  // are the two cases a seller most needs separated, and they collapse into the
+  // same row-shaped absence -- instance 22 of audit/PATTERN_ASSERTION_SURFACE.md,
+  // reached here through a correct fix rather than a careless one (see 22c).
+  // A visible mislabel was traded for an invisible omission. That is progress and
+  // it is not closure. Do not read the assertions in tests/quick-pricing.mjs as
+  // evidence this row is honest; they verify the label logic, and all nine passed
+  // while this defect was live, because each checks one state in isolation.
+  // The disclosure copy is deliberately absent: it would assert something about
+  // WHY the book is inverted, which is T2.10's subject and needs the Q7 decision.
   const _lowIsObserved  = basis.lowBasis === 'observed';
   const _lowExceedsAsk  = (basis.low != null && basis.mid != null && basis.low > basis.mid);
   if (basis.low != null && !_lowExceedsAsk) {
