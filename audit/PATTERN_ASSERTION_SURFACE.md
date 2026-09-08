@@ -1468,3 +1468,41 @@ Now it is a rule.
 
 Cost of the omission here: one review cycle spent on a closed blocker, and a
 verdict of "D3 is not ready to close" that was based on it.
+
+## 26. A derived quantity was measured and the conclusion was stated about a different quantity (2026-09-07)
+
+**What happened.** A sweep computed the difference in *fees* between two price
+legs and the finding was written up as a claim about *upside*. The two are
+related by `upside = (G - R) - feeDiff - GRADING_FEE`, so they move in opposite
+directions. Every arithmetic step was right; the label on the output was wrong,
+which inverted the reported direction of a bias.
+
+**Why the existing defences did not catch it.** The numbers were reproducible,
+the function was quoted verbatim, the sweep was broad, and the write-up named its
+metric. What it did not do was compute the named metric — it computed a proxy one
+step upstream and trusted the mapping. **Naming the metric is what the audit
+already requires; computing the named metric is a different requirement, and it
+was not written down.**
+
+**Why review did not catch it.** The wrong version was reviewed and endorsed,
+with the direction finding singled out as the most important part and explicitly
+passing both admissibility tests. Confident presentation plus attached numbers is
+what review checks *against*, so a wrong direction stated that way clears it.
+**Peer review is not a defence against an inverted sign, because the sign is the
+thing least visible in a table of correct numbers.**
+
+**Repeat count.** This is the third time a bias direction has been wrong in this
+corpus — the two prior occasions produced `Directional Bias Audit — Directions
+Re-Derived` and `Directional Bias Audit — Metric Named, Directions Corrected`.
+Each fix addressed the instance. **The class is that direction is derived last,
+from a quantity computed for another purpose, and it is the one field with no
+independent check.**
+
+**Rule.** *Compute the quantity you are going to name. If a sweep measures a
+proxy, the write-up states the proxy and the mapping to the reported metric as a
+separate, checked step — a correct number under a wrong label is not a smaller
+error than a wrong number.*
+
+**Standing requirement added.** Any directional claim must be produced by
+evaluating the expression that reaches the user's screen, not an input to it. For
+this codebase that means the rendered field, by name, through the real function.

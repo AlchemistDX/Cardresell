@@ -838,43 +838,65 @@ way, the finding is that the seven-item table was incomplete in a direction the
 audit had not looked for, which is worth knowing either way.
 
 
-## BIAS-11 — the grading-upside incremental computed at zero shipping overstates the upside
+## BIAS-11 — CORRECTED. The `S = 0` grading-upside incremental leans **conservative**, not optimistic
 
-**Metric:** the incremental figure the grading panel renders,
-`upsideNet = gradedNet - rawNet - GRADING_FEE`, in dollars.
+**2026-09-07, same day as filing.** The first version of this entry stated the
+direction as optimistic. **That was wrong, and the error was mine.** It is
+corrected here rather than rewritten, because the wrong version was shared and
+endorsed and the corpus should show that.
 
-**Truth compared against:** the same figure computed with the seller's actual
-shipping charge through `feeEbay`, not against an alternative panel design.
+**How the error was made:** the sweep differenced *fees*
+(`sum(feeEbay(G)) - sum(feeEbay(R))`) and the conclusion was stated about
+*upside*. The rendered metric is
 
-**Direction: optimistic.** Measured by executing the real `feeEbay` and
-differencing the two legs at `S ∈ {0, 5, 10, 20}`. The figure computed at
-`S = 0` is the **maximum** of the set in every case tested. Shipping charge
-therefore only ever reduces the true incremental upside relative to what a
-`S = 0` computation reports.
+```
+upsideNet = (G - fees(G)) - (R - fees(R)) - GRADING_FEE
+          = (G - R) - feeDiff - GRADING_FEE
+```
 
-**Magnitude, measured:**
+so `upsideNet` moves **opposite** to `feeDiff`. Every number in the first version
+was correctly computed; the sign of the mapping to the reported metric was
+inverted. "`S = 0` yields the highest figure" was true of the fee difference and
+false of the upside.
 
-| condition | example | deviation at `S = 0` |
-|---|---|---|
-| both legs above $10, within tier | G $80 / R $12 | $0.00 (exact) |
-| raw leg straddles the $10 per-order step | G $80 / R $6 | **$0.10** |
-| no store, graded leg crosses $7,500 | G $9,000 / R $40 | **$2.18** |
-| basic store, graded leg crosses $2,500 | G $2,600 / R $30 | **$15.00** |
+**Corrected direction, computed on the rendered metric.** Full sweep, 2 store
+settings × 3 promo rates × TRS on/off × 20×20 price pairs × 7 shipping charges:
 
-**Why it is a bias and not a rounding note:** the error is bounded but its sign
-is constant. A bounded error with a consistent direction is a bias.
+| behaviour of the rendered `upsideNet` | price pairs |
+|---|---|
+| `S = 0` is the **minimum** — understates upside (**conservative**) | **1,500** |
+| `S = 0` is the **maximum** — overstates upside (optimistic) | 108 |
+| no dependence on `S` (cancellation exact) | 672 |
+| mixed / neither bound | 0 |
 
-**Incidence caution — do not quote the table as an incidence.** These are worked
-cases chosen to exhibit the failure conditions, not a distribution. The
-`$0.00` row is the ordinary case and is exact. What is *not* measured is how
-often real sellers sit in each condition, and the catalog distribution is the
-wrong evidence for that, because it says nothing about which cards sellers
-consult the grading panel for.
+**So the second admissibility test fails: the sign is not consistent.** It is
+dominantly conservative with a bounded optimistic minority. Recording it as a
+directional item anyway, with both directions stated, rather than as a bias with
+a single lean.
 
-**Relationship to BIAS-1:** discovered while verifying the fix for BIAS-1, and it
-is a property of that fix rather than of the code being replaced. The current
-flat `FEES_PCT = 13` has its own, larger error; this item exists so that
-replacing it is not recorded as making the number exact when it makes it exact
-only in the ordinary case.
+**The optimistic minority is fully characterised and benign.** All 108 cases have
+graded price `<= $10`; all have `upsideNet@0` negative (worst-case least-negative
+value `-18.78`); maximum overstatement **$0.10**. These are cards where the panel
+already says grading destroys value by roughly the grading fee, so no seller
+acts on the number.
 
-**Status:** open. Handling is the Q-C follow-up question, not yet decided.
+**Magnitude of the conservative side:**
+
+| population | worst deviation |
+|---|---|
+| graded price `<= $300` (the ordinary case) | **$0.10** |
+| tier-crossing (graded `> $2,500` basic / `> $7,500` no store) | **$11.00** |
+
+The $11 figures are all tier-crossers. For everything a seller is realistically
+consulting, the deviation is `$0.10` in either direction.
+
+**Consequence for the disclosure copy — the approved sentence is also backwards.**
+"assumes no shipping charge; a shipping charge reduces this" is false in 1,500 of
+1,608 `S`-dependent cases: a shipping charge *increases* the figure. Since no
+directional claim holds universally, the recommendation is now to make the
+assumption without the direction:
+
+> Assumes no shipping charge collected from the buyer.
+
+**Status:** open. Direction corrected. Supersedes the version shared at
+`47579c5`.
