@@ -1,6 +1,32 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.59d4b1ab.js` (21,491 lines).** New work cites that hash.
+**Live bundle: `js/core.34fb750c.js` (21,494 lines).** New work cites that hash.
+
+> ### Four generations this file did not record when they happened
+>
+> Between the T2.9 rev2 pass and 2026-09-08 the bundle was renamed four times
+> and **this map was not updated for three of them.** Recording it late is
+> worse than recording it on the day and better than leaving the header
+> pointing at a hash that has not been live since 2026-09-08 morning:
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 1 | `59d4b1ab` → `9f0f6b30` | `5228494` | T2.9 rev3 corrections, TRS gate, capture reduction. **Recorded here late.** |
+> | 2 | `9f0f6b30` → `541c4c39` | `19cb94c` | T2.10 midBasis preservation, derived-centre labels. **Recorded here late.** |
+> | 3 | `541c4c39` → `fec7fb3a` | *(never committed under this name)* | The Lane A client work. Renamed, then the file changed again before the commit, so **no committed tree ever contained `fec7fb3a`** — do not cite it. |
+> | 4 | `541c4c39` → `34fb750c` | `a8dc3d6` | The same Lane A client work as landed: pricingContext builder, review-screen packet arms, refresh path. |
+>
+> Generations 1 and 2 were in-place edits under the old name before the rename,
+> so — same as every prior generation in the tables below — **no file with
+> those bytes survives to align line numbers against.** They are not added to
+> the retired-generation tables for that reason, and a citation naming
+> `59d4b1ab` or `9f0f6b30` cannot be mechanically re-derived; it has to be
+> re-grepped by symbol against `34fb750c`.
+>
+> **Generation 3 is a naming hazard, not a generation.** `fec7fb3a` was a valid
+> fingerprint of a real intermediate file for the length of one work session
+> and appears in no commit. Anything citing it is citing a file that was never
+> version-controlled.
 
 > **`2c7cf451` was renamed to `59d4b1ab` on 2026-09-08 by the T2.9 review pass,
 > and it is NOT in the retired-generation tables below** — same reason as its
