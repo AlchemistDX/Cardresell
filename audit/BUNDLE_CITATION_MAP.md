@@ -1,7 +1,17 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.24cd52cb.js` (20,227 lines).** New work cites that hash.
-`7f9c03ad` joined the retired set at the D3 closeout rename on 2026-09-07.
+**Live bundle: `js/core.69b38a85.js` (21,206 lines).** New work cites that hash.
+`24cd52cb` joined the retired set at the BIAS-6 rename on 2026-09-08 (commit
+`fa4739b`); `7f9c03ad` joined it at the D3 closeout rename on 2026-09-07.
+
+> **Unresolved count moved 72 → 109 at the BIAS-6 rename, and that is drift, not
+> rot.** The BIAS-6 corrections inserted roughly 1,000 lines into the live
+> bundle, so 37 further `d9e1b484` citations now map onto a line whose content
+> shifted. Nothing about the retired bundles changed; what changed is the
+> target they are aligned against. Per the standing decision, a named bundle
+> differing from live is **not** a failure rule, and no broad historical
+> citation cleanup is being run. Citations introduced by the BIAS-6 work cite
+> `69b38a85` directly.
 
 > **The offset tables below are a convenience cache and are now one generation
 > stale.** `tools/bundle-citation-map.mjs` derives the live name from

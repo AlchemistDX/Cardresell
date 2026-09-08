@@ -772,9 +772,17 @@ Nothing in this document has been changed in code. Recorded as findings:
   already taken for the TRS discount, and the only one of the three that does not
   invent precision.
 
-- **BIAS-6** WALKED 2026-09-08. All three surfaces checked; 8 findings, 6 with
-  a direction and all 6 optimistic. See "BIAS-6 — the three unwalked estimate
-  surfaces, walked" below. The fourth surface, the ±15% band, is resolved.
+- **BIAS-6** WALKED 2026-09-08, then CORRECTED and largely CLOSED the same day.
+  Eight findings across three surfaces, which collapse to **two actionable
+  defects** — a chart with no honest representation for a nonpositive payout,
+  and cost records that stored a blank field as a confirmed $0 — plus one
+  provenance correction. The directional reading first written here ("6 of 6
+  optimistic", extended to "12 of 12") is **WITHDRAWN**: it counted related
+  failure modes as independent observations and built on the already-retracted
+  7-of-7 finding. Both defects are corrected in commit `fa4739b`; the fee-source
+  comment is corrected against the published terms. See "BIAS-6 — the three
+  unwalked estimate surfaces, walked" below. The fourth surface, the ±15% band,
+  is resolved.
 
 ## Bookkeeping corrections to `TODO_PHASE1.md`
 
@@ -1159,9 +1167,16 @@ but it is the same guard family as P-1.
 **Against the decision boundary.** The downstream decision is *which venue to
 sell on*. The numeric ranking and the sort order are correct in all three cases,
 so the boundary is not crossed by the numbers — it is crossed by the graphic a
-seller scans before reading them. The honest framing: **the bar is only truthful
-while at least one unlocked venue is profitable.** It is not currently gated on
-that condition.
+seller scans before reading them.
+
+**Correction 2026-09-08.** An earlier draft of this paragraph framed it as "the
+bar is only truthful while at least one unlocked venue is profitable." That is
+wrong, and it contradicts P-2 recorded three paragraphs above: with a profitable
+best venue, the 6% floor still drew every loss as a same-direction stub of the
+same width, so a profitable leader does not make the chart truthful — it is the
+exact condition under which P-2 fires. The supported framing is narrower: **the
+chart had no honest representation for a nonpositive payout in any ranking,
+whatever the sign of the best venue.**
 
 ---
 
@@ -1191,8 +1206,20 @@ a measured zero.
 
 **Do omissions affect the metric? Yes.**
 
-**F-1 — a blank fee field makes net equal the gross sale.** Overstated by the
-whole fee load (~13% plus shipping on a typical eBay sale). Optimistic.
+**F-1 — a missing cost is treated as zero.**
+
+**Corrected 2026-09-08.** This finding was first written as "a blank fee field
+makes net equal the gross sale." That overstates it: a blank fee field alone
+does not make net equal gross, because the purchase price and any other entered
+costs are still subtracted. The supported finding is the narrower one:
+
+> A missing cost treated as zero overstates recorded profit by that cost, when
+> the cost was actually incurred.
+
+That is enough to matter, because the reader cannot tell which case they are
+looking at — the stored record makes "seller confirmed there was no fee" and
+"seller never entered a fee" the same number. Optimistic whenever the cost was
+real; exact whenever it genuinely was zero; and the record does not say which.
 
 **F-2 — the label gets *more* assertive as the evidence gets thinner.** `parts`
 is only populated by costs that are greater than zero, so when nothing was
@@ -1251,9 +1278,31 @@ CoolStuffInc, SCG) pass nothing and `if (serviceFeePct)` correctly omits the row
   top of the buyer's buylist haircut. `https://tcgbulk.com/page/terms-of-service`"
 
 One says the figure is an estimate *because* it is unpublished; the other cites a
-terms-of-service URL as its authority. Both cannot be true. Per the standing
-rule this is **disclosed, not averaged** — I am not picking one. It needs the
-source page read from raw text before either comment is trusted.
+terms-of-service URL as its authority. Both cannot be true.
+
+**RESOLVED 2026-09-08 against the published source.** `https://tcgbulk.com/page/terms-of-service`
+was fetched as raw page text (retrieved 2026-09-08; effective date stated on the
+page: **August 26, 2026**). Verbatim:
+
+> "Unless a different fee is clearly shown before the Seller confirms a
+> Submission, a 10% TCG Bulk service fee applies to the transaction and is
+> deducted from the Seller's proceeds."
+
+> "The final transaction summary will show the applicable fee."
+
+The `:6416` comment is therefore **unsupported and has been removed**: the fee is
+published, as a default. Three distinctions are preserved rather than flattened:
+
+1. **Published default, not a guarantee.** The terms let a different fee be shown
+   before the seller confirms, so the 10% is what applies absent that notice.
+2. **The offer is still ours.** The published fee says nothing about the buylist
+   offer itself; our 50%-of-market ratio remains an estimate and is still
+   labelled as one.
+3. **The terms do not state the fee's base.** They say "deducted from the
+   Seller's proceeds" and never name what the percentage is charged against.
+   Our `offer × 0.10` reads "proceeds" as the pre-deduction offer. On a $100
+   retail card that reading gives $5.00; the post-fee reading gives $4.55. This
+   is recorded in the code as our reading, not asserted as the vendor's rule.
 
 The *user-facing* disclosure is adequate and I want to be clear about that: the
 tile's `redFlags` carry "💸 10% TCG Bulk service fee comes out of your proceeds —
@@ -1267,6 +1316,11 @@ checked".** A truthy test collapses `0` and `undefined`. Harmless today, since
 both currently mean "no service fee". But it means a venue we have *confirmed*
 charges nothing is stored identically to one we simply never investigated, so
 the codebase cannot answer "which buylist fees have been verified".
+
+**Still open 2026-09-08, and deliberately so.** A-1 closing does not close A-2:
+this is a metadata question about how a confirmed zero is stored, not a question
+about TCG Bulk's rate. It is open, not uninvestigated — the omission of an
+argument at a call site is not evidence that nobody looked.
 
 ---
 
@@ -1283,16 +1337,39 @@ the codebase cannot answer "which buylist fees have been verified".
 | A-1 estimate-vs-ToS contradiction | aggregator rows | undetermined | medium |
 | A-2 truthy test hides verified-zero | aggregator rows | neutral | low |
 
-**Every finding with a direction leans optimistic.** That extends the audit's
-standing 7-of-7 pattern to 12 of 12 directional findings in the same direction —
-which at this point is better read as a property of the codebase's defaults
-(missing input ⇒ zero cost ⇒ higher payout) than as twelve independent bugs.
+**Read this table as an inventory of observations, not as a tally.** The
+"direction" column records how each observation happened to lean; it does not
+license a count. P-1/P-2/P-3 are one geometry defect seen three ways, and
+F-1/F-2/F-3 are one record-keeping defect seen three ways. Status after
+`fa4739b`: P-1, P-2, P-3, F-1, F-2 and F-3 corrected; A-1 resolved against the
+published terms; A-2 open.
+
+**The "12 of 12" claim is WITHDRAWN (2026-09-08.)** It was built on the 7-of-7
+finding, which had already been retracted, and it counted related failure modes
+as independent observations. P-1, P-2 and P-3 are three expressions of one
+geometry defect; F-1, F-2 and F-3 are three expressions of one record-keeping
+defect. Counting them as six observations and then reading a pattern off the
+count is double-counting. The supported conclusion is the narrow one:
+
+> Missing costs can overstate recorded profit. The payout chart also represents
+> negative values misleadingly. These findings do not establish a universal
+> direction across CardResell's estimates.
+
+These are related failure modes, not twelve independent observations.
 
 ### Not verified
 
-- The saturation case (P-1) is established by arithmetic and by the CSS, **not**
-  by a rendered screenshot. I did not drive a browser to a state where every
-  unlocked venue is underwater.
-- A-1 is unresolved on purpose: I did not fetch
-  `tcgbulk.com/page/terms-of-service` to determine which comment is right.
-- No production code was changed for BIAS-6. These are findings, not fixes.
+- ~~The saturation case (P-1) is established by arithmetic and by the CSS, **not**
+  by a rendered screenshot.~~ **Superseded 2026-09-08:** an all-negative ranking
+  was rendered in a browser and captured (`payout_all_negative.png`), together
+  with a mixed-sign case (`payout_mixed_signs.png`) that demonstrates P-2
+  directly.
+- ~~A-1 is unresolved on purpose.~~ **Superseded 2026-09-08:** resolved against
+  the published terms; see A-1 above.
+- ~~No production code was changed for BIAS-6.~~ **Superseded by commit
+  `fa4739b`:** the chart geometry, the cost-record model and the fee-source
+  comment were all corrected. See the BIAS-6 return packet.
+- Still not established: the residual small-negative floor collapse under a
+  ≥60× payout spread is a known linear-scale limit of the corrected chart, not
+  a solved problem. Signs and ordering stay correct; relative magnitude among
+  very small losses does not.
