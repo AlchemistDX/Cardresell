@@ -310,10 +310,28 @@ export function validateDraftForSlot(draft, slot = draft && draft.slot) {
   const packetCovers = Object.prototype.hasOwnProperty.call(draft || {}, 'packet')
     && typeof draft.packetInputs === 'string'
     && draft.packetInputs === packetInputFingerprint(draft);
-  if (hasPrice && !packetCovers) {
+  if (hasPrice) {
     if (draft.priceSource === PRICE_SOURCE.SELLER) {
+      // A COVERING PACKET DOES NOT SUPPRESS THIS ONE, and the distinction is
+      // the whole reason the two arms are separate.
+      //
+      // SELLER_PRICED is not "we cannot tell where this number came from". It
+      // is a disclosure that the seller typed it, and a packet does not make
+      // that untrue. The packet documents a COMP BASIS; it does not convert a
+      // seller-entered price into a comp-derived one, and suppressing the
+      // disclosure because a basis happens to be attached would tell the
+      // seller their own number was market-derived.
+      //
+      // Found by an existing E2E assertion going red when this was first
+      // written with the packet gating both arms — see the note there. The
+      // test was right; gating both arms was an over-suppression, and it is
+      // the more dangerous direction: a warning that wrongly disappears is
+      // invisible, where one that wrongly appears is merely noise.
       push(VIOLATION.SELLER_PRICED, 'price', PRICE_SOURCE.SELLER);
-    } else {
+    } else if (!packetCovers) {
+      // This arm IS the question a packet answers: a price of unstated origin.
+      // A packet covering the current price documents that origin, so the
+      // warning stands down — and only while the coverage holds.
       push(VIOLATION.NO_PROVENANCE, 'price', draft.priceSource || 'unknown');
     }
   }

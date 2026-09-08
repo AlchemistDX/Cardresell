@@ -8,6 +8,7 @@ import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub, isDr
 import { SLOT_RULES } from './_draftStore.js';
 import { skuFor, identityReadiness } from './_cardIdentity.js';
 import { buildListingTitle } from './_listingTitle.js';
+import { buildListingPacket } from './_listingPacket.js';
 import { sellReasons } from './_sellEligibility.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
 
@@ -448,7 +449,15 @@ export function normalizeCreateInput(body) {
   const slot = normToken(body.slot, 'slot');
 
   // Refuse, don't drop. See above.
-  for (const derived of ['sku', 'title']) {
+  //
+  // `packet` joins sku and title, and it is the most important of the three.
+  // A listing packet CONTAINS sku, title, category, aspects and condition. So
+  // accepting a client-supplied packet would not merely widen the trust
+  // boundary these two refusals draw — it would reopen the very refusal by
+  // another route, letting a client post the title this endpoint just rejected
+  // by nesting it one level deeper. The packet is built HERE, from the same
+  // `card` the sku and title are derived from, and never accepted.
+  for (const derived of ['sku', 'title', 'packet']) {
     if (body[derived] !== undefined && body[derived] !== null) {
       throw new Error(`DRAFT_FIELD_INVALID:${derived}:derived-from-card`);
     }
@@ -539,6 +548,64 @@ export function normalizeCreateInput(body) {
     }
     out.priceSource = priceSource;
   }
+  // ── The listing packet — produced here, from the server's own row ───────
+  //
+  // Placement, because it is the whole argument. This function is already the
+  // one place that derives from `card`: skuFor, identityReadiness, sellReasons
+  // and buildListingTitle all run above, and their results are what get stored.
+  // The packet is the same kind of thing — a server derivation of the scanned
+  // card — so it is produced beside them, by the only producer that exists.
+  //
+  // What the CLIENT declares, and why that is not a widening of the boundary:
+  // feeModelRevision, feeScheduleVerified, pricing and basisMeta are facts
+  // about what the client COMPUTED, not claims about which card the seller
+  // scanned. They sit in the same category as `price` and `priceSource`, which
+  // this endpoint already accepts as declared inputs. The boundary stays
+  // exactly where it was; four fields join the side that was already declaring.
+  //
+  // The context is assembled FIELD BY FIELD and the request object is never
+  // spread into it. That is not tidiness. `ctx.maxTitleLength` would let a
+  // client widen the venue's title bound, and `ctx.now` would let it choose the
+  // clock that stamps priceBasis.retrievedAt — dating a stale comp to whenever
+  // it liked. Both are set here, from the server, and cannot be reached from
+  // the body.
+  //
+  // The two client-supplied OBJECTS are safe to pass whole because the packet
+  // builder already whitelists them field by field on the way in:
+  // stampPriceBasis picks eight named keys and pricing picks five, so an
+  // unexpected key on either arrives nowhere. Re-listing those keys here would
+  // be a second whitelist to drift against the first.
+  const pc = (body.pricingContext && typeof body.pricingContext === 'object'
+              && !Array.isArray(body.pricingContext)) ? body.pricingContext : {};
+  for (const forbidden of ['now', 'maxTitleLength', 'taxonomyTreeVersion']) {
+    if (pc[forbidden] !== undefined) {
+      throw new Error(`DRAFT_FIELD_INVALID:pricingContext.${forbidden}:server-owned`);
+    }
+  }
+  // NOT defaulted, and the packet's own ERROR is the reporting channel. An
+  // absent revision produces MISSING_FEE_MODEL_REVISION and blocked:true — a
+  // packet that says out loud it cannot name the fee logic that priced it.
+  // Substituting a server-side FEE_MODEL_REVISION here would make every such
+  // packet claim a revision that never priced it, unfalsifiably, because the
+  // packet would stop recording that it did not know.
+  //
+  // The create still SUCCEEDS. A blocked packet is a bad snapshot, not a bad
+  // draft, and the existing policy already says the draft is authoritative and
+  // the packet advisory. Refusing the create would take the seller's work away
+  // over a field the seller never saw.
+  const packetCtx = {
+    feeModelRevision:    Number.isInteger(pc.feeModelRevision) ? pc.feeModelRevision : undefined,
+    feeScheduleVerified: typeof pc.feeScheduleVerified === 'string' ? pc.feeScheduleVerified : undefined,
+    pricing:             (pc.pricing   && typeof pc.pricing   === 'object' && !Array.isArray(pc.pricing))   ? pc.pricing   : undefined,
+    basisMeta:           (pc.basisMeta && typeof pc.basisMeta === 'object' && !Array.isArray(pc.basisMeta)) ? pc.basisMeta : undefined,
+    // Server-owned. The title bound is the VENUE's, the same one used for
+    // out.title above, so the packet cannot report a title this endpoint
+    // would not have stored.
+    maxTitleLength:      titleMax,
+    now:                 Date.now(),
+  };
+  out.packet = buildListingPacket(card, packetCtx);
+
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   return out;
 }

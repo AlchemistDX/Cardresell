@@ -142,8 +142,38 @@ export const MUTATION_FIELDS = {
   },
 };
 
+/**
+ * Fields carried on a validated create that are DERIVED, and therefore
+ * deliberately excluded from the mutation identity.
+ *
+ * This exists so the undeclared-field guard can keep saying what it was built
+ * to say. That guard is load-bearing — it is what caught `priceSource` being
+ * silently absent from the fingerprint (see the note in 'draft-create' above),
+ * and "just let unknown keys through" would throw that away. So a derived field
+ * must be named here, in a table someone has to edit on purpose, rather than
+ * slipping past.
+ *
+ * `packet` is derived and MUST NOT count, for a reason that is not stylistic:
+ * a listing packet stamps `priceBasis.retrievedAt` from the clock at build
+ * time. The identical request, retried three seconds later after a dropped
+ * response, produces a packet whose bytes differ. If the packet counted toward
+ * identity, that retry would fingerprint as a DIFFERENT mutation and be refused
+ * as a key-reuse MISMATCH — turning ordinary network retry, the exact thing
+ * idempotency exists to make safe, into a hard failure.
+ *
+ * Excluding it is also correct on the merits, not merely convenient. The packet
+ * is a function of `card` (already represented by `sku`, which does count),
+ * `price`, `title`, and the client's declared pricing context. Nothing a seller
+ * could change to mean "a different draft" is visible only in the packet.
+ */
+export const DERIVED_FIELDS = {
+  'draft-create': new Set(['packet']),
+};
+
 export const NOT_NORMALIZED = 'MUTATION_FIELD_NOT_NORMALIZED';
 export const UNDECLARED_FIELD = 'MUTATION_FIELD_UNDECLARED';
+export const DERIVED_AND_DECLARED = 'MUTATION_FIELD_DERIVED_AND_DECLARED';
+const EMPTY_DERIVED = new Set();
 
 /**
  * Refuse values that are clearly pre-normalization. Deliberately a REFUSAL and
@@ -186,7 +216,15 @@ export function selectMutation(scope, validated) {
   const spec = MUTATION_FIELDS[scope];
   if (!spec) throw new Error('IDEMPOTENCY_SCOPE_UNKNOWN');
   const v = validated || {};
+  const derived = DERIVED_FIELDS[scope] || EMPTY_DERIVED;
   for (const k of Object.keys(v)) {
+    // Derived fields are skipped, never fingerprinted. A field that is both
+    // declared and derived is a contradiction — it would be counted and not
+    // counted — so that is a hard error rather than a precedence rule.
+    if (derived.has(k)) {
+      if (k in spec) throw new Error(`${DERIVED_AND_DECLARED}:${scope}:${k}`);
+      continue;
+    }
     if (!(k in spec)) throw new Error(`${UNDECLARED_FIELD}:${scope}:${k}`);
   }
   const out = {};

@@ -850,4 +850,179 @@ reset();
 }
 
 
+// ===========================================================================
+// THE PRODUCER IS CONNECTED — create → store → reload, with a real packet
+//
+// Until this section, buildListingPacket() had no production caller: the whole
+// packet lifecycle was exercised by handing pre-built packets to the store.
+// These checks are the difference between "the storage layer handles packets
+// correctly" and "a draft created through the endpoint HAS one".
+//
+// Option A placement: the packet is produced in normalizeCreateInput, from the
+// server's own `card` row, beside skuFor / buildListingTitle / identityReadiness.
+// Option B — the client posts a packet — was refused, because a packet CONTAINS
+// sku, title, category, aspects and condition, so accepting one would let a
+// client re-supply the exact title this endpoint rejects by name, nested one
+// level deeper. That is not a widened trust boundary, it is a bypass of an
+// existing refusal, and the assertions below pin the refusal shut.
+// ===========================================================================
+console.log('\nthe producer is connected: a created draft carries a packet that covers its price');
+reset();
+{
+  const PC = () => ({
+    feeModelRevision: 1,
+    feeScheduleVerified: 'Sep 2026',
+    pricing: { ok: true, listPrice: 250, targetNet: 200, achievedNet: 200.14, exact: false, delta: 0.14 },
+    basisMeta: { label: 'PriceCharting loose', sourceUrl: 'https://www.pricecharting.com/', datedBySource: false, cacheAgeSec: 3600, low: 180, mid: 240, high: 300 },
+  });
+
+  const norm = EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'inst_pk', slot: 'ebay:fixed-price',
+    price: 250, priceSource: 'comp', pricingContext: PC(),
+  });
+
+  check('normalizeCreateInput now produces a packet',
+        !!norm.packet && typeof norm.packet === 'object');
+  check('the packet SKU is the server-derived one, not anything the client sent',
+        norm.packet.sku === norm.sku, `${norm.packet.sku} vs ${norm.sku}`);
+  check('the packet title matches the title this endpoint stores',
+        norm.packet.title.text === norm.title,
+        `${norm.packet.title.text} vs ${norm.title}`);
+  check('the declared fee revision is recorded on the packet',
+        norm.packet.metadata.feeModelRevision === 1);
+  check('the declared basis is stamped as an ABSOLUTE time, never an age',
+        typeof norm.packet.priceBasis.retrievedAt === 'string'
+        && norm.packet.priceBasis.cacheAgeSec === undefined,
+        JSON.stringify(norm.packet.priceBasis));
+  check('a feed that publishes no as-of date is not claimed to have one',
+        norm.packet.priceBasis.datedBySource === false);
+
+  const res = await SVC.createDraft(kv, SUB, norm, K('pkcreate'));
+  const codes = (res.result.validation?.violations || []).map((x) => x.code);
+  check('🔴 a comp-priced draft with a covering packet raises NO provenance warning',
+        !codes.includes(DS.VIOLATION.NO_PROVENANCE),
+        JSON.stringify(codes) + ' — this is the warning the producer exists to answer');
+
+  // The point of the whole exercise: RELOAD, not the in-memory object.
+  const back = await SVC.readDraft(kv, SUB, res.result.draft.draftId);
+  check('🔴 the packet survives a reload',
+        !!back.draft.packet && back.draft.packet.sku === norm.sku);
+  check('🔴 and the reloaded draft still raises no provenance warning',
+        !(back.validation.violations || []).map((x) => x.code)
+          .includes(DS.VIOLATION.NO_PROVENANCE));
+
+  // ── and the stale path, through the REAL edit endpoint ──────────────────
+  // The store-level suite proves applyEdit stales a packet. This proves the
+  // service path does, which is the one a seller actually reaches.
+  const upd = await SVC.updateDraft(kv, SUB, res.result.draft.draftId,
+                                    { price: 500 }, back.draft.rev, K('pkedit'));
+  check('an edit through the service succeeds',
+        upd.ok === true, JSON.stringify(upd.error || ''));
+
+  const after = await SVC.readDraft(kv, SUB, res.result.draft.draftId);
+  check('🔴 after a reprice the stored packet no longer covers the price',
+        (after.validation.violations || []).map((x) => x.code)
+          .includes(DS.VIOLATION.NO_PROVENANCE),
+        'a $500 draft may not borrow the provenance of a $250 packet');
+  check('the draft itself is unharmed — packet advisory, draft authoritative',
+        after.draft.price === 500 && after.ok !== false);
+
+  // ── SELLER_PRICED is NOT suppressed by a covering packet ────────────────
+  // Written after this exact over-suppression shipped for one commit and was
+  // caught by the $0 assertions above. SELLER_PRICED discloses that the seller
+  // typed the number; a packet documents a comp basis and does not make that
+  // untrue. A warning that wrongly disappears is invisible; one that wrongly
+  // appears is merely noise, so this arm errs loud.
+  const sn = EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'inst_pk_seller', slot: 'ebay:fixed-price',
+    price: 250, priceSource: 'seller', pricingContext: PC(),
+  });
+  const sres = await SVC.createDraft(kv, SUB, sn, K('pkseller'));
+  const scodes = (sres.result.validation?.violations || []).map((x) => x.code);
+  check('🔴 a covering packet does NOT suppress SELLER_PRICED',
+        scodes.includes(DS.VIOLATION.SELLER_PRICED),
+        JSON.stringify(scodes) + ' — the packet is a comp basis, not a reassignment of authorship');
+}
+
+console.log('\nthe refusals that keep the producer the only producer');
+reset();
+{
+  check('a client-supplied packet is REFUSED, not dropped',
+        (() => {
+          try {
+            EP.normalizeCreateInput({
+              card: CARD(), instanceId: 'i1', slot: 'ebay:fixed-price',
+              packet: { sku: 'attacker-sku', title: { text: 'Anything I Like' } },
+            });
+            return false;
+          } catch (e) { return /packet:derived-from-card/.test(e.message); }
+        })(),
+        'accepting one would re-admit the sku and title this endpoint rejects by name');
+
+  for (const [field, val] of [['now', 1], ['maxTitleLength', 500], ['taxonomyTreeVersion', 'v9']]) {
+    check(`pricingContext.${field} is refused as server-owned`,
+          (() => {
+            try {
+              EP.normalizeCreateInput({
+                card: CARD(), instanceId: 'i1', slot: 'ebay:fixed-price',
+                price: 10, priceSource: 'seller',
+                pricingContext: { feeModelRevision: 1, [field]: val },
+              });
+              return false;
+            } catch (e) { return new RegExp(`pricingContext\\.${field}:server-owned`).test(e.message); }
+          })(),
+          field === 'now'
+            ? 'a client-chosen clock could date a stale comp to whenever it liked'
+            : 'a client-chosen bound could widen the venue title limit');
+  }
+
+  // No pricingContext at all: the packet still builds and says what it lacks.
+  const bare = EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'i_bare', slot: 'ebay:fixed-price',
+    price: 30, priceSource: 'seller',
+  });
+  check('🔴 an omitted fee revision BLOCKS the packet rather than defaulting',
+        bare.packet.metadata.feeModelRevision === null
+        && bare.packet.blocked === true
+        && bare.packet.blockingCodes.includes('MISSING_FEE_MODEL_REVISION'),
+        JSON.stringify(bare.packet.blockingCodes));
+  check('but the CREATE still succeeds — a bad snapshot is not a bad draft',
+        (await SVC.createDraft(kv, SUB, bare, K('bare'))).result.draft.price === 30,
+        'refusing here would take the seller\u2019s work away over a field they never saw');
+}
+
+console.log('\nthe packet does not break retry safety');
+reset();
+{
+  // The packet stamps priceBasis.retrievedAt from the clock, so the identical
+  // request retried a moment later produces different bytes. If the packet
+  // counted toward mutation identity, that retry would fingerprint as a
+  // different mutation and be refused as key reuse — turning ordinary network
+  // retry, the thing idempotency exists to make safe, into a hard failure.
+  // DERIVED_FIELDS in _idempotency.js is what prevents it; this is the
+  // behaviour that proves it, rather than the table that declares it.
+  const mk = () => EP.normalizeCreateInput({
+    card: CARD(), instanceId: 'inst_retry', slot: 'ebay:fixed-price',
+    price: 250, priceSource: 'comp',
+    pricingContext: { feeModelRevision: 1, feeScheduleVerified: 'Sep 2026',
+                      pricing: { ok: true, listPrice: 250 },
+                      basisMeta: { label: 'PC', cacheAgeSec: 10 } },
+  });
+  const a = mk();
+  await new Promise((r) => setTimeout(r, 1100));
+  const b = mk();
+  check('the same request really does produce a different packet stamp',
+        a.packet.priceBasis.retrievedAt !== b.packet.priceBasis.retrievedAt,
+        'if this ever goes false the retry check below stops proving anything');
+
+  const first  = await SVC.createDraft(kv, SUB, a, K('retry'));
+  const second = await SVC.createDraft(kv, SUB, b, K('retry'));
+  check('🔴 the retry REPLAYS rather than being refused as a key-reuse mismatch',
+        second.state === IDEM.IDEMPOTENCY_STATE.REPLAYED,
+        `${second.state} — a derived field must not count toward mutation identity`);
+  check('and it replays the draft that was actually created',
+        second.result.draft.draftId === first.result.draft.draftId);
+}
+
+
 done();
