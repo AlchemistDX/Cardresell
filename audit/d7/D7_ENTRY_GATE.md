@@ -108,6 +108,62 @@ Open before code:
 3. **Validation reuse** — confirm the scan QC gates are the right gates, or
    record why listing photos differ.
 
+### 5.1 Question 2 sharpened — three states, not two
+
+Added on review. The read-time absence case is not "no photos", and it must not
+render as "no photos". There are **three** states and the middle one is the
+whole point of asking:
+
+| State | What we know | What the screen owes |
+|---|---|---|
+| Never added | no record of any photo for this draft | the ordinary empty prompt |
+| Added, present | records and bytes both here | the photos |
+| **Added, gone** | **a record says photos existed; the bytes are absent** | **say so** |
+
+This is the withheld-versus-never-had rule. Two different facts must not render
+identically, and the difference is cheap to keep: the ordering record is small
+and survives when the image bytes do not, so *"photos were here and are not
+now"* is knowable **even though why is not.** We can state the absence honestly
+without claiming a cause — we were not told, and guessing between eviction,
+private mode, and a user clearing storage would be inventing a reason.
+
+Worth naming why this is a harder version of the eBay case rather than a
+milder one: with eBay the seller is standing in front of the other party's
+screen and can compare our claim against it. **With eviction there is nothing to
+compare against.** The photo is simply not there, and the only party who could
+have said so did not. If the screen renders it as "never added", the seller's
+own memory is the only contradicting evidence, and they will assume they are
+wrong.
+
+Design consequence: the ordering record must be stored **separately from the
+image bytes**, so it can survive them. If order and bytes live in one blob,
+losing the bytes loses the evidence that anything was lost, and the third state
+becomes unrepresentable.
+
+### 5.2 The medium argument, restated — and what the measurement is now for
+
+The strongest case against `localStorage` is not size. It is that **photos would
+consume a quota that existing working behaviour depends on, and the failure would
+land somewhere unrelated to the feature that caused it.** The first casualty of
+a full quota is the next portfolio save, not the photo. Nothing on the screen
+would connect a photo added on Tuesday to a card that would not save on Friday,
+and the seller would experience it as the portfolio breaking.
+
+That is not a photo defect with a storage cause. It is **a portfolio defect with
+a photo cause** — a new feature quietly degrading an old one, across a boundary
+neither feature's code mentions. The existing `_lsWrite` machinery would report
+it accurately and still misattribute it, because it reports the write that
+failed, not the feature that consumed the room.
+
+So IndexedDB's async contract and its Rule 1 question are real work weighed
+against the wrong alternative. The alternative is not "a smaller budget."
+
+**This changes what the measurement is for.** It no longer decides the medium —
+the cross-feature degradation argument does that on its own, at any quota. The
+measurement now sizes the harm and sets urgency: how many photos it takes before
+an existing feature starts failing. Recorded because a later reader will
+otherwise see a pending measurement and assume the decision is waiting on it.
+
 None of the three needs an account or a signed-in browser. (1) needs a device,
 (2) and (3) need the rendered screen. That makes D7 the block's cleanest
 remaining run of work — but not because it has no boundary. Because its
