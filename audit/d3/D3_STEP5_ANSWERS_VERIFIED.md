@@ -8,7 +8,7 @@
 > opposite directions. Corrected in full in §Q-C-corrected below. The
 > disclosure sentence we both then agreed on is backwards for the same reason.
 
-**Written at:** `c4a733c` · branch `phase1-block-d` · tree clean · nothing pushed
+**Written at:** `b5a24af` · branch `phase1-block-d` · tree clean · nothing pushed
 **Answering:** your "Answers — D3 Step 5 review questions Q-A through Q-D", written against tip `59a971f`
 **Tip drift:** `59a971f` → `c4a733c` is four commits, all documentation. No code
 changed between your tip and this one, so nothing you read is stale. Stating it
@@ -248,6 +248,99 @@ BIAS-1 moves after the rename because it edits `js/core.7f9c03ad.js`, and any
 edit after the rename invalidates the new hash and every citation pointing at it.
 
 ---
+
+---
+
+## Q-C-corrected — the direction was inverted, and the copy we agreed on is backwards
+
+You wrote that the direction finding "matters most" and "passes both
+admissibility tests." It fails the second one, and the reason is my error.
+
+### The mechanical error
+
+The sweep computed `sum(feeEbay(G, S)) - sum(feeEbay(R, S))` — a **fee**
+difference. The panel renders
+
+```
+upsideNet = (G - fees(G)) - (R - fees(R)) - GRADING_FEE
+          = (G - R) - feeDiff - GRADING_FEE
+```
+
+`upsideNet` moves **opposite** to `feeDiff`. "`S = 0` yields the highest figure"
+was true of what I measured and false of what I reported. Every number in the
+table was correctly computed and correctly labelled as a fee difference; the
+sentence drawing the conclusion silently switched metric.
+
+### Corrected sweep, on the rendered field
+
+2 store settings × 3 promo rates × TRS on/off × 20×20 price pairs × 7 shipping
+charges, evaluating `upsideNet` through the real `feeEbay`:
+
+| behaviour of `upsideNet` | price pairs |
+|---|---|
+| `S = 0` is the **minimum** — **understates** upside (conservative) | **1,500** |
+| `S = 0` is the **maximum** — overstates upside (optimistic) | 108 |
+| no dependence on `S` (cancellation exact) | 672 |
+| mixed | 0 |
+
+**The sign is not consistent, so it is not admissible as a bias with a single
+lean.** Dominantly conservative with a bounded optimistic minority. Filed that
+way, with both directions stated.
+
+The optimistic 108 are fully characterised: **all** have graded price `<= $10`,
+**all** have `upsideNet@0` negative (least-negative `-18.78`), maximum
+overstatement **$0.10** — cards where the panel already reports that grading
+destroys roughly the grading fee.
+
+Conservative-side magnitude: **$0.10** for all graded prices `<= $300`; up to
+**$11.00** for tier-crossers. For the population a seller actually consults, the
+deviation is a dime in either direction.
+
+### This changes the answer to your follow-up
+
+We converged on (1) for both bands with *"assumes no shipping charge; a shipping
+charge reduces this."* **That sentence is false in 1,500 of the 1,608
+`S`-dependent pairs** — a shipping charge *increases* the figure.
+
+Your reasoning for (1) over (3) still holds and I am not reopening it: a range
+communicates our uncertainty about an input the seller knows rather than
+uncertainty about the world, and the midpoint reads as an estimate. What changes
+is the directional half of the sentence, because no direction holds universally:
+
+> Assumes no shipping charge collected from the buyer.
+
+Assumption stated, no direction claimed, nothing stamped that a sweep can
+falsify. If you want a direction in the copy, the only defensible one is scoped —
+"slightly increases this for most cards" — and I would rather not, because "most"
+would be carrying 108 counterexamples and a tier boundary.
+
+### What survives unchanged
+
+The cancellation itself, which was the substance of your answer. `S` cancels
+exactly for the FVF and promo terms; the residual is the `$10` per-order step and
+the store-dependent tier boundary. BIAS-1 is still unblocked, still needs no
+invented input, and the fix is still exact in the ordinary case. **Only the sign
+of the residual was wrong.**
+
+### Filed as instance 26
+
+*A derived quantity was measured and the conclusion was stated about a different
+quantity.* The part worth your attention: the write-up named its metric, which is
+what this audit already requires, and still reported the wrong direction —
+because naming the metric and *computing* the named metric are different
+requirements and only the first was written down. New standing requirement: a
+directional claim must be produced by evaluating the expression that reaches the
+screen, not an input to it.
+
+Third occurrence of a wrong bias direction in this corpus. The class: direction
+is derived last, from a quantity computed for another purpose, and it is the one
+field with no independent check.
+
+**And it cleared review.** You endorsed it and singled it out. That is not a
+complaint, it is the finding: confident presentation with correct numbers
+attached is what review validates against, so an inverted sign is close to
+invisible to it. If you have a cheap check for direction specifically, I would
+take it — I now have three instances and no defence.
 
 ## Sources
 
