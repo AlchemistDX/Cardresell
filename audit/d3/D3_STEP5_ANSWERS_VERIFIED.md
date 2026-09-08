@@ -1,4 +1,12 @@
-# Q-A – Q-D answers: verified against the code, three adopted, one corrected
+# Q-A – Q-D answers — plus a correction to my own BIAS-11 direction
+
+> **READ THIS FIRST — the direction finding in the previous version of this
+> document is wrong.** Section "The direction, which neither of us raised"
+> reported that computing at `S = 0` **overstates** grading upside. It
+> **understates** it in 1,500 of 1,608 shipping-dependent price pairs. The
+> sweep differenced *fees*; the metric reported was *upside*; the two move in
+> opposite directions. Corrected in full in §Q-C-corrected below. The
+> disclosure sentence we both then agreed on is backwards for the same reason.
 
 **Written at:** `c4a733c` · branch `phase1-block-d` · tree clean · nothing pushed
 **Answering:** your "Answers — D3 Step 5 review questions Q-A through Q-D", written against tip `59a971f`
