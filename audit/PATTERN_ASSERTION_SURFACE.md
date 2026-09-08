@@ -1615,3 +1615,56 @@ with the grid attached.
 
 *A grid-dependent number published without its grid is a claim whose truth
 conditions are missing, and the reader cannot tell which kind they are holding.*
+
+---
+
+## Instance 28 — The verification step destroyed the thing it was verifying
+
+**2026-09-07, T2.14 fee-row work.**
+
+Mutation testing is the practice this corpus adopted to stop new guards from
+being asserted-green-and-unproven. The loop is: mutate the source, run the
+test, observe the intended failure, revert. The revert was implemented as
+`git checkout js/core.7f9c03ad.js`.
+
+The T2.14 edits being guarded were **uncommitted**. So the first iteration's
+revert did not undo the mutation; it undid the mutation *and the feature*. The
+loop then continued. Iterations two and three attempted to apply their
+mutations against a bundle that no longer contained the code they were meant to
+mutate, both `assert`ed out in the patch script, and the test ran anyway
+against HEAD. It reported failures. Those failures were read as the mutations
+working. They were the feature being absent.
+
+The failure counts were wrong in a direction that looked like success: more
+assertions red than expected, which reads as a thorough guard rather than as a
+missing subject. `div-span` and `no-space` were both reported as "10 passed /
+5 failed" including a copy-vocabulary check that neither mutation touches. That
+one unexplained extra failure was the tell, and the correct reading of it was
+available immediately.
+
+**Why this is not merely carelessness.** The technique's precondition is
+invisible in the technique. "Mutate, test, revert" is complete as a
+description of what to do and silent on what must be true first. Every previous
+mutation in this corpus happened to be run against committed code, so the
+precondition had never been load-bearing and never got written down. The
+practice was adopted, verified to work, and reused, and the thing that made it
+safe was never part of what got adopted.
+
+**Rule.** *Mutation testing requires something to revert to. Commit the subject
+before mutating it.* And: a revert command inside a verification loop is a
+destructive operation wearing a verification's clothing -- the loop's purpose
+is to leave no trace, which is exactly the shape that leaves no evidence when
+it removes the wrong thing.
+
+**Corollary, on the reporting.** Both invalid runs are recorded in
+`tests/review-fee-dl.mjs` alongside the valid ones, with the reason they were
+invalid. The alternative -- quietly re-running and reporting only the correct
+numbers -- would have produced a test file whose comment block was true and
+whose history taught nothing, which is the failure mode the corpus already
+names: a corpus that shows only final answers teaches nothing about how they
+were reached.
+
+**Relation to the standing quote.** "The loss only exists in the space between
+two commits, which is where nothing looks." That line was written about
+production data. It describes tooling too, and this instance is the first time
+it cost work rather than describing a risk.
