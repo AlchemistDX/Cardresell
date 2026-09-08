@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**32 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 32; that number, not this sentence, is the
+**33 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 33; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1827,3 +1827,44 @@ from the listing is truncated and cannot be reconciled with the headline — the
 most likely origin of the standing 31. The tool is unregistered in the runner,
 which is why nothing caught the drift. Same mechanism, different artifact: a
 number carried in prose beside a tool that would have produced it.
+
+## Instance 33 — a boolean was written as if it were a completeness check (2026-09-08)
+
+**The assertion.** `_flipNetOf` returned `hasCosts`, computed as
+`(fees + shippingCost + gradingCost) > 0`. The name asserts a behaviour —
+*this record has its costs* — and BIAS-6 originally recorded F-3 as "`hasCosts`
+computed, never read", which frames the defect as a wiring gap and implies the
+fix is to read it.
+
+**The surface it actually evidences.** It evidences only that at least one of
+three fields is greater than zero. That predicate cannot separate the three
+cases that matter:
+
+- every cost confirmed as $0 (complete, and the profit figure is exact);
+- one cost entered while two were never typed (incomplete, profit is an upper
+  bound);
+- nothing typed at all (incomplete, and nothing is known).
+
+The first and third both make `hasCosts` false; the first is complete and the
+third is not. So reading the flag would have produced a *more confident* label
+on records it cannot actually vouch for — the copy would have improved while the
+record stayed wrong.
+
+**What makes this the pattern rather than an oversight:** the gap between the
+name and the evidence was invisible precisely because nothing consumed it. An
+unread flag is never contradicted by a surface, so its name goes unchallenged
+and gets inherited by the audit that finds it. F-3's framing came from the
+identifier, not from the predicate.
+
+**Resolution.** The flag was removed rather than wired up, and replaced by a
+four-state per-field record (`blank` | `zero` | `value` | `invalid`) plus
+`_flipCompleteness()`, which reports provisional records and names the missing
+inputs. The comment explaining why the flag is gone stays in the bundle; the
+field does not. `tests/payout-honesty.mjs` asserts that no code path reads it
+and that the three cases above stay distinguishable.
+
+**Rider.** When a finding is phrased as "computed, never read", check whether
+reading it would actually have been correct before recording the fix as wiring.
+A predicate that cannot distinguish the cases its name implies is not
+under-consumed — it is mis-named, and consuming it would ship the mis-naming to
+the user.
