@@ -1,6 +1,6 @@
 # Lane A, step 1 — a packet may not outlive the inputs it was built from
 
-**Commits:** `db396da` (staleness) · `2cc7c6b` (review items) · `3db7169` (producer connected) · `af65ece` (fee-schedule stamp) · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
+**Commits:** `db396da` (staleness) · `2cc7c6b` (review items) · `3db7169` (producer connected) · `af65ece` (fee-schedule stamp) · `1303b7f` (two price conditions) · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
 **Nothing pushed. Nothing deployed.** `origin/main` is still `9aaf326`.
 
 Prior closures recorded, for context only: T2.10 accepted at `19cb94c` + `00445d0`; T2.9 accepted as the correction record. Neither is reopened here.
@@ -209,6 +209,55 @@ Three ways out, not chosen:
 - **(c) Give `listPriceForTargetNet` its production caller** — the largest, and arguably the real fix, since a target-payout feature that exists in tested code and not in the product is its own finding.
 
 (b) looks right for this lane and (c) looks like its own piece of work, but this is a decision, not a cleanup.
+
+## 7d. (a)+(b) landed together — `1303b7f`
+
+Both defects fixed, neither standing in for the other.
+
+- **`NO_PRICE` now tests the draft's own price** and says *"This draft has no price yet."* `packetCtx` receives the **server-normalized** `price`/`priceSource` — for the same reason `sku` and `title` are server-derived: reading the raw client field would let a packet document a price the store rejected or coerced. Absence is the test, not falsiness — **$0 is a price** on venues that permit one.
+- **`NO_TARGET_NET_PRICING`** names the inversion gap separately, non-blocking. A seller can list a priced draft without ever asking "what price nets me $X".
+- **`PRICE_BASIS_NOT_SOURCE_OF_PRICE`** — this fell out of giving `priceSource` a real job rather than passing it unread. It is the packet-level form of `SELLER_PRICED`: a basis stamped beside a seller-typed price is market **context**, not that price's provenance, and a review screen reading the packet must not present the two as the same claim. **Warned, not stripped** — the basis is genuinely useful beside an asking price, and deleting evidence to avoid mislabelling it is the wrong trade.
+- **`priceSource` joins `PACKET_INPUT_FIELDS`.** The packet now reads it, so it changes packet bytes. `applyEdit` cannot currently change `priceSource`, but leaving it out would be safe only while that stays true — a coupling to another module's behaviour, and precisely the assumption the read-time fingerprint exists to stop making.
+
+**`NO_PRICE` had zero test coverage in any suite.** That is why changing its semantics passed 175/0 in silence, and it is the same read-by-nobody family as the finding that prompted the change. Now 13 checks in `listing-packet-offline` (175 → **188/0**) and 6 in `draft-crud-e2e` (152 → **158/0**), including the production-shaped create — priced, no inversion — which is the case every real create hits today.
+
+## 7e. The normalizer sweep — siblings found, including one in the mirror direction
+
+The check applied: for every field this module normalizes, is there a code for the failure case? Run against a live builder, not by reading.
+
+| Field | Failure | Reported? |
+|---|---|---|
+| `feeModelRevision` | non-integer → `null` | ✅ `MISSING_FEE_MODEL_REVISION`, blocking |
+| `feeScheduleVerified` | absent / unparseable | ✅ fixed in `af65ece` |
+| `taxonomyTreeVersion` | absent → verified constant | ✅ `TAXONOMY_VERSION_ASSUMED` |
+| `taxonomyTreeVersion` | **garbage accepted as live** | ❌ **mirror defect — see below** |
+| `priceBasis` | **no basis supplied → `null`** | ❌ silent |
+| `priceBasis.retrievedAt` | **age absent → `null`** | ❌ silent |
+| `priceBasis.retrievedAt` | **age unreadable → `null`** | ❌ silent, and not distinguished from absent |
+| `priceBasis.label` / `.sourceUrl` | **absent → `null`** | ❌ silent |
+| `datedBySource` | non-boolean → `false` | ❌ malformed reads as "not dated by source" |
+
+Two things worth separating out.
+
+**The mirror direction is worse than a silent null.** `taxonomyTreeVersion: 'complete garbage'` is accepted, stamped `taxonomyTreeVersionSource: 'live'`, and **suppresses `TAXONOMY_VERSION_ASSUMED`** — so an unvalidated string is treated as better evidence than the verified constant. Every other row here fails to state something; this one states something false, and it does it by silencing the code that would have been correct.
+
+**`retrievedAt: null` is live, not hypothetical.** PriceCharting publishes no as-of date, and the freshness contract is that a caption names the source *and* how old it is. A packet that cannot answer "how old" says nothing about it. And absent-vs-unreadable is the same split as `FEE_SCHEDULE_DATE_ABSENT` vs `FEE_SCHEDULE_DATE_UNPARSEABLE` — incomplete caller vs format drift — which collapsing sends someone to fix the wrong end.
+
+**Not fixed in this commit.** These are producer-side and want the same absent/drift treatment, but that is a second pass, not a rider on the price split.
+
+## 7f. (c) answered: never wired, not cut
+
+Asked directly, because "restore a cut feature" and "finish an unwired one" are different jobs.
+
+Across **every commit in the repository's history**, `listPriceForTargetNet(` appears **zero times outside its own definition** in shipped code (`js/`, `index.html`). The apparent growth in occurrences — 1 at `e457a9d`, 13 at `19cb94c` — is entirely retained retired bundles accumulating copies of the *definition*. There was never a call site to remove.
+
+It entered in `e457a9d` / `e6b9579`, *"Phase 1 Block B: listing packet (title, condition, target-net, metadata)"* — the same commit family that introduced `buildListingPacket`, which itself had no production caller until `3db7169` three days ago. Both halves of Block B shipped as library code with no entry point. It was then substantially reworked in `ce616c8` (*"FIX B — the 60-cent inverse scan"*, replacing a magic constant with branch-wise search over `FEE_TOTAL_DISCONTINUITIES = [10]`) — a correctness fix, well-tested, to a function no seller could reach.
+
+**So: never wired.** The answer is unambiguous and it makes (c) a scoping question about finishing Block B, not an archaeology question about a regression.
+
+One consequence worth stating: `audit/CARDRESELL_PLAN_AND_ROADMAP.md:452-454` §5.3 *"Fix the function, not the label"* reads **"If target-net inversion misses by more than $0.05, fix the calculation. Do not relax or rewrite the UI claim."** There is no UI claim. The rule governs a function no seller can reach, and it has been enforced — `ce616c8` is that rule being obeyed. The rule is fine; what it documents is that the plan has treated target-net as shipped for as long as the plan has existed.
+
+**Filed as its own finding, not as Lane A follow-up.** With `marketAskDivergence` and `buildListingPacket`, that is three, and the third one confirms the shape is a pattern rather than a coincidence: work lands as tested library code, the plan records it as done, and nothing reaches a seller. The **serialized-field-with-no-reader sweep** already on the open list is the same question asked of data; this is it asked of functions. Neither has been run.
 
 ## 8. Unchanged and still open
 
