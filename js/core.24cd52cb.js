@@ -11517,7 +11517,32 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
   if (!el) return;
 
   const GRADING_FEE = 25;   // PSA value tier ~$25 all-in
-  const FEES_PCT    = 13;   // eBay + shipping typical
+  /* BIAS-1, 2026-09-07. `FEES_PCT = 13` used to live here and is GONE, not
+     re-tuned. It was a second implementation of "net after eBay fees" -- the
+     duplicate-implementation bug, which has bitten this repo nine times -- and
+     a flat percentage cannot express what eBay actually charges: the rate
+     depends on the store subscription, there is a value tier above which the
+     excess is charged at a lower rate, a per-order fee that steps at a $10
+     order total, and any promoted-listing rate the seller runs. A single
+     percentage is wrong in a direction that varies with price, which is why
+     this surface appeared in the directional bias audit at all.
+
+     Fees now come from `netEbayForPrice(price, ctx)` (:6992), the same
+     function the review screen's payout row and the target-net bisection use.
+     GRADING_FEE is deliberately UNCHANGED: it contradicts the server's tier
+     table in `api/grade-opportunity.js:44-52`, and that is BIAS-5, which needs
+     supported grading-cost inputs and its own acceptance evidence. Routing
+     fees does not fix it and must not be reported as fixing it. */
+  const _prof = _crSellerProfile();
+  /* trsEligible is hard false for the same reason the review screen holds it
+     false (:19965): Top Rated Plus is a per-listing benefit and the seller
+     profile is a global answer, so a global 'yes' must not become a discount
+     on a specific card. There is no listing here at all -- this is a grade
+     ladder, not a draft -- so there is nothing that could carry a per-listing
+     confirmation. Undiscounted is the honest reading: an upside estimate that
+     is too LOW disappoints, one that is too HIGH is a promise eBay will not
+     keep. */
+  const _feeCtx = { ebayStore: _prof.ebayStore, ebayPromo: _prof.ebayPromo, trsEligible: false };
 
   // Unconfigured / no match / all null — don't waste screen space, fall back.
   const p = pc && pc.prices ? pc.prices : {};
@@ -11554,17 +11579,21 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
   ];
 
   // Compute per-column net upside vs raw sell:
-  //   raw_net    = raw * (1 - fees)
-  //   graded_net = graded * (1 - fees)
+  //   raw_net    = netEbayForPrice(raw)
+  //   graded_net = netEbayForPrice(graded)
   //   upside     = graded_net - raw_net - grading_fee
-  const rawNet = raw > 0 ? raw * (1 - FEES_PCT/100) : 0;
+  // The two nets are the model's own, not price minus a percentage, so the
+  // per-order step at a $10 order total and the value-tier boundary apply to
+  // each side independently -- which is the whole reason a flat rate misstated
+  // this comparison rather than merely offsetting it.
+  const rawNet = raw > 0 ? netEbayForPrice(raw, _feeCtx) : 0;
   grades.forEach(g => {
     if (g.isGrade === 0 || g.price <= 0) {
       g.upsideNet = 0;
       g.upsidePct = 0;
       return;
     }
-    const gradedNet = g.price * (1 - FEES_PCT/100);
+    const gradedNet = netEbayForPrice(g.price, _feeCtx);
     g.upsideNet = gradedNet - rawNet - GRADING_FEE;
     g.upsidePct = raw > 0 ? (g.upsideNet / raw) * 100 : 0;
   });
@@ -11622,7 +11651,7 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
   const headline = bestTier
     ? `📈 Best case: <strong style="color:#4ade80">${bestTier.sub} → ${fmt$(bestTier.upsideNet)} net upside</strong> vs raw sell`
     : (raw > 0
-        ? `⚠️ Grading may not pencil out at current comps (raw $${raw.toFixed(0)}). Numbers assume $${GRADING_FEE} PSA fee + ${FEES_PCT}% sale fees.`
+        ? `⚠️ Grading may not pencil out at current comps (raw $${raw.toFixed(0)}). Numbers assume a $${GRADING_FEE} PSA fee and eBay selling fees at your store rate.`
         : `Missing raw comp — upside ‘$’ assumes raw = PriceCharting median.`);
 
   const pcUrl = pc.url ? pc.url : '';
@@ -11633,7 +11662,7 @@ function renderGradingUpside(el, pc, psaEst, psaGradeBucket, cardData) {
   el.innerHTML =
     `<div style="font-size:.62rem;font-weight:800;letter-spacing:.06em;color:rgba(255,255,255,.55);margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">` +
       `<span>💰 GRADING UPSIDE — tap a grade</span>` +
-      `<span style="color:rgba(255,255,255,.35);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:.55rem">net after $${GRADING_FEE} fee + ${FEES_PCT}% sale fees</span>` +
+      `<span style="color:rgba(255,255,255,.35);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:.55rem">net after $${GRADING_FEE} grading fee and eBay selling fees</span>` +
     `</div>` +
     // Horizontal scrollable grade columns
     `<div style="display:flex;flex-direction:row;gap:.4rem;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:.5rem .1rem .4rem;margin:0 -.15rem;scrollbar-width:thin">` +

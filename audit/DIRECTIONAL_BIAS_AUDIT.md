@@ -958,3 +958,104 @@ evidence. BIAS-1 is the only one the routing unblocks.
 > same audit" and "fixed by the same change" are different relations, and the first is
 > the one that leaves a trace in the document. A grouped filing is an artefact of how
 > attention moved, not a claim about the repair.
+
+## BIAS-1 — CLOSED. The grade ladder's net now comes from the fee model
+
+**2026-09-07.** `renderGradingUpside()` held `FEES_PCT = 13` and computed
+`price * (1 - FEES_PCT/100)` twice. It now calls `netEbayForPrice(price, ctx)` — the same
+function the review screen's payout row and the target-net bisection use. `FEES_PCT` is
+**deleted, not re-tuned**: a second fee model that still exists is still a second fee
+model, which is the duplicate-implementation bug (rule 1), and this repo has been bitten
+by it nine times.
+
+`trsEligible` is hard `false`, for the reason the review screen holds it false: Top Rated
+Plus is a per-listing benefit and the profile answer is global. Here there is not even a
+listing — it is a grade ladder — so nothing could carry a per-listing confirmation.
+
+### The measured effect, expressed against the boundary it can move
+
+The ladder colours each column by a threshold on `upsideNet`: `> 5` green, `> -5` yellow,
+otherwise red. That is the decision downstream of this number, so it is what the finding
+is stated against.
+
+Grid: 19 raw values × 24 graded values, PriceCharting-plausible, keeping only pairs where
+the graded comp exceeds raw. **300 pairs.**
+
+| | |
+|---|---|
+| **Colour verdict changes** | **1 of 300** |
+| The one change | raw $2 → $25: `−$4.99` yellow → `−$5.15` red |
+| Old flat rate was **optimistic** in | 261 pairs |
+| Old flat rate was **pessimistic** in | 38 pairs |
+| Identical | 1 pair |
+
+**Grid-invariant:** the single verdict change is a pair that was already sitting one cent
+from the boundary; the correction moved it 16 cents. No pair that was clearly green or
+clearly red changed category. So the fix is right on the merits and **near-invisible in
+the advice**, which is the same shape BIAS-11 settled into.
+
+**Grid-dependent, and reported as such:** the largest absolute divergence on this grid is
+**$143.50** (raw $1,000 → $9,000). That number is a property of the grid's upper corner,
+not of the surface — a grid stopping at $2,000 would report a far smaller maximum. It is
+not a headline.
+
+### The direction is NOT uniform, and the reversal is structural
+
+This is the part worth keeping. The old flat rate was optimistic in 261 pairs and
+**pessimistic in 38**, and the 38 are not scattered — every one of them has a graded price
+of $8,000 or $9,000, and **no** optimistic pair has a graded price at or above $7,500.
+
+The boundary is exact: for a no-store seller `feeEbay` charges 13.25% up to a **$7,500**
+value tier and 2.35% on the excess. Below the tier a flat 13% understates the fee (13% <
+13.25%, plus a per-order fee the flat rate ignored entirely) so the old number overstated
+upside. Above the tier the model charges 2.35% on the excess, so the model nets *more* than
+a flat 13% and the old number understated upside.
+
+> A flat rate could not have been "tuned conservatively" out of this. It errs in opposite
+> directions on either side of a tier boundary, so any single percentage is optimistic on
+> one side of $7,500 and pessimistic on the other. **A threshold with two consumers cannot
+> be tuned conservatively for both** — here the two consumers are the two sides of eBay's
+> own fee schedule. That is why this had to become a call into the model rather than a
+> better constant, and it is the reason BIAS-1 was filed as a bias rather than as an
+> inaccuracy.
+
+### Copy
+
+The caption said `net after $25 fee + 13% sale fees`. After the routing there is no single
+percentage to name — it depends on store subscription, the value tier, the per-order step
+and any promoted-listing rate. Keeping `13%` would have been stamping a lie, so the rate
+is gone from the copy and the `$25` stays, per the settled decision. The caption now reads
+`net after $25 grading fee and eBay selling fees`.
+
+This is the exception to *fix the function, not the label*: the label named a quantity that
+the fix removed from existence.
+
+### Acceptance evidence
+
+`tests/grading-upside-fees.mjs` — **36 passed, 0 failed.** Registered as slot 46 of 47;
+`tests/test-registry.mjs` 12/0 confirms the registration.
+
+It extracts `feeEbay`, `netEbayForPrice`, `_crSellerProfile` and `renderGradingUpside` out
+of the **live** bundle and runs them, rather than grepping for the absence of `FEES_PCT` —
+a grep would pass against a build that reintroduced a flat rate under another name
+(instance 1 of `PATTERN_ASSERTION_SURFACE.md`). Ten raw→graded pairs are checked to the
+cent against `netEbayForPrice`, chosen to straddle the $10 per-order step and the $7,500
+tier boundary; one assertion requires that at least one case renders a figure the old flat
+arithmetic could not produce, so the suite cannot pass vacuously if the routing is
+reverted and the two happen to round alike.
+
+Two further checks exist because the baseline is invisible on screen: the raw column
+renders the word `baseline`, not a figure, so an error in `netEbayForPrice(raw)` would
+shift every other column while showing nothing itself. Its net is asserted directly, and
+the baseline implied by the PSA-10 column is asserted to equal `netEbayForPrice(raw)`.
+
+`GRADING_FEE = 25` is asserted **unchanged**, so this suite fails if a later pass alters
+the grading fee while calling itself BIAS-1 work.
+
+### Still open, and not closed by this
+
+**BIAS-3** (conditional grade labels), **BIAS-5** (supported grading-cost inputs including
+grading-only expenses — `GRADING_FEE = 25` still contradicts `api/grade-opportunity.js:44-52`),
+**BIAS-7** and **BIAS-8** (compatible grader/price basis and provenance; a grader is **not**
+inherited from `syncKey`, which is a lookup key and not a record of origin). Each needs its
+own acceptance evidence.
