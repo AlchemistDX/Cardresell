@@ -96,3 +96,73 @@ So BIAS-5 needs an owner decision, recorded in the packet. The value is left at 
 annotated as unsupported rather than silently replaced. The test that pinned `$25` has been
 deleted and replaced with the invariant that survives any decision: **the cost used in the
 arithmetic is the cost disclosed to the seller.**
+
+---
+
+## Re-verification, 2026-09-07 — and a disagreement, disclosed not averaged
+
+The owner supplied newer PSA evidence when resolving BIAS-5 and instructed that
+this file be corrected against it. It was re-read from **raw page text**, per the
+standing rule that enumerated policy is cited from the page and not from
+anything that condensed it. Two of the three supplied figures do not reproduce.
+
+| Claim supplied | What the raw page says | Verdict |
+|---|---|---|
+| PSA Regular is $79.99/card | "Regular: $74.99 → $79.99" ([PSA submission updates](https://www.psacard.com/info/submission-updates)) | **Confirmed** |
+| PSA Value services are temporarily paused | Same page lists "Value: $27.99 → $32.99" among increases. Nothing on it says Value is paused. | **Unverified** — could not be substantiated |
+| Postage is $19.99 for 1–4 cards up to $2,000 insured | Chart headed "PSA & PSA/DNA Postage Rates - Effective January 24, 2023" reads **1–8 items / $1–$1,000 / $19.00**. No $19.99 rate, no 1–4 band, no $2,000 band appear on it. ([PSA postage rates](https://www.psacard.com/submissions/postage/)) | **Contradicted** |
+
+Consequently the figures already in this file — Value **$32.99** and postage
+**$19.00 / 1–8 cards / $1–$1,000** — are **left unchanged**, because the source
+page did not disagree with them. The instruction was to correct this file if a
+number had moved; the check found that the number had not moved. Changing it to
+match the summary would have been stamping a lie in the other direction.
+
+`Regular $79.99` is added below as confirmed. The "Value paused" line is
+recorded as Unverified rather than omitted, so a later pass does not have to
+rediscover that it was checked.
+
+### What this does and does not change
+
+**Nothing about the decision.** BIAS-5 ships with no default. $51.99 stays
+rejected, and the re-verification actually strengthens the rejection while
+removing one of the stated reasons for it:
+
+- The arithmetic still reproduces. $32.99 + $19.00 = $51.99 off the live pages.
+  So $51.99 was never stale, and "a number that moved twice while we were
+  looking at it" — the phrasing used when the decision was taken — was wrong.
+- The reasons that survive are the structural ones, and they were always the
+  load-bearing ones: a scan cannot observe which service the seller qualifies
+  for or will choose, whether they hold a Collectors Club membership, how many
+  cards ride in the submission, what value they declare, or what they pay to
+  ship **inbound** — which appears in no PSA table at all, because the seller
+  buys that postage from their own carrier.
+- Two readers of the same vendor pages produced different postage numbers
+  during this decision. That is a direct argument against pinning either one
+  into the product as an automatic cost.
+
+The owner's framing — "the sourced figures can appear as dated guidance after
+their service/value relationship is verified, but not as an automatic cost" —
+is unaffected. This table is that dated guidance. It is not wired to anything.
+
+### Confirmed service prices, raw-text read 2026-09-07
+
+Source: [PSA submission updates](https://www.psacard.com/info/submission-updates).
+Listed there as increases for new submissions.
+
+| Service level | Was | Now |
+|---|---:|---:|
+| Value Bulk (Collectors Club only) | $21.99 | **$24.99** |
+| Value | $27.99 | **$32.99** |
+| Value Plus | $44.99 | **$49.99** |
+| Value Max | $59.99 | **$64.99** |
+| Regular | $74.99 | **$79.99** |
+
+The same page states TCG Bulk and Value Bulk have been consolidated into a
+single Collectors Club-only service, Value Bulk, which now accepts all
+categories including TCG.
+
+**Not established from these pages:** per-card declared-value caps tied to each
+service name (the services page renders its tiers client-side and returned
+turnaround/insurance rows without service names), and any pause on Value.
+Recorded as Unverified rather than inferred from row order.

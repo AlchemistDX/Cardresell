@@ -492,5 +492,106 @@ console.log('\n[Quick Pricing — wiring]');
         + 'healthy path -- the exact defect this change fixes');
 }
 
+
+/* ══ Q7 option (iii): a range renders only when one was measured ════════════
+   The decision this covers replaced "synthesize a low and a high so the comp
+   doesn't look lonely" with "show the comp alone and say so". The gate is one
+   function, `_crMeasuredRange`, and it is extracted from the live bundle and
+   run rather than grepped, because "the synthesizer is gone" is a claim about
+   a surface while "a malformed pair does not render" is a claim about
+   behaviour -- instance 30 of audit/PATTERN_ASSERTION_SURFACE.md. */
+{
+  console.log('\n[Q7 — measured range gate]');
+  const core = readCoreBundle().source;
+  const i = core.indexOf('const _CR_MEASURED_ORIGINS');
+  const j = core.indexOf('const _CR_NO_RANGE_NOTE');
+  check('the range gate is locatable in the bundle', i !== -1 && j > i,
+        'if this fails every assertion below is testing nothing');
+  const gate = new Function(core.slice(i, j) + '; return _crMeasuredRange;')();
+
+  const O = 'tcgplayer';
+  // The five cases named in the acceptance list, plus the three the gate exists
+  // to catch that a low/high enumeration would miss.
+  const cases = [
+    ['both endpoints, one origin',   { low: 10, high: 40, lowBasis: O, highBasis: O }, true,  null],
+    ['neither endpoint',             { lowBasis: O, highBasis: O },                    false, 'no-endpoints'],
+    ['low only',                     { low: 10, lowBasis: O },                         false, 'low-only'],
+    ['high only',                    { high: 40, highBasis: O },                       false, 'high-only'],
+    ['reversed',                     { low: 40, high: 10, lowBasis: O, highBasis: O }, false, 'reversed'],
+    ['mixed origin',                 { low: 10, high: 40, lowBasis: O, highBasis: 'ebay-sold' }, false, 'mixed-origin'],
+    ['unattributed',                 { low: 10, high: 40 },                            false, 'unattributed'],
+    ['derived endpoint',             { low: 10, high: 40, lowBasis: 'derived', highBasis: 'derived' }, false, 'derived-endpoint'],
+    ['equal endpoints',              { low: 40, high: 40, lowBasis: O, highBasis: O }, false, 'degenerate'],
+  ];
+  for (const [name, input, wantOk, wantWhy] of cases) {
+    const r = gate(input);
+    check(`Q7: ${name} ${wantOk ? 'renders as a range' : 'does not render as a range'}`,
+          r.ok === wantOk, `got ${JSON.stringify(r)}`);
+    if (!wantOk) {
+      check(`Q7: ${name} is refused as "${wantWhy}", not lumped in with the rest`,
+            r.why === wantWhy,
+            `distinct reasons are the only way to tell a provider that sent `
+            + `nothing from one that sent something wrong; got "${r.why}"`);
+    }
+  }
+
+  // The negative rule, stated directly. A synthesized band is symmetric about
+  // the comp by construction, so if symmetry were ever treated as evidence the
+  // gate would authenticate exactly what it was built to reject.
+  check('Q7: symmetry about a comp is NOT accepted as provenance',
+        gate({ low: 85, high: 115, market: 100 }).ok === false,
+        'a -15%/+15% pair is the shape of the fabrication, not of a measurement');
+  check('Q7: an untagged pair is refused before it is range-checked',
+        gate({ low: 10, high: 40 }).why === 'unattributed',
+        'a well-formed untagged pair must not pass on the strength of looking tidy');
+
+  // Zero and negatives are absent values, not small ones.
+  check('Q7: a zero endpoint counts as absent, not as a floor of $0',
+        gate({ low: 0, high: 40, lowBasis: O, highBasis: O }).why === 'high-only',
+        'rendering "$0.00-$40.00" would claim someone sold one for nothing');
+
+  // Source paths: the synthesizers the decision required removing.
+  check('Q7: the eBay rolling averages no longer stand in for range endpoints',
+        !/ebay\?\.avg_30d\s*\?\?\s*null/.test(core) && !/tcgplayer\?\.low\s+\?\?\s+condData\?\.ebay/.test(core),
+        'a 30-day mean is not the bottom of a range, and pairing it with a '
+        + 'TCGplayer high produced a mixed-origin range on the common path');
+  check('Q7: the copied mid is tagged rather than passed off as a median ask',
+        /mid: mkt, midBasis: 'derived'/.test(core),
+        'mid === market is the market value printed twice, not a median');
+  check('Q7: the live TCGplayer variant tags its endpoints too',
+        /high: null, highBasis: null, mid: d\.market, midBasis: 'derived'/.test(core),
+        'the live path had the same copied mid and an untagged absent high');
+  check('Q7: origin metadata survives the trip into the pricing basis',
+        (core.match(/lowBasis:\s+b\.lowBasis/).length > 0) && /highBasis: p\.highBasis/.test(core),
+        'dropping the tags at _qpBasis and re-deriving them at the render site '
+        + 'is how the range got authenticated by its shape in the first place');
+
+  // The comp-alone copy, fixed by the decision.
+  check('Q7: the single-reference wording is exactly as decided',
+        core.includes("'Single reference price. No observed market range is available.'"),
+        'the wording is the disclosure; paraphrasing it changes what is claimed');
+  check('Q7: the withheld-range case says so beside the comp',
+        /noRangeStr = rangeStr \? ''/.test(core),
+        'a comp with no range must not simply render as a bare precise number');
+  check('Q7: the Market price badge line no longer vouches for an ungated range',
+        /rangeStr \+ noRangeStr/.test(core),
+        'badge and range shared a line, so the range borrowed the badge');
+
+  // Sell Now / Comp / Patient survive, relabelled.
+  check('Q7: the three suggestions are still offered',
+        /label:'Sell Now'/.test(core) && /label:'Comp'/.test(core) && /label:'Patient'/.test(core),
+        'option (iii) keeps them -- it changes what they are called');
+  check('Q7: they are labelled calculated suggestions, not estimates of a market',
+        (core.match(/calculated suggestion/g) || []).length >= 2,
+        'both outer tiers must name themselves as computed by this app');
+  check('Q7: the captions no longer call the trio a band',
+        !/Estimated band\./.test(core),
+        '"band" names a measured interval; nothing measured a width here');
+  check('Q7: the captions deny being a provider range in so many words',
+        (core.match(/not a '\s*\+\s*'provider range|not a \\?'?provider range/g) || []).length >= 1
+          || (core.match(/provider range/g) || []).length >= 2,
+        'the specific misreading to head off is "this is what the source said"');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
