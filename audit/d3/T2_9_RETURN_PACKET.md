@@ -21,6 +21,7 @@ states. Revision 2's resolution of the original six rejections is retained. Noth
 | Live bundle *at that correction* | **`js/core.9f0f6b30.js`** |
 | Retained bundle | **`js/core.59d4b1ab.js`**, restored to its original bytes |
 | Final reported results | fingerprints **15/15** · review fees **21/21** · draft review **180/180** · fee parity **41/41** |
+| T2.10 implementation commit | **`19cb94c`** — the client edit that moved the live bundle to `core.541c4c39.js` |
 
 The live bundle has since moved on: T2.10 edited the client, so `index.html`
 now resolves **`js/core.541c4c39.js`**. That does not disturb anything above —
@@ -54,15 +55,24 @@ TRS-gating changes were made. Resolved:
 | Commit under review | `0c759cd` |
 | Bundle `index.html` resolved at that commit | `js/core.59d4b1ab.js` |
 | **SHA-256[:8] of those bytes** | **`9f0f6b30`** — the name was stale, the bytes are the tested ones |
-| Live bundle name today | `js/core.9f0f6b30.js` (21,491 lines), **byte-identical** to the above (`diff` clean) |
+| Tested bundle at `5228494` | `js/core.9f0f6b30.js` (21,491 lines), **byte-identical** to the above (`diff` clean). Not the live name today — T2.10 moved it to `core.541c4c39.js` |
 | Retired name | `js/core.59d4b1ab.js` retained in-tree with its **own** `6011b67` bytes |
 
 So the focused results below were measured against the bytes now called
 `core.9f0f6b30.js`, and every `:NNNN` citation in this packet resolves against
-them unchanged. **No committed immutable bundle was overwritten:** the rename
-copied the edited bytes to their true content address and restored the retired
-name's own bytes, because `vercel.json:47` serves `/js/*.<8hex>.js` as
-`immutable` for a year. Full record in `audit/BUNDLE_RENAME_9f0f6b30.md`;
+them unchanged.
+
+**On overwriting, stated correctly.** An earlier claim here read "no committed
+immutable bundle was overwritten". That was wrong, and it was wrong in my
+favour. The T2.9 rev3 edits **did** overwrite `js/core.59d4b1ab.js` in place and
+that overwrite **was committed** at `0c759cd` — a file under an immutable
+content-addressed name, carrying bytes that no longer hashed to it. What the
+`5228494` correction did was *restore* the original bytes to that name and copy
+the edited bytes to their true address. The defect was real and committed; the
+correction addressed it. It was never deployed, so no cache ever served the
+mismatched bytes — which limits the consequence, not the fact.
+`vercel.json:47` serves `/js/*.<8hex>.js` as `immutable` for a year, which is
+why the restore was required rather than optional. Full record in `audit/BUNDLE_RENAME_9f0f6b30.md`;
 mechanism in `audit/PATTERN_ASSERTION_SURFACE.md` instance 38.
 
 I did not detect this myself. A read-only snapshot tool reported
@@ -395,12 +405,23 @@ column is headed **"Domestic CC/Paypal Processing Fee\*"** by the page itself
 (`tcgplayer.txt:13`, `:15`). The fee charged on every sale is the Marketplace
 Commission. Your counter-point survives too: "we do not charge fees on taxes for
 orders paid by debit card" does presuppose *some* fee on debit — satisfied by the
-commission alone. So §1 now records an **unresolved two-reading ambiguity in the
-published text**, quoting both with line cites, expressed against the decision
-boundary (the disputed processing line is ≈ $2.80 on a $100 item against $10.75
-of commission, roughly a fifth of the fee total). `taxOn: 'unknown'` /
-`taxBasis: 'payment-method'` are preserved, and the warning still renders. No
-fee-model change follows from an unresolved ambiguity.
+commission alone. So §1 now records an **unresolved retrieval conflict** — not
+an ambiguity in a single shared text. The distinction is the one item 1 of the
+previous round settled: your retrieval shows a "Transaction Fee" heading, my
+retained capture (`1d2aa480…`, 2,824 bytes) reads
+`Domestic CC/Paypal Processing Fee*` at `tcgplayer.txt:13` and contains zero
+occurrences of "transaction fee". Two retrievals of the same URL disagree, and
+neither is ranked above the other. Both readings are quoted with line cites.
+
+No magnitude comparison is drawn here. An earlier version of this paragraph
+weighed the disputed line against a commission percentage, and the numbers did
+not even agree with the retained excerpt beneath it (`tcgplayer.txt:15` shows
+**10.25%** for a Level 1–4 seller; the prose said 10.75%). That comparison is
+removed rather than repaired: this is a **tax-treatment** closeout, the fee
+model is not being changed, and a fee-share estimate is not evidence about
+whether tax is in the base. `taxOn: 'unknown'` / `taxBasis: 'payment-method'`
+are preserved, and the warning still renders. No fee-model change follows from
+an unresolved conflict.
 
 **Blocking 2 — the captures are not being pushed.** 2,569,243 bytes across 25
 files, reduced to **52 KB**: `PROVENANCE.md` + `manifest.json` carrying source

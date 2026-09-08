@@ -6,6 +6,10 @@ of midpoint provenance, and test T2.14's comparison separately. Bounded trace
 and correction only. No grading-price or tax-source research was done and no
 such sources are cited here.
 
+**Implementation commit: `19cb94c`** (local; nothing pushed). The integration
+case, the two narrowed claims and the mutation evidence in §4, §3 and §8c
+landed in a follow-up commit recorded at the end of this document.
+
 **Artifact.** Live bundle is now **`js/core.541c4c39.js`**; every `:NNNN`
 citation below is against that file. The bundle was re-addressed in the same
 step as the edit and `tests/asset-fingerprints.mjs` was run before any result
@@ -81,21 +85,63 @@ cosmetic inconsistency. Instead the contract is stated and pinned:
 Both existing consumers (`:4272`, `:5452`) already satisfy this. A test pins the
 asymmetry so it is not "fixed" into a consumer-breaking rename.
 
+**What `!== 'derived'` does and does not mean.** It means *not known to be
+ours*. It does **not** mean observed, and it must not be read as one. Three
+states share that branch:
+
+| State | `midBasis` | What is established |
+|---|---|---|
+| Supplied | `'observed'` / `'provider'` | upstream sent a midpoint |
+| Derived | `'derived'` | we substituted the market price |
+| **Unknown** | `null` / absent | **nothing** |
+
+The third is distinct from both, and it is reachable — any cached row written
+before this commit, and every non-TCGplayer rung, arrives with no midpoint
+basis. `!== 'derived'` is therefore a **negative** test with a deliberately weak
+guarantee, and it is the correct shape for the two consumers that use it:
+the tier gate withholds a tier only on positive evidence of derivation, and the
+label declines to relabel without it.
+
+It would be the **wrong** shape for anything asserting the midpoint is real. No
+consumer may use `!== 'derived'`, or a neutral `Mid` label, to authenticate an
+observed median or an ask. Nothing in this work does; this is written down
+because the next consumer to read the field is the risk, not the current two.
+
 ## 4. No behaviour change at the tier gate — provable, not observed
 
 `:4272` suppresses the "Top of Book" tier when
 `mid > market * 1.02 && basis.midBasis !== 'derived'`. Newly populating
 `midBasis` could in principle suppress a tier that used to render.
 
-It cannot, and the reason is arithmetic rather than testing: **in every path
-that emits `'derived'`, `mid` was set equal to `market` by the `??`.** A number
-cannot exceed itself by 2%, so the first clause was already false wherever the
-new tag is `'derived'`. The gate's outcome is unchanged for every input.
+It does not, on the paths exercised — and the scope of that statement matters,
+because my first version of it was too broad.
 
-Pinned as `a derived mid is always exactly the market price, in both paths`,
-which is the property the argument rests on — if a future edit makes a derived
-mid something other than market, that test fails and this reasoning is retired
-with it.
+The argument is arithmetic: **in every path that emits `'derived'`, `mid` is set
+equal to `market` by the `??`.** A number cannot exceed itself by 2%, so the
+first clause is already false wherever the new tag is `'derived'`.
+
+**But a producer assignment does not establish the equality at the consumer.**
+Between the assignment and the gate sit `_clampHighPriceInPlace` on the server,
+`_clampHigh` on the client, and the wire. Any of those could in principle
+transform `market` or `mid` and break an equality that was true where it was
+written. Reading the assignments proves nothing about that, which is the same
+error as reading seven occurrences and calling provenance preserved.
+
+So the claim is now scoped and measured, not asserted:
+
+> On the **main and fallback `/api/tcg-price` paths**, with both clamps
+> executed, a `'derived'` mid arriving at the consumer equals the market value
+> the consumer holds.
+
+That is a test (§8, `after the High clamp, a derived mid still equals market`),
+run on a basis produced by the real producer and the real clamp, including a
+case where the clamp actually fires. What it does **not** cover: the eBay and
+PriceCharting rungs, `scan-miss`, cached pre-commit rows, and any future
+producer. Those reach the gate with `midBasis` absent, take the `!== 'derived'`
+branch, and are unaffected for that reason rather than by this equality.
+
+If a future edit makes a derived mid something other than market, that test
+fails and this reasoning retires with it.
 
 ## 5. Label
 
@@ -151,7 +197,7 @@ under either branch.
 
 | Suite | Before | After |
 |---|---|---|
-| `quick-pricing` | 188 / 0 | **204 / 0** (+16 T2.10) |
+| `quick-pricing` | 188 / 0 | **219 / 0** (+31 T2.10) |
 | `launch-audit-regressions` | 433 / 3 | **438 / 0** |
 | `asset-fingerprints` | — | **15 / 0** |
 | `review-fee-dl` | — | 21 / 0 |
@@ -161,7 +207,69 @@ under either branch.
 | `payout-honesty` | — | 32 / 0 |
 | `sports-price-guard` | — | 60 / 0 |
 
-Nine of the sixteen new checks are **executed**, not pattern-matched:
+### 8a. The integration case, and why the formatter tests were not enough
+
+You were right, and it is the ingestion-B gap again. Executing `_rangeParts`
+proves the **formatter** works. It proves nothing about whether production hands
+it a fifth argument — a dropped assignment anywhere between the server and the
+call site leaves every formatter test green while the label silently reverts.
+
+So the new case walks the chain with **production text at every hop**:
+
+```
+api/tcg-price.js  const data = {…} + _clampHighPriceInPlace   (both paths)
+  → core :2653  the wire read into _basisMeta                 (bundle text)
+  → core :2701  the window._crBasis build                     (bundle text)
+  → core :4894  priceRange.textContent = _rangeParts(…)       (bundle text)
+  → core :5423  _rangeParts                                   (bundle text)
+```
+
+Cases: missing provider midpoint on the main path → `'derived'` survives to a
+rendered `Ref $40.00 (calculated)`; supplied midpoint → `'observed'` survives
+and renders `Mid $44.00`; both repeated on the **fallback** path, where
+`'provider'` must render `Mid` and not be downgraded; the low/high pair verified
+still present in the rendered string in each; and the clamp-fires case behind
+§4's narrowed claim.
+
+**What is reconstructed and therefore NOT proven:** the `if (tcg && tcg.market
+!= null)` and `if (bestPrice != null)` branch guards, and the fetch that puts
+the server's JSON into `tcg`. The field-copy statements between them are
+production text, which is where the defect was and where a regression lands.
+
+### 8b. T2.14, executed rather than structurally pinned
+
+Your point stands — the two prior assertions established code structure, not
+behaviour. Both states now run the real row builder on a basis produced by the
+real producer:
+
+- **Withheld:** server returns `low: 150` against a substituted `mid: 100`. The
+  row renders `Provider low (not used)` with an em dash, no number, and the
+  cause-free note. Asserted alongside `midBasis === 'derived'`, so the state
+  under test is confirmed to be the one the regression involved.
+- **Absent:** server returns `low: null`. No low row is emitted at all.
+
+### 8c. Mutation check
+
+Asked for, and it changed the packet. Two assignments dropped, one at a time:
+
+| Mutation | Formatter checks | Integration checks |
+|---|---|---|
+| adapter `midBasis: tcg.midBasis ?? null` (`:2669`) | **all green** | **8 red** |
+| server main path `midBasis:` (`:317`) | **all green** | **9 red** |
+
+The separation is the result that matters: the formatter suite cannot see either
+defect, and the integration case cannot miss it. Dropping only the main-path
+server assignment also left both **fallback**-path checks green, so the cases
+discriminate paths rather than failing en masse.
+
+It also caught a dishonest assertion of mine. `main path, no provider mid: the
+server tags it derived` was asserting on the **chained** basis, so the adapter
+mutation turned it red — reporting a client regression as a server failure. It
+now asserts on the producer's own output object. Nine of the ten new integration
+checks are executed against real code; that one is executed against the server
+alone, deliberately.
+
+Nine of the original sixteen checks are also **executed**, not pattern-matched:
 `_rangeParts` is sliced out of the live bundle and called with real arguments.
 
 **Three pre-existing assertions failed and were re-pointed, not deleted.** They

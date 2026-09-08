@@ -1441,5 +1441,182 @@ console.log('\n[Quick Pricing — wiring]');
         /_askRef = \(basis\.mid != null\) \? basis\.mid : basis\.market/.test(core));
 }
 
+/* ── T2.10 INTEGRATION: producer -> adapter -> render ─────────────────────
+   The gap this closes, named by the reviewer and previously found in
+   ingestion B: executing `_rangeParts` proves the FORMATTER works. It does
+   not prove production hands it a fifth argument. A dropped assignment
+   anywhere between `api/tcg-price.js` and the call site leaves every
+   formatter test green while the rendered label silently reverts.
+
+   So this walks the whole chain with production text at every hop:
+
+     server `const data = {...}` + _clampHighPriceInPlace   (both paths)
+       -> client wire read into _basisMeta                   (bundle text)
+       -> client window._crBasis build                       (bundle text)
+       -> the actual `priceRange.textContent = _rangeParts(...)` call site
+       -> _rangeParts                                        (bundle text)
+
+   What is RECONSTRUCTED and therefore not proven here: the `if (tcg &&
+   tcg.market != null)` / `if (bestPrice != null)` branch guards, and the
+   fetch that puts the server's JSON into `tcg`. The two field-copy
+   statements between them are production text, which is where the defect
+   was and where a regression would land. */
+{
+  const core = readCoreBundle().source;
+
+  // ---- server: both producers, each sliced with its clamp call included,
+  // anchored on its own `mid` expression so the two cannot be confused.
+  const _prod = (anchor) => {
+    const a = tcgPrice.lastIndexOf('const data = {', tcgPrice.indexOf(anchor));
+    const m = '_clampHighPriceInPlace(data);';
+    const b = tcgPrice.indexOf(m, a);
+    return (a > -1 && b > a) ? tcgPrice.slice(a, b + m.length) : null;
+  };
+  const mainSrc = _prod('mid:    r.mid  ?? displayMarket');
+  const fbSrc   = _prod('mid:  fb.mid  ?? fb.market');
+  const _fnSrc  = (src, name) => {
+    const a = src.indexOf(name);
+    return a > -1 ? src.slice(a, src.indexOf('\n}', a) + 2) : null;
+  };
+  const clampSrc = tcgPrice.slice(tcgPrice.indexOf('const _HIGH_CAP_MULT'),
+                                  tcgPrice.indexOf('\n}', tcgPrice.indexOf('function _clampHighPriceInPlace')) + 2);
+  const sentSrc     = tcgPrice.slice(tcgPrice.indexOf('const _PRICE_SENTINELS'),
+                                    tcgPrice.indexOf('\n}', tcgPrice.indexOf('function _isSentinelPrice')) + 2);
+  const divSrc      = _fnSrc(tcgPrice, 'function _marketAskDivergence');
+  const clampHighSrc = _fnSrc(core, 'function _clampHigh(row)');
+
+  // ---- client: the two field-copy statements, verbatim.
+  const _adB = core.indexOf("_basisMeta = { label: 'TCGPlayer market'");
+  const _adA = core.lastIndexOf('bestPrice = tcg.market;', _adB);
+  const _adE = core.indexOf("datedBySource: tcg.marketBasis === 'sales' };", _adB);
+  const adapterSrc = core.slice(_adA, _adE + "datedBySource: tcg.marketBasis === 'sales' };".length);
+  const _cbA = core.indexOf('window._crBasis = {');
+  const crBasisSrc = core.slice(_cbA, core.indexOf('\n      };', _cbA) + 9);
+
+  // ---- the render call site, verbatim.
+  const _rsA = core.indexOf('priceRange.textContent = _rangeParts(');
+  const renderSrc = core.slice(_rsA, core.indexOf(';', _rsA) + 1);
+  const rangeSrc  = _fnSrc(core, 'function _rangeParts(');
+
+  check('every hop of the chain is locatable',
+        !!(mainSrc && fbSrc && clampSrc && divSrc && clampHighSrc
+           && sentSrc && _adA > -1 && _adE > _adB && _cbA > -1 && _rsA > -1 && rangeSrc),
+        'if this fails the integration checks below are silently testing nothing');
+
+  // Named so a failure says which hop broke rather than just "integration".
+  const serveMain = new Function('r', 'displayMarket', '_head', 'game', 'categoryId', 'name', 'set',
+                                 clampSrc + sentSrc + divSrc + mainSrc + '; return data;');
+  const serveFb   = new Function('fb', 'game', 'categoryId', 'name', 'set',
+                                 clampSrc + fbSrc + '; return data;');
+  const toBasis   = new Function('tcg', 'window',
+                                 clampHighSrc + '\nlet bestPrice = null, _basisMeta = null;\n'
+                                 + adapterSrc + '\n' + crBasisSrc + '\nreturn window._crBasis;');
+  const renderRange = new Function('b', 'm', 'priceRange',
+                                   rangeSrc + '\n' + renderSrc + '\nreturn priceRange.textContent;');
+
+  // One call = server JSON -> wire -> basis -> rendered string.
+  const wire   = (data) => toBasis(JSON.parse(JSON.stringify(data)), {});
+  const render = (basis) => renderRange(basis, 1, { textContent: '' });
+  const chain  = (data) => { const b = wire(data); return { basis: b, text: render(b) }; };
+
+  const HEAD = { basis: 'sales' };
+
+  /* ── MAIN PATH, provider sends no midpoint ─────────────────────────────
+     The substitution case. `mid` becomes the market price and the label
+     must stop calling it a median. */
+  const noMidWire = serveMain({ market: 40, low: 30, mid: null, high: 60,
+                                product: {}, variant: null },
+                              40, HEAD, 'pokemon', 3, 'X', 'Y');
+  const noMid = chain(noMidWire);
+  // Asserted on the SERVER object, not the chained basis: a client-side
+  // regression must not be reported as a server failure. The mutation run
+  // proved these two separate -- dropping the adapter assignment leaves this
+  // check green and the next one red.
+  check('main path, no provider mid: the server tags it derived',
+        noMidWire.midBasis === 'derived' && noMidWire.mid === 40);
+  check('main path, no provider mid: the tag survives to window._crBasis',
+        noMid.basis.mid === 40 && noMid.basis.midBasis === 'derived',
+        'this is the hop that was dropping it -- the wire read into _basisMeta');
+  check('main path, no provider mid: it RENDERS as a calculated reference',
+        noMid.text === 'Low $30.00 \u00b7 Ref $40.00 (calculated) \u00b7 High $60.00',
+        'end to end: a substituted midpoint reaches the seller labelled as ours');
+  check('main path, no provider mid: low and high still render',
+        /Low \$30\.00/.test(noMid.text) && /High \$60\.00/.test(noMid.text),
+        'a derived centre must not cost the seller a usable range');
+
+  /* ── MAIN PATH, provider sends a midpoint ──────────────────────────────
+     Attribution survives and the neutral label is kept. */
+  const hasMid = chain(serveMain({ market: 40, low: 30, mid: 44, high: 60,
+                                   product: {}, variant: null },
+                                 40, HEAD, 'pokemon', 3, 'X', 'Y'));
+  check('main path, provider mid: attribution survives the chain',
+        hasMid.basis.midBasis === 'observed' && hasMid.basis.mid === 44);
+  check('main path, provider mid: it renders as Mid',
+        hasMid.text === 'Low $30.00 \u00b7 Mid $44.00 \u00b7 High $60.00');
+
+  /* ── FALLBACK PATH ─────────────────────────────────────────────────────
+     Different vocabulary ('provider'), same decision. This is the path
+     whose honest tag used to die at the wire. */
+  const fbNoMid = chain(serveFb({ market: 12, low: 9, mid: null, high: 20,
+                                  source: 'scryfall' }, 'mtg', 1, 'A', 'B'));
+  check('fallback path, no provider mid: tagged derived, renders calculated',
+        fbNoMid.basis.midBasis === 'derived'
+        && /Ref \$12\.00 \(calculated\)/.test(fbNoMid.text));
+  const fbHasMid = chain(serveFb({ market: 12, low: 9, mid: 13, high: 20,
+                                   source: 'scryfall' }, 'mtg', 1, 'A', 'B'));
+  check("fallback path, provider mid: 'provider' is NOT downgraded to calculated",
+        fbHasMid.basis.midBasis === 'provider' && /Mid \$13\.00/.test(fbHasMid.text),
+        "the consumer contract is `=== 'derived'`, so a third token must render as Mid");
+
+  /* ── The claim narrowed: mid === market AFTER the clamp, on these paths.
+     Producer assignments alone do not establish this, because the clamp
+     runs between the assignment and the wire. It rewrites `high` only, so
+     the equality survives -- but that is a property to test, not assume. */
+  const clamped = chain(serveMain({ market: 10, low: 5, mid: null, high: 900,
+                                    product: {}, variant: null },
+                                  10, HEAD, 'pokemon', 3, 'X', 'Y'));
+  check('after the High clamp, a derived mid still equals market',
+        clamped.basis.mid === clamped.basis.value && clamped.basis.midBasis === 'derived',
+        'the Top-of-Book argument rests on this equality holding at the CONSUMER, not at the producer');
+  check('the clamp rewrote high and left the centre alone',
+        clamped.basis.high === 30 && clamped.basis.highClamped === true);
+
+  /* ── T2.14, executed with the basis this chain produces ────────────────
+     Previously pinned by source structure only. These two run the row
+     builder on a real produced basis. */
+  const _riA = core.indexOf('const _lowIsObserved');
+  const _riB = core.indexOf('if (basis.market != null)', _riA);
+  const rowFn = new Function('basis', 'condMult', 'fmt', 'rows',
+                             core.slice(_riA, _riB) + '; return rows;');
+  const rows = (basis) => rowFn(basis, 1, (v) => '$' + v.toFixed(2), []);
+
+  // Withheld: a floor above the comparison reference, reached through the
+  // real producer (low 150 against a substituted mid of 100).
+  const inverted = wire(serveMain({ market: 100, low: 150, mid: null, high: null,
+                                    product: {}, variant: null },
+                                  100, HEAD, 'pokemon', 3, 'X', 'Y'));
+  const invRows = rows(inverted);
+  check('T2.14 executed: an inverted floor renders the withheld state',
+        invRows.length > 0 && invRows[0][0] === 'Provider low (not used)'
+        && invRows[0][1] === '\u2014',
+        'the withholding must be visible, and must print no number');
+  check('T2.14 executed: the withheld row explains itself without a cause',
+        /Not used in this comparison because it exceeds/.test(invRows[0][3] || ''));
+  check('T2.14 executed: suppression fired on a DERIVED mid',
+        inverted.midBasis === 'derived',
+        'the regression this guards is exactly an untagged/derived mid skipping the check');
+
+  // Absent: upstream sent no low at all. The row must be omitted, so that
+  // absence still reads differently from withholding.
+  const noLow = wire(serveMain({ market: 100, low: null, mid: null, high: null,
+                                 product: {}, variant: null },
+                               100, HEAD, 'pokemon', 3, 'X', 'Y'));
+  const noLowRows = rows(noLow);
+  check('T2.14 executed: an absent low omits the row entirely',
+        noLow.low === null
+        && !noLowRows.some((r) => /low/i.test(r[0])),
+        'withheld and absent are the two states a seller most needs separated');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
