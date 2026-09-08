@@ -2698,7 +2698,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
       // The single basis. updatePriceFromPrinting() renders the headline from
       // THIS, so "Market Value" and every payout row are guaranteed to be the
       // same number times the same condition multiplier — no second feed.
-      window._crBasis = {
+      window._crBasis = _crBindBasis({
         value: Number(bestPrice),
         label: (_basisMeta && _basisMeta.label) || '',
         low:  _basisMeta ? _basisMeta.low  : null,
@@ -2726,7 +2726,7 @@ async function fetchAndApplySoldComps(forceRefresh) {
         // PriceCharting publishes no as-of date; TCGplayer market is computed
         // from completed sales. The caption needs to know which it is holding.
         datedBySource: _basisMeta ? !!_basisMeta.datedBySource : false,
-      };
+      }, card);
       // Remember that WE filled this, not the user. A user-typed number is the
       // price they expect to actually sell at, so it must be used verbatim; a
       // system-filled number is a Near-Mint basis and has to be condition
@@ -3331,10 +3331,10 @@ async function _priceSportsVariant(key) {
       key, label: v.label,
       market: d.median, low: null, mid: null, high: null,
     };
-    window._crBasis = {
+    window._crBasis = _crBindBasis({
       value: d.median, low: null, mid: null, high: null,
       label: `SportsCardsPro guide · ${v.productName}`,
-    };
+    }, card);
     window._ovAutoFilled = true;
     window._qpChosenTier = null;   // new basis -> previous tier choice is void
     if (priceOverride) priceOverride.value = d.median.toFixed(2);
@@ -4850,10 +4850,10 @@ function _onPrintingChange() {
   if (key && key.startsWith('sports_pc:')) {
     if (currentPrices[key] && currentPrices[key].market != null) {
       const v = window._spVariants[key];
-      window._crBasis = {
+      window._crBasis = _crBindBasis({
         value: currentPrices[key].market, low: null, mid: null, high: null,
         label: `SportsCardsPro guide · ${v ? v.productName : key}`,
-      };
+      }, selectedCard);
       updatePriceFromPrinting(); calc();
       return;
     }
@@ -20279,6 +20279,45 @@ function _crRetrievedAtFrom(meta) {
 }
 
 /**
+ * Bind a freshly-read price basis to the card it was read FOR.
+ *
+ * WHY THIS EXISTS. `window._crBasis` is ambient: one global holding whatever
+ * the app priced last. Ambient is fine for the headline, because the headline
+ * is drawn for the card on screen at that moment. It is NOT fine for a listing
+ * draft, because a draft can be started for a card that is not the one on
+ * screen -- `startListingDraftForEntry` lists a saved Collection row, and the
+ * panel behind it may be showing something else entirely.
+ *
+ * That is not hypothetical. Exercised 2026-09-08: price card B in the panel,
+ * then list Collection row A, and A's create carried B's `sourceUrl`, B's
+ * low/mid/high and B's retrieval time. The card-switch path was clean -- it
+ * nulls the basis (loadCardUI) -- so the leak was reachable only through the
+ * path that never touches the panel.
+ *
+ * THE BINDING. A basis is usable for a draft only if it CARRIES the identity of
+ * the card it was read for and that identity matches the card being listed.
+ * `_crIntentToken` is reused as the identity rather than a second hash being
+ * written: it already covers game, type, set, number, grader, grade and cert,
+ * and it is already the token the draft's own instance key is derived from.
+ *
+ * AN UNSTAMPED BASIS IS NOT USABLE. If a read path is ever added that does not
+ * come through here, its basis has no `cardKey` and `_crPricingContext` drops
+ * it -- the packet then records no basis at all rather than one that may belong
+ * to another card. That is the direction to fail in: a missing comp provenance
+ * is visible on the review screen (the disclosure block says so), whereas a
+ * foreign one looks exactly like a correct one. The three read paths that exist
+ * today all come through here: fetchAndApplySoldComps, _priceSportsVariant and
+ * _onPrintingChange.
+ */
+function _crBindBasis(basis, card) {
+  if (!basis || typeof basis !== 'object') return basis;
+  const c = card || (typeof selectedCard !== 'undefined' ? selectedCard : null);
+  if (!c) return basis;                     // unstamped, therefore unusable below
+  basis.cardKey = _crIntentToken(c);
+  return basis;
+}
+
+/**
  * The client-declared pricing context, assembled in ONE place.
  *
  * Create and rebuild both come through here. Two copies of this object would
@@ -20303,7 +20342,23 @@ function _crPricingContext(opts) {
   const o = opts || {};
   const pid = CR_D1_SLOT.split(':')[0];
   const venue = (typeof PLATFORMS === 'object' && PLATFORMS) ? PLATFORMS[pid] : null;
-  const b = (o.basis !== undefined) ? o.basis : (window._crBasis || null);
+  const ambient = (o.basis !== undefined) ? o.basis : (window._crBasis || null);
+
+  // ── The basis must be established to belong to THIS card ────────────────
+  //
+  // A populated global is not evidence. The ambient basis is used only when it
+  // carries the identity of the card it was read for (see _crBindBasis) and
+  // that identity matches the card being listed. No card passed, no basis: a
+  // caller that cannot say which card it is pricing cannot be given one.
+  //
+  // An explicit `basis` argument is subject to the same test -- the refresh
+  // path passes null, and a future caller passing an object does not get to
+  // skip the binding by supplying it directly.
+  let b = null;
+  if (ambient && o.card) {
+    const want = _crIntentToken(o.card);
+    if (ambient.cardKey && String(ambient.cardKey) === want) b = ambient;
+  }
 
   const ctx = { feeModelRevision: FEE_MODEL_REVISION };
   // Omitted rather than nulled when the venue table has no audit date: a
@@ -20366,7 +20421,7 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
         // the packet is built with no fee revision at all, which BLOCKS it
         // (MISSING_FEE_MODEL_REVISION) -- so every draft the app created
         // carried a packet the seller could never use.
-        pricingContext: _crPricingContext(),
+        pricingContext: _crPricingContext({ card }),
       }),
     });
 

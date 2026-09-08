@@ -1762,6 +1762,181 @@ try {
     await ctx.close();
   });
 
+  /* ── The create path: whose basis does a NEW draft carry? ────────────────
+   *
+   * The PATCH route refuses a client basis outright, so a refresh cannot
+   * import one. That says nothing about the POST, where a live basis is
+   * legitimate and is the only place a comp can enter a packet at all. The
+   * question from review: populate the browser's basis for card B, get to card
+   * A without a new price read, create A's draft, and see what A's packet
+   * holds.
+   *
+   * Both entry points are exercised through the control the seller actually
+   * touches -- the panel's own button (index.html, onclick="startListingDraft()")
+   * and the button hydrateCollectionSellButtons() renders into a Collection row
+   * -- because the two paths differ in exactly the way that mattered here: one
+   * goes through the card panel and one never touches it.
+   *
+   * WHAT THIS FOUND. The panel path was already clean, for a reason that is not
+   * the binding: loadCardUI nulls the basis on every card load, so arriving at
+   * card A discards B's read. The Collection path never loads a card, so
+   * nothing cleared it, and card A's create went out carrying card B's
+   * sourceUrl, low/mid/high and retrieval time. Fixed by binding the basis to
+   * the card it was read for; see _crBindBasis in the bundle.
+   */
+  await T.section('a new draft carries only a basis read for ITS card', async () => {
+    const FOREIGN = 'https://www.pricecharting.com/CARD-B';
+    const CARD_A = { id: 'cra1', name: 'Card A', game: 'pokemon', set: 'Base Set', number: '4/102' };
+
+    // One page, four situations, because the leak was ORDER-dependent: it
+    // needed a read for B to survive into a create for A.
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    let posted = null;
+    // Waiting on window._crLastDraftId would only work once -- it stays set
+    // after the first create, so every later wait would return immediately and
+    // the assertions would read the PREVIOUS body. The wait is on the request
+    // this side captured, per case.
+    const waitPost = async () => {
+      for (let i = 0; i < 150; i++) {
+        if (posted !== null) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    };
+    await page.route('**/api/drafts*', async (route) => {
+      const req = route.request();
+      if (req.method() === 'POST') {
+        posted = JSON.parse(req.postData() || '{}');
+        await route.fulfill({ status: 201, contentType: 'application/json',
+          body: JSON.stringify({ draftId: 'drf_created' }) });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    // The Collection button is only drawn for a row the server calls eligible.
+    await page.route('**/api/sell-eligibility', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ stamps: [{ eligible: true }] }) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.startListingDraft === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+
+    const priceCardB = (u) => page.evaluate((url) => {
+      // Deliberately NOT bound: this stands in for a read that happened while
+      // card B was on screen, whose binding is to B and not to A.
+      window._crBasis = { value: 10, label: 'Card B comp', sourceUrl: url, low: 9, mid: 10, high: 11,
+        retrievedAt: '2026-09-08T20:00:00.000Z', cardKey: 'bbbbbbbb' };
+      window._ovAutoFilled = true;
+    }, u);
+
+    // ── 1. The panel path: card B priced, then card A loaded, no new read.
+    await priceCardB(FOREIGN);
+    const switched = await page.evaluate((A) => {
+      try { loadCardUI(A); } catch (e) { return 'threw: ' + e.message; }
+      return window._crBasis === null ? 'cleared' : 'kept';
+    }, CARD_A);
+    T.check('loading a card discards the previous card\u2019s basis',
+      switched === 'cleared', String(switched));
+
+    posted = null;
+    await page.evaluate((A) => {
+      window._crSellApproved = A;                    // what applySellGate leaves behind
+      const row = document.getElementById('crSellRow');
+      if (row) row.style.display = '';               // the gate's own show, without the round trip
+    }, CARD_A);
+    await page.click('#crSellBtn');
+    T.check('setup: the panel button issued a create', await waitPost() === true);
+    T.check('setup: the panel button really did create a draft',
+      posted !== null && posted.card && posted.card.name === 'Card A',
+      JSON.stringify(posted && posted.card));
+    T.check('\ud83d\udd34 the panel path sends no basis for a card it never priced',
+      posted && posted.pricingContext && !posted.pricingContext.basisMeta,
+      JSON.stringify(posted && posted.pricingContext));
+    T.check('\ud83d\udd34 and card B is nowhere in the create body',
+      JSON.stringify(posted || {}).indexOf('CARD-B') === -1, JSON.stringify(posted));
+
+    // ── 2. The Collection path: card B priced in the panel, row A listed. This
+    // is the case that leaked, and it never goes near loadCardUI.
+    posted = null;
+    await priceCardB(FOREIGN);
+    await page.evaluate(() => {
+      localStorage.setItem(getUserKey('portfolio'), JSON.stringify([
+        { id: 'row_a', name: 'Card A', game: 'pokemon', set: 'Base Set', number: '4/102', currentValue: 400 },
+      ]));
+      // The cell renderCollectionView leaves for the hydrator to fill.
+      const host = document.createElement('div');
+      host.id = 'crSellCell_row_a';
+      host.style.cssText = 'display:flex;padding:8px';
+      document.body.appendChild(host);
+    });
+    await page.evaluate(() => hydrateCollectionSellButtons(loadPortData()));
+    const btn = await page.evaluate(() => {
+      const b = document.querySelector('#crSellCell_row_a button');
+      return b ? b.textContent : null;
+    });
+    T.check('setup: the Collection row rendered its real List control',
+      typeof btn === 'string' && /List/.test(btn), String(btn));
+    T.check('setup: card B\u2019s basis is still populated at click time',
+      await page.evaluate((u) => (window._crBasis || {}).sourceUrl === u, FOREIGN) === true);
+
+    await page.click('#crSellCell_row_a button');
+    T.check('setup: the Collection button issued a create', await waitPost() === true);
+    T.check('setup: the Collection button created a draft for row A',
+      posted !== null && posted.instanceId === 'inst_col_row_a', JSON.stringify(posted && posted.instanceId));
+    T.check('\ud83d\udd34 REGRESSION: a Collection create sends no unbound basis',
+      posted && posted.pricingContext && !posted.pricingContext.basisMeta,
+      'before _crBindBasis this carried card B\u2019s sourceUrl, low/mid/high and retrievedAt: '
+        + JSON.stringify(posted && posted.pricingContext));
+    T.check('\ud83d\udd34 REGRESSION: card B is nowhere in the create body',
+      JSON.stringify(posted || {}).indexOf('CARD-B') === -1, JSON.stringify(posted));
+    T.check('the global was populated, so the absence is a refusal, not an empty read',
+      await page.evaluate((u) => (window._crBasis || {}).sourceUrl === u, FOREIGN) === true,
+      'a populated global that does not reach the wire is the whole point of the check');
+
+    // ── 3. The legitimate case must still work, or the binding has just
+    // deleted comp provenance from every packet.
+    posted = null;
+    await page.evaluate((A) => {
+      window._crBasis = _crBindBasis({ value: 400, label: 'TCGplayer market',
+        sourceUrl: 'https://www.tcgplayer.com/CARD-A', low: 380, mid: 400, high: 430,
+        retrievedAt: '2026-09-08T20:30:00.000Z' }, A);
+      window._crSellApproved = A;
+    }, CARD_A);
+    await page.click('#crSellBtn');
+    T.check('setup: the legitimate create went out', await waitPost() === true);
+    const meta = posted && posted.pricingContext && posted.pricingContext.basisMeta;
+    T.check('\ud83d\udd34 a basis read FOR this card is still sent',
+      !!(meta && meta.sourceUrl === 'https://www.tcgplayer.com/CARD-A'), JSON.stringify(meta));
+    T.check('with its tiers and its own retrieval time intact',
+      !!(meta && meta.low === 380 && meta.mid === 400 && meta.high === 430
+         && meta.retrievedAt === '2026-09-08T20:30:00.000Z'), JSON.stringify(meta));
+
+    // ── 4. An unstamped basis is not usable. This is the standing guard for a
+    // read path added later that forgets to bind: it loses provenance rather
+    // than attaching someone else's.
+    posted = null;
+    await page.evaluate((A) => {
+      window._crBasis = { value: 400, label: 'unbound read', sourceUrl: 'https://x.test/UNBOUND',
+        retrievedAt: '2026-09-08T20:45:00.000Z' };
+      window._crSellApproved = A;
+    }, CARD_A);
+    await page.click('#crSellBtn');
+    T.check('setup: the unbound-basis create went out', await waitPost() === true);
+    T.check('\ud83d\udd34 a basis carrying no card identity is dropped',
+      posted && posted.pricingContext && !posted.pricingContext.basisMeta,
+      JSON.stringify(posted && posted.pricingContext));
+    T.check('and the unbound source never reaches the wire',
+      JSON.stringify(posted || {}).indexOf('UNBOUND') === -1, JSON.stringify(posted));
+    T.check('the fee revision still goes out, so dropping the basis is not dropping the context',
+      posted && posted.pricingContext.feeModelRevision === 1,
+      JSON.stringify(posted && posted.pricingContext));
+
+    await ctx.close();
+  });
+
 } finally {
   await browser.close();
   server.close();

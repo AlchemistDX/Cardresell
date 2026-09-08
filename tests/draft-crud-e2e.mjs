@@ -1387,5 +1387,64 @@ reset();
         `${drifted.status} / declared ${afterDrift.body.packet.metadata.clientDeclaredFeeModelRevision}`);
 }
 
+/* ── The create path, server half: what a reload actually shows ──────────────
+ *
+ * tests/draft-review-screen.mjs establishes what the browser SENDS on a create
+ * after a foreign card was priced. This is the other half of the reviewer's
+ * exercise -- create, then reload, and read the stored packet through the real
+ * GET -- plus the control that says which side is load-bearing.
+ *
+ * THE CONTROL MATTERS AND IT IS UNCOMFORTABLE. On the POST route a client basis
+ * is legitimate: it is the only way a comp ever enters a packet, so the server
+ * cannot refuse it the way the PATCH route now does, and nothing inside a
+ * basisMeta names the card it was read for. So a create body carrying another
+ * card's basis IS stored, faithfully, and the reload shows it. The binding is
+ * enforced in exactly one place -- _crBindBasis in the bundle -- and this block
+ * exists so that fact is written down where the server is tested rather than
+ * being an unstated assumption.
+ */
+{
+  const HDRS = (k) => ({ authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(k) });
+  const call = async (req) => { const res = fakeRes(); await EP.default(fakeReq(req), res); return { status: res.statusCode, body: res.body }; };
+  const B_URL = 'https://www.pricecharting.com/CARD-B';
+
+  // 1. What the browser now sends for a card it has no read for: a context
+  //    with the fee revision and no basis at all.
+  const clean = await call({ method: 'POST', headers: HDRS('cp-clean'), body: {
+    ...httpInput(),
+    pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01' },
+  } });
+  const readClean = await call({ method: 'GET', query: { id: clean.body.draftId } });
+  check('setup: the create landed and the packet is readable',
+        clean.status === 201 && readClean.body.packetUsable === true,
+        `${clean.status} / ${readClean.body.packetStatus}`);
+  check('🔴 a reload of that draft holds none of the other card\u2019s basis',
+        JSON.stringify(readClean.body).indexOf('CARD-B') === -1);
+  check('🔴 and its price basis makes no source claim it cannot support',
+        !readClean.body.packet.priceBasis
+          || (!readClean.body.packet.priceBasis.sourceUrl && !readClean.body.packet.priceBasis.label),
+        JSON.stringify(readClean.body.packet.priceBasis));
+  check('the packet is still usable without a basis \u2014 dropping one does not block a draft',
+        readClean.body.packetUsable === true && readClean.body.packet.blocked === false,
+        `usable ${readClean.body.packetUsable} / blocked ${readClean.body.packet.blocked}`);
+
+  // 2. The control: the SAME create with a foreign basis attached is stored and
+  //    served back. This is what the client fix prevents, demonstrated to be
+  //    something the server would otherwise carry.
+  const dirty = await call({ method: 'POST', headers: HDRS('cp-dirty'), body: {
+    ...httpInput(), instanceId: 'inst_cp_dirty',
+    pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01',
+      basisMeta: { label: 'Card B comp', sourceUrl: B_URL, retrievedAt: '2026-09-08T20:00:00.000Z', low: 9, mid: 10, high: 11 } },
+  } });
+  const readDirty = await call({ method: 'GET', query: { id: dirty.body.draftId } });
+  check('CONTROL: the server does store a basis handed to it on create',
+        dirty.status === 201 && readDirty.body.packet.priceBasis
+          && readDirty.body.packet.priceBasis.sourceUrl === B_URL,
+        JSON.stringify(readDirty.body.packet.priceBasis));
+  check('CONTROL: so the binding is a client obligation, not a server refusal',
+        JSON.stringify(readDirty.body).indexOf('CARD-B') !== -1,
+        'if this ever fails the server has grown its own check and the comment above is out of date');
+}
+
 
 done();

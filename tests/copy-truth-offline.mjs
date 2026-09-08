@@ -284,7 +284,14 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'typing in the override clears the auto-fill flag');
 
   // ONE basis: the ladder records it, the headline renders from it.
-  ok(/window\._crBasis = \{/.test(idx), 'the ladder records the basis it chose');
+  // 2026-09-08: was /window\._crBasis = \{/. The assignment now goes through
+  // _crBindBasis, which stamps the identity of the card the read was FOR
+  // (a Collection create otherwise carried the panel card's basis). The
+  // behaviour asserted is unchanged -- the ladder records ONE basis -- so the
+  // pattern follows the call shape rather than the assertion being dropped.
+  ok(/window\._crBasis = _crBindBasis\(\{/.test(idx), 'the ladder records the basis it chose');
+  ok(/basis\.cardKey = _crIntentToken\(c\);/.test(idx),
+     'and the basis it records is bound to the card it was read for');
   ok(!/_tcgFreshVariant/.test(idx),
      'the dead currentPrices injection is gone (it matched printing names against condition keys)');
   const upd = idx.indexOf('function updatePriceFromPrinting()');

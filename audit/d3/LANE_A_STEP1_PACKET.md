@@ -7,20 +7,22 @@
 >
 > **The sections below are a running record, written as the work happened, and
 > the early ones have been overtaken.** Nothing in them has been rewritten to
-> look prescient. What is true as of **2026-09-08, commit `0cc4477`**:
+> look prescient. What is true as of **2026-09-08, commit `f0e4e4d`** (the
+> create-path check in §17; the three §16 checks landed at `0cc4477`):
 >
 > | Section | Says | Actually |
 > |---|---|---|
 > | §0, §5, §6 | "**The producer is still unwired**" | Wired at `3db7169`. §7b records the wiring; §0 was written before it. |
-> | header, §1–§10 | Bundle `js/core.541c4c39.js`, "unchanged by this work — server and tests only" | Live bundle is **`js/core.c61a6ef9.js`**. Four generations since (`audit/BUNDLE_CITATION_MAP.md`). Any line number in §1–§10 that points into `541c4c39` must be re-grepped by symbol. |
-> | §15 | The client slice as first landed | Extended by §16: a fourth verdict arm, a conflict re-read, and a copy refusal. |
+> | header, §1–§10 | Bundle `js/core.541c4c39.js`, "unchanged by this work — server and tests only" | Live bundle is **`js/core.86000bf2.js`**. Five generations since (`audit/BUNDLE_CITATION_MAP.md`). Any line number in §1–§10 that points into `541c4c39` must be re-grepped by symbol. |
+> | §15 | The client slice as first landed | Extended by §16 (a fourth verdict arm, a conflict re-read, a copy refusal) and by §17 (the create-path basis binding). |
+> | §16.4 | The foreign-basis answer, refresh only | **Incomplete.** The create path was not covered and leaked; see §17. |
 > | §14 | "a packet goes stale only after an edit" | **Wrong.** Corrected in §16.2. |
 > | §14 | "A live client basis still wins" | **Withdrawn.** A client basis on a rebuild is now refused. §16.4. |
 > | §13 | Both Phase 1 completion percentages | Still superseded. **No current figure replaces them.** |
 >
 > **What is implemented and tested**: draft persistence, the draft list, the
-> review screen, packet staleness detection, packet refresh, copy-out, and the
-> three checks in §16. **What is not**: `listPriceForTargetNet` is never wired
+> review screen, packet staleness detection, packet refresh, copy-out, the
+> three checks in §16, and the create-path basis binding in §17. **What is not**: `listPriceForTargetNet` is never wired
 > (§7f), and target-net work is out of this lane by agreement.
 >
 > **Push and deployment remain blocked** by the unchanged credential-rotation
@@ -1424,4 +1426,171 @@ hazard alongside `fec7fb3a`. `index.html` carries the single reference.
 - `tests/listing-packet-offline.mjs` still carries 4 duplicate `codes` helpers.
 - Sections §1–§10 remain historical; the status table at the top of this
   document is the correction, not a rewrite of them.
+- §16.4's answer was incomplete and §17 completes it. The create path is now
+  bound; `applyEdit`'s `priceSource` gap is untouched.
 - **Push and deployment remain blocked by the credential-rotation gate.**
+
+---
+
+## 17. The create path — whose basis does a NEW draft carry?
+
+Asked at review after §16 was accepted: the PATCH refusal covers refreshing an
+existing draft, it does not establish that the initial POST attaches the right
+card's basis. Raised as a verification question, not a claimed defect. **It was
+a defect.** Not on the path the question described, which was already clean, but
+on the one it did not.
+
+### §17.1 What was exercised
+
+Populate the browser's basis for card B, reach card A without a new price read,
+create A's draft through the control a seller actually clicks, reload, and read
+the stored packet. Both create entry points were run, because they differ in
+exactly the way that turned out to matter.
+
+| Entry point | Control clicked | Goes through the card panel? |
+|---|---|---|
+| `startListingDraft()` | `#crSellBtn` (`index.html:2195`, `onclick="startListingDraft()"`) | Yes |
+| `startListingDraftForEntry(id)` | the button `hydrateCollectionSellButtons()` renders into the row (`js/core.86000bf2.js:20515`) | **No** |
+
+### §17.2 Result — the panel path was already clean, for the wrong reason
+
+`loadCardUI` nulls `window._crBasis` on every card load
+(`js/core.86000bf2.js:3556`, `window._crBasis = null;` with the comment "and no
+basis to render the headline from"). So arriving at card A discards B's read and
+A's create goes out with a context carrying only `feeModelRevision` and
+`feeScheduleVerified`. Asserted, and it passed **before** any change was made:
+`loading a card discards the previous card's basis`.
+
+That is existing behaviour answering the question as asked. It is not a binding:
+the basis is discarded because the panel reloaded, not because anything checked
+who it belonged to.
+
+### §17.3 Result — the Collection path leaked. CONFIRMED DEFECT
+
+`startListingDraftForEntry` lists a saved Collection row and never touches the
+panel, so nothing cleared the basis. Card B priced in the panel, then row A
+listed, and A's create body carried:
+
+```
+pricingContext.basisMeta = { label: 'Card B comp',
+  sourceUrl: 'https://…/CARD-B', low: 9, mid: 10, high: 11,
+  retrievedAt: '2026-09-08T20:00:00.000Z' }
+```
+
+Card B's source, card B's tiers and card B's retrieval time, on card A's draft.
+The server stores that faithfully and the reload serves it back — demonstrated
+as a **control** in `tests/draft-crud-e2e.mjs`, not asserted as acceptable.
+
+### §17.4 The fix — the basis carries the identity of the card it was read for
+
+`_crBindBasis(basis, card)` (`js/core.86000bf2.js:20312`, immediately above
+`_crPricingContext`) stamps `basis.cardKey = _crIntentToken(card)` at read time.
+`_crIntentToken` (`:20079`) is reused rather than a second identity hash being
+written; it already covers game, type, set, number, grader, grade and cert, and
+it is already what the draft's instance key is derived from.
+
+`_crPricingContext(opts)` then uses the ambient basis **only** when the caller
+names the card and the stamp matches:
+
+```js
+let b = null;
+if (ambient && o.card) {
+  const want = _crIntentToken(o.card);
+  if (ambient.cardKey && String(ambient.cardKey) === want) b = ambient;
+}
+```
+
+`_crCreateDraft` passes `{ card }`; the refresh path still passes
+`{ basis: null }` and is unchanged. Three read paths stamp on the way in:
+`fetchAndApplySoldComps`, `_priceSportsVariant`, `_onPrintingChange`.
+
+**The failure direction is deliberate.** An unstamped basis — a read path added
+later that forgets to bind — is DROPPED, so the packet records no comp
+provenance rather than someone else's. A missing basis is visible on the review
+screen; a foreign one looks exactly like a correct one. Asserted directly: `a
+basis carrying no card identity is dropped`.
+
+### §17.5 Where this is enforced, stated plainly
+
+**On the client, in one place.** The server cannot do it: a `basisMeta` contains
+nothing that names the card it was read for, and on POST a client basis is
+legitimate — it is the only way a comp ever enters a packet. So the PATCH-style
+refusal of §16.4 is not available here. `tests/draft-crud-e2e.mjs` records that
+asymmetry as two CONTROL assertions rather than leaving it unstated:
+
+- `CONTROL: the server does store a basis handed to it on create`
+- `CONTROL: so the binding is a client obligation, not a server refusal`
+
+### §17.6 Evidence
+
+New section in `tests/draft-review-screen.mjs`, real Chromium, real controls:
+
+| Assertion | |
+|---|---|
+| loading a card discards the previous card's basis | passed pre-fix |
+| the panel path sends no basis for a card it never priced | passed pre-fix |
+| **REGRESSION: a Collection create sends no unbound basis** | **failed pre-fix** |
+| **REGRESSION: card B is nowhere in the create body** | **failed pre-fix** |
+| the global was populated, so the absence is a refusal, not an empty read | |
+| a basis read FOR this card is still sent, tiers and retrieval time intact | |
+| a basis carrying no card identity is dropped | |
+| the fee revision still goes out, so dropping the basis is not dropping the context | |
+
+Server half, `tests/draft-crud-e2e.mjs`, through the real POST and GET: a
+reload holds none of the other card's basis, makes no source claim it cannot
+support, and the packet stays usable and unblocked without a basis.
+
+**Negative controls.** Binding condition removed → **4 FAIL**. Stamping removed
+(`_crBindBasis` returns the object unstamped) → **2 FAIL**, and the Collection
+assertions still passed — because an unstamped basis is refused too. Reported as
+found: the two halves do not fail independently in both directions, and the
+direction that survives is the safe one.
+
+### §17.7 Two suites this touched, one of which was already broken
+
+`tests/copy-truth-offline.mjs` asserts the ladder records ONE basis by matching
+the assignment's source shape; the pattern now matches the bound call, with the
+old pattern recorded in a comment beside it. A second assertion was added for
+the stamp itself.
+
+`tests/quick-pricing.mjs` builds the server→wire→basis→headline chain by
+evaluating extracted bundle source. **It was crashing before this work** —
+`ReferenceError: _crRetrievedAtFrom is not defined`, standing since the
+retrieval-time work landed earlier the same day, so every integration check
+after that point in the file had not run. The real source of
+`_crRetrievedAtFrom`, `_crIntentToken` and `_crBindBasis` is now prepended to
+the evaluated scope rather than stubbed. **219 passed, 0 failed** — a suite that
+would not complete at all before.
+
+### §17.8 Counts and the rename
+
+| Suite | After | Before |
+|---|---|---|
+| `draft-review-screen` | **268 / 0** | 249 / 0 |
+| `draft-crud-e2e` | **190 / 0** | 184 / 0 |
+| `quick-pricing` | **219 / 0** | did not complete |
+| `copy-truth-offline` | ALL CHECKS PASSED | ALL CHECKS PASSED |
+| `launch-audit-regressions` | 438 / 0 | 438 / 0 |
+| `listing-packet-offline` · `draft-store` · `draft-list-screen` · `sell-eligibility` · `sell-gate-ordering` | 232 / 135 / 101 / 113 / 38, all 0 failed | unchanged |
+| `asset-fingerprints` | 15 / 0 | 15 / 0 |
+| `draft-readiness` | PASS | PASS |
+
+`tests/run-all.sh` was not run.
+
+**Bundle renamed once, cleanly:** `c61a6ef9` → **`js/core.86000bf2.js`** (22,331
+lines). Single reference updated in `index.html:3772`.
+`audit/BUNDLE_CITATION_MAP.md` records it as generation 6 and notes that
+`c61a6ef9` — unlike generations 1–4 — is recoverable from git
+(`git show ffa735d:js/core.c61a6ef9.js`) for line alignment.
+
+### §17.9 What §17 does not establish
+
+- Nothing about `applyEdit` and `priceSource` (still open).
+- Nothing about whether the stamped identity is the RIGHT granularity for a
+  card with two physical copies in one collection. `_crIntentToken` does not
+  distinguish copies; two rows of the same card, same grade share a token. For
+  a price basis that is correct — the comp is about the card, not the copy —
+  but it is an assumption, stated here rather than left implicit.
+- The panel path's cleanliness still rests on `loadCardUI` nulling the basis
+  **as well as** the binding. Both hold today; only the binding is asserted as
+  a behaviour.

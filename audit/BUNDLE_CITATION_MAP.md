@@ -1,6 +1,6 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.c61a6ef9.js` (22,276 lines).** New work cites that hash.
+**Live bundle: `js/core.86000bf2.js` (22,331 lines).** New work cites that hash.
 
 > ### Four generations this file did not record when they happened
 >
@@ -16,12 +16,20 @@
 > | 3 | `541c4c39` → `fec7fb3a` | *(never committed under this name)* | The Lane A client work. Renamed, then the file changed again before the commit, so **no committed tree ever contained `fec7fb3a`** — do not cite it. |
 > | 4 | `541c4c39` → `34fb750c` | `a8dc3d6` | The same Lane A client work as landed: pricingContext builder, review-screen packet arms, refresh path. |
 > | 5 | `34fb750c` → `c61a6ef9` | *(this commit)* | Lane A three-question close: `_reviewPacketBlocking`, the `details-blocked` verdict arm, the `DRAFT_REVISION_CONFLICT` re-read, and the copy refusal for a blocked packet. **Recorded on the day.** |
+> | 6 | `c61a6ef9` → `86000bf2` | *(this commit)* | The create-path basis binding: `_crBindBasis`, `_crPricingContext` requiring a card and a matching `cardKey`, and the three read paths stamping on the way in. |
 >
 > **Generation 5 passed through a second naming hazard.** The rename ran twice
 > in one session: `34fb750c` → `611f4efe` (the code fixes) → `c61a6ef9` (the
 > comment corrections that followed them). `611f4efe` was a valid fingerprint
 > of a real file for part of one session and appears in no commit, so — like
 > `fec7fb3a` — **never cite it.** Only `c61a6ef9` is committed.
+>
+> **Generation 6 was renamed once, cleanly.** `c61a6ef9` WAS committed (`ffa735d`),
+> so unlike generations 1-4 a file with those bytes survives in git and a
+> citation naming it can be aligned by `git show ffa735d:js/core.c61a6ef9.js`.
+> Its line numbers hold up to `_crBindBasis`, which was inserted immediately
+> before `_crPricingContext`; everything after that point in `86000bf2` sits
+> about 40 lines lower.
 >
 > Generations 1 and 2 were in-place edits under the old name before the rename,
 > so — same as every prior generation in the tables below — **no file with

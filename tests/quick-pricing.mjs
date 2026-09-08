@@ -1490,8 +1490,18 @@ console.log('\n[Quick Pricing — wiring]');
   const _adA = core.lastIndexOf('bestPrice = tcg.market;', _adB);
   const _adE = core.indexOf("datedBySource: tcg.marketBasis === 'sales' };", _adB);
   const adapterSrc = core.slice(_adA, _adE + "datedBySource: tcg.marketBasis === 'sales' };".length);
-  const _cbA = core.indexOf('window._crBasis = {');
-  const crBasisSrc = core.slice(_cbA, core.indexOf('\n      };', _cbA) + 9);
+  const _cbA = core.indexOf('window._crBasis = _crBindBasis({');
+  const crBasisSrc = core.slice(_cbA, core.indexOf('\n      }, card);', _cbA) + 15);
+  // The extracted ladder calls three helpers by name. They were previously
+  // absent from the evaluated scope, which is why this chain threw
+  // ReferenceError: _crRetrievedAtFrom rather than failing an assertion -- a
+  // crash that had been standing since the retrieval-time work landed. Their
+  // real source is prepended rather than stubbed, so the chain still tests the
+  // shipped conversion and the shipped binding.
+  const retrievedAtSrc = _fnSrc(core, 'function _crRetrievedAtFrom(');
+  const bindBasisSrc   = _fnSrc(core, 'function _crBindBasis(');
+  const intentSrc      = _fnSrc(core, 'function _crIntentToken(');
+  const basisDepsSrc   = [retrievedAtSrc, intentSrc, bindBasisSrc].join('\n');
 
   // ---- the render call site, verbatim.
   const _rsA = core.indexOf('priceRange.textContent = _rangeParts(');
@@ -1500,7 +1510,8 @@ console.log('\n[Quick Pricing — wiring]');
 
   check('every hop of the chain is locatable',
         !!(mainSrc && fbSrc && clampSrc && divSrc && clampHighSrc
-           && sentSrc && _adA > -1 && _adE > _adB && _cbA > -1 && _rsA > -1 && rangeSrc),
+           && sentSrc && _adA > -1 && _adE > _adB && _cbA > -1 && _rsA > -1 && rangeSrc
+           && retrievedAtSrc && bindBasisSrc && intentSrc),
         'if this fails the integration checks below are silently testing nothing');
 
   // Named so a failure says which hop broke rather than just "integration".
@@ -1508,14 +1519,16 @@ console.log('\n[Quick Pricing — wiring]');
                                  clampSrc + sentSrc + divSrc + mainSrc + '; return data;');
   const serveFb   = new Function('fb', 'game', 'categoryId', 'name', 'set',
                                  clampSrc + fbSrc + '; return data;');
-  const toBasis   = new Function('tcg', 'window',
-                                 clampHighSrc + '\nlet bestPrice = null, _basisMeta = null;\n'
+  const toBasis   = new Function('tcg', 'window', 'card',
+                                 basisDepsSrc + '\n' + clampHighSrc
+                                 + '\nlet bestPrice = null, _basisMeta = null;\n'
                                  + adapterSrc + '\n' + crBasisSrc + '\nreturn window._crBasis;');
   const renderRange = new Function('b', 'm', 'priceRange',
                                    rangeSrc + '\n' + renderSrc + '\nreturn priceRange.textContent;');
 
   // One call = server JSON -> wire -> basis -> rendered string.
-  const wire   = (data) => toBasis(JSON.parse(JSON.stringify(data)), {});
+  const CHAIN_CARD = { game: 'pokemon', set: 'Base Set', number: '4/102' };
+  const wire   = (data) => toBasis(JSON.parse(JSON.stringify(data)), {}, CHAIN_CARD);
   const render = (basis) => renderRange(basis, 1, { textContent: '' });
   const chain  = (data) => { const b = wire(data); return { basis: b, text: render(b) }; };
 
