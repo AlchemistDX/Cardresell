@@ -757,8 +757,16 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .payout-rank-rank{font-family:var(--mono);font-size:.68rem;color:var(--text-muted);text-align:center;font-weight:700}
 .payout-rank-emoji{font-size:1rem;line-height:1;text-align:center}
 .payout-rank-name{font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.payout-rank-bar-wrap{height:6px;background:rgba(255,255,255,.05);border-radius:99px;overflow:hidden;min-width:40px}
-.payout-rank-bar{height:100%;border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.payout-rank-bar-wrap{height:6px;background:rgba(255,255,255,.05);border-radius:99px;overflow:hidden;min-width:40px;position:relative}
+/* 2026-09-08 BIAS-6/P: bars are absolutely positioned so a negative payout can
+   sit to the LEFT of a zero reference. Previously the bar was a plain
+   left-anchored block whose width was the only channel available, which is why
+   a negative value had nowhere to go but a positive-looking stub. */
+.payout-rank-bar{position:absolute;top:0;height:100%;border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1),left .5s cubic-bezier(.4,0,.2,1)}
+/* The $0 line, drawn only in signed mode so an all-positive chart is unchanged. */
+.payout-rank-bar-wrap.signed::before{content:'';position:absolute;left:50%;top:-5px;bottom:-5px;width:1px;background:var(--text-muted);opacity:.9;z-index:2}
+.payout-rank-zeronote{font-size:.62rem;color:var(--text-muted);margin:.1rem 0 .35rem;line-height:1.35}
+.payout-rank-zeronote strong{color:var(--red);font-weight:700}
 .payout-rank-amt{font-family:var(--mono);font-weight:600;color:var(--text);font-size:.85rem;min-width:64px;text-align:right}
 
 /* 2026-08-30: "Last verified" pill on every venue's fee block. Links to /accuracy. */
@@ -1020,6 +1028,10 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pnl-value.neg{color:var(--red)}
 .pnl-value.neutral{color:var(--text)}
 .pnl-sub{font-size:.65rem;color:var(--text-muted);margin-top:.2rem}
+/* 2026-09-08 BIAS-6/F: provisional qualifier under a P&L headline whose
+   records are missing cost inputs. Gold, not red -- the figure is not
+   wrong, it is an upper bound. */
+.pnl-prov-note{color:var(--gold-text);font-weight:600;line-height:1.35}
 
 /* ─── ADD FLIP MODAL ─── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
@@ -2650,12 +2662,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <!-- P&L Summary -->
   <div class="pnl-grid" id="pnlGrid">
     <div class="pnl-card">
-      <div class="pnl-label">Total Profit</div>
+      <div class="pnl-label" id="pnlTotalProfitLabel">Total Profit</div>
       <div class="pnl-value pos" id="pnlTotalProfit">$0.00</div>
       <div class="pnl-sub" id="pnlFlipCount">0 completed flips</div>
+      <div class="pnl-sub pnl-prov-note" id="pnlTotalProfitNote" style="display:none"></div>
     </div>
     <div class="pnl-card">
-      <div class="pnl-label">Best Flip</div>
+      <div class="pnl-label" id="pnlBestFlipLabel">Best Flip</div>
       <div class="pnl-value pos" id="pnlBestFlip">—</div>
       <div class="pnl-sub" id="pnlBestFlipName" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
     </div>
@@ -3737,7 +3750,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </div><!-- /wrap -->
 
 <script defer src="/js/config.20ebe911.js"></script>
-<script defer src="/js/core.1eea628c.js"></script>
+<script defer src="/js/core.69b38a85.js"></script>
 <script defer src="/js/ui.6b3a528e.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.5cf1cd22.js"></script>

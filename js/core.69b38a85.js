@@ -6412,17 +6412,43 @@ const PLATFORMS = {
   // TCG Bulk — buylist aggregator. Sellers browse verified buyers and their current
   // rates, submit cards to a chosen buyer, ship, and get paid via PayPal after the
   // buyer confirms receipt. Games: Pokemon, MTG, One Piece, Riftbound, YGO, Lorcana, FAB.
-  // Exact seller fee not publicly published — deducted from PayPal payout on completion.
-  // We estimate 10% aggregator fee as an honest baseline; the tile flags this.
+  // 2026-09-08 CORRECTION (BIAS-6/A-1). This comment previously read "Exact
+  // seller fee not publicly published ... We estimate 10% aggregator fee as an
+  // honest baseline". That is no longer supported: TCG Bulk's Terms of Service,
+  // effective 2026-08-26, publish the fee. Verbatim from the page:
+  //     "Unless a different fee is clearly shown before the Seller confirms a
+  //      Submission, a 10% TCG Bulk service fee applies to the transaction and
+  //      is deducted from the Seller's proceeds."
+  //     "The final transaction summary will show the applicable fee."
+  //     "We may change fees for future transactions by giving notice or clearly
+  //      displaying the new fee before confirmation; a change does not alter a
+  //      fee already accepted for an existing Submission."
+  // So the 10% is a PUBLISHED DEFAULT, not our estimate. Two consequences we
+  // must not blur together:
+  //   (1) The 10% service fee is sourced. It is still a DEFAULT, not a
+  //       guarantee — the terms expressly allow a different fee shown before
+  //       submission confirmation, which is why the "verify live quote" red
+  //       flag stays.
+  //   (2) The 50% buylist RATIO below is still OUR ESTIMATE. Correct arithmetic
+  //       applied to an assumed offer does not make the payout accurate. The
+  //       published fee fixes the fee, not the offer it is charged against.
+  // Base caveat: the terms say the fee is "deducted from the Seller's
+  // proceeds" and never state what the fee is a percentage OF. We compute it
+  // as 10% of the offer (see feeBuylist), reading "proceeds" as the
+  // pre-deduction offer. On a $100 retail card that is $5.00; the alternative
+  // reading (10% of the post-fee amount) would be $4.55. Documented as a
+  // reading, not asserted as the published base.
   //   Sources:
   //     https://tcgbulk.com/  (workflow + games verified 2026-08-29)
+  //     https://tcgbulk.com/page/terms-of-service  (fee text above, retrieved
+  //       2026-09-08; terms effective 2026-08-26)
   tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', feeAuditedOn: '2026-09-01',
     effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
     workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
     hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
     bestFor: '💵 Best for bulk that needs shopping around — one place to compare buyers',
     buylistRatio: { cash: 0.50, credit: 0.50 },
-    redFlags: ['💰 Buylist offer varies by buyer (~50% of retail typical)', '💳 Aggregator fee deducted from PayPal payout at completion', '💸 10% TCG Bulk service fee comes out of your proceeds — included above', '📦 You ship cards to the buyer you pick', '⚠️ Estimated payout — verify live quote before shipping'] }
+    redFlags: ['💰 Buylist offer varies by buyer (~50% of retail typical) — this part is our estimate', '💳 Service fee deducted from your PayPal payout at completion', '💸 10% TCG Bulk service fee comes out of your proceeds — their published default, included above', '📦 You ship cards to the buyer you pick', '⚠️ Estimated payout — the offer is estimated and a different fee can be shown before you confirm; verify the live quote before shipping'] }
 };
 
 /* ═══ CROSS-BORDER / FOREIGN-VENUE DISCLOSURE ═══════════════════════════════
@@ -7749,6 +7775,49 @@ function feeCardmarket(price, shipCharge) {
 //
 // The `mode` param picks cash vs store credit. Default cash (worst-case);
 // users planning to also buy from the same shop get the boosted credit rate.
+/* =========================================================
+   _payoutBarGeom — added 2026-09-08 for BIAS-6/P.
+
+   The old geometry was `Math.max(6, (net / rankBest) * 100)`, which had three
+   failures, all pointing the same way (bad venues looked better):
+
+     P-1 when EVERY visible payout was negative, rankBest was the least-negative
+         value, so net/rankBest was a ratio of two negatives -- positive and > 1
+         for every venue worse than the best. Combined with overflow:hidden on
+         the track, every underwater venue rendered a FULL bar identical to the
+         winner's, so the chart lost all discrimination at the exact moment
+         every option lost money.
+     P-2 with rankBest positive, the Math.max(6, ...) floor mapped every
+         negative payout onto the same 6% stub, so -$5,000 drew the same bar as
+         +$2. A mixed ranking still turned losses into positive stubs.
+     P-3 `rankBest ?? 1` guarded null/undefined but not 0, so a best payout of
+         exactly $0 produced width:NaN%.
+
+   Fix: when any visible payout is <= 0, switch to a SIGNED bar against a zero
+   reference at the track's midpoint -- positives grow right from the line,
+   negatives grow left -- scaled by the largest ABSOLUTE payout so an
+   all-negative ranking stays ordered and readable. Sign is carried by which
+   side of the line the bar sits on, so it can no longer be lost.
+
+   Numeric amounts and the row ordering are untouched by this function; it
+   returns geometry only.
+   ========================================================= */
+function _payoutBarGeom(net, maxAbs, signed) {
+  // maxAbs <= 0 means every visible payout is exactly zero. Render a hairline
+  // at the reference instead of dividing by zero (P-3).
+  if (!Number.isFinite(net) || !Number.isFinite(maxAbs) || maxAbs <= 0) {
+    return { left: signed ? 50 : 0, width: 0.8, neg: false, zero: true };
+  }
+  const mag = Math.min(1, Math.abs(net) / maxAbs);
+  if (!signed) {
+    // All payouts positive: unchanged left-anchored bar, 6% visibility floor.
+    return { left: 0, width: Math.max(6, mag * 100), neg: false, zero: net === 0 };
+  }
+  const half = Math.max(0.8, mag * 50);
+  if (net >= 0) return { left: 50,        width: half, neg: false, zero: net === 0 };
+  return               { left: 50 - half, width: half, neg: true,  zero: false };
+}
+
 function feeBuylist(price, ratio, serviceFeePct) {
   // How much of retail the seller actually pockets
   const offer   = price * ratio;
@@ -8231,22 +8300,33 @@ function calc() {
     const unlockedRank = eligible.filter(r => _tierPlatforms.has(r.pid)).slice(0, 8);
     const lockedRank   = eligible.filter(r => !_tierPlatforms.has(r.pid)).slice(0, 3);
     const rankBest     = unlockedRank[0]?.netPayout ?? 1;
+    // BIAS-6/P: decide the bar mode from EVERY row the chart will draw
+    // (unlocked + locked teasers), not from the winner alone. Any nonpositive
+    // payout in view switches the whole chart to signed mode so the rows stay
+    // comparable against one shared zero reference.
+    const _rankRows = unlockedRank.concat(lockedRank);
+    const _rankSigned = _rankRows.some(r => !(r.netPayout > 0));
+    const _rankMaxAbs = _rankRows.reduce((m, r) =>
+      Math.max(m, Number.isFinite(r.netPayout) ? Math.abs(r.netPayout) : 0), 0);
     if (unlockedRank.length >= 2) {
       html += `<div class="payout-rank" role="list" aria-label="Net payout ranking">
         <div class="payout-rank-header">
           <span class="payout-rank-title">Ranked by net payout</span>
           <span class="payout-rank-sub">after fees${itemCost > 0 ? ' + cost basis' : ''}</span>
-        </div>`;
+        </div>${_rankSigned ? `<div class="payout-rank-zeronote">Bars run from the $0 line \u2014 bars to its <strong>left are losses</strong>.</div>` : ''}`;
       unlockedRank.forEach((r, i) => {
         const p = PLATFORMS[r.pid];
-        const pct = Math.max(6, (r.netPayout / rankBest) * 100);
+        const g = _payoutBarGeom(r.netPayout, _rankMaxAbs, _rankSigned);
         const delta = i === 0 ? '' : `−${fmt(rankBest - r.netPayout)}`;
-        const barColor = i === 0 ? 'var(--green)' : (i === 1 ? 'var(--gold)' : 'var(--text-muted)');
+        // A negative payout is drawn in the loss colour regardless of rank, so
+        // the podium colours can never make a loss read as a good outcome.
+        const barColor = g.neg ? 'var(--red)'
+          : (i === 0 ? 'var(--green)' : (i === 1 ? 'var(--gold)' : 'var(--text-muted)'));
         html += `<div class="payout-rank-row" role="listitem">
           <div class="payout-rank-rank">${i + 1}</div>
           <div class="payout-rank-emoji">${p.emoji}</div>
           <div class="payout-rank-name">${p.name}</div>
-          <div class="payout-rank-bar-wrap"><div class="payout-rank-bar" style="width:${pct}%;background:${barColor}"></div></div>
+          <div class="payout-rank-bar-wrap${_rankSigned ? ' signed' : ''}"><div class="payout-rank-bar" style="left:${g.left}%;width:${g.width}%;background:${barColor}"></div></div>
           <div class="payout-rank-amt">${fmt(r.netPayout)}</div>
           <div class="payout-rank-delta">${delta}</div>
         </div>`;
@@ -8255,12 +8335,12 @@ function calc() {
       lockedRank.forEach((r, idx) => {
         const p = PLATFORMS[r.pid];
         const rowIdx = unlockedRank.length + idx + 1;
-        const pct = Math.max(6, (r.netPayout / rankBest) * 100);
+        const g = _payoutBarGeom(r.netPayout, _rankMaxAbs, _rankSigned);
         html += `<div class="payout-rank-row payout-rank-locked" role="listitem" onclick="(function(){ try{ window.trackEvent && window.trackEvent('ranking_locked_row_clicked', { source: 'ranking_strip' }); }catch(_){}; window.startVenueUnlock && window.startVenueUnlock('ranking_strip'); })()">
           <div class="payout-rank-rank">${rowIdx}</div>
           <div class="payout-rank-emoji">${p.emoji}</div>
           <div class="payout-rank-name">${p.name}</div>
-          <div class="payout-rank-bar-wrap"><div class="payout-rank-bar" style="width:${pct}%;background:var(--text-muted);opacity:.4"></div></div>
+          <div class="payout-rank-bar-wrap${_rankSigned ? ' signed' : ''}"><div class="payout-rank-bar" style="left:${g.left}%;width:${g.width}%;background:var(--text-muted);opacity:.4"></div></div>
           <div class="payout-rank-amt payout-rank-blur">$•••.••</div>
           <div class="payout-rank-delta" style="color:var(--gold-text);font-weight:700">Unlock</div>
         </div>`;
@@ -9311,11 +9391,18 @@ function saveFlipEntry() {
     const sellPrice = parseFloat(document.getElementById('mSellPrice').value) || 0;
     const platform  = document.getElementById('mPlatform').value;
     // 2026-09-04: net of fees/shipping/grading, matching the Mark-as-sold path.
-    const _gc = (id) => Math.max(0, parseFloat((document.getElementById(id)||{}).value) || 0);
-    const fees         = _gc('mFees');
-    const shippingCost = _gc('mShipCost');
-    const gradingCost  = _gc('mGradingCost');
-    const profit    = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost }).net;
+    // 2026-09-08 BIAS-6/F: shared reader + persisted per-field state, matching
+    // the Mark-as-sold path. Two readers doing this was the duplication that
+    // let blanks become silent zeros in both places independently.
+    const _cf = _readCostFields({
+      buyPrice: 'mBuyPrice', fees: 'mFees',
+      shippingCost: 'mShipCost', gradingCost: 'mGradingCost',
+    });
+    const fees         = _cf.values.fees;
+    const shippingCost = _cf.values.shippingCost;
+    const gradingCost  = _cf.values.gradingCost;
+    const costMeta     = _cf.meta;
+    const profit    = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost, costMeta }).net;
     const flips = loadFlipsData();
     // Free users capped at 10 flips (bumped from 5, 2026-08-20)
     if (!window._isPro && flips.length >= 10) {
@@ -9323,7 +9410,7 @@ function saveFlipEntry() {
       setTimeout(() => openPricingModal('flips_cap'), 200);
       return;
     }
-    flips.push({ id: Date.now(), updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, profit, platform, date });
+    flips.push({ id: Date.now(), updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, costMeta, profit, platform, date });
     if (!saveFlipsData(flips)) { _reportStorageFailure(); return; }
     // Warn free users when they're 1 flip away from the cap
     if (!window._isPro && flips.length === 9) {
@@ -9690,14 +9777,21 @@ function deletePort(id) {
 function exportFlips() {
   const flips = loadFlipsData();
   if (!flips.length) return;
-  const rows = [['Date','Card','Set','Buy Price','Sell Price','Fees','Shipping','Grading','Net Profit','Platform']];
+  const rows = [['Date','Card','Set','Buy Price','Sell Price','Fees','Shipping','Grading','Net Profit','Platform','Record Status','Missing Inputs']];
   flips.forEach(f => {
     // Export the cost components too — a bare net profit column cannot be
     // reconciled against a marketplace statement without them.
     const c = _flipNetOf(f);
+    // 2026-09-08 BIAS-6/F: a exported net whose inputs were partly unknown is
+    // an upper bound. Say which fields were blank in the file, so the export
+    // can be reconciled against a marketplace statement without guessing.
+    const _st = c.completeness === 'untracked'
+      ? 'unverified (logged before cost tracking)'
+      : (c.provisional ? 'provisional' : 'complete');
     rows.push([f.date, f.card, f.set||'', c.buyPrice.toFixed(2), c.sellPrice.toFixed(2),
                c.fees.toFixed(2), c.shippingCost.toFixed(2), c.gradingCost.toFixed(2),
-               (f.profit != null ? Number(f.profit) : c.net).toFixed(2), f.platform]);
+               (f.profit != null ? Number(f.profit) : c.net).toFixed(2), f.platform,
+               _st, _missingCostText(c.missingCosts)]);
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -10775,6 +10869,89 @@ function deletePortEntry(entryId) {
 
    Costs are clamped at >= 0: a negative fee would silently inflate profit.
    ========================================================= */
+/* =========================================================
+   Cost-field completeness — added 2026-09-08 for BIAS-6/F.
+
+   A blank cost field is a MISSING MEASUREMENT, not a measured zero. The
+   previous readers (three separate closures, `g`, `_g` and `_gc`, all doing
+   `Math.max(0, parseFloat(v) || 0)`) collapsed four distinct situations into
+   one number and lost the only distinction that matters for honesty:
+
+     'blank'   nothing typed. Cost unknown. Net is an UPPER BOUND.
+     'zero'    seller explicitly typed 0. Confirmed there was no such cost.
+     'value'   a valid positive amount.
+     'invalid' typed something unusable (text, negative). Not a measurement.
+
+   Why a hasCosts-style boolean does not do this job: `(fees + shipping +
+   grading) > 0` cannot tell "all three confirmed zero" from "one entered, two
+   unknown" from "all three blank". Those need different copy and different
+   treatment in a total. The old `hasCosts` field was removed rather than
+   wired up, because reading it would have improved some wording without
+   fixing the record underneath.
+
+   We do NOT substitute a venue fee estimate for a blank field. This is a
+   seller-entered record of an actual transaction; guessing the fee would
+   trade a known gap for an unknown error.
+   ========================================================= */
+const _CR_COST_FIELDS = ['buyPrice', 'fees', 'shippingCost', 'gradingCost'];
+const _CR_COST_LABELS = {
+  buyPrice: 'purchase price', fees: 'fees',
+  shippingCost: 'shipping', gradingCost: 'grading',
+};
+
+function _costState(raw) {
+  const t = String(raw == null ? '' : raw).trim();
+  if (t === '') return { state: 'blank', value: 0 };
+  const n = parseFloat(t);
+  if (!Number.isFinite(n) || n < 0) return { state: 'invalid', value: 0 };
+  return { state: n === 0 ? 'zero' : 'value', value: n };
+}
+
+/* ONE reader for every cost-field group in the app, replacing the three
+   duplicate closures. `ids` maps a logical cost field to its DOM id. Returns
+   the numbers (unchanged from before, so no displayed amount moves) plus the
+   per-field state that the numbers cannot carry. */
+function _readCostFields(ids) {
+  const values = {}, meta = {};
+  for (const k of Object.keys(ids)) {
+    const el = document.getElementById(ids[k]);
+    const r = _costState(el ? el.value : '');
+    values[k] = r.value;
+    meta[k]   = r.state;
+  }
+  return { values, meta };
+}
+
+/* What a stored record's costMeta says about whether its net is final.
+
+   Records written before costMeta existed report tracked:false and are
+   treated as PROVISIONAL, not complete. A historical blank cannot be
+   retrospectively declared a confirmed zero — we do not know whether the
+   seller had no fees or simply never typed them. "Unverifiable" is the honest
+   third answer and is reported separately from "known incomplete". */
+function _flipCompleteness(f) {
+  const meta = f && f.costMeta;
+  if (!meta || typeof meta !== 'object') {
+    return { tracked: false, provisional: true, missing: [], invalid: [], reason: 'untracked' };
+  }
+  const missing = _CR_COST_FIELDS.filter(k => meta[k] === 'blank');
+  const invalid = _CR_COST_FIELDS.filter(k => meta[k] === 'invalid');
+  const provisional = (missing.length + invalid.length) > 0;
+  return {
+    tracked: true, provisional, missing, invalid,
+    reason: provisional ? 'incomplete' : 'complete',
+  };
+}
+
+/* Human-readable list of what is missing, for copy that must name the gap
+   rather than just flagging one. */
+function _missingCostText(keys) {
+  const names = (keys || []).map(k => _CR_COST_LABELS[k] || k);
+  if (!names.length) return '';
+  if (names.length === 1) return names[0];
+  return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+}
+
 function _flipNetOf(f) {
   const n = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : 0; };
   const pos = (v) => Math.max(0, n(v));
@@ -10785,13 +10962,21 @@ function _flipNetOf(f) {
   const gradingCost  = pos(f && f.gradingCost);
   const net   = sellPrice - buyPrice - fees - shippingCost - gradingCost;
   const basis = buyPrice + fees + shippingCost + gradingCost;
+  const _comp = _flipCompleteness(f);
   return {
     sellPrice, buyPrice, fees, shippingCost, gradingCost,
     net,
     basis,
     // No cost basis -> ROI is undefined, not 0%. Callers render "-".
     roiPct: basis > 0 ? (net / basis) * 100 : null,
-    hasCosts: (fees + shippingCost + gradingCost) > 0,
+    // Completeness travels with the arithmetic so no consumer can render the
+    // number without being able to see whether its inputs were all known.
+    // `hasCosts` used to live here; it was removed, not wired up (see above).
+    costMeta:     (f && f.costMeta) || null,
+    provisional:  _comp.provisional,
+    missingCosts: _comp.missing,
+    invalidCosts: _comp.invalid,
+    completeness: _comp.reason,
   };
 }
 
@@ -10863,17 +11048,23 @@ function openMarkSoldModal(entryId) {
 function _msUpdateProfitPreview() {
   const pv = document.getElementById('msProfitPreview');
   if (!pv) return;
-  const g = (id) => Math.max(0, parseFloat((document.getElementById(id)||{}).value) || 0);
-  const sell = g('msSellPrice');
+  const _sellRaw = _costState((document.getElementById('msSellPrice')||{}).value);
+  const sell = _sellRaw.value;
+  if (_sellRaw.state === 'invalid') {
+    pv.innerHTML = 'Sold price is not a valid amount';
+    pv.style.color = 'var(--text-muted)';
+    return;
+  }
   if (sell <= 0) {
     pv.innerHTML = 'Enter a sold price to see profit';
     pv.style.color = 'var(--text-muted)';
     return;
   }
-  const r = _flipNetOf({
-    sellPrice: sell, buyPrice: g('msBuyPrice'),
-    fees: g('msFees'), shippingCost: g('msShipCost'), gradingCost: g('msGradingCost'),
+  const _cf = _readCostFields({
+    buyPrice: 'msBuyPrice', fees: 'msFees',
+    shippingCost: 'msShipCost', gradingCost: 'msGradingCost',
   });
+  const r = _flipNetOf({ sellPrice: sell, ..._cf.values, costMeta: _cf.meta });
   const color = r.net >= 0 ? '#4ade80' : '#f87171';
   const sign  = r.net >= 0 ? '+' : '\u2212';
   // Name the costs that were actually subtracted, so the number is auditable
@@ -10882,12 +11073,36 @@ function _msUpdateProfitPreview() {
   if (r.fees > 0)        parts.push(`$${r.fees.toFixed(2)} fees`);
   if (r.shippingCost > 0) parts.push(`$${r.shippingCost.toFixed(2)} shipping`);
   if (r.gradingCost > 0)  parts.push(`$${r.gradingCost.toFixed(2)} grading`);
-  const breakdown = parts.length
-    ? `after ${parts.join(' + ')}`
-    : (r.net >= 0 ? 'Profit' : 'Loss') + ' on this flip';
+  // BIAS-6/F-2: the old copy fell back to a bare "Profit on this flip" exactly
+  // when nothing had been subtracted, so the least-evidenced number carried the
+  // least-qualified label. Now a blank field is named, and the result is marked
+  // provisional with the direction of the error stated.
+  // `parts` only ever covers the three deducted extras; the purchase price is
+  // carried by the ROI basis, not this list. The earlier fallback said "no
+  // costs entered" whenever `parts` was empty, which was false for a card that
+  // had a purchase price and a confirmed $0 fee — so the copy is now derived
+  // from the recorded field states rather than from an empty list.
+  const _three = ['fees', 'shippingCost', 'gradingCost'];
+  const _m = r.costMeta || {};
+  let breakdown, provisionalNote = '';
+  if (parts.length) {
+    breakdown = `after ${parts.join(' + ')}`;
+  } else if (_three.every(k => _m[k] === 'zero')) {
+    breakdown = 'No fees, shipping or grading \u2014 all three entered as $0';
+  } else {
+    breakdown = 'No fees, shipping or grading entered yet';
+  }
+  if (r.invalidCosts.length) {
+    provisionalNote = `\u26a0 ${_missingCostText(r.invalidCosts)} not a valid amount \u2014 treated as unknown`;
+  } else if (r.missingCosts.length) {
+    // Every omitted cost can only reduce net, so the figure shown is a ceiling.
+    provisionalNote = `Provisional \u2014 ${_missingCostText(r.missingCosts)} not entered. Actual ${r.net >= 0 ? 'profit' : 'result'} is at most this.`;
+  }
   pv.innerHTML = `<span style="color:${color};font-weight:800">${sign}$${Math.abs(r.net).toFixed(2)}</span>` +
     (r.roiPct !== null ? `<span style="color:${color};opacity:.75;margin-left:.35rem;font-weight:700">(${r.roiPct >= 0 ? '+' : '\u2212'}${Math.abs(r.roiPct).toFixed(1)}%)</span>` : '') +
-    `<span style="display:block;font-size:.65rem;color:var(--text-muted);margin-top:.15rem;font-weight:400">${breakdown}</span>`;
+    (r.provisional ? `<span style="display:inline-block;font-size:.6rem;font-weight:800;letter-spacing:.03em;margin-left:.4rem;padding:.05rem .3rem;border-radius:4px;color:var(--gold-text);background:color-mix(in srgb,var(--gold) 16%,transparent)">PROVISIONAL</span>` : '') +
+    `<span style="display:block;font-size:.65rem;color:var(--text-muted);margin-top:.15rem;font-weight:400">${breakdown}</span>` +
+    (provisionalNote ? `<span style="display:block;font-size:.62rem;color:var(--gold-text);margin-top:.2rem;font-weight:600">${provisionalNote}</span>` : '');
 }
 
 // One-tap fill from the "current market" hint.
@@ -10931,11 +11146,18 @@ function confirmMarkSold() {
   // 2026-09-04: profit is now NET of fees, shipping and grading. We store the
   // components alongside it so the Flip Log can show its work and so `profit`
   // never has to be re-derived from fields a caller might forget to pass.
-  const _g = (id) => Math.max(0, parseFloat((document.getElementById(id)||{}).value) || 0);
-  const fees         = _g('msFees');
-  const shippingCost = _g('msShipCost');
-  const gradingCost  = _g('msGradingCost');
-  const profit = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost }).net;
+  // 2026-09-08 BIAS-6/F: read through the ONE shared cost reader and persist
+  // the per-field state, so a blank field is recorded as unknown rather than
+  // saved as a confirmed $0 that later sums into "Total Profit" as if measured.
+  const _cf = _readCostFields({
+    buyPrice: 'msBuyPrice', fees: 'msFees',
+    shippingCost: 'msShipCost', gradingCost: 'msGradingCost',
+  });
+  const fees         = _cf.values.fees;
+  const shippingCost = _cf.values.shippingCost;
+  const gradingCost  = _cf.values.gradingCost;
+  const costMeta     = _cf.meta;
+  const profit = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost, costMeta }).net;
   const date   = new Date().toISOString().slice(0,10);
   flips.push({
     id: Date.now(),
@@ -10947,6 +11169,7 @@ function confirmMarkSold() {
     fees,
     shippingCost,
     gradingCost,
+    costMeta,
     profit,
     platform,
     date,
@@ -11064,6 +11287,17 @@ function renderFlipsView() {
   const num = (v) => { const n = Number(v); return isFinite(n) ? n : 0; };
   const totalProfit = flips.reduce((s, f) => s + num(f.profit), 0);
   const bestFlip    = flips.reduce((best, f) => (!best || num(f.profit) > num(best.profit)) ? f : best, null);
+  // 2026-09-08 BIAS-6/F: these two headlines summed and ranked stored nets
+  // without regard to whether the inputs behind them were all known. Every
+  // omitted cost can only reduce a net, so a total containing incomplete
+  // records is an UPPER BOUND, not a measurement. Split the two honest
+  // categories: records we know are missing inputs, and records written before
+  // completeness was tracked (unverifiable — not retroactively "confirmed $0").
+  const _comps       = flips.map(f => _flipCompleteness(f));
+  const _nIncomplete = _comps.filter(c => c.tracked && c.provisional).length;
+  const _nUntracked  = _comps.filter(c => !c.tracked).length;
+  const _anyProv     = (_nIncomplete + _nUntracked) > 0;
+  const _bestProv    = bestFlip ? _flipCompleteness(bestFlip).provisional : false;
   const portCost    = port.reduce((s, p) => s + num(p.buyPrice), 0);
   const portCurVal  = port.reduce((s, p) => s + num(p.currentValue ?? p.buyPrice), 0);
   const unrealized  = portCurVal - portCost;
@@ -11075,11 +11309,30 @@ function renderFlipsView() {
 
   document.getElementById('pnlTotalProfit').textContent = fmt(totalProfit);
   document.getElementById('pnlTotalProfit').className = 'pnl-value ' + (totalProfit >= 0 ? 'pos' : 'neg');
+  // Qualify the label itself rather than only footnoting it, so the headline
+  // cannot be read as a settled figure when it isn't one.
+  const _tpLabel = document.getElementById('pnlTotalProfitLabel');
+  if (_tpLabel) _tpLabel.textContent = _anyProv ? 'Total Profit (provisional)' : 'Total Profit';
+  const _tpNote = document.getElementById('pnlTotalProfitNote');
+  if (_tpNote) {
+    const bits = [];
+    const _rec = (n) => `${n} record${n === 1 ? '' : 's'}`;
+    if (_nIncomplete) bits.push(`${_rec(_nIncomplete)} missing cost inputs`);
+    if (_nUntracked)  bits.push(`${_rec(_nUntracked)} logged before costs were tracked`);
+    _tpNote.textContent = _anyProv
+      ? `At most this \u2014 ${bits.join(', ')}.`
+      : '';
+    _tpNote.style.display = _anyProv ? 'block' : 'none';
+  }
   document.getElementById('pnlFlipCount').textContent = flips.length + ' completed flip' + (flips.length !== 1 ? 's' : '');
 
-  document.getElementById('pnlBestFlip').textContent = bestFlip ? fmt(num(bestFlip.profit)) : '—';
+  document.getElementById('pnlBestFlip').textContent = (bestFlip ? fmt(num(bestFlip.profit)) : '—');
   document.getElementById('pnlBestFlip').className = 'pnl-value ' + (bestFlip && num(bestFlip.profit) >= 0 ? 'pos' : 'neg');
-  document.getElementById('pnlBestFlipName').textContent = bestFlip ? bestFlip.card : '—';
+  document.getElementById('pnlBestFlipName').textContent = bestFlip
+    ? bestFlip.card + (_bestProv ? ' \u00b7 provisional' : '')
+    : '\u2014';
+  const _bfLabel = document.getElementById('pnlBestFlipLabel');
+  if (_bfLabel) _bfLabel.textContent = _bestProv ? 'Best Flip (provisional)' : 'Best Flip';
 
   document.getElementById('pnlPortValue').textContent = '$' + portCurVal.toFixed(2);
   document.getElementById('pnlPortCount').textContent = port.length + ' card' + (port.length !== 1 ? 's' : '') + ' held';
