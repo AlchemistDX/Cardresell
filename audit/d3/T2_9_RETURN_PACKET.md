@@ -13,6 +13,23 @@ buylist wording, the eBay sentence, and the labelling of non-eBay rendered
 states. Revision 2's resolution of the original six rejections is retained. Nothing was pushed and nothing was deployed. `D3`, `BIAS-1` and
 `BIAS-6` remain closed and untouched.
 
+## Acceptance record
+
+| | |
+|---|---|
+| T2.9 packet | **Accepted** on reported evidence, 2026-09-08. No further review cycle. |
+| T2.10 | **Accepted** at `19cb94c` + `00445d0`, bundle `core.541c4c39.js` |
+| Basis of both | the packets' reported evidence — **not** independent repository verification, **not** release approval |
+
+**What this acceptance does not resolve.** The unresolved fee-policy questions
+stay open, including the TCGplayer debit processing treatment (a retrieval
+conflict, §1/§9) and A-2's verified-zero-vs-never-checked distinction.
+**BIAS-10's remaining half stays open**: `feeBase`/`feeBaseLabel` emit on only
+2 of 15 venues, so 13 show a fee total with no stated base, split-basis venues
+cannot express which component carries the fee, the TCG Bulk base is
+unconfirmed, and the Poshmark base is unobtainable. **No ranking effect has been
+ruled out.** Accepting the tax-treatment record does not close any of that.
+
 ## Fingerprint correction — authoritative header
 
 | | |
@@ -484,15 +501,24 @@ silence on tax implies false completeness. Registered as behaviour: suite 19 →
 21. Logged as instance **37**; the page header also said "35 instances" while 36
 was filed below it, and that is corrected.
 
-**Next, per your item 6:** T2.10 `midBasis`. `api/tcg-price.js:290` emits
-`mid: r.mid ?? displayMarket` with `marketBasis`/`lowBasis`/`highBasis` but **no
-`midBasis`**, while the fallback path at `:367` does set it — the two paths
-disagree, and the client copies the other three but not `midBasis`. The work is
-scoped to your constraints: carry `midBasis` on the main path, **do not** make
-the low/high range gate depend on mid, label any derived mid a **calculated
-reference** rather than a median observed ask, test main/fallback parity, and
-check **T2.14 separately** because a derived midpoint currently influences
-whether a provider low is withheld.
+**Historical — T2.10 was subsequently completed and accepted.** The paragraph
+below is the forward-looking note written when this packet was authored. It is
+retained as written rather than rewritten, because the packet is a record. The
+outcome: T2.10 was accepted at **`19cb94c` + `00445d0`**, against bundle
+**`core.541c4c39.js`** — bounded correction, on reported evidence, not
+independent repository verification or release approval. See
+`audit/d3/T2_10_RETURN_PACKET.md`. Line citations in the paragraph below
+(`:290`, `:367`) are pre-T2.10 and have since shifted.
+
+> **Next, per your item 6:** T2.10 `midBasis`. `api/tcg-price.js:290` emits
+> `mid: r.mid ?? displayMarket` with `marketBasis`/`lowBasis`/`highBasis` but **no
+> `midBasis`**, while the fallback path at `:367` does set it — the two paths
+> disagree, and the client copies the other three but not `midBasis`. The work is
+> scoped to your constraints: carry `midBasis` on the main path, **do not** make
+> the low/high range gate depend on mid, label any derived mid a **calculated
+> reference** rather than a median observed ask, test main/fallback parity, and
+> check **T2.14 separately** because a derived midpoint currently influences
+> whether a provider low is withheld.
 
 ---
 
