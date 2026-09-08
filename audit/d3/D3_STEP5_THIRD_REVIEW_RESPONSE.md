@@ -173,6 +173,20 @@ Computed contrast, `--text-faint` against all four surface tokens per theme:
 **Minimum 4.58:1.** All eight clear 4.5:1 for normal text. No Block D occurrence
 needs to change before release.
 
+**Hold this result loosely — it is a pass on the question asked, and the light-mode
+half of the table is not measuring what it appears to measure.** `#6b6960` is
+byte-identical to `--text-muted`. So the light row is the second tier measured
+twice, not a third tier verified. "Minimum 4.58:1" is true and it is **not**
+evidence that a faint tier is AA-compliant, because in light mode there is no
+faint tier to be compliant.
+
+The consequence is forward-looking: if the neutral ramp is ever re-cut so a third
+tier can exist, every Block D occurrence listed above silently inherits whatever
+the new value is, **unreviewed**, and this pass does not cover it. The occurrences
+were checked against a value that is currently a duplicate, not against the token's
+intended role. Recorded here rather than only in `CSS_TOKEN_DEBT.md`, because the
+debt log is not what gets read at release.
+
 **The residual debt is not contrast, and is already logged.** In light mode
 `--text-faint` is `#6b6960` — byte-identical to `--text-muted`. The third tier
 does not exist in light mode; it was made AA-compliant by being collapsed into
@@ -185,6 +199,31 @@ third occurrence of that shape in one day.
 
 ---
 
+## 4b. The stale-packet failure mode, and the rule it produced
+
+Filed as **instance 25**. Worth stating in this document because it cost this
+review cycle.
+
+Every prior entry in `audit/PATTERN_ASSERTION_SURFACE.md` is a claim that was
+*wrong about the code*. This one was accurate when written and became wrong by
+the code moving underneath it. Nobody was careless — the packet was correct at
+write time, and that is not a property that survives.
+
+> **A snapshot handed to a reviewer is read as the present tense.**
+
+The remedy is not more care in the packet. It is that the reader must be able to
+tell whether they are reading history:
+
+> **A review request carries the commit it was written against.**
+
+Then a reviewer comparing the packet's tip against the branch tip can see for
+themselves whether a described shape is current, and a blocker raised against a
+stale description is identifiable before it consumes a cycle. This response
+states its commit in the header; from here that is a rule, not a formatting
+habit.
+
+---
+
 ## 5. Closeout status against your list
 
 | Requirement | Status |
@@ -194,11 +233,24 @@ third occurrence of that shape in one day.
 | Semantic `<dl>` fee rows | **Open** — accepted, not written |
 | Static-date parity guard | **Open** — accepted, not written |
 | 720px light/dark across all states | **Partial** — done for the Lowest-listing row states (20 combinations, no overflow, leader self-adjusts, no orphan separator). Fee-row states not yet re-verified after the `<dl>` conversion, which has not happened |
-| `--text-faint` scoped check | **Closed** — min 4.58:1 |
+| `--text-faint` scoped check | **Closed on the question asked** — min 4.58:1. Light-mode figures measure `--text-muted` twice, since the tokens share a hex; a re-cut ramp re-exposes every Block D occurrence unreviewed |
 | Final bundle rename → `asset-fingerprints` 15/0 | **Open** — held red at 14/1 by design; the rename is D3's last action |
 | Clean-checkout safe suite run + executed/skipped inventory | **Open** |
 | Cert ID rotation | **NOT DONE. Push remains blocked.** |
 | Credential hygiene — inventory labels, rewrite the partial commit-message disclosure | **Open** |
+
+**On the three-in-one-day observation:** promoted to a named **Class** in
+`audit/PATTERN_ASSERTION_SURFACE.md` rather than left as three instances. All
+three are "we know something the surface cannot express," and two of the three
+were produced by correct decisions, so it is not a carelessness pattern. It is the
+downstream cost of rules we intend to keep — every rule that pushes toward
+withholding rather than guessing produces a state whose honest rendering is
+nothing, and nothing is already an existing claim with an existing meaning. The
+review question that follows is now in the checklist: *for every state where we
+correctly decline to publish a number, what does the seller see, and what else
+produces that same view?* The contact sheet is promoted from a nicety to a
+required step for any change that adds or removes a rendered state, since none of
+the three was findable by per-state assertions.
 
 **On your closeout framing:** we are treating "finish the listing-scope blocker,
 semantic fee rows, static-date parity guard, final bundle rename, and safe local

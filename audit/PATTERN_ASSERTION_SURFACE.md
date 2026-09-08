@@ -1,9 +1,17 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**24 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 24; that number, not this sentence, is the
+**25 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 25; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
+
+The file also carries two entries that are **not** instances and are not counted:
+a **Rule** (withhold rather than relabel, and its rider) and a **Class** (states
+the surface cannot distinguish, which subsumes 22, 22c/T2.14, and the
+`--text-faint` collapse). Both sit after instance 25. Headings use two styles for
+historical reasons — `## N.` for 18 onward, `### Instance N —` for the earlier
+ones — so counting `## N.` headings returns 7, not 25. That is the same trap this
+header fell into before; count by highest number, not by grep.
 
 > 2026-09-07: this header read **"Six instances"** while the file carried 19 — a
 > stamped count, stale by thirteen, in the document about claims that outlive
@@ -1117,32 +1125,6 @@ suppression**, and it arrives just as reliably from good judgement as from bad.
 Filing it only under carelessness would mean the next correct withholding
 produces it again with nothing to catch it.
 
-## Rule — withhold rather than relabel, and its mandatory rider
-
-Stated three times as a remedy before it was ever written down as a rule
-(`DIRECTIONAL_BIAS_AUDIT.md:757` on the grading upside,
-`D3_STEP5_SECOND_REVIEW_RESPONSE.md:178` on the review-screen discount,
-condition (2) of `9a3c7ac` on the Lowest-listing row):
-
-> **A number with no defensible name does not get a worse name. It goes away.**
-
-The rule is right and stays. But it manufactures the instance-22 collapse **by
-design**: every correct refusal to mislabel creates a state that renders as
-absence, and absence already means something to the reader — usually "we don't
-have this." So the rule is incomplete on its own and carries a rider:
-
-> **Withholding is only complete once the withheld state is distinguishable from
-> the never-had-it state.** If suppressing the number makes the surface identical
-> to the surface where the number never existed, the mislabel has been traded for
-> a different false claim, not removed.
-
-Corollary for review: a withhold-on-condition fix is not assessable from its
-diff. The diff shows the suppression, which is the part that is correct. What has
-to be checked is the **rendered collision** between the suppressed state and the
-naturally-empty state, which only appears when the two are put next to each
-other. Per-state assertions cannot see it — T2.14 survived nine of them, each
-correct in isolation.
-
 ## 23. A guard whose threshold bounds the defect instead of catching it (2026-09-07)
 
 `_HIGH_CAP_MULT = 3.0` (`api/tcg-price.js:530`) drops the high ask from the
@@ -1382,3 +1364,107 @@ corpus-level check: for each field the codebase serializes, does any non-test
 consumer read it? A field with tests and no readers is either premature or a
 half-shipped trade — and the commit that references it says which.
 `marketAskDivergence` is the known case; the sweep has not been run.
+
+## Rule — withhold rather than relabel, and its mandatory rider
+
+Stated three times as a remedy before it was ever written down as a rule
+(`DIRECTIONAL_BIAS_AUDIT.md:757` on the grading upside,
+`D3_STEP5_SECOND_REVIEW_RESPONSE.md:178` on the review-screen discount,
+condition (2) of `9a3c7ac` on the Lowest-listing row):
+
+> **A number with no defensible name does not get a worse name. It goes away.**
+
+The rule is right and stays. But it manufactures the instance-22 collapse **by
+design**: every correct refusal to mislabel creates a state that renders as
+absence, and absence already means something to the reader — usually "we don't
+have this." So the rule is incomplete on its own and carries a rider:
+
+> **Withholding is only complete once the withheld state is distinguishable from
+> the never-had-it state.** If suppressing the number makes the surface identical
+> to the surface where the number never existed, the mislabel has been traded for
+> a different false claim, not removed.
+
+Corollary for review: a withhold-on-condition fix is not assessable from its
+diff. The diff shows the suppression, which is the part that is correct. What has
+to be checked is the **rendered collision** between the suppressed state and the
+naturally-empty state, which only appears when the two are put next to each
+other. Per-state assertions cannot see it — T2.14 survived nine of them, each
+correct in isolation.
+
+## Class — states the surface cannot distinguish (three instances in one day, 2026-09-07)
+
+Instance 22, T2.14/22c, and the `--text-faint` token collapse are the same defect
+wearing three costumes. All three are **"we know something the surface cannot
+express."**
+
+| instance | what we know | what the surface shows |
+|---|---|---|
+| 22 | this venue was assessed and charges no tax-inclusive fee **vs** nobody ever looked | identical blank |
+| 22c / T2.14 | we have a floor and distrust it **vs** upstream sent no floor | identical absent row |
+| token collapse | this text is a third-tier annotation **vs** this text is ordinary muted body copy | identical `#6b6960` |
+
+Three in one day is not coincidence, and it is not carelessness — 22c and the
+token collapse were both produced by correct decisions. **This project generates
+this class structurally.** The reason is in our own rules: they push consistently
+toward withholding rather than guessing (no invented rate, no invented input to a
+fee model, no relabelling a market as an ask, withhold rather than relabel). Every
+one of those rules is right. Every one of them produces a state whose honest
+rendering is *nothing* — and nothing already means something to a reader, usually
+"we don't have this."
+
+> **A codebase that refuses to guess accumulates states that render as absence.
+> Absence is not a neutral output; it is an existing claim with an existing
+> meaning. Withholding therefore does not remove a false claim by default — it
+> substitutes a quieter one, unless the distinction is designed.**
+
+### Consequence for how this file is read
+
+The catalogue has been treating each entry as a mechanism to avoid. This class
+says something different: the defect is the **downstream cost of a rule we intend
+to keep**. It cannot be driven to zero by being more careful, only by pairing each
+withholding with a designed distinction. So the question belongs in the review
+checklist, not in the retrospective:
+
+> For every state where we correctly decline to publish a number: what does the
+> seller see, and what else produces that same view?
+
+### Standing detection method
+
+None of the three was found by an assertion. 22 was found by grepping twelve
+function bodies; 22c by putting five rendered states on one contact sheet; the
+token collapse by computing contrast on two tokens and noticing the hex matched.
+The common factor is **comparison across states**, which per-state rigor cannot
+reach by construction. The contact sheet is therefore promoted from a nicety to a
+required step for any change that adds or removes a rendered state.
+
+## 25. A return packet was accurate when written and became wrong by standing still (2026-09-07)
+
+The third review's one blocker — *"the new listing confirmation is still described
+as a global profile key"* — was true of the packet and false of the code. The
+value stopped being a profile key earlier the same day the packet was read.
+
+**This is a new failure mode for this corpus.** Every prior instance is a claim
+that was wrong about the code: an assertion naming a behaviour it never checked, a
+comment describing a branch that changed, a stamp outliving its source. This one
+was *correct at the moment it was written* and became wrong by the code moving
+underneath it. Nobody made an error. The packet froze, the branch did not.
+
+> **A snapshot handed to a reviewer is read as the present tense. Accuracy at
+> write time is not a property that survives.**
+
+**Remedy — not "more care in the packet".** Care cannot fix this; the packet was
+careful. What is missing is the reader's ability to tell whether they are reading
+history:
+
+> **A review request must carry the commit it was written against.** Then a
+> reviewer comparing the packet's tip to the branch tip can see for themselves
+> whether a described shape is current, and a blocker raised against a stale
+> description is identifiable as such before it costs a review cycle.
+
+Applied from `D3_STEP5_THIRD_REVIEW_RESPONSE.md` onward: every packet header
+states the commit and branch it describes, and the response states the commit it
+was written at. Both were present in this response by luck of format, not by rule.
+Now it is a rule.
+
+Cost of the omission here: one review cycle spent on a closed blocker, and a
+verdict of "D3 is not ready to close" that was based on it.
