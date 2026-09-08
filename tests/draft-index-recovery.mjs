@@ -5,6 +5,15 @@
 //   1. a failed index write must never strand an authoritative draft
 //   2. packetSchemaVersion must be acted on, never assumed current
 //
+// FIXTURE SHAPE CORRECTION (2026-09-08): every fixture below used to carry a
+// TOP-LEVEL `packetSchemaVersion`. `buildListingPacket` has always written it
+// nested at `metadata.packetSchemaVersion`, and `readStoredPacket` used to
+// read the top level -- so these assertions were green while every real packet
+// read back PACKET_VERSION_MALFORMED -> INCOMPATIBLE. The assertions were
+// correct about the BEHAVIOUR and wrong about the SHAPE, which is exactly how
+// a suite passes against a fiction. Fixtures now match what the producer
+// emits, and the migration fixtures bump the nested field.
+//
 // The index module talks to Upstash over fetch(), so these tests stub fetch
 // with an in-memory Redis that can be told to fail specific commands. That
 // exercises the real code path rather than a re-implementation of it.
@@ -311,20 +320,20 @@ check('bad arguments still throw — that is a bug, not an outage',
 console.log('\n🔴 C0 — packet schema version handling');
 const cur = PACKET_SCHEMA_VERSION;
 check('a current packet is usable',
-      readStoredPacket({ packetSchemaVersion: cur, sku: 'x' }).status === PACKET_COMPAT.CURRENT);
-const ahead = readStoredPacket({ packetSchemaVersion: cur + 1, sku: 'x' });
+      readStoredPacket({ metadata: { packetSchemaVersion: cur }, sku: 'x' }).status === PACKET_COMPAT.CURRENT);
+const ahead = readStoredPacket({ metadata: { packetSchemaVersion: cur + 1 }, sku: 'x' });
 check('🔴 a newer packet is marked incompatible, not read as current',
       ahead.status === PACKET_COMPAT.INCOMPATIBLE && ahead.usable === false);
 check('a newer packet is preserved verbatim, not rewritten or dropped',
-      ahead.packet && ahead.packet.sku === 'x' && ahead.packet.packetSchemaVersion === cur + 1,
+      ahead.packet && ahead.packet.sku === 'x' && ahead.packet.metadata.packetSchemaVersion === cur + 1,
       'the reader is behind; the record is not corrupt');
 check('the reason distinguishes "ahead of reader" from corruption',
       ahead.reason === 'PACKET_VERSION_AHEAD_OF_READER');
-for (const bad of [{}, { packetSchemaVersion: null }, { packetSchemaVersion: '1' },
-                   { packetSchemaVersion: 1.5 }, { packetSchemaVersion: 0 },
-                   { packetSchemaVersion: -3 }]) {
+for (const bad of [{}, { metadata: { packetSchemaVersion: null } }, { metadata: { packetSchemaVersion: '1' } },
+                   { metadata: { packetSchemaVersion: 1.5 } }, { metadata: { packetSchemaVersion: 0 } },
+                   { metadata: { packetSchemaVersion: -3 } }]) {
   const r = readStoredPacket(bad);
-  check(`malformed version ${JSON.stringify(bad.packetSchemaVersion)} → incompatible, never current`,
+  check(`malformed version ${JSON.stringify(bad.metadata && bad.metadata.packetSchemaVersion)} → incompatible, never current`,
         r.status === PACKET_COMPAT.INCOMPATIBLE && r.usable === false,
         `got ${r.status}`);
 }
@@ -333,7 +342,7 @@ for (const junk of [null, undefined, [], 'packet', 7]) {
   check(`non-object ${JSON.stringify(junk)} is refused`,
         r.status === PACKET_COMPAT.INCOMPATIBLE && r.usable === false);
 }
-const older = readStoredPacket({ packetSchemaVersion: 1, sku: 'x' }, { currentVersion: 2 });
+const older = readStoredPacket({ metadata: { packetSchemaVersion: 1 }, sku: 'x' }, { currentVersion: 2 });
 check('an older version with no registered migration is incompatible, not assumed',
       older.status === PACKET_COMPAT.INCOMPATIBLE
       && older.reason === 'PACKET_NO_MIGRATION_PATH',
@@ -342,20 +351,20 @@ check('an unmigratable old packet is still preserved', older.packet.sku === 'x')
 
 // migration table wired up for real
 const { PACKET_MIGRATIONS } = await import('../api/_listingPacket.js');
-PACKET_MIGRATIONS[1] = (p) => ({ ...p, packetSchemaVersion: 2, migratedField: true });
-const migrated = readStoredPacket({ packetSchemaVersion: 1, sku: 'x' }, { currentVersion: 2 });
+PACKET_MIGRATIONS[1] = (p) => ({ ...p, metadata: { ...p.metadata, packetSchemaVersion: 2 }, migratedField: true });
+const migrated = readStoredPacket({ metadata: { packetSchemaVersion: 1 }, sku: 'x' }, { currentVersion: 2 });
 check('a registered migration runs and the packet becomes usable',
       migrated.status === PACKET_COMPAT.MIGRATED && migrated.usable === true
       && migrated.packet.migratedField === true);
 check('the migration is recorded, not silent',
       migrated.migrationsApplied.join(',') === '1->2' && migrated.fromVersion === 1);
-PACKET_MIGRATIONS[2] = (p) => ({ ...p, packetSchemaVersion: 3 });
-const twoHops = readStoredPacket({ packetSchemaVersion: 1 }, { currentVersion: 3 });
+PACKET_MIGRATIONS[2] = (p) => ({ ...p, metadata: { ...p.metadata, packetSchemaVersion: 3 } });
+const twoHops = readStoredPacket({ metadata: { packetSchemaVersion: 1 } }, { currentVersion: 3 });
 check('multi-step migrations chain in order',
       twoHops.status === PACKET_COMPAT.MIGRATED
       && twoHops.migrationsApplied.join(',') === '1->2,2->3');
 PACKET_MIGRATIONS[2] = (p) => ({ ...p });   // forgets to advance the version
-const stuck = readStoredPacket({ packetSchemaVersion: 1 }, { currentVersion: 3 });
+const stuck = readStoredPacket({ metadata: { packetSchemaVersion: 1 } }, { currentVersion: 3 });
 check('a migration that does not advance the version fails loudly',
       stuck.status === PACKET_COMPAT.INCOMPATIBLE
       && stuck.reason === 'PACKET_MIGRATION_DID_NOT_ADVANCE_VERSION',

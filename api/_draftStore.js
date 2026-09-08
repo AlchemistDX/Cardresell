@@ -439,9 +439,15 @@ export function readStoredDraft(stored) {
       result.packet       = null;
       result.packetStatus = PACKET_COMPAT.STALE;
       result.packetUsable = false;
+      // Three distinguishable ways a packet fails to cover the draft, and they
+      // send someone to different places. UNRECORDED is a write path that does
+      // not know packets exist. NEVER_MATCHED is a build-time bug: the packet
+      // was attached to a record it never described, and since the draft has
+      // not been edited since, no edit can be blamed. CHANGED is the ordinary
+      // case -- the seller moved a dependent input after the snapshot.
       result.packetReason = storedInputs === null
         ? 'PACKET_INPUTS_UNRECORDED'
-        : 'PACKET_INPUTS_CHANGED';
+        : (d.rev === 1 ? 'PACKET_INPUTS_NEVER_MATCHED' : 'PACKET_INPUTS_CHANGED');
       result.packetRaw    = d.packet;
       return result;
     }
@@ -539,9 +545,27 @@ export function buildDraft(input = {}) {
       throw new Error(`${ERR.FIELD_INVALID}:packet:not-an-object`);
     }
     draft.packet = input.packet;
-    // Recorded from the draft being built, not from the caller: a caller that
-    // could supply its own fingerprint could declare a stale packet fresh.
-    draft.packetInputs = packetInputFingerprint(draft);
+    // ── The packet's fingerprint comes FROM THE PACKET ────────────────────
+    // This used to be `packetInputFingerprint(draft)` -- computed from the
+    // draft being built -- on the reasoning that a caller-supplied
+    // fingerprint could declare a stale packet fresh. That reasoning defends
+    // against a lying caller but makes the check a tautology: it stores the
+    // draft's own fingerprint as the packet's, so the reader recomputes the
+    // same value, agrees, and declares ANY attached packet current.
+    //
+    // Demonstrated: a packet built from price $100 attached to a $500 draft
+    // read as current. The stored value must be the BUILDER's claim about
+    // what it consumed, so that comparing it to the draft says something.
+    //
+    // The lying-caller concern does not reappear here. `packet` is refused
+    // from the client on the create path (see api/drafts.js, `derived`), so
+    // this metadata is server-produced. A caller that could forge it could
+    // forge the whole packet.
+    //
+    // Absence is not agreement: a packet with no stamped fingerprint stores
+    // none, and the read-time gate treats an unrecorded fingerprint as stale.
+    const declared = input.packet.metadata && input.packet.metadata.inputFingerprint;
+    if (typeof declared === 'string') draft.packetInputs = declared;
   }
   return draft;
 }

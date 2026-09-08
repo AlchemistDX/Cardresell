@@ -2,6 +2,7 @@
 import { harness } from './_assert.mjs';
 import * as DS from '../api/_draftStore.js';
 import * as INV from '../api/_inventoryInstance.js';
+import { packetInputFingerprint } from '../api/_listingPacket.js';
 
 const { check, checkAsync, done } = harness('draft-store');
 
@@ -427,22 +428,35 @@ const pkBase = () => ({
 // (PACKET_INPUTS_UNRECORDED) instead of exercising the version axis these
 // checks are about. The fixture was wrong in a way that only became visible
 // once absence stopped being read as agreement.
+// SECOND FIXTURE CORRECTION (2026-09-08): `buildDraft` no longer computes the
+// fingerprint from the draft -- it reads the one the PACKET BUILDER stamped,
+// because computing it from the draft proved only that the draft matched
+// itself. So a fixture packet with no `metadata.inputFingerprint` now records
+// no fingerprint and reads STALE, which again is not the axis these checks
+// are about. The fixture stamps the matching one, which is what a real
+// producer does: the packet declares the inputs it consumed.
 const pk_stored = (extra = {}) => {
   const { packet, ...rest } = extra;
+  let p = packet;
+  if (p && p.metadata && p.metadata.inputFingerprint === undefined) {
+    const b = pkBase();
+    p = { ...p, metadata: { ...p.metadata,
+      inputFingerprint: packetInputFingerprint({ price: b.price, priceSource: b.priceSource, title: b.title }) } };
+  }
   const base = packet === undefined ? DS.buildDraft(pkBase())
-                                    : DS.buildDraft({ ...pkBase(), packet });
+                                    : DS.buildDraft({ ...pkBase(), packet: p });
   return JSON.stringify({ ...base, ...rest });
 };
 
 check('a draft with no packet reads clean',
       DS.readStoredDraft(pk_stored({})).packetStatus === undefined);
 
-const pk_cur = DS.readStoredDraft(pk_stored({ packet: { packetSchemaVersion: 1, title: 'X' } }));
+const pk_cur = DS.readStoredDraft(pk_stored({ packet: { metadata: { packetSchemaVersion: 1 }, title: 'X' } }));
 check('a current packet is returned as usable',
       pk_cur.ok === true && pk_cur.packetUsable === true && pk_cur.packetStatus === 'CURRENT');
 check('and it is the packet itself, not a copy of the draft', pk_cur.packet.title === 'X');
 
-const pk_ahead = DS.readStoredDraft(pk_stored({ packet: { packetSchemaVersion: 99, title: 'X' } }));
+const pk_ahead = DS.readStoredDraft(pk_stored({ packet: { metadata: { packetSchemaVersion: 99 }, title: 'X' } }));
 check('🔴 a packet from a NEWER deploy does not fail the draft read',
       pk_ahead.ok === true,
       'the draft is authoritative; the snapshot is advisory');
@@ -451,7 +465,7 @@ check('but the packet is refused as unusable',
 check('and it is named as pk_ahead of this reader',
       pk_ahead.packetReason === 'PACKET_VERSION_AHEAD_OF_READER');
 check('🔴 the unreadable packet is preserved verbatim, not dropped',
-      pk_ahead.packetRaw && pk_ahead.packetRaw.packetSchemaVersion === 99,
+      pk_ahead.packetRaw && pk_ahead.packetRaw.metadata.packetSchemaVersion === 99,
       'the client that CAN read it may be one deploy away');
 check('and the usable packet field is null so nothing stale can be shown',
       pk_ahead.packet === null);
@@ -469,7 +483,7 @@ check('a non-object packet is refused at WRITE time', (() => {
   catch (e) { return e.message.endsWith(':packet:not-an-object'); }
 })());
 check('a packet is stored verbatim with the version it declared',
-      DS.buildDraft({ ...pkBase(), packet: { packetSchemaVersion: 1, a: 1 } }).packet.packetSchemaVersion === 1,
+      DS.buildDraft({ ...pkBase(), packet: { metadata: { packetSchemaVersion: 1 }, a: 1 } }).packet.metadata.packetSchemaVersion === 1,
       'stamping our own version onto someone else\u2019s packet destroys the fact that makes it safe to read');
 
 const pk_tomb = DS.readStoredDraft(JSON.stringify({
@@ -496,7 +510,11 @@ const laneA = (over = {}) => DS.buildDraft({
   draftId: 'd_laneA', instanceId: 'i_laneA', sku: 'sku_laneA',
   slot: 'ebay:fixed-price', title: 'Charizard Base Set Holo', price: 100,
   rev: 1, priceSource: 'comp',
-  packet: { packetSchemaVersion: 1, pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
+  // Stamped as a real producer stamps it: from the inputs the packet
+  // consumed, not from the draft it is attached to.
+  packet: { metadata: { packetSchemaVersion: 1,
+              inputFingerprint: packetInputFingerprint({ price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
+            pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
   ...over,
 });
 
@@ -576,7 +594,8 @@ check('a packet with no recorded inputs is stale, not assumed current',
 
 // STALE and INCOMPATIBLE are different facts and must not collapse into one
 // message: one means "recompute", the other means "your app is behind".
-const la_ahead = DS.buildDraft(laneA({ packet: { packetSchemaVersion: 99 } }));
+const la_ahead = DS.buildDraft(laneA({ packet: { metadata: { packetSchemaVersion: 99,
+  inputFingerprint: packetInputFingerprint({ price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) } } }));
 check('a version-ahead packet is INCOMPATIBLE, not STALE',
       DS.readStoredDraft(JSON.stringify(la_ahead)).packetStatus === 'INCOMPATIBLE');
 
@@ -584,6 +603,39 @@ check('a version-ahead packet is INCOMPATIBLE, not STALE',
 // the current price is not provenance for it. This is deliberately NOT
 // manufacturing provenance to clear a warning -- it is letting the warning
 // return when the thing that justified silencing it stopped being true.
+// ── The initial mismatch, distinguished from the edit mismatch ────────────
+//
+// A packet can fail to cover a draft two ways, and they send someone to two
+// different places. Attached to a record it NEVER described -- a build-time
+// bug -- versus described it once and the seller has since moved a dependent
+// input. The old code could not tell them apart, because the stored
+// fingerprint was the draft's own and therefore always agreed.
+{
+  const fpOf = (o) => packetInputFingerprint(o);
+  const mismatched = DS.buildDraft(laneA({
+    packet: { metadata: { packetSchemaVersion: 1,
+                // built from $100, about to be attached to a $500 draft
+                inputFingerprint: fpOf({ price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
+              pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
+    price: 500,
+  }));
+  const readBack = DS.readStoredDraft(JSON.stringify(mismatched));
+  check('\ud83d\udd34 a packet built from a different price is refused at the FIRST read',
+        readBack.packetUsable === false && readBack.packetStatus === 'STALE',
+        'no edit happened; the packet never described this draft');
+  check('and the reason names it as never having matched, not as an edit',
+        readBack.packetReason === 'PACKET_INPUTS_NEVER_MATCHED');
+  check('the draft itself still reads fine \u2014 the snapshot is advisory',
+        readBack.ok === true && readBack.draft.price === 500);
+  check('the bytes are preserved for whoever debugs the producer',
+        readBack.packetRaw && readBack.packetRaw.pricing.listPrice === 100);
+
+  // The edit case keeps its own name, and rev is what separates them.
+  const edited = DS.applyEdit(DS.buildDraft(laneA()), { price: 500 }, { expectedRev: 1 });
+  check('an edit-induced mismatch is still reported as CHANGED, not NEVER_MATCHED',
+        DS.readStoredDraft(JSON.stringify(edited)).packetReason === 'PACKET_INPUTS_CHANGED');
+}
+
 const codesFor = (d) => DS.validateDraftForSlot(d, 'ebay:fixed-price').violations.map((v) => v.code);
 check('a covered price makes no provenance finding',
       !codesFor(la_fresh).includes(DS.VIOLATION.NO_PROVENANCE));

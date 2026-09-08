@@ -22,6 +22,7 @@ import {
   buildListingPacket, stampPriceBasis, ageFromRetrievedAt, normalizeVerifiedStamp,
   findRelativeAgeKeys, FORBIDDEN_AGE_KEYS, PACKET_SCHEMA_VERSION, PACKET_CODES,
   PACKET_INPUT_FIELDS, packetInputFingerprint, stampPriceBasisReporting,
+  readStoredPacket, PACKET_COMPAT,
 } from '../api/_listingPacket.js';
 import { CONDITION, CONDITION_DESCRIPTOR, DESCRIPTOR_VALUES_RESOLVED } from '../api/_ebayTaxonomy.js';
 import { cardIdentity, skuFor } from '../api/_cardIdentity.js';
@@ -588,11 +589,11 @@ const packet = buildListingPacket(slab, {
   now: NOW,
 });
 
-check('packet carries all five metadata fields',
+check('packet carries all five metadata fields (fee pair renamed to clientDeclared*)',
       packet.metadata.packetSchemaVersion === PACKET_SCHEMA_VERSION
       && packet.metadata.taxonomyTreeVersion === '134'
-      && packet.metadata.feeModelRevision === FEE_MODEL_REVISION
-      && packet.metadata.feeScheduleVerified === '2026-09'
+      && packet.metadata.clientDeclaredFeeModelRevision === FEE_MODEL_REVISION
+      && packet.metadata.clientDeclaredFeeScheduleDate === '2026-09'
       && packet.metadata.generatedAt === '2026-09-05T21:00:00.000Z',
       JSON.stringify(packet.metadata));
 
@@ -620,7 +621,7 @@ check('an assumed taxonomy version is labelled as the verified constant, not liv
 check('missing feeModelRevision is a blocking ERROR, never defaulted to 0',
       (() => {
         const p = buildListingPacket(slab, { feeScheduleVerified: 'Sep 2026', now: NOW });
-        return p.metadata.feeModelRevision === null && p.blocked === true
+        return p.metadata.clientDeclaredFeeModelRevision === null && p.blocked === true
           && p.blockingCodes.includes(PACKET_CODES.MISSING_FEE_MODEL_REVISION);
       })(),
       'a silent fallback would let core.js and the packet drift — the exact ambiguity this field removes');
@@ -651,7 +652,7 @@ for (const [label, bad] of [
   check(`feeModelRevision ${label} blocks rather than defaulting`,
         (() => {
           const p = buildListingPacket(slab, { ...bad, feeScheduleVerified: 'Sep 2026', now: NOW });
-          return p.metadata.feeModelRevision === null
+          return p.metadata.clientDeclaredFeeModelRevision === null
             && p.blocked === true
             && p.blockingCodes.includes(PACKET_CODES.MISSING_FEE_MODEL_REVISION);
         })(),
@@ -667,7 +668,7 @@ check('a supplied feeModelRevision is recorded verbatim, not normalised',
         const p = buildListingPacket(slab, {
           feeModelRevision: 1, feeScheduleVerified: 'Sep 2026', now: NOW,
         });
-        return p.metadata.feeModelRevision === 1
+        return p.metadata.clientDeclaredFeeModelRevision === 1
           && !p.blockingCodes.includes(PACKET_CODES.MISSING_FEE_MODEL_REVISION);
       })(),
       'an older revision honestly reported beats a current one asserted on its behalf');
@@ -1168,8 +1169,8 @@ console.log('\nthe fee-schedule stamp: the real field format, and the two ways i
         'a listing is publishable without knowing which month the schedule was audited, and the '
         + 'arithmetic version it would gate is already carried by feeModelRevision');
   check('and both leave the stamp null rather than defaulting it to this month',
-        absent.metadata.feeScheduleVerified === null
-        && drifted.metadata.feeScheduleVerified === null,
+        absent.metadata.clientDeclaredFeeScheduleDate === null
+        && drifted.metadata.clientDeclaredFeeScheduleDate === null,
         'same no-default rule as feeModelRevision: an unknown month is not this month');
 
   const good = buildListingPacket(FS_CARD(), {
@@ -1207,16 +1208,37 @@ console.log('\nthe fee-schedule stamp: the real field format, and the two ways i
   check('\u{1F534} a $250 comp-priced draft is NOT told it has no price',
         !codes(priced).includes(PACKET_CODES.NO_PRICE),
         'this is the regression: NO_PRICE used to fire here and render beside the price');
-  check('the inversion gap is named separately instead of disappearing',
-        codes(priced).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
+  // WAS: asserted NO_TARGET_NET_PRICING fires on this ordinary priced draft,
+  // where no target payout was requested. That was the behaviour, and the
+  // behaviour was wrong: no production UI offers target-net pricing, so the
+  // warning appeared on every draft for declining a feature nobody was shown.
+  // Now absent-request is absent optional analysis. The failure arm -- asked
+  // and could not answer -- is asserted below.
+  check('no target requested is silence, not a warning',
+        !codes(priced).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
+  check('a target requested but uncomputable still warns',
+        codes(buildListingPacket(C(), { ...BASE, price: 250, priceSource: 'comp', targetNet: 200 }))
+          .includes(PACKET_CODES.NO_TARGET_NET_PRICING),
+        'the two arms cannot share a gate: wrongly-absent is invisible, wrongly-present is noise');
   check('neither price note blocks the listing',
         priced.blocked === false && priced.blockingCodes.length === 0);
 
   const unpriced = buildListingPacket(C(), { ...BASE });
   check('a draft with no price still reports NO_PRICE',
         codes(unpriced).includes(PACKET_CODES.NO_PRICE));
-  check('an unpriced draft reports BOTH conditions, not one standing in for the other',
-        codes(unpriced).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
+  // WAS: 'an unpriced draft reports BOTH conditions' -- NO_PRICE and
+  // NO_TARGET_NET_PRICING together. The two-names point still holds, but it
+  // was demonstrated with a draft that never requested a target, so the
+  // second code was noise rather than a second finding. Demonstrated now with
+  // an unpriced draft that DID request one.
+  check('unpriced AND target-requested reports both, neither standing in for the other',
+        (() => {
+          const c = codes(buildListingPacket(C(), { ...BASE, targetNet: 200 }));
+          return c.includes(PACKET_CODES.NO_PRICE) && c.includes(PACKET_CODES.NO_TARGET_NET_PRICING);
+        })());
+  check('an unpriced draft with no target asked reports only NO_PRICE',
+        codes(unpriced).includes(PACKET_CODES.NO_PRICE)
+        && !codes(unpriced).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
 
   const zero = buildListingPacket(C(), { ...BASE, price: 0, priceSource: 'seller' });
   check('$0 is a price, not the absence of one',
@@ -1347,6 +1369,63 @@ console.log('\nthe fee-schedule stamp: the real field format, and the two ways i
         JSON.stringify(stampPriceBasis(good, NOW))
         === JSON.stringify(stampPriceBasisReporting(good, NOW).basis),
         'two parse implementations is how the stamp and its findings start disagreeing');
+}
+
+// ── Reviewer corrections, 2026-09-08 ──────────────────────────────────────
+console.log('\nthe fingerprint proves the packet was built from the draft');
+const codes = (p) => (p.notes || []).map((n) => n.code);
+
+// THE COUNTEREXAMPLE, as a regression. Before this, buildDraft computed the
+// fingerprint from the draft, so the stored value was the DRAFT's fingerprint
+// and the reader inevitably agreed with it. A $100 packet on a $500 draft read
+// as current. The builder now stamps what it consumed.
+{
+  const B = { feeModelRevision: 1, feeScheduleVerified: 'Sep 2026', now: NOW };
+  const at = (p) => buildListingPacket(CARDS[0], { ...B, price: p, priceSource: 'comp' });
+  const p100 = at(100), p500 = at(500);
+  check('the builder stamps a fingerprint of its own inputs',
+        typeof p100.metadata.inputFingerprint === 'string'
+        && p100.metadata.inputFingerprint.includes('price=number:100'));
+  check('a different price yields a different stamp',
+        p100.metadata.inputFingerprint !== p500.metadata.inputFingerprint);
+  check('\u{1F534} the stamp is the packet\u2019s claim, so a $100 packet cannot describe a $500 draft',
+        p100.metadata.inputFingerprint
+          !== packetInputFingerprint({ price: 500, priceSource: 'comp', title: p100.title.text }),
+        'this comparison used to be draft-against-itself, which is always true');
+  check('and the matching packet does agree with its own draft',
+        p500.metadata.inputFingerprint
+          === packetInputFingerprint({ price: 500, priceSource: 'comp', title: p500.title.text }));
+
+  // The shape fiction. Every version assertion in draft-index-recovery.mjs was
+  // green while readStoredPacket read a TOP-LEVEL packetSchemaVersion that
+  // buildListingPacket has never written -- so a real packet read back
+  // INCOMPATIBLE. Asserted here against a REAL producer output, not a fixture.
+  check('\u{1F534} a packet from the real producer reads back CURRENT, not INCOMPATIBLE',
+        readStoredPacket(p500).status === PACKET_COMPAT.CURRENT,
+        'the version tests used a hand-built shape production never emits');
+  check('and the version lives where the producer writes it',
+        p500.metadata.packetSchemaVersion === PACKET_SCHEMA_VERSION
+        && p500.packetSchemaVersion === undefined);
+}
+
+// Client-declared fee metadata may not present itself as server-verified.
+{
+  const declared = buildListingPacket(CARDS[0], {
+    feeModelRevision: 99, feeScheduleVerified: '2099-12', now: NOW, price: 10, priceSource: 'seller' });
+  check('a client-declared fee revision is not named as verified',
+        declared.metadata.feeScheduleVerified === undefined
+        && declared.metadata.clientDeclaredFeeScheduleDate === '2099-12',
+        'the server type-checks this and cannot validate it; a future date passes');
+  check('the boundary is stated in one field a consumer can branch on',
+        declared.metadata.feeMetadataSource === 'client-declared');
+  check('\u{1F534} supplying values cannot suppress the disclosure',
+        codes(declared).includes(PACKET_CODES.FEE_METADATA_CLIENT_DECLARED),
+        'a supplied value buying silence is the taxonomy defect in another field');
+  check('and the disclosure names the fields it is about',
+        (declared.notes.find((n) => n.code === PACKET_CODES.FEE_METADATA_CLIENT_DECLARED).fields || [])
+          .includes('clientDeclaredFeeModelRevision'));
+  check('it is INFO, not a warning: a labelled boundary is not a defect',
+        declared.notes.find((n) => n.code === PACKET_CODES.FEE_METADATA_CLIENT_DECLARED).severity === SEVERITY.INFO);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

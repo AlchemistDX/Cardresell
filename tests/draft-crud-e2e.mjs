@@ -908,10 +908,18 @@ reset();
       pricingContext: { feeModelRevision: 1, feeScheduleVerified: 'Sep 2026',
                         basisMeta: PC().basisMeta },
     });
-    check('\u{1F534} the PRODUCTION-shaped create (no inversion) reports the gap, not a false NO_PRICE',
-          codesOf(real).includes('NO_TARGET_NET_PRICING')
-          && !codesOf(real).includes('NO_PRICE'),
+    // WAS: asserted the production-shaped create REPORTS NO_TARGET_NET_PRICING.
+    // It did, on every create, because no production surface requests a target
+    // payout -- so the "gap" being reported was a feature the seller was never
+    // offered. The false-NO_PRICE half of this check is the part that mattered
+    // and it is kept; the target-net half now asserts silence.
+    check('\u{1F534} the PRODUCTION-shaped create reports no false NO_PRICE, and no target-net noise',
+          !codesOf(real).includes('NO_PRICE')
+          && !codesOf(real).includes('NO_TARGET_NET_PRICING'),
           'this is the case every real create hits today');
+    check('and the fee metadata is disclosed as client-declared on that same create',
+          codesOf(real).includes('FEE_METADATA_CLIENT_DECLARED'),
+          'the server type-checks these two and cannot validate them');
     check('and it is not blocked by either price note',
           real.packet.blocked === false);
 
@@ -932,7 +940,8 @@ reset();
         norm.packet.title.text === norm.title,
         `${norm.packet.title.text} vs ${norm.title}`);
   check('the declared fee revision is recorded on the packet',
-        norm.packet.metadata.feeModelRevision === 1);
+        norm.packet.metadata.clientDeclaredFeeModelRevision === 1
+        && norm.packet.metadata.feeMetadataSource === 'client-declared');
   check('the declared basis is stamped as an ABSOLUTE time, never an age',
         typeof norm.packet.priceBasis.retrievedAt === 'string'
         && norm.packet.priceBasis.cacheAgeSec === undefined,
@@ -1025,7 +1034,7 @@ reset();
     price: 30, priceSource: 'seller',
   });
   check('🔴 an omitted fee revision BLOCKS the packet rather than defaulting',
-        bare.packet.metadata.feeModelRevision === null
+        bare.packet.metadata.clientDeclaredFeeModelRevision === null
         && bare.packet.blocked === true
         && bare.packet.blockingCodes.includes('MISSING_FEE_MODEL_REVISION'),
         JSON.stringify(bare.packet.blockingCodes));

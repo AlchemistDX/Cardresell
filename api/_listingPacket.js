@@ -84,6 +84,22 @@ export const PACKET_CODES = {
   // the absent case would hide the only signal that drift produces.
   FEE_SCHEDULE_DATE_ABSENT:      'FEE_SCHEDULE_DATE_ABSENT',
   FEE_SCHEDULE_DATE_UNPARSEABLE: 'FEE_SCHEDULE_DATE_UNPARSEABLE',
+  // ── The authority boundary, stated on every packet ──────────────────────
+  // feeModelRevision and the fee-schedule date arrive in the request body.
+  // The server type-checks them and nothing more: any integer, any parseable
+  // date, including a future one. Named `feeScheduleVerified`, stamped into
+  // `metadata`, and read by a review screen, they would present a client
+  // assertion as a server verification -- the same inversion the taxonomy
+  // fix removed, where an unchecked input silenced the honest fallback.
+  //
+  // Validating them server-side is NOT available: the fee model lives only in
+  // the client bundle (FEE_MODEL_REVISION, js/core.*.js), and a server-side
+  // copy is a second fee model -- excluded by standing decision, and by the
+  // rule that one behaviour gets one implementation. So the boundary is
+  // LABELLED instead of enforced, and this code is unconditional: supplying a
+  // value cannot buy silence, because supplying a value is the thing being
+  // disclosed.
+  FEE_METADATA_CLIENT_DECLARED:  'FEE_METADATA_CLIENT_DECLARED',
 };
 
 // ── C0 — schema version handling (Block C entry criterion) ────────────────
@@ -162,6 +178,21 @@ export const PACKET_INPUT_FIELDS = ['price', 'priceSource', 'title'];
  * Absence is not agreement. A packet stored with no fingerprint at all cannot
  * be shown to still match, so it reads as stale rather than as current —
  * the same "unknown provenance is not current" rule the version check uses.
+ *
+ * ── WHO computes it, and why that was the whole ballgame ───────────────────
+ *
+ * This function is deliberately shape-agnostic: it fingerprints any object
+ * carrying `price`, `priceSource` and `title`. That matters because the
+ * BUILDER must stamp its own inputs (`metadata.inputFingerprint`, below) and
+ * the STORE must recompute from the draft it is about to persist. One
+ * implementation, two callers, and the comparison between them is the check.
+ *
+ * The earlier arrangement had `buildDraft` compute this from the draft and
+ * store it as the packet's fingerprint. That proved the draft matched itself.
+ * Counterexample that passed it: build a packet from price $100, attach it to
+ * a draft whose normalized price is $500, and the stored fingerprint is the
+ * $500 one — so the reader recomputes $500, agrees, and declares the $100
+ * packet current. Tautology, not a check.
  */
 export function packetInputFingerprint(draft = {}) {
   const parts = PACKET_INPUT_FIELDS.map((f) => {
@@ -215,7 +246,24 @@ export function readStoredPacket(stored, opts = {}) {
     return fail('PACKET_NOT_AN_OBJECT');
   }
 
-  const raw = stored.packetSchemaVersion;
+  // ── Read the version WHERE THE PRODUCER WRITES IT ───────────────────────
+  // This read used to be `stored.packetSchemaVersion` -- top level. The
+  // producer has always written it nested, at `metadata.packetSchemaVersion`.
+  // So every packet `buildListingPacket` has ever produced read back as
+  // PACKET_VERSION_MALFORMED -> INCOMPATIBLE: unusable, on every draft.
+  //
+  // The version tests did not catch it because their fixtures are hand-built
+  // objects carrying a TOP-LEVEL `packetSchemaVersion` -- a shape production
+  // never emits. The suite was green against a fiction. Fixtures updated in
+  // tests/draft-index-recovery.mjs alongside this change.
+  //
+  // No compatibility fallback to the top-level field: accepting two shapes
+  // means an ambiguous version, and there is no legacy data to accommodate --
+  // no packet has ever been read back, so none has ever been relied upon.
+  const meta = (stored.metadata && typeof stored.metadata === 'object' && !Array.isArray(stored.metadata))
+    ? stored.metadata
+    : {};
+  const raw = meta.packetSchemaVersion;
   // A version must be a real integer. `'1'`, `1.5`, null and undefined are all
   // unknown provenance, and unknown provenance is incompatible — not current.
   if (!Number.isInteger(raw)) return fail('PACKET_VERSION_MALFORMED');
@@ -253,7 +301,11 @@ export function readStoredPacket(stored, opts = {}) {
       };
     }
     working = step(working);
-    if (!working || working.packetSchemaVersion !== v + 1) {
+    // A migration must land the version WHERE THE READER LOOKS -- nested, the
+    // same place the producer writes it. A migration that bumped a top-level
+    // field would leave the packet reading as its old version forever.
+    const wMeta = (working && working.metadata && typeof working.metadata === 'object') ? working.metadata : {};
+    if (!working || wMeta.packetSchemaVersion !== v + 1) {
       return {
         ...fail('PACKET_MIGRATION_DID_NOT_ADVANCE_VERSION'),
         fromVersion: raw,
@@ -542,13 +594,30 @@ export function buildListingPacket(row = {}, ctx = {}) {
                             && String(rawSchedule).trim() !== '';
   const feeScheduleVerified = normalizeVerifiedStamp(rawSchedule);
 
+  // ── The builder's own claim about what it consumed ──────────────────────
+  // Computed from the exact inputs THIS call read: the price and source
+  // handed to it, and the title it itself rendered. Not from a draft, not
+  // from a caller-supplied value. The store compares this against the
+  // normalized draft it is about to persist; disagreement means the packet
+  // documents something other than the record it is attached to.
+  const inputFingerprint = packetInputFingerprint({
+    price:       ctx.price,
+    priceSource: ctx.priceSource,
+    title:       title.title,
+  });
+
   const metadata = {
     packetSchemaVersion: PACKET_SCHEMA_VERSION,
+    inputFingerprint,
     taxonomyTreeVersion: treeVersionLive || VERIFIED_TREE_VERSION,
     // Never claim a live read we did not perform.
     taxonomyTreeVersionSource: treeVersionLive ? 'live' : 'verified-constant',
-    feeModelRevision,
-    feeScheduleVerified: feeScheduleVerified,
+    // `clientDeclared` prefixes, not `verified`: these came from the request
+    // body unchecked. The old name asserted authority the server never had.
+    clientDeclaredFeeModelRevision: feeModelRevision,
+    clientDeclaredFeeScheduleDate:  feeScheduleVerified,
+    // One field a consumer can branch on without knowing the field list.
+    feeMetadataSource: 'client-declared',
     generatedAt: new Date(now).toISOString(),
   };
 
@@ -611,9 +680,22 @@ export function buildListingPacket(row = {}, ctx = {}) {
   // Non-blocking, and distinct from NO_PRICE: a seller can list a priced draft
   // without ever having asked "what list price nets me $X". Collapsing the two
   // is what produced "No list price computed" on a draft that had a price.
-  if (!pricing || pricing.ok !== true || !(pricing.listPrice > 0)) {
+  // WHEN it fires is the whole correction here. It used to fire whenever a
+  // target-net result was absent -- which is every ordinary draft, because no
+  // production UI requests one (listPriceForTargetNet has no caller outside
+  // tests). A warning on every draft for not using a feature nobody was
+  // offered is noise, and noise is how a real warning gets ignored.
+  //
+  // The two arms cannot share a gate: a warning that wrongly appears is noise,
+  // one that wrongly disappears is invisible. So absence of a REQUEST is
+  // absent optional analysis and says nothing; a request that produced no
+  // usable answer still warns, because that one is a failure.
+  const targetRequested = (ctx.targetNet !== null && ctx.targetNet !== undefined
+                           && Number.isFinite(Number(ctx.targetNet)))
+                          || (pricing !== null && pricing !== undefined);
+  if (targetRequested && (!pricing || pricing.ok !== true || !(pricing.listPrice > 0))) {
     add(PACKET_CODES.NO_TARGET_NET_PRICING, SEVERITY.WARNING,
-        'No target-payout price was computed for this draft.');
+        'A target payout was requested but no list price could be computed for it.');
   }
 
   // ── A stamped basis is not the origin of a seller-typed price ───────────
@@ -656,6 +738,13 @@ export function buildListingPacket(row = {}, ctx = {}) {
         'The price basis shown is market context. This price was set by the seller, '
       + 'not derived from that basis.');
   }
+
+  // Unconditional, and deliberately not gated on either value being present:
+  // the disclosure is about WHERE they came from, not whether they arrived.
+  add(PACKET_CODES.FEE_METADATA_CLIENT_DECLARED, SEVERITY.INFO,
+      'Fee model revision and fee-schedule date are declared by the client and '
+    + 'are not verified against a server-owned fee contract.',
+      { fields: ['clientDeclaredFeeModelRevision', 'clientDeclaredFeeScheduleDate'] });
 
   if (feeScheduleVerified === null) {
     if (scheduleSupplied) {
