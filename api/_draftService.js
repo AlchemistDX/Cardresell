@@ -34,6 +34,7 @@ import {
   DRAFT_STATUS,
   buildDraft,
   applyEdit,
+  attachPacket,
   deleteDraft,
   discardDraft,
   getDraft,
@@ -323,7 +324,27 @@ export async function readDraft(kv, googleSub, draftId) {
   // Producer, forwarding and consumer land together, so the field arrives with
   // something that reads it. Until then the honest response shape is the one
   // whose every field has a reader. See audit/d3/LANE_A_STEP1_PACKET.md §5.
-  return { ok: true, draft: cur.draft, validation: validateDraftForSlot(cur.draft), readiness: readinessOf(cur.draft) };
+  // ── The packet envelope, now that there is a consumer ─────────────────
+  // The note above described the state where forwarding these would ship a
+  // field nothing read. That state has ended: the producer runs on create and
+  // on rebuild, api/drafts.js forwards this envelope, and the review screen
+  // reads it. So four of the five fields are forwarded.
+  //
+  // `packetRaw` is NOT, and that is not an oversight either. It is the
+  // unvalidated stored bytes, kept for internal diagnosis of a record that
+  // failed to read; putting it on a seller-facing response would make an
+  // unreadable packet's contents renderable by any client willing to ignore
+  // packetUsable.
+  return {
+    ok: true,
+    draft: cur.draft,
+    validation: validateDraftForSlot(cur.draft),
+    readiness: readinessOf(cur.draft),
+    packet:       cur.packet,
+    packetStatus: cur.packetStatus,
+    packetUsable: cur.packetUsable,
+    packetReason: cur.packetReason,
+  };
 }
 
 /**
@@ -333,7 +354,7 @@ export async function readDraft(kv, googleSub, draftId) {
  * either a no-op replay (own claim, already committed) or a conflict. The
  * revision IS the concurrency token here.
  */
-export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, idempotencyKey) {
+export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, idempotencyKey, rebuildPacket) {
   const operationId = operationIdFor('draft-update', idempotencyKey);
 
   const cur = await getDraft(kv, googleSub, draftId);
@@ -344,6 +365,32 @@ export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, id
     next = applyEdit(cur.draft, patch, { expectedRev });
   } catch (e) {
     return { ok: false, error: e.message, current: cur.draft };
+  }
+
+  // ── The packet rebuild, and why it lives HERE ──────────────────────────
+  // Between applyEdit and putDraft, on the POST-EDIT record. Both halves of
+  // that placement are load-bearing.
+  //
+  // Post-edit, because the whole point is that the packet describes the draft
+  // that will be stored. Building from `cur.draft` would reproduce the defect
+  // this lane opened with: a packet that documents a price the seller just
+  // changed away from.
+  //
+  // Before putDraft, because putDraft's claimRevision(next.rev) IS the
+  // conditional write. A concurrent edit that lands first takes the revision,
+  // this claim fails REV_CONFLICT, and the rebuilt packet is discarded
+  // unwritten -- which is the reviewer's race: a rebuild started before a
+  // newer edit must not attach obsolete output. Nothing extra is needed
+  // because the packet rides the same record as the edit, under one claim.
+  // There is deliberately no `await` between the build and the claim.
+  if (typeof rebuildPacket === 'function') {
+    let built;
+    try {
+      built = rebuildPacket(next);
+    } catch (e) {
+      return { ok: false, error: e.message, current: cur.draft };
+    }
+    next = attachPacket(next, built);
   }
 
   const written = await putDraft(kv, googleSub, next, operationId);

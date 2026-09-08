@@ -1381,7 +1381,8 @@ const codes = (p) => (p.notes || []).map((n) => n.code);
 // as current. The builder now stamps what it consumed.
 {
   const B = { feeModelRevision: 1, feeScheduleVerified: 'Sep 2026', now: NOW };
-  const at = (p) => buildListingPacket(CARDS[0], { ...B, price: p, priceSource: 'comp' });
+  const SLOT = 'ebay:fixed-price';
+  const at = (p) => buildListingPacket(CARDS[0], { ...B, slot: SLOT, price: p, priceSource: 'comp' });
   const p100 = at(100), p500 = at(500);
   check('the builder stamps a fingerprint of its own inputs',
         typeof p100.metadata.inputFingerprint === 'string'
@@ -1390,11 +1391,13 @@ const codes = (p) => (p.notes || []).map((n) => n.code);
         p100.metadata.inputFingerprint !== p500.metadata.inputFingerprint);
   check('\u{1F534} the stamp is the packet\u2019s claim, so a $100 packet cannot describe a $500 draft',
         p100.metadata.inputFingerprint
-          !== packetInputFingerprint({ price: 500, priceSource: 'comp', title: p100.title.text }),
+          !== packetInputFingerprint({ sku: p100.sku, slot: SLOT, price: 500,
+                                       priceSource: 'comp', title: p100.title.text }),
         'this comparison used to be draft-against-itself, which is always true');
   check('and the matching packet does agree with its own draft',
         p500.metadata.inputFingerprint
-          === packetInputFingerprint({ price: 500, priceSource: 'comp', title: p500.title.text }));
+          === packetInputFingerprint({ sku: p500.sku, slot: SLOT, price: 500,
+                                       priceSource: 'comp', title: p500.title.text }));
 
   // The shape fiction. Every version assertion in draft-index-recovery.mjs was
   // green while readStoredPacket read a TOP-LEVEL packetSchemaVersion that

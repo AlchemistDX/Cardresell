@@ -133,6 +133,21 @@ export const MUTATION_FIELDS = {
     // undeclared did not make it ignored — it made every create D1 sends throw
     // MUTATION_FIELD_UNDECLARED, which no identity-level parity test could see.
     priceSource: 'token',
+    // ── The client's declared pricing context COUNTS ────────────────────
+    // Reviewer check: exclude generated packet timestamps from retry
+    // identity, but retain the meaningful pricingContext inputs. Excluding
+    // `packet` (below) does both only if this is here. Without it, the same
+    // key sent twice with feeModelRevision 7 and then 8 REPLAYS the first
+    // answer, so the seller keeps a packet whose declared fee revision is not
+    // the one their client is running -- a mismatch nothing would report,
+    // because a replay looks like a success.
+    //
+    // A 'digest' rather than a scalar because the context is an object.
+    // `canonicalize` already sorts keys at every depth, so a client that
+    // rebuilds the object in a different property order still fingerprints
+    // identically -- the key-order case is handled by canonicalization, not
+    // by flattening this into scalars.
+    pricingContext: 'digest',
   },
   'instance-split': {
     instanceId: 'id', count: 'count', totalAcquisitionCost: 'money',
@@ -165,9 +180,16 @@ export const MUTATION_FIELDS = {
  * is a function of `card` (already represented by `sku`, which does count),
  * `price`, `title`, and the client's declared pricing context. Nothing a seller
  * could change to mean "a different draft" is visible only in the packet.
+ *
+ * `card` is derived for the same reason, and the paragraph above already
+ * states it: the row is represented by `sku`, a sha256 over its identity axes,
+ * and `sku` counts. Two creates whose rows differ in any way identity reads
+ * produce different skus and conflict on that field. Two creates whose rows
+ * differ only outside those axes are the same card, so replaying the first is
+ * the correct answer rather than a missed conflict.
  */
 export const DERIVED_FIELDS = {
-  'draft-create': new Set(['packet']),
+  'draft-create': new Set(['packet', 'card']),
 };
 
 export const NOT_NORMALIZED = 'MUTATION_FIELD_NOT_NORMALIZED';
@@ -193,6 +215,14 @@ function assertNormalized(field, kind, v) {
     // Money is compared to the cent. 19.999 and 20.00 must not be two
     // different mutations when they are the same charge.
     if (kind === 'money' && Math.abs(v * 100 - Math.round(v * 100)) > 1e-9) fail('sub-cent-precision');
+    return v;
+  }
+
+  if (kind === 'digest') {
+    // Plain objects only. An array or a class instance would canonicalize to
+    // something, which is worse than refusing: it would fingerprint a shape
+    // the endpoint never meant to accept.
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) fail('not-a-plain-object');
     return v;
   }
 

@@ -188,7 +188,15 @@ async function handleGet(req, res, kv, googleSub, draftId) {
 
   const got = await readDraft(kv, googleSub, draftId);
   if (got.ok) {
-    return res.status(200).json({ draft: got.draft, validation: got.validation, readiness: got.readiness });
+    return res.status(200).json({
+      draft: got.draft, validation: got.validation, readiness: got.readiness,
+      // Four fields, not five. packetRaw stays server-side — see the note in
+      // api/_draftService.js readDraft.
+      packet:       got.packet === undefined ? null : got.packet,
+      packetStatus: got.packetStatus === undefined ? null : got.packetStatus,
+      packetUsable: got.packetUsable === undefined ? false : got.packetUsable,
+      packetReason: got.packetReason === undefined ? null : got.packetReason,
+    });
   }
   return res.status(statusForStoreError(got.error)).json(errorBody(got));
 }
@@ -269,9 +277,48 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
   }
 
   const patch = normalizePatch(body);
-  const out = await updateDraft(kv, googleSub, draftId, patch, expectedRev, key);
+
+  // ── The recovery operation, on the route that already exists ───────────
+  // A PATCH carrying `pricingContext` regenerates the packet from the
+  // POST-EDIT values. A PATCH without it does not. That single rule serves
+  // both cases the reviewer asked for and needs no second endpoint:
+  //
+  //   edit + recompute      → PATCH { title/price..., pricingContext }
+  //   explicit recompute    → PATCH { pricingContext } with no edit fields
+  //
+  // A PATCH without `pricingContext` deliberately leaves the packet alone
+  // rather than rebuilding it from nothing. Rebuilding would produce a packet
+  // with no declared fee revision — MISSING_FEE_MODEL_REVISION, blocked:true —
+  // and overwrite a previously good snapshot with a worse one, on an edit the
+  // seller made to their notes. The stale packet is more useful than that: it
+  // still says what it was built from, and the read gate already reports it as
+  // unusable rather than showing it as current.
+  let rebuild;
+  if (body.pricingContext !== undefined) {
+    rebuild = (next) => {
+      // No stored identity row, no rebuild. Refused explicitly rather than
+      // built from a partial row: a packet whose category and aspects came
+      // from nowhere is worse than no packet. Reachable only for drafts
+      // created before the row was persisted.
+      if (!next.card || typeof next.card !== 'object') {
+        throw new Error('PACKET_REBUILD_NO_CARD_ROW');
+      }
+      return buildPacketFor(next.card, {
+        pricingContext: body.pricingContext,
+        slot:        next.slot,
+        price:       next.price,
+        priceSource: next.priceSource,
+        titleMax:    titleMaxForSlot(next.slot),
+      });
+    };
+  }
+
+  const out = await updateDraft(kv, googleSub, draftId, patch, expectedRev, key, rebuild);
   if (out.ok) {
-    return res.status(200).json({ draft: out.draft, replayed: !!out.replayed, validation: out.validation });
+    return res.status(200).json({
+      draft: out.draft, replayed: !!out.replayed, validation: out.validation,
+      packetRebuilt: !!rebuild,
+    });
   }
   return res.status(statusForStoreError(out.error)).json(errorBody(out));
 }
@@ -487,7 +534,7 @@ export function normalizeCreateInput(body) {
   // an 80-char title for eBay and a 40-char one for Mercari is the same
   // function with a different bound; building one 500-char title and letting
   // slot validation reject it is a dead end the seller cannot act on.
-  const titleMax = (SLOT_RULES[slot] && SLOT_RULES[slot].titleMax) || undefined;
+  const titleMax = titleMaxForSlot(slot);
 
   // buildListingTitle returns a RESULT, not a string — `{title, ok, dropped,
   // reason}`. Storing the object itself is a mistake this endpoint made for
@@ -505,6 +552,10 @@ export function normalizeCreateInput(body) {
 
   const out = {
     sku:        skuFor(card),
+    // Persisted so a rebuild can re-derive identity, category, aspects and
+    // condition without the client resupplying the scan. See the note in
+    // _draftStore.js buildDraft.
+    card,
     instanceId: normId(body.instanceId, 'instanceId'),
     slot,
     title:      built.title,
@@ -575,13 +626,6 @@ export function normalizeCreateInput(body) {
   // stampPriceBasis picks eight named keys and pricing picks five, so an
   // unexpected key on either arrives nowhere. Re-listing those keys here would
   // be a second whitelist to drift against the first.
-  const pc = (body.pricingContext && typeof body.pricingContext === 'object'
-              && !Array.isArray(body.pricingContext)) ? body.pricingContext : {};
-  for (const forbidden of ['now', 'maxTitleLength', 'taxonomyTreeVersion']) {
-    if (pc[forbidden] !== undefined) {
-      throw new Error(`DRAFT_FIELD_INVALID:pricingContext.${forbidden}:server-owned`);
-    }
-  }
   // NOT defaulted, and the packet's own ERROR is the reporting channel. An
   // absent revision produces MISSING_FEE_MODEL_REVISION and blocked:true — a
   // packet that says out loud it cannot name the fee logic that priced it.
@@ -593,6 +637,53 @@ export function normalizeCreateInput(body) {
   // draft, and the existing policy already says the draft is authoritative and
   // the packet advisory. Refusing the create would take the seller's work away
   // over a field the seller never saw.
+  // Carried onto the validated input so it reaches the retry fingerprint. It
+  // is NOT stored on the draft -- buildDraft picks its fields by name and this
+  // is not one of them. The packet is where the declared context is recorded,
+  // labelled as client-declared.
+  if (body.pricingContext !== undefined) out.pricingContext = body.pricingContext;
+  out.packet = buildPacketFor(card, {
+    pricingContext: body.pricingContext,
+    slot, price: out.price, priceSource: out.priceSource, titleMax,
+  });
+
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  return out;
+}
+
+
+/**
+ * The packet context, assembled field by field, in ONE place.
+ *
+ * Create and rebuild both go through here. They used to be one call site, so
+ * "one place" was free; the rebuild path is what makes it a rule rather than
+ * an accident. A second copy of this assembly is the failure this repo has
+ * been bitten by ten times: the copy that forgets to pass `slot` produces
+ * packets that can never read current, and nothing fails loudly.
+ *
+ * The classification is the substance. Every field is either server-owned
+ * (slot, price, priceSource, maxTitleLength, now), or explicitly labelled as
+ * client-declared inside the packet (`pricingContext`). Nothing arrives here
+ * unclassified.
+ */
+/**
+ * The venue's title bound for a slot. One reader of SLOT_RULES, because the
+ * create path and the rebuild path must agree: a rebuild under a different
+ * bound would produce a title the create would not have stored, and the
+ * difference would surface as a mysterious `dropped` segment.
+ */
+export function titleMaxForSlot(slot) {
+  return (SLOT_RULES[slot] && SLOT_RULES[slot].titleMax) || undefined;
+}
+
+export function buildPacketFor(card, { pricingContext, slot, price, priceSource, titleMax, now } = {}) {
+  const pc = (pricingContext && typeof pricingContext === 'object' && !Array.isArray(pricingContext))
+    ? pricingContext : {};
+  for (const forbidden of ['now', 'maxTitleLength', 'taxonomyTreeVersion']) {
+    if (pc[forbidden] !== undefined) {
+      throw new Error(`DRAFT_FIELD_INVALID:pricingContext.${forbidden}:server-owned`);
+    }
+  }
   const packetCtx = {
     feeModelRevision:    Number.isInteger(pc.feeModelRevision) ? pc.feeModelRevision : undefined,
     feeScheduleVerified: typeof pc.feeScheduleVerified === 'string' ? pc.feeScheduleVerified : undefined,
@@ -607,18 +698,26 @@ export function normalizeCreateInput(body) {
     // declared on this create path. This passes an accepted input one layer
     // further in, to the two conditions that read it (NO_PRICE and
     // PRICE_BASIS_NOT_SOURCE_OF_PRICE).
-    price:               out.price,
-    priceSource:         out.priceSource,
+    price,
+    priceSource,
     // Server-owned. The title bound is the VENUE's, the same one used for
     // out.title above, so the packet cannot report a title this endpoint
     // would not have stored.
     maxTitleLength:      titleMax,
-    now:                 Date.now(),
+    // The one input the builder cannot derive: it sees maxTitleLength, never
+    // the slot itself. Omit it and the stamp records slot=<absent>, which no
+    // real draft can match -- so the packet reads stale forever. Fail-closed,
+    // but silently, which is why it is documented on the builder too.
+    slot,
   };
-  out.packet = buildListingPacket(card, packetCtx);
-
-  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
-  return out;
+  // `now` is the GENERATION clock and nothing else. It must never be allowed
+  // to become a retrieval time: a rebuild an hour after the quote was fetched
+  // generates new bytes, it does not re-fetch the source. stampPriceBasis
+  // keeps `retrievedAt` absolute for exactly this reason, and a caller that
+  // passed `now` in as an age would make the quote look newer on every
+  // rebuild.
+  packetCtx.now = Number.isFinite(now) ? now : Date.now();
+  return buildListingPacket(card, packetCtx);
 }
 
 export function normalizePatch(body) {

@@ -155,7 +155,29 @@ export const PACKET_COMPAT = {
  * read-time fingerprint exists to stop making. The write site that makes
  * `priceSource` editable is one nobody has written yet.
  */
-export const PACKET_INPUT_FIELDS = ['price', 'priceSource', 'title'];
+export const PACKET_INPUT_FIELDS = ['sku', 'slot', 'price', 'priceSource', 'title'];
+
+/**
+ * Version of the PROJECTION, not of the packet.
+ *
+ * `sku` and `slot` were added after review observed that price+source+title
+ * cannot distinguish two different cards that happen to share a title and a
+ * price -- and identity is not incidental to a packet, it IS most of one:
+ * `packet.sku` is `cardIdentity(row).sku`, and category, required aspects and
+ * the condition block are all derived from the same row. A packet built for
+ * card A carried onto card B would describe B's price with A's category.
+ *
+ * `slot` is here because it selects `maxTitleLength`, so it changes
+ * `packet.title.text` and `title.dropped`. Neither field is editable today,
+ * which is exactly the coupling the read-time comparison exists to stop
+ * relying on.
+ *
+ * The version is part of the fingerprint STRING so that a stamp written under
+ * the narrow projection cannot accidentally equal one computed under the wide
+ * one. Widening the field list already changes the value; the prefix makes the
+ * mismatch legible instead of looking like a price edit.
+ */
+export const PACKET_INPUT_PROJECTION = 2;
 
 /**
  * A fingerprint of the draft inputs a packet was built from.
@@ -195,14 +217,14 @@ export const PACKET_INPUT_FIELDS = ['price', 'priceSource', 'title'];
  * packet current. Tautology, not a check.
  */
 export function packetInputFingerprint(draft = {}) {
-  const parts = PACKET_INPUT_FIELDS.map((f) => {
+  const parts = [`v=${PACKET_INPUT_PROJECTION}`].concat(PACKET_INPUT_FIELDS.map((f) => {
     const v = draft ? draft[f] : undefined;
     // null and undefined are the same fact here (no value) and must fingerprint
     // identically, or a draft would read as stale merely for having been
     // rewritten by a path that omits an absent field instead of nulling it.
     if (v === null || v === undefined) return `${f}=\u0000`;
     return `${f}=${typeof v}:${String(v)}`;
-  });
+  }));
   return parts.join('|');
 }
 
@@ -519,6 +541,12 @@ function buildOptionalAspects(row, ident, categoryId) {
  *                        such field exists, so the one instruction available to
  *                        whoever wires a caller pointed at nothing.
  *   taxonomyTreeVersion  live-read version string, optional
+ *   slot                 the draft's slot, e.g. 'ebay:fixed-price'. Consumed
+ *                        ONLY by the input fingerprint -- the builder gets the
+ *                        slot's effect on output via maxTitleLength. Omitting
+ *                        it does not throw; it stamps a fingerprint no real
+ *                        draft can match, so the packet reads stale rather
+ *                        than being wrongly accepted.
  *   price                the draft's price, for the NO_PRICE condition. Read,
  *                        never copied into the packet: the draft record is the
  *                        authority on its own price, and a second stored copy
@@ -600,7 +628,14 @@ export function buildListingPacket(row = {}, ctx = {}) {
   // from a caller-supplied value. The store compares this against the
   // normalized draft it is about to persist; disagreement means the packet
   // documents something other than the record it is attached to.
+  // `sku` is taken from the identity THIS call derived, not from ctx: the
+  // packet's own sku field is `ident.sku`, so fingerprinting anything else
+  // would let the stamp and the packet disagree about which card this is.
+  // `slot` is the one projection input the builder cannot derive, because it
+  // reaches the builder only in the reduced form of `maxTitleLength`.
   const inputFingerprint = packetInputFingerprint({
+    sku:         ident.sku,
+    slot:        ctx.slot,
     price:       ctx.price,
     priceSource: ctx.priceSource,
     title:       title.title,

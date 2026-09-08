@@ -439,9 +439,12 @@ const pk_stored = (extra = {}) => {
   const { packet, ...rest } = extra;
   let p = packet;
   if (p && p.metadata && p.metadata.inputFingerprint === undefined) {
-    const b = pkBase();
+    // THIRD FIXTURE CORRECTION (2026-09-08): the projection widened to include
+    // `sku` and `slot`, so a stamp over price/source/title alone no longer
+    // matches any draft. Stamped from the record the writer will actually
+    // persist, which is what a producer handed the same inputs would stamp.
     p = { ...p, metadata: { ...p.metadata,
-      inputFingerprint: packetInputFingerprint({ price: b.price, priceSource: b.priceSource, title: b.title }) } };
+      inputFingerprint: packetInputFingerprint(DS.buildDraft(pkBase())) } };
   }
   const base = packet === undefined ? DS.buildDraft(pkBase())
                                     : DS.buildDraft({ ...pkBase(), packet: p });
@@ -513,7 +516,8 @@ const laneA = (over = {}) => DS.buildDraft({
   // Stamped as a real producer stamps it: from the inputs the packet
   // consumed, not from the draft it is attached to.
   packet: { metadata: { packetSchemaVersion: 1,
-              inputFingerprint: packetInputFingerprint({ price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
+              inputFingerprint: packetInputFingerprint({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
+                price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
             pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
   ...over,
 });
@@ -534,7 +538,7 @@ check('\ud83d\udd34 a reprice through applyEdit still carries the packet bytes f
       'the edit path does not know about packets, and must not have to');
 check('\ud83d\udd34 but the reader refuses it as STALE rather than showing $100 for a $500 draft',
       la_read.packetUsable === false && la_read.packetStatus === 'STALE'
-      && la_read.packetReason === 'PACKET_INPUTS_CHANGED');
+      && la_read.packetReason === 'PACKET_INPUTS_DIFFER');
 check('and no packet is handed to the caller to render',
       la_read.packet === null);
 check('while the draft itself reads fine -- advisory snapshot, authoritative draft',
@@ -595,7 +599,8 @@ check('a packet with no recorded inputs is stale, not assumed current',
 // STALE and INCOMPATIBLE are different facts and must not collapse into one
 // message: one means "recompute", the other means "your app is behind".
 const la_ahead = DS.buildDraft(laneA({ packet: { metadata: { packetSchemaVersion: 99,
-  inputFingerprint: packetInputFingerprint({ price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) } } }));
+  inputFingerprint: packetInputFingerprint({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
+    price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) } } }));
 check('a version-ahead packet is INCOMPATIBLE, not STALE',
       DS.readStoredDraft(JSON.stringify(la_ahead)).packetStatus === 'INCOMPATIBLE');
 
@@ -615,7 +620,8 @@ check('a version-ahead packet is INCOMPATIBLE, not STALE',
   const mismatched = DS.buildDraft(laneA({
     packet: { metadata: { packetSchemaVersion: 1,
                 // built from $100, about to be attached to a $500 draft
-                inputFingerprint: fpOf({ price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
+                inputFingerprint: fpOf({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
+                  price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
               pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
     price: 500,
   }));
@@ -630,10 +636,51 @@ check('a version-ahead packet is INCOMPATIBLE, not STALE',
   check('the bytes are preserved for whoever debugs the producer',
         readBack.packetRaw && readBack.packetRaw.pricing.listPrice === 100);
 
+  // REVIEW CHECK: bind the packet to the card, not only to its price.
+  // Two different cards can share a display title and a price -- a common
+  // reprint, or the same card in two sets. Before the projection widened, a
+  // packet built for card A attached to card B matched, and B's draft would
+  // have shown A's category, aspects and condition block.
+  const wrongCard = DS.buildDraft(laneA({
+    sku: 'sku_OTHER_CARD',
+    packet: { metadata: { packetSchemaVersion: 1,
+                inputFingerprint: fpOf({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
+                  price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
+              pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
+  }));
+  const wcRead = DS.readStoredDraft(JSON.stringify(wrongCard));
+  check('\ud83d\udd34 a packet cannot be inherited by a different card at the same title and price',
+        wcRead.packetUsable === false && wcRead.packetStatus === 'STALE',
+        'identity is most of a packet: sku, category, aspects and condition all come from the row');
+  check('and that draft is still readable',
+        wcRead.ok === true && wcRead.draft.sku === 'sku_OTHER_CARD');
+
+  // Slot is not editable today. It is in the projection anyway, because
+  // "not editable today" is a claim about another module's behaviour.
+  const wrongSlot = DS.buildDraft(laneA({ slot: 'ebay:auction' }));
+  check('a packet built for one slot does not cover a draft in another',
+        DS.readStoredDraft(JSON.stringify(wrongSlot)).packetUsable === false);
+
+  // The other direction, which is the one that makes the projection useful
+  // rather than merely strict: an edit to a field the builder never reads
+  // must NOT invalidate the packet, and must not rewrite its bytes.
+  const notesOnly = DS.applyEdit(DS.buildDraft(laneA()),
+                                 { notes: 'Keep front and back photos together.' },
+                                 { expectedRev: 1 });
+  const noRead = DS.readStoredDraft(JSON.stringify(notesOnly));
+  check('a notes-only edit leaves the packet current',
+        noRead.packetUsable === true && noRead.packetStatus === 'CURRENT');
+  check('and the packet bytes are unchanged by that edit',
+        JSON.stringify(noRead.packet) === JSON.stringify(DS.buildDraft(laneA()).packet));
+
   // The edit case keeps its own name, and rev is what separates them.
   const edited = DS.applyEdit(DS.buildDraft(laneA()), { price: 500 }, { expectedRev: 1 });
-  check('an edit-induced mismatch is still reported as CHANGED, not NEVER_MATCHED',
-        DS.readStoredDraft(JSON.stringify(edited)).packetReason === 'PACKET_INPUTS_CHANGED');
+  // WAS: asserted the reason was PACKET_INPUTS_CHANGED. Renamed to DIFFER
+  // because "changed" asserted that the packet had once matched and an edit
+  // moved it -- a history the record cannot establish, since a never-matching
+  // packet that is then edited past also arrives here.
+  check('a mismatch after an edit is reported as DIFFER, not NEVER_MATCHED',
+        DS.readStoredDraft(JSON.stringify(edited)).packetReason === 'PACKET_INPUTS_DIFFER');
 }
 
 const codesFor = (d) => DS.validateDraftForSlot(d, 'ebay:fixed-price').violations.map((v) => v.code);

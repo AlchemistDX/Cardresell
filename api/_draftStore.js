@@ -445,9 +445,17 @@ export function readStoredDraft(stored) {
       // was attached to a record it never described, and since the draft has
       // not been edited since, no edit can be blamed. CHANGED is the ordinary
       // case -- the seller moved a dependent input after the snapshot.
+      //
+      // The two mismatch names describe WHAT IS KNOWN, not a cause. At rev 1
+      // no edit has occurred, so the packet demonstrably never matched this
+      // draft. After an edit the mismatch is consistent with an edit having
+      // moved a dependent input -- but it does NOT establish that the packet
+      // ever matched, because a packet that never matched and was then edited
+      // past lands here too. Review's correction: the later-revision reason
+      // must not assert a history the record cannot support.
       result.packetReason = storedInputs === null
         ? 'PACKET_INPUTS_UNRECORDED'
-        : (d.rev === 1 ? 'PACKET_INPUTS_NEVER_MATCHED' : 'PACKET_INPUTS_CHANGED');
+        : (d.rev === 1 ? 'PACKET_INPUTS_NEVER_MATCHED' : 'PACKET_INPUTS_DIFFER');
       result.packetRaw    = d.packet;
       return result;
     }
@@ -540,6 +548,29 @@ export function buildDraft(input = {}) {
     }
     draft.priceSource = input.priceSource;
   }
+  // ── The card row the identity was derived FROM ──────────────────────────
+  // Stored because a server-side packet rebuild has no other way to obtain
+  // it. `sku` is a one-way sha256 of the identity string, there is no
+  // card-by-sku lookup on this server, and the client does not have the row
+  // in hand after a page reload -- so without this field the reviewer's
+  // required lifecycle (edit -> stale -> recompute -> reload -> review)
+  // cannot be served at all.
+  //
+  // Accepting `card` on the rebuild request instead was refused: it works
+  // only for a client that still holds the scan, which is exactly not the
+  // case after the reload the lifecycle requires.
+  //
+  // It needs no invalidation story because it is immutable and it is the
+  // thing `sku` is a digest OF. `normalizePatch` does not accept it, so no
+  // edit path can move a draft onto a different card, and if a repair script
+  // ever did, the packet fingerprint now covers `sku` and would refuse to
+  // cover the row.
+  if (input.card !== undefined && input.card !== null) {
+    if (typeof input.card !== 'object' || Array.isArray(input.card)) {
+      throw new Error(`${ERR.FIELD_INVALID}:card:not-an-object`);
+    }
+    draft.card = input.card;
+  }
   if (input.packet !== undefined && input.packet !== null) {
     if (typeof input.packet !== 'object' || Array.isArray(input.packet)) {
       throw new Error(`${ERR.FIELD_INVALID}:packet:not-an-object`);
@@ -564,10 +595,43 @@ export function buildDraft(input = {}) {
     //
     // Absence is not agreement: a packet with no stamped fingerprint stores
     // none, and the read-time gate treats an unrecorded fingerprint as stale.
-    const declared = input.packet.metadata && input.packet.metadata.inputFingerprint;
-    if (typeof declared === 'string') draft.packetInputs = declared;
+    const stamped = attachPacket(draft, input.packet);
+    if (stamped.packetInputs !== undefined) draft.packetInputs = stamped.packetInputs;
   }
   return draft;
+}
+
+/**
+ * Record a packet and the fingerprint IT stamped, together, on one record.
+ *
+ * ONE implementation, three callers: `buildDraft` at create, the rebuild path
+ * after an edit, and the explicit rebuild. Splitting it would mean three
+ * places that each have to remember that a packet without its fingerprint is
+ * a packet that reads stale -- and the pairing is the entire mechanism.
+ *
+ * Pure, and returns a NEW record: the rebuild path needs to attach to a draft
+ * that already exists without mutating the revision it was read at.
+ *
+ * The fingerprint is never computed here. It is read off the packet, because
+ * only the builder knows what it consumed; computing it from `draft` is the
+ * tautology this whole check was rewritten to remove.
+ */
+export function attachPacket(draft, packet) {
+  if (!draft || typeof draft !== 'object') throw new Error(ERR.NOT_FOUND);
+  if (packet === undefined || packet === null) {
+    // Explicit removal. Drops the fingerprint with it -- a fingerprint with no
+    // packet would leave the next reader comparing against nothing.
+    const { packet: _p, packetInputs: _f, ...without } = draft;
+    return without;
+  }
+  if (typeof packet !== 'object' || Array.isArray(packet)) {
+    throw new Error(`${ERR.FIELD_INVALID}:packet:not-an-object`);
+  }
+  const next = { ...draft, packet };
+  const declared = packet.metadata && packet.metadata.inputFingerprint;
+  if (typeof declared === 'string') next.packetInputs = declared;
+  else delete next.packetInputs;
+  return next;
 }
 
 /**
