@@ -13,6 +13,37 @@ buylist wording, the eBay sentence, and the labelling of non-eBay rendered
 states. Revision 2's resolution of the original six rejections is retained. Nothing was pushed and nothing was deployed. `D3`, `BIAS-1` and
 `BIAS-6` remain closed and untouched.
 
+## Fingerprint correction — authoritative header
+
+| | |
+|---|---|
+| Correction commit | **`5228494`** |
+| Live bundle *at that correction* | **`js/core.9f0f6b30.js`** |
+| Retained bundle | **`js/core.59d4b1ab.js`**, restored to its original bytes |
+| Final reported results | fingerprints **15/15** · review fees **21/21** · draft review **180/180** · fee parity **41/41** |
+
+The live bundle has since moved on: T2.10 edited the client, so `index.html`
+now resolves **`js/core.541c4c39.js`**. That does not disturb anything above —
+`js/core.9f0f6b30.js` is still in the tree with its own bytes, which is what the
+row above asserts, and the four suite results were measured against those bytes.
+The name is recorded here as the artifact tested at `5228494`, not as a standing
+claim about what is live today.
+
+**Status: committed locally with an incorrect fingerprint. Not shipped to
+customers. Nothing was deployed.** The defective commit `0c759cd` exists only on
+the unpushed local branch `phase1-block-d`; `origin/main` is still `9aaf326` and
+no deploy was triggered, so no cache ever served bytes under the wrong name. The
+immutable-caching risk the fingerprint gate exists to prevent was therefore
+never realised — it was caught one step before the step that would have made it
+real.
+
+These results are **reported, not independently inspected** by the reviewer who
+flagged the defect. The restoration is verifiable in the checkout: both names
+hash to their own contents, and `tests/asset-fingerprints.mjs` is the check that
+fails if either does not.
+
+---
+
 ## The artifact these results were measured against
 
 Revision 2's bundle name was retained in error while the production copy and

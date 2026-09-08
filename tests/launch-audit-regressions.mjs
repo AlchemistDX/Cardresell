@@ -1545,15 +1545,38 @@ try {
     /wrapTcgpAffiliate\(\s*_tcgpCondUrl\(`https:\/\/www\.tcgplayer\.com\/product\//.test(idx));
 
   // Degenerate range collapse: a single number repeated is not a spread.
+  //
+  // USED TO ASSERT (until 2026-09-08, T2.10): the signature exactly, as
+  // `function _rangeParts(low, mid, high, mult)`. T2.10 appended a fifth
+  // parameter, `midBasis`, so the renderer can label a server-derived centre a
+  // calculated reference instead of a median ask. The BEHAVIOUR named here --
+  // an all-equal triple collapses to nothing -- did not change; only the arity
+  // did. The regex now pins the first four parameters IN ORDER and tolerates
+  // additional ones, because reordering or dropping the originals would be a
+  // real regression while appending is not.
   check('_rangeParts collapses an all-equal range',
-    /function _rangeParts\(low, mid, high, mult\)[\s\S]{0,600}?if \(seen\.every\(v => v === seen\[0\]\)\) return \[\];/.test(idx));
+    /function _rangeParts\(low, mid, high, mult\b[^)]*\)[\s\S]{0,1600}?if \(seen\.every\(v => v === seen\[0\]\)\) return \[\];/.test(idx));
 
   // Both headline range writers must go through it — a raw .push of
   // `Low $` back into priceRange would reintroduce the PSA 10 triple.
+  //
+  // USED TO ASSERT (until 2026-09-08, T2.10): these two calls with exactly four
+  // arguments. Both now pass `midBasis` as a fifth. Same reasoning as above:
+  // what is being protected is that neither writer builds its own `Low $...`
+  // string, not the argument count. The four positional arguments stay pinned.
   check('Basis headline range routes through _rangeParts',
-    /priceRange\.textContent = _rangeParts\(b\.low, b\.mid, b\.high, m\)/.test(idx));
+    /priceRange\.textContent = _rangeParts\(b\.low, b\.mid, b\.high, m[,)]/.test(idx));
   check('Clamped headline range routes through _rangeParts',
-    /_rangeParts\(clamped\.low, clamped\.mid, clamped\.high, condMult\)/.test(idx));
+    /_rangeParts\(clamped\.low, clamped\.mid, clamped\.high, condMult[,)]/.test(idx));
+
+  // T2.10: the label is a function of provenance, not of the number. A derived
+  // centre must not be presented under a noun that claims a measured median.
+  check('a derived centre renders as a calculated reference, not a Mid',
+    /midBasis === 'derived' \? `Ref \$\$\{md\} \(calculated\)` : `Mid \$\$\{md\}`/.test(idx));
+  // Unknown must stay unknown: only an explicit 'derived' downgrades the label,
+  // so an untagged mid is not relabelled on suspicion.
+  check('an untagged mid keeps the Mid label rather than being downgraded',
+    !/midBasis !== 'observed' \? `Ref/.test(idx) && !/!midBasis \? `Ref/.test(idx));
   check('No hand-rolled Low/Mid/High range writer survives',
     !/parts\.push\(`Low \$\$\{/.test(idx) && !/rp\.push\(`Low \$\$\{/.test(idx));
 }

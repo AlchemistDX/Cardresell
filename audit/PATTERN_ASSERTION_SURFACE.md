@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**38 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 37; that number, not this sentence, is the
+**39 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 39; that number, not this sentence, is the
 thing to check. (This sentence said 35 while 36 was already filed below it —
 which is the pattern this page documents, committed against the page itself: a
 hand-kept count asserted as the set. Instance 32 is the same shape.) A subclass shares a mechanism with its parent and is filed under
@@ -2201,3 +2201,52 @@ mechanism is "the file changed."
 correctly; adding a second one would be the duplicate-implementation bug this
 corpus is named for. What was missing is that it runs, which is a
 release-checklist fact and is recorded in `audit/BUNDLE_RENAME_9f0f6b30.md`.
+
+
+## Instance 39 — three assertions that pinned an arity (2026-09-08)
+
+Found by T2.10, and unlike 36–38 it was found by **making the change**, not by
+auditing after it. Adding a fifth parameter to `_rangeParts` broke three checks
+in `launch-audit-regressions` at once:
+
+```
+✗ _rangeParts collapses an all-equal range
+✗ Basis headline range routes through _rangeParts
+✗ Clamped headline range routes through _rangeParts
+```
+
+Not one of those three behaviours changed. An all-equal triple still collapses;
+both headline writers still route through the shared function rather than
+hand-rolling a `Low $…` string. What changed was the **argument count**, and all
+three regexes had pinned the exact call text:
+
+```js
+/function _rangeParts\(low, mid, high, mult\)/
+/priceRange\.textContent = _rangeParts\(b\.low, b\.mid, b\.high, m\)/
+```
+
+The closing `\)` is the whole defect. Each assertion names a behaviour in its
+label and evidences a **signature** in its body — the page's exact subject.
+
+**What makes this one worth filing separately** is the failure mode it creates.
+Instances 36 and 37 were assertions that stayed green while the behaviour broke:
+silent, and dangerous. This is the mirror image — three assertions went red while
+the behaviour was intact. That is loud and safe, but it is not harmless, because
+the pressure it applies is *"delete or loosen the test to get to green"*, and the
+test being deleted is a real guard. The PSA-10 triple it exists to prevent is a
+shipped historical bug.
+
+The correction was to pin the four original parameters **in order** while
+tolerating appended ones (`mult\b[^)]*\)`, and `condMult[,)]` at the call
+sites). Reordering or dropping an argument still fails; appending does not.
+Each carries a `USED TO ASSERT` note recording the old text and why it moved —
+per the standing rule that the commit message is the one part of the corpus
+nobody greps.
+
+**Generalisation, and the thing to actually do about it:** a regex over source
+text cannot distinguish "the behaviour changed" from "the spelling changed", so
+every such assertion has a false-failure rate proportional to how much of the
+spelling it pins. Pin the smallest fragment that would differ if the behaviour
+differed. Where the behaviour is executable, execute it instead — the nine new
+T2.10 checks slice `_rangeParts` out of the bundle and **call it**, and not one
+of them would have failed for an added parameter.

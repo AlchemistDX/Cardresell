@@ -1339,5 +1339,107 @@ console.log('\n[Quick Pricing — wiring]');
         'this is the production fact that made object identity work by accident');
 }
 
+/* ── T2.10: midpoint provenance ───────────────────────────────────────────
+   `mid` is published for every card, but until now it was published without
+   saying where it came from on the path that serves almost all traffic.
+
+   The server never returns a null mid: both paths write `mid: X.mid ?? market`,
+   so when the provider sends no midpoint the MARKET PRICE is republished under
+   the name "Mid". That substitution was untagged on the main path and tagged on
+   the fallback path -- the two disagreed, and the untagged one is the common
+   one. The client then dropped the tag anyway, so even the fallback's honesty
+   did not survive the wire.
+
+   Three separate things are pinned below, deliberately not merged:
+     (a) both server paths emit a midBasis, and both use the same token for the
+         substituted case;
+     (b) the client carries it instead of dropping it;
+     (c) the label follows the basis, while low/high do not.                  */
+{
+  const core = readCoreBundle().source;
+
+  check('the main path emits a midBasis at all',
+        /midBasis:\s*r\.mid\s*!=\s*null/.test(tcgPrice),
+        'this is the whole defect: the common path published an untagged centre');
+
+  check('both server paths tag a substituted midpoint with the SAME token',
+        (tcgPrice.match(/midBasis:[^\n]*'derived'/g) || []).length === 2,
+        "'derived' is the token with a decision behind it, so it must not vary by path");
+
+  /* The two paths use different words for the SOURCED case -- 'observed' on the
+     main path, 'provider' on the fallback -- because each matches its own
+     sibling low/high fields. That divergence is intentional and is why every
+     consumer must test `=== 'derived'` rather than `=== 'observed'`. Pin the
+     asymmetry so nobody "fixes" it into a consumer-breaking rename. */
+  check('the sourced case keeps each path\u2019s own vocabulary',
+        /midBasis:\s*r\.mid\s*!=\s*null\s*\?\s*'observed'/.test(tcgPrice)
+        && /midBasis:\s*fb\.mid\s*!=\s*null\s*\?\s*'provider'/.test(tcgPrice));
+
+  /* Why the "Top of Book" tier is provably unaffected by tagging: that gate is
+     `mid > market * 1.02 && midBasis !== 'derived'`, and in EVERY path that
+     emits 'derived' the mid was set equal to market by the `??`. A number
+     cannot exceed itself by 2%, so the first clause was already false and the
+     new tag cannot suppress a tier that was previously shown. */
+  check('a derived mid is always exactly the market price, in both paths',
+        /mid:\s*r\.mid\s*\?\?\s*displayMarket/.test(tcgPrice)
+        && /mid:\s*fb\.mid\s*\?\?\s*fb\.market/.test(tcgPrice),
+        'this equality is what makes the Top-of-Book gate a no-op under tagging');
+  check('the Top of Book gate still tests the 2% margin BEFORE provenance',
+        /mid > market \* 1\.02 && basis\.midBasis !== 'derived'/.test(core));
+
+  // (b) the wire. Both client copy sites must carry it beside its siblings.
+  check('the client reads midBasis off the wire',
+        /midBasis:\s*tcg\.midBasis\s*\?\?\s*null/.test(core),
+        'dropping it here made the server\u2019s tag unobservable to every consumer');
+  check('the basis object carries midBasis through to the renderer',
+        /midBasis:\s*_basisMeta \? \(_basisMeta\.midBasis\s*\?\?\s*null\) : null/.test(core));
+
+  // (c) the label. Executed, not pattern-matched.
+  const _rpA = core.indexOf('function _rangeParts(');
+  const _rpB = core.indexOf('\n}', _rpA) + 2;
+  const rangeParts = new Function(core.slice(_rpA, _rpB) + '; return _rangeParts;')();
+
+  check('a derived centre is labelled a calculated reference',
+        rangeParts(1, 2, 3, 1, 'derived')[1] === 'Ref $2.00 (calculated)',
+        '"Mid" asserts a middle of observed asks; nothing observed this one');
+  check('a provider midpoint is still labelled Mid',
+        rangeParts(1, 2, 3, 1, 'provider')[1] === 'Mid $2.00');
+  check('an observed midpoint is still labelled Mid',
+        rangeParts(1, 2, 3, 1, 'observed')[1] === 'Mid $2.00');
+  check('an UNTAGGED midpoint keeps Mid rather than being downgraded',
+        rangeParts(1, 2, 3, 1, undefined)[1] === 'Mid $2.00'
+        && rangeParts(1, 2, 3, 1, null)[1] === 'Mid $2.00',
+        'absence of a tag is not evidence of derivation; that would invent provenance');
+
+  /* Independence, stated as its own assertion because it is the requirement
+     most likely to be lost in a later refactor: a derived CENTRE says nothing
+     about whether the ENDPOINTS were measured. */
+  check('low and high are unchanged by midpoint provenance',
+        (() => {
+          const d = rangeParts(1, 2, 3, 1, 'derived');
+          const o = rangeParts(1, 2, 3, 1, 'observed');
+          return d[0] === o[0] && d[0] === 'Low $1.00'
+              && d[2] === o[2] && d[2] === 'High $3.00' && d.length === o.length;
+        })(),
+        'a usable range must not be discarded because the middle was computed');
+  check('the all-equal collapse still fires regardless of basis',
+        rangeParts(2, 2, 2, 1, 'derived').length === 0
+        && rangeParts(2, 2, 2, 1, 'observed').length === 0);
+  check('a range with no midpoint at all is unaffected',
+        rangeParts(1, null, 3, 1, 'derived').join(' \u00b7 ') === 'Low $1.00 \u00b7 High $3.00');
+
+  /* T2.14 is checked SEPARATELY, per the review instruction. Its low-vs-ask
+     tripwire reads `basis.mid` as a VALUE and must never gate on midBasis: an
+     earlier revision required 'observed' there, which let untagged mids skip
+     the suppression and a bad floor came back. Tripwires fail closed. */
+  const _t14a = core.indexOf('const _lowIsObserved  = basis.lowBasis === \'observed\';');
+  const _t14 = core.slice(_t14a, _t14a + 1400);
+  check('T2.14: the low-vs-ask comparison does not gate on midBasis',
+        _t14a > -1 && !/midBasis/.test(_t14.replace(/\/\/[^\n]*/g, '')),
+        'gating this on provenance would reopen the floor regression it exists to catch');
+  check('T2.14: the ask reference still prefers mid and falls back to market',
+        /_askRef = \(basis\.mid != null\) \? basis\.mid : basis\.market/.test(core));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

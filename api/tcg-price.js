@@ -296,6 +296,25 @@ export default async function handler(req, res) {
         marketBasis: _head.basis,
         lowBasis:  r.low  != null ? 'observed' : null,
         highBasis: r.high != null ? 'observed' : null,
+        /* T2.10 (2026-09-08). `mid` above is `r.mid ?? displayMarket`, so when
+           the provider supplies no midpoint this path SUBSTITUTES the market
+           price and publishes it under the name "Mid". Until now it shipped
+           with no basis field at all, while the fallback path below tagged its
+           own midpoint. The two paths disagreed, and the untagged one is the
+           common one.
+
+           `null` is not used for the absent case, unlike low/high above. Those
+           two are null when there is no value to describe. `mid` is NEVER null
+           here -- the `??` guarantees a number -- so a null basis would read as
+           "no midpoint" next to a populated `mid`, which is the opposite of
+           what happened. 'derived' says a number is present and we computed it.
+
+           Vocabulary: this path says 'observed' where the fallback says
+           'provider', matching each path's own sibling fields. Consumers must
+           test `=== 'derived'` (or `!== 'derived'`), never `=== 'observed'`;
+           'derived' is the only token that carries a decision downstream and
+           it is identical across both paths. */
+        midBasis:  r.mid  != null ? 'observed' : 'derived',
         source: 'tcgcsv',
         game,
         categoryId: r.categoryId ?? categoryId,
