@@ -278,6 +278,43 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
 
   const patch = normalizePatch(body);
 
+  // ── A REBUILD MAY NOT CARRY A CLIENT PRICE BASIS ────────────────────────
+  //
+  // Refused here, before anything is written, and this replaces a rule that
+  // shipped wrong. The previous revision let a client-supplied `basisMeta`
+  // override the basis carried forward from the record, described as "a live
+  // client read wins because the server has no better source for it". A review
+  // question found the hole by naming the exercise: scan card B, then refresh
+  // card A's saved draft. The request was accepted and card A's packet came
+  // back citing card B's comp URL, card B's midpoint, and card B's retrieval
+  // time -- a price provenance for a card the draft is not for.
+  //
+  // The missing piece is a BINDING, not a check on the values. Nothing in a
+  // `basisMeta` says which card it was read for, so the server cannot tell A's
+  // basis from B's, and "the client only ever sends its own" is a property of
+  // one client rather than of this endpoint.
+  //
+  // A rebuild does not need one. It reassembles a listing from values already
+  // stored, and the basis it should use is the one already on the record. So
+  // the field is server-owned on this route, alongside `now`,
+  // `maxTitleLength` and `taxonomyTreeVersion`, and for the same reason: a
+  // client-chosen value here would document a price the seller never saw.
+  //
+  // If a future re-price flow genuinely needs to hand over a fresh comp, the
+  // binding condition is already named: the request must carry the identity of
+  // the card the comp was read for, and it must match the draft's stored card.
+  // Until something establishes that, refusing is the only answer that cannot
+  // mislabel a price.
+  if (body && body.pricingContext && typeof body.pricingContext === 'object'
+      && Object.prototype.hasOwnProperty.call(body.pricingContext, 'basisMeta')) {
+    return res.status(400).json({
+      error: 'pricingContext.basisMeta cannot be sent when refreshing listing details',
+      code: 'PRICING_CONTEXT_BASIS_NOT_BINDABLE',
+      retryable: false,
+      hint: 'A refresh reuses the price basis already stored on this draft. Nothing in a basis identifies which card it was read for, so one supplied here could describe a different card.',
+    });
+  }
+
   // ── The recovery operation, on the route that already exists ───────────
   // A PATCH carrying `pricingContext` regenerates the packet from the
   // POST-EDIT values. A PATCH without it does not. That single rule serves
@@ -321,16 +358,17 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
       // in the one place that always has the data, rather than a client
       // round-trip that works only when the packet happened to be readable.
       //
-      // The client's own basisMeta.retrievedAt still WINS when present, because
-      // that is a live read the client just performed and the server has no
-      // better source for it. This is a fallback, not an override.
+      // The record is the ONLY source. An earlier revision let a client-supplied
+      // basis override this; see the refusal at the top of handleUpdate for why
+      // that was withdrawn.
       let pc = body.pricingContext;
       const priorRetrievedAt = (next.packet && next.packet.priceBasis
         && typeof next.packet.priceBasis.retrievedAt === 'string')
         ? next.packet.priceBasis.retrievedAt : null;
-      const declared = (pc && typeof pc === 'object' && pc.basisMeta && typeof pc.basisMeta === 'object')
-        ? pc.basisMeta : null;
-      if (priorRetrievedAt && !(declared && declared.retrievedAt)) {
+      // No `declared` branch. `basisMeta` is refused at the boundary above, so
+      // the record is the only source here -- which also removes the earlier
+      // shape where two sources for one value had to be ranked.
+      if (priorRetrievedAt) {
         // Carried WITH the rest of the prior basis, not alone: a retrieval time
         // detached from the source it was read from documents nothing.
         const prior = next.packet.priceBasis;
@@ -343,7 +381,6 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
             ...(prior.mid != null ? { mid: prior.mid } : {}),
             ...(prior.high != null ? { high: prior.high } : {}),
             datedBySource: !!prior.datedBySource,
-            ...declared,
             retrievedAt: priorRetrievedAt,
           },
         };

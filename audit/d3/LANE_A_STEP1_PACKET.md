@@ -3,6 +3,30 @@
 **Commits:** `db396da` (staleness) · `2cc7c6b` (review items) · `3db7169` (producer connected) · `af65ece` (fee-schedule stamp) · `1303b7f` (two price conditions) · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
 **Nothing pushed. Nothing deployed.** `origin/main` is still `9aaf326`.
 
+> ## ⚠️ CURRENT STATUS — read this before §0
+>
+> **The sections below are a running record, written as the work happened, and
+> the early ones have been overtaken.** Nothing in them has been rewritten to
+> look prescient. What is true as of **2026-09-08, commit `4f9cbc7`**:
+>
+> | Section | Says | Actually |
+> |---|---|---|
+> | §0, §5, §6 | "**The producer is still unwired**" | Wired at `3db7169`. §7b records the wiring; §0 was written before it. |
+> | header, §1–§10 | Bundle `js/core.541c4c39.js`, "unchanged by this work — server and tests only" | Live bundle is **`js/core.c61a6ef9.js`**. Four generations since (`audit/BUNDLE_CITATION_MAP.md`). Any line number in §1–§10 that points into `541c4c39` must be re-grepped by symbol. |
+> | §15 | The client slice as first landed | Extended by §16: a fourth verdict arm, a conflict re-read, and a copy refusal. |
+> | §14 | "a packet goes stale only after an edit" | **Wrong.** Corrected in §16.2. |
+> | §14 | "A live client basis still wins" | **Withdrawn.** A client basis on a rebuild is now refused. §16.4. |
+> | §13 | Both Phase 1 completion percentages | Still superseded. **No current figure replaces them.** |
+>
+> **What is implemented and tested**: draft persistence, the draft list, the
+> review screen, packet staleness detection, packet refresh, copy-out, and the
+> three checks in §16. **What is not**: `listPriceForTargetNet` is never wired
+> (§7f), and target-net work is out of this lane by agreement.
+>
+> **Push and deployment remain blocked** by the unchanged credential-rotation
+> gate. That gate has not moved and is not affected by anything in this
+> document.
+
 Prior closures recorded, for context only: T2.10 accepted at `19cb94c` + `00445d0`; T2.9 accepted as the correction record. Neither is reopened here.
 
 ---
@@ -1050,13 +1074,17 @@ derives one from `cacheAgeSec` **at the moment of the price read**, returning
 
 **This requirement moved to the server, and the end-to-end test is why.** The
 first implementation read the prior packet's `retrievedAt` off `_reviewState`
-and forwarded it on rebuild. That is wrong in the ordinary case: a packet goes
-stale only after an edit, the read gate **withholds** a stale packet, so at the
-moment a refresh is most likely the client holds nothing to forward. The test
-caught the PATCH going out with no retrieval time at all. Preservation now
-happens in the rebuild closure in `api/drafts.js`, which always has the record.
-A live client basis still wins — the carry-forward is a fallback, not an
-override, asserted both ways.
+and forwarded it on rebuild. That is wrong: the read gate **withholds** a
+withdrawn packet's content in all three of its cases, so at the moment a
+refresh is most likely the client holds nothing to forward. The test caught the
+PATCH going out with no retrieval time at all. Preservation now happens in the
+rebuild closure in `api/drafts.js`, which always has the record.
+
+> **Corrected 2026-09-08.** This paragraph previously read "a packet goes stale
+> only after an edit," and the sentence after it said "a live client basis still
+> wins — the carry-forward is a fallback, not an override." Both are wrong and
+> both are replaced. See **§16.2** for the staleness correction and **§16.4**
+> for the withdrawn basis claim.
 
 **2. Forwarded packet status and content, with the client-declared fee
 qualification visible.** `_reviewAbsorb` takes `packet`, `packetStatus`,
@@ -1176,3 +1204,224 @@ for** — and the preservation itself is asserted through the real handler in
   logged and unfixed.
 - No source research was done for this section and no broad new suite was
   added, as instructed.
+
+---
+
+## §16 — Three focused checks at the newly connected interfaces
+
+Three questions, asked against the existing suites rather than a new one. All
+three were run before anything was written here, and **two of the three found a
+real gap.** Both gaps are fixed, both fixes have a negative control, and one
+prior claim in this document is withdrawn.
+
+Reused suites: `tests/draft-crud-e2e.mjs` (server, real endpoint) and
+`tests/draft-review-screen.mjs` (Playwright, real bundle). No new suite.
+`tests/_draftListFixtures.mjs` gained one fixture, built through the real POST
+handler like the other three.
+
+### §16.1 Existing coverage, stated first
+
+| Question | Already covered? |
+|---|---|
+| Q1 refresh retry identity | **Partly.** The route's replay behaviour was covered; the *corrected-context* and *identical-retry* sequences were not. Added. |
+| Q2 foreign basis | **No.** The prior assertion asserted the opposite behaviour and passed. Replaced. |
+| Q3 blocked packet vs "Ready to list" | **No.** The verdict had three arms and none read packet findings. Added. |
+
+### §16.2 Correction: "a packet goes stale only after an edit"
+
+Withdrawn. The read gate distinguishes **three** ways a stored packet fails to
+cover its draft (`api/_draftStore.js:457-458`):
+
+| Reason code | Condition | Involves an edit? |
+|---|---|---|
+| `PACKET_INPUTS_UNRECORDED` | `storedInputs === null` — a write path stored no fingerprint | **No** |
+| `PACKET_INPUTS_NEVER_MATCHED` | fingerprint mismatch at `rev === 1` — no edit has occurred yet | **No** |
+| `PACKET_INPUTS_DIFFER` | fingerprint mismatch after `rev > 1` | Consistent with one; does not establish it (§11) |
+
+My own earlier cases are what disprove the claim: the missing-fingerprint case
+and the rev-1 initial-mismatch case both reach the gate with no edit in the
+record. The argument the sentence was serving is unaffected and in fact
+stronger — the gate withholds packet content in **all three** cases, so the
+client holds nothing to forward at refresh time in every one of them, not just
+after an edit.
+
+The wrong sentence appeared in four places and all four are corrected:
+`audit/d3/LANE_A_STEP1_PACKET.md` §14, the `_reviewRefreshPacket` docblock in
+the bundle, `tests/draft-crud-e2e.mjs`, and `tests/draft-review-screen.mjs`.
+
+### §16.3 Q1 — refresh retry identity does not distinguish context, and does not need to
+
+**The key is not what protects this route.** `pkt-<draftId>-r<rev>` is an
+idempotency key, but `MUTATION_FIELDS` (`api/_idempotency.js:119`) declares a
+`pricingContext: 'digest'` field for the **`draft-create`** scope only; there
+is no `draft-update` scope. `updateDraft` says so in its own docblock
+(`api/_draftService.js:353`): *"Not idempotency-keyed: the expected revision
+already makes a replayed edit either a no-op replay or a conflict. The revision
+IS the concurrency token here."*
+
+Executed through the real endpoint (`tests/draft-crud-e2e.mjs`, section
+"correcting a refused refresh, and retrying an identical one"):
+
+| Step | Request | Result |
+|---|---|---|
+| 1 | refresh, key `pkt-…-r2`, context containing `now` | **400 `DRAFT_FIELD_INVALID`** — the producer refuses `pc.now`. Nothing written, key unspent. |
+| 2 | refresh, **same key**, corrected context | **200, `packetRebuilt: true`** — the corrected context succeeds; the refusal did not consume the identity. |
+| 3 | **identical** retry of step 2 | **409 `DRAFT_REVISION_CONFLICT`** — no second rebuild, revision and stored quote untouched. |
+| 4 | same key, stale rev, *different* context | **409** as well. |
+
+So: a corrected context can succeed, and an identical retry cannot duplicate
+anything. The mechanism is the revision, not the key — `applyEdit` rejects the
+moved revision before `putDraft`'s operationId replay can apply, which is why
+step 3 conflicts rather than replaying the 200.
+
+**A conflict is not a failure the seller should see.** A lost response leaves
+the client holding a stale revision, and the honest state is "the refresh
+already happened." So a 409 `DRAFT_REVISION_CONFLICT` on refresh now re-reads
+the draft and stays silent if the packet came back usable
+(`_reviewRefreshPacket`, bundle `:22155`). Only a still-unusable packet shows
+conflict copy. Asserted in the browser: `PATCHes=1`, `GETs=2`, no error
+element, details on screen, verdict `ready`.
+
+**A dead branch found on the way.** `_reviewRefreshErrCopy` compared
+`code === 'REV_CONFLICT'` — the constant *name* — while the wire carries
+`'DRAFT_REVISION_CONFLICT'` (`api/_draftStore.js:86`). The branch never ran, so
+every conflict fell through to "try again in a moment," advice that cannot work
+because the stale thing is the revision being resent. Now accepts both spellings
+(bundle `:22192`) and says the draft changed elsewhere, with a reopen. Asserted
+in the section "a real conflict with another device is still reported."
+
+### §16.4 Q2 — a foreign basis is refused, and the old claim is withdrawn
+
+**The gap was real.** Scan card B, then refresh card A's saved draft: card A's
+rebuilt packet came back with `sourceUrl https://x/CARD-B`, `mid 10`, and card
+B's retrieval time. The rule this document previously stated — *"A live client
+basis still wins — the carry-forward is a fallback, not an override"* — **is
+withdrawn.** It cannot be made correct with a card-binding condition, because
+**nothing in a `basisMeta` identifies the card it was read for.** There is no
+field to bind against, so no binding is possible at this interface.
+
+Fixed by refusing the input rather than ranking it. `handleUpdate` now rejects
+any PATCH whose `pricingContext` carries a `basisMeta` own-property, before any
+write: **400 `PRICING_CONTEXT_BASIS_NOT_BINDABLE`**, `retryable: false`, with a
+hint (`api/drafts.js:312`). A rebuild reassembles from stored values and has no
+use for a live basis. The rebuild closure's `declared` override branch is gone
+with it (`api/drafts.js:371`) — the record is now the only source.
+
+Two independent defences, verified separately:
+
+1. **Server refuses it.** Four assertions in `tests/draft-crud-e2e.mjs`. Under
+   mutation (guard disabled) three of them fail. The fourth — "this draft keeps
+   its OWN basis, source and time" — **still passed**, because removing the
+   `declared` branch independently prevents the override. Reported as found.
+2. **Client never sends it.** `_crPricingContext` is the one builder and refresh
+   calls it with `{ basis: null }`. Asserted with a foreign basis deliberately
+   populated: `window._crBasis` set to a card-B comp, then card A refreshed —
+   the PATCH body contains no `basisMeta` and the string `CARD-B` appears
+   nowhere in it, while the global is confirmed still set, so the absence is the
+   builder refusing rather than nothing being there. This is the point the
+   review made: a populated global is not the question; what leaves the browser
+   is.
+
+### §16.5 Q3 — server readiness does **not** incorporate packet findings
+
+**The gap was real, and the fixture proves the three facts the screen had were
+insufficient.** A draft created with an empty `pricingContext` reads back:
+
+| Field | Value |
+|---|---|
+| `packetStatus` | `CURRENT` |
+| `packetUsable` | `true` |
+| `packet.blocked` | `true` |
+| `packet.blockingCodes` | `["MISSING_FEE_MODEL_REVISION"]` |
+| `readiness.publishable` | **`true`** |
+| `readiness.blockers.length` | **`0`** |
+
+`readinessOf` (`api/_draftService.js:607`) is `validateDraftForSlot(draft)` over
+the stored draft fields; it has no view of the packet. Blocking findings are the
+producer's: `blocked: blocking.length > 0` where `blocking` is the ERROR-severity
+notes (`api/_listingPacket.js:840,875`). Three codes can set it today —
+`MISSING_FEE_MODEL_REVISION` (`:623`), `INSUFFICIENT_IDENTITY` (`:700`),
+`NO_CARD_NAME` (`:714`). Before the fix this fixture rendered **"Ready to
+list."**
+
+Fixed client-side only. Server readiness is left alone: the packet is advisory
+and one behaviour gets one implementation, so readiness does not grow a second
+notion of blocked.
+
+- `_reviewPacketBlocking()` (bundle `:21762`) is the single reader of
+  `blocked`/`blockingCodes`.
+- Fourth verdict arm: `data-review-verdict="details-blocked"` (bundle `:21295`),
+  "1 problem with the listing details" / "N problems…", distinct from the stale
+  arm because the remedy differs by code.
+- `_reviewCopyPayload` returns `null` while any finding stands, so **copy is
+  withheld** — a blocked packet is one paste from being a live listing.
+- Fields stay rendered, so the seller can see which part is wrong; the container
+  carries `data-packet-blocked` while still reporting `data-review-packet="usable"`.
+
+**One deliberate departure from the verbatim-copy rule.** Blockers and
+disclosures are rendered verbatim. These are not, because the server's text is
+not written for a seller — `MISSING_FEE_MODEL_REVISION` reads *"Pass
+FEE_MODEL_REVISION from core.js."* Known codes get seller-facing copy (same
+shape as `_reviewPacketReasonCopy`); an **unknown** code falls back to the
+server's message, so a finding added server-side still reaches the seller
+without a client release. Asserted both ways: the code is present, the
+developer instruction is not.
+
+**Copy withholding is asserted through the click path, not a hook.** No
+test-only production global was added. The test injects an ordinary
+`[data-packet-copy]` button — markup the delegated listener already matches —
+writes a sentinel to the clipboard, clicks, and asserts the clipboard is
+unchanged and the toast says fix rather than refresh.
+
+### §16.6 Negative controls
+
+| Disabled | Suite | Result |
+|---|---|---|
+| the `details-blocked` verdict arm | `draft-review-screen` | 4 FAIL |
+| the `DRAFT_REVISION_CONFLICT` re-read | `draft-review-screen` | 5 FAIL |
+| the `basisMeta` refusal in `handleUpdate` | `draft-crud-e2e` | 3 FAIL (the fourth passes for the independent reason in §16.4) |
+
+The conflict-recovery case initially reported as a **thrown** case rather than
+clean failures, because a bare `waitForFunction` throws on exactly the
+regression the section exists to catch — and a case that throws stops reporting
+its own remaining claims. The wait is now defensive and the timeout is a value
+the assertions read. Re-run mutated: 9 clean failures, no throw.
+
+### §16.7 Counts, and what this changed
+
+| Suite | Before | After |
+|---|---|---|
+| `tests/draft-crud-e2e.mjs` | 173 / 0 | **184 / 0** |
+| `tests/draft-review-screen.mjs` | 220 / 0 | **249 / 0** |
+| `tests/listing-packet-offline.mjs` | 232 / 0 | 232 / 0 |
+| `tests/draft-store.mjs` | 135 / 0 | 135 / 0 |
+| `tests/draft-list-screen.mjs` | 101 / 0 | 101 / 0 |
+| `tests/asset-fingerprints.mjs` | 15 / 0 | 15 / 0 |
+| `tests/draft-readiness.mjs` | PASS | PASS |
+
+Run individually with `timeout <n> node tests/<name>.mjs`. `tests/run-all.sh`
+was not run.
+
+**Assertion replaced, with its history recorded in the test itself.** The old
+text — *"a live client read overrides the stored time rather than being
+ignored"* — is preserved verbatim in a `WHAT THIS USED TO ASSERT, AND WHY IT
+CHANGED` block above its four replacements, because a commit message is the one
+part of the corpus nobody greps.
+
+**Bundle renamed twice.** `34fb750c` → `611f4efe` (the fixes) → **`c61a6ef9`**
+(the comment corrections). `611f4efe` is committed nowhere and must never be
+cited; `audit/BUNDLE_CITATION_MAP.md` records both hops and flags it as a naming
+hazard alongside `fec7fb3a`. `index.html` carries the single reference.
+
+### §16.8 Still open after §16
+
+- **Completion percentage still unverified** (§13). Both figures superseded, no
+  replacement.
+- `applyEdit` still never updates `priceSource`; A-2 open; `feeBase`/
+  `feeBaseLabel` still emit on **2 of 15** venues.
+- The four undeclared CSS tokens remain. The blocking stylesheet added here uses
+  only `--border` and `--surface-2`.
+- `tests/listing-packet-offline.mjs` still carries 4 duplicate `codes` helpers.
+- Sections §1–§10 remain historical; the status table at the top of this
+  document is the correction, not a rewrite of them.
+- **Push and deployment remain blocked by the credential-rotation gate.**

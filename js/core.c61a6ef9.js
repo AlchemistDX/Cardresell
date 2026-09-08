@@ -21278,10 +21278,21 @@ function _reviewIdentityHtml() {
     // details we have just refused to show would be the screen telling the
     // seller to go do the thing it cannot help them do.
     const detailsMissing = !_reviewState.packetUsable;
+    // ── The third condition, added after review ─────────────────────────
+    //   publishable && usable && blocked -> Listing details need fixing
+    // A current, readable packet in agreement with the draft can still carry
+    // an ERROR finding. That is a CONTENT problem rather than an out-of-date
+    // one, so the copy differs from the stale case: what the seller needs is
+    // the finding itself, printed below, because the way out depends on which
+    // finding it is -- a missing fee revision is fixed by refreshing, a missing
+    // card name is not.
+    const detailsBlocked = _reviewPacketBlocking();
     if (!r.publishable) {
       verdict = `<div class="review-verdict review-verdict-blocked" data-review-verdict="blocked">${blockers.length === 1 ? '1 thing to fix' : blockers.length + ' things to fix'}</div>`;
     } else if (detailsMissing) {
       verdict = '<div class="review-verdict review-verdict-blocked" data-review-verdict="details-stale">Listing details need a refresh</div>';
+    } else if (detailsBlocked.length) {
+      verdict = `<div class="review-verdict review-verdict-blocked" data-review-verdict="details-blocked">${detailsBlocked.length === 1 ? '1 problem with the listing details' : detailsBlocked.length + ' problems with the listing details'}</div>`;
     } else {
       verdict = '<div class="review-verdict review-verdict-ok" data-review-verdict="ready">Ready to list</div>';
     }
@@ -21725,8 +21736,74 @@ function _reviewPacketRows() {
  * call sites. A cached payload string would be a second copy of the packet with
  * its own lifetime, and this codebase's recurring bug is the second copy.
  */
+/**
+ * The packet's own BLOCKING findings, and why they are a separate fact from
+ * usability.
+ *
+ * `packetUsable` answers "can this snapshot be read, and does it describe the
+ * draft as stored" -- version compatibility and input agreement. `blocked`
+ * answers "is what it says fit to list" -- content. A packet can be current,
+ * readable, in perfect agreement with the draft, and still carry an ERROR
+ * finding: no card name, not enough identity to build a title, or no declared
+ * fee revision, which leaves the quote permanently ambiguous about the fee
+ * logic that produced it.
+ *
+ * A review question asked whether "Ready to list" could appear over one of
+ * those. It could: the verdict consulted readiness and usability and nothing
+ * consulted `blocked`. Server readiness does not close it either --
+ * `readinessOf` in api/_draftService.js is `validateDraftForSlot` over the
+ * stored draft fields, so a draft can be publishable with 0 blockers while its
+ * packet reports MISSING_FEE_MODEL_REVISION.
+ *
+ * So this is the single reader of that flag, and the verdict, the copy gate and
+ * the rendered findings all ask it rather than each testing the packet
+ * themselves.
+ */
+function _reviewPacketBlocking() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  if (!pk || pk.blocked !== true) return [];
+  const notes = Array.isArray(pk.notes) ? pk.notes : [];
+  const codes = Array.isArray(pk.blockingCodes) ? pk.blockingCodes.map(String) : [];
+  // ── Why this one is NOT the server's text verbatim ──────────────────────
+  //
+  // The blocker lines and the disclosures are rendered verbatim, deliberately.
+  // These are not, because they are not written for a seller. The live text of
+  // MISSING_FEE_MODEL_REVISION reads "Pass FEE_MODEL_REVISION from core.js" --
+  // an instruction to whoever is holding the code, printed on a screen where
+  // the reader is holding a card. So known codes get seller-facing copy here,
+  // the same shape `_reviewPacketReasonCopy` already uses for packetReason.
+  //
+  // The fallback for an UNKNOWN code is the server's message rather than a
+  // generic sentence. A finding added server-side then still reaches the seller
+  // -- imperfectly worded, but present and specific, which beats "something is
+  // wrong with these details" and beats silence. The remedy differs by code,
+  // so it is named per code and never generalised: a missing fee revision is
+  // fixed by refreshing, a missing card name is not.
+  return codes.map((code) => {
+    const n = notes.find((x) => x && String(x.code) === code);
+    const server = (n && typeof n.message === 'string') ? n.message : '';
+    if (code === 'MISSING_FEE_MODEL_REVISION') {
+      return { code, text: 'These details were prepared without recording which fee rules priced them, so the payout figures can\u2019t be relied on.',
+               hint: 'Refresh the listing details to prepare them again.' };
+    }
+    if (code === 'INSUFFICIENT_IDENTITY') {
+      return { code, text: 'We don\u2019t know enough about this card to build a listing \u2014 a listing needs at least the game, the set and the card number.',
+               hint: 'Scan the card again so we can fill those in.' };
+    }
+    if (code === 'NO_CARD_NAME') {
+      return { code, text: 'This card has no name recorded, so there is nothing to build a listing title from.',
+               hint: 'Scan the card again so we can read the name.' };
+    }
+    return { code, text: server || code, hint: '' };
+  });
+}
+
 function _reviewCopyPayload(kind) {
   if (!_reviewState.packetUsable || !_reviewState.packet) return null;
+  // Blocked content is refused too, not only unreadable content. Handing over
+  // a copy button for a listing the packet itself says cannot be listed would
+  // put the seller a paste away from publishing it.
+  if (_reviewPacketBlocking().length) return null;
   const rows = _reviewPacketRows();
   if (!rows.length) return null;
   if (kind === 'title') {
@@ -21854,18 +21931,31 @@ function _reviewPacketHtml() {
   const t = _reviewState.packet.title || {};
   const dropped = Array.isArray(t.dropped) ? t.dropped : [];
 
-  return `
-      <div class="review-packet" data-review-packet="usable"
-           data-packet-status="${_reviewEsc(String(_reviewState.packetStatus || ''))}">
-        <div class="review-packet-h">Listing details</div>
-        <div class="review-packet-fields">${rowHtml}</div>
-        ${dropped.length ? `<div class="review-packet-p" data-packet-dropped="">The title was too long for this venue, so we left out: ${_reviewEsc(dropped.join(', '))}.</div>` : ''}
-        ${_reviewPacketDisclosuresHtml()}
+  // Blocking findings are printed, and the copy row is withheld while any
+  // exist. The fields themselves stay on screen: they are current and in
+  // agreement with the draft, and hiding them would leave the seller reading
+  // "1 problem with the listing details" with no way to see which part.
+  const blocking = _reviewPacketBlocking();
+  const blockingHtml = blocking.length ? `
+        <div class="review-packet-blocking" data-packet-blocking-list="">
+          ${blocking.map((b) => `<div class="review-packet-p" data-packet-blocking="${_reviewEsc(b.code)}">${_reviewEsc(b.text)}${b.hint ? ' ' + _reviewEsc(b.hint) : ''}</div>`).join('')}
+        </div>` : '';
+  const copyHtml = blocking.length ? '' : `
         <div class="review-packet-copy">
           <button type="button" class="draft-more-btn" data-packet-copy="title">Copy title</button>
           <button type="button" class="draft-more-btn" data-packet-copy="aspects">Copy card details</button>
           <button type="button" class="draft-more-btn" data-packet-copy="all">Copy everything</button>
-        </div>
+        </div>`;
+
+  return `
+      <div class="review-packet" data-review-packet="usable"${blocking.length ? ' data-packet-blocked=""' : ''}
+           data-packet-status="${_reviewEsc(String(_reviewState.packetStatus || ''))}">
+        <div class="review-packet-h">Listing details</div>
+        <div class="review-packet-fields">${rowHtml}</div>
+        ${dropped.length ? `<div class="review-packet-p" data-packet-dropped="">The title was too long for this venue, so we left out: ${_reviewEsc(dropped.join(', '))}.</div>` : ''}
+        ${blockingHtml}
+        ${_reviewPacketDisclosuresHtml()}
+        ${copyHtml}
         ${_reviewPacketRefreshHtml()}
       </div>`;
 }
@@ -21986,11 +22076,17 @@ async function _reviewRefreshPacket() {
   //
   // The first version of this function read the prior packet's retrievedAt off
   // `_reviewState.packet` and forwarded it. That is the obvious thing and it is
-  // wrong in the ordinary case: a packet only goes stale after an edit, and a
-  // stale packet is WITHHELD by the read gate -- so `_reviewState.packet` is
-  // null exactly when a refresh is most likely, and the quote's age would have
-  // been lost every time. The end-to-end test caught it; the PATCH went out
-  // with no retrieval time at all.
+  // wrong, and the reason is stronger than it first looked. A packet stops
+  // covering a draft in THREE ways, not one (api/_draftStore.js:457-458):
+  // PACKET_INPUTS_UNRECORDED (a write path stored no fingerprint at all),
+  // PACKET_INPUTS_NEVER_MATCHED (rev 1 -- it never described this draft, and
+  // no edit can be blamed because none happened), and PACKET_INPUTS_DIFFER
+  // (the ordinary post-edit case). The read gate WITHHOLDS the content in all
+  // three, so `_reviewState.packet` is null in every case where a refresh is
+  // the point -- including two that have nothing to do with editing. The
+  // earlier note here said "a packet only goes stale after an edit"; that was
+  // wrong on its own terms and is corrected. The end-to-end test caught the
+  // consequence either way: the PATCH went out with no retrieval time at all.
   //
   // The record still has it, so the server preserves it during the rebuild.
   // One implementation, in the one place that always holds the data.
@@ -22039,6 +22135,31 @@ async function _reviewRefreshPacket() {
     return;
   }
 
+  // ── A conflict is recovered, not reported ───────────────────────────────
+  //
+  // The refresh key is `pkt-<draftId>-r<rev>`, and a review question asked
+  // whether an identical network retry replays safely. It does not replay:
+  // `updateDraft` is deliberately NOT idempotency-keyed (see its docblock) --
+  // the expected revision is the concurrency token, and the key only names the
+  // write claim. So the first attempt succeeding with its response lost leaves
+  // the second attempt sending a revision that has moved, and the server
+  // answers DRAFT_REVISION_CONFLICT.
+  //
+  // Nothing was duplicated, which is the safety that matters, but reporting a
+  // failure would be wrong: the rebuild the seller asked for has HAPPENED. So a
+  // conflict re-reads, and the re-read decides. Current details after the
+  // re-read means the work is done and there is nothing to say. Anything else
+  // is a genuine conflict with another device, and the copy sends them to the
+  // only thing that helps -- the version they are now looking at.
+  if (resp.status === 409
+      && String((resp.body && (resp.body.code || resp.body.error)) || '') === 'DRAFT_REVISION_CONFLICT') {
+    await loadDraftReview(draftId);
+    if (_reviewState.packetUsable) return;
+    _reviewState.refreshError = _reviewRefreshErrCopy(409, { code: 'DRAFT_REVISION_CONFLICT' });
+    _reviewPaint();
+    return;
+  }
+
   _reviewState.refreshError = _reviewRefreshErrCopy(resp.status, resp.body || {});
   _reviewPaint();
 }
@@ -22063,7 +22184,12 @@ function _reviewRefreshErrCopy(status, body) {
       hint: 'Scan the card again and start a new listing. This draft is unaffected and can still be edited.',
     };
   }
-  if (status === 409 && code === 'REV_CONFLICT') {
+  // 'DRAFT_REVISION_CONFLICT' is what STORE_ERR.REV_CONFLICT serialises to
+  // (api/_draftStore.js:86). This compared against the CONSTANT NAME, so the
+  // branch never ran and every conflict fell through to the generic "try again
+  // in a moment" -- advice that cannot work, because the revision on screen is
+  // the stale part and retrying sends it again.
+  if (status === 409 && (code === 'DRAFT_REVISION_CONFLICT' || code === 'REV_CONFLICT')) {
     return { code, text: 'This draft changed somewhere else while you were looking at it.', hint: 'Reopen it to see the current version, then refresh again.' };
   }
   if (status === 410) return { code, text: 'This draft has been deleted.', hint: '' };
@@ -22079,7 +22205,15 @@ async function _reviewCopy(kind) {
   // that survives into an unusable state copies NOTHING rather than the last
   // good packet. The seller is told, because a copy button that silently does
   // nothing reads as a broken app and invites a second press.
-  if (!text) { showToast('These listing details are out of date. Refresh them first.'); return; }
+  // Two reasons a payload is refused, and they are not the same instruction.
+  // Out of date means refresh. A blocking finding means fix the thing the
+  // finding names, which for some codes refreshing cannot do.
+  if (!text) {
+    showToast(_reviewPacketBlocking().length
+      ? 'These listing details have a problem to fix first.'
+      : 'These listing details are out of date. Refresh them first.');
+    return;
+  }
   try {
     await navigator.clipboard.writeText(text);
     showToast(kind === 'title' ? 'Title copied.' : 'Copied.');

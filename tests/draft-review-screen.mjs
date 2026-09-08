@@ -1393,10 +1393,12 @@ try {
     // WAS: 'the pricingContext reuses the ORIGINAL retrieval time, not now',
     // asserting patched.pricingContext.basisMeta.retrievedAt === 12:00.
     // CHANGED 2026-09-08 because that assertion described a design this test
-    // disproved. The client cannot forward the prior retrieval time: a packet
-    // only goes stale after an edit, the read gate withholds a stale packet,
-    // and so the client holds nothing to forward in exactly the case where a
-    // refresh happens. The PATCH went out with no basisMeta at all and the
+    // disproved. The client cannot forward the prior retrieval time: the read
+    // gate withholds a withdrawn packet's content in all three of its cases --
+    // unrecorded inputs, inputs that never matched at rev 1, and inputs that
+    // differ after an edit -- so the client holds nothing to forward in exactly
+    // the case where a refresh happens. (This comment previously said staleness
+    // only follows an edit; the first two cases disprove that.) The PATCH went out with no basisMeta at all and the
     // assertion failed. Preservation moved to the server, which always has the
     // record. The client's obligation is now the NEGATIVE one below -- send no
     // basis it cannot vouch for -- and the preservation itself is asserted
@@ -1488,6 +1490,275 @@ try {
       await page.evaluate((t) => !document.getElementById('reviewWrap').innerText.includes(t), first));
     T.check('\ud83d\udd34 and the first draft\u2019s copy buttons are gone',
       await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 0);
+    await ctx.close();
+  });
+
+  /* ── Q3: a packet can be CURRENT and still not fit to list ──────────────
+   *
+   * The verdict had three arms -- readiness, then usability, then ready -- and
+   * neither of the first two sees a packet's own ERROR findings. Server
+   * readiness does not close the gap either: `readinessOf` is
+   * `validateDraftForSlot` over the stored draft fields, so this fixture comes
+   * back publishable with zero blockers while its packet reports
+   * MISSING_FEE_MODEL_REVISION. Before the fourth arm this rendered
+   * "Ready to list".
+   */
+  await T.section('a packet that cannot be listed does not say Ready to list', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    await page.route('**/api/drafts*', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(F.packetBlocked.body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+    await openReview(page, F.ids.packetBlocked);
+
+    // The three facts the old rule had in hand, stated so a later reader can
+    // see that none of them could have produced the right answer.
+    T.check('setup: the server says the draft is publishable, with no blockers',
+      F.packetBlocked.body.readiness.publishable === true
+        && F.packetBlocked.body.readiness.blockers.length === 0,
+      JSON.stringify(F.packetBlocked.body.readiness));
+    T.check('setup: and the packet is CURRENT and usable',
+      F.packetBlocked.body.packetStatus === 'CURRENT' && F.packetBlocked.body.packetUsable === true,
+      `${F.packetBlocked.body.packetStatus} / ${F.packetBlocked.body.packetUsable}`);
+    T.check('setup: while carrying a blocking finding',
+      F.packetBlocked.body.packet.blocked === true
+        && F.packetBlocked.body.packet.blockingCodes.includes('MISSING_FEE_MODEL_REVISION'),
+      JSON.stringify(F.packetBlocked.body.packet.blockingCodes));
+
+    const verdict = await page.evaluate(() => {
+      const el = document.querySelector('[data-review-verdict]');
+      return el ? { state: el.getAttribute('data-review-verdict'), text: el.innerText } : null;
+    });
+    T.check('\ud83d\udd34 the verdict is NOT ready',
+      verdict && verdict.state !== 'ready',
+      JSON.stringify(verdict));
+    T.check('\ud83d\udd34 it is reported as a problem with the details, not as a stale packet',
+      verdict && verdict.state === 'details-blocked', verdict && verdict.state);
+    T.check('and the screen never contains the words Ready to list',
+      await page.evaluate(() => !document.getElementById('reviewWrap').innerText.includes('Ready to list')));
+    T.check('the count is the number of blocking findings',
+      verdict && /^1 problem with the listing details$/.test(verdict.text.trim()), verdict && verdict.text);
+
+    // The finding itself, in the seller's terms rather than the producer's.
+    const finding = await page.evaluate(() => {
+      const el = document.querySelector('[data-packet-blocking]');
+      return el ? { code: el.getAttribute('data-packet-blocking'), text: el.innerText } : null;
+    });
+    T.check('\ud83d\udd34 the finding is printed under its own code',
+      finding && finding.code === 'MISSING_FEE_MODEL_REVISION', JSON.stringify(finding));
+    T.check('\ud83d\udd34 and it does not print the developer instruction the server sends',
+      finding && !/FEE_MODEL_REVISION from core\.js/.test(finding.text)
+        && !/feeModelRevision/.test(finding.text),
+      finding && finding.text);
+    T.check('it says what the seller can do about it',
+      finding && /refresh the listing details/i.test(finding.text), finding && finding.text);
+
+    // Copy is withheld: a blocked packet is a paste away from being listed.
+    T.check('\ud83d\udd34 there are no copy buttons for a packet that cannot be listed',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 0);
+    // The gate is in the payload builder, not in the rendering. Proven by
+    // giving the handler a button anyway -- ordinary markup the delegated
+    // listener already matches -- and showing that pressing it copies nothing.
+    // Deliberately NOT a test-only production global: the assertion goes
+    // through the same click path a seller would use.
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `http://127.0.0.1:${port}` });
+    await page.evaluate(async () => {
+      await navigator.clipboard.writeText('SENTINEL-NOT-OVERWRITTEN');
+      const host = document.querySelector('[data-review-packet]');
+      const b = document.createElement('button');
+      b.setAttribute('data-packet-copy', 'all');
+      b.id = 'crInjectedCopy';
+      b.textContent = 'Copy everything';
+      b.style.cssText = 'display:block;width:160px;height:32px';
+      host.appendChild(b);
+    });
+    await page.click('#crInjectedCopy');
+    await page.waitForFunction(() => {
+      const t = document.getElementById('csToast');
+      return t && t.textContent && t.textContent.length > 0;
+    }, { timeout: 15000 });
+    T.check('\ud83d\udd34 pressing a copy control anyway copies nothing',
+      await page.evaluate(() => navigator.clipboard.readText()) === 'SENTINEL-NOT-OVERWRITTEN');
+    T.check('\ud83d\udd34 and the refusal says fix, not refresh',
+      await page.evaluate(() => document.getElementById('csToast').textContent)
+        === 'These listing details have a problem to fix first.',
+      await page.evaluate(() => document.getElementById('csToast').textContent));
+    await page.evaluate(() => { const b = document.getElementById('crInjectedCopy'); if (b) b.remove(); });
+    // The fields stay: the seller has to be able to see WHICH part is wrong.
+    T.check('the listing fields are still shown, so the finding can be located',
+      await page.evaluate(() => document.querySelectorAll('[data-packet-field]').length) > 0);
+    T.check('the block is marked as blocked without pretending to be unusable',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-review-packet]');
+        return el && el.getAttribute('data-review-packet') === 'usable' && el.hasAttribute('data-packet-blocked');
+      }));
+    await ctx.close();
+  });
+
+  /* ── Q2: another card's basis cannot ride along on this card's refresh ───
+   *
+   * The exercise from review, run on the client: scan card B, then refresh
+   * card A's saved draft. A populated global is not the question -- what
+   * matters is what leaves the browser. The server refuses a client basis on
+   * this route as well (tests/draft-crud-e2e.mjs), so this is the first of two
+   * independent answers rather than the only one.
+   */
+  await T.section('a refresh cannot carry another card\u2019s price basis', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    let patched = null;
+    let gets = 0;
+    await page.route('**/api/drafts*', async (route) => {
+      const req = route.request();
+      if (req.method() === 'PATCH') {
+        patched = JSON.parse(req.postData() || '{}');
+        await route.fulfill({ status: 200, contentType: 'application/json',
+          body: JSON.stringify({ draft: F.packetCurrent.body.draft, validation: F.packetCurrent.body.validation, packetRebuilt: true }) });
+        return;
+      }
+      gets++;
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify(gets === 1 ? F.packetStale.body : F.packetCurrent.body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+
+    // Card B is scanned: the read stamps the global the pricing context is
+    // ordinarily built from. This is the state the question asks about.
+    const FOREIGN_URL = 'https://www.pricecharting.com/CARD-B';
+    await page.evaluate((u) => {
+      window._crBasis = { label: 'Card B comp', sourceUrl: u, retrievedAt: '2026-09-08T20:00:00.000Z', low: 9, mid: 10, high: 11 };
+    }, FOREIGN_URL);
+    T.check('setup: a foreign basis really is populated at refresh time',
+      await page.evaluate(() => !!(window._crBasis && window._crBasis.sourceUrl)) === true);
+
+    await openReview(page, F.ids.packetStale);
+    await page.click('[data-packet-refresh]');
+    await page.waitForFunction(() => document.querySelectorAll('[data-packet-copy]').length === 3, { timeout: 15000 });
+
+    T.check('setup: the refresh did go out',
+      patched !== null && patched.pricingContext && Number.isInteger(patched.pricingContext.feeModelRevision),
+      JSON.stringify(patched && patched.pricingContext));
+    T.check('\ud83d\udd34 the request carries NO price basis at all',
+      patched && !patched.pricingContext.basisMeta,
+      JSON.stringify(patched && patched.pricingContext.basisMeta));
+    T.check('\ud83d\udd34 and card B\u2019s source is nowhere in the request body',
+      JSON.stringify(patched || {}).indexOf('CARD-B') === -1,
+      JSON.stringify(patched));
+    T.check('the populated global did not reach the wire even though it was set',
+      await page.evaluate((u) => (window._crBasis || {}).sourceUrl === u, FOREIGN_URL) === true,
+      'the global is still set, so the absence above is the builder refusing it rather than nothing being there');
+    await ctx.close();
+  });
+
+  /* ── Q1, client half: a refresh whose response was lost ─────────────────
+   *
+   * The key is `pkt-<draftId>-r<rev>` and it does not make a retry replay: the
+   * route is not idempotency-keyed, the revision is the token, so the second
+   * attempt sends a revision that has moved and the server answers
+   * DRAFT_REVISION_CONFLICT. Nothing is duplicated, which is the safety that
+   * matters, but the seller must not be told the refresh failed when it
+   * happened. So the conflict re-reads, and the re-read decides.
+   */
+  await T.section('a refresh whose response was lost is recovered, not reported', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    let gets = 0;
+    let patches = 0;
+    await page.route('**/api/drafts*', async (route) => {
+      const req = route.request();
+      if (req.method() === 'PATCH') {
+        patches++;
+        // The first attempt already landed somewhere the client never saw.
+        await route.fulfill({ status: 409, contentType: 'application/json',
+          body: JSON.stringify({ error: 'expectedRev does not match', code: 'DRAFT_REVISION_CONFLICT', current: F.packetCurrent.body.draft }) });
+        return;
+      }
+      gets++;
+      // First read: stale, so the button is there. After the conflict the
+      // re-read shows what the lost attempt actually did.
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify(gets === 1 ? F.packetStale.body : F.packetCurrent.body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+    await openReview(page, F.ids.packetStale);
+
+    await page.click('[data-packet-refresh]');
+    // Waited DEFENSIVELY. A bare waitForFunction here throws on the very
+    // regression this section exists to catch, and a case that throws stops
+    // reporting on its own remaining claims -- so the timeout becomes a value
+    // the assertions can read instead of an exception.
+    const recovered = await page
+      .waitForFunction(() => document.querySelectorAll('[data-packet-copy]').length === 3, { timeout: 15000 })
+      .then(() => true).catch(() => false);
+
+    T.check('setup: the refresh was refused as a revision conflict', patches === 1, `PATCHes=${patches}`);
+    T.check('\ud83d\udd34 the seller ends up with usable listing details',
+      recovered === true, 'the copy controls never came back after the conflict');
+    T.check('\ud83d\udd34 the conflict triggered a re-read rather than an error message',
+      gets === 2, `GETs=${gets}`);
+    T.check('\ud83d\udd34 no refresh error is shown, because the refresh had happened',
+      await page.evaluate(() => !document.querySelector('[data-packet-refresh-error]')));
+    T.check('\ud83d\udd34 and the details the seller asked for are on screen',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-packet-field="title"] .review-field-value');
+        return el ? el.innerText : null;
+      }) === F.packetCurrent.body.packet.title.text);
+    T.check('the verdict is ready, from the re-read and not from the PATCH',
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-review-verdict]');
+        return el && el.getAttribute('data-review-verdict');
+      }) === 'ready');
+    await ctx.close();
+  });
+
+  /* A conflict that is NOT self-healing still has to be reported, and under the
+   * code the server actually sends. The client compared against the CONSTANT
+   * NAME 'REV_CONFLICT' while the wire carries 'DRAFT_REVISION_CONFLICT'
+   * (STORE_ERR in api/_draftStore.js), so the branch never ran and every
+   * conflict fell through to "try again in a moment" -- advice that cannot
+   * work, since the stale part is the revision being resent.
+   */
+  await T.section('a real conflict with another device is still reported', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    await page.route('**/api/drafts*', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        await route.fulfill({ status: 409, contentType: 'application/json',
+          body: JSON.stringify({ error: 'expectedRev does not match', code: 'DRAFT_REVISION_CONFLICT' }) });
+        return;
+      }
+      // The re-read still shows no usable packet: whatever changed the
+      // revision was not this refresh.
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(F.packetStale.body) });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+    await openReview(page, F.ids.packetStale);
+
+    await page.click('[data-packet-refresh]');
+    await page.waitForFunction(() => !!document.querySelector('[data-packet-refresh-error]'), { timeout: 15000 });
+    const err = await page.evaluate(() => {
+      const el = document.querySelector('[data-packet-refresh-error]');
+      return { code: el.getAttribute('data-packet-refresh-error'), text: el.innerText };
+    });
+    T.check('\ud83d\udd34 the conflict is reported under the code the server sends',
+      err.code === 'DRAFT_REVISION_CONFLICT', err.code);
+    T.check('\ud83d\udd34 and says the draft changed elsewhere, not "try again in a moment"',
+      /changed somewhere else/i.test(err.text) && !/try again in a moment/i.test(err.text), err.text);
+    T.check('it sends the seller to the current version',
+      /reopen/i.test(err.text), err.text);
     await ctx.close();
   });
 

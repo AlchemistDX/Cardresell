@@ -152,6 +152,24 @@ export async function generateReadFixtures() {
   await patch(currentId, { price: 555, expectedRev: packetCurrent.body.draft.rev }, 'pkt-stale-edit');
   const packetStale = await call({ id: currentId });
 
+  // ── packetBlocked: current, readable, and NOT fit to list ───────────────
+  //
+  // A fourth state, and the one the earlier three could not express. This
+  // packet is CURRENT and usable -- it is readable and it agrees with the draft
+  // -- while carrying an ERROR finding, because the create declared no fee
+  // model revision. A packet that cannot say which fee logic priced it is
+  // permanently ambiguous, so the producer refuses to call it listable.
+  //
+  // Produced by POSTing an EMPTY pricingContext through the real handler. The
+  // create still succeeds: a blocked packet is a bad snapshot, not a bad draft
+  // (see api/drafts.js). Note what the envelope reports -- packetUsable true,
+  // readiness.publishable true, zero readiness blockers -- which is exactly why
+  // the screen needed a fourth verdict rather than being able to infer this
+  // from the three facts it already had.
+  const madeBlocked  = await post({ ...httpInput(), pricingContext: {} }, 'pkt-blocked');
+  const blockedPktId = madeBlocked.body.draftId;
+  const packetBlocked = await call({ id: blockedPktId });
+
   // Absent: created through the service, which stores no packet at all.
   await reset();
   const bareIds = await seedPublishable(1);
@@ -159,11 +177,12 @@ export async function generateReadFixtures() {
 
   return {
     blockedTitle, blockedPrice, blockedBoth, publishable,
-    packetCurrent, packetStale, packetAbsent,
+    packetCurrent, packetStale, packetAbsent, packetBlocked,
     PRICING_CONTEXT,
     ids: {
       blockedTitle: longIds[0], blockedPrice: noPriceIds[0], blockedBoth: bothIds[0], publishable: okIds[0],
       packetCurrent: currentId, packetStale: currentId, packetAbsent: bareIds[0],
+      packetBlocked: blockedPktId,
     },
   };
 }

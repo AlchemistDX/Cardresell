@@ -1184,10 +1184,14 @@ reset();
   // tests/listing-packet-offline.mjs, where the 12:50 result is kept as a
   // negative control.)
   //
-  // The client cannot supply this. A packet goes stale only after an edit, the
-  // read gate withholds a stale packet, so at refresh time the client holds no
-  // retrieval time to forward. The record does. This asserts the server reads
-  // it from there, through the real endpoint.
+  // The client cannot supply this. A packet stops covering a draft in three
+  // ways -- inputs never recorded, inputs that never matched at rev 1, and
+  // inputs that differ after an edit (api/_draftStore.js:457-458) -- and the
+  // read gate withholds the content in all three, so at refresh time the
+  // client holds no retrieval time to forward. (An earlier version of this
+  // comment said staleness follows an edit; the first two cases disprove it.)
+  // The record does hold it. This asserts the server reads it from there,
+  // through the real endpoint.
   const HDRS = (k) => ({ authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(k) });
   const call = async (req) => { const res = fakeRes(); await EP.default(fakeReq(req), res); return { status: res.statusCode, body: res.body }; };
   const ORIGIN = '2026-09-08T12:00:00.000Z';
@@ -1241,20 +1245,146 @@ reset();
         basis3 && typeof basis3.sourceUrl === 'string' && basis3.sourceUrl.length > 0,
         JSON.stringify(basis3 && basis3.sourceUrl));
 
-  // A client that DOES hold a live read still wins: the server's copy is a
-  // fallback for the case where the client has nothing, not an override.
-  const LATER = '2026-09-08T18:30:00.000Z';
+  // ── WHAT THIS USED TO ASSERT, AND WHY IT CHANGED ────────────────────────
+  //
+  // Until this revision the assertion here read:
+  //
+  //   'a live client read overrides the stored time rather than being ignored'
+  //   relive.status === 200 && basis5.retrievedAt === LATER
+  //
+  // with the rationale that a client holding a live comp read has a better
+  // source than the record, so the server's carry-forward is a fallback rather
+  // than an override.
+  //
+  // A review question retired it by naming an exercise the assertion could not
+  // survive: scan card B, then refresh card A's saved draft. Under the old rule
+  // the request was ACCEPTED -- verified against the endpoint before the change
+  // -- and card A's packet came back citing card B's comp URL, card B's
+  // midpoint and card B's retrieval time. Nothing in a `basisMeta` says which
+  // card it was read for, so the server could not tell A's basis from B's, and
+  // "the client only ever sends its own" is a property of one client rather
+  // than of this endpoint.
+  //
+  // The capability was withdrawn rather than gated, because a rebuild does not
+  // need it: it reassembles a listing from values already stored, and the basis
+  // it should use is the one on the record. So the assertion is now the
+  // REFUSAL, plus the thing the refusal protects -- that A keeps its own price
+  // provenance.
+  const FOREIGN = '2026-09-08T18:30:00.000Z';
   const read4 = await call({ method: 'GET', query: { id } });
   const relive = await call({ method: 'PATCH', query: { id }, headers: HDRS('age-live'),
                               body: { expectedRev: read4.body.draft.rev, pricingContext: {
                                 feeModelRevision: 1,
-                                basisMeta: { label: 'PriceCharting loose', sourceUrl: 'https://www.pricecharting.com/x', retrievedAt: LATER, low: 390, mid: 410, high: 440 },
+                                basisMeta: { label: 'Card B comp', sourceUrl: 'https://www.pricecharting.com/CARD-B', retrievedAt: FOREIGN, low: 9, mid: 10, high: 11 },
                               } } });
+  check('🔴 a rebuild carrying a client price basis is REFUSED, not ranked',
+        relive.status === 400 && relive.body.code === 'PRICING_CONTEXT_BASIS_NOT_BINDABLE',
+        `${relive.status} / ${relive.body.code} — nothing in a basis identifies the card it was read for`);
   const read5 = await call({ method: 'GET', query: { id } });
   const basis5 = (read5.body.packet && read5.body.packet.priceBasis) || null;
-  check('a live client read overrides the stored time rather than being ignored',
-        relive.status === 200 && basis5 && basis5.retrievedAt === LATER,
-        `${relive.status} / ${basis5 && basis5.retrievedAt}`);
+  check('🔴 and this draft keeps its OWN basis, source and time',
+        basis5 && basis5.retrievedAt === ORIGIN && String(basis5.sourceUrl || '').indexOf('CARD-B') === -1,
+        `${basis5 && basis5.retrievedAt} / ${basis5 && basis5.sourceUrl}`);
+  check('the refusal changed nothing about the draft either',
+        read5.body.draft.rev === read4.body.draft.rev && read5.body.draft.price === 555,
+        `rev ${read5.body.draft.rev} price ${read5.body.draft.price}`);
+  check('the refusal says what to do instead of just failing',
+        typeof relive.body.hint === 'string' && relive.body.hint.length > 0
+          && relive.body.retryable === false,
+        JSON.stringify({ hint: relive.body.hint, retryable: relive.body.retryable }));
+}
+
+
+/* ── The refresh key, and what actually distinguishes one refresh from another
+ *
+ * The client sends `Idempotency-Key: pkt-<draftId>-r<rev>` on a rebuild. Review
+ * asked whether that key can distinguish a CHANGED pricing context, since the
+ * context can change while the revision does not.
+ *
+ * It cannot, and it is not what protects this route. `MUTATION_FIELDS` in
+ * _idempotency.js declares `pricingContext: 'digest'` for 'draft-create' only;
+ * there is no 'draft-update' scope, and `updateDraft` says so in its own
+ * docblock: "Not idempotency-keyed: the expected revision already makes a
+ * replayed edit either a no-op replay or a conflict. The revision IS the
+ * concurrency token here." The key names the write claim, nothing more.
+ *
+ * So the two behaviours the question asks for have to come from the revision,
+ * and that is what this section exercises end to end.
+ */
+console.log('\ncorrecting a refused refresh, and retrying an identical one');
+reset();
+{
+  const ORIGIN = '2026-09-08T12:00:00.000Z';
+  const HDRS = (k) => ({ authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(k) });
+  const call = async (req) => { const res = fakeRes(); await EP.default(fakeReq(req), res); return { status: res.statusCode, body: res.body }; };
+  const created = await call({ method: 'POST', headers: HDRS('q1-create'), body: {
+    ...httpInput(),
+    pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01',
+      basisMeta: { label: 'PriceCharting loose', sourceUrl: 'https://www.pricecharting.com/q1', retrievedAt: ORIGIN, low: 380, mid: 400, high: 430 } },
+  } });
+  const id = created.body.draftId;
+  const r1 = await call({ method: 'GET', query: { id } });
+  await call({ method: 'PATCH', query: { id }, headers: HDRS('q1-edit'),
+               body: { price: 555, expectedRev: r1.body.draft.rev } });
+  const r2 = await call({ method: 'GET', query: { id } });
+  const rev = r2.body.draft.rev;
+  check('the edit withheld the packet, so a refresh is the thing under test',
+        r2.body.packetUsable === false, String(r2.body.packetStatus));
+
+  // ONE key for every attempt below, exactly as the client mints it.
+  const KEY = `pkt-${id}-r${rev}`;
+  const withKey = (body) => call({ method: 'PATCH', query: { id }, body,
+    headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': KEY } });
+
+  // 1. A refresh the server refuses. `now` is server-owned, so a context
+  //    carrying it is rejected before anything is written.
+  const refused = await withKey({ expectedRev: rev, pricingContext: { feeModelRevision: 1, now: 1 } });
+  check('a refresh with a bad context is refused',
+        refused.status === 400, `${refused.status} ${refused.body.code || ''}`);
+  const afterRefusal = await call({ method: 'GET', query: { id } });
+  check('and the refusal wrote nothing, so the key is unspent',
+        afterRefusal.body.draft.rev === rev && afterRefusal.body.packetUsable === false,
+        `rev ${afterRefusal.body.draft.rev}`);
+
+  // 2. The SAME key, with the context corrected, must be able to succeed.
+  const corrected = await withKey({ expectedRev: rev,
+    pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01' } });
+  check('🔴 the same key with a corrected context SUCCEEDS rather than replaying the refusal',
+        corrected.status === 200 && corrected.body.packetRebuilt === true,
+        `${corrected.status} rebuilt=${corrected.body.packetRebuilt}`);
+  const afterFix = await call({ method: 'GET', query: { id } });
+  check('the refreshed packet is current and covers the edited price',
+        afterFix.body.packetUsable === true && afterFix.body.draft.price === 555,
+        `${afterFix.body.packetStatus} / ${afterFix.body.draft.price}`);
+  const revAfter = afterFix.body.draft.rev;
+
+  // 3. The identical request again -- a dropped response, retried. It does NOT
+  //    replay; the revision it carries has moved, so it conflicts. What
+  //    matters is that it is not a SECOND rebuild: nothing duplicated, and the
+  //    record is unchanged afterwards.
+  const stamp = afterFix.body.packet.priceBasis.retrievedAt;
+  const retried = await withKey({ expectedRev: rev,
+    pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01' } });
+  check('🔴 an identical retry does not rebuild a second time',
+        retried.status === 409 && retried.body.code === 'DRAFT_REVISION_CONFLICT'
+          && !retried.body.packetRebuilt,
+        `${retried.status} ${retried.body.code} rebuilt=${retried.body.packetRebuilt}`);
+  const afterRetry = await call({ method: 'GET', query: { id } });
+  check('🔴 and the record is untouched by it — same revision, same quote',
+        afterRetry.body.draft.rev === revAfter
+          && afterRetry.body.packet.priceBasis.retrievedAt === stamp
+          && afterRetry.body.packetUsable === true,
+        `rev ${afterRetry.body.draft.rev} vs ${revAfter}`);
+
+  // 4. And the same key with a DIFFERENT context, after the success -- the
+  //    reviewer's "context changed without the revision changing" case. It is
+  //    refused for the same reason, which is the answer to the question: the
+  //    revision, not the key, is what separates these.
+  const drifted = await withKey({ expectedRev: rev, pricingContext: { feeModelRevision: 2 } });
+  const afterDrift = await call({ method: 'GET', query: { id } });
+  check('a stale revision with a different context cannot land either',
+        drifted.status === 409 && afterDrift.body.packet.metadata.clientDeclaredFeeModelRevision === 1,
+        `${drifted.status} / declared ${afterDrift.body.packet.metadata.clientDeclaredFeeModelRevision}`);
 }
 
 
