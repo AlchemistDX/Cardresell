@@ -1,6 +1,6 @@
 # Lane A, step 1 — a packet may not outlive the inputs it was built from
 
-**Commits:** `db396da` (staleness) · `2cc7c6b` (review items) · `3db7169` (producer connected) · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
+**Commits:** `db396da` (staleness) · `2cc7c6b` (review items) · `3db7169` (producer connected) · `af65ece` (fee-schedule stamp) · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
 **Nothing pushed. Nothing deployed.** `origin/main` is still `9aaf326`.
 
 Prior closures recorded, for context only: T2.10 accepted at `19cb94c` + `00445d0`; T2.9 accepted as the correction record. Neither is reopened here.
@@ -167,6 +167,48 @@ Packet sku/title equal the stored server-derived ones · declared revision recor
 ### Still not on the wire, deliberately
 
 `_draftService.readDraft` still discards the five packet fields, and the comment at that line now says why. The client sends no `pricingContext` yet, so **in production today every packet would be blocked with `MISSING_FEE_MODEL_REVISION`** — the honest state, and the reason forwarding and the client change should land together as the next step.
+
+## 7c. Two findings from sequencing the client change second — `af65ece` and one open
+
+Both were found by starting the client wiring and *reading what it would have to send*, before any renderer existed. Neither would have surfaced as a red test, and both would first have appeared as a review-screen bug.
+
+### Fixed — the fee-schedule stamp was silently null (`af65ece`)
+
+Three defects stacked:
+
+1. The `buildListingPacket` docblock said `feeScheduleVerified` comes from `PLATFORMS.ebay.verified`. **No such field exists.** The real one is `feeAuditedOn`. That docblock is the only instruction whoever wires a caller gets.
+2. `feeAuditedOn` is `'2026-09-01'`, and `normalizeVerifiedStamp` accepted `YYYY-MM` and `Mon YYYY` only — so `YYYY-MM-DD` fell out as `null`.
+3. **A null result was reported nowhere.** No code, no severity, no note.
+
+(3) is what made (1) and (2) invisible: a client wired from the docblock produces a clean-*looking* unblocked packet with a missing field. `TAXONOMY_VERSION_ASSUMED` in the same table does the right thing for the same situation, which is what makes this an omission rather than a decision.
+
+Fixed on the function: `YYYY-MM-DD` accepted with the day dropped (a fee schedule has month granularity), *not* widened into a general date parser; docblock corrected and told to stop saying `.verified`; and two codes split — `FEE_SCHEDULE_DATE_ABSENT` (incomplete caller) vs `FEE_SCHEDULE_DATE_UNPARSEABLE` (**format drift** — the venue table moved and this module didn't hear). Neither blocks; both stay `null` rather than defaulting to this month. `listing-packet-offline` 160 → **175/0**.
+
+### OPEN, needs a decision — the packet's `pricing` field has no producer
+
+`buildListingPacket`'s docblock says `pricing` is "the `listPriceForTargetNet` result". **`listPriceForTargetNet` has no production caller.** It is defined in the live bundle at `js/core.541c4c39.js:7658` and called only from `tests/listing-packet-offline.mjs`, which extracts it by source text. Same in every retained bundle generation.
+
+This is the second instance of the exact shape Lane A exists to remove — `buildListingPacket` had no production caller until `3db7169`; its `pricing` input still has no production producer — and it is the `marketAskDivergence` read-by-nobody family from the other direction.
+
+It blocks the client change, because there are only three things the client could send and two are not allowed:
+
+| Option | Verdict |
+|---|---|
+| Call `listPriceForTargetNet` at create time with a target the seller never set | **Refused** — invented input to a fee model |
+| Send `pricing` built from the draft price by hand | **Refused** — second implementation of the inversion |
+| Omit `pricing` | Honest, but see below |
+
+Omitting it is honest and is what the producer does today, with one consequence worth deciding rather than absorbing: **`NO_PRICE` fires on a draft that has a price.** The trigger is `!pricing || pricing.ok !== true || !(pricing.listPrice > 0)`, and the message is *"No list price computed. Set a target payout to get one."* The code name claims one thing, the message claims another, and the trigger tests the second. The packet **never sees the draft's price at all** — `row` is the card, and `stampPriceBasis` keeps eight named keys that do not include `basisMeta.value` — so it cannot currently tell the difference between "unpriced draft" and "priced draft, no target-payout inversion".
+
+On a $250 comp-priced draft the packet would therefore render a warning telling the seller to set a target payout, next to a price. That is the "stamp a lie" shape, and it is why the client change is paused here rather than shipped.
+
+Three ways out, not chosen:
+
+- **(a) Rename to what it tests** — `NO_TARGET_NET_PRICING`, message adjusted. Cheapest; leaves the packet still blind to the draft price.
+- **(b) Let the packet see the price** — the client already sends `price`/`priceSource` as declared inputs, so passing them into `packetCtx` widens nothing. Then `NO_PRICE` means what its name says, and the inversion gap becomes a separate, correctly-named note.
+- **(c) Give `listPriceForTargetNet` its production caller** — the largest, and arguably the real fix, since a target-payout feature that exists in tested code and not in the product is its own finding.
+
+(b) looks right for this lane and (c) looks like its own piece of work, but this is a decision, not a cleanup.
 
 ## 8. Unchanged and still open
 
