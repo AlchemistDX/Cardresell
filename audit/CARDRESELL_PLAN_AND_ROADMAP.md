@@ -533,6 +533,16 @@ The phase sequence is the frozen product roadmap (`audit/CARDRESELL_WHERE_WERE_G
 > withdrawn pending that pass** — not revised downward, withdrawn, because the
 > sweeps invalidated its basis without establishing a replacement. Do not quote
 > a Phase 1 percentage from this document until the pass is recorded.
+>
+> **Update, same day:** a provisional **75-80% seller-reachable** has been
+> offered on review, reasoning that the packet block is internally implemented
+> and still unavailable to sellers. Recorded as provisional and unaudited: it
+> adjusts the same basis that was withdrawn rather than replacing it with a
+> checked one. A defect found the same day supports the direction -- every
+> packet the producer built was unreadable, not merely unread, so that block's
+> seller-reachable contribution was zero rather than partial. See
+> `audit/d3/LANE_A_STEP1_PACKET.md` sections 11b and 13. The per-block
+> reachability pass is still what settles this.
 
 | Block | State | What is present | Exit or next-entry criterion |
 |---|---|---|---|
