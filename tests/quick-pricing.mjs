@@ -976,6 +976,132 @@ console.log('\n[Quick Pricing — wiring]');
           'a 30-day mean is not the bottom of anything');
   }
 
+  // ---- 5b-int. THE REAL ADAPTER: tplCardToNormalized -> gate ----
+  /* Added 2026-09-08 on review. Section 5b composes _crTplAskEndpoints with the
+     gate, which tests the validator but NOT the adapter -- and the adapter is
+     where the attribution defect actually lived. A validator that returns the
+     right answer proves nothing if the function calling it drops, overwrites or
+     re-tags the result on the way out.
+
+     So this lifts the shipped `tplCardToNormalized` itself. Its only free
+     identifier is _crTplAskEndpoints (the two _crMeasuredRange mentions inside
+     it are in comments), so the real function can be reconstituted from bundle
+     text with one dependency and no stubs. The priceVariant it emits is then
+     fed to the real gate, which is the shape production actually produces. */
+  {
+    const na = core.indexOf('function _crTplAskEndpoints(');
+    const nb = core.indexOf('function tplCardToNormalized(');
+    /* End the slice at the adapter's OWN closing brace, not at the next
+       declaration. Anchoring on "the next function" pulled in top-level code
+       that touches `window`, which throws under node before a single assertion
+       runs -- the extraction has to end where the function ends. */
+    const nTail = core.indexOf('tplGameSlug: gameSlug,', nb);
+    const nc = core.indexOf('\n}\n', nTail) + 3;
+    check('the real adapter and its dependency are locatable',
+          na !== -1 && nb > na && nTail > nb && nc > nTail,
+          'if this fails the integration case below is testing nothing');
+    check('the extracted adapter slice ends at the adapter',
+          !/\bwindow\./.test(core.slice(nb, nc)),
+          'an overshooting slice throws on window before any assertion runs');
+
+    const normalize = new Function(
+      core.slice(na, nb) + core.slice(nb, nc) + '; return tplCardToNormalized;')();
+
+    // The adapter takes a TPL card object, so build one the way TPL ships it.
+    const tplCard = (rawPrices, gradedPrices) => ({
+      id: 'tpl-1', name: 'Test Card', number: '4', rarity: 'Rare',
+      set_name: 'Base', image_url: 'https://example.invalid/x.png',
+      prices: { raw: rawPrices || {}, graded: gradedPrices || {} },
+    });
+    const variant = (out, key) => out.priceVariants.find(v => v.key === key);
+
+    // (1) a conforming block keeps its endpoints AND its attribution
+    {
+      const out = normalize(
+        tplCard({ near_mint: { tcgplayer: { market: 100, low: 90, high: 130 } } }),
+        'pokemon', '');
+      const v = variant(out, 'near_mint');
+      check('the adapter emits the conforming condition variant',
+            !!v, 'if absent, the endpoint assertions below cannot fail honestly');
+      check('the adapter preserves both endpoints through normalization',
+            v.low === 90 && v.high === 130,
+            'the validator returning them is not the same as the adapter emitting them');
+      check('the adapter preserves the attribution through normalization',
+            v.lowBasis === 'tcgplayer' && v.highBasis === 'tcgplayer',
+            'this is the exact field the old || fallback used to overwrite');
+      check('a conforming adapter output passes the real gate',
+            gate(v).ok === true,
+            'adapter -> gate end to end, no hand-built basis object');
+      check('the adapter records market provenance too',
+            v.marketBasis === 'tcgplayer');
+    }
+
+    // (2) a clamped high is still derived AFTER normalization
+    {
+      const out = normalize(
+        tplCard({ near_mint: { tcgplayer: { market: 100, low: 90, high: 300, highClamped: true } } }),
+        'pokemon', '');
+      const v = variant(out, 'near_mint');
+      check('a clamped high survives normalization still tagged derived',
+            v.highBasis === 'derived',
+            'the adapter must not re-tag it back to the vendor on the way out');
+      check('a clamped adapter output is refused by the real gate',
+            gate(v).ok === false && gate(v).why === 'derived-endpoint');
+    }
+
+    // (2b) the untagged-positive case, through the adapter this time
+    {
+      const out = normalize(
+        tplCard({ near_mint: { market: 100, low: 90, high: 130 } }), 'pokemon', '');
+      const v = variant(out, 'near_mint');
+      check('endpoints outside the tcgplayer block do not reach the variant',
+            v.low === null && v.high === null
+            && v.lowBasis === null && v.highBasis === null,
+            'the adapter must not resurrect what the validator refused');
+      check('and the real gate refuses that variant',
+            gate(v).ok === false);
+    }
+
+    // (3) a graded averages-only block produces NO endpoints
+    {
+      const out = normalize(
+        tplCard({}, { psa: { '10': { ebay: { avg_1d: 120, avg_7d: 100, avg_30d: 140 } } } }),
+        'pokemon', '');
+      const v = variant(out, 'psa_10');
+      check('the adapter emits the graded variant', !!v);
+      check('an averages-only graded block yields no endpoints',
+            v.low === null && v.high === null
+            && v.lowBasis === null && v.highBasis === null,
+            'a 30-day mean is not a floor and a 1-day mean is not a ceiling');
+      check('the graded variant still carries its market figure and its origin',
+            v.market === 100 && v.marketBasis === 'ebay-sold',
+            'avg_7d is a documented completed-sale average, so it may be named');
+      check('the graded mid is tagged derived, not presented as a median',
+            v.mid === 100 && v.midBasis === 'derived');
+      check('the real gate withholds a range for the graded variant',
+            gate(v).ok === false && gate(v).why === 'no-endpoints');
+
+      /* The specific regression this closes: avg_30d ABOVE avg_7d is ordinary in
+         a falling market, and under the old code that put a 30-day mean into
+         `low` above the centre -- which the T2.14 row would now render as
+         "Provider low (not used)". The T2.14 branch is gated on
+         `basis.low != null`, so a null low means no row at all. */
+      check('no T2.14 row can be built from a graded average',
+            v.low == null,
+            'basis.low != null is what gates that row; averages must not reach it');
+    }
+
+    // (3b) a graded block whose market came from an untyped field stays untyped
+    {
+      const out = normalize(
+        tplCard({}, { psa: { '9': { market: 55 } } }), 'pokemon', '');
+      const v = variant(out, 'psa_9');
+      check('an untyped graded market figure is not given the eBay tag',
+            v.market === 55 && v.marketBasis === null,
+            'the vendor does not say whether g[grade].market is an ask or a sale');
+    }
+  }
+
   // ---- 5c. the origin contract: a token must carry a guarantee ----
   {
     const ci = core.indexOf('const _CR_ORIGIN_CONTRACT');
@@ -1008,6 +1134,50 @@ console.log('\n[Quick Pricing — wiring]');
     check('mixing an ask origin with a sale origin is refused',
           gate({ low: 90, high: 130, lowBasis: 'observed', highBasis: 'ebay-sold' }).why
             === 'mixed-origin');
+    /* Presentation limitation for the generic token, 2026-09-08 on review.
+       "provider-supplied range, type unspecified" is supportable; "observed
+       sales range" is not, because that token's instrument is unknown. The
+       contract records the limitation; this asserts the RENDERER honours it. */
+    {
+      const ra = core.indexOf('function _crRangeHtml(');
+      const rb = core.indexOf('const _QP_DERIVED_SPREAD', ra);
+      check('the range renderer is locatable', ra !== -1 && rb > ra);
+      /* One contiguous slice from the contract through _crMeasuredRange. An
+         earlier version stitched `ci..cj` (contract only) to the gate and threw
+         ReferenceError, because `cj` is the START of the derived allow-list, so
+         the line that defines _CR_MEASURED_ORIGINS fell in the gap. Same shape
+         as instance 31: an extraction anchor that stopped containing its own
+         dependency. Take the whole region instead of splicing around it. */
+      const gateRegion = core.slice(ci, core.indexOf('const _CR_NO_RANGE_NOTE'));
+      check('the lifted gate region carries its own allow-list',
+            /_CR_MEASURED_ORIGINS\s*=/.test(gateRegion)
+            && /function _crMeasuredRange\(/.test(gateRegion),
+            'a slice missing its dependency throws instead of asserting');
+      const rangeHtml = new Function(
+        gateRegion + core.slice(ra, rb) + '; return _crRangeHtml;')();
+
+      const out = rangeHtml(90, 130, 'provider');
+      check('a provider-origin range still renders',
+            out.includes('90.00') && out.includes('130.00'),
+            'the token is admitted; withholding it would discard real data');
+      check('a provider-origin range is not called sales',
+            !/sold|sales|completed/i.test(out),
+            'its instrument is unknown, so sale language is unsupportable');
+      check('a provider-origin range is not called observed',
+            !/observed/i.test(out),
+            '"observed" is the vocabulary the absence note uses for measurement');
+      check('the range is named neutrally',
+            /\brange\b/.test(out),
+            'provider-supplied range, type unspecified -- which is supportable');
+
+      // An ask-origin range gets the same neutral wording, so nothing upgrades
+      // one token's presentation above another's on the strength of its tag.
+      check('an ask-origin range uses the same neutral wording',
+            rangeHtml(90, 130, 'tcgplayer').replace(/[\d.]/g, '')
+              === out.replace(/[\d.]/g, ''),
+            'one renderer, one vocabulary; the tag gates admission, not adjectives');
+    }
+
     check('an origin absent from the contract is refused',
           gate({ low: 90, high: 130, lowBasis: 'made-up', highBasis: 'made-up' }).why
             === 'derived-endpoint',

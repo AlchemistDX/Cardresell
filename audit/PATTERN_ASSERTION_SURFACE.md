@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**31 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 31; that number, not this sentence, is the
+**32 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 32; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1784,3 +1784,46 @@ gate's logic locally — the tempting shortcut — they would have kept passing
 against a copy while the shipped gate changed underneath them, which is the
 failure this whole file catalogues. Recorded because it is evidence *for* the
 extraction technique, not against it.
+
+## Instance 32 — a hand-kept list of suites was reported as the set of suites (2026-09-08)
+
+The 2026-09-08 checkpoint reported seventeen suites green and then wrote reasons
+for everything absent from that list, including "dated audit, no runner
+registered" for twelve suites. `a11y-mobile-2026-09-04.mjs` is registered at
+`tests/run-all.sh:392`, and so were the other eleven.
+
+The wrong reason is not the defect. The defect is that the seventeen names were
+a **hand-maintained list living in my working notes**, and "not in my list" was
+silently converted into "not registered". Deriving the real set is one command —
+`grep -oE 'tests/[a-z0-9._-]+\.mjs' tests/run-all.sh` returns **42** — so
+twenty-five registered suites went unrun and were then characterised without
+being run.
+
+**What makes this the pattern rather than an oversight:** `tests/test-registry.mjs`
+exists specifically so that "registered" is a derived fact and nobody's memory.
+Its own header records that it was written because `contrast-tokens` had been
+reported as registered when the runner never invoked it. That suite passed 12/0
+in the same run in which I made the equivalent error one level up — about the
+runner rather than about a single suite. The guard was green and unconsulted.
+A derivation tool only removes the class of error if the report is generated
+*from* it; running it beside a hand-written claim leaves the claim unchecked.
+
+All 25 were then run: all green, 41 of 42 registered suites passing, the sole
+exception `draft-kv-live` requiring live KV. Three of the unrun suites were
+directly relevant to the commit being reported — `scan-hygiene-2026-09-04` for
+the changed `api/scan.js` response, `a11y-mobile-2026-09-04` for the surface the
+new disclosure row shipped into, `asset-extraction-2026-09-05` for the bundle
+rename — and I had classified two of them as low relevance.
+
+**Rider.** A checkpoint report that lists suite results must derive the list from
+the runner in the same action that reports the results. Reporting "not rerun" is
+accurate and acceptable; assigning a *reason* requires checking the registry.
+
+**Second finding from the same correction.** The status line "31 mappings
+resolved" was inverted (prior inventories said 31 *unresolved*) and the number
+was wrong: the tool reports **72 unresolved**. Its listing is capped at
+`problems.slice(0, 40)` (`tools/bundle-citation-map.mjs:134`), so a count taken
+from the listing is truncated and cannot be reconciled with the headline — the
+most likely origin of the standing 31. The tool is unregistered in the runner,
+which is why nothing caught the drift. Same mechanism, different artifact: a
+number carried in prose beside a tool that would have produced it.

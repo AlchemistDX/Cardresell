@@ -110,6 +110,63 @@ On the untagged-positive case specifically: under the new code the meaningful
 distinction is no longer "tagged vs untagged" — nothing is ever tagged upstream
 — but **conforming vs not**. The test is shaped that way deliberately.
 
+### The adapter itself — added on review
+
+The gap was correctly identified: § 5b composed `_crTplAskEndpoints` with the
+gate, so it tested the validator and not `tplCardToNormalized`, which is where
+the defect lived. A validator returning the right answer proves nothing if the
+function calling it drops, overwrites or re-tags the result on the way out.
+
+**§ 5b-int now lifts the shipped adapter.** Its only free identifier is
+`_crTplAskEndpoints` (the two `_crMeasuredRange` mentions inside it are in
+comments), so the real function reconstitutes from bundle text with one
+dependency and **no stubs**. It is given a TPL-shaped card object and its
+emitted `priceVariant` is fed to the real gate — the shape production produces,
+with no hand-built basis object anywhere in the chain.
+
+The three required cases, plus two:
+
+| case | asserted |
+|---|---|
+| conforming block | `low === 90`, `high === 130`, `lowBasis === highBasis === 'tcgplayer'`, `marketBasis === 'tcgplayer'`, real gate `ok: true` |
+| clamped high | `highBasis === 'derived'` **after** normalization; gate refuses `derived-endpoint` |
+| graded averages only | `low`, `high`, `lowBasis`, `highBasis` all `null`; `market === 100` with `marketBasis === 'ebay-sold'`; `mid` tagged `derived`; gate refuses `no-endpoints`; and `basis.low == null`, which is what gates the T2.14 row |
+| untagged positive, through the adapter | endpoints do not reach the variant; gate refuses |
+| untyped graded market | `marketBasis === null` — `g[grade].market` has no documented instrument, so it does not borrow the eBay tag above it |
+
+**These were mutation-tested, not just observed green.** Three mutations were
+applied to the live bundle and reverted:
+
+1. Endpoints resurrected past the validator (`condData?.low ?? _ask.low`) →
+   **caught**, and caught *only* by § 5b-int. The § 5b validator-level
+   assertions all still passed, because the validator was untouched. That is a
+   direct demonstration of the gap that was flagged.
+2. The original defect restored (`_ask.lowBasis || 'tcgplayer'`) → **caught**.
+3. Graded averages restored (`ebay.avg_30d ?? mkt` / `ebay.avg_1d ?? mkt`) →
+   **caught**, 3 assertions failing including the T2.14 reachability one.
+
+Bundle restored afterwards; `sha256sum` first 8 is `1eea628c`, matching its own
+name, and `asset-fingerprints` re-passes.
+
+One incident worth recording: the first version of the extraction anchored the
+slice end on "the next function declaration", which overshot into top-level code
+touching `window` and threw `ReferenceError` before a single assertion ran. It
+now anchors on the adapter's own closing brace, with an assertion that the
+extracted slice contains no `window.` reference. Same family as instance 31, and
+it recurred a third time in this same session when a spliced gate region omitted
+the line defining its own allow-list. Both now carry explicit
+slice-contains-its-dependency assertions.
+
+### The generic provider token in presentation
+
+Retained as required. `_crRangeHtml` renders `· range $90.00–$130.00` and
+nothing else, and this is now asserted rather than observed: for a
+`provider`-origin range the output must match `/\brange\b/` and must **not**
+match `/sold|sales|completed/i` or `/observed/i`. A further assertion requires
+that an ask-origin range produce byte-identical wording once digits are
+stripped, so no token's presentation can be upgraded above another's on the
+strength of its tag — the tag gates admission, not adjectives.
+
 ### Naming the co-context guarantee
 
 The instruction was to name and test the guarantee before calling the result a
@@ -279,29 +336,77 @@ provider range keeps its own qualification.
 
 ## The two reporting corrections
 
-### Suites not rerun at this checkpoint
+### Suites not rerun at this checkpoint — WITHDRAWN AND REPLACED
 
-Reported as **not rerun at this checkpoint**, with regression relevance
-classified from **behaviour**, not from the dated name.
+The table that stood here is withdrawn. It was wrong in a way that matters more
+than the individual rows.
 
-| suite | why not rerun | regression relevance to this commit |
-|---|---|---|
-| `tests/run-all.sh` | instructed not to run | n/a |
-| `ebay-live` | needs `EBAY_LIVE=1`, blocked behind the rotation gate | **relevant** — 18/19, and 19/19 is a release gate |
-| `draft-kv-live` | needs live KV | low — no draft or KV code touched |
-| `test-scan` | no offline harness exists | **relevant** — `api/scan.js` changed (grade-mode response shape) |
-| `a11y-mobile-*` | dated audit, no runner registered | **relevant** — a new visible row and a new CSS rule shipped |
-| `asset-extraction-*` | dated audit | **relevant** — the bundle was renamed |
-| `bulk-*` | dated audit | low — bulk paths not touched |
-| `durability-*` | dated audit | low — no persistence change |
-| `entitlements-*` | dated audit | low — no entitlement change |
-| `majors-*`, `minors-*` | dated audits | **partly relevant** — both include pricing-ladder items |
-| `scan-hygiene-*` | dated audit | **relevant** — `api/scan.js` response shape changed |
-| `sol-remediation-*` | dated audit | low — items already closed elsewhere |
+It assigned reasons like "dated audit, no runner registered" to twelve suites.
+`a11y-mobile-2026-09-04.mjs` **is** registered — `tests/run-all.sh:392` — and so
+are eleven others I described the same way. The reviewer caught this against the
+earlier registered-suite inventory.
 
-The dated name is a filename convention, not evidence about scope. Where a suite
-exercises behaviour this commit changed, it is marked relevant regardless of its
-date.
+The underlying defect is not the wrong reason, it is where my list came from.
+I ran a **hand-maintained list of 17 suite names** and then wrote reasons for
+everything absent from it, inferring "unregistered" from "not in my list". The
+runner is the source of truth for what is registered, and
+`tests/test-registry.mjs` exists precisely to stop registration being a
+remembered fact. I had that suite green in the same run and did not consult it.
+Filed as **instance 32**.
+
+Derived, not remembered — `grep -oE 'tests/[a-z0-9._-]+\.mjs' tests/run-all.sh`
+yields **42 registered suites**. My 17 covered 17 of them; **25 registered
+suites went unrun and were then reported on**. Of those 25, fourteen are not
+even dated: `bulk-scan-misfire`, `draft-crud-e2e`, `draft-focus`,
+`draft-index-recovery`, `draft-list-cap`, `draft-list-screen`,
+`draft-readiness`, `draft-store`, `ebay-auth-offline`, `listing-packet-offline`,
+`sell-gate-ordering`, `sports-parallel`, `trs-listing-scope`,
+`webhook-p0-offline`.
+
+**All 25 have now been run individually.** All pass, all exit 0:
+
+| suite | result |
+|---|---|
+| `draft-index-recovery` | 258 / 0 |
+| `scan-hygiene-2026-09-04` | 182 / 0 |
+| `a11y-mobile-2026-09-04` | 174 / 0 |
+| `listing-packet-offline` | 153 / 0 |
+| `draft-crud-e2e` | 130 / 0 |
+| `draft-list-cap` | 130 / 0 |
+| `durability-tombstones-2026-09-04` | 130 / 0 |
+| `draft-store` | 111 / 0 |
+| `minors-011-012-013-2026-09-04` | 106 / 106 assertions |
+| `draft-list-screen` | 101 / 0 |
+| `majors-flip-and-pack-2026-09-04` | 100 / 0 |
+| `bulk-minun-misfire-2026-09-04` | 85 / 0 |
+| `bulk-bulbasaur-qualifier-2026-09-04` | 72 / 0 |
+| `entitlements-2026-09-04` | 68 / 0 |
+| `trs-listing-scope` | 60 / 0 |
+| `sol-remediation-2026-09-04` | 58 / 0 |
+| `draft-focus` | 56 / 0 |
+| `ebay-auth-offline` | 53 / 0 |
+| `sell-gate-ordering` | 38 / 0 |
+| `asset-extraction-2026-09-05` | 34 / 0 |
+| `sports-parallel` | 11 / 0 |
+| `webhook-p0-offline` | all 4 cases passed |
+| `bulk-scan-misfire` | all regressions pass |
+| `draft-readiness` | RESULT: PASS |
+| `draft-kv-live` | **not run** — needs live KV |
+
+The four suites without a `N passed, N failed` line were checked individually to
+confirm they assert real work rather than exiting clean on an empty set.
+
+**Total: 41 of 42 registered suites run and green.** The single exception is
+`draft-kv-live`, which needs a live KV binding. It and three other
+non-offline-runnable checks are now filed in
+`audit/RELEASE_VALIDATION_QUEUE.md` — a file that did not exist, which is why
+"carry it into release validation" had previously resolved to nowhere.
+
+Several of the newly-run suites were directly relevant to this commit and I had
+classified them as low relevance: `scan-hygiene-2026-09-04` (182/0) covers the
+`api/scan.js` response shape I changed, `a11y-mobile-2026-09-04` (174/0) covers
+the surface the new T2.14 row shipped into, and `asset-extraction-2026-09-05`
+(34/0) covers the bundle rename.
 
 ### Fee arithmetic versus disclosures
 
@@ -391,8 +496,39 @@ Retired in place: `040daa95`, `259bdb88`, `4104f47f`, `24cd52cb`, `569ff536`,
 `7f9c03ad`, `8bd8277a`, `c5d0858b`, `d9e1b484`, `b837f63b`, `2abb15f0`,
 `8e031c8f`.
 
-Citation map: 31 mappings **resolved**, all pointing at `d9e1b484`, all
-pre-existing. That is "mappings resolved", not "citations verified".
+Citation map — **corrected on review, and the correction is worse than the
+original error.** The prior line read "31 mappings resolved". Two things were
+wrong with it: the status was **inverted** (prior inventories reported 31
+*unresolved*), and the number is not 31.
+
+`node tools/bundle-citation-map.mjs` actually reports:
+
+```
+core.24cd52cb.js   17/17 citations resolve
+core.7f9c03ad.js   42/42 citations resolve
+core.8bd8277a.js     1/1 citations resolve
+core.8e031c8f.js    9/10 citations resolve
+core.d9e1b484.js  6557/6628 citations resolve
+72 citation(s) do not resolve — the cited line changed or moved:
+```
+
+**72 unresolved**, which is exactly 71 (`6628 − 6557`) plus 1 (`10 − 9`). The
+listing beneath that headline shows 40 rows across 4 documents (29 unique
+document+citation pairs), because `tools/bundle-citation-map.mjs:134` prints
+`problems.slice(0, 40)` — **the listing is capped at 40**. So any count taken by
+reading the listing rather than the headline is truncated, which is the most
+likely origin of the standing "31" figure and is why it could not be reconciled
+against the headline.
+
+One of the 72 is **new at this checkpoint**: the single unresolved citation in
+`core.8e031c8f.js` appeared because that bundle was retired and restored to its
+`HEAD` bytes here. One more sits in `audit/d3/Q7_BIAS5_RETURN_PACKET.md`, my own
+prior packet.
+
+Correct status: **72 citations unresolved, 6626 resolve, listing capped at 40.**
+Still "mappings", not "citations verified" — resolution means the cited line
+exists, not that it says what the citing text claims. The tool remains
+unregistered in `tests/run-all.sh`, which is why this drifted unnoticed.
 
 ---
 
