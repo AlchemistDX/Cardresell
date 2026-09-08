@@ -397,6 +397,36 @@ test, and there is no mutation-testing tool available (no dependencies).
 only to those guarding a fix?** We are aware that we are asking whether to
 institute a practice we have so far applied exactly once.
 
+### What we do next, and which answers arrive too late to matter
+
+Stating this because two of the questions above gate work we are otherwise about
+to start, and an answer that arrives after the code is written costs a rewrite
+rather than a decision.
+
+**Planned order:** static-date parity guard → `<dl>` fee-row conversion →
+re-verify fee-row states at 720px light/dark → final bundle rename (D3's last
+action, `asset-fingerprints` 14/1 → 15/0).
+
+- **Q-B gates the parity guard**, which is the next thing we touch. Unless you
+  say otherwise we will build the **regex** version, on the grounds that it
+  breaches no standing rule and is the cheapest option to throw away. If you
+  prefer `data-venue` attributes, saying so before we start saves the rewrite —
+  and saying so *after* is still fine, it just costs more.
+- **Q-A gates the `<dl>` conversion**, which is second. We will not guess this
+  one. If no answer has arrived by the time the guard is done, we will build the
+  markup with option (1) — omit the withheld pair — and leave T2.14 open and
+  explicitly unclosed, rather than inventing disclosure copy that depends on the
+  Q7 policy decision.
+- **Q-C does not gate D3.** BIAS-1 sits after the bundle rename. Answer at
+  leisure; it needs Q-A's answer first anyway.
+- **Q-D is a process question with no deadline.** It changes how we write the
+  next assertion, not this one.
+
+**The bundle rename is deliberately last** and is why `asset-fingerprints` is
+held red at 14/1 rather than fixed. Any further change to `js/core.7f9c03ad.js`
+after the rename invalidates the hash and every citation pointing at it, so it
+cannot happen until the two items above land.
+
 ---
 
 # Appendices — full text of everything cited above
