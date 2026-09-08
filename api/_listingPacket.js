@@ -45,6 +45,14 @@ export const PACKET_CODES = {
   MISSING_REQUIRED_ASPECT:    'MISSING_REQUIRED_ASPECT',
   UNVERIFIED_ASPECT_VALUES:   'UNVERIFIED_ASPECT_VALUES',
   TAXONOMY_VERSION_ASSUMED:   'TAXONOMY_VERSION_ASSUMED',
+  // Format drift, and a DIFFERENT severity class from the rest of this table.
+  // Every other code here reports a failure to STATE something. This one
+  // exists because the old code accepted any truthy value, stamped it
+  // `source: 'live'`, and in doing so SUPPRESSED TAXONOMY_VERSION_ASSUMED --
+  // so an unvalidated string was treated as stronger evidence than the
+  // verified constant, and the honest fallback was silenced by the dishonest
+  // input. A malformed version now falls back and says both things.
+  TAXONOMY_VERSION_UNPARSEABLE: 'TAXONOMY_VERSION_UNPARSEABLE',
   // NO_PRICE means what its name says: this draft has no price. It used to
   // test ctx.pricing -- the target-payout inversion result -- while carrying a
   // message telling the seller to set a target payout. Name, message and
@@ -58,6 +66,16 @@ export const PACKET_CODES = {
   // number the seller typed. Attaching one silently would let the review screen
   // present a seller's own asking price as comp-derived.
   PRICE_BASIS_NOT_SOURCE_OF_PRICE: 'PRICE_BASIS_NOT_SOURCE_OF_PRICE',
+  // ── The priceBasis normalizer's failure modes ────────────────────────────
+  // Every one of these used to resolve to a silent null. Split absent from
+  // unparseable throughout, for the same reason as the fee schedule: an
+  // incomplete caller and a feed that changed shape want different responses,
+  // and collapsing them sends someone to fix the wrong end.
+  PRICE_BASIS_ABSENT:         'PRICE_BASIS_ABSENT',
+  PRICE_BASIS_AGE_ABSENT:     'PRICE_BASIS_AGE_ABSENT',
+  PRICE_BASIS_AGE_UNPARSEABLE:'PRICE_BASIS_AGE_UNPARSEABLE',
+  PRICE_BASIS_INCOMPLETE:     'PRICE_BASIS_INCOMPLETE',
+  PRICE_BASIS_DATING_UNPARSEABLE: 'PRICE_BASIS_DATING_UNPARSEABLE',
   // Split deliberately, and for the same reason `feeAudited` vs a live read is
   // split above: "nobody sent a fee-schedule date" and "someone sent one this
   // module could not read" are different events with different causes. Absent
@@ -296,13 +314,57 @@ export function normalizeVerifiedStamp(v) {
  * `retrievedAt: null` — an honest gap beats a fabricated timestamp.
  */
 export function stampPriceBasis(basisMeta, nowMs) {
-  if (!basisMeta || typeof basisMeta !== 'object') return null;
+  return stampPriceBasisReporting(basisMeta, nowMs).basis;
+}
+
+/**
+ * The same normalizer, with its failure modes named instead of swallowed.
+ *
+ * `stampPriceBasis` above is a thin wrapper over this so the two cannot drift:
+ * the parse rules live here once. Callers that only want the stamp keep the
+ * old signature; `buildListingPacket` uses this one so a null can be reported
+ * rather than rendering as an empty caption nobody can explain.
+ *
+ * These are not edge cases. The two SportsCardsPro basis assignments in the
+ * bundle (`window._crBasis` at core:3326 and core:4845) set exactly
+ * `{ value, low: null, mid: null, high: null, label }` -- no `cacheAgeSec`,
+ * no `sourceUrl`, no `datedBySource`. Every sports-card price therefore
+ * produces a basis with a label and nothing else, and the packet used to
+ * record that as a clean stamp.
+ *
+ * (An earlier draft of this comment blamed PriceCharting. That was wrong and
+ * is recorded here rather than quietly corrected: PriceCharting's gap is
+ * `datedBySource: false` -- no publisher as-of date -- which the stamp
+ * ALREADY handles honestly and which is a different failure from having no
+ * retrieval time at all.)
+ */
+export function stampPriceBasisReporting(basisMeta, nowMs) {
+  const findings = [];
+  if (!basisMeta || typeof basisMeta !== 'object') {
+    return { basis: null, findings: [{ code: PACKET_CODES.PRICE_BASIS_ABSENT }] };
+  }
   const now = Number.isFinite(nowMs) ? nowMs : Date.now();
 
-  const age = Number(basisMeta.cacheAgeSec);
-  const retrievedAt = Number.isFinite(age) && age >= 0
-    ? new Date(now - age * 1000).toISOString()
-    : null;
+  const rawAge = basisMeta.cacheAgeSec;
+  const ageSupplied = rawAge !== null && rawAge !== undefined && String(rawAge).trim() !== '';
+  const age = Number(rawAge);
+  const ageUsable = ageSupplied && Number.isFinite(age) && age >= 0;
+  const retrievedAt = ageUsable ? new Date(now - age * 1000).toISOString() : null;
+
+  if (!ageSupplied)      findings.push({ code: PACKET_CODES.PRICE_BASIS_AGE_ABSENT });
+  else if (!ageUsable)   findings.push({ code: PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE });
+
+  const missing = [];
+  if (!basisMeta.label)     missing.push('label');
+  if (!basisMeta.sourceUrl) missing.push('sourceUrl');
+  if (missing.length) findings.push({ code: PACKET_CODES.PRICE_BASIS_INCOMPLETE, missing });
+
+  // A non-boolean here used to read as "not dated by source", which is a
+  // CLAIM about the feed rather than an admission that we could not tell.
+  if (basisMeta.datedBySource !== undefined && basisMeta.datedBySource !== null
+      && typeof basisMeta.datedBySource !== 'boolean') {
+    findings.push({ code: PACKET_CODES.PRICE_BASIS_DATING_UNPARSEABLE });
+  }
 
   const out = {
     label:         basisMeta.label || null,
@@ -320,7 +382,7 @@ export function stampPriceBasis(basisMeta, nowMs) {
   // Belt and braces: if a future _basisMeta grows another relative field,
   // this strips it rather than letting it ride along into storage.
   for (const k of FORBIDDEN_AGE_KEYS) delete out[k];
-  return out;
+  return { basis: out, findings };
 }
 
 // No price data predates this app, so a stamp older than this is corrupt
@@ -444,7 +506,26 @@ export function buildListingPacket(row = {}, ctx = {}) {
       + 'a packet that cannot say which fee logic priced it is permanently ambiguous.');
   }
 
-  const treeVersionLive = ctx.taxonomyTreeVersion ? String(ctx.taxonomyTreeVersion) : null;
+  // ── Live taxonomy version, validated before it is believed ──────────────
+  // eBay's get_default_category_tree_id returns categoryTreeVersion as a
+  // numeric string ("134"). Anything else is drift or a wiring mistake, and
+  // must not be able to buy the 'live' label. Deliberately NOT widened into a
+  // lenient parser: the point is to refuse what we cannot recognize, not to
+  // salvage it.
+  const rawTree       = ctx.taxonomyTreeVersion;
+  const treeSupplied  = rawTree !== null && rawTree !== undefined
+                        && String(rawTree).trim() !== '';
+  const treeCandidate = treeSupplied ? String(rawTree).trim() : null;
+  const treeVersionLive = (treeCandidate && /^\d+$/.test(treeCandidate)) ? treeCandidate : null;
+
+  if (treeSupplied && treeVersionLive === null) {
+    add(PACKET_CODES.TAXONOMY_VERSION_UNPARSEABLE, SEVERITY.WARNING,
+        'A live taxonomy version was supplied but is not a recognizable eBay '
+      + 'category tree version. Falling back to the verified constant.');
+  }
+  // The fallback notice fires whenever the constant is what got recorded --
+  // including after a rejection above. These two are ALLOWED to co-occur, and
+  // that is the fix: the previous code let a bad input suppress this one.
   if (!treeVersionLive) {
     add(PACKET_CODES.TAXONOMY_VERSION_ASSUMED, SEVERITY.INFO,
         `No live taxonomy version supplied; recording the last verified value `
@@ -542,7 +623,34 @@ export function buildListingPacket(row = {}, ctx = {}) {
   // not present the two as the same claim. Warned rather than stripped: the
   // basis is genuinely useful next to an asking price, and deleting evidence
   // to avoid mislabelling it is the wrong trade.
-  const stampedBasis = stampPriceBasis(ctx.basisMeta, now);
+  const { basis: stampedBasis, findings: basisFindings } = stampPriceBasisReporting(ctx.basisMeta, now);
+
+  for (const f of basisFindings) {
+    // A seller who typed their own number owes no market basis, so its
+    // absence is not a finding against them. A 'comp' or 'venue' price claims
+    // one, and a claim with no evidence behind it is the thing worth saying.
+    if (f.code === PACKET_CODES.PRICE_BASIS_ABSENT) {
+      if (ctx.priceSource && ctx.priceSource !== 'seller') {
+        add(f.code, SEVERITY.WARNING,
+            `This price is recorded as '${ctx.priceSource}'-derived but no price basis was supplied.`);
+      }
+      continue;
+    }
+    if (f.code === PACKET_CODES.PRICE_BASIS_AGE_ABSENT) {
+      add(f.code, SEVERITY.WARNING,
+          'The price basis carries no retrieval time, so how old it is cannot be stated.');
+    } else if (f.code === PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE) {
+      add(f.code, SEVERITY.WARNING,
+          'The price basis carries a retrieval age that could not be read.');
+    } else if (f.code === PACKET_CODES.PRICE_BASIS_INCOMPLETE) {
+      add(f.code, SEVERITY.WARNING,
+          `The price basis is missing ${f.missing.join(' and ')}.`, { missing: f.missing });
+    } else if (f.code === PACKET_CODES.PRICE_BASIS_DATING_UNPARSEABLE) {
+      add(f.code, SEVERITY.WARNING,
+          'The price basis dating flag was not a boolean, so whether the source dated it is unknown.');
+    }
+  }
+
   if (stampedBasis && ctx.priceSource === 'seller') {
     add(PACKET_CODES.PRICE_BASIS_NOT_SOURCE_OF_PRICE, SEVERITY.WARNING,
         'The price basis shown is market context. This price was set by the seller, '

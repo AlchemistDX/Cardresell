@@ -21,7 +21,7 @@ import {
 import {
   buildListingPacket, stampPriceBasis, ageFromRetrievedAt, normalizeVerifiedStamp,
   findRelativeAgeKeys, FORBIDDEN_AGE_KEYS, PACKET_SCHEMA_VERSION, PACKET_CODES,
-  PACKET_INPUT_FIELDS, packetInputFingerprint,
+  PACKET_INPUT_FIELDS, packetInputFingerprint, stampPriceBasisReporting,
 } from '../api/_listingPacket.js';
 import { CONDITION, CONDITION_DESCRIPTOR, DESCRIPTOR_VALUES_RESOLVED } from '../api/_ebayTaxonomy.js';
 import { cardIdentity, skuFor } from '../api/_cardIdentity.js';
@@ -1248,6 +1248,105 @@ console.log('\nthe fee-schedule stamp: the real field format, and the two ways i
   check('adding it actually changes the fingerprint',
         packetInputFingerprint({ price: 250, priceSource: 'comp', title: 'T' })
         !== packetInputFingerprint({ price: 250, priceSource: 'seller', title: 'T' }));
+}
+
+
+// ─── The producer-side normalizer sweep ────────────────────────────────────
+// The question asked of every field this module normalizes: is there a code
+// for the failure case? These rows all answered no, and each one resolved to
+// a silent null that a review screen would render as an empty caption.
+{
+  console.log('\nnormalizer sweep: taxonomy version and price basis');
+  const C = () => ({ name: 'Charizard', setName: 'Base Set', number: '4', year: 1999,
+                     game: 'pokemon', condition: 'near mint' });
+  const BASE = { feeModelRevision: 1, feeScheduleVerified: '2026-09-01', now: NOW,
+                 price: 250, priceSource: 'comp' };
+  const codes = p => (p.notes || []).map(n => n.code);
+  const meta  = p => p.metadata;
+
+  // ── Taxonomy: the mirror defect ─────────────────────────────────────────
+  // A DIFFERENT severity class from the rest of the sweep. The others fail to
+  // state something; this one accepted an unvalidated string, stamped it
+  // 'live', and SUPPRESSED the honest fallback notice in the process.
+  const garbage = buildListingPacket(C(), { ...BASE, taxonomyTreeVersion: 'complete garbage' });
+  check('\u{1F534} a garbage taxonomy version can no longer buy the \'live\' label',
+        meta(garbage).taxonomyTreeVersionSource === 'verified-constant',
+        `got ${meta(garbage).taxonomyTreeVersionSource}`);
+  check('\u{1F534} and it no longer SUPPRESSES the honest fallback notice',
+        codes(garbage).includes(PACKET_CODES.TAXONOMY_VERSION_ASSUMED),
+        'the inversion was that a dishonest input silenced the code that would have been correct');
+  check('the drift is named as well as the fallback — both, not one',
+        codes(garbage).includes(PACKET_CODES.TAXONOMY_VERSION_UNPARSEABLE));
+  check('the recorded value is the verified constant, not the garbage',
+        meta(garbage).taxonomyTreeVersion === '134');
+
+  const live = buildListingPacket(C(), { ...BASE, taxonomyTreeVersion: '134' });
+  check('a real eBay categoryTreeVersion is still accepted as live',
+        meta(live).taxonomyTreeVersionSource === 'live'
+        && !codes(live).includes(PACKET_CODES.TAXONOMY_VERSION_UNPARSEABLE));
+  check('a numeric 134 is accepted too — eBay returns a string, callers may not',
+        meta(buildListingPacket(C(), { ...BASE, taxonomyTreeVersion: 134 })).taxonomyTreeVersionSource === 'live');
+  const blank = buildListingPacket(C(), { ...BASE, taxonomyTreeVersion: '   ' });
+  check('whitespace counts as absent, not as drift — same rule as the fee schedule',
+        codes(blank).includes(PACKET_CODES.TAXONOMY_VERSION_ASSUMED)
+        && !codes(blank).includes(PACKET_CODES.TAXONOMY_VERSION_UNPARSEABLE));
+  check('\'13.4\' is refused rather than salvaged',
+        codes(buildListingPacket(C(), { ...BASE, taxonomyTreeVersion: '13.4' }))
+          .includes(PACKET_CODES.TAXONOMY_VERSION_UNPARSEABLE));
+
+  // ── Price basis: the live shape, not a hypothetical ─────────────────────
+  // core:3326 and core:4845 both set _crBasis to exactly this. Every
+  // sports-card price produces a basis with a label and nothing else.
+  const sportsShape = { value: 40, low: null, mid: null, high: null,
+                        label: 'SportsCardsPro guide \u00b7 1998 Kobe Bryant' };
+  const sports = buildListingPacket(C(), { ...BASE, basisMeta: sportsShape });
+  check('\u{1F534} the SportsCardsPro basis shape no longer stamps clean',
+        codes(sports).includes(PACKET_CODES.PRICE_BASIS_AGE_ABSENT)
+        && codes(sports).includes(PACKET_CODES.PRICE_BASIS_INCOMPLETE),
+        'this is what core:3326 and core:4845 actually build');
+  check('the missing fields are named, not just counted',
+        (sports.notes.find(n => n.code === PACKET_CODES.PRICE_BASIS_INCOMPLETE) || {})
+          .missing.join(',') === 'sourceUrl');
+
+  const good = { label: 'TCGPlayer market', sourceUrl: 'https://www.tcgplayer.com/product/1',
+                 cacheAgeSec: 3600, datedBySource: true };
+  check('a complete basis raises none of the sweep codes',
+        codes(buildListingPacket(C(), { ...BASE, basisMeta: good }))
+          .every(c => !String(c).startsWith('PRICE_BASIS_')));
+
+  check('absent age and unreadable age are DIFFERENT codes',
+        codes(buildListingPacket(C(), { ...BASE, basisMeta: { ...good, cacheAgeSec: 'soon' } }))
+          .includes(PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE),
+        'incomplete caller vs feed drift want different responses');
+  check('a negative age is drift, not a valid retrieval time',
+        codes(buildListingPacket(C(), { ...BASE, basisMeta: { ...good, cacheAgeSec: -5 } }))
+          .includes(PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE));
+
+  check('a non-boolean dating flag is reported instead of reading as \'not dated\'',
+        codes(buildListingPacket(C(), { ...BASE, basisMeta: { ...good, datedBySource: 'yes' } }))
+          .includes(PACKET_CODES.PRICE_BASIS_DATING_UNPARSEABLE),
+        'false is a CLAIM about the feed; unknown is not the same claim');
+  check('an honestly false dating flag is NOT reported',
+        !codes(buildListingPacket(C(), { ...BASE, basisMeta: { ...good, datedBySource: false } }))
+          .includes(PACKET_CODES.PRICE_BASIS_DATING_UNPARSEABLE),
+        'PriceCharting publishes no as-of date and that is already handled honestly');
+
+  check('a comp-derived price with NO basis says so',
+        codes(buildListingPacket(C(), { ...BASE })).includes(PACKET_CODES.PRICE_BASIS_ABSENT));
+  check('a seller-typed price with no basis is NOT a finding',
+        !codes(buildListingPacket(C(), { ...BASE, priceSource: 'seller' }))
+          .includes(PACKET_CODES.PRICE_BASIS_ABSENT),
+        'a seller who typed their own number owes no market basis');
+
+  check('none of the sweep codes block a listing',
+        buildListingPacket(C(), { ...BASE, basisMeta: sportsShape,
+                                  taxonomyTreeVersion: 'garbage' }).blocked === false);
+
+  // The wrapper and the reporting form cannot drift: one is defined as the other.
+  check('stampPriceBasis is a thin wrapper over the reporting form',
+        JSON.stringify(stampPriceBasis(good, NOW))
+        === JSON.stringify(stampPriceBasisReporting(good, NOW).basis),
+        'two parse implementations is how the stamp and its findings start disagreeing');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
