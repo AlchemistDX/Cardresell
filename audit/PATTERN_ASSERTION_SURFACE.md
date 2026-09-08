@@ -1543,3 +1543,52 @@ therefore fail exactly when the producer is confident. Check 3 is a
 text-comparison a reader performs while reading, and it catches the same defect
 from the outside. The noun mismatch was visible in the shared document with no
 repo access at all.
+
+## 27. A question was posed to review that the repository had already answered (2026-09-07)
+
+**What happened.** Q-B asked the external reviewer how to build a bidirectional
+venue/date parity guard over static HTML, offering three options and a lean.
+`tests/accuracy-fee-parity.mjs` already was that guard: bidirectional in three
+directions, both tables, negative-control floors before every comparison, a date
+parser with an explicit rejection test, and the grouped-buylist-row split. 15
+assertions, 15 passing. The reviewer answered carefully and their answer
+described the file.
+
+**Why this is not the same defect as instance 25.** Instance 25 is a reviewer
+reading a snapshot as the present tense — an evidence limit that is structural
+and not their fault. This is the producer asking about state the producer had
+access to and had not read. **The reviewer's blindness is imposed; mine was
+elective.**
+
+**What it cost and what it bought.** It cost a review cycle. It also bought the
+one thing the file was missing, which no amount of reading would have produced
+without the question: the reviewer asked for a **named-venue presence check**
+alongside the count floor, and no assertion in the file named a venue.
+
+**The gap the anchors close, measured by mutation.** Removing eBay — the default
+venue — from the fee table, the cross-border table, `PLATFORMS` and
+`CROSS_BORDER` together leaves **15 of 17 assertions green**. Both directional
+parity checks pass, because two surfaces that agree about 14 venues do agree.
+Both floors pass, because 14 >= 10. **Parity between two equally-wrong surfaces
+is still parity, and a bidirectional check is exactly as blind to symmetric
+deletion as a one-way check.**
+
+**The reviewer's count-pin was declined, and the anchors are what it was reaching
+for.** They asked for "assert it found 15 rows". A pinned occurrence count is
+instance 19 in this corpus: `minors-011-012-013` pinned 125 gold text usages,
+found 130, and reported an improvement as a defect. A sixteenth venue is that
+same improvement. Anchors give identity instead of cardinality and survive
+growth.
+
+**Rule.** *Before asking review how to build a thing, grep for the thing. A
+question the repository can answer spends a reviewer's cycle on retrieval, which
+is the one task they are worse at than you — they see one file and you see all of
+them.*
+
+**Corollary, and the reason this entry is not simply an embarrassment.** The
+question still returned something the repository could not: a requirement absent
+from the file, invisible to anyone reading only what was there. **Asking about
+solved problems is wasteful; asking about the shape of a solved problem is how
+the missing assertion was found.** The failure was in the framing — "how should I
+build this" instead of "here is what this does, what is missing" — and the second
+framing costs the reviewer less and would have surfaced the same gap.
