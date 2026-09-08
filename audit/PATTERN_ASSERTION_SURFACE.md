@@ -1,6 +1,6 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**37 instances**, plus one subclass (18b) deliberately not given its own number.
+**38 instances**, plus one subclass (18b) deliberately not given its own number.
 The highest-numbered entry is instance 37; that number, not this sentence, is the
 thing to check. (This sentence said 35 while 36 was already filed below it —
 which is the pattern this page documents, committed against the page itself: a
@@ -2067,7 +2067,7 @@ carried out, because the unknown state printed eBay's sentence under a
 Cardmarket row and the contradiction was on one line of output.
 
 **The remedy:** `estimateNote` → `estimateStem` (the venue-neutral opening) plus
-`venueEstimateNote(pid)` (`js/core.59d4b1ab.js:6774`), which composes the
+`venueEstimateNote(pid)` (`js/core.9f0f6b30.js:6774`), which composes the
 state-appropriate second half from per-venue fields. Two follow-on defects
 surfaced in the *rendered* sentence and would not have surfaced in the helper:
 `.toLowerCase()` flattened Cardmarket's "Buyer VAT" to "buyer vat", and
@@ -2153,3 +2153,51 @@ same defect surviving that lesson, so the lesson was too narrow. The correction:
 block, not the element.** A surface pinned to one value does not contain one
 untested claim — it contains as many as it renders, and fixing the one that was
 reported leaves the rest exactly as unverified as they were.
+
+## Instance 38 — the gate that was not in the set (2026-09-08)
+
+Instances 36 and 37 were both found by re-rendering a surface. Instance 38 was
+found by a **read-only tool from outside this repository** — a partner handoff
+kit whose snapshot utility reported `filenameMatchesBytes: false` on the live
+core bundle. Running our own `tests/asset-fingerprints.mjs` immediately
+confirmed it: **14 passed, 1 failed**.
+
+The T2.9 revision-3 edits changed `js/core.59d4b1ab.js` in place. I ran
+`review-fee-dl` (21), `draft-review-screen` (180) and `accuracy-fee-parity` (41),
+saw three green results, and reported the work verified. `asset-fingerprints`
+was never in that set, so the bundle went into commit `0c759cd` under a filename
+that no longer hashed to its contents — and a return packet stated that filename
+as fact.
+
+**This is instance 32's mechanism reaching the release surface.** Instance 32 was
+a hand-kept list of suites reported as *the* set of suites. Here the same
+hand-kept set silently omitted the one gate whose entire purpose is catching the
+edit I had just made. The suite even prints *"Do not edit this expectation to
+match the stale name"* — it anticipated tampering, but not absence. **A gate
+you don't run does not fail; it just isn't there.** Tamper-resistance and
+run-set membership are independent properties, and only the first one was built.
+
+**The near-miss worth recording.** There is a standing decision that *"named
+bundle differs from live" is not a failure rule.* Reaching for it here would
+have closed this in one sentence with a real prior ruling — but that ruling is
+about the citation map, where a document citing a retired bundle is a stale
+reference. `asset-fingerprints` is about immutable caching: `vercel.json:47`
+serves `/js/*.<8hex>.js` for a year as `immutable`, so changed bytes under an
+unchanged name can leave caches serving an old client against new APIs. Same
+words, different question. **A prior decision only settles the question it was
+asked**, and the cost of misapplying one is that the dismissal inherits the
+authority of a ruling it never earned.
+
+**The generalisable check.** 36 said render the other configurations. 37
+widened it to re-render the whole block. 38 widens it again, off the render
+surface entirely: **after editing an artefact, run the suites that assert on the
+artefact — not the suites that assert on the change.** The three suites I ran
+were selected by what I had edited *semantically* (fee copy, disclosures). The
+suite that failed was selected by what I had edited *physically* (the bundle
+file). Those are different sets, and only the second one catches a defect whose
+mechanism is "the file changed."
+
+**Not registered as a new test.** The gate already exists and already fails
+correctly; adding a second one would be the duplicate-implementation bug this
+corpus is named for. What was missing is that it runs, which is a
+release-checklist fact and is recorded in `audit/BUNDLE_RENAME_9f0f6b30.md`.

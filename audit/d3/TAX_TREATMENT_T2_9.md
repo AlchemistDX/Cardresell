@@ -263,11 +263,11 @@ phrase is retired everywhere (§16).
 | | |
 |---|---|
 | **Published fee base** | Card Kingdom: "Payments for cards are done by a percentage system based on the **NM buy price** for a card"; the seller ships in and is paid by check, PayPal or store credit ([Card Kingdom](https://www.cardkingdom.com/purchasing/how_to_sell)). CoolStuffInc: "**no fees on any collections**", "you receive the full value for your cards without any deductions" ([CoolStuffInc](https://www.coolstuffinc.com/main_fullservice_selllist.php)). SCG Sell List: "**Pay no Service Fees**" ([Star City Games](https://sellyourcards.starcitygames.com/)). |
-| **Current implementation** | All three route through `feeBuylist(price, ratio, serviceFeePct)` (`js/core.59d4b1ab.js:8035`) and pass **no** `serviceFeePct`. The "fee" they display is the retail-to-offer haircut, not a charge. |
+| **Current implementation** | All three route through `feeBuylist(price, ratio, serviceFeePct)` (`js/core.9f0f6b30.js:8035`) and pass **no** `serviceFeePct`. The "fee" they display is the retail-to-offer haircut, not a charge. |
 | **Strength of the evidence, per venue** | CoolStuffInc and SCG publish an affirmative "no fees" / "pay no Service Fees" sentence. **Card Kingdom does not.** Its page states a buy-price percentage and never says the word fee either way — an A-2 pattern (absence of a fee, or a fee never checked for). Card Kingdom's `false` therefore rests on weaker evidence than the other two, and that difference is recorded here rather than averaged away. |
 | **Missing inputs** | For the **fee** question: none for CoolStuffInc and SCG; Card Kingdom is A-2. For the **tax** question: not answered, and not claimed to be. |
-| **Seller-facing disclosure** | No tax row. `venueTaxNote` returns `null` when `taxOn === false` (`js/core.59d4b1ab.js:6746`). |
-| **Required correction** | `taxOn: false`, `taxBasis: 'no-seller-fee'` (`js/core.59d4b1ab.js:6438, 6452, 6472`). |
+| **Seller-facing disclosure** | No tax row. `venueTaxNote` returns `null` when `taxOn === false` (`js/core.9f0f6b30.js:6746`). |
+| **Required correction** | `taxOn: false`, `taxBasis: 'no-seller-fee'` (`js/core.9f0f6b30.js:6438, 6452, 6472`). |
 
 **What `false` means here, stated precisely.** It means: *no seller service fee
 is published, so there is no fee of ours for a buyer-tax component to be charged
@@ -296,7 +296,7 @@ payment. Both are recorded `'unknown'` above.
 | **Missing inputs** | **"The transaction" is never composed anywhere in the document.** It is not enumerated, no worked example decomposes it, and no sentence states whether it includes tax or shipping. So the 10% fee's base is unknown, and whether buyer-paid tax sits inside it is unknown. |
 | **Current implementation** | `feeBuylist(...)` with `serviceFeePct = 0.10` — a real seller charge, unlike §10–12. |
 | **Seller-facing disclosure** | Tax row renders in the **unestablished** state: *Buyer sales tax (treatment not established)*. |
-| **Required correction** | `taxOn: 'unknown'`, `taxBasis: 'unstated'` (`js/core.59d4b1ab.js:6544`). |
+| **Required correction** | `taxOn: 'unknown'`, `taxBasis: 'unstated'` (`js/core.9f0f6b30.js:6544`). |
 
 ## 14. CardNexus
 
@@ -379,7 +379,7 @@ its own clock. All 15 stamps stay at `2026-09-01`.
 
 **Corrected dates.** The first version of this section said amber `2026-10-01`
 and stale `2026-10-16`. That was wrong, and the reviewer's correction is
-adopted. `feeAuditAgeDays` (`js/core.59d4b1ab.js:6686`) floors a `Date.UTC`
+adopted. `feeAuditAgeDays` (`js/core.9f0f6b30.js:6686`) floors a `Date.UTC`
 difference, and the thresholds are strict: stale at `> 45`, amber at `> 30`. A
 2026-09-01 stamp reaches age 30 on 2026-10-01 — which is **not** `> 30` — so it
 turns **amber on 2026-10-02** and **stale on 2026-10-17**. And per the one-date decision, **no `taxCheckedOn` field is
@@ -395,7 +395,7 @@ somewhere other than its fee schedule, which none of these fifteen does.
   — and nothing may, because of the binding rule.
 - **The Cardmarket copy mismatch — now CLOSED by this revision.** "Buyer sales
   tax" was the wrong noun for a VAT regime. Cardmarket now carries
-  `taxNoun: 'Buyer VAT'` (`js/core.59d4b1ab.js:6406`) and its standing note is
+  `taxNoun: 'Buyer VAT'` (`js/core.9f0f6b30.js:6406`) and its standing note is
   VAT-appropriate. Critically, the note does **not** imply that a
   VAT-inclusive price needs another tax amount added on top: it says only that
   the published schedule *does not establish* whether VAT forms part of any fee

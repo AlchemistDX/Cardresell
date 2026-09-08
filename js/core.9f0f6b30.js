@@ -6301,9 +6301,15 @@ const PLATFORMS = {
     // estimate leaves out, and buyer-paid shipping is a second omission --
     // dropping it from the sentence lost a disclosure the review screen had
     // been making since D3 (caught by tests/draft-review-screen.mjs).
+    // Top Rated Plus is an eBay SELLER PROGRAM. Flagged per venue for the same
+    // reason the taxBase* fields are: the review screen emitted its withheld
+    // row and note unconditionally, which was right only because the screen is
+    // pinned to ebay:fixed-price. Second instance of the R4 mechanism, found by
+    // rendering the non-eBay states through the harness.
+    trsProgram:      true,
     taxBaseName:     'total sale',
     taxBaseFeeName:  'its fee',
-    taxBaseIncludes: 'buyer-paid shipping and buyer sales tax',
+    taxBaseIncludes: 'buyer-paid shipping and sales tax',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
@@ -6349,7 +6355,7 @@ const PLATFORMS = {
     taxBaseName:     'total order value',
     // Commission excludes tax; only processing is charged on the inclusive total.
     taxBaseFeeName:  'its payment processing fee',
-    taxBaseIncludes: 'buyer-paid shipping and buyer sales tax',
+    taxBaseIncludes: 'buyer-paid shipping and sales tax',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
@@ -6797,14 +6803,41 @@ function venueEstimateNote(pid) {
     // payment processing fee is charged on the tax-inclusive total, so
     // "charges its fee" would have overstated the scope on that venue.
     const feeName  = (p && p.taxBaseFeeName) || 'its fee';
-    return stem + ' ' + venue + ' charges ' + feeName + ' on the ' + baseName
-         + ', which includes ' + comps + ' and this estimate excludes, so on an '
-         + 'order where ' + noun + ' applies your actual proceeds may be lower.';
+    // 2026-09-08, second review: the previous single sentence ran two clauses
+    // together -- "...includes buyer-paid shipping and buyer sales tax and this
+    // estimate excludes..." -- which parsed ambiguously. Split into two
+    // sentences, and the consequence clause no longer claims a DIRECTION.
+    // Buyer-paid shipping and the seller's postage cost move proceeds opposite
+    // ways, so "may be lower" was only true of the tax component; "may differ"
+    // is what the two omissions jointly support.
+    return stem + ' ' + venue + ' calculates ' + feeName + ' from the ' + baseName
+         + ', including ' + comps + '; neither is included in this estimate.'
+         + ' When ' + noun + ' applies \u2014 or when shipping changes the'
+         + ' seller\u2019s costs \u2014 the final proceeds may differ.';
   }
   // Unestablished: concede nothing about an amount. We do not know there is one.
   return stem + ' ' + venue + '\u2019s published fee schedule does not establish whether '
        + noun + ' forms part of any fee base, so we cannot say whether this '
        + 'estimate is complete on that point.';
+}
+
+/* Does THIS venue run the Top Rated Plus programme?
+ *
+ * 2026-09-08, second review. `trsWithheldLabel`/`trsWithheldNote` were rendered
+ * unconditionally by `_reviewFeeBlockHtml`, so every venue's fee table carried a
+ * "Top Rated Plus discount (not applied)" row and a paragraph about eBay's
+ * handling-time and US-residency conditions. Right only by scope, exactly like
+ * `estimateNote` was: the screen is pinned to `ebay:fixed-price`. Rendering
+ * cardmarket and tcgbulk through the offline harness printed eBay programme
+ * copy under both.
+ *
+ * Fails CLOSED the opposite way from `venueTaxNote`, and deliberately: a tax
+ * caveat we are unsure about should still be shown, but asserting a venue runs
+ * a discount programme it does not run is a false claim about that venue. An
+ * unknown pid therefore gets NO row. */
+function venueTrsNote(pid) {
+  const p = PLATFORMS[pid];
+  return !!(p && p.trsProgram === true);
 }
 
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
@@ -21364,11 +21397,11 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
 ${_reviewTaxRow(pid)}${feeRows}
-${_reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld')}
+${venueTrsNote(pid) ? _reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld') : ''}
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </dl>
         <div class="review-fees-note">${_reviewEsc(venueEstimateNote(pid))}</div>
-        <div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>
+        ${venueTrsNote(pid) ? `<div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>` : ''}
         ${pill}
       </div>`;
 }

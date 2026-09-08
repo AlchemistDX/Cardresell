@@ -162,6 +162,7 @@ Ordered by cost of leaving them broken, not by ease.
 
 - **PUSH GATE — do not push before the Cert ID is rotated.** `94dc777` is unreachable from `origin/main`, so the credential fragments exist only in unpushed history. The push is the publishing event. This is additive to the deploy-authorization rule below, not a replacement: rotation removes one blocker, it does not authorize a push. Recorded at `audit/DECISION_94dc777.md`.
 - **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory and now gates the first push. Sequence, environment dependencies, and the 18/19-vs-19/19 distinction are in `audit/DECISION_94dc777.md`. Once rotated and verified, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
+- **Run `tests/asset-fingerprints.mjs` after ANY edit to a hashed bundle — before reporting suites green.** Missing this let T2.9 rev3 land in `0c759cd` with `js/core.59d4b1ab.js` no longer hashing to its own bytes; the fix is recorded at `audit/BUNDLE_RENAME_9f0f6b30.md` and the mechanism at `audit/PATTERN_ASSERTION_SURFACE.md` instance 38. Suite selection driven by *what changed semantically* does not cover a defect whose mechanism is *the file changed*. Rename method is copy-to-new-address + restore the retired name's own bytes — **never `git mv`**, because `vercel.json:47` serves `/js/*.<8hex>.js` `immutable` for a year.
 - **Local history rewrite must also drop the tax captures.** Commit `6011b67`
   added 25 full external page captures (2,569,243 bytes) under
   `audit/d3/sources/taxaudit/`. They have been `git rm`'d and replaced by a
@@ -285,7 +286,7 @@ paths**. Every remaining `0.85` in `api/tcg-price.js` (`:243`, `:267`, `:278`,
 `low: fb.low ?? null` (free-API fallback, `:360`). `_spreadOk` is gone.
 **No regression: synthesis has not returned.**
 
-The client hole closed with it. `js/core.59d4b1ab.js:3834` now reads
+The client hole closed with it. `js/core.9f0f6b30.js:3834` now reads
 `lowBasis: _dLow != null ? (d.lowBasis || null) : null` — attribution off the
 wire, replacing the value-presence stamp that relabelled derived numbers
 `'tcgplayer'`. `_crTplAskEndpoints` (`:334`) still stamps `'tcgplayer'` from
@@ -314,9 +315,9 @@ read them. **`mid` did not get one on the primary path.**
 - The **fallback** path does better — `:367` sets
   `midBasis: fb.mid != null ? 'provider' : 'derived'`. So the two paths disagree
   about whether `mid` needs provenance, which is itself the rule-1 smell.
-- The client never carries it either: `js/core.59d4b1ab.js:2660-2662` and
+- The client never carries it either: `js/core.9f0f6b30.js:2660-2662` and
   `:2701-2703` copy `marketBasis`/`lowBasis`/`highBasis` and **not** `midBasis`.
-- `_rangeParts` (`js/core.59d4b1ab.js:5414`) prints `Mid $X` with **no basis
+- `_rangeParts` (`js/core.9f0f6b30.js:5414`) prints `Mid $X` with **no basis
   check and no ordering check against `low`**. `_crMeasuredRange` (`:4108`) gates
   the pair well — it refuses unattributed, mixed-origin, derived, reversed and
   degenerate endpoints — but it only ever compares `low` against `high`. **`mid`

@@ -7,7 +7,7 @@ buylist wording, the eBay sentence, and the labelling of non-eBay rendered
 states. Revision 2's resolution of the original six rejections is retained. Nothing was pushed and nothing was deployed. `D3`, `BIAS-1` and
 `BIAS-6` remain closed and untouched.
 
-**Live bundle: `js/core.59d4b1ab.js` (21,491 lines).** Every line citation below
+**Live bundle: `js/core.9f0f6b30.js` (21,491 lines).** Every line citation below
 was re-derived against that file after the rename. The superseded revision cited
 `core.2c7cf451.js`; the offset between them is recorded in
 `audit/BUNDLE_CITATION_MAP.md`.
@@ -64,7 +64,7 @@ because the sign depends on a payment method that does not exist until checkout,
 after the draft is written.
 
 Recorded as an **open item, not a finding**. Neither branch is published.
-`taxOn: 'unknown'`, `taxBasis: 'payment-method'` (`js/core.59d4b1ab.js:6312`) is
+`taxOn: 'unknown'`, `taxBasis: 'payment-method'` (`js/core.9f0f6b30.js:6312`) is
 unchanged and is the correct record for a conditional that resolves after we
 estimate.
 
@@ -86,7 +86,7 @@ venue is the buyer, so there is no buyer checkout, so there is no buyer tax."
 That is false for TCG Bulk by its own text. Once the premise fails for one
 member it cannot define the class.
 
-**TCG Bulk is split out and reclassified `'unknown'`** (`js/core.59d4b1ab.js:6544`,
+**TCG Bulk is split out and reclassified `'unknown'`** (`js/core.9f0f6b30.js:6544`,
 `taxBasis: 'unstated'`). Its 10% service fee is real and applies "to **the
 transaction**" (`tcgbulk.txt:117`) — and **"the transaction" is never composed
 anywhere in the document**: not enumerated, no worked example, no sentence
@@ -95,8 +95,8 @@ are unknown. Its tax row now renders.
 
 **The other three keep `false`, on a narrower and better-evidenced footing.**
 Card Kingdom, CoolStuffInc and SCG are `taxBasis: 'no-seller-fee'`
-(`js/core.59d4b1ab.js:6438, 6452, 6472`). All three pass **no** `serviceFeePct`
-into `feeBuylist(price, ratio, serviceFeePct)` (`js/core.59d4b1ab.js:8035`), so
+(`js/core.9f0f6b30.js:6438, 6452, 6472`). All three pass **no** `serviceFeePct`
+into `feeBuylist(price, ratio, serviceFeePct)` (`js/core.9f0f6b30.js:8035`), so
 our estimate charges them no service fee at all.
 
 This is your distinction, adopted as written: **a supported finding that no
@@ -166,9 +166,9 @@ moment D4 shows a second venue, it prints *"eBay charges its fee on the total
 sale"* directly beneath a row reading *"Buyer VAT (treatment not established)"*.
 Latent, not live. Logged as instance 36 in `audit/PATTERN_ASSERTION_SURFACE.md`.
 
-**The remedy.** `estimateNote` → `estimateStem` (`js/core.59d4b1ab.js:7486`) plus
-**`venueEstimateNote(pid)`** (`js/core.59d4b1ab.js:6774`), wired at the render
-site (`js/core.59d4b1ab.js:21370`). Three states:
+**The remedy.** `estimateNote` → `estimateStem` (`js/core.9f0f6b30.js:7486`) plus
+**`venueEstimateNote(pid)`** (`js/core.9f0f6b30.js:6774`), wired at the render
+site (`js/core.9f0f6b30.js:21370`). Three states:
 
 **Known-inclusive** (eBay):
 
@@ -203,7 +203,7 @@ omissions and commits to **no** direction, and each change carries an inline
 Note what this deliberately does **not** say: it does not imply that a
 VAT-inclusive transaction needs another tax amount added. It says only that the
 schedule does not establish whether VAT sits in a fee base. Cardmarket also now
-carries `taxNoun: 'Buyer VAT'` (`js/core.59d4b1ab.js:6406`), closing the copy
+carries `taxNoun: 'Buyer VAT'` (`js/core.9f0f6b30.js:6406`), closing the copy
 mismatch that was previously listed as open.
 
 **Excluded** (Card Kingdom): the stem alone, no second sentence, no tax row.
@@ -229,7 +229,7 @@ published.
 
 ## 5. R5 — your dates are correct, mine were wrong
 
-`feeAuditAgeDays` (`js/core.59d4b1ab.js:6686`) floors a `Date.UTC` difference.
+`feeAuditAgeDays` (`js/core.9f0f6b30.js:6686`) floors a `Date.UTC` difference.
 Thresholds are strict: **stale `> 45`**, **amber `> 30`**. A `2026-09-01` stamp
 is age 30 on 2026-10-01, which is not `> 30`.
 
