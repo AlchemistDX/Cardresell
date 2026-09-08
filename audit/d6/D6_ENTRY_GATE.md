@@ -105,6 +105,24 @@ discover a payout hold after a sale.
 eligibility model, no new state. The work is copy, placement, and a test that
 the guidance is present at hand-off and cannot silently vanish.
 
+### 3.1 The sourcing rule for the copy — and its ceiling
+
+Settled on review, before the copy exists, because the temptation arrives with
+the research: **name the kind of restriction and where to check it; never the
+duration or the amount.**
+
+- Maintainable: *"New sellers may have payout holds or selling limits. Check
+  your eBay account before you list."* Keyed to eBay's published policy in the
+  general, and to an instruction the seller performs.
+- Not maintainable: *"Funds are held 21 days"*, *"your limit is 10 items or
+  $500/month"*. eBay changes these without notice, **nothing on our side goes
+  red when they do**, and the sentence rots while still rendering.
+
+That is this pattern's own test applied to the copy the pattern's reasoning
+produced. It holds even if a precise figure is findable and correctly sourced
+today — sourcing establishes that a number was true when read, which is exactly
+the property that does not survive.
+
 **Not decided here:** the exact copy, and which eBay restrictions to name.
 Naming specific holds or selling limits requires sourcing them from eBay's own
 published pages — no invented day-ranges, no invented amounts, per the standing

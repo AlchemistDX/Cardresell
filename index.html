@@ -2526,6 +2526,28 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
             </div>
             <div>
               <div class="field-label" style="margin-top:0">eBay Store</div>
+              <!-- 2026-09-08. READ BEFORE CONDITIONING ANYTHING ON THIS SELECT.
+                   Its default option is byte-identical to a deliberate answer:
+                   "No Store / Starter" is both what a starter seller would pick
+                   and what every untouched panel reports. localStorage holds a
+                   value either way, so the state that matters -- "the seller has
+                   never looked at this" -- HAS NO REPRESENTATION HERE. The field
+                   exists and is populated, and the distinction is still absent.
+
+                   Fee arithmetic is a legitimate reader: it needs a tier and the
+                   conservative default IS the right tier to assume. A FEATURE
+                   THAT READS THIS AS A DECLARATION IS NOT. D6's new-seller
+                   warning was refused on exactly this basis and shipped
+                   unconditional instead -- see audit/d6/D6_ENTRY_GATE.md §1.
+                   Same caution applies to #ebayTopRated below, where the TRS
+                   work already does the right thing (durable status, plus a
+                   per-listing confirmation that defaults to No and requires an
+                   explicit === true). If you need "unknown", add the option;
+                   do not infer it from the default.
+
+                   Adding an option here also changes loadSellerProfile()'s
+                   accept-list behaviour (js/core.*.js, loadSellerProfile) --
+                   it only restores values the select actually offers. -->
               <select id="ebayStore" onchange="calc()">
                 <option value="none">No Store / Starter</option>
                 <option value="basic">Basic Store (lower rate)</option>

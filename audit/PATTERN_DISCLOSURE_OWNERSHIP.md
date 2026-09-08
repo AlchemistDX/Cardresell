@@ -109,3 +109,39 @@ narrows the gap:
 > restatement that would go stale silently should not exist; where one must,
 > the sentence carries the authority's filename so the drift is at least
 > grep-able.
+
+---
+
+## Second corollary — a default identical to an answer erases the state that matters
+
+Found 2026-09-08 in D6's entry gate (`audit/d6/D6_ENTRY_GATE.md` §1), and it
+generalizes well past that feature.
+
+**A control whose default option is byte-identical to a meaningful answer can
+never be read as a declaration.** Storage holds a value either way, so
+*"the seller told us this"* and *"the seller has never looked"* are the same
+bytes. `#ebayStore` defaults to `No Store / Starter`; `#ebayTopRated` defaults to
+`No`. Both defaults are also exactly what a new seller would truthfully choose.
+
+This is the no-field-no-check failure in the form least visible from the code:
+**the field exists, it is populated, it validates, it round-trips through
+storage — and the state that matters has no representation.** Nothing looks
+missing. There is no null to notice.
+
+Who may read such a control:
+
+- **A consumer that needs a value and has a correct conservative default** — fee
+  arithmetic. It needs a tier; the cautious tier is the right assumption when
+  nobody answered. Legitimate.
+- **A consumer that needs a declaration** — any warning, gate, eligibility
+  check, or personalisation conditioned on what the seller said. **Not
+  legitimate**, and the D6 gate refuses it rather than working around it.
+
+The remedy, when a feature genuinely needs the distinction, is to **add the
+option** — an explicit unknown/unanswered state — never to infer it from the
+default. Adding one is not free: `loadSellerProfile()` only restores values the
+select offers, so the accept-list behaviour changes with the markup.
+
+Recorded at the markup as well as here (`index.html`, above `#ebayStore`),
+because the next person to make this mistake will be reading the select, not the
+audit corpus.
