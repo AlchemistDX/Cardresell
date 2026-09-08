@@ -367,11 +367,27 @@ browser. That is a five-minute check and it is the highest-value one left in D5:
 2. Does the identify/match screen appear, and does it show that search rather
    than an empty box or a restored draft?
 3. Is the collector number on the offered match the one in the URL?
+4. **After landing, is the query still in the address bar?** Added on review, and
+   free once step 1 is done. If eBay strips or rewrites `title`/`caty` on a
+   signed-in redirect, that is **the same failure mode as the dead scan-miss
+   link** — a query dropped in transit — and it is visible in the same session
+   without extra work. It is also the failure that §8.1's instruction cannot
+   survive: a seller told to compare against a number we sent, on a screen that
+   never received it, has been given a task they cannot perform.
 
 **Status: Unverified.** No claim in this document or in the shipped copy asserts
 signed-in behaviour, and the shipped copy is written to survive being wrong about
 it — it says what we send and tells the seller to check what arrives, neither of
-which depends on which screen eBay chooses.
+which depends on which screen eBay chooses. That is the distinction worth
+naming, because it decides which disclosures are safe to ship against an
+unverified boundary: **a disclosure keyed to our own behaviour holds whatever the
+other side does; one keyed to theirs is a claim we cannot maintain.** Every line
+of the shipped copy is the first kind, with the single exception step 4 above
+tests — the instruction assumes the query arrives, which is our behaviour only
+up to the redirect.
+
+Neither AI reviewer can close this either: no browser, no eBay session, and
+driving the owner's browser is not available to them. It is the owner's to run.
 
 ### 8.4 EPN — the load-bearing argument is compliance, not revenue
 
