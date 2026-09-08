@@ -923,3 +923,38 @@ No directional claim is stampable. Final copy:
 
 **Status:** open pending the BIAS-1 implementation. Direction corrected,
 magnitude re-bounded, advice-invariance established.
+
+## What routing `renderGradingUpside` through `feeEbay` does and does not close
+
+**Recorded 2026-09-07 at D3 closeout, as a correction to a claim made in-session.**
+
+I had written that routing `renderGradingUpside` through `feeEbay` would close BIAS-3,
+BIAS-5, BIAS-7 and BIAS-8 together, on the reasoning that all four are downstream of the
+duplicate fee arithmetic. The reviewer corrected this, and the correction is right — it
+is checkable against the items as filed above, and the items do not say what I said they
+said.
+
+Routing through `feeEbay` closes exactly one thing: **the duplicate fee calculation**
+(rule 1 — one business behaviour, one implementation). `renderGradingUpside`'s local
+`FEES_PCT = 13` stops being a second fee model. That is the whole of what the routing
+buys.
+
+Each of the following needs **its own acceptance evidence**, and none of them is
+satisfied by the routing:
+
+| Item | Line | What it actually requires | Why the routing does not supply it |
+|---|---|---|---|
+| **BIAS-3** | `:660` | Conditional grade labels | A label is copy, not arithmetic. No fee-model call changes what the tile is *called*. |
+| **BIAS-5** | `:716` | Supported grader-cost inputs, **including grading-only expenses** | `GRADING_FEE = 25` contradicts the server's tier table (`api/grade-opportunity.js:44-52`). `feeEbay` computes *marketplace* fees and has no grader input at all — routing through it leaves the $25 exactly where it was. |
+| **BIAS-7** | `:720` | A compatible grader / price basis | Requires knowing *which* grader the price basis belongs to. Nothing in the fee model carries that. |
+| **BIAS-8** | `:725` | The same, with provenance | `{ key:'grade_7', sub:'Any grader', syncKey:'psa:7' }` — a concrete grader sits in the column while the label says "Any grader". **`syncKey` cannot supply provenance**: it is a lookup key, not a record of where the number came from. |
+
+These four can land in the same implementation pass. They cannot land on the same
+evidence. BIAS-1 is the only one the routing unblocks.
+
+> **Why this is worth a section rather than a corrected sentence.** The wrong claim was
+> plausible for a structural reason: all five items were *filed together*, in one audit
+> pass, against one function. Shared provenance reads as shared cause. But "found by the
+> same audit" and "fixed by the same change" are different relations, and the first is
+> the one that leaves a trace in the document. A grouped filing is an artefact of how
+> attention moved, not a claim about the repair.
