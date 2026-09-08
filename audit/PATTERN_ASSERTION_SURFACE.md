@@ -1592,3 +1592,26 @@ solved problems is wasteful; asking about the shape of a solved problem is how
 the missing assertion was found.** The failure was in the framing — "how should I
 build this" instead of "here is what this does, what is missing" — and the second
 framing costs the reviewer less and would have surfaced the same gap.
+
+## Rule (standing, adopted 2026-09-07): state the finding against the boundary, not the number
+
+**When a numeric deviation has a decision boundary downstream, express the
+finding against the boundary.** A dollar figure has to carry its sampling grid
+forever; a verdict-invariance claim does not.
+
+Worked example, BIAS-11. "Max understatement $11.00" required the grid to be
+quoted with it, and was wrong anyway — an artifact of sampling a $100 shipping
+charge on a trading card, retracted in v3. "**0 of 1,704 pairs change the
+seller-facing verdict**" needed no grid, because it is measured against the
+rendered output's own thresholds (`> 5` green, `> -5` yellow, else red) rather
+than against a magnitude that moves with what you sample.
+
+**The companion distinction: grid-invariant vs grid-dependent.** Every magnitude
+this corpus quotes should be labelled. In BIAS-11 the 108 optimistic pairs, the
+$0.10 ceiling, the graded-price `<= $10` confinement and the zero mixed-direction
+pairs held across every grid — structural. The $2.28 / $11.00 / $54.60
+understatement maxima moved with the grid — grid-dependent, and quotable only
+with the grid attached.
+
+*A grid-dependent number published without its grid is a claim whose truth
+conditions are missing, and the reader cannot tell which kind they are holding.*
