@@ -4,7 +4,16 @@
 **Reviewed document:** D3 Step 5 · Third review, `491558c`, 7 September 2026
 **Nothing pushed. Nothing deployed. `origin/main` is still `9aaf326`.**
 
-Every claim below is bound to `file:line`. Where the repo cannot establish
+**This document is self-contained.** Your stated evidence limit is that the repo,
+commits and tests are not independently inspected — so every `file:line` below is
+a pointer you cannot open, and any reference to one of our internal audit files
+would be a dead end. Everything this response relies on is therefore reproduced
+in the appendices: the rule and rider (A), the structural class (B), the
+stale-packet instance (C), the two open defects it discloses (D, E), and the
+token comment (F). Nothing here requires a second file.
+
+Every claim below is bound to `file:line` so that *we* can be held to it and so a
+future reader with repo access can check it. Where the repo cannot establish
 something, it says **Unverified**. Line numbers in `js/core.7f9c03ad.js` shift as
 the bundle is edited — re-grep rather than trusting a citation's line number
 after any further change.
@@ -184,15 +193,16 @@ The consequence is forward-looking: if the neutral ramp is ever re-cut so a thir
 tier can exist, every Block D occurrence listed above silently inherits whatever
 the new value is, **unreviewed**, and this pass does not cover it. The occurrences
 were checked against a value that is currently a duplicate, not against the token's
-intended role. Recorded here rather than only in `CSS_TOKEN_DEBT.md`, because the
-debt log is not what gets read at release.
+intended role. Recorded here rather than only in the internal debt log, because the debt log
+is not what gets read at release.
 
 **The residual debt is not contrast, and is already logged.** In light mode
 `--text-faint` is `#6b6960` — byte-identical to `--text-muted`. The third tier
 does not exist in light mode; it was made AA-compliant by being collapsed into
 the tier above it. Two token names, one value, 105 references. Documented at
-`index.html:100-110` and logged in `audit/CSS_TOKEN_DEBT.md` as a deliberate
-choice between collapsing the tokens and re-cutting the neutral ramp. Not
+`index.html:100-110`, with the full comment quoted in **Appendix F**, and logged
+internally as a deliberate choice between collapsing the tokens and re-cutting the
+neutral ramp. Not
 reopened here, per your instruction. Worth noting it is the same shape as T2.14
 and instance 22 — two states a reader needs separated rendering identically — the
 third occurrence of that shape in one day.
@@ -201,10 +211,10 @@ third occurrence of that shape in one day.
 
 ## 4b. The stale-packet failure mode, and the rule it produced
 
-Filed as **instance 25**. Worth stating in this document because it cost this
-review cycle.
+Filed as **instance 25**, carried in full in **Appendix C**. Worth stating in this
+document because it cost this review cycle.
 
-Every prior entry in `audit/PATTERN_ASSERTION_SURFACE.md` is a claim that was
+Every prior entry in our defect catalogue is a claim that was
 *wrong about the code*. This one was accurate when written and became wrong by
 the code moving underneath it. Nobody was careless — the packet was correct at
 write time, and that is not a property that survives.
@@ -239,8 +249,9 @@ habit.
 | Cert ID rotation | **NOT DONE. Push remains blocked.** |
 | Credential hygiene — inventory labels, rewrite the partial commit-message disclosure | **Open** |
 
-**On the three-in-one-day observation:** promoted to a named **Class** in
-`audit/PATTERN_ASSERTION_SURFACE.md` rather than left as three instances. All
+**On the three-in-one-day observation:** promoted to a named **Class** in our
+defect catalogue rather than left as three instances (**Appendix B** carries it
+in full). All
 three are "we know something the surface cannot express," and two of the three
 were produced by correct decisions, so it is not a carelessness pattern. It is the
 downstream cost of rules we intend to keep — every rule that pushes toward
@@ -268,3 +279,248 @@ exhaustive, and two known-open things are not on it.
 - eBay Top Rated Seller Program — https://www.ebay.com/sellercenter/protections/top-rated-program
 - W3C WCAG 2.2 Contrast (Minimum) — https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
 - tcgcsv bulk data (Q3-F measurement source, public read-only) — https://tcgcsv.com/tcgplayer
+
+---
+
+# Appendices — full text of everything cited above
+
+These are reproduced verbatim from our internal audit files so this response
+stands alone. They are the filed record, not a summary written for this document.
+
+---
+
+## Appendix A — the rule and its mandatory rider
+
+## Rule — withhold rather than relabel, and its mandatory rider
+
+Stated three times as a remedy before it was ever written down as a rule
+(`DIRECTIONAL_BIAS_AUDIT.md:757` on the grading upside,
+`D3_STEP5_SECOND_REVIEW_RESPONSE.md:178` on the review-screen discount,
+condition (2) of `9a3c7ac` on the Lowest-listing row):
+
+> **A number with no defensible name does not get a worse name. It goes away.**
+
+The rule is right and stays. But it manufactures the instance-22 collapse **by
+design**: every correct refusal to mislabel creates a state that renders as
+absence, and absence already means something to the reader — usually "we don't
+have this." So the rule is incomplete on its own and carries a rider:
+
+> **Withholding is only complete once the withheld state is distinguishable from
+> the never-had-it state.** If suppressing the number makes the surface identical
+> to the surface where the number never existed, the mislabel has been traded for
+> a different false claim, not removed.
+
+Corollary for review: a withhold-on-condition fix is not assessable from its
+diff. The diff shows the suppression, which is the part that is correct. What has
+to be checked is the **rendered collision** between the suppressed state and the
+naturally-empty state, which only appears when the two are put next to each
+other. Per-state assertions cannot see it — T2.14 survived nine of them, each
+correct in isolation.
+
+---
+
+## Appendix B — the class this response reports three instances of
+
+## Class — states the surface cannot distinguish (three instances in one day, 2026-09-07)
+
+Instance 22, T2.14/22c, and the `--text-faint` token collapse are the same defect
+wearing three costumes. All three are **"we know something the surface cannot
+express."**
+
+| instance | what we know | what the surface shows |
+|---|---|---|
+| 22 | this venue was assessed and charges no tax-inclusive fee **vs** nobody ever looked | identical blank |
+| 22c / T2.14 | we have a floor and distrust it **vs** upstream sent no floor | identical absent row |
+| token collapse | this text is a third-tier annotation **vs** this text is ordinary muted body copy | identical `#6b6960` |
+
+Three in one day is not coincidence, and it is not carelessness — 22c and the
+token collapse were both produced by correct decisions. **This project generates
+this class structurally.** The reason is in our own rules: they push consistently
+toward withholding rather than guessing (no invented rate, no invented input to a
+fee model, no relabelling a market as an ask, withhold rather than relabel). Every
+one of those rules is right. Every one of them produces a state whose honest
+rendering is *nothing* — and nothing already means something to a reader, usually
+"we don't have this."
+
+> **A codebase that refuses to guess accumulates states that render as absence.
+> Absence is not a neutral output; it is an existing claim with an existing
+> meaning. Withholding therefore does not remove a false claim by default — it
+> substitutes a quieter one, unless the distinction is designed.**
+
+### Consequence for how this file is read
+
+The catalogue has been treating each entry as a mechanism to avoid. This class
+says something different: the defect is the **downstream cost of a rule we intend
+to keep**. It cannot be driven to zero by being more careful, only by pairing each
+withholding with a designed distinction. So the question belongs in the review
+checklist, not in the retrospective:
+
+> For every state where we correctly decline to publish a number: what does the
+> seller see, and what else produces that same view?
+
+### Standing detection method
+
+None of the three was found by an assertion. 22 was found by grepping twelve
+function bodies; 22c by putting five rendered states on one contact sheet; the
+token collapse by computing contrast on two tokens and noticing the hex matched.
+The common factor is **comparison across states**, which per-state rigor cannot
+reach by construction. The contact sheet is therefore promoted from a nicety to a
+required step for any change that adds or removes a rendered state.
+
+---
+
+## Appendix C — instance 25, the stale packet
+
+## 25. A return packet was accurate when written and became wrong by standing still (2026-09-07)
+
+The third review's one blocker — *"the new listing confirmation is still described
+as a global profile key"* — was true of the packet and false of the code. The
+value stopped being a profile key earlier the same day the packet was read.
+
+**This is a new failure mode for this corpus.** Every prior instance is a claim
+that was wrong about the code: an assertion naming a behaviour it never checked, a
+comment describing a branch that changed, a stamp outliving its source. This one
+was *correct at the moment it was written* and became wrong by the code moving
+underneath it. Nobody made an error. The packet froze, the branch did not.
+
+> **A snapshot handed to a reviewer is read as the present tense. Accuracy at
+> write time is not a property that survives.**
+
+**Remedy — not "more care in the packet".** Care cannot fix this; the packet was
+careful. What is missing is the reader's ability to tell whether they are reading
+history:
+
+> **A review request must carry the commit it was written against.** Then a
+> reviewer comparing the packet's tip to the branch tip can see for themselves
+> whether a described shape is current, and a blocker raised against a stale
+> description is identifiable as such before it costs a review cycle.
+
+Applied from `D3_STEP5_THIRD_REVIEW_RESPONSE.md` onward: every packet header
+states the commit and branch it describes, and the response states the commit it
+was written at. Both were present in this response by luck of format, not by rule.
+Now it is a rule.
+
+Cost of the omission here: one review cycle spent on a closed blocker, and a
+verdict of "D3 is not ready to close" that was based on it.
+
+---
+
+## Appendix D — T2.14, open defect disclosed in section 3
+
+### T2.14 — the withheld floor row is indistinguishable from having no floor data
+
+Found by the D3 visual pass on `9a3c7ac`, not by any assertion. All 20
+width/theme/state combinations render correctly — no overflow, no wrapping, the
+dotted leader self-adjusts (497px vs 494px across the two label lengths, floor is
+`min-width:1rem` and the narrowest observed was 45px), and the withheld case
+leaves no orphan separator because `.qp-row + .qp-row` is sibling-scoped with no
+`nth-child` anywhere.
+
+The defect is what the correct rendering means. Compare two states:
+
+| state | what the seller sees |
+|---|---|
+| low endpoint absent upstream | `Market price  $96.00  TCGPlayer market` |
+| low endpoint present, above the median ask, withheld by condition (2) | `Market price  $300.00  TCGPlayer market` |
+
+Identical layout. The seller cannot tell "we have no floor for this card" from
+"we have a floor and judged it untrustworthy". **We know which case we are in and
+we do not say.**
+
+This is the same shape as instance 24: a suppression justified by a judgement the
+user never sees. Condition (2) is still correct — a floor above an observed ask
+is not a floor, and printing it was the worse option. But "withhold rather than
+relabel" was accepted here on the strength of matching the server's behaviour,
+and the server's version has the same gap (Q3-B decided the copy omits the
+numeric spread, which is a different question from whether the omission is
+announced at all).
+
+**Not fixing this unilaterally.** Any disclosure copy here asserts something
+about why the book is inverted, and that is T2.10's subject, which needs a Q7
+decision. What is recorded is that the fix as shipped converts a visible
+mislabel into an invisible omission, that this is an improvement and not a
+closure, and that anyone reading `9a3c7ac` as "the Lowest-listing row is now
+honest" is reading it too generously.
+
+**Cross-reference:** recorded as instance **22c** in
+`audit/PATTERN_ASSERTION_SURFACE.md` [our defect catalogue — the rule it names is
+reproduced as Appendix A above], and the withhold-rather-than-relabel rule
+now carries a mandatory rider there — withholding is only complete once the
+withheld state is distinguishable from the never-had-it state.
+
+**On the commit record:** `9a3c7ac`'s message does not carry this caveat and has
+not been reworded, because the hash is already cited in T2.14 and in the instance
+1 addendum, and a reword changes the hash those citations point at. The caveat
+instead sits in the code at the render site, which is where a reader who greps
+this row actually lands, and in the title of the follow-up commit.
+
+Detection note, generalisable: this was invisible to nine passing behavioural
+assertions because every one of them checks a single state in isolation. The
+defect is in the **collision between two states**, which only a side-by-side
+render shows. Worth asking of any withhold-on-condition fix: does the withheld
+state look different from the never-had-it state?
+
+---
+
+## Appendix E — Q3-F, open disclosure gap disclosed in section 3
+
+## Q3-F — the headline is trimmed downward and nothing says so (live, not hypothetical)
+
+T2.13 was filed as a design question about the blend's shape. One half of it is
+**not** a pending question — it is a current, undisclosed property of the number
+every other figure on the site derives from.
+
+Under today's default the blend admits the low ask 52.18% of the time, where it
+pulls the headline down a median 11.01% (in the same direction 97.3% of the
+time). Net against a `(mid*2 + market)/3` centre: below in 41.8% of products,
+mean **−3.99%**.
+
+**That is a systematic downward adjustment to the published price, applied now,
+disclosed nowhere.** Not in the caption, not in the range line, not in the basis
+label — which reads `TCGPlayer market` on a rung where, when `marketBasis` is
+`'ask_blend'`, no market sale is behind the number at all.
+
+It sits inside Q3's actual subject rather than T2.13's: Q3 asks what the seller
+is told about how a number was made. The seller is told the number is TCGplayer
+market. On the ask-blend rung it is a mid-anchored trimmed average of the ask
+book, adjusted downward by a term the seller cannot see and we have never named.
+
+**Deliberately not proposing copy here.** Both the honest labels depend on
+T2.13's outcome, and inventing one now would pin copy to a shape that may change.
+What is being recorded is that the disclosure gap exists under the current
+default and does not require any change to become real — so it cannot be
+deferred as "pending T2.13" without saying out loud that we are shipping an
+undisclosed adjustment in the meantime.
+
+Pairs with `marketBasis` already being on the wire: the field that would let a
+caption tell the truth here exists and, like `marketAskDivergence`, no client
+reads it (instance 24).
+
+---
+
+## Appendix F — the `--text-faint` token comment, quoted in full
+
+Declared at `index.html:100-110` (light) and `:155-161` (dark):
+
+```
+/* --text-faint is currently identical to --text-muted in light mode. That is a
+   smell and should not survive as a permanent state. It is left standing
+   rather than collapsed across 105 references mid-D3, and is logged in
+   CSS_TOKEN_DEBT.md as a decision to take deliberately: collapse the tokens,
+   or re-cut the neutral ramp so a third tier can exist at AA. Hierarchy at
+   these sizes is carried by size, weight and letterspacing anyway -- the
+   micro-caps labels read as subordinate without needing to be faint. */
+  --text-faint:    #6b6960;
+```
+
+```
+/* #8d8b82 is the faintest value clearing 4.5:1 on all six. That leaves four
+   steps between this and --text-muted (#918f86), so the dark ramp does admit
+   a third tier -- barely, and not perceptibly. The light ramp admits none at
+   all; see the light-mode note above. */
+  --text-faint:    #8d8b82;
+```
+
+The dark comment's "four steps… barely, and not perceptibly" is the reason the
+dark half of the contrast table should also be read as a compliance result rather
+than a hierarchy result.
