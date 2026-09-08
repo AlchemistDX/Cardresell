@@ -66,7 +66,10 @@ const liveVariant = { key: 'tcgplayer_live', label: 'TCGPlayer Live', market: d.
 Provenance is now **read**, never inferred. `high` is also no longer hardcoded
 `null`, which it had been — a genuinely supplied high was being dropped on the floor.
 
-**Ingestion site B (`js/core.8e031c8f.js:359`)** reads `_tp.lowBasis || 'tcgplayer'`
+**Ingestion site B (`js/core.8e031c8f.js:359` — RETIRED bundle, historical citation;
+this line was deleted by the fix and has no counterpart in the live bundle, so
+`tools/bundle-citation-map.mjs` reports it unresolved by design)** read
+`_tp.lowBasis || 'tcgplayer'`
 and sets `highBasis = 'derived'` when `_tp.highClamped === true`.
 
 ### The focused integration case
