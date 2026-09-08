@@ -82,21 +82,63 @@ T.check('the default profile is no-store with no promo rate',
 T.check('source: no active flat fee percentage remains in the function',
   !/FEES_PCT\s*\/\s*100/.test(core) && !/const\s+FEES_PCT\s*=/.test(core),
   'a flat-rate divisor or constant is still live in the bundle');
-/* TEMPORARY -- REMOVE WHEN BIAS-5 LANDS. ─────────────────────────────────────
-   This asserts a KNOWN DEFECT is still present. Its only purpose is to
-   document THIS pass's isolation: BIAS-1 moved fee routing and must be shown
-   not to have quietly moved the grading cost at the same time.
+/* BIAS-5 replacement, 2026-09-07. ────────────────────────────────────────────
+   The TEMPORARY assertion that lived here pinned `GRADING_FEE = 25` in place to
+   prove BIAS-1 had not quietly moved the grading cost while moving fee routing.
+   It has been DELETED, as instructed, because a test that pins a known defect
+   stops being evidence and starts being an obstacle the moment the defect is
+   scheduled for repair.
 
-   $25 is wrong. It contradicts the server's tier table in
-   api/grade-opportunity.js:44-52. This assertion must NOT become a standing
-   requirement that blocks BIAS-5 from correcting it. When BIAS-5 lands,
-   DELETE this check and replace it with the supported-cost behaviour checks:
-   costs sourced from the tier table, and grading-only expenses accounted
-   separately. A test that pins a defect in place outlives its purpose the
-   moment the defect is scheduled for repair. */
-T.check('TEMPORARY (BIAS-1 isolation only): the $25 grading fee is unchanged',
-  /const GRADING_FEE = 25;/.test(core),
-  'BIAS-1 must not move the grading fee; BIAS-5 SHOULD, and should delete this check');
+   What replaces it does NOT assert any particular cost, and deliberately does
+   not assert agreement with the server's tier table in api/grade-opportunity.js
+   either. Agreement with that table would establish CONSISTENCY, not cost
+   accuracy -- and the table is independently unsupported: it returns PSA $25
+   for a raw price under $200, while PSA's own published price for its cheapest
+   non-bulk service level is $32.99 (effective 2026-02-10), its $24.99 Value
+   Bulk rate requires Collectors Club membership and a 20-card minimum, and
+   neither figure includes the $19.00 return shipping and insurance PSA charges
+   on a single-card domestic submission. See audit/GRADING_COST_BASIS.md.
+
+   So these check the INVARIANT that survives whatever cost BIAS-5 settles on:
+   the cost used in the arithmetic must be the same cost disclosed to the
+   seller. A panel that computes with one number and prints another is wrong at
+   any value of the number. */
+const DISCLOSED_COST = (() => {
+  const m = /const GRADING_FEE = ([\d.]+);/.exec(core);
+  return m ? Number(m[1]) : null;
+})();
+
+/* Convention for every hand-derived expectation below: the eBay-side figures
+   (2679.10, 87.25, 817.10, ...) stay LITERAL, because they are the independent
+   check on the fee schedule and must not be able to track a bug in the model.
+   Only the grading-cost term reads DISCLOSED_COST, so BIAS-5 can change the
+   cost without invalidating the fee arithmetic these cases exist to verify.
+   The retired flat-13% fixture keeps a literal 25 -- see its own note. */
+T.check('a grading cost constant is present and numeric',
+  DISCLOSED_COST != null && isFinite(DISCLOSED_COST) && DISCLOSED_COST >= 0,
+  `expected a numeric GRADING_FEE, read ${DISCLOSED_COST}`);
+
+T.check('the cost is disclosed to the seller, not applied silently',
+  core.includes('${GRADING_FEE} grading fee'),
+  'the caption must interpolate the same constant the arithmetic subtracts');
+
+T.check('the cost is not hard-coded a second time in the caption text',
+  !/\$25 (?:PSA |grading )/.test(core.replace(/\/\*[\s\S]*?\*\//g, '')),
+  'a literal in the copy would drift from the constant -- one business value, one source');
+
+/* Grading-only expenses. BIAS-5 must account for costs incurred ONLY because
+   the card was graded -- PSA's return shipping and insurance is $19.00 for a
+   1-8 card domestic submission at $1-$1,000 declared value, charged per
+   submission, and inbound shipping is the submitter's responsibility. Neither
+   is represented anywhere in this surface today. This records the gap as an
+   OPEN finding rather than asserting a number the owner has not chosen: the
+   check below fails only if the panel starts CLAIMING to be all-in without
+   those costs appearing, which would be a new and worse claim than the current
+   silence. */
+T.check('the panel does not claim its grading cost is all-in',
+  !/all-?in/i.test(core.split('function renderGradingUpside')[1].slice(0, 9000)
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')),
+  'no "all-in" claim may be made while return and inbound shipping are unmodelled');
 
 // ── the behavioural claim: the rendered net IS the model net ────────────────
 // Mirrors the bundle's own formatter. Duplicated deliberately and narrowly: the
@@ -112,8 +154,11 @@ function render(raw, graded) {
 
 const ctx = { ebayStore: 'none', ebayPromo: 0, trsEligible: false };
 const modelUpside = (raw, graded) =>
-  api.netEbayForPrice(graded, ctx) - api.netEbayForPrice(raw, ctx) - 25;
+  api.netEbayForPrice(graded, ctx) - api.netEbayForPrice(raw, ctx) - DISCLOSED_COST;
 const flatUpside = (raw, graded) =>
+  // 25 is INTENTIONALLY literal here: this reproduces the RETIRED panel as it
+  // actually behaved, so it must not track the current constant. If BIAS-5
+  // changes GRADING_FEE, the old panel still subtracted 25.
   graded * 0.87 - raw * 0.87 - 25;
 
 // Prices chosen to straddle the two places a flat rate cannot follow the model:
@@ -147,8 +192,8 @@ for (const [raw, graded] of cases) {
     JSON.stringify(rawCol));
   const g10 = win._lastGradeLadder.grades.find(g => g.key === 'psa_10');
   T.check('the baseline subtracted is netEbayForPrice(raw), not raw itself',
-    Math.abs((api.netEbayForPrice(1200, ctx) - g10.upsideNet - 25) - api.netEbayForPrice(100, ctx)) < 0.005,
-    `implied baseline ${(api.netEbayForPrice(1200, ctx) - g10.upsideNet - 25).toFixed(4)}, ` +
+    Math.abs((api.netEbayForPrice(1200, ctx) - g10.upsideNet - DISCLOSED_COST) - api.netEbayForPrice(100, ctx)) < 0.005,
+    `implied baseline ${(api.netEbayForPrice(1200, ctx) - g10.upsideNet - DISCLOSED_COST).toFixed(4)}, ` +
     `netEbayForPrice(100) ${api.netEbayForPrice(100, ctx).toFixed(4)}`);
 }
 
@@ -170,8 +215,8 @@ for (const [raw, graded] of cases) {
 // have been stamping a lie.
 T.check('copy: the caption does not claim a flat 13% fee',
   !/13%\s*sale fees/.test(core), 'the caption still names 13%');
-T.check('copy: the caption still names the $25 grading fee',
-  /\$\$\{GRADING_FEE\} grading fee/.test(core), 'the $25 disclosure was dropped');
+T.check('copy: the caption still names the grading fee, whatever its value',
+  /\$\$\{GRADING_FEE\} grading fee/.test(core), 'the grading-cost disclosure was dropped');
 
 
 /* ── Profile variation: the inputs the new routing introduces ────────────────
@@ -210,7 +255,8 @@ T.check('copy: the caption still names the $25 grading fee',
     { source: 'pricecharting', prices: { raw: 100, psa_10: 3000 } }, 10, 10, {});
   const got = w._lastGradeLadder.grades.find(g => g.key === 'psa_10').upsideNet;
   T.check('Basic Store: ladder equals the independently computed $2,566.85',
-    Math.abs(got - 2566.85) < 0.005, `got ${got.toFixed(4)}`);
+    Math.abs(got - (2679.10 - 87.25 - DISCLOSED_COST)) < 0.005,
+    `got ${got.toFixed(4)}, expected ${(2679.10 - 87.25 - DISCLOSED_COST).toFixed(4)}`);
 
   // The same pair on the default profile, computed independently:
   //   graded fvf = 3000 x 0.1325 = 397.50   (below the $7,500 boundary)
@@ -222,7 +268,8 @@ T.check('copy: the caption still names the $25 grading fee',
     { source: 'pricecharting', prices: { raw: 100, psa_10: 3000 } }, 10, 10, {});
   const dflt = w2._lastGradeLadder.grades.find(g => g.key === 'psa_10').upsideNet;
   T.check('default profile: same pair equals the independently computed $2,490.75',
-    Math.abs(dflt - 2490.75) < 0.005, `got ${dflt.toFixed(4)}`);
+    Math.abs(dflt - (2602.10 - 86.35 - DISCLOSED_COST)) < 0.005,
+    `got ${dflt.toFixed(4)}, expected ${(2602.10 - 86.35 - DISCLOSED_COST).toFixed(4)}`);
   T.check('the store setting actually moves the ladder ($76.10 apart here)',
     Math.abs(got - dflt - 76.10) < 0.005,
     `basic ${got.toFixed(2)} vs default ${dflt.toFixed(2)}`);
@@ -243,7 +290,8 @@ T.check('copy: the caption still names the $25 grading fee',
     { source: 'pricecharting', prices: { raw: 100, psa_10: 1000 } }, 10, 10, {});
   const got = w._lastGradeLadder.grades.find(g => g.key === 'psa_10').upsideNet;
   T.check('5% promo: ladder equals the independently computed $710.75',
-    Math.abs(got - 710.75) < 0.005, `got ${got.toFixed(4)}`);
+    Math.abs(got - (817.10 - 81.35 - DISCLOSED_COST)) < 0.005,
+    `got ${got.toFixed(4)}, expected ${(817.10 - 81.35 - DISCLOSED_COST).toFixed(4)}`);
 
   // Same pair, no promo: 867.10 - 86.35 - 25 = 755.75. The $45.00 gap is the
   // promo charged on both sides (50.00 on graded, 5.00 on raw).
@@ -252,7 +300,8 @@ T.check('copy: the caption still names the $25 grading fee',
     { source: 'pricecharting', prices: { raw: 100, psa_10: 1000 } }, 10, 10, {});
   const dflt = w2._lastGradeLadder.grades.find(g => g.key === 'psa_10').upsideNet;
   T.check('no promo: same pair equals the independently computed $755.75',
-    Math.abs(dflt - 755.75) < 0.005, `got ${dflt.toFixed(4)}`);
+    Math.abs(dflt - (867.10 - 86.35 - DISCLOSED_COST)) < 0.005,
+    `got ${dflt.toFixed(4)}, expected ${(867.10 - 86.35 - DISCLOSED_COST).toFixed(4)}`);
   T.check('the promo setting is applied to BOTH sides ($45.00 apart here)',
     Math.abs(dflt - got - 45.00) < 0.005,
     `promo ${got.toFixed(2)} vs none ${dflt.toFixed(2)}`);
@@ -329,3 +378,43 @@ T.check('copy: the caption still names the $25 grading fee',
 }
 
 T.done();
+
+
+// ══ BIAS-3: conditional language per grade column ═══════════════════════════
+// Each column states a dollar figure that only occurs IF the card receives
+// that grade. The condition must be named in the column, and must not be
+// dressed up as a probability.
+{
+  const html = render(100, 3000);
+
+  T.check('BIAS-3: each priced grade column names its condition',
+    (html.match(/if 10/g) || []).length >= 1,
+    'the graded column must carry an "if <grade>" condition next to its figure');
+
+  T.check('BIAS-3: the raw column is marked as the as-is alternative',
+    /sell as-is/.test(html),
+    'the raw column is the baseline the others are conditional against');
+
+  T.check('BIAS-3: the section caption disclaims odds',
+    /we don.t estimate the odds/i.test(html),
+    'conditional figures must not imply we know the grade distribution');
+
+  T.check('BIAS-3: no grade probability is published',
+    !/(\d+)\s*% chance|likely to grade|odds of|probability/i.test(html),
+    'no invented grade probabilities -- the condition is not a forecast');
+
+  T.check('BIAS-3: the headline names the grade it is conditional on',
+    /Best case <em[^>]*>if it grades 10<\/em>/.test(html),
+    'the best-case pitch must state which grade produces it');
+
+  T.check('BIAS-3: the headline no longer asserts a grader for the best case',
+    !/Best case[^:]*Any grader/.test(html),
+    'the old headline read "Best case: Any grader ->", asserting a grader the feed does not break out');
+
+  // A column with no comp has no figure, so it must not carry a bare condition
+  // implying a number was withheld for grading reasons rather than data ones.
+  const sparse = render(100, 0);
+  T.check('BIAS-3: an unpriced column shows no condition label',
+    !/if 10/.test(sparse),
+    'a missing comp is a data gap, not a conditional outcome');
+}
