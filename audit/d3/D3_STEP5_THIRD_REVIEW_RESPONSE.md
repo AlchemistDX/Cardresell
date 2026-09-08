@@ -33,12 +33,20 @@ had, and a reviewer working from the packet had no way to know.
 
 **`ebayTrsListing` is not a profile key:**
 
-- `js/core.7f9c03ad.js:5660-5673` — `_crSellerProfile()` returns four keys:
+> **Citations corrected 2026-09-07 (D3 closeout).** The bundle name in this
+> section read `core.7f9c03ad.js`. The line numbers were right but the name was
+> not: this section was written against the working tree that the D3 rename has
+> since published as `core.24cd52cb.js`, while `7f9c03ad.js` was frozen back to
+> its own original bytes. At retired `:5660` sits an unrelated Lorcana comment;
+> `_crSellerProfile()` is at `:5660` of the LIVE bundle. Verified line by line
+> before renaming, not bulk-replaced.
+
+- `js/core.24cd52cb.js:5660-5673` — `_crSellerProfile()` returns four keys:
   `ebayStore`, `ebayTopRated`, `ebayPromo`, `tcgLevel`. `ebayTrsListing` is
   absent, with the reason stated inline at `:5668-5669`: *"ebayTrsListing is NOT
   read here. It describes one listing, not the seller, so it is not a profile key
   at all."*
-- `js/core.7f9c03ad.js:5675+` — the confirmation is held in
+- `js/core.24cd52cb.js:5675+` — the confirmation is held in
   `_trsListingConfirm = { ctx, ok, rev }`, stamped with the listing context it
   was given in.
 - `noteTrsListingAnswer()` at `:5833-5847` calls `touchListingContext()` **before**

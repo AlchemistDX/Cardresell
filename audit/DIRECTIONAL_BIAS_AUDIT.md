@@ -584,7 +584,20 @@ and the code says why:**
 
 - `_reviewFeeCalc()` calls `feeEbay(price, 0, ...)` — shipping charge **hard
   zero** on this screen — so the heading's `item price only` basis is *true* here
-  (`js/core.7f9c03ad.js:19991`, `:20006`).
+  (`js/core.24cd52cb.js:19969`, inside `_reviewFeeCalc()` at `:19951`).
+
+  > **Citation corrected 2026-09-07 (D3 closeout).** This read
+  > `js/core.7f9c03ad.js` at lines 19991 and 20006 — written here without the
+  > `file:line` separator on purpose, because `bundle-citation-map.mjs` scans
+  > whole documents and a corrected citation quoted in its own correction note
+  > is re-flagged as a live citation forever. That line number is past the end of
+  > the retired `7f9c03ad` bundle (19,329 lines), so the citation never
+  > resolved against the file it named — it was written against the working
+  > tree that has since become `24cd52cb`, and the numbers then drifted again
+  > during T2.14. **The claim itself was re-verified against live code before
+  > the citation was touched:** `feeEbay(price, 0, prof.ebayStore,
+  > prof.ebayPromo, false)` — shipping charge is a hard literal `0`. The claim
+  > stands; only the reference was wrong.
 - `items.taxNote = true` **unconditionally** (`:6840`), so the breakdown always
   renders a **`Buyer sales tax (not estimated) — `** row (`:8156`,
   `FEE_DISCLOSURE.taxQualifier`). Not a guard that can go unreached.

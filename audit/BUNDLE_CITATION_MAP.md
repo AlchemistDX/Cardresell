@@ -1,6 +1,27 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.7f9c03ad.js`.** New work cites that hash.
+**Live bundle: `js/core.24cd52cb.js` (20,227 lines).** New work cites that hash.
+`7f9c03ad` joined the retired set at the D3 closeout rename on 2026-09-07.
+
+> **The offset tables below are a convenience cache and are now one generation
+> stale.** `tools/bundle-citation-map.mjs` derives the live name from
+> `index.html`, so running it is always correct; the stamped intervals here were
+> measured against `7f9c03ad` as live. Re-derive rather than trust a number in
+> this file — that is the rule this file's own tool header states, and the
+> reason the tool exists.
+
+> **The verifier cannot detect a wrong bundle NAME, only a wrong line.** It
+> assumes a citation naming bundle X was written against X's bytes and aligns
+> X→live accordingly. During D3, documents cited `core.7f9c03ad.js` with line
+> numbers taken from the *working tree*, which the rename has now published as
+> `core.24cd52cb.js` while `7f9c03ad.js` was frozen back to its own original
+> bytes. Those citations name a file whose bytes never contained what they
+> cite, and the tool reports them as resolving — it maps a line the author
+> never read onto a line they never meant. All 18 name-level `7f9c03ad`
+> citations differ in content between retired and live at the cited line. Two
+> were adjudicated at closeout; **the other 16 are an open finding** (see the
+> closeout packet). `42/42 citations resolve` is a statement about arithmetic,
+> not about authorship.
 
 The corpus does not. 408 line-citations point at `core.d9e1b484.js` and exactly **one** points
 at `core.8bd8277a.js`, so reading almost any existing audit document means translating from the
