@@ -1,8 +1,10 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**35 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 35; that number, not this sentence, is the
-thing to check. A subclass shares a mechanism with its parent and is filed under
+**37 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 37; that number, not this sentence, is the
+thing to check. (This sentence said 35 while 36 was already filed below it —
+which is the pattern this page documents, committed against the page itself: a
+hand-kept count asserted as the set. Instance 32 is the same shape.) A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
 The file also carries two entries that are **not** instances and are not counted:
@@ -2087,3 +2089,67 @@ one value, render the other values before believing the copy — and when the
 subject of an assertion is deleted, re-point the assertion, because
 `!/--/.test(undefined)` passes forever. That vacuous pass was live in
 `tests/review-fee-dl.mjs:208` for the length of this sitting.
+
+---
+
+## Instance 37 — the same mechanism, one row over, found by the method that found Instance 36 (2026-09-08)
+
+**The claim.** That the fee-disclosure block was correct for the venues it
+renders. Instance 36 fixed the venue **tax** note. This is the row directly
+below it, and it had the identical defect — which is the point of recording it
+separately.
+
+**What was wrong.** `_reviewFeeBlockHtml` emitted
+`FEE_DISCLOSURE.trsWithheldLabel` (a "Top Rated Plus discount (not applied)"
+row) and `FEE_DISCLOSURE.trsWithheldNote` (a paragraph explaining eBay's
+handling-time and US-residency conditions) **unconditionally**, for every venue
+id. Rendered under Cardmarket or TCG Bulk, the screen told a seller that a venue
+which runs no such programme was withholding an eBay seller discount from them.
+
+**Why it was invisible.** Exactly the Instance 36 reason, and worth stating
+plainly because it did not generalise on its own: the copy was **right only by
+scope**. The production review screen is pinned to `ebay:fixed-price`, so the
+only configuration a customer or a suite ever rendered was the one where the row
+is true. Every assertion about it passed, and each one was honest about what it
+checked — the row's presence, its label text, its note text. None of them could
+fail, because none of them rendered a non-eBay venue.
+
+**How it was found.** By carrying out the reviewer's R4 instruction a second
+time — render the non-eBay states and read the emitted markup. The first pass
+caught the tax sentence because that was what R4 named. This row was in the same
+output, four lines down, and was not noticed until the states were rendered again
+for the revision. **The method found it; the previous application of the method
+did not, because the previous application was scoped to the sentence under
+review rather than to the block that contains it.**
+
+**The remedy, and one deliberate asymmetry.** `trsProgram: true` was added to
+eBay's `PLATFORMS` entry (beside the existing `taxBase*` fields), a
+`venueTrsNote(pid)` helper reads it, and both render sites are gated on it.
+
+`venueTrsNote` **fails closed in the opposite direction from `venueTaxNote`**,
+and the difference is not an inconsistency:
+
+- An unrecognised pid gets **no TRS row**. Claiming a venue operates a seller
+  discount programme it does not operate is a **false statement about that
+  venue**. Silence is the safe failure.
+- An unrecognised pid **does** get a tax row (`treatment not established`).
+  There, silence is the unsafe failure: it implies the estimate is complete on a
+  point we have not established.
+
+The rule the pair encodes: **fail toward silence when the risk is asserting a
+fact, and toward disclosure when the risk is implying completeness.** The two
+helpers sit adjacent in the bundle and would look inconsistent to a later reader
+without this note.
+
+**Registered as behaviour, not left to scope.** `tests/review-fee-dl.mjs` now
+asserts `venueTrsNote` is true for eBay and false for Cardmarket, TCG Bulk and
+Whatnot, plus false for an unrecognised pid. Suite 19 → 21. This is the check
+that would have failed before the fix, which is the only kind worth adding here.
+
+**The generalisable check, sharpened by the repeat.** Instance 36's lesson was
+*render the other configurations before believing the copy.* Instance 37 is the
+same defect surviving that lesson, so the lesson was too narrow. The correction:
+**when a scope-dependent defect is found in one element, re-render the whole
+block, not the element.** A surface pinned to one value does not contain one
+untested claim — it contains as many as it renders, and fixing the one that was
+reported leaves the rest exactly as unverified as they were.

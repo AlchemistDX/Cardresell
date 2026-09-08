@@ -80,10 +80,11 @@ const helperSrc = [
   fnSource('venueTaxNote'),
   fnSource('_reviewTaxRow'),
   fnSource('venueEstimateNote'),
+  fnSource('venueTrsNote'),
 ].join('\n');
 
 const helpers = new Function(
-  helperSrc + '; return { _reviewEsc, _reviewMoney, _reviewFeeRow, _reviewBasisRow, feeEbay, FEE_DISCLOSURE, FEE_UNKNOWN, PLATFORMS, venueTaxNote, _reviewTaxRow, venueEstimateNote };'
+  helperSrc + '; return { _reviewEsc, _reviewMoney, _reviewFeeRow, _reviewBasisRow, feeEbay, FEE_DISCLOSURE, FEE_UNKNOWN, PLATFORMS, venueTaxNote, _reviewTaxRow, venueEstimateNote, venueTrsNote };'
 )();
 
 /* The two template literals, sliced from the bundle as text. Anchored on the
@@ -108,6 +109,7 @@ export const PIDS = Object.keys(helpers.PLATFORMS);
 /** The production tax decision, for tests that assert state, not markup. */
 export const venueTaxNote = helpers.venueTaxNote;
 export const venueEstimateNote = helpers.venueEstimateNote;
+export const venueTrsNote = helpers.venueTrsNote;
 
 /**
  * Render one branch. `price` null renders the unpriced branch.
@@ -137,10 +139,10 @@ export function renderFeeBlock(price, profile, pid) {
 
   return new Function(
     'c', 'pill', 'feeRows', '_reviewFeeRow', '_reviewBasisRow', '_reviewEsc', '_reviewMoney',
-    'FEE_DISCLOSURE', 'FEE_UNKNOWN', '_reviewTaxRow', 'venueEstimateNote', 'pid',
+    'FEE_DISCLOSURE', 'FEE_UNKNOWN', '_reviewTaxRow', 'venueEstimateNote', 'venueTrsNote', 'pid',
     'return `' + TEMPLATES.priced + '`'
   )(c, '', feeRows, H._reviewFeeRow, H._reviewBasisRow, H._reviewEsc, H._reviewMoney,
-    H.FEE_DISCLOSURE, H.FEE_UNKNOWN, H._reviewTaxRow, H.venueEstimateNote, venue);
+    H.FEE_DISCLOSURE, H.FEE_UNKNOWN, H._reviewTaxRow, H.venueEstimateNote, H.venueTrsNote, venue);
 }
 
 export const DISCLOSURE = helpers.FEE_DISCLOSURE;

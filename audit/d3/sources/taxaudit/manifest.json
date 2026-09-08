@@ -1,0 +1,181 @@
+{
+  "note": "Provenance for tax-audit captures. Full pages intentionally not committed; see PROVENANCE.md.",
+  "finalRedirectedUrl": "Unverified for all rows",
+  "captures": [
+    {
+      "file": "cardkingdom.txt",
+      "url": "https://www.cardkingdom.com/purchasing/how_to_sell",
+      "sha256": "f1d77176d4cbc77d9a4ab0794ef85785a3d640ecb53cd0796e5ef93b3133befd",
+      "bytes": 14484,
+      "retrieved": "2026-09-08T13:40:53Z"
+    },
+    {
+      "file": "cardmarket.txt",
+      "url": "https://www.cardmarket.com/en/Policies/Fees",
+      "sha256": "b08a89632af01d17323dbf362c7ab913ec0dc7b5371a6d3765e70115e7aedca3",
+      "bytes": 912,
+      "retrieved": "2026-09-08T13:39:20Z"
+    },
+    {
+      "file": "cardnexus.txt",
+      "url": "https://help.cardnexus.com/articles/9938652-fee-structure-overview",
+      "sha256": "9bcfe7c5ad7b0a337daef058970de3e42cef244479b47486c9cf2b2f778ff268",
+      "bytes": 3207,
+      "retrieved": "2026-09-08T13:39:21Z"
+    },
+    {
+      "file": "cardnexus_faq.txt",
+      "url": "https://help.cardnexus.com/articles/1754380-selling-faq",
+      "sha256": "4731f09613356f2eba0c295263a165d31caffb09aed0af516cf41c48a8b52a28",
+      "bytes": 4563,
+      "retrieved": "2026-09-08T13:40:53Z"
+    },
+    {
+      "file": "cardsphere.txt",
+      "url": "https://www.cardsphere.com/terms",
+      "sha256": "9e8ad8af8e5cf0f1419e847993f00e8832c2674713eb66854a5dfb7e65440553",
+      "bytes": 49626,
+      "retrieved": "2026-09-08T13:39:18Z"
+    },
+    {
+      "file": "comc.txt",
+      "url": "https://comc.zendesk.com/hc/en-us/articles/360053737993-What-are-the-commission-fees",
+      "sha256": "e93aecab931e4a56f80b10c08dfac717663a5b92388f14e502e67b1eab0dab56",
+      "bytes": 1317,
+      "retrieved": "2026-09-08T13:39:17Z"
+    },
+    {
+      "file": "comc2.txt",
+      "url": "https://comc.zendesk.com/hc/en-us/articles/360053737993-What-are-the-commission-fees",
+      "sha256": "97ddb8f019652b03e6e05a8e7846ee0009c79d09e7fcfad0cd96e9e71d9f6e9c",
+      "bytes": 936,
+      "retrieved": "2026-09-08T13:40:43Z"
+    },
+    {
+      "file": "coolstuffinc.txt",
+      "url": "https://www.coolstuffinc.com/main_fullservice_selllist.php",
+      "sha256": "84d17003285b861743616fd75df2ef01d632025fd056a8a29ad0e591952aba5d",
+      "bytes": 4156,
+      "retrieved": "2026-09-08T13:39:20Z"
+    },
+    {
+      "file": "ebay.txt",
+      "url": "https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822",
+      "sha256": "f6d4c870a38e164a97116c4f1c721ecd83779272a8450a3f0abb521e6d89a45f",
+      "bytes": 18189,
+      "retrieved": "2026-09-08T13:39:17Z"
+    },
+    {
+      "file": "fanatics.txt",
+      "url": "https://support.fanaticscollect.com/en_us/buy-now-fees-ry33QCXaxe",
+      "sha256": "97aa27a85f86f3e6b71ad2fe0d50ae52eb5299a60c6c27f99e5e9d3d023c770d",
+      "bytes": 1780,
+      "retrieved": "2026-09-08T13:39:18Z"
+    },
+    {
+      "file": "fanatics_sell.txt",
+      "url": "https://support.fanaticscollect.com/en_us/selling-on-fanatics-collect-Byq2QAQpel",
+      "sha256": "6046a8a404e21923889a1ada63493c35a6e4aab1f766d9e7755b39cf924f0d2f",
+      "bytes": 16042,
+      "retrieved": "2026-09-08T13:40:43Z"
+    },
+    {
+      "file": "https_poshmark_com_terms.txt",
+      "url": "https://poshmark.com/terms",
+      "sha256": "e858229899a199d69a0900c3035be0887eb5e4ab61351f789fc0aef02168ae52",
+      "bytes": 1192399,
+      "retrieved": "2026-09-08T13:41:26Z"
+    },
+    {
+      "file": "m_2024_10_21_returning_to_original_fees_.txt",
+      "url": "https://blog.poshmark.com/2024/10/21/returning-to-original-fees/",
+      "sha256": "effc403893bd223db6cb5adba6a9dde486bb8113a64733ad133efeff88a26e5b",
+      "bytes": 4806,
+      "retrieved": "2026-09-08T13:41:27Z"
+    },
+    {
+      "file": "manapool.txt",
+      "url": "https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees",
+      "sha256": "70cc4a5095e70fca87b27133796949aef1927b46d206d8631c3fa558121b604a",
+      "bytes": 544,
+      "retrieved": "2026-09-08T13:39:18Z"
+    },
+    {
+      "file": "mercari.txt",
+      "url": "https://www.mercari.com/us/help_center/article/169/",
+      "sha256": "e8468fcd8361667d7f2b27d201c0fdf1058b52ffca3c35361d9ba8419217e469",
+      "bytes": 14533,
+      "retrieved": "2026-09-08T13:40:43Z"
+    },
+    {
+      "file": "poshmark.txt",
+      "url": "https://poshmark.com/terms",
+      "sha256": "fc6e0aba173db33560de65fda803ffeb4384cd06705f2f3a32e5053c52a85b42",
+      "bytes": 271,
+      "retrieved": "2026-09-08T13:40:43Z"
+    },
+    {
+      "file": "poshmark_feepolicy.txt",
+      "url": "https://poshmark.com/fee_policy",
+      "sha256": "e858229899a199d69a0900c3035be0887eb5e4ab61351f789fc0aef02168ae52",
+      "bytes": 1192399,
+      "retrieved": "2026-09-08T13:44:11Z"
+    },
+    {
+      "file": "poshmark_help.txt",
+      "url": "https://poshmark.com/terms",
+      "sha256": "10a75bd91929e223fa7615b8d6ec85dc12f00a1a5340b3769c62549383a5d037",
+      "bytes": 155,
+      "retrieved": "2026-09-08T13:40:53Z"
+    },
+    {
+      "file": "s_www_coolstuffinc_com_main_selllist_php.txt",
+      "url": "https://www.coolstuffinc.com/main_fullservice_selllist.php",
+      "sha256": "37f1f254ac0350f09ea6e1f58536b9c1cf44264a2458041fa256edb25d08e761",
+      "bytes": 5732,
+      "retrieved": "2026-09-08T13:41:27Z"
+    },
+    {
+      "file": "scg.txt",
+      "url": "https://sellyourcards.starcitygames.com/",
+      "sha256": "c6fa539173799560efe202d070f231ee38f1132b2034e6db00370a6a01f0935f",
+      "bytes": 1547,
+      "retrieved": "2026-09-08T13:39:20Z"
+    },
+    {
+      "file": "scg_help.txt",
+      "url": "https://sellyourcards.starcitygames.com/",
+      "sha256": "13cb1c42ebc1d07f5e12f363abaef6fe44c86c39b3147fe3fb0ef5ddd52b22e5",
+      "bytes": 1183,
+      "retrieved": "2026-09-08T13:39:21Z"
+    },
+    {
+      "file": "tcgbulk.txt",
+      "url": "https://tcgbulk.com/page/terms-of-service",
+      "sha256": "67f72916790f292277ecce6bbbd234abb75b46fa71f59606293fdda91d4d3760",
+      "bytes": 24836,
+      "retrieved": "2026-09-08T13:39:21Z"
+    },
+    {
+      "file": "tcgplayer.txt",
+      "url": "https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees",
+      "sha256": "1d2aa4805191a63cef415a14496a408444967dec09ce3d5e134aae7e8d80ae9f",
+      "bytes": 2824,
+      "retrieved": "2026-09-08T13:39:17Z"
+    },
+    {
+      "file": "tcgplayer_examples.txt",
+      "url": "https://help.tcgplayer.com/hc/en-us/articles/360047732673-Fee-Calculation-Examples",
+      "sha256": "7e3c7d8302c69bb227427dfcfa9ee054d35d9db8363d83b3f373df9f625494cb",
+      "bytes": 4337,
+      "retrieved": "2026-09-08T13:39:17Z"
+    },
+    {
+      "file": "whatnot.txt",
+      "url": "https://help.whatnot.com/hc/en-us/articles/4847069165965-Whatnot-Seller-Fees-and-Commissions-Schedule",
+      "sha256": "80700bc5d73e2bdf1ce2b3326065c70996dde52f29c58ddc5048733250cc9389",
+      "bytes": 8465,
+      "retrieved": "2026-09-08T13:39:18Z"
+    }
+  ]
+}

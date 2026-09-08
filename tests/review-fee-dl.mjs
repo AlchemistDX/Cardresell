@@ -55,7 +55,7 @@
  */
 
 import { harness } from './_assert.mjs';
-import { renderFeeBlock, DISCLOSURE, BUNDLE_PATH, venueEstimateNote } from '../tools/review-fee-dl-render.mjs';
+import { renderFeeBlock, DISCLOSURE, BUNDLE_PATH, venueEstimateNote, venueTrsNote } from '../tools/review-fee-dl-render.mjs';
 
 const T = harness('review-fee-dl');
 
@@ -222,10 +222,16 @@ T.check('copy: the estimate note likewise, in every state it can render',
    the omission, and a venue whose treatment we could not establish must not --
    it may turn out to be zero. Same helper, two sentences, and they may not
    collapse into each other. */
+/* USED TO ASSERT `/proceeds may be lower/` on the known-inclusion arm. Changed
+   2026-09-08 (second review): the note no longer claims a DIRECTION. It names
+   two omissions -- buyer-paid tax and buyer-paid shipping -- and those move
+   proceeds opposite ways, so "lower" was only ever true of the tax half. The
+   behaviour under test is unchanged (known inclusion concedes an omission,
+   unestablished concedes nothing); only the word for the consequence moved. */
 T.check('copy: known inclusion concedes an omission; unestablished does not',
-  /proceeds may be lower/.test(venueEstimateNote('ebay'))
+  /proceeds may differ/.test(venueEstimateNote('ebay'))
   && /does not establish whether/.test(venueEstimateNote('cardmarket'))
-  && !/proceeds may be lower/.test(venueEstimateNote('cardmarket')),
+  && !/proceeds may differ/.test(venueEstimateNote('cardmarket')),
   `unestablished venues reuse the known-omission sentence: ${JSON.stringify(venueEstimateNote('cardmarket'))}`);
 
 /* Caught by READING the rendered sentence rather than trusting the helper that
@@ -241,7 +247,10 @@ T.check('copy: an acronym in the tax noun survives being spliced mid-sentence',
    charged on the tax-inclusive total. "charges its fee" claimed the whole
    schedule, which is the same over-reach the venue's first-pass reading made. */
 T.check('copy: Whatnot names the processing fee, not its whole schedule',
-  /its payment processing fee on the total order value/.test(venueEstimateNote('whatnot')),
+  // USED TO ASSERT "...fee on the total order value". The preposition moved to
+  // "from" when the sentence was split in two; the scope claim under test --
+  // processing fee only, not the whole schedule -- is unchanged.
+  /its payment processing fee from the total order value/.test(venueEstimateNote('whatnot')),
   `Whatnot's note overstates which fee uses the inclusive base: ${JSON.stringify(venueEstimateNote('whatnot'))}`);
 
 /* The bug that rendering the states surfaced: the note named eBay under every
@@ -250,5 +259,26 @@ T.check('copy: a non-eBay venue\u2019s note does not describe eBay\u2019s fee ba
   !/eBay/.test(venueEstimateNote('cardmarket'))
   && !/eBay/.test(venueEstimateNote('tcgbulk')),
   `the eBay-specific sentence still renders off-eBay: ${JSON.stringify(venueEstimateNote('cardmarket'))}`);
+
+/* 2026-09-08, second review. Second instance of the mechanism above, found the
+   same way -- by rendering the non-eBay states. `trsWithheldLabel` and
+   `trsWithheldNote` were emitted unconditionally, so every venue's fee table
+   carried a "Top Rated Plus discount (not applied)" row and a paragraph about
+   eBay's handling-time and US-residency conditions. Top Rated Plus is an eBay
+   programme; under Cardmarket it is a false claim about that venue. Registered
+   as a behaviour so the gate cannot regress silently when D4 adds venues. */
+T.check('copy: the Top Rated Plus programme is claimed for eBay only',
+  venueTrsNote('ebay') === true
+  && venueTrsNote('cardmarket') === false
+  && venueTrsNote('tcgbulk') === false
+  && venueTrsNote('whatnot') === false,
+  'Top Rated Plus is an eBay programme and must not be claimed off-eBay');
+
+/* Fails CLOSED with NO row, opposite to venueTaxNote, and deliberately: an
+   unestablished tax treatment should still be disclosed, but asserting a venue
+   runs a discount programme it does not run is a false claim, not a caveat. */
+T.check('copy: an unrecognised pid claims no Top Rated Plus programme',
+  venueTrsNote('definitely-not-a-venue') === false,
+  'unknown pid must not inherit an eBay seller programme');
 
 T.done();

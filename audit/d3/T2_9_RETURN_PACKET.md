@@ -1,7 +1,10 @@
-# T2.9 / BIAS-10 — Return packet, revision 2
+# T2.9 / BIAS-10 — Return packet, revision 3
 
-**Scope of this revision:** the six rejections in the last review, resolved
-against code. Nothing was pushed and nothing was deployed. `D3`, `BIAS-1` and
+**Scope of this revision:** the **two blocking corrections** from the second
+review — the TCGplayer debit conclusion (§1, §9) and the committed raw-page
+captures (§9, and §19 of the tax document) — plus the accepted refinements to
+buylist wording, the eBay sentence, and the labelling of non-eBay rendered
+states. Revision 2's resolution of the original six rejections is retained. Nothing was pushed and nothing was deployed. `D3`, `BIAS-1` and
 `BIAS-6` remain closed and untouched.
 
 **Live bundle: `js/core.59d4b1ab.js` (21,491 lines).** Every line citation below
@@ -170,9 +173,25 @@ site (`js/core.59d4b1ab.js:21370`). Three states:
 **Known-inclusive** (eBay):
 
 > An estimate, not a payout. This estimate calculates fees on the item price
-> only. eBay charges its fee on the total sale, which includes buyer-paid
-> shipping and buyer sales tax and this estimate excludes, so on an order where
-> buyer sales tax applies your actual proceeds may be lower.
+> only. eBay calculates its fee from the total sale, including buyer-paid
+> shipping and sales tax; neither is included in this estimate. When buyer sales
+> tax applies — or when shipping changes the seller's costs — the final proceeds
+> may differ.
+
+**Adopted from your revision, including the reason.** The sentence was
+grammatically unclear and it also **claimed a direction it could not support**:
+it named two omissions, buyer-paid tax and buyer-paid shipping, then closed with
+"may be lower." Those two do not share a direction — a buyer's shipping payment
+and the seller's postage cost move proceeds opposite ways — so "lower" was true
+of the tax half only. `proceeds may differ` is the honest close.
+
+That cost four test assertions, each coupled to the old wording. Three were
+re-pointed; one was **withdrawn rather than re-pointed**, because its premise
+went with the copy: `draft-review-screen`'s *"the note states the direction of
+the error"* asserted `/may be lower/i`, and there is no longer a single
+direction to state. It is replaced by an assertion that the note names both
+omissions and commits to **no** direction, and each change carries an inline
+`USED TO ASSERT` note recording the old text and why it moved.
 
 **Unestablished** (Cardmarket, VAT-appropriate):
 
@@ -228,17 +247,24 @@ and obtaining `true` establishes what the helper returns, not what the screen
 emits. `audit/PATTERN_ASSERTION_SURFACE.md` instance 35 has been corrected in
 place to say so — it was itself an instance of the pattern that page documents.
 
-**Suites run individually:** `review-fee-dl` 19/19 · `draft-review-screen`
+**Suites run individually:** `review-fee-dl` 21/21 · `draft-review-screen`
 180/180 · `accuracy-fee-parity` 41/41.
 
-**Rendered states, read from the emitted markup:**
+**Rendered states, read from the emitted markup. Three of the four are
+simulated renderer states, not customer-reachable screens.** The production
+review screen remains pinned to `ebay:fixed-price`, so only the eBay row is
+currently reachable by a customer. The Cardmarket, TCG Bulk and Card Kingdom
+rows are produced by driving the real renderer with a venue id it will not
+receive in production until D4's multi-venue review screen exists. They are
+evidence that the renderer branches correctly — nothing more. **This packet does
+not claim a multi-venue review screen exists.**
 
-| Venue | State | Emitted row |
-|---|---|---|
-| eBay | known-inclusive | `<dt class="review-fee-label" data-fee-row="tax-included">Buyer sales tax <span class="review-fee-qual">(not estimated)</span></dt>` |
-| Cardmarket | unknown | `<dt class="review-fee-label" data-fee-row="tax-unestablished">Buyer VAT <span class="review-fee-qual">(treatment not established)</span></dt>` |
-| TCG Bulk | unknown | `<dt class="review-fee-label" data-fee-row="tax-unestablished">Buyer sales tax <span class="review-fee-qual">(treatment not established)</span></dt>` |
-| Card Kingdom | excluded | *(no row emitted)* |
+| Venue | Reachability | State | Emitted row |
+|---|---|---|---|
+| eBay | **reachable in production** | known-inclusive | `<dt class="review-fee-label" data-fee-row="tax-included">Buyer sales tax <span class="review-fee-qual">(not estimated)</span></dt>` |
+| Cardmarket | *simulated renderer state* | unknown | `<dt class="review-fee-label" data-fee-row="tax-unestablished">Buyer VAT <span class="review-fee-qual">(treatment not established)</span></dt>` |
+| TCG Bulk | *simulated renderer state* | unknown | `<dt class="review-fee-label" data-fee-row="tax-unestablished">Buyer sales tax <span class="review-fee-qual">(treatment not established)</span></dt>` |
+| Card Kingdom | *simulated renderer state* | excluded | *(no row emitted)* |
 
 ---
 
@@ -279,13 +305,63 @@ suite would have failed to construct rather than failed to assert.
 
 ---
 
-## 9. Next, per your instruction
+## 9. The two blocking corrections, and what is next
 
-T2.10 proceeds **against live code**: trace the current server-to-client price
-values before investigating anything. If synthesis has returned, that is a
-regression and gets reported as one. Otherwise the `$255` example and its derived
-threshold are marked **historical**. **Q7 is not reopened and the deleted
-`market × 0.85` mechanism is not investigated.**
+**Blocking 1 — TCGplayer.** Your epistemic point is accepted and the
+absence-of-a-worked-example argument is gone. Your *reading* of the fee table is
+not adopted, because the captured page contradicts it on two checkable points:
+the page contains **zero** occurrences of "transaction fee", and the 2.5% + $0.30
+column is headed **"Domestic CC/Paypal Processing Fee\*"** by the page itself
+(`tcgplayer.txt:13`, `:15`). The fee charged on every sale is the Marketplace
+Commission. Your counter-point survives too: "we do not charge fees on taxes for
+orders paid by debit card" does presuppose *some* fee on debit — satisfied by the
+commission alone. So §1 now records an **unresolved two-reading ambiguity in the
+published text**, quoting both with line cites, expressed against the decision
+boundary (the disputed processing line is ≈ $2.80 on a $100 item against $10.75
+of commission, roughly a fifth of the fee total). `taxOn: 'unknown'` /
+`taxBasis: 'payment-method'` are preserved, and the warning still renders. No
+fee-model change follows from an unresolved ambiguity.
+
+**Blocking 2 — the captures are not being pushed.** 2,569,243 bytes across 25
+files, reduced to **52 KB**: `PROVENANCE.md` + `manifest.json` carrying source
+URL, retrieval timestamp, SHA-256 and byte count of each original, plus minimal
+verbatim excerpts, generated reproducibly by `tools/reduce-captures.py`.
+Lines cited by number are **pinned** — retained in full, exempt from truncation
+and the per-page cap — so the reduction cannot break an existing citation.
+Final redirected URL is **Unverified** on every row: it was not recorded at
+capture time, and re-fetching would record today's redirect, not that one.
+`git rm` clears the tree and index but the blobs stay reachable from `6011b67`,
+so this is **folded into the required local history rewrite** rather than left to
+a follow-up commit. Nothing has been pushed. See §19 of the tax document.
+
+**Also applied:** the no-seller-fee scope is now exactly *"no modelled seller
+service fee has a tax-bearing base"* — never "the venue is confirmed to charge no
+seller fee"; Card Kingdom stays **A-2** and does not inherit CoolStuffInc's and
+SCG's strength; "excluded" replaces "confirmed zero" throughout; the Whatnot note
+still names the payment-**processing** fee specifically; and the three non-eBay
+rows are labelled **simulated renderer states** (§6).
+
+**One new defect, found by your own R4 method.** Applying "render the non-eBay
+states" a second time surfaced the row **directly below** the one R4 named:
+`trsWithheldLabel` and `trsWithheldNote` were emitted unconditionally, so
+Cardmarket and TCG Bulk printed *"Top Rated Plus discount (not applied)"* plus
+eBay's handling-time and US-residency copy. Fixed behind `trsProgram: true` on
+eBay's `PLATFORMS` entry and a new `venueTrsNote(pid)`, which deliberately fails
+**closed with no row** — the opposite of `venueTaxNote` — because asserting a
+venue runs a discount programme it does not run is a false claim, whereas
+silence on tax implies false completeness. Registered as behaviour: suite 19 →
+21. Logged as instance **37**; the page header also said "35 instances" while 36
+was filed below it, and that is corrected.
+
+**Next, per your item 6:** T2.10 `midBasis`. `api/tcg-price.js:290` emits
+`mid: r.mid ?? displayMarket` with `marketBasis`/`lowBasis`/`highBasis` but **no
+`midBasis`**, while the fallback path at `:367` does set it — the two paths
+disagree, and the client copies the other three but not `midBasis`. The work is
+scoped to your constraints: carry `midBasis` on the main path, **do not** make
+the low/high range gate depend on mid, label any derived mid a **calculated
+reference** rather than a median observed ask, test main/fallback parity, and
+check **T2.14 separately** because a derived midpoint currently influences
+whether a provider low is withheld.
 
 ---
 

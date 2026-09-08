@@ -45,7 +45,7 @@ keep the answer.
 |---|---|---|
 | `true` | `published-inclusive` | The page states the base includes tax. |
 | `false` | `published-exclusive` | The page states the base excludes tax, or enumerates the base closed and tax is not in the enumeration. **A confirmed zero.** |
-| `false` | `no-seller-fee` | Buylist / direct purchase where the venue publishes that it charges the seller **no service fee**. `taxOn: false` records that there is no seller fee for a tax component to sit inside — it does **not** assert that the transaction was untaxed. **This is a fee finding, not a tax finding.** |
+| `false` | `no-seller-fee` | Buylist / direct purchase where **this model applies no separate seller service fee**. The claim is exactly: *no modelled seller service fee has a tax-bearing base.* `taxOn: false` therefore records that there is no fee of ours for a buyer-tax component to sit inside — it does **not** assert that the transaction was untaxed, and it does **not** assert the venue is confirmed to charge no seller fee. **This is a statement about our fee model, not a tax determination and not an external verification of the venue's whole fee schedule.** |
 | `'unknown'` | `payment-method` | Policy is published, but the deciding input — how the buyer paid — is not knowable at draft time. |
 | `'unknown'` | `unstated` | The published fee page does not address it. |
 
@@ -93,26 +93,64 @@ names no seller tier, no store configuration and no region.
 
 *What I cannot establish is the thing I asserted.* "Correct for debit" requires
 knowing that on a debit order TCGplayer charges a 2.5% + $0.30 processing fee on
-the tax-exclusive subtotal. The Note establishes only that **taxes are not in the
-fee base** for debit. It does not establish that the processing fee **exists** on
-debit orders at all. **All eight worked configurations** in
-`taxaudit/raw/tcgplayer_examples.txt` are credit card or PayPal; there is no
-debit example anywhere in either capture. Our model charges 2.5% + $0.30 on 100%
-of orders.
+the tax-exclusive subtotal. The Note establishes only that **taxes are not in
+the fee base** for debit.
 
-*Consequence, stated against the boundary rather than as a number.* If debit
-orders carry no processing fee, our model **overstates** fees on every debit
-order — the opposite direction from the credit-card case, on the same venue.
-That would mean TCGplayer's total error is **not signed**: it depends on a
-payment method unknown at draft time. This is recorded as an **open item, not a
-finding**, because no source establishes either branch. Until it is reconciled,
-neither "correct for debit" nor "overstates on debit" is published as
-established.
+**REVISED 2026-09-08 (second review).** The reviewer read this as an argument
+from the absence of a worked example, and on that reading rejected it —
+correctly. Absence of a debit example is not evidence that debit carries no
+processing fee, and the earlier text did lean on it. But the reviewer's proposed
+replacement is not what the captured page says either, so neither version is
+adopted. From the raw text, per the standing rule that enumerated policy is
+cited from the page and not from anything that condensed it:
+
+1. **The page never uses the phrase "transaction fee."** Zero occurrences in
+   `tcgplayer.txt`. The reviewer's "a transaction fee is charged on each sale …
+   marketplace sellers pay 2.5% + $0.30" merges two separate columns.
+2. **The 2.5% + $0.30 column is scoped to CC/PayPal by its own header.**
+   `tcgplayer.txt:13` reads
+   `|Seller Type|Marketplace Commission Fee|Pro Fee|Direct Shipping Replacement Cost|Sync Fee|Domestic CC/Paypal Processing Fee*|`,
+   and `:15` puts `2.5%+$.30` in that last column for Level 1–4. The fee charged
+   on **every** sale is the Marketplace Commission (`10.25%` on the captured
+   page). So the scoping is **affirmative page text**, not an inference from
+   silence — which is a stronger basis than the version that was rejected.
+3. **The Note's own rationale points the same way:** the processing amount "is
+   used to cover the added processing costs for **those payment methods**"
+   (`:9`), i.e. credit cards and PayPal.
+4. **But the reviewer has a real textual counter, and it survives.** "We do not
+   charge fees on taxes for orders paid by debit card" presupposes that *some*
+   fee applies to debit orders. That is satisfied by the commission alone, so it
+   does not establish that the processing line applies to debit — but it does
+   block any claim that debit orders are fee-free.
+
+*Result: the published text is genuinely ambiguous on one point* — whether the
+CC/PayPal-headed processing line applies to debit at all. Both readings are
+textual, neither is refuted by the capture, and **no source in hand resolves it.**
+So it stays an **open item, not a finding**, and nothing is published as
+established in either direction. What is now recorded is the ambiguity itself,
+with both readings and their line cites, rather than a one-sided hypothesis.
+
+*Stated against the decision boundary, not as a number.* The two readings differ
+by exactly the processing line: on a $100 item that is `2.5% + $0.30 = $2.80`,
+against a commission of `$10.75` — roughly a fifth of the modelled fee total. It
+is therefore large enough to matter to ranking near a tie, and **no ranking
+effect has been ruled out** (§16). Our model charges the processing line on 100%
+of orders, so if the CC/PayPal scoping is the correct reading we **overstate** on
+debit orders while **understating** on credit-card orders through the tax base —
+opposite directions on one venue, resolved by a payment method that does not
+exist until checkout. That is precisely why the classification is
+`taxOn: 'unknown'`, `taxBasis: 'payment-method'` and why the warning renders.
+
+*Not actioned in code.* No fee-model change follows from an unresolved ambiguity,
+and the standing rule forbids inventing an input to a fee model. Resolving it
+needs a debit-path source TCGplayer has not published; the alternative is a
+seller-reported debit invoice, which is evidence we do not have.
 
 *Reproducibility note.* The reviewer's own fetch of the fees article did not
-return this Note. The raw captures under `taxaudit/raw/` are therefore being
-committed to the repository with this change, so the passage can be checked
-against the bytes I actually read rather than against a re-fetch.
+return this Note. Rather than commit the full pages, the capture is now reduced
+to `audit/d3/sources/taxaudit/PROVENANCE.md` — source URL, retrieval timestamp,
+SHA-256 and byte count of the original, plus pinned verbatim excerpts for every
+line an audit document cites by number (`:9`, `:13`, `:15` here). See §19.
 
 ## 3. Poshmark
 
@@ -210,8 +248,17 @@ premise is false there, and once it is false for one member it cannot be the
 thing that defines the class. TCG Bulk is therefore split out into §13 below and
 recorded `'unknown'`.
 
-What survives for these three is narrower and better evidenced: each publishes
-that it charges the seller no service fee.
+What survives for these three is narrower, and the scope must be kept exact.
+**The supported claim is:**
+
+> No modelled seller service fee has a tax-bearing base.
+
+**Not:** "the venue is confirmed to charge no seller fee." That second sentence is
+an external-verification claim about the venue's entire fee schedule, and only
+CoolStuffInc and SCG have affirmative language approaching it. Card Kingdom does
+not, and must not inherit their strength — see the per-venue row below. This is
+also why **"excluded" is the right word and "confirmed zero" was not**; the older
+phrase is retired everywhere (§16).
 
 | | |
 |---|---|
@@ -373,3 +420,52 @@ somewhere other than its fee schedule, which none of these fifteen does.
 
 *All quotations retrieved 2026-09-08 from the raw text of the linked pages.
 Raw captures: `/home/user/workspace/taxaudit/raw/`.*
+
+---
+
+## 19. Sources — reduced, not committed in full
+
+An earlier revision of this work committed complete text captures of all 25
+external pages (2,569,243 bytes) under `audit/d3/sources/taxaudit/`. **They were
+removed before any push.** The reasons given on review are correct and are not
+argued with: full vendor pages carry copyright exposure, add permanent
+repository weight, and create a maintenance burden for content that is mostly
+unrelated to any fee finding.
+
+What replaces them, in `audit/d3/sources/taxaudit/`:
+
+| File | Contents |
+|---|---|
+| `PROVENANCE.md` | Per capture: source URL, retrieval timestamp (UTC), SHA-256 and byte count of the original, and the minimal verbatim excerpt carrying the fee-base or tax statement. |
+| `manifest.json` | The same metadata, machine-readable. |
+| *(generator)* | `tools/reduce-captures.py` — the reduction is reproducible, not hand-curated. |
+
+Four properties worth stating, because each was a way this could have gone
+wrong:
+
+1. **Excerpts are a filter, not a summary.** Every retained line is verbatim
+   from the capture. Selection is a keyword match minus navigation boilerplate.
+   No line was rewritten, condensed or paraphrased — which is the standing rule
+   for enumerated policy.
+2. **Lines cited by number are pinned.** `tcgplayer.txt:9, :13, :15` and
+   `tcgbulk.txt:9, :117, :125` are retained in full, exempt from truncation and
+   from the per-page cap, so this reduction cannot silently break a citation
+   that already exists. Line numbers are positions in the **original** capture,
+   so existing cites still resolve against the recorded hash.
+3. **The hash is what makes an excerpt checkable.** It anchors each excerpt to
+   the byte stream it came from, so a future reader can confirm an excerpt is
+   faithful to a capture they no longer have — which was the whole reason the
+   full pages were committed in the first place.
+4. **Final redirected URL is `Unverified` for every row.** It was not recorded
+   at capture time and cannot be recovered from the stored bytes. Re-fetching
+   today would record *today's* redirect, not the one that applied at capture
+   time, so the field is left unestablished rather than backfilled — per the
+   standing rule that the repo writes **Unverified** where it cannot establish
+   a fact.
+
+**This is now part of the required local history cleanup, not separate from it.**
+`git rm` removes the files from the working tree and the index, but the blobs
+remain reachable from commit `6011b67` on `phase1-block-d`, which has never been
+pushed. So the 2.6 MB is still in local history and **must be dropped by the
+same rewrite that handles the credential scrub**, not by a follow-up commit.
+Tracked in `audit/TODO_PHASE1.md`.

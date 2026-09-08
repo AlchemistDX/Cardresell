@@ -872,10 +872,24 @@ try {
     // replacement asserts attribution and direction of error.
     T.check('the note attributes the item-only base to this estimate, not to eBay',
       /this estimate calculates fees on the item price only/i.test(f.note), f.note);
+    // USED TO ASSERT `/ebay charges .*total sale/i`. Reworded 2026-09-08 to
+    // "calculates ... from the total sale" when the sentence was split; the
+    // claim under test -- eBay's base is broader than ours -- is unchanged.
     T.check('the note states eBay\u2019s base is broader',
-      /ebay charges .*total sale/i.test(f.note), f.note);
-    T.check('the note states the direction of the error',
-      /may be lower/i.test(f.note), f.note);
+      /ebay calculates .*from the total sale/i.test(f.note), f.note);
+    /* USED TO ASSERT `/may be lower/i` under the name "the note states the
+       direction of the error". WITHDRAWN 2026-09-08 (second review): the note
+       names TWO omissions, buyer-paid sales tax and buyer-paid shipping, and
+       they do not share a direction -- a buyer's shipping payment and the
+       seller's postage cost move proceeds opposite ways. Asserting one
+       direction was asserting something the sentence cannot support, so the
+       assertion is replaced rather than re-pointed: the note must name both
+       omissions and must NOT commit to a direction. */
+    T.check('the note names both omissions and claims no single direction',
+      /buyer-paid shipping/i.test(f.note)
+      && /sales tax/i.test(f.note)
+      && /proceeds may differ/i.test(f.note)
+      && !/may be lower/i.test(f.note), f.note);
     T.check('the note does not assert the item-only base as eBay\u2019s rule',
       !/^(?!.*this estimate).*fees are charged on the item price only/i.test(f.note), f.note);
 
