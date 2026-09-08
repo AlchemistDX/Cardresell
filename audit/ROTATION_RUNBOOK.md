@@ -84,14 +84,22 @@ work on `phase1-block-d` is held entirely by this gate.
 **Does not unblock:** deployment, which stays a separate explicit authorization,
 and Phase 2, which needs 19/19 plus the OAuth and token-storage items.
 
-**Still to decide before the push, independent of rotation:** commit `94dc777`'s
-message contains small fragments of real eBay identifiers. The audit found no
-full outgoing credential, so the two options are to push as-is, accepting that
-fragments are not authenticating material, or to rewrite the message — which
-changes every descendant SHA and invalidates every commit hash cited across the
-audit corpus, requiring re-verification of all of it. **No owner decision has
-been recorded** (`audit/DECISION_94dc777.md`). This is not something to decide
-silently in the moment of pushing.
+**Already decided, not an open item:** the `94dc777` commit-history question was
+settled on 2026-09-06 — **Option A, keep the history**, recorded with evidence
+and rationale at `audit/DECISION_94dc777.md`. No rebase, no rewrite, no
+force-push; every SHA cited across the audit corpus stays valid.
+
+**But it is conditional, and the condition is this runbook.** A is safe *because*
+rotation happens: the decision rests on the fragments becoming references to a
+dead credential. Until step 2 completes they are fragments of a live one, and
+`94dc777` is unreachable from `origin/main`, so **the push is the publishing
+event.** That is the whole reason the push gate exists — under A, rotation is the
+only protection, because A leaves the fragments in place to be published as-is.
+If rotation stalls indefinitely, the decision record says to revisit A rather
+than to wait.
+
+*Corrected 2026-09-08.* The first version of this section said no owner decision
+had been recorded, and cited the decision record while doing it. See §5.
 
 ## 4. While you are signed in anyway — the eBay check
 
@@ -108,3 +116,38 @@ open:
    rewrites `title`/`caty` on a signed-in redirect, that is the same failure mode
    that killed the old scan-miss link, and it is the one failure D5's shipped
    instruction cannot survive.
+
+---
+
+## 5. Two corrections this runbook had to make to itself
+
+Recorded rather than quietly fixed, because both are the same failure and it is
+the failure this corpus is most prone to.
+
+**The count.** "Five Vercel dashboard questions" was carried through six
+documents and enumerated in none of them. The roadmap §8.3 lists seven, and
+seven is right. An unenumerated blocker cannot be worked, only referred to —
+which is how this one survived fifty commits of otherwise careful work — and a
+number with no list behind it drifts by retelling. Same shape as the offset table
+and the predicted hash: **a derived value stamped into prose, aging quietly,**
+with nothing to check it against.
+
+**The decision.** §3 of this file asserted that no owner decision on `94dc777`
+had been recorded, and cited `audit/DECISION_94dc777.md` in the same sentence —
+a file that opens with "Decision: Option A — keep the history" and was decided
+2026-09-06. The claim came from `CARDRESELL_PLAN_AND_ROADMAP.md` §8.2, which was
+accurate when written and went stale that day. **A stale sentence in a
+carried-forward document became a false claim in a new one, in a file whose
+entire purpose is to be the single place this gets read from.** Both corrected;
+the roadmap paragraph now records that it propagated, so the correction is not
+itself the sort of thing that ages.
+
+**One substantive divergence, resolved.** The decision record's rotation sequence
+says "update the Vercel environment variable in **both** Production and Preview"
+unconditionally. §2 of this runbook makes Preview conditional on dashboard answer
+1. The conditional version is correct and supersedes it: if Preview holds no eBay
+credential, updating Preview does not protect anything, it **creates a live
+credential in an environment that did not have one.** The unconditional wording
+was written before the Preview questions were posed and reads as safe-by-default
+only if you assume Preview already holds the secret — which is precisely the
+thing answer 1 exists to establish.

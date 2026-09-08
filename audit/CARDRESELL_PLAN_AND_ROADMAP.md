@@ -688,7 +688,11 @@ Commit `94dc777`'s message contains small fragments of real eBay identifiers. Th
 - Push history as-is, accepting that the fragments are not authenticating material.
 - Rewrite the message, which changes every descendant commit SHA and requires all review, hashes, and tests to be rerun against the new tip.
 
-No rewrite has been performed and no owner decision was found (`audit/D2_0_ASSET_FINGERPRINT_RETURN_PACKET.md:210-219`, `326-338`). Do not silently choose.
+**DECIDED 2026-09-06 — Option A, keep the history.** No rebase, no rewrite, no force-push; `94dc777` and its descendants keep their SHAs. Recorded with evidence and rationale at `audit/DECISION_94dc777.md`. The scan found no full credential and no credential-shaped fragment (zero alphanumeric runs of 30+ characters; zero runs of 12-29 mixing case and digits), and rewriting 36 commits to redact fragments of a credential being retired anyway is a bad trade -- the documentation pass, not the rebase, is the larger half of the cost.
+
+**The decision carries one condition: A is safe *because* rotation happens.** It is unmet. That condition is the only thing that reopens this, and `audit/ROTATION_RUNBOOK.md` step 2 discharges it.
+
+This paragraph previously read "no owner decision was found", citing `audit/D2_0_ASSET_FINGERPRINT_RETURN_PACKET.md:210-219`, `326-338` -- accurate when written, stale from 2026-09-06, and **it propagated**: on 2026-09-08 `ROTATION_RUNBOOK.md` reproduced the claim while citing the file that refutes it. Corrected in both places.
 
 ## 8.3 eBay live and dashboard gates
 
