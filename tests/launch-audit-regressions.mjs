@@ -1769,10 +1769,35 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 
 // ---- The band caption stops claiming completed-sales as universal (Sol) ----
 {
-  check('band caption says Comp is the displayed source value',
-        index.includes("'Estimated band. Comp is the displayed source value; Sell Now and '"));
+  /* CHANGED 2026-09-07 by Q7 option (iii).
+     This used to assert the literal opening string
+       'Estimated band. Comp is the displayed source value; Sell Now and '
+     which was the Sol fix for a caption that had claimed the comp was
+     "recent completed sales" universally. That fix was right and is kept --
+     the caption still says the comp is the displayed source value.
+
+     What Q7 removed is the phrase "Estimated band". A band is a measured
+     interval, so naming the trio one told the reader the market is this wide
+     when nothing measured a width; the two outer figures are suggestions this
+     app calculates around the comp. Asserting the exact old literal would now
+     fail for the right reason, and re-pinning the exact NEW literal would just
+     reschedule this argument for the next copy change. So the checks below name
+     the three claims the caption has to make and the one it must not, and stop
+     caring how they are punctuated. The completed-sales check is preserved
+     verbatim in intent because it is the original regression. */
+  check('band caption still says Comp is the displayed source value',
+        index.includes('Comp is the displayed source value'));
   check('band caption does not say completed sales anymore',
-        !index.includes("'Estimated band. Comp is recent completed sales; Sell Now and '"));
+        !index.includes("'Estimated band. Comp is recent completed sales; Sell Now and '")
+        && !/Comp is recent completed sales/.test(index));
+  check('caption no longer calls the trio a band (Q7)',
+        !index.includes('Estimated band.'));
+  check('caption names the outer tiers as calculated suggestions (Q7)',
+        index.includes('calculated ') && index.includes('suggestions at '));
+  check('caption denies being a provider range (Q7)',
+        (index.match(/provider range/g) || []).length >= 2);
+  check('caption carries the single-reference disclosure (Q7)',
+        index.includes('Single reference price. No observed market range is available.'));
 }
 
 // ---- Marker uses the condition-adjusted price (2026-09-04 Sol audit) ----
