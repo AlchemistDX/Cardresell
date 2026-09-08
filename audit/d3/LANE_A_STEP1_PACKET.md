@@ -488,3 +488,176 @@ checked**, and any block marked Implemented inherits that doubt.
 
 Recorded in the roadmap itself so the doubt travels with the claim rather than
 living only here.
+
+---
+
+## §11 — Reviewer corrections (2026-09-08)
+
+Four defects, three raised by review and one found while reproducing the first.
+Commit `52c7164`.
+
+### §11a — The fingerprint proved the draft matched itself
+
+`buildDraft` computed `packetInputFingerprint(draft)` from the draft it was
+building and stored that as *the packet's* fingerprint. The reader then
+recomputed the same value from the same draft, agreed, and declared any
+attached packet current. Reproduced before changing anything:
+
+| | |
+|---|---|
+| packet built from price | `$100` |
+| draft normalized price | `$500` |
+| stored `packetInputs` | `price=number:500\|priceSource=string:comp\|title=string:…` |
+| reader recomputes | identical |
+| **verdict** | **packet declared CURRENT** |
+
+The old code carried a comment defending this choice: a caller that supplied
+its own fingerprint could declare a stale packet fresh. That defends against a
+lying caller and buys a tautology in exchange. It also does not apply — `packet`
+is refused from the client on the create path, so the value is server-produced,
+and a caller that could forge the fingerprint could forge the whole packet.
+
+**Fixed.** `buildListingPacket` stamps `metadata.inputFingerprint` from the
+exact inputs it consumed: `ctx.price`, `ctx.priceSource`, and the title it
+rendered itself. `buildDraft` reads that stamp rather than computing one.
+Absence still is not agreement — a packet with no stamp records no fingerprint
+and reads stale.
+
+**Initial mismatch, added.** Derived from `rev`, not stored:
+
+- `PACKET_INPUTS_NEVER_MATCHED` — mismatch at `rev === 1`. No edit has
+  happened, so none can be blamed; this is a producer bug.
+- `PACKET_INPUTS_CHANGED` — mismatch after an edit. The ordinary case.
+- `PACKET_INPUTS_UNRECORDED` — no fingerprint at all. A write path that does
+  not know packets exist.
+
+All three withhold the packet, keep the draft readable, and preserve the bytes
+in `packetRaw`.
+
+### §11b — Fourth defect: the reader looked where the producer never wrote
+
+Running a real producer packet through `readStoredPacket` for the first time —
+something §10b had established nobody does — returned `INCOMPATIBLE`:
+
+- `readStoredPacket` read `stored.packetSchemaVersion` (top level).
+- `buildListingPacket` has always written `metadata.packetSchemaVersion`.
+
+So **every packet the producer has ever built was unreadable**, not merely
+unread. The version suite was green because its fixtures hand-write a
+top-level field production never emits: the assertions were right about the
+behaviour and wrong about the shape. That is the §10-family failure again, and
+this time inside a suite that was cited as evidence.
+
+Reader now reads the nested field, migrations bump the nested field, and the
+fixtures were corrected to the producer's real shape, each carrying a note of
+what it used to assert. No top-level fallback — two accepted shapes is an
+ambiguous version, and no legacy data exists to accommodate, because no packet
+has ever been read back.
+
+### §11c — Client-declared metadata may not present as verified
+
+`feeModelRevision` and `feeScheduleVerified` arrive in the request body
+(`pricingContext`) and are only type-checked: any integer, any parseable date,
+including a future one.
+
+**Server-side validation is not available**, and this is a finding rather than
+a deferral. The fee model exists only in the client bundle
+(`FEE_MODEL_REVISION`, `js/core.541c4c39.js:7590`); `api/_listingPacket.js`
+already reasons that a server-side copy would be a second fee model, excluded
+by standing decision and by one-behaviour-one-implementation. So the reviewer's
+option (a) is closed until a genuinely shared contract module exists, which is
+its own piece of work in a repo with no bundler.
+
+Option (b), taken:
+
+| was | now |
+|---|---|
+| `metadata.feeModelRevision` | `metadata.clientDeclaredFeeModelRevision` |
+| `metadata.feeScheduleVerified` | `metadata.clientDeclaredFeeScheduleDate` |
+| — | `metadata.feeMetadataSource: 'client-declared'` |
+| — | `FEE_METADATA_CLIENT_DECLARED` (INFO), **unconditional** |
+
+Unconditional is the substance. A supplied value cannot suppress the
+disclosure, because supplying it is the thing being disclosed — the same
+inversion the taxonomy fix removed. `MISSING_FEE_MODEL_REVISION` still blocks:
+that code is about presence, not authority, and the two are separate claims.
+
+### §11d — `NO_TARGET_NET_PRICING` was noise on every draft
+
+It fired whenever a target-net result was absent, which is every ordinary
+draft, because no production surface requests one (§10a: `listPriceForTargetNet`
+has no caller outside tests). A warning for declining a feature nobody was
+offered is noise, and noise is how a real warning gets ignored.
+
+The two arms cannot share a gate — a warning that wrongly disappears is
+invisible, one that wrongly appears is noise:
+
+- **No target requested** → absent optional analysis, no code.
+- **Target requested, no usable answer** → still warns.
+
+## §12 — Stale-packet recovery: the operation, defined
+
+"The caller recomputes" was policy with no operation behind it. Defined here
+before any packet state goes on the wire, because a withheld packet with no way
+to obtain a replacement is a dead end that looks like a feature.
+
+**Lifecycle, as required:**
+
+```
+create → current packet
+       → edit a dependent input (price | priceSource | title)
+       → packet withheld, reason PACKET_INPUTS_CHANGED, bytes preserved
+       → recompute with current pricing context
+       → new current packet
+       → reload → review
+```
+
+**Decision: one builder, reached two ways.**
+
+1. **`PATCH` carrying `pricingContext` regenerates.** The edit path rebuilds
+   the packet from the *post-edit* normalized values and re-stamps the
+   fingerprint. This is the ordinary route: the review screen holds the pricing
+   context already, so the recompute rides the edit that caused the staleness.
+2. **`PATCH` carrying only `pricingContext` (no field changes) is the explicit
+   recompute.** Same code path, no second endpoint, no new verb — a recompute
+   is an edit that changes no fields.
+
+**A `PATCH` with no `pricingContext` does not regenerate.** It leaves the
+existing packet in place to read stale. Regenerating without pricing context
+would build a packet with no basis and a blocking
+`MISSING_FEE_MODEL_REVISION`, overwrite preserved evidence, and trade a
+diagnosable stale snapshot for a fresh useless one. A title edit from the list
+screen is exactly this case.
+
+**One implementation.** The `packetCtx` assembly currently inline in
+`normalizeCreateInput` gets extracted so create and recompute call the same
+builder, and the store gets a single `attachPacket(draft, packet)` that records
+the packet and its stamped fingerprint together. Two callers of one function,
+not two functions — the rule that has bitten this codebase ten times.
+
+Implementation lands with the forwarding work, not before it; this section is
+the definition the forwarding gate asked for.
+
+## §13 — The estimate, on the record
+
+The reviewer offers **provisionally 75–80% seller-reachable**, reasoning that
+the packet block is internally implemented and still unavailable to sellers.
+That reasoning is sound and §11b strengthens it: the block was not merely
+unread, it was unreadable, so its seller-reachable contribution was zero rather
+than partial.
+
+It is recorded as **the owner's provisional figure, not an audited one.** The
+80–85% was withdrawn in §10c because its basis had not been checked, and 75–80%
+is arrived at by adjusting that same unchecked basis — a better-reasoned number
+resting on the same unaudited foundation. Recording it as provisional is
+honest; presenting it as the output of the per-block pass would not be. The
+per-block reachability pass remains the thing that replaces both.
+
+**Sweep counts are leads, not measurements.** Per review, the §10a and §10b
+counts stand as discovery evidence pending classification of externally invoked
+handlers, aliases and callbacks. §10a already rules out `window[…]` dynamic
+dispatch and interpolated `onclick`, and the `startTierCheckout` /
+`_waitForAuth` findings show what classification does to the raw count — it
+moved 38 rows from "missing capability" to "superseded duplicate". The
+remaining classes are not yet done, so no completion percentage may be derived
+from these numbers.
