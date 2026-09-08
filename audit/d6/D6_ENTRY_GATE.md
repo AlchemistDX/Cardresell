@@ -270,6 +270,41 @@ carries the source's definite verb about a class and adds the non-new-seller
 case that makes it relevant to everyone; sentence 3 is an instruction with the
 destination named. No duration, no amount, no claim about this reader.
 
+### 5.7 The limit is not permanent — say so, but not the way it wants to be said
+
+Raised on review: sentence 1 says eBay can "cap how much you list" and nothing
+says what happens next, so it reads as a harder ceiling than it is. Correct, and
+the omission is a misleading-by-silence, not merely a gap: a permanent-sounding
+cap is a reason not to bother listing at all.
+
+**Decision: add it, in seven words, with a neutral verb.**
+
+The obvious phrasing is "and raises it as you sell" — and **that phrasing is not
+supportable.** The source says limits are "reviewed every month and adjusted
+automatically" based on sales volume and buyer feedback ([eBay, "Selling
+limits"](https://www.ebay.com/help/selling/listings/selling-limits?id=4107)).
+Adjusted, not raised. eBay guarantees a review cadence, not a direction, and the
+same inputs that raise a limit can lower it. "Raises it as you sell" would be an
+unsupported directional claim about someone else's process — the §5.3 defect
+again, wearing a friendlier face, and this time it would be *our* invention
+rather than a figure we copied.
+
+So the clause states the cadence and stops: **"limits are reviewed monthly."**
+That carries the whole point — the cap is not permanent, something happens on a
+known schedule — without promising which way it moves. A seller who wants the
+direction has the destination named in sentence 3.
+
+Cost check, since §5.5(c) just made this note quiet: seven words on a
+three-sentence muted note. Worth it. The alternative is a sentence that
+discourages the action the screen exists to encourage.
+
+### 5.8 Copy as it stands for the rendered pass
+
+> eBay can hold your payout and cap how much you list, and limits are reviewed
+> monthly. New sellers will have transaction holds while they build selling
+> history, and eBay can also hold funds on high-priced or unusual sales. Your
+> selling limits and any funds on hold are shown in your eBay Seller Hub.
+
 **Still open:** wording review against the rendered screen, and the presence
 test.
 Naming specific holds or selling limits requires sourcing them from eBay's own
