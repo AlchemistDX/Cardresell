@@ -1431,5 +1431,76 @@ const codes = (p) => (p.notes || []).map((n) => n.code);
         declared.notes.find((n) => n.code === PACKET_CODES.FEE_METADATA_CLIENT_DECLARED).severity === SEVERITY.INFO);
 }
 
+
+// ── Quote age survives a rebuild ─────────────────────────────────────────
+// Reviewer check: "Keep quote age unchanged when reusing a quote. Rebuilding
+// now must not make an earlier retrieval appear newer."
+{
+  const RETRIEVED = Date.parse('2026-09-08T12:00:00.000Z');
+  const CREATE    = Date.parse('2026-09-08T12:10:00.000Z');
+  const REBUILD   = Date.parse('2026-09-08T13:00:00.000Z');
+  const basis = (extra) => ({ label: 'PriceCharting loose', sourceUrl: 'https://www.pricecharting.com/x',
+                              datedBySource: false, ...extra });
+  // findings are {code}, not packet notes -- the file-level `codes` helper
+  // reads p.notes and does not apply here.
+  const fcodes = (fs) => fs.map((f) => f.code);
+
+  // The create path has only a duration, and converting it is correct there:
+  // the build and the read are the same moment.
+  const created = stampPriceBasis(basis({ cacheAgeSec: (CREATE - RETRIEVED) / 1000 }), CREATE);
+  check('a create converts the relative age to the right absolute retrieval time',
+        created.retrievedAt === '2026-09-08T12:00:00.000Z');
+
+  // THE DEFECT, demonstrated. Re-converting the SAME duration at rebuild time
+  // moves the retrieval 50 minutes forward. An hour-old quote reads as ten
+  // minutes old, and nothing reports it.
+  const naive = stampPriceBasis(basis({ cacheAgeSec: (CREATE - RETRIEVED) / 1000 }), REBUILD);
+  check('\ud83d\udd34 re-converting a duration at rebuild time WOULD move the retrieval forward',
+        naive.retrievedAt === '2026-09-08T12:50:00.000Z',
+        'ten minutes before the REBUILD instead of before the create: the age is right, the anchor is wrong');
+
+  // The fix: the rebuild declares the absolute time it already knows, and the
+  // answer no longer depends on when the rebuild ran.
+  const rebuilt = stampPriceBasis(basis({ retrievedAt: '2026-09-08T12:00:00.000Z' }), REBUILD);
+  check('a rebuild that declares the absolute retrieval time preserves it',
+        rebuilt.retrievedAt === '2026-09-08T12:00:00.000Z');
+  check('and the same declaration is clock-independent',
+        stampPriceBasis(basis({ retrievedAt: '2026-09-08T12:00:00.000Z' }), CREATE).retrievedAt
+          === rebuilt.retrievedAt);
+
+  // Absolute WINS over a stale duration, because a rebuild may carry both: the
+  // client's cached basis object still has the duration it was built with.
+  const both = stampPriceBasisReporting(
+    basis({ retrievedAt: '2026-09-08T12:00:00.000Z', cacheAgeSec: 600 }), REBUILD);
+  check('the absolute form is preferred when both are present',
+        both.basis.retrievedAt === '2026-09-08T12:00:00.000Z');
+  check('and no age-absent warning appears beside a usable retrieval time',
+        !fcodes(both.findings).includes(PACKET_CODES.PRICE_BASIS_AGE_ABSENT),
+        'a warning that wrongly appears is noise');
+
+  // A future timestamp is refused, not clamped. Clamping would turn a wrong
+  // client clock into a plausible retrieval time.
+  const future = stampPriceBasisReporting(
+    basis({ retrievedAt: '2026-09-09T00:00:00.000Z' }), REBUILD);
+  check('a future retrieval time is refused rather than clamped',
+        future.basis.retrievedAt === null
+          && fcodes(future.findings).includes(PACKET_CODES.PRICE_BASIS_RETRIEVAL_UNPARSEABLE));
+
+  // Generation time is a separate field and DOES move. The two must not be
+  // conflated: the packet was generated at 13:00 from a quote read at 12:00.
+  const pk = buildListingPacket(CARDS[0], {
+    feeModelRevision: 7, feeScheduleVerified: '2026-09-01', slot: 'ebay:fixed-price',
+    price: 100, priceSource: 'comp', maxTitleLength: 80, now: REBUILD,
+    basisMeta: basis({ retrievedAt: '2026-09-08T12:00:00.000Z' }),
+  });
+  check('the packet records generation at rebuild time',
+        pk.metadata.generatedAt === '2026-09-08T13:00:00.000Z');
+  check('and retrieval at the original time',
+        pk.priceBasis.retrievedAt === '2026-09-08T12:00:00.000Z');
+  check('and does not claim the source dated it',
+        pk.priceBasis.datedBySource === false);
+}
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -34,6 +34,11 @@ export const PACKET_SCHEMA_VERSION = 1;
  * Any of these keys inside a persisted packet is a bug: they encode "how long
  * ago" relative to a moment that is gone by the time anyone reads it.
  */
+// Tolerated clock skew on a client-declared absolute retrieval time. Small on
+// purpose: it exists so a browser a few seconds fast is not called broken, not
+// to accommodate a wrong clock.
+export const RETRIEVAL_SKEW_MS = 60 * 1000;
+
 export const FORBIDDEN_AGE_KEYS = ['cacheAgeSec', 'ageSec', 'ageSeconds', 'secondsAgo', 'age'];
 
 export const PACKET_CODES = {
@@ -73,6 +78,7 @@ export const PACKET_CODES = {
   // and collapsing them sends someone to fix the wrong end.
   PRICE_BASIS_ABSENT:         'PRICE_BASIS_ABSENT',
   PRICE_BASIS_AGE_ABSENT:     'PRICE_BASIS_AGE_ABSENT',
+  PRICE_BASIS_RETRIEVAL_UNPARSEABLE: 'PRICE_BASIS_RETRIEVAL_UNPARSEABLE',
   PRICE_BASIS_AGE_UNPARSEABLE:'PRICE_BASIS_AGE_UNPARSEABLE',
   PRICE_BASIS_INCOMPLETE:     'PRICE_BASIS_INCOMPLETE',
   PRICE_BASIS_DATING_UNPARSEABLE: 'PRICE_BASIS_DATING_UNPARSEABLE',
@@ -419,14 +425,47 @@ export function stampPriceBasisReporting(basisMeta, nowMs) {
   }
   const now = Number.isFinite(nowMs) ? nowMs : Date.now();
 
+  // ── Retrieval time, and the rebuild that must not move it ─────────────
+  // `cacheAgeSec` is a DURATION, so it is only meaningful against the clock
+  // that read it. Converting it at build time is correct on a create, where
+  // the build and the read are the same moment. It is wrong on a REBUILD: the
+  // same duration re-converted an hour later moves retrievedAt an hour
+  // forward, and an old quote silently looks fresh. Generating bytes is not
+  // re-fetching a source.
+  //
+  // So an ABSOLUTE `retrievedAt` is accepted and PREFERRED when present. A
+  // rebuild passes the retrieval time it already knows, and the answer is
+  // independent of when the rebuild ran. The relative form stays supported
+  // because the create path legitimately has only that.
+  //
+  // Future must be refused rather than clamped: a clamp would turn a client
+  // clock error into a plausible timestamp, which is the fabrication the
+  // `retrievedAt: null` policy exists to avoid. A small skew allowance keeps
+  // an ordinary few-seconds-fast client from being called unparseable.
+  const rawAbs = basisMeta.retrievedAt;
+  const absSupplied = typeof rawAbs === 'string' && rawAbs.trim() !== '';
+  const absMs = absSupplied ? Date.parse(rawAbs) : NaN;
+  const absUsable = absSupplied && Number.isFinite(absMs) && absMs <= now + RETRIEVAL_SKEW_MS;
+
   const rawAge = basisMeta.cacheAgeSec;
   const ageSupplied = rawAge !== null && rawAge !== undefined && String(rawAge).trim() !== '';
   const age = Number(rawAge);
   const ageUsable = ageSupplied && Number.isFinite(age) && age >= 0;
-  const retrievedAt = ageUsable ? new Date(now - age * 1000).toISOString() : null;
 
-  if (!ageSupplied)      findings.push({ code: PACKET_CODES.PRICE_BASIS_AGE_ABSENT });
-  else if (!ageUsable)   findings.push({ code: PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE });
+  const retrievedAt = absUsable ? new Date(absMs).toISOString()
+                    : ageUsable ? new Date(now - age * 1000).toISOString()
+                    : null;
+
+  if (absSupplied && !absUsable) {
+    findings.push({ code: PACKET_CODES.PRICE_BASIS_RETRIEVAL_UNPARSEABLE });
+  }
+  // The absolute form satisfies the age requirement on its own. Reporting
+  // AGE_ABSENT alongside a usable retrievedAt would be a warning that wrongly
+  // appears, and a caption that says "no retrieval time" beside one.
+  if (!absUsable) {
+    if (!ageSupplied)      findings.push({ code: PACKET_CODES.PRICE_BASIS_AGE_ABSENT });
+    else if (!ageUsable)   findings.push({ code: PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE });
+  }
 
   const missing = [];
   if (!basisMeta.label)     missing.push('label');
@@ -759,6 +798,9 @@ export function buildListingPacket(row = {}, ctx = {}) {
     } else if (f.code === PACKET_CODES.PRICE_BASIS_AGE_UNPARSEABLE) {
       add(f.code, SEVERITY.WARNING,
           'The price basis carries a retrieval age that could not be read.');
+    } else if (f.code === PACKET_CODES.PRICE_BASIS_RETRIEVAL_UNPARSEABLE) {
+      add(f.code, SEVERITY.WARNING,
+          'The price basis declared a retrieval time that could not be read, or that is in the future.');
     } else if (f.code === PACKET_CODES.PRICE_BASIS_INCOMPLETE) {
       add(f.code, SEVERITY.WARNING,
           `The price basis is missing ${f.missing.join(' and ')}.`, { missing: f.missing });
