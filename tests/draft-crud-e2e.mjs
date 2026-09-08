@@ -1077,4 +1077,92 @@ reset();
 }
 
 
+/* ── The revision claim, under a real concurrent write ────────────────────
+ *
+ * WHY THIS EXISTS. The packet rebuild is safe against a competing edit because
+ * `putDraft`'s `claimRevision` is a conditional write and there is no `await`
+ * between building the packet and claiming the revision. Review's objection to
+ * that argument is correct and worth restating: the ABSENCE of an await is a
+ * property of the current source, not a demonstration of the behaviour. It
+ * stops being true the moment someone inserts one, and nothing fails when they
+ * do. What follows is the demonstration -- two overlapping updateDraft calls
+ * through the real service, the real store, and the real claim, with the
+ * rebuild deliberately held open across the competing write.
+ *
+ * DETERMINISTIC, NOT TIMED. The interleaving is forced with a barrier promise
+ * inside a kv wrapper. A sleep would make this a race the test usually wins,
+ * and a suite that usually passes is not evidence of anything.
+ *
+ * THE SCENARIO:
+ *   1. The draft sits at rev 7.
+ *   2. A rebuild (call A) reads rev 7 and is then HELD, before it builds and
+ *      claims. This stands in for any latency, present or future, between the
+ *      read and the write -- including an await someone adds later.
+ *   3. A plain edit (call B) runs to completion, taking rev 8 and setting the
+ *      price to 999.
+ *   4. A is released. It builds a packet describing PRICE 100 -- the value it
+ *      read at step 1, now obsolete -- and tries to claim rev 8.
+ *
+ * WHAT MUST HAPPEN: A is refused REV_CONFLICT, and the stored draft still
+ * carries B's price with NO packet from A. The obsolete packet must be
+ * unwritten, not merely unused.
+ */
+{
+  reset();
+  const c2 = await SVC.createDraft(kv, SUB, input(), K('race2-create'));
+  const id2 = c2.result.draftId;
+  for (let i = 2; i <= 7; i++) {
+    const r = await SVC.updateDraft(kv, SUB, id2, { price: i * 10 }, i - 1, K('race2-bump-' + i));
+    if (!r.ok) throw new Error('setup failed at rev ' + i + ': ' + r.error);
+  }
+
+  let release2;
+  const held2 = new Promise((r) => { release2 = r; });
+  let read2 = false;
+  let bDone2 = false;
+  let builtFromPrice = null;
+
+  const gatedKv = async (...args) => {
+    const out = await kv(...args);
+    if (!read2 && args[0] === 'get') { read2 = true; await held2; }
+    return out;
+  };
+
+  const rebuildA = SVC.updateDraft(gatedKv, SUB, id2, {}, 7, K('race2-rebuild'), (next) => {
+    builtFromPrice = next.price;
+    return { metadata: { packetSchemaVersion: 1, marker: 'obsolete-rebuild' } };
+  });
+
+  // Let A's read land and park.
+  while (!read2) await new Promise((r) => setImmediate(r));
+
+  // B runs to completion while A is parked.
+  const editB = await SVC.updateDraft(kv, SUB, id2, { price: 999 }, 7, K('race2-edit'));
+  bDone2 = true;
+  check('🔴 the competing edit lands first and takes rev 8',
+        editB.ok === true && editB.draft.rev === 8 && editB.draft.price === 999,
+        `ok=${editB.ok} rev=${editB.draft && editB.draft.rev} price=${editB.draft && editB.draft.price}`);
+
+  release2();
+  const outA = await rebuildA;
+
+  check('the held rebuild built from the record it read, before B wrote',
+        bDone2 === true && builtFromPrice === 70,
+        `B done=${bDone2}, rebuild built from price ${builtFromPrice}`);
+
+  check('🔴 the revision claim REJECTS the stale write',
+        outA.ok === false && outA.error === 'DRAFT_REVISION_CONFLICT',
+        `ok=${outA.ok} error=${outA.error} — a conditional write that lets both through is the lost update this exists to prevent`);
+
+  const after = await SVC.readDraft(kv, SUB, id2);
+  check("the stored draft is B's, at rev 8, price 999",
+        after.ok === true && after.draft.rev === 8 && after.draft.price === 999,
+        `rev=${after.draft && after.draft.rev} price=${after.draft && after.draft.price}`);
+
+  check('🔴 the obsolete packet was never written',
+        !after.draft.packet,
+        `packet marker=${after.draft.packet && after.draft.packet.metadata && after.draft.packet.metadata.marker} — refusing the write is the only thing that keeps an obsolete snapshot off the record`);
+}
+
+
 done();

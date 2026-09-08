@@ -1478,6 +1478,38 @@ const codes = (p) => (p.notes || []).map((n) => n.code);
         !fcodes(both.findings).includes(PACKET_CODES.PRICE_BASIS_AGE_ABSENT),
         'a warning that wrongly appears is noise');
 
+  // ── The regression must REQUIRE the original time ───────────────────────
+  //
+  // Review's point: an assertion that the answer is 12:00 passes for two
+  // different reasons, and only one of them is the fix. If the absolute
+  // preference were dropped tomorrow, `both` -- which carries BOTH forms -- is
+  // the input that separates them, and the wrong answer it produces is exactly
+  // the negative control above. So the correct behaviour is pinned against the
+  // defect's own output rather than against a bare literal.
+  //
+  // Concretely: with both forms present, dropping the preference re-converts
+  // cacheAgeSec: 600 against REBUILD and yields 12:50 -- `naive.retrievedAt`.
+  // Asserting inequality with that value is what makes this test fail when the
+  // preference regresses. `naive` is therefore load-bearing, not decoration,
+  // and must not be deleted as a redundant case.
+  check('\ud83d\udd34 and the preferred answer is NOT the one re-conversion would give',
+        both.basis.retrievedAt !== naive.retrievedAt
+          && naive.retrievedAt === '2026-09-08T12:50:00.000Z',
+        `absolute=${both.basis.retrievedAt} vs re-converted=${naive.retrievedAt} — if these ever match, the absolute preference has been lost`);
+
+  // The same requirement one level up, through the packet builder, because the
+  // preference could hold in stampPriceBasisReporting and still be bypassed by
+  // whatever the builder hands it.
+  const bothPk = buildListingPacket(CARDS[0], {
+    feeModelRevision: 7, feeScheduleVerified: '2026-09-01', slot: 'ebay:fixed-price',
+    price: 100, priceSource: 'comp', maxTitleLength: 80, now: REBUILD,
+    basisMeta: basis({ retrievedAt: '2026-09-08T12:00:00.000Z', cacheAgeSec: 600 }),
+  });
+  check('\ud83d\udd34 a rebuilt packet carrying both forms keeps the ORIGINAL retrieval time',
+        bothPk.priceBasis.retrievedAt === '2026-09-08T12:00:00.000Z'
+          && bothPk.priceBasis.retrievedAt !== naive.retrievedAt,
+        `${bothPk.priceBasis.retrievedAt} — the rebuild must not walk an hour-old quote forward to ten minutes old`);
+
   // A future timestamp is refused, not clamped. Clamping would turn a wrong
   // client clock into a plausible retrieval time.
   const future = stampPriceBasisReporting(

@@ -317,7 +317,36 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
   if (out.ok) {
     return res.status(200).json({
       draft: out.draft, replayed: !!out.replayed, validation: out.validation,
-      packetRebuilt: !!rebuild,
+      // Whether a packet was WRITTEN, not whether one was asked for. A replay
+      // returns the stored answer without running the rebuild closure, so
+      // reporting `true` there would tell the seller their quote was refreshed
+      // when the record is untouched.
+      packetRebuilt: !!rebuild && !out.replayed,
+    });
+  }
+  // ── A rebuild refused for want of a stored identity row ────────────────
+  //
+  // 409, not the 500 `statusForStoreError` gives an unrecognised code. 500 says
+  // "the server is broken and you should retry"; both halves are wrong. The
+  // request was well formed, the server is fine, and retrying changes nothing
+  // -- the row this draft was created without cannot appear.
+  //
+  // Handled HERE rather than by catching a throw around `updateDraft`, because
+  // the service does not throw it out: the rebuild closure's error is caught
+  // inside and returned as `{ok:false, error}` alongside every other refusal.
+  // A catch block would have been a second error path that this one never
+  // reaches, which is exactly the duplicate-implementation shape -- and it read
+  // as correct until the response came back 500.
+  //
+  // `retryable: false` matters as much as the status: the client turns it into
+  // an instruction with no retry button, because a button that can never work
+  // is worse than no button.
+  if (out.error === 'PACKET_REBUILD_NO_CARD_ROW') {
+    return res.status(409).json({
+      error: 'This draft was created before listing details were stored, so it cannot be refreshed.',
+      code: 'PACKET_REBUILD_NO_CARD_ROW',
+      retryable: false,
+      hint: 'Scan the card again and start a new listing. The existing draft is unaffected and can still be edited.',
     });
   }
   return res.status(statusForStoreError(out.error)).json(errorBody(out));
