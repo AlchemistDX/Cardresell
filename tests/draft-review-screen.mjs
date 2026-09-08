@@ -1937,6 +1937,204 @@ try {
     await ctx.close();
   });
 
+  /* ─────────────────────────────────────────────
+     D4 -- where the price came from
+
+     Five behaviours, each evidenced on the surface a seller reads, all of them
+     after a real load of the stored record rather than off a live in-memory
+     basis:
+
+       1. the stored source label reaches the screen, and its link is an href
+          only when the stored string is a safe http(s) URL;
+       2. the retrieval time rendered is the STORED absolute instant -- a
+          rebuild moves `metadata.generatedAt` and must not move the caption;
+       3. a basis beside a seller-typed price is labelled context, and a basis
+          behind a comp-derived price is labelled as what determined it;
+       4. missing source and missing retrieval time are STATED, not blank;
+       5. an unusable packet clears the whole block.
+
+     The hostile-URL fixture stores `javascript:alert(document.domain)` through
+     the real POST handler, unsanitized, because the rejection under test is
+     the client's. A fixture that arrived pre-cleaned would pass this section
+     while the screen was wide open.
+  ───────────────────────────────────────────── */
+  const basisOf = (page) => page.evaluate(() => {
+    const el = document.querySelector('#reviewWrap .review-packet-basis');
+    if (!el) return null;
+    const q = (sel) => el.querySelector(sel);
+    const link = q('[data-basis-link]');
+    return {
+      state:   el.getAttribute('data-packet-basis'),
+      role:    el.getAttribute('data-basis-role'),
+      src:     el.getAttribute('data-basis-price-source'),
+      unsupported: el.hasAttribute('data-basis-unsupported'),
+      text:    el.innerText,
+      html:    el.innerHTML,
+      roleNote: (q('[data-basis-role-note]') || {}).innerText || '',
+      linkHref: link ? link.getAttribute('href') : null,
+      linkText: link ? link.innerText : null,
+      rejected: !!q('[data-basis-link-rejected]'),
+      linkAbsent: !!q('[data-basis-link-absent]'),
+      sourceAbsent: !!q('[data-basis-source-absent]'),
+      retrievedAttr: (q('[data-basis-retrieved-at]') || {}).getAttribute
+        ? q('[data-basis-retrieved-at]').getAttribute('data-basis-retrieved-at') : null,
+      retrievedText: (q('[data-basis-field="retrieved"] .review-field-value') || {}).innerText || '',
+      retrievedAbsent: !!q('[data-basis-retrieved-absent]'),
+      dating: (q('[data-basis-dating]') || {}).getAttribute
+        ? q('[data-basis-dating]').getAttribute('data-basis-dating') : null,
+    };
+  });
+
+  await T.section('a seller can see where the price came from, after a reload', async () => {
+    // ── 1. comp-derived: the basis is the evidence ──────────────────────────
+    {
+      const { ctx, page } = await boot(serveRead(F.packetCompPriced));
+      await openReview(page, F.ids.packetCompPriced);
+      const b = await basisOf(page);
+      T.check('setup: the stored packet is usable and carries a basis',
+        F.packetCompPriced.body.packetUsable === true && !!F.packetCompPriced.body.packet.priceBasis);
+      T.check('\ud83d\udd34 the provenance block renders for a usable packet', b && b.state === 'present', JSON.stringify(b && b.state));
+      T.check('\ud83d\udd34 the stored source label reaches the seller',
+        b && b.linkText === F.packetCompPriced.body.packet.priceBasis.label, b && b.linkText);
+      T.check('\ud83d\udd34 a stored https link becomes the href, unaltered',
+        b && b.linkHref === F.packetCompPriced.body.packet.priceBasis.sourceUrl, b && b.linkHref);
+      T.check('the link cannot hand the opener to the source',
+        b && /rel="noopener noreferrer nofollow"/.test(b.html));
+      T.check('\ud83d\udd34 a comp-derived price is labelled as DERIVED from the basis',
+        b && b.role === 'determining' && /derived from the market data/i.test(b.roleNote),
+        b && b.role + ' / ' + b.roleNote);
+      // The stored instant, not the moment the bytes were made. 12:00Z was
+      // fixed at fixture time; generatedAt is today, so a display sourced from
+      // generatedAt would render a different DATE and this comparison catches
+      // it rather than depending on a millisecond difference.
+      T.check('\ud83d\udd34 the retrieval time rendered is the STORED absolute instant',
+        b && b.retrievedAttr === '2026-09-08T12:00:00.000Z', b && b.retrievedAttr);
+      T.check('setup: the packet was generated at a different instant than it was retrieved',
+        F.packetCompPriced.body.packet.metadata.generatedAt !== '2026-09-08T12:00:00.000Z',
+        F.packetCompPriced.body.packet.metadata.generatedAt);
+      T.check('and the caption does not print the generation time',
+        b && b.text.indexOf(F.packetCompPriced.body.packet.metadata.generatedAt) === -1);
+      T.check('PriceCharting publishes no as-of date, so the caption says we read it',
+        b && b.dating === 'retrieval' && /when we read the source/i.test(b.text), b && b.dating);
+      await ctx.close();
+    }
+
+    // ── 2. the rebuild does not make the quote look newer ───────────────────
+    {
+      T.check('setup: the rebuild moved the generation time',
+        F.packetCompRebuilt.body.packet.metadata.generatedAt
+          !== F.packetCompPriced.body.packet.metadata.generatedAt,
+        F.packetCompRebuilt.body.packet.metadata.generatedAt);
+      const { ctx, page } = await boot(serveRead(F.packetCompRebuilt));
+      await openReview(page, F.ids.packetCompRebuilt);
+      const b = await basisOf(page);
+      T.check('\ud83d\udd34 after a rebuild the rendered retrieval time has NOT moved',
+        b && b.retrievedAttr === '2026-09-08T12:00:00.000Z', b && b.retrievedAttr);
+      await ctx.close();
+    }
+
+    // ── 3. seller-typed: the same basis is context, not evidence ────────────
+    {
+      const { ctx, page } = await boot(serveRead(F.packetSellerPriced));
+      await openReview(page, F.ids.packetSellerPriced);
+      const b = await basisOf(page);
+      T.check('setup: same basis fields as the comp-derived draft',
+        JSON.stringify(F.packetSellerPriced.body.packet.priceBasis)
+          === JSON.stringify(F.packetCompPriced.body.packet.priceBasis));
+      T.check('\ud83d\udd34 a basis beside a seller-typed price is labelled CONTEXT',
+        b && b.role === 'context', b && b.role);
+      T.check('\ud83d\udd34 and the copy denies that it determined the price',
+        b && /you set this asking price yourself/i.test(b.roleNote)
+          && /not what the price was derived from/i.test(b.roleNote), b && b.roleNote);
+      T.check('the heading changes with the role, so the two are not one screen',
+        b && /market context/i.test(b.text) && !/where this price came from/i.test(b.text), b && b.text.slice(0, 80));
+      await ctx.close();
+    }
+
+    // ── 4. a hostile stored link never becomes an href ──────────────────────
+    {
+      T.check('setup: the stored link is a javascript: URL',
+        F.packetHostileUrl.body.packet.priceBasis.sourceUrl.startsWith('javascript:'),
+        F.packetHostileUrl.body.packet.priceBasis.sourceUrl);
+      const { ctx, page } = await boot(serveRead(F.packetHostileUrl));
+      await openReview(page, F.ids.packetHostileUrl);
+      const b = await basisOf(page);
+      T.check('\ud83d\udd34 a javascript: source link is not rendered as a link at all',
+        b && b.linkHref === null, b && b.linkHref);
+      T.check('\ud83d\udd34 and the URL string does not reach the DOM in any form',
+        b && b.html.indexOf('javascript:') === -1 && b.html.indexOf('alert(') === -1);
+      T.check('\ud83d\udd34 the label still shows, with the reason there is no link',
+        b && /PriceCharting loose/.test(b.text) && b.rejected === true, b && b.text);
+      await ctx.close();
+    }
+
+    // ── 5. missing pieces are stated, not blank ─────────────────────────────
+    {
+      const { ctx, page } = await boot(serveRead(F.packetPartialBasis));
+      await openReview(page, F.ids.packetPartialBasis);
+      const b = await basisOf(page);
+      T.check('setup: the stored basis is label-only -- the real SportsCardsPro shape',
+        F.packetPartialBasis.body.packet.priceBasis.sourceUrl === null
+          && F.packetPartialBasis.body.packet.priceBasis.retrievedAt === null);
+      T.check('\ud83d\udd34 a basis with no link says so instead of showing a dead label',
+        b && b.linkAbsent === true && b.linkHref === null && /no link was recorded/i.test(b.text), b && b.text);
+      T.check('\ud83d\udd34 a basis with no retrieval time says so instead of rendering blank',
+        b && b.retrievedAbsent === true && /no retrieval time recorded/i.test(b.retrievedText),
+        b && b.retrievedText);
+      T.check('and no as-of sentence is printed for a time we do not have',
+        b && b.dating === null, b && b.dating);
+      await ctx.close();
+    }
+
+    // ── 6. a comp-derived price with no basis at all ────────────────────────
+    {
+      const { ctx, page } = await boot(serveRead(F.packetNoBasis));
+      await openReview(page, F.ids.packetNoBasis);
+      const b = await basisOf(page);
+      T.check('setup: usable packet, priceBasis null, price recorded as comp-derived',
+        F.packetNoBasis.body.packetUsable === true
+          && F.packetNoBasis.body.packet.priceBasis === null
+          && F.packetNoBasis.body.draft.priceSource === 'comp');
+      T.check('\ud83d\udd34 no recorded source is stated as absent',
+        b && b.state === 'absent' && /no price source was recorded/i.test(b.text), b && b.text);
+      T.check('\ud83d\udd34 and a comp-derived price with no basis is flagged as owing one',
+        b && b.unsupported === true && /should have one/i.test(b.text), b && b.text);
+      await ctx.close();
+    }
+
+    // ── 7. an unusable packet clears the block entirely ─────────────────────
+    {
+      T.check('setup: the stale envelope withholds the packet',
+        F.packetStale.body.packetUsable === false, String(F.packetStale.body.packetUsable));
+      const { ctx, page } = await boot(serveRead(F.packetStale));
+      await openReview(page, F.ids.packetStale);
+      const b = await basisOf(page);
+      T.check('\ud83d\udd34 an unusable packet renders NO provenance block', b === null, JSON.stringify(b));
+      const body = await page.evaluate(() => document.getElementById('reviewWrap').innerText);
+      T.check('and no source label survives on screen',
+        body.indexOf('PriceCharting loose') === -1);
+      T.check('and no retrieval instant survives on screen',
+        body.indexOf('2026-09-08T12:00') === -1);
+      await ctx.close();
+    }
+
+    // ── 8. the action is named for what it does ─────────────────────────────
+    // A rebuild re-reads the DRAFT, not the market. "Refresh price" would
+    // promise a new quote; the button must not.
+    {
+      const { ctx, page } = await boot(serveRead(F.packetCompPriced));
+      await openReview(page, F.ids.packetCompPriced);
+      const label = await page.evaluate(() => {
+        const b = document.getElementById('reviewRefreshBtn');
+        return b ? b.innerText.trim() : null;
+      });
+      T.check('\ud83d\udd34 the rebuild action is labelled Refresh listing details',
+        label === 'Refresh listing details', label);
+      T.check('and it does not promise a new price', label && !/price|quote/i.test(label), label);
+      await ctx.close();
+    }
+  });
+
 } finally {
   await browser.close();
   server.close();

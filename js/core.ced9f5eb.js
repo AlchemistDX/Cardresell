@@ -21782,6 +21782,183 @@ function _reviewPacketRows() {
   return rows;
 }
 
+/* ─── D4: where the price came from ──────────────────────────────────────
+   Four things a seller can act on, and one they cannot:
+
+   1. The SOURCE LABEL and, when it is safe to render, a link to it. A stored
+      URL is attacker-adjacent data -- it reached the packet through a client
+      field -- so it is parsed and scheme-checked before it becomes an href,
+      never interpolated on trust. A rejected URL degrades to the plain label;
+      it does not silently vanish and it does not become a live link.
+
+   2. The RETRIEVAL TIME, read from the packet's absolute `retrievedAt` and
+      nothing else. NOT `metadata.generatedAt`: that moves on every rebuild,
+      and a rebuild generates bytes rather than re-reading a market. Sourcing
+      the caption from generatedAt is precisely how an hour-old quote starts
+      reading as fresh. The server already refuses to move `retrievedAt` on
+      rebuild (api/_listingPacket.js stampPriceBasisReporting); this is the
+      display half of the same rule, and it is asserted after a refresh.
+
+   3. WHOSE NUMBER IT IS. A basis beside a seller-typed price is market
+      CONTEXT. A basis behind a 'comp' or 'venue' price is the EVIDENCE that
+      determined it. Same fields, different claim, and conflating them either
+      credits our data for the seller's judgement or blames it for their
+      price. `data-basis-role` is the machine-readable form; the heading and
+      the sentence are the seller-readable form.
+
+   4. WHAT IS MISSING, stated. A label with no URL, a basis with no retrieval
+      time, and no basis at all are three different states and each says so.
+      Absence is never rendered as a blank row.
+
+   And the one they cannot act on: when the packet is unusable, none of this
+   renders. Structural, not remembered -- `_reviewBasis()` returns null unless
+   `packetUsable`, exactly like `_reviewPacketRows`, so there is no branch that
+   could render provenance from a snapshot we have already told the seller not
+   to trust. */
+
+/** http/https only, parsed not pattern-matched. Anything else -> null. */
+function _reviewSafeSourceUrl(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  let u;
+  try { u = new URL(raw.trim()); } catch (_) { return null; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  return u.href;
+}
+
+/** The stored instant, absolute. No "2h ago": a relative caption re-read later
+    is the same drift as re-deriving the stamp, one layer up. */
+function _reviewWhen(iso) {
+  if (typeof iso !== 'string' || !iso) return null;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Date(ms).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+  } catch (_) { return new Date(ms).toISOString(); }
+}
+
+/**
+ * The provenance view model, or null.
+ *
+ * Null in exactly two cases: no usable packet, and a usable packet whose
+ * `priceBasis` is absent. The caller renders a different thing for each, which
+ * is why this returns null rather than a partly-filled object -- an object with
+ * every field null would let a caller print an empty block and call it
+ * disclosure.
+ */
+function _reviewBasis() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  if (!pk) return null;
+  const b = pk.priceBasis && typeof pk.priceBasis === 'object' ? pk.priceBasis : null;
+  if (!b) return null;
+  const src = _reviewState.draft ? _reviewState.draft.priceSource : null;
+  return {
+    label:      typeof b.label === 'string' && b.label ? b.label : null,
+    href:       _reviewSafeSourceUrl(b.sourceUrl),
+    urlStored:  typeof b.sourceUrl === 'string' && b.sourceUrl.trim() !== '',
+    retrievedAt: typeof b.retrievedAt === 'string' && b.retrievedAt ? b.retrievedAt : null,
+    datedBySource: b.datedBySource === true,
+    // 'seller' -> context. 'comp'/'venue' -> determining. Anything else,
+    // including a draft that never recorded one, is UNKNOWN and says so; a
+    // default of either would be an invented claim about how the price was set.
+    role: src === 'seller' ? 'context'
+        : (src === 'comp' || src === 'venue') ? 'determining'
+        : 'unknown',
+    priceSource: typeof src === 'string' && src ? src : null,
+  };
+}
+
+const _REVIEW_BASIS_ROLE = {
+  determining: {
+    h: 'Where this price came from',
+    p: 'This asking price was derived from the market data below.',
+  },
+  context: {
+    h: 'Market context for this price',
+    p: 'You set this asking price yourself. The market data below is context alongside it \u2014 it is not what the price was derived from.',
+  },
+  unknown: {
+    h: 'Market data recorded with this price',
+    p: 'This draft has no record of how its asking price was set, so we cannot say whether the market data below determined it or sits beside it.',
+  },
+};
+
+/**
+ * The provenance block.
+ *
+ * Every row is either a value or an explicit statement of absence. The one
+ * thing this function will not do is print a row it cannot substantiate.
+ */
+function _reviewBasisHtml() {
+  if (!_reviewState.packetUsable || !_reviewState.packet) return '';
+
+  const b = _reviewBasis();
+  if (!b) {
+    // Usable packet, no basis at all. The draft's own priceSource decides
+    // whether that absence is unremarkable or worth a second sentence: a
+    // seller-typed price owes no market basis, a 'comp'-derived one does.
+    const src = _reviewState.draft ? _reviewState.draft.priceSource : null;
+    const claims = src === 'comp' || src === 'venue';
+    return `
+        <div class="review-packet-basis" data-packet-basis="absent"${claims ? ' data-basis-unsupported=""' : ''}>
+          <div class="review-field-label">Where this price came from</div>
+          <div class="review-packet-note">No price source was recorded with these listing details.${
+            claims ? ` This price is recorded as ${_reviewEsc(String(src))}-derived, so it should have one.` : ''}</div>
+        </div>`;
+  }
+
+  const role = _REVIEW_BASIS_ROLE[b.role];
+
+  // Source row. Three outcomes, all visible: safe link, plain label with the
+  // reason there is no link, or nothing recorded.
+  let sourceVal;
+  if (b.label && b.href) {
+    sourceVal = `<a href="${_reviewEsc(b.href)}" target="_blank" rel="noopener noreferrer nofollow" data-basis-link="">${_reviewEsc(b.label)}</a>`;
+  } else if (b.label && b.urlStored) {
+    sourceVal = `${_reviewEsc(b.label)} <span class="review-packet-note" data-basis-link-rejected="">Its stored link could not be opened safely, so it is not shown.</span>`;
+  } else if (b.label) {
+    sourceVal = `${_reviewEsc(b.label)} <span class="review-packet-note" data-basis-link-absent="">No link was recorded.</span>`;
+  } else {
+    sourceVal = `<span data-basis-source-absent="">Not recorded</span>`;
+  }
+
+  const when = _reviewWhen(b.retrievedAt);
+  const whenVal = when
+    ? `<time datetime="${_reviewEsc(b.retrievedAt)}" data-basis-retrieved-at="${_reviewEsc(b.retrievedAt)}">${_reviewEsc(when)}</time>`
+    : `<span data-basis-retrieved-absent="">No retrieval time recorded</span>`;
+
+  // Whether the FEED dated it, or we only know when we read it. Kept because
+  // "retrieved Tuesday" and "the source says Tuesday" are different claims and
+  // PriceCharting only ever supports the first.
+  const dated = when
+    ? `<div class="review-packet-note" data-basis-dating="${b.datedBySource ? 'source' : 'retrieval'}">${
+        b.datedBySource
+          ? 'The source published this as-of date.'
+          : 'This is when we read the source. The source does not publish an as-of date of its own.'}</div>`
+    : '';
+
+  return `
+        <div class="review-packet-basis" data-packet-basis="present"
+             data-basis-role="${_reviewEsc(b.role)}"
+             data-basis-price-source="${_reviewEsc(b.priceSource || '')}">
+          <div class="review-field-label">${_reviewEsc(role.h)}</div>
+          <div class="review-packet-note" data-basis-role-note="">${_reviewEsc(role.p)}</div>
+          <div class="review-packet-fields">
+            <div class="review-field" data-basis-field="source">
+              <div class="review-field-label">Source</div>
+              <div class="review-field-value">${sourceVal}</div>
+            </div>
+            <div class="review-field" data-basis-field="retrieved">
+              <div class="review-field-label">Retrieved</div>
+              <div class="review-field-value">${whenVal}</div>
+            </div>
+          </div>
+          ${dated}
+        </div>`;
+}
+
 /**
  * Every payload a copy button can produce, derived at CLICK time.
  *
@@ -22009,6 +22186,7 @@ function _reviewPacketHtml() {
         <div class="review-packet-fields">${rowHtml}</div>
         ${dropped.length ? `<div class="review-packet-p" data-packet-dropped="">The title was too long for this venue, so we left out: ${_reviewEsc(dropped.join(', '))}.</div>` : ''}
         ${blockingHtml}
+        ${_reviewBasisHtml()}
         ${_reviewPacketDisclosuresHtml()}
         ${copyHtml}
         ${_reviewPacketRefreshHtml()}

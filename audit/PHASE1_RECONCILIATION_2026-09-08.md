@@ -68,7 +68,7 @@ renderer (`_reviewPacketHtml`, `_reviewFeesHtml`):
 | Title | `title.text` | Yes |
 | Category and aspects | `category`, `aspects` with per-aspect provenance | Yes |
 | Price | draft `price` | Yes |
-| Expected net | see the correction in §7.1 — this is **not** blocked on target-net inversion | **No**, and it is the cheapest of the four |
+| Expected net | **already rendered** as `Estimated net (item only)` — see §7.1; §2's original "absent" reading was wrong | **Yes, with an item-price-only boundary.** The remaining gap is shipping/tax inputs, not the net. |
 | Fee **and shipping** breakdown | no shipping field exists in the packet at all | Fees yes; **shipping no** |
 | Condition guidance | `condition` (`api/_conditionDescriptors.js`) | Condition label yes; guidance text **no** |
 | Description | **no description field exists in the packet** | **No** |
@@ -167,6 +167,17 @@ item. They are opposite directions:
 |---|---|---|
 | **Forward** — a price exists, what does it net? | `feeEbay(price, …)` plus the shipping and cash-out inputs the payout panel already supplies | **Shipped arithmetic, already used.** The payout panel computes `netPayout` per venue from exactly this (`js/core.86000bf2.js:8483-8490`), and the review screen's fee breakdown reconciles to the cent against the same function. |
 | **Reverse** — a payout is named, what price achieves it? | `listPriceForTargetNet`, inverted by bisection on the forward function | **Never wired. §0.** |
+
+**And it is not merely unblocked — it is already on the screen.** The review
+screen's fee panel renders `Estimated net (item only)` from the same forward
+function (`_reviewFeeRow('net', 'Estimated net (item only)', …)`,
+`js/core.ced9f5eb.js:21664`, with the qualifier mechanism documented at
+`:21560`). Verified by screenshot during the D4 work, on both the seller-priced
+and comp-priced fixtures. **§2's "expected net is absent" was wrong**, and it
+was wrong because it was reasoning from packet membership — which is exactly the
+error §7.2 corrects. What is genuinely missing is narrower: the net is
+**item-price-only**, because buyer-paid shipping and sales tax are not recorded
+on the draft. That is the shipping gap in §7.2, not an expected-net gap.
 
 So **expected net on the review screen is a rendering task over an existing
 forward function**, not a target-net feature. It does not require the seller to

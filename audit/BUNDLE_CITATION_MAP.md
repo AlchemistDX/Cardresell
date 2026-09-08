@@ -1,6 +1,6 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.86000bf2.js` (22,331 lines).** New work cites that hash.
+**Live bundle: `js/core.ced9f5eb.js` (22,509 lines).** New work cites that hash.
 
 > ### Four generations this file did not record when they happened
 >
@@ -16,6 +16,7 @@
 > | 3 | `541c4c39` → `fec7fb3a` | *(never committed under this name)* | The Lane A client work. Renamed, then the file changed again before the commit, so **no committed tree ever contained `fec7fb3a`** — do not cite it. |
 > | 4 | `541c4c39` → `34fb750c` | `a8dc3d6` | The same Lane A client work as landed: pricingContext builder, review-screen packet arms, refresh path. |
 > | 5 | `34fb750c` → `c61a6ef9` | *(this commit)* | Lane A three-question close: `_reviewPacketBlocking`, the `details-blocked` verdict arm, the `DRAFT_REVISION_CONFLICT` re-read, and the copy refusal for a blocked packet. **Recorded on the day.** |
+> | 7 | `86000bf2` → `ced9f5eb` | *(this commit)* | D4 price provenance on the review screen: `_reviewSafeSourceUrl`, `_reviewWhen`, `_reviewBasis`, `_REVIEW_BASIS_ROLE`, `_reviewBasisHtml`, wired into the usable-packet arm of `_reviewPacketHtml`. `86000bf2` WAS committed (`c16d579`), so a citation naming it can be aligned by `git show c16d579:js/core.86000bf2.js`. |
 > | 6 | `c61a6ef9` → `86000bf2` | *(this commit)* | The create-path basis binding: `_crBindBasis`, `_crPricingContext` requiring a card and a matching `cardKey`, and the three read paths stamping on the way in. |
 >
 > **Generation 5 passed through a second naming hazard.** The rename ran twice

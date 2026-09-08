@@ -170,6 +170,54 @@ export async function generateReadFixtures() {
   const blockedPktId = madeBlocked.body.draftId;
   const packetBlocked = await call({ id: blockedPktId });
 
+  // ── D4 provenance fixtures ──────────────────────────────────────────────
+  //
+  // The provenance block's states are decided by TWO records that are stored
+  // apart: the draft's `priceSource` and the packet's `priceBasis`. A fixture
+  // that only varied one of them could not tell "market context beside a
+  // seller's price" from "the evidence that set it", which is the distinction
+  // the block exists to draw. So each combination is created through the real
+  // POST handler, and the hostile URL is stored the same way a client would
+  // store it -- unsanitized -- because the client-side rejection is the thing
+  // under test and a pre-cleaned fixture would assert nothing.
+  const ctx = (basisMeta) => ({
+    feeModelRevision: 1, feeScheduleVerified: '2026-09-01',
+    ...(basisMeta === undefined ? {} : { basisMeta }),
+  });
+
+  const madeSeller = await post({ ...httpInput(), priceSource: 'seller', pricingContext: PRICING_CONTEXT }, 'pkt-seller');
+  const sellerId = madeSeller.body.draftId;
+  const packetSellerPriced = await call({ id: sellerId });
+
+  const madeComp = await post({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-comp');
+  const compId = madeComp.body.draftId;
+  const packetCompPriced = await call({ id: compId });
+
+  // Rebuild the comp-priced draft with NO client basis, which is what the
+  // refresh button sends. The stored retrieval time must come back unchanged
+  // while `metadata.generatedAt` moves -- the whole point of the display
+  // reading one and not the other.
+  await patch(compId, { expectedRev: packetCompPriced.body.draft.rev, pricingContext: ctx() }, 'pkt-comp-rebuild');
+  const packetCompRebuilt = await call({ id: compId });
+
+  // A stored link that must never become an href.
+  const madeHostile = await post({
+    ...httpInput(), priceSource: 'comp',
+    pricingContext: ctx({ ...PRICING_CONTEXT.basisMeta, sourceUrl: 'javascript:alert(document.domain)' }),
+  }, 'pkt-hostile');
+  const packetHostileUrl = await call({ id: madeHostile.body.draftId });
+
+  // Label only -- the real SportsCardsPro shape. No URL, no retrieval time.
+  const madePartial = await post({
+    ...httpInput(), priceSource: 'comp',
+    pricingContext: ctx({ label: 'SportsCardsPro loose' }),
+  }, 'pkt-partial');
+  const packetPartialBasis = await call({ id: madePartial.body.draftId });
+
+  // A 'comp'-derived price with no basis at all: the claim with no evidence.
+  const madeNoBasis = await post({ ...httpInput(), priceSource: 'comp', pricingContext: ctx() }, 'pkt-nobasis');
+  const packetNoBasis = await call({ id: madeNoBasis.body.draftId });
+
   // Absent: created through the service, which stores no packet at all.
   await reset();
   const bareIds = await seedPublishable(1);
@@ -178,11 +226,17 @@ export async function generateReadFixtures() {
   return {
     blockedTitle, blockedPrice, blockedBoth, publishable,
     packetCurrent, packetStale, packetAbsent, packetBlocked,
+    packetSellerPriced, packetCompPriced, packetCompRebuilt,
+    packetHostileUrl, packetPartialBasis, packetNoBasis,
     PRICING_CONTEXT,
     ids: {
       blockedTitle: longIds[0], blockedPrice: noPriceIds[0], blockedBoth: bothIds[0], publishable: okIds[0],
       packetCurrent: currentId, packetStale: currentId, packetAbsent: bareIds[0],
       packetBlocked: blockedPktId,
+      packetSellerPriced: sellerId, packetCompPriced: compId, packetCompRebuilt: compId,
+      packetHostileUrl: madeHostile.body.draftId,
+      packetPartialBasis: madePartial.body.draftId,
+      packetNoBasis: madeNoBasis.body.draftId,
     },
   };
 }
