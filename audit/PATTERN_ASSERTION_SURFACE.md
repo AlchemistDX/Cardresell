@@ -1506,3 +1506,40 @@ error than a wrong number.*
 **Standing requirement added.** Any directional claim must be produced by
 evaluating the expression that reaches the user's screen, not an input to it. For
 this codebase that means the rendered field, by name, through the real function.
+
+### Instance 26 — the three checks that would have caught it
+
+Contributed by the external reviewer, who took the wrong join rather than
+re-deriving it and accounted for that as instance 21 operating on a reviewer:
+the explanation was good enough that the question closed.
+
+**1. Producer-side, two function calls.** A directional claim must be produced by
+evaluating the **rendered** expression at both endpoints of the varying input,
+with both numbers quoted in the write-up. Not a sweep — one concrete case, the
+rendered field, two points:
+
+```
+G=$80  R=$6  no store:  upsideNet@S=0 = 39.0950 ; @S=20 = 39.1950  -> S=0 is the LOWER figure
+G=$2600 R=$30 basic:    upsideNet@S=0 = 2237.6050 ; @S=20 = 2239.6050 -> S=0 is the LOWER figure
+```
+
+Two points establish the sign; sweeps are for magnitude. The claim either
+survives contact in the same line it is written, or it dies there.
+
+**2. Structural — a direction cannot be carried across a subtraction.**
+`upsideNet = (G - R) - feeDiff - GRADING_FEE`. One subtraction sits between the
+measured quantity and the claimed one, so one sign inversion. Whenever the
+measured quantity is an *input* to the claimed one, count the inversions between
+them; if the count is odd the inherited sign is wrong. **And if you are counting
+at all, re-evaluate the output instead** — the count is the smell, not the fix.
+
+**3. Reviewer-side, free.** Does the conclusion sentence use the **same noun** as
+the column header? The failing document said "incremental fee difference" above
+and "the figure" below. Different nouns is the tell, and it requires no
+recomputation — which is the only kind of check a reviewer reliably performs.
+
+**Why check 3 matters most.** Checks 1 and 2 are producer discipline and
+therefore fail exactly when the producer is confident. Check 3 is a
+text-comparison a reader performs while reading, and it catches the same defect
+from the outside. The noun mismatch was visible in the shared document with no
+repo access at all.

@@ -838,65 +838,75 @@ way, the finding is that the seven-item table was incomplete in a direction the
 audit had not looked for, which is worth knowing either way.
 
 
-## BIAS-11 — CORRECTED. The `S = 0` grading-upside incremental leans **conservative**, not optimistic
+## BIAS-11 — REVISED TWICE. Grid-dependent, advice-invariant, bounded at a dime
 
-**2026-09-07, same day as filing.** The first version of this entry stated the
-direction as optimistic. **That was wrong, and the error was mine.** It is
-corrected here rather than rewritten, because the wrong version was shared and
-endorsed and the corpus should show that.
+**Revision history, kept deliberately.** v1 (`47579c5`) reported the direction as
+optimistic — wrong, fee difference measured, upside reported. v2 (`2af5184`)
+corrected the direction to conservative and quoted a `$11.00` worst case. **v3
+(this) retracts the `$11.00`**: it came from sampling a `$100` shipping charge,
+which no card seller levies. Three versions of one entry, and only the third is
+quotable.
 
-**How the error was made:** the sweep differenced *fees*
-(`sum(feeEbay(G)) - sum(feeEbay(R))`) and the conclusion was stated about
-*upside*. The rendered metric is
+### The measured result
 
-```
-upsideNet = (G - fees(G)) - (R - fees(R)) - GRADING_FEE
-          = (G - R) - feeDiff - GRADING_FEE
-```
+Sweep: 2 store settings × 3 promo rates × TRS on/off × 20×20 price pairs
+(`G > R`), `upsideNet` evaluated through the real `feeEbay`.
 
-so `upsideNet` moves **opposite** to `feeDiff`. Every number in the first version
-was correctly computed; the sign of the mapping to the reported metric was
-inverted. "`S = 0` yields the highest figure" was true of the fee difference and
-false of the upside.
+**Grid-invariant facts** (identical at every shipping grid tested):
 
-**Corrected direction, computed on the rendered metric.** Full sweep, 2 store
-settings × 3 promo rates × TRS on/off × 20×20 price pairs × 7 shipping charges:
-
-| behaviour of the rendered `upsideNet` | price pairs |
+| fact | value |
 |---|---|
-| `S = 0` is the **minimum** — understates upside (**conservative**) | **1,500** |
-| `S = 0` is the **maximum** — overstates upside (optimistic) | 108 |
-| no dependence on `S` (cancellation exact) | 672 |
-| mixed / neither bound | 0 |
+| optimistic (`S = 0` overstates) price pairs | **108** |
+| max overstatement | **$0.10** |
+| all optimistic pairs have graded price | **`<= $10`** |
+| all optimistic pairs have `upsideNet@0` | **negative** (least-negative `-18.78`) |
+| pairs with mixed / unbounded direction | **0** |
+| **pairs where shipping changes the seller-facing verdict** | **0 of 1,704** |
 
-**So the second admissibility test fails: the sign is not consistent.** It is
-dominantly conservative with a bounded optimistic minority. Recording it as a
-directional item anyway, with both directions stated, rather than as a bias with
-a single lean.
+**Grid-dependent facts** — quote only with the grid attached:
 
-**The optimistic minority is fully characterised and benign.** All 108 cases have
-graded price `<= $10`; all have `upsideNet@0` negative (worst-case least-negative
-value `-18.78`); maximum overstatement **$0.10**. These are cards where the panel
-already says grading destroys value by roughly the grading fee, so no seller
-acts on the number.
+| shipping grid sampled | understates | overstates | no dependence | max understatement |
+|---|---|---|---|---|
+| `$0`–`$20` (realistic for cards) | 1,500 | 108 | 672 | **$2.28** |
+| `$0`–`$100` | 1,500 | 108 | 672 | $11.00 |
+| `$0`–`$500` | 1,596 | 108 | 576 | $54.60 |
 
-**Magnitude of the conservative side:**
+**The realistic row is the one that describes the product.** Raw cards ship in a
+plain envelope; graded slabs ship boxed. `$0`–`$20` spans both. Within it:
 
-| population | worst deviation |
-|---|---|
-| graded price `<= $300` (the ordinary case) | **$0.10** |
-| tier-crossing (graded `> $2,500` basic / `> $7,500` no store) | **$11.00** |
+- graded price `<= $300` — the population the panel is actually consulted for —
+  **deviation `<= $0.10` in either direction**
+- all graded prices — **`<= $2.28`**
 
-The $11 figures are all tier-crossers. For everything a seller is realistically
-consulting, the deviation is `$0.10` in either direction.
+### Direction
 
-**Consequence for the disclosure copy — the approved sentence is also backwards.**
-"assumes no shipping charge; a shipping charge reduces this" is false in 1,500 of
-1,608 `S`-dependent cases: a shipping charge *increases* the figure. Since no
-directional claim holds universally, the recommendation is now to make the
-assumption without the direction:
+**Dominantly conservative** (understates upside), with a bounded optimistic
+minority of 108 pairs. **The sign is not consistent, so this is not admissible as
+a bias with a single lean** and is recorded as a directional item with both
+directions stated.
+
+### Advice-invariance — the finding that bounds it properly
+
+`renderGradingUpside` renders three verdicts: `upsideNet > 5` (green, plus the
+"Best case" line), `> -5` (yellow), else red ("may not pencil out"). Across
+**all 1,704** shipping-dependent price pairs, at every sampled shipping charge,
+**the verdict never changes**. Not "rarely" — zero.
+
+For the optimistic 108 this is doubly true: every one already renders red, so the
+`$0.10` overstatement is applied to a number that is already telling the seller
+not to grade the card.
+
+**Why this is the right bound rather than the dollar figure.** The magnitude is
+grid-dependent and the direction is mixed, so neither is a stable summary. The
+verdict crossing is neither: it is a property of the rendered output against its
+own thresholds, and it holds at every grid tested. **The panel's advice does not
+depend on the shipping charge anywhere in the sampled space.**
+
+### Consequence for copy
+
+No directional claim is stampable. Final copy:
 
 > Assumes no shipping charge collected from the buyer.
 
-**Status:** open. Direction corrected. Supersedes the version shared at
-`47579c5`.
+**Status:** open pending the BIAS-1 implementation. Direction corrected,
+magnitude re-bounded, advice-invariance established.
