@@ -1,6 +1,6 @@
 # Lane A, step 1 — a packet may not outlive the inputs it was built from
 
-**Commit:** `db396da` · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
+**Commits:** `db396da` (staleness) · `2cc7c6b` (review items) · `3db7169` (producer connected) · **Branch:** `phase1-block-d` · **Bundle:** `js/core.541c4c39.js` (unchanged by this work — server and tests only)
 **Nothing pushed. Nothing deployed.** `origin/main` is still `9aaf326`.
 
 Prior closures recorded, for context only: T2.10 accepted at `19cb94c` + `00445d0`; T2.9 accepted as the correction record. Neither is reopened here.
@@ -138,6 +138,35 @@ If A: the sole client change is to send `feeModelRevision`, `pricing` and `basis
 - **Which changes count** is one declared list, `PACKET_INPUT_FIELDS`, checked structurally at read time rather than remembered at each write site.
 
 This is the shape that satisfies "changed inputs cannot display stale numbers" without a second staleness mechanism. What it does **not** yet do is give the review screen something to recompute *with*, because of §5 — that is the next step, and it is gated on §6.
+
+## 7b. Producer connected — `3db7169`
+
+Option A adopted, on your sharper argument: a client packet is not a widened boundary, it is a **bypass** of the `sku`/`title` refusal by nesting. `packet` now joins that refuse-don't-drop list.
+
+- **Placement:** `normalizeCreateInput`, beside `skuFor` / `identityReadiness` / `buildListingTitle` — the function that already is the server's derivation of the scanned card.
+- **Client declares four:** `feeModelRevision`, `feeScheduleVerified`, `pricing`, `basisMeta`, in a named `pricingContext` envelope so the declared set is visible in one place.
+- **Context assembled field by field, body never spread.** `now` and `maxTitleLength` are server-set and *refused* if a client sends them — a client-chosen clock could date a stale comp to whenever it liked. The two client objects pass whole only because the builder already whitelists them (`stampPriceBasis` eight keys, `pricing` five); a second whitelist would be a thing to drift against the first.
+- **No default.** Absent revision → `MISSING_FEE_MODEL_REVISION`, `blocked: true`, and the create still succeeds. A blocked packet is a bad snapshot, not a bad draft.
+
+### Retry safety needed a new kind of table entry
+
+The packet stamps `priceBasis.retrievedAt` from the clock, so an identical request retried a second later produces different bytes. Counting it toward mutation identity would refuse that retry as key reuse — ordinary network retry turned into a hard failure. Rather than loosen the undeclared-field guard (the one that caught `priceSource` missing from the fingerprint), `_idempotency.js` gains `DERIVED_FIELDS`: a named table of fields skipped rather than fingerprinted, with declaring a field in both tables a hard error. Proven by behaviour — two creates on one key, 1.1s apart, verified to produce different stamps and still `REPLAYED`.
+
+### An over-suppression I shipped, and the suite caught
+
+My first cut had the covering packet gate **both** arms of the provenance check, and `a $0 draft still reports WHERE the 0 came from` went red. **The test was right.** `SELLER_PRICED` is not "we cannot tell where this came from" — it discloses that the seller typed the number, and a packet documents a *comp basis* without converting a seller-entered price into a comp-derived one. Suppressing it would have told a seller their own number was market-derived.
+
+The arms are now separate: `SELLER_PRICED` fires on any present seller-sourced price regardless of packet; only `NO_PROVENANCE` stands down under coverage. The asymmetry is worth naming — a warning that wrongly disappears is invisible, one that wrongly appears is merely noise, so this arm errs loud.
+
+### 22 new checks (`draft-crud-e2e` 130 → 152/0)
+
+Packet sku/title equal the stored server-derived ones · declared revision recorded · basis stamped absolute with no age key · a feed with no as-of date not claimed as dated · `NO_PROVENANCE` absent on create **and after reload** · reprice through the real service path stales it, the warning returns, the draft still reads fine at $500 · `SELLER_PRICED` not suppressed · client packet refused · three server-owned ctx fields refused · bare create blocked-but-successful · retry replays.
+
+**Suites:** `draft-crud-e2e` 152/0 · `draft-store` 125/0 · `draft-readiness` PASS · `listing-packet-offline` 160/0 · `draft-index-recovery` 258/0 · `draft-list-cap` 130/0 · `draft-focus` 56/0 · `draft-list-screen` 101/0 · `draft-review-screen` 180/0 · `quick-pricing` 219/0 · `launch-audit-regressions` 438/0 · `review-fee-dl` 21/0 · `accuracy-fee-parity` 41/0 · `asset-fingerprints` 15/0.
+
+### Still not on the wire, deliberately
+
+`_draftService.readDraft` still discards the five packet fields, and the comment at that line now says why. The client sends no `pricingContext` yet, so **in production today every packet would be blocked with `MISSING_FEE_MODEL_REVISION`** — the honest state, and the reason forwarding and the client change should land together as the next step.
 
 ## 8. Unchanged and still open
 
