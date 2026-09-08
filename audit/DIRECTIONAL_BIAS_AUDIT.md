@@ -772,10 +772,9 @@ Nothing in this document has been changed in code. Recorded as findings:
   already taken for the TRS discount, and the only one of the three that does not
   invent precision.
 
-- **BIAS-6** Remaining estimate surfaces not yet walked for direction:
-  aggregator service-fee rows, the payout bar chart, and the `msProfitPreview`
-  panel. **Absence of a finding there is absence of a check, not a clean
-  result.** The fourth surface, the ±15% band, is resolved — see below.
+- **BIAS-6** WALKED 2026-09-08. All three surfaces checked; 8 findings, 6 with
+  a direction and all 6 optimistic. See "BIAS-6 — the three unwalked estimate
+  surfaces, walked" below. The fourth surface, the ±15% band, is resolved.
 
 ## Bookkeeping corrections to `TODO_PHASE1.md`
 
@@ -1091,3 +1090,209 @@ grading-only expenses — `GRADING_FEE = 25` still contradicts `api/grade-opport
 **BIAS-7** and **BIAS-8** (compatible grader/price basis and provenance; a grader is **not**
 inherited from `syncKey`, which is a lookup key and not a record of origin). Each needs its
 own acceptance evidence.
+
+
+## BIAS-6 — the three unwalked estimate surfaces, walked
+
+Absence of a finding was absence of a check. Checked now. **Two of the three
+carry optimistic bias; the aggregator rows are arithmetically clean and carry a
+provenance contradiction instead.**
+
+All line citations are `js/core.1eea628c.js` (live bundle, resolved through
+`tests/_assetRefs.mjs`).
+
+---
+
+### Surface 1 — the payout rank bar chart (`:8242`, `:8258`)
+
+**Displayed metric.** Bar width = each venue's net payout as a proportion of the
+best *unlocked* venue's net payout. Header reads "Ranked by net payout" /
+"after fees" (plus "+ cost basis" when `itemCost > 0`), `:8238`.
+
+**Calculation and inputs.**
+
+```
+:8112   netPayout = price + effectiveShipCharge - totalFees - p.sellerShip
+:8151   eligible.sort((a,b) => ... : b.netPayout - a.netPayout)    // desc
+:8233   rankBest = unlockedRank[0]?.netPayout ?? 1
+:8242   pct = Math.max(6, (r.netPayout / rankBest) * 100)
+```
+
+Inputs: `price` (basis-labelled, `:8100`), `shipCharge` and `shipCost` (user
+inputs, `:7887`), and `totalFees` summed from each venue's `feeItems`. The fee
+arithmetic itself is `feeEbay`/`feeBuylist` etc. and is **not** in question here.
+
+**Do omissions affect the metric? Yes — three, all leaning the same way.**
+
+**P-1 — when every venue is underwater the bar saturates instead of ranking.**
+`netPayout` can be negative (`:8112` subtracts `sellerShip`, and **10 of 13**
+venues take `sellerShip: shipCost`). When *all* unlocked venues are negative,
+`rankBest` is the least-negative value, so `netPayout / rankBest` is a ratio of
+two negatives — positive, and greater than 1 for every venue worse than the
+best. Measured with a \$1 card and \$4.50 of seller-paid shipping:
+
+| venue | net payout | computed width |
+|---|---|---|
+| percentage venue (~13.25% + \$0.30) | −\$3.93 | 100% |
+| buylist (50% haircut) | −\$4.00 | 102% |
+| flat commission under \$15 | −\$6.45 | **164%** |
+
+**Correction to my own first reading of this:** the bars do *not* visibly
+overflow. `.payout-rank-bar-wrap` sets `overflow:hidden` (`index.html:760`), so
+every width above 100% is **clipped to full width**. So the on-screen failure is
+not a reversed ranking — it is **saturation**: every underwater venue draws a
+*full* bar, identical to the winner's. A chart whose job is discrimination
+renders "all venues equally excellent" at the exact moment every venue loses
+money. The dollar column beside it is correct throughout; only the bar lies.
+
+**P-2 — the bar has no vocabulary for loss.** With `rankBest` positive, the
+`Math.max(6, …)` floor maps *every* negative payout onto the same 6% stub.
+Verified by execution: `net=−50` and `net=−5000` both yield `width:6%` — the
+same bar a genuinely positive `net=+2` gets. A venue that costs the seller money
+is drawn as a small positive quantity. Optimistic.
+
+**P-3 — `?? 1` does not catch zero.** `??` guards `null`/`undefined` only. If the
+best unlocked venue nets exactly \$0, `0/0` → `NaN` → `Math.max(6, NaN)` → `NaN`
+→ `width:NaN%`, invalid CSS; the bar falls back to the stylesheet width. Minor,
+but it is the same guard family as P-1.
+
+**Against the decision boundary.** The downstream decision is *which venue to
+sell on*. The numeric ranking and the sort order are correct in all three cases,
+so the boundary is not crossed by the numbers — it is crossed by the graphic a
+seller scans before reading them. The honest framing: **the bar is only truthful
+while at least one unlocked venue is profitable.** It is not currently gated on
+that condition.
+
+---
+
+### Surface 2 — the profit preview (`_msUpdateProfitPreview`, `:10864`)
+
+**Displayed metric.** Net profit in dollars and ROI %, for a flip the seller is
+*recording as completed*, plus a breakdown line naming the costs subtracted.
+
+**Calculation and inputs.** One shared function, `_flipNetOf` (`:10778`):
+
+```
+net    = sellPrice - buyPrice - fees - shippingCost - gradingCost
+basis  = buyPrice + fees + shippingCost + gradingCost
+roiPct = basis > 0 ? (net / basis) * 100 : null      // null, not 0% — correct
+```
+
+**All five inputs are user-typed** (`msSellPrice`, `msBuyPrice`, `msFees`,
+`msShipCost`, `msGradingCost`), read as `Math.max(0, parseFloat(...) || 0)`.
+**Nothing here consults `feeEbay` or any venue fee model.** The modal
+deliberately clears all three cost fields on every open (`:10844-10848`) so the
+previous card's costs cannot leak forward — correct in intent, but it means the
+resting state of the fee field is empty, and empty reads as **zero**.
+
+Worth stating plainly: this surface is a *record* of a real sale, not a forecast.
+So zero is not a modelling choice — it is a missing measurement being treated as
+a measured zero.
+
+**Do omissions affect the metric? Yes.**
+
+**F-1 — a blank fee field makes net equal the gross sale.** Overstated by the
+whole fee load (~13% plus shipping on a typical eBay sale). Optimistic.
+
+**F-2 — the label gets *more* assertive as the evidence gets thinner.** `parts`
+is only populated by costs that are greater than zero, so when nothing was
+subtracted the breakdown falls back to the bare word **"Profit on this flip"**
+(`:10887`). When costs *are* entered the seller gets the auditable "after \$X
+fees + \$Y shipping". So the best-evidenced number carries the qualifying
+detail and the worst-evidenced number carries an unqualified claim. One tap of
+`_msUseMarket` (`:10897`) fills the sale price from the market hint, and with no
+other entry the panel reads "**+\$450.00 / Profit on this flip**" — a figure with
+no fees, no cost basis, and no ROI (`basis` is 0, so `roiPct` is `null` and the
+percentage is correctly suppressed — the one guard that does fire).
+
+**F-3 — the disclosure flag already exists and nothing reads it.** `_flipNetOf`
+returns `hasCosts: (fees + shippingCost + gradingCost) > 0` (`:10794`). Grep of
+the whole bundle: **one occurrence, the definition.** It is never read. That is
+precisely the predicate F-2 needs. Filed against the standing
+serialized-field-with-no-reader sweep.
+
+**Against the decision boundary.** This is the sharper half. The stored value
+(`:10938`, same `_flipNetOf`) becomes `f.profit`, and `renderFlipsView` sums it:
+
+```
+:11065  const totalProfit = flips.reduce((s, f) => s + num(f.profit), 0);
+:11076  document.getElementById('pnlTotalProfit').textContent = fmt(totalProfit);
+```
+
+rendered under the label **"Total Profit"** and colour-coded positive/negative.
+So a fee-less entry does not merely misprice one flip — it inflates a lifetime
+P&L headline, and **nothing on that panel distinguishes flips that had fees
+entered from flips that did not.** `bestFlip` (`:11066`) has the same exposure:
+the flip most likely to win "best" is the one whose costs were never typed in.
+
+---
+
+### Surface 3 — the aggregator service-fee rows (`feeBuylist`, `:7752`)
+
+**Displayed metric.** Two deduction rows:
+
+- `Buylist offer (~N% of retail)` → amount `price − price × ratio` (the haircut)
+- `Aggregator service fee (N% of offer)` → amount `offer × serviceFeePct`
+
+**Calculation.** `net = price − haircut − serviceFee = offer × (1 − pct)`. The
+label says "of offer" and the arithmetic multiplies `offer`. **They agree — no
+arithmetic bias found on this surface.** The only caller passing a service fee is
+`tcgbulk` at `0.10` (`:8087`); the three direct buylists (Card Kingdom,
+CoolStuffInc, SCG) pass nothing and `if (serviceFeePct)` correctly omits the row.
+
+**Do omissions affect the metric? Not the arithmetic. Two provenance findings.**
+
+**A-1 — two comments about the same 10% contradict each other.**
+
+- `:6416` — "Exact seller fee **not publicly published** — deducted from PayPal
+  payout on completion. **We estimate 10%** aggregator fee as an honest
+  baseline; the tile flags this."
+- `:8085-8086` — "10% TCG Bulk service fee comes out of the seller's proceeds on
+  top of the buyer's buylist haircut. `https://tcgbulk.com/page/terms-of-service`"
+
+One says the figure is an estimate *because* it is unpublished; the other cites a
+terms-of-service URL as its authority. Both cannot be true. Per the standing
+rule this is **disclosed, not averaged** — I am not picking one. It needs the
+source page read from raw text before either comment is trusted.
+
+The *user-facing* disclosure is adequate and I want to be clear about that: the
+tile's `redFlags` carry "💸 10% TCG Bulk service fee comes out of your proceeds —
+included above" and "⚠️ Estimated payout — verify live quote before shipping"
+(`:6425`). The row label itself reads "(10% of offer)" with no estimate marker,
+but the surface as a whole does flag it. This is a code-provenance defect, not a
+disclosure-parity failure.
+
+**A-2 — `if (serviceFeePct)` cannot distinguish "verified zero" from "never
+checked".** A truthy test collapses `0` and `undefined`. Harmless today, since
+both currently mean "no service fee". But it means a venue we have *confirmed*
+charges nothing is stored identically to one we simply never investigated, so
+the codebase cannot answer "which buylist fees have been verified".
+
+---
+
+### Direction summary
+
+| finding | surface | direction | severity |
+|---|---|---|---|
+| P-1 saturation when all venues underwater | payout chart | optimistic | high |
+| P-2 loss drawn as a positive stub | payout chart | optimistic | medium |
+| P-3 `?? 1` misses zero | payout chart | neutral (renders nothing) | low |
+| F-1 blank fees ⇒ net = gross | profit preview | optimistic | high |
+| F-2 thinner evidence, stronger label | profit preview | optimistic | high |
+| F-3 `hasCosts` computed, never read | profit preview | enabling | medium |
+| A-1 estimate-vs-ToS contradiction | aggregator rows | undetermined | medium |
+| A-2 truthy test hides verified-zero | aggregator rows | neutral | low |
+
+**Every finding with a direction leans optimistic.** That extends the audit's
+standing 7-of-7 pattern to 12 of 12 directional findings in the same direction —
+which at this point is better read as a property of the codebase's defaults
+(missing input ⇒ zero cost ⇒ higher payout) than as twelve independent bugs.
+
+### Not verified
+
+- The saturation case (P-1) is established by arithmetic and by the CSS, **not**
+  by a rendered screenshot. I did not drive a browser to a state where every
+  unlocked venue is underwater.
+- A-1 is unresolved on purpose: I did not fetch
+  `tcgbulk.com/page/terms-of-service` to determine which comment is right.
+- No production code was changed for BIAS-6. These are findings, not fixes.
