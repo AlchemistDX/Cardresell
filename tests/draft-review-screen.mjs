@@ -655,9 +655,39 @@ try {
     T.check('🔴 the draft net did not move',
       amt(after.headline) === amt(before.headline),
       `${before.headline} -> ${after.headline} — a global answer leaked into a per-listing benefit`);
-    T.check('🔴 no fee row claims the discount',
-      !after.rows.some((r) => /Top Rated/.test(r.label || '')),
+    /* CHANGED 2026-09-07 (D3 closeout, after T2.14). Was:
+
+           T.check('🔴 no fee row claims the discount',
+             !after.rows.some((r) => /Top Rated/.test(r.label || '')),
+             after.rows.map((r) => r.label).join(' | '));
+
+       That assertion required NO fee row to mention Top Rated at all, because
+       at the time the withheld discount existed only as prose beneath the
+       total. T2.14 added a real row for it, so the old form went red on a
+       change that improved the thing it was guarding -- the classic case of an
+       assertion having encoded the implementation rather than the behaviour.
+
+       The BEHAVIOUR being guarded is unchanged and still the point of this
+       whole block: a global "I am Top Rated" answer must not turn into a
+       discount on this draft. What changed is what satisfies it. A row naming
+       the discount is now correct; a row carrying an AMOUNT for it is the
+       leak. So the assertion is split -- the row must exist, and it must carry
+       the stated non-value rather than any figure. Deleting the check would
+       have removed the leak guard entirely, which is why it was sharpened
+       instead. */
+    const trsRows = after.rows.filter((r) => /Top Rated/.test(r.label || ''));
+    T.check('the withheld discount has exactly one fee row',
+      trsRows.length === 1,
+      `${trsRows.length} rows mention Top Rated: ` +
       after.rows.map((r) => r.label).join(' | '));
+    T.check('🔴 that row claims no amount — the global answer did not become a discount',
+      trsRows.length === 1 && trsRows[0].amount.trim() === '\u2014',
+      `withheld row amount is ${JSON.stringify(trsRows[0] && trsRows[0].amount)} — ` +
+      `anything numeric here means a per-listing benefit was granted on a ` +
+      `global answer, and "$0.00" would claim it was computed and came to nothing`);
+    T.check('🔴 that row is typed as withheld, not as a fee',
+      trsRows.length === 1 && trsRows[0].kind === 'withheld' && trsRows[0].kindMatches,
+      `kind=${trsRows[0] && trsRows[0].kind} kindMatches=${trsRows[0] && trsRows[0].kindMatches}`);
     T.check('the screen says the discount is withheld, and which way that errs',
       await page.evaluate(() => {
         const el = document.querySelector('[data-fee-trs="withheld"]');
@@ -970,9 +1000,47 @@ try {
     // 45 is the stale cutoff (`> 45`) and 30 the amber cutoff (`> 30`), so the
     // interesting pairs are 45/46 and 30/31. A rule written with >= would pass
     // a one-sided test and fail here.
+    /* CHANGED 2026-09-07 (D3 closeout). Was:
+
+           const _base = Date.now();
+           const atAge = async (days) => {
+             await page.clock.setFixedTime(new Date(_base + (days - 6) * 86400000));
+
+       The `- 6` was the stamp's age in days on the day this was written. It is
+       a hardcoded calendar constant, so the helper silently drifted one day
+       further out of true every day: by 2026-09-07 the 2026-09-01 stamp was 7
+       days old, every case landed one day late, and the suite reported the
+       `30 -> not amber` and `45 -> not stale` cases as failures. Both
+       "failures" were the harness, not the rule -- `isFeeStale` is `> 45` and
+       `isFeeAmber` is `> 30` exactly as documented, and at a true age of 30 and
+       45 they are correctly quiet.
+
+       This is the failure mode the block's own comment warned about one screen
+       up -- it moves the CLOCK because the config is not reachable -- and then
+       measured the moved clock against a constant instead of against the
+       config. The age now comes from the app's own `verifiedAgeDays`, so the
+       offset is derived from whatever the stamp actually says. Changing the
+       stamp or waiting a day no longer moves the boundaries under the test.
+
+       Kept as a boundary pair rather than pinned to absolute dates: the point
+       is that 30/31 and 45/46 straddle a `>` and would both pass under `>=`. */
     const _base = Date.now();
+    /* Restore the real instant before measuring. The stale-flip block above
+       left a fixed clock 200 days in the future, so measuring here without
+       resetting reports ~207 and every offset below lands before the stamp,
+       where the age is Infinity and the boundary cases assert nothing. That
+       mistake was made once while writing this and caught by the two cases
+       failing in OPPOSITE directions -- a symptom that says the input moved,
+       not that a threshold is off by one. */
+    await page.clock.setFixedTime(new Date(_base));
+    await page.evaluate(() => window._reviewPaint());
+    const _realAge = await page.evaluate(() => window.verifiedAgeDays('ebay'));
+    T.check('the stamp age is a finite number, so the offsets below mean something',
+      Number.isFinite(_realAge) && _realAge >= 0,
+      `verifiedAgeDays('ebay') = ${_realAge} — a non-finite age would make every ` +
+      `boundary case below land on Infinity and assert nothing`);
     const atAge = async (days) => {
-      await page.clock.setFixedTime(new Date(_base + (days - 6) * 86400000));
+      await page.clock.setFixedTime(new Date(_base + (days - _realAge) * 86400000));
       await page.evaluate(() => window._reviewPaint());
       return await feesOf(page);
     };

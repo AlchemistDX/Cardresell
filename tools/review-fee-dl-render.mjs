@@ -16,18 +16,23 @@
  * it is an <a>, outside the <dl>, and not part of the term/value contract).
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+/*
+ * BUNDLE RESOLUTION IS NOT DONE HERE. This file used to read index.html and
+ * regex out `js/core.<hash>.js` itself. That was a second implementation of a
+ * question tests/_assetRefs.mjs already owns, and it was worse in two ways
+ * that only show up during a rename: its pattern accepted any hex length where
+ * the convention is exactly 8, and it took the FIRST match, so a document
+ * referencing both a live and a retired bundle would have resolved silently to
+ * whichever appeared first instead of failing. `resolveCoreBundle` treats zero
+ * matches and two matches as errors, which is the behaviour a rename needs.
+ * Reuse the helper, do not re-implement its query.
+ */
+import { readCoreBundle } from '../tests/_assetRefs.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, '..');
-
-const indexHtml = readFileSync(join(ROOT, 'index.html'), 'utf8');
-const m = indexHtml.match(/src="\/?(js\/core\.[0-9a-f]+\.js)"/);
-if (!m) throw new Error('no bundle reference in index.html');
-export const BUNDLE_PATH = m[1];
-const src = readFileSync(join(ROOT, BUNDLE_PATH), 'utf8');
+const bundle = readCoreBundle();
+export const BUNDLE_PATH = bundle.rel;
+export const BUNDLE_HASH = bundle.nameHash;
+const src = bundle.source;
 
 /** Slice a top-level `function name(...) { ... }` by brace matching. */
 function fnSource(name) {
