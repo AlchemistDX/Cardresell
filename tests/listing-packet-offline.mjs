@@ -21,6 +21,7 @@ import {
 import {
   buildListingPacket, stampPriceBasis, ageFromRetrievedAt, normalizeVerifiedStamp,
   findRelativeAgeKeys, FORBIDDEN_AGE_KEYS, PACKET_SCHEMA_VERSION, PACKET_CODES,
+  PACKET_INPUT_FIELDS, packetInputFingerprint,
 } from '../api/_listingPacket.js';
 import { CONDITION, CONDITION_DESCRIPTOR, DESCRIPTOR_VALUES_RESOLVED } from '../api/_ebayTaxonomy.js';
 import { cardIdentity, skuFor } from '../api/_cardIdentity.js';
@@ -1183,6 +1184,70 @@ console.log('\nthe fee-schedule stamp: the real field format, and the two ways i
           feeModelRevision: 1, feeScheduleVerified: '   ', now: NOW,
         })).includes(PACKET_CODES.FEE_SCHEDULE_DATE_ABSENT),
         'a caller that sent nothing is not a format that changed');
+}
+
+
+// ─── NO_PRICE vs NO_TARGET_NET_PRICING vs basis-is-not-source ──────────────
+// WAS: one code, NO_PRICE, triggered on the absence of ctx.pricing (the
+// target-payout inversion) and worded "No list price computed. Set a target
+// payout to get one." Name, message and trigger described three different
+// things, and no test asserted any of them -- which is why changing the
+// semantics could pass 175/0 in silence. Split because a priced draft with no
+// inversion is normal and must not be told it has no price.
+{
+  console.log('\nNO_PRICE / NO_TARGET_NET_PRICING / basis provenance');
+  const C = () => ({ name: 'Charizard', setName: 'Base Set', number: '4', year: 1999,
+                     game: 'pokemon', condition: 'near mint' });
+  const BASE = { feeModelRevision: 1, feeScheduleVerified: '2026-09-01', now: NOW };
+  const bm = { label: 'TCGPlayer market', sourceUrl: 'https://www.tcgplayer.com/product/1',
+               cacheAgeSec: 3600, low: 30, mid: 40, high: 55 };
+  const codes = p => (p.notes || []).map(n => n.code);
+
+  const priced = buildListingPacket(C(), { ...BASE, price: 250, priceSource: 'comp', basisMeta: bm });
+  check('\u{1F534} a $250 comp-priced draft is NOT told it has no price',
+        !codes(priced).includes(PACKET_CODES.NO_PRICE),
+        'this is the regression: NO_PRICE used to fire here and render beside the price');
+  check('the inversion gap is named separately instead of disappearing',
+        codes(priced).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
+  check('neither price note blocks the listing',
+        priced.blocked === false && priced.blockingCodes.length === 0);
+
+  const unpriced = buildListingPacket(C(), { ...BASE });
+  check('a draft with no price still reports NO_PRICE',
+        codes(unpriced).includes(PACKET_CODES.NO_PRICE));
+  check('an unpriced draft reports BOTH conditions, not one standing in for the other',
+        codes(unpriced).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
+
+  const zero = buildListingPacket(C(), { ...BASE, price: 0, priceSource: 'seller' });
+  check('$0 is a price, not the absence of one',
+        !codes(zero).includes(PACKET_CODES.NO_PRICE),
+        'some venues permit a zero-priced listing; falsiness is the wrong test');
+
+  const inverted = buildListingPacket(C(), { ...BASE, price: 250, priceSource: 'comp',
+                                             pricing: { ok: true, listPrice: 275, exact: true } });
+  check('a real inversion result clears NO_TARGET_NET_PRICING',
+        !codes(inverted).includes(PACKET_CODES.NO_TARGET_NET_PRICING));
+
+  const sellerWithBasis = buildListingPacket(C(), { ...BASE, price: 250, priceSource: 'seller', basisMeta: bm });
+  check('\u{1F534} a basis beside a seller-typed price is flagged as context, not provenance',
+        codes(sellerWithBasis).includes(PACKET_CODES.PRICE_BASIS_NOT_SOURCE_OF_PRICE),
+        'same asymmetry as SELLER_PRICED: presenting a typed number as comp-derived is the stronger false claim');
+  check('the basis is retained, not stripped, when it is flagged',
+        sellerWithBasis.priceBasis && sellerWithBasis.priceBasis.label === 'TCGPlayer market',
+        'deleting evidence to avoid mislabelling it is the wrong trade');
+  check('a comp-sourced price with the same basis is NOT flagged',
+        !codes(priced).includes(PACKET_CODES.PRICE_BASIS_NOT_SOURCE_OF_PRICE));
+  check('a seller price with no basis is NOT flagged',
+        !codes(buildListingPacket(C(), { ...BASE, price: 250, priceSource: 'seller' }))
+          .includes(PACKET_CODES.PRICE_BASIS_NOT_SOURCE_OF_PRICE),
+        'nothing was mislabelled if nothing was stamped');
+
+  check('priceSource is in the input fingerprint because the packet now reads it',
+        PACKET_INPUT_FIELDS.includes('priceSource'),
+        'a field that changes packet bytes and is absent from the fingerprint is a stale packet waiting for the write site nobody has written yet');
+  check('adding it actually changes the fingerprint',
+        packetInputFingerprint({ price: 250, priceSource: 'comp', title: 'T' })
+        !== packetInputFingerprint({ price: 250, priceSource: 'seller', title: 'T' }));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

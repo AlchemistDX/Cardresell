@@ -598,6 +598,17 @@ export function normalizeCreateInput(body) {
     feeScheduleVerified: typeof pc.feeScheduleVerified === 'string' ? pc.feeScheduleVerified : undefined,
     pricing:             (pc.pricing   && typeof pc.pricing   === 'object' && !Array.isArray(pc.pricing))   ? pc.pricing   : undefined,
     basisMeta:           (pc.basisMeta && typeof pc.basisMeta === 'object' && !Array.isArray(pc.basisMeta)) ? pc.basisMeta : undefined,
+    // The SERVER-normalized price and source, not the raw client fields, for
+    // the same reason sku and title are server-derived: the packet must
+    // document the draft that will actually be stored. Reading pc.price here
+    // would let a packet describe a price the store rejected or coerced.
+    //
+    // These are not a new client input -- price and priceSource are already
+    // declared on this create path. This passes an accepted input one layer
+    // further in, to the two conditions that read it (NO_PRICE and
+    // PRICE_BASIS_NOT_SOURCE_OF_PRICE).
+    price:               out.price,
+    priceSource:         out.priceSource,
     // Server-owned. The title bound is the VENUE's, the same one used for
     // out.title above, so the packet cannot report a title this endpoint
     // would not have stored.

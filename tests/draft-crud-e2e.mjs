@@ -883,6 +883,49 @@ reset();
 
   check('normalizeCreateInput now produces a packet',
         !!norm.packet && typeof norm.packet === 'object');
+
+  // ── The two price conditions, through the real create path ──────────────
+  // WAS: one NO_PRICE code triggered by the absence of the target-payout
+  // inversion. Split after finding that listPriceForTargetNet has no
+  // production caller, so the inversion is absent on every real create and
+  // NO_PRICE would have rendered "No list price computed" beside a price.
+  {
+    const codesOf = n => (n.packet.notes || []).map(x => x.code);
+    check('a priced create is not told it has no price',
+          !codesOf(norm).includes('NO_PRICE'));
+
+    const noPrice = EP.normalizeCreateInput({
+      card: CARD(), instanceId: 'inst_np', slot: 'ebay:fixed-price',
+      pricingContext: PC(),
+    });
+    check('a create with no price does report NO_PRICE',
+          codesOf(noPrice).includes('NO_PRICE'));
+
+    // The production shape: no pricingContext.pricing, because nothing computes it.
+    const real = EP.normalizeCreateInput({
+      card: CARD(), instanceId: 'inst_real', slot: 'ebay:fixed-price',
+      price: 250, priceSource: 'comp',
+      pricingContext: { feeModelRevision: 1, feeScheduleVerified: 'Sep 2026',
+                        basisMeta: PC().basisMeta },
+    });
+    check('\u{1F534} the PRODUCTION-shaped create (no inversion) reports the gap, not a false NO_PRICE',
+          codesOf(real).includes('NO_TARGET_NET_PRICING')
+          && !codesOf(real).includes('NO_PRICE'),
+          'this is the case every real create hits today');
+    check('and it is not blocked by either price note',
+          real.packet.blocked === false);
+
+    const sellerTyped = EP.normalizeCreateInput({
+      card: CARD(), instanceId: 'inst_st', slot: 'ebay:fixed-price',
+      price: 250, priceSource: 'seller',
+      pricingContext: { feeModelRevision: 1, feeScheduleVerified: 'Sep 2026',
+                        basisMeta: PC().basisMeta },
+    });
+    check('a seller-typed price with a stamped basis is flagged as context, not provenance',
+          codesOf(sellerTyped).includes('PRICE_BASIS_NOT_SOURCE_OF_PRICE'));
+    check('the server-normalized priceSource is what the packet read, not a client claim',
+          sellerTyped.priceSource === 'seller');
+  }
   check('the packet SKU is the server-derived one, not anything the client sent',
         norm.packet.sku === norm.sku, `${norm.packet.sku} vs ${norm.sku}`);
   check('the packet title matches the title this endpoint stores',

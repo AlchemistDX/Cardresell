@@ -45,7 +45,19 @@ export const PACKET_CODES = {
   MISSING_REQUIRED_ASPECT:    'MISSING_REQUIRED_ASPECT',
   UNVERIFIED_ASPECT_VALUES:   'UNVERIFIED_ASPECT_VALUES',
   TAXONOMY_VERSION_ASSUMED:   'TAXONOMY_VERSION_ASSUMED',
+  // NO_PRICE means what its name says: this draft has no price. It used to
+  // test ctx.pricing -- the target-payout inversion result -- while carrying a
+  // message telling the seller to set a target payout. Name, message and
+  // trigger each described a different thing, and on a $250 comp-priced draft
+  // with no inversion it rendered "No list price computed" beside a price.
+  // Two conditions now, two names, neither claiming the other's meaning.
   NO_PRICE:                   'NO_PRICE',
+  NO_TARGET_NET_PRICING:      'NO_TARGET_NET_PRICING',
+  // The packet-level form of the SELLER_PRICED rule in _draftStore.js. A
+  // stamped priceBasis is evidence about the MARKET; it is not the origin of a
+  // number the seller typed. Attaching one silently would let the review screen
+  // present a seller's own asking price as comp-derived.
+  PRICE_BASIS_NOT_SOURCE_OF_PRICE: 'PRICE_BASIS_NOT_SOURCE_OF_PRICE',
   // Split deliberately, and for the same reason `feeAudited` vs a live read is
   // split above: "nobody sent a fee-schedule date" and "someone sent one this
   // module could not read" are different events with different causes. Absent
@@ -97,8 +109,19 @@ export const PACKET_COMPAT = {
  * because it carries `title.text`. `quantity` and `notes` are deliberately
  * absent — the packet does not derive from them, and listing them would
  * invalidate packets on edits that cannot have changed a number.
+ *
+ * `priceSource` was added when the packet started raising
+ * PRICE_BASIS_NOT_SOURCE_OF_PRICE, which reads it — so it passes the test in
+ * the banner above `tests/draft-store.mjs`'s survival checks: would
+ * `buildListingPacket()` produce different bytes? It would.
+ *
+ * It is here even though `applyEdit` cannot currently change `priceSource`.
+ * Leaving it out would be safe only for as long as that stays true, which is
+ * a coupling to another module's behaviour and exactly the assumption the
+ * read-time fingerprint exists to stop making. The write site that makes
+ * `priceSource` editable is one nobody has written yet.
  */
-export const PACKET_INPUT_FIELDS = ['price', 'title'];
+export const PACKET_INPUT_FIELDS = ['price', 'priceSource', 'title'];
 
 /**
  * A fingerprint of the draft inputs a packet was built from.
@@ -382,7 +405,17 @@ function buildOptionalAspects(row, ident, categoryId) {
  *                        such field exists, so the one instruction available to
  *                        whoever wires a caller pointed at nothing.
  *   taxonomyTreeVersion  live-read version string, optional
- *   pricing              the listPriceForTargetNet result, optional
+ *   price                the draft's price, for the NO_PRICE condition. Read,
+ *                        never copied into the packet: the draft record is the
+ *                        authority on its own price, and a second stored copy
+ *                        would need its own invalidation story.
+ *   priceSource          'comp' | 'seller' | ..., for
+ *                        PRICE_BASIS_NOT_SOURCE_OF_PRICE
+ *   pricing              the listPriceForTargetNet result, optional. NOTE:
+ *                        that function has no production caller (defined in
+ *                        js/core.*.js, called only from tests), so in practice
+ *                        this arrives absent and NO_TARGET_NET_PRICING fires.
+ *                        See audit/TODO_PHASE1.md — never wired, not cut.
  *   basisMeta            _basisMeta-shaped price basis, optional
  *   now                  ms epoch, for deterministic tests
  */
@@ -482,9 +515,38 @@ export function buildListingPacket(row = {}, ctx = {}) {
       { mappedAspects, submissionReady: false });
 
   const pricing = ctx.pricing || null;
-  if (!pricing || pricing.ok !== true || !(pricing.listPrice > 0)) {
+
+  // ── The draft's own price ────────────────────────────────────────────────
+  // 0 is a PRICE. Some venues permit a zero-priced listing (see the slot rule
+  // in _draftStore.js), so absence is the test here, not falsiness.
+  const hasDraftPrice = ctx.price !== null && ctx.price !== undefined
+                        && Number.isFinite(Number(ctx.price));
+  if (!hasDraftPrice) {
     add(PACKET_CODES.NO_PRICE, SEVERITY.WARNING,
-        'No list price computed. Set a target payout to get one.');
+        'This draft has no price yet.');
+  }
+
+  // ── The target-payout inversion, named separately ───────────────────────
+  // Non-blocking, and distinct from NO_PRICE: a seller can list a priced draft
+  // without ever having asked "what list price nets me $X". Collapsing the two
+  // is what produced "No list price computed" on a draft that had a price.
+  if (!pricing || pricing.ok !== true || !(pricing.listPrice > 0)) {
+    add(PACKET_CODES.NO_TARGET_NET_PRICING, SEVERITY.WARNING,
+        'No target-payout price was computed for this draft.');
+  }
+
+  // ── A stamped basis is not the origin of a seller-typed price ───────────
+  // Same asymmetry as SELLER_PRICED in _draftStore.js, one layer in. If the
+  // seller typed the number, the basis stamped beside it is market CONTEXT,
+  // not the number's provenance, and a review screen reading the packet must
+  // not present the two as the same claim. Warned rather than stripped: the
+  // basis is genuinely useful next to an asking price, and deleting evidence
+  // to avoid mislabelling it is the wrong trade.
+  const stampedBasis = stampPriceBasis(ctx.basisMeta, now);
+  if (stampedBasis && ctx.priceSource === 'seller') {
+    add(PACKET_CODES.PRICE_BASIS_NOT_SOURCE_OF_PRICE, SEVERITY.WARNING,
+        'The price basis shown is market context. This price was set by the seller, '
+      + 'not derived from that basis.');
   }
 
   if (feeScheduleVerified === null) {
@@ -532,7 +594,7 @@ export function buildListingPacket(row = {}, ctx = {}) {
           delta:       pricing.delta,
         }
       : null,
-    priceBasis: stampPriceBasis(ctx.basisMeta, now),
+    priceBasis: stampedBasis,
     metadata,
     notes,
     // C7 severity tiers: only ERROR blocks the handoff.
