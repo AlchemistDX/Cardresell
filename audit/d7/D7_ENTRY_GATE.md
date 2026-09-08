@@ -164,6 +164,55 @@ measurement now sizes the harm and sets urgency: how many photos it takes before
 an existing feature starts failing. Recorded because a later reader will
 otherwise see a pending measurement and assume the decision is waiting on it.
 
+### 5.3 The fourth state, and the rule that removes it
+
+Splitting the order record from the bytes buys the third state and creates a
+fourth: the two are now **independently evictable**, so either can survive
+alone.
+
+| Survives | State | Renders |
+|---|---|---|
+| record + bytes | added, present | the photos |
+| record only | **added, gone** | the §5.1 absence line |
+| **bytes only** | **orphan bytes, no order** | — undecided until now |
+| neither | indistinguishable from never added | the empty prompt |
+
+Record-only is the case §5.1 was designed for and it works. Bytes-only is new,
+and left undecided it renders as "never added" — which is the exact
+misrepresentation §5.1 exists to prevent, reintroduced by the fix for it.
+
+**Decision: the order record is the index of truth. Bytes without a record are
+unreachable and treated as gone.**
+
+Reasons, in order of weight:
+
+1. **It keeps the states honest.** Bytes-only collapses into the *neither* row —
+   we have no record, so we say nothing was added, and that is now a true
+   statement about what we know rather than a guess. Recovery would mean
+   claiming an order we do not have.
+2. **Any recovered order would be invented.** Orphan bytes carry no sequence.
+   Presenting them in storage-key order, or capture order if a timestamp
+   survives, is a fabricated answer to "which photo is first" — a directional
+   claim from a cadence, the §5.7 defect from D6 in another costume.
+3. **It is the simpler invariant to hold and to test.** One read path, one
+   authority, and the fourth row is unreachable by construction rather than
+   handled.
+
+**Cost, stated rather than hidden:** in the bytes-only case the seller loses
+photos that physically still exist on the device. That is real, and it is the
+right trade — the alternative is showing them photos in an order we made up and
+calling it theirs.
+
+**Consequence for cleanup:** orphan bytes are now garbage by definition, so
+whatever writes the record must be able to delete bytes it has no record of.
+Otherwise "unreachable" quietly means "occupying quota forever", which is §5.2's
+cross-feature degradation arriving by the back door.
+
+**Consequence for write order:** the record is written **after** the bytes.
+Record-first risks the honest-but-wrong third state on a failed byte write —
+claiming a photo was lost that was never stored. Bytes-first risks only orphans,
+which rule 1 above already sweeps.
+
 None of the three needs an account or a signed-in browser. (1) needs a device,
 (2) and (3) need the rendered screen. That makes D7 the block's cleanest
 remaining run of work — but not because it has no boundary. Because its
