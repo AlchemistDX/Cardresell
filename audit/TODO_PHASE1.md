@@ -611,3 +611,15 @@ state look different from the never-had-it state?
 - **NEW — target-net inversion was NEVER WIRED, not cut.** Zero call sites outside its own definition in every commit in history. Entered with `buildListingPacket` in Block B; both shipped without an entry point. Plan §5.3 governs it as if live. Scope as "finish Block B", not "restore a regression".
 - **`listPriceForTargetNet` has no production caller.** Defined at `js/core.541c4c39.js:7658`, called only by `tests/listing-packet-offline.mjs` via source extraction. `buildListingPacket`'s `pricing` input therefore has no producer, and omitting it makes `NO_PRICE` fire on drafts that have a price ("Set a target payout to get one" beside a $250 price). Blocks the client `pricingContext` wiring. Options (a) rename to `NO_TARGET_NET_PRICING`, (b) pass the already-declared `price`/`priceSource` into the packet context so `NO_PRICE` means its name, (c) give the inversion a production caller. See `audit/d3/LANE_A_STEP1_PACKET.md §7c`.
 - **Fee-schedule stamp fixed** in `af65ece`; the docblock previously named `PLATFORMS.ebay.verified`, which does not exist.
+
+## Rotation and the dashboard answers
+
+- **`audit/ROTATION_RUNBOOK.md` is now the single file for this.** The seven
+  dashboard questions are enumerated there (the corpus said "five"; the roadmap
+  §8.3 lists seven, and seven is right). Only two gate the rotation: whether
+  Preview holds live eBay secrets, and whether Preview reads production KV.
+- Re-verified 2026-09-08: `api.vercel.com` is HTTP 000 from the sandbox and the
+  `vercel` npm package returns 403, so both instruments are unavailable and the
+  answers are owner-only.
+- The `94dc777` commit-message decision is still unrecorded and is a
+  push-blocker independent of rotation.

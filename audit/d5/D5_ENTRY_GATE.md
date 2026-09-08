@@ -389,6 +389,11 @@ up to the redirect.
 Neither AI reviewer can close this either: no browser, no eBay session, and
 driving the owner's browser is not available to them. It is the owner's to run.
 
+The general form of this is now recorded as
+`audit/PATTERN_DISCLOSURE_OWNERSHIP.md`, with every user-facing disclosure in
+the app sorted by whose behaviour makes it true. Step 4 above is the remedy that
+pattern prescribes for the single exception.
+
 ### 8.4 EPN — the load-bearing argument is compliance, not revenue
 
 §7.1 gave two arguments for dropping EPN on the seller link and treated them as
