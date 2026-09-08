@@ -1,6 +1,6 @@
 # D5 entry gate — the eBay continuation control
 
-**Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **HEAD:** `5b17b4a` · **Live bundle:** `js/core.84f79a1f.js`
+**Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **HEAD:** `5b17b4a` (gate) · **Live bundle at writing:** `js/core.84f79a1f.js` — now `js/core.7629ec69.js`, see §7
 **Nothing built yet.** This is the evidence pass before writing the control, and it
 changed what the control should be twice. **Not pushed, not deployed.**
 
@@ -155,3 +155,124 @@ Constraints already binding, carried in:
 - **No rate, no percentage.** §3 explains why.
 - **Nothing about other venues.** This is eBay only, which is the first integration,
   not the destination.
+
+---
+
+## 7. Closeout — the four decisions, taken, and what shipped
+
+**Bundle:** the live bundle is now `js/core.7629ec69.js` (generation 9). Every
+`84f79a1f` citation above still resolves: that file is **retained on disk** with
+bytes matching its own name, per the retention rule generation 8 added, and
+`audit/BUNDLE_CITATION_MAP.md` records the rename. Line numbers moved by roughly
++60 in the new generation; the symbol names below are the durable citation.
+
+### 7.1 The decisions
+
+| # | Question (§5) | Decision | Ground |
+|---|---|---|---|
+| 1 | EPN on the seller link | **Dropped — on this link only.** Buy-side links keep their tracking. | EPN pays on a **buyer's qualifying purchase** ([eBay Partner Network overview](https://listperfectly.com/selling/ebay-affiliate-program-the-ebay-partner-network-aka-epn/), [eBay Seller Center](https://www.ebay.com/sellercenter/growth/ebay-partner-network)). A seller opening a listing form is not a purchase, so there is no commissionable action to attribute. Tagging it anyway earns nothing and puts traffic of a kind the program does not describe under the account that does earn. |
+| 2 | Seed = name + number + set | **Yes.** | §3: 6/6 matched with the set name, 5/6 without. The contradicting comment in our own code (`5684` in the old generation) was written about `/sch`, the buy-side search endpoint — two endpoints, two measured behaviours, and the builder says so in its own comment. |
+| 3 | Show the seed on screen | **Yes.** | eBay answered `Mew ex 232/165` with a library match on `205/165`. A seller who can read the query they are being sent with can catch that on arrival; one who cannot, cannot. |
+| 4 | Fix the dead scan-miss link now | **Yes, in this pass.** | One line once the shared builder exists. Leaving a known-dead link live next to a working one is the split this codebase keeps paying for. |
+
+Decisions 1–4 were taken on the merits under the owner's standing instruction to
+record such questions here and reserve interruptions for deploy authorization and
+business/feature explanation. Decision 1 is the only one with a revenue edge, and
+it is recorded here rather than assumed: it can be reversed by wrapping one call
+in `buildEbayUrl`.
+
+### 7.2 What shipped
+
+**One builder pair, used by both callers** (Rule 1 — one behaviour, one implementation):
+
+- `ebaySellSeed(parts)` — `js/core.7629ec69.js:5475`. Joins name, number, set.
+  Strips a trailing `\d+/\d+` already glued to the name, so a catalogue row
+  carrying `Charizard ex 223/197` does not produce the number twice.
+- `buildEbaySellStartUrl(seed, categoryId)` — `:5494`. Returns
+  `https://www.ebay.com/sl/prelist/identify?title=…` plus `&caty=…` when a
+  category is supplied, and **`null` for an empty seed**. No EPN wrapper.
+
+**Two surfaces:**
+
+- **Scan miss** (`:14817`) — routes through the builder with category `183454`,
+  and the CTA is now conditional on the builder returning a URL. Label changed
+  from "List on eBay →" to "**Start a listing on eBay →**": we open a flow, we do
+  not list.
+- **Review screen** (`_reviewSellStart` `:22363`, `_reviewSellStartHtml` `:22385`,
+  rendered at `:22327`) — gated on `packetUsable && !_reviewPacketBlocking().length`,
+  the **same** two predicates as the copy row. Seed comes from the packet's own
+  server-derived optional aspects (`api/_listingPacket.js` `buildOptionalAspects`),
+  category from `pk.category.id` rather than a constant. The note names the seed,
+  says eBay decides the match, and states that **nothing is listed or published
+  until the seller does it there**. Empty seed → a `data-sell-start-absent` note
+  instead of a link.
+- **Styling** — `index.html:1161-1169`. A rule separates the continuation from the
+  copy row on purpose: a fourth pill in that row would read as a fourth copy button.
+
+**No publish control, no credential use, no server change.** The client builds a
+URL and the seller clicks it.
+
+### 7.3 Tests, and what they can honestly hold
+
+`tests/deeplink-companions.js` — the assertion at the old line 52 pinned the dead
+`presetNameSearchQuery` URL and was **rewritten with WAS/why lines in the file
+itself**. That assertion was never false; the thing it asserted had stopped
+working, which is the failure mode a source-regex suite cannot see. Replaced with
+checks that no `ebay.com/sell/listing` URL is constructed anywhere, that each
+builder is defined exactly once, that both callers reach eBay through them, that
+the builder is not EPN-wrapped, and that it refuses an empty seed. 176/176.
+
+`tests/draft-review-screen.mjs` — five new behavioural sections, 334/334 (up from
+329). They assert the URL **we build** and the gate we build it behind. The one
+end-to-end behaviour they do establish is the negative one: clicking hands the
+seller to eBay in a new tab (read off an **aborted** route, so nothing leaves the
+machine) and **writes nothing** — no draft call, no publish call, no write of any
+kind. That claim is scoped to writes on purpose: an earlier version asserted zero
+`/api/*` traffic and failed on `GET /api/stats`, `POST /api/events` and
+`GET /api/tpl-proxy`, page-level timers unrelated to this control. The recorded
+claim is narrower and true rather than broad and quietly weakened later.
+
+Gate parity is asserted as the two controls appearing and disappearing **together**
+across withdrawn / blocking / absent / usable, not as the continuation's own
+absence — which would pass even if the gates drifted apart in the other direction.
+
+One envelope in the empty-seed section is **modified rather than generated**, and
+says so in the test: the real producer cannot emit a usable packet with no card
+name, but a client can meet one, and Rule 2 says the silent omission is the bug.
+
+**What no test here establishes:** that eBay honours the URL. Nothing in this repo
+can reach eBay. §1 and §2 are browser evidence with a date on them, and they will
+rot the same way the last link did.
+
+### 7.4 Suites run (individually, offline)
+
+| suite | result |
+|---|---|
+| `draft-review-screen.mjs` | 334 passed, 0 failed |
+| `deeplink-companions.js` | 176 checks, 0 failures |
+| `draft-store.mjs` | 147 passed, 0 failed |
+| `draft-crud-e2e.mjs` | 192 passed, 0 failed |
+| `listing-packet-offline.mjs` | 232 passed, 0 failed |
+| `launch-audit-regressions.mjs` | 438 passed, 0 failed |
+| `asset-fingerprints.mjs` | 58 passed, 0 failed |
+
+Visual QA: review screen at 1280px and 390px, light and dark. No wrapping, no
+overflow, no low-contrast text; the continuation reads as one control with its
+note, separated from the copy row.
+
+`asset-fingerprints.mjs` failed once during this pass, correctly: the retained
+`84f79a1f` had been copied **after** the edits, so it held bytes that hashed to
+`7629ec69`. Restored from `HEAD`. A retained file under a name it does not match
+is worse than an absent one, and the suite said so in those words.
+
+### 7.5 Still open after D5
+
+- **eBay's signed-in continuation behaviour is unverified.** All evidence is
+  logged out.
+- **No match rate is stated anywhere**, and none should be until the matcher stops
+  answering two different ways to one identical request (§3).
+- The control is a hand-off, not an integration. The end state — scan it, find its
+  best venue, sign in, sell it — needs the venue's own API, which D5 does not touch.
+
+**Push and deployment remain blocked.** The Cert ID rotation gate is unchanged and
+gates pushing, not editing.

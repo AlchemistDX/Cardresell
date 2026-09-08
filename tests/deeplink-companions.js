@@ -48,8 +48,45 @@ check('gradedSellLink JS wires eBay search URL',           /gradedSellLink[\s\S]
 check('jpEbaySellLink element exists in HTML',              /id="jpEbaySellLink"/.test(INDEX));
 check('jpEbaySellLink JS sets URL for both JP branches',    (INDEX.match(/jpEbaySellLink\.href = buildEbaySearchUrl/g) || []).length >= 2);
 check('Scan-miss panel has ebaySellUrl variable',           /const ebaySellUrl = /.test(INDEX));
-check('Scan-miss panel renders "List on eBay" button',      /List on eBay \u2192/.test(INDEX));
-check('Scan-miss sell URL uses sell/listing flow',          /sell\/listing\?flow=startSell&presetNameSearchQuery=\$\{ebayQ\}/.test(INDEX));
+// D5, 2026-09-08. These three assertions changed, and the middle one is the
+// reason the other two had to.
+//
+// WAS: 'Scan-miss sell URL uses sell/listing flow' asserting
+//   /sell\/listing\?flow=startSell&presetNameSearchQuery=\$\{ebayQ\}/
+// WHY CHANGED: that URL is dead. Probed in a real browser it answers 307 and
+// lands on eBay's selling marketing page with the query dropped, so the suite
+// was pinning a link that took the seller nowhere useful. The assertion was
+// never false; the thing it asserted had stopped working, which is a failure
+// mode no source-regex suite can see. Recorded here because the next person to
+// wonder why this file stopped naming `presetNameSearchQuery` should find the
+// answer without a browser.
+//
+// WAS: 'Scan-miss panel renders "List on eBay" button' asserting the literal
+// 'List on eBay \u2192'. Copy is now 'Start a listing on eBay' — the old label
+// implied we do the listing.
+//
+// These stay source-regex checks, which assert STRUCTURE and not behaviour. No
+// suite in this repo can establish that eBay honours the URL; only a browser
+// can, and that evidence lives in audit/d5/D5_ENTRY_GATE.md rather than here.
+// What these can honestly hold is that the dead pattern is gone and that both
+// callers reach eBay through the one builder.
+check('Scan-miss panel renders "Start a listing on eBay"',  /Start a listing on eBay \u2192/.test(INDEX));
+// Scoped to the built URL (`ebay.com/sell/listing`) rather than to the word
+// `presetNameSearchQuery`: the replacement builder's comment names the dead
+// parameter on purpose, so an assertion on the bare word would fail on the
+// explanation of why it is dead. Structure again, not behaviour — what this
+// holds is that no code path still constructs that host+path.
+check('No ebay.com/sell/listing URL is constructed',        !/ebay\.com\/sell\/listing/.test(INDEX));
+check('Shared sell-start builder defined once',             (INDEX.match(/function buildEbaySellStartUrl\s*\(/g) || []).length === 1);
+check('Shared seed composer defined once',                  (INDEX.match(/function ebaySellSeed\s*\(/g) || []).length === 1);
+check('Builder targets prelist/identify with title+caty',   /sl\/prelist\/identify\?/.test(INDEX) && /title=\$\{encodeURIComponent\(s\)\}/.test(INDEX) && /caty=\$\{encodeURIComponent\(cat\)\}/.test(INDEX));
+check('Scan-miss sell link goes through the builder',       /buildEbaySellStartUrl\(ebaySellSeed\(\{ name, number, setName \}\), '183454'\)/.test(INDEX));
+// The sell path carries NO EPN parameters, deliberately: EPN pays on a buyer's
+// qualifying purchase and a seller opening a listing form is not one. Asserted
+// as the builder not wrapping in buildEbayUrl, because that wrapper is the only
+// thing in this file that appends campid/mkcid.
+check('Sell-start builder is not EPN-wrapped',              !/function buildEbaySellStartUrl[\s\S]{0,700}buildEbayUrl\(/.test(INDEX));
+check('Sell-start builder refuses an empty seed',           /function buildEbaySellStartUrl[\s\S]{0,300}if \(!s\) return null;/.test(INDEX));
 
 console.log('\n[Scan-miss UX bug fixes 2026-08-13]');
 check('Scan-miss enriches pending.imageUrl from candidates',  /if \(!pending\.imageUrl\)/.test(INDEX));

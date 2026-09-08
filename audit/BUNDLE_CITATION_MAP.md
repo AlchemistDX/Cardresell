@@ -1,6 +1,16 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.84f79a1f.js` (22,552 lines).** New work cites that hash.
+**Live bundle: `js/core.7629ec69.js` (22,714 lines).** New work cites that hash.
+
+> ### Generation 9 — the eBay continuation control
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 9 | `84f79a1f` → `7629ec69` | *(this commit)* | D5: two shared builders (`ebaySellSeed`, `buildEbaySellStartUrl`) replace the dead `sell/listing?flow=startSell` deep link; the scan-miss CTA routes through them and is withheld when the seed is empty; the review screen gains a continuation link behind the same gate as the copy row, showing the seed it sends. |
+>
+> **`84f79a1f` is retained on disk** — copied, not `git mv`d, which is the
+> mistake generation 8 documents. Bytes verified against its own name by
+> `tests/asset-fingerprints.mjs`.
 
 > ### Generation 8, and a retention rule that had been quietly broken
 >

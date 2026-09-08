@@ -1493,6 +1493,185 @@ try {
     await ctx.close();
   });
 
+  /* ── D5: the eBay continuation control ─────────────────────────────────
+   *
+   * What these assertions can and cannot hold, stated once so no later reader
+   * mistakes their scope. They assert the URL WE BUILD and the gate we build it
+   * behind. They do NOT assert that eBay honours it: no suite here can reach
+   * eBay, and the previous sell link died without a single test going red
+   * precisely because a URL can stay well-formed long after it stops working.
+   * The browser evidence for the endpoint is in audit/d5/D5_ENTRY_GATE.md, and
+   * it will rot the same way; when the control breaks it will break there,
+   * silently, and someone will have to go look.
+   *
+   * The one behaviour these DO establish end to end is the negative one that
+   * matters most for a Phase 1 with no publish path: clicking the control hands
+   * the seller to eBay and sends nothing to CardResell.
+   */
+  await T.section('the continuation control hands the seller to eBay and nothing else', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    // Nothing leaves the machine: the popup's navigation is aborted, so the
+    // assertion reads the URL the click requested rather than eBay's response.
+    const ebayAsked = [];
+    await ctx.route('**://*.ebay.com/**', (r) => { ebayAsked.push(r.request().url()); r.abort(); });
+    const apiCalls = [];
+    await page.route('**/api/**', async (route) => {
+      const u = new URL(route.request().url());
+      apiCalls.push(route.request().method() + ' ' + u.pathname);
+      if (/\/api\/drafts/.test(u.pathname)) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(F.packetCurrent.body) });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+    await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+    await openReview(page, F.ids.packetCurrent);
+
+    const pkt = F.packetCurrent.body.packet;
+    const opt = (pkt.aspects && pkt.aspects.optional) || {};
+    const one = (k) => { const v = opt[k]; const x = Array.isArray(v) ? v[0] : v; return String(x == null ? '' : x).trim(); };
+    const expectSeed = [one('Card Name'), one('Card Number'), one('Set')].filter(Boolean).join(' ');
+
+    const link = await page.evaluate(() => {
+      const a = document.querySelector('[data-sell-start="ebay"]');
+      if (!a) return null;
+      return { tag: a.tagName, href: a.getAttribute('href'), target: a.getAttribute('target'),
+               rel: a.getAttribute('rel'), text: a.innerText };
+    });
+    T.check('the control renders as a link, not a submit',
+      link && link.tag === 'A', JSON.stringify(link));
+    const u = link ? new URL(link.href) : null;
+    T.check('\ud83d\udd34 it points at eBay\u2019s prelist match step',
+      !!u && u.host === 'www.ebay.com' && u.pathname === '/sl/prelist/identify',
+      u && (u.host + u.pathname));
+    T.check('\ud83d\udd34 the seed it carries is the card, built from the packet\u2019s own aspects',
+      !!u && u.searchParams.get('title') === expectSeed,
+      `${u && u.searchParams.get('title')} vs ${expectSeed}`);
+    T.check('and the category is the packet\u2019s, not a hardcoded one',
+      !!u && u.searchParams.get('caty') === String(pkt.category.id),
+      `${u && u.searchParams.get('caty')} vs ${pkt.category.id}`);
+    // EPN pays on a buyer's qualifying purchase. A seller opening a listing
+    // form is not one, so tracking it as if it were would be an unverified
+    // revenue claim attached to the account that does earn.
+    T.check('\ud83d\udd34 it carries no affiliate tracking, unlike every buy-side link',
+      !!u && !['campid', 'mkcid', 'mkevt', 'mkrid', 'toolid', 'customid', 'siteid'].some((k) => u.searchParams.has(k)),
+      link && link.href);
+    T.check('it opens in a new tab without handing eBay our window',
+      link && link.target === '_blank' && /noopener/.test(link.rel || ''), JSON.stringify(link));
+
+    // The seed is on screen, not only in the href. eBay answered one probe for
+    // card 232/165 with a product-library match on 205/165 -- their catalogue
+    // and ours disagree and their matcher answers anyway, so a seller who can
+    // read the query they are being sent with can catch it on arrival.
+    const seedShown = await page.evaluate(() => {
+      const el = document.querySelector('[data-sell-start-seed]');
+      return el ? el.innerText : null;
+    });
+    T.check('\ud83d\udd34 the seed is shown to the seller, not just hyperlinked',
+      !!seedShown && seedShown.includes(expectSeed), seedShown);
+    T.check('and the copy promises the flow opens, never that eBay will match',
+      !!seedShown && /opens/i.test(seedShown) && !/(prefill|pre-fill|fills in|filled in|we.ll list)/i.test(seedShown),
+      seedShown);
+    T.check('and it says nothing is published until the seller does it there',
+      !!seedShown && /nothing is listed or published/i.test(seedShown), seedShown);
+
+    const before = apiCalls.length;
+    const [popup] = await Promise.all([
+      ctx.waitForEvent('page'),
+      page.click('[data-sell-start="ebay"]'),
+    ]);
+    await page.waitForTimeout(400);
+    // Read the URL the click ASKED FOR, off the aborted route, not popup.url():
+    // the abort leaves the popup sitting on chrome-error://chromewebdata, which
+    // is what the first version of this assertion read and failed on. Asserting
+    // the request is also the stronger claim -- it holds even if eBay answers
+    // with a redirect, which is exactly how the previous sell link died.
+    T.check('\ud83d\udd34 clicking it requests eBay\u2019s prelist step in a new tab',
+      ebayAsked.some((h) => /^https:\/\/www\.ebay\.com\/sl\/prelist\/identify\?/.test(h))
+        && popup !== page,
+      ebayAsked.join(', ') || '(no eBay request)');
+    // Scoped to the DRAFT, deliberately. An earlier version asserted zero calls
+    // to /api/* after the click and failed on GET /api/stats, POST /api/events
+    // and GET /api/tpl-proxy -- page-level traffic on its own timers that has
+    // nothing to do with this control. Asserting silence we do not have would
+    // have meant weakening the assertion later under pressure; the claim worth
+    // holding is narrower and true: the continuation touches no draft state and
+    // asks no endpoint to publish anything.
+    const afterClick = apiCalls.slice(before);
+    T.check('\ud83d\udd34 and it writes nothing \u2014 no draft call, no publish call, no write of any kind',
+      !afterClick.some((c) => /\/api\/drafts/.test(c))
+        && !afterClick.some((c) => /publish|list|offer|inventory/i.test(c))
+        && !afterClick.some((c) => /^(POST|PUT|PATCH|DELETE)/.test(c) && !/\/api\/events/.test(c)),
+      afterClick.join(', ') || '(nothing)');
+    await popup.close();
+    await ctx.close();
+  });
+
+  await T.section('the continuation is gated exactly like the copy row', async () => {
+    // Same gate, read from the same two predicates. A continuation that
+    // survived into a state where `Copy title` is refused would walk the seller
+    // into eBay carrying the very thing the finding names -- so these assert the
+    // two controls appear and disappear TOGETHER rather than asserting the
+    // continuation's own absence, which would pass even if the gates drifted
+    // apart in the other direction.
+    for (const [name, fx, id] of [
+      ['a withdrawn packet', F.packetStale, F.ids.packetStale],
+      ['a packet with a blocking finding', F.packetBlocked, F.ids.packetBlocked],
+      ['a draft with no packet', F.packetAbsent, F.ids.packetAbsent],
+    ]) {
+      const { ctx, page } = await boot(serveRead(fx));
+      await openReview(page, id);
+      const counts = await page.evaluate(() => ({
+        copy: document.querySelectorAll('[data-packet-copy]').length,
+        sell: document.querySelectorAll('[data-sell-start]').length,
+      }));
+      T.check(`\ud83d\udd34 ${name}: copy withheld and the continuation withheld with it`,
+        counts.copy === 0 && counts.sell === 0, JSON.stringify(counts));
+      await ctx.close();
+    }
+    const { ctx, page } = await boot(serveRead(F.packetCurrent));
+    await openReview(page, F.ids.packetCurrent);
+    const counts = await page.evaluate(() => ({
+      copy: document.querySelectorAll('[data-packet-copy]').length,
+      sell: document.querySelectorAll('[data-sell-start]').length,
+    }));
+    T.check('and a usable packet has both \u2014 the gate is shared, not merely absent',
+      counts.copy === 3 && counts.sell === 1, JSON.stringify(counts));
+    await ctx.close();
+  });
+
+  await T.section('a packet that cannot name the card says so instead of linking', async () => {
+    /* The one envelope here that is MODIFIED rather than generated, and the
+     * reason: the real producer derives Card Name / Card Number / Set from the
+     * stored card row, so it cannot emit a usable packet with none of them.
+     * The state is still reachable on a client -- an older stored packet, a
+     * catalogue row that lost its name -- and Rule 2 says the silent omission
+     * is the bug, so the branch has to be exercised from the only side that
+     * can produce it. What is asserted is the CLIENT's behaviour on an empty
+     * seed; nothing here claims the server can produce this shape.
+     */
+    const stripped = JSON.parse(JSON.stringify(F.packetCurrent.body));
+    for (const k of ['Card Name', 'Card Number', 'Set']) delete stripped.packet.aspects.optional[k];
+    const { ctx, page } = await boot(() => ({ status: F.packetCurrent.status, body: stripped }));
+    await openReview(page, F.ids.packetCurrent);
+    const st = await page.evaluate(() => ({
+      link: document.querySelectorAll('[data-sell-start]').length,
+      copy: document.querySelectorAll('[data-packet-copy]').length,
+      note: (document.querySelector('[data-sell-start-absent]') || {}).innerText || null,
+    }));
+    T.check('\ud83d\udd34 no link is offered when there is nothing to search for',
+      st.link === 0, JSON.stringify(st));
+    T.check('\ud83d\udd34 and the seller is told why, rather than the control vanishing',
+      !!st.note && /eBay/i.test(st.note), st.note);
+    T.check('the rest of the packet is untouched \u2014 this withholds one control, not the screen',
+      st.copy === 3, JSON.stringify(st));
+    await ctx.close();
+  });
+
   /* ── Q3: a packet can be CURRENT and still not fit to list ──────────────
    *
    * The verdict had three arms -- readiness, then usability, then ready -- and
