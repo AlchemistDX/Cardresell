@@ -76,11 +76,29 @@ console.log('\n[Headline price]');
         /basis: blended == null \? null : 'ask_blend'/.test(code),
         'the code says market and asks must never be relabelled as each other');
 
-  check('a spread is synthesized only around an observed centre',
-        /const _spreadOk = _head\.basis === 'sales';/.test(code)
-          && /_spreadOk \? displayMarket \* 0\.85 : null/.test(code)
-          && /_spreadOk \? displayMarket \* 1\.15 : null/.test(code),
-        'a 0.85 floor off an ask blend published low ABOVE mid');
+  /* RETIRED 2026-09-08 by Q7 option (iii).
+     This used to assert that the spread synthesizers fired only around an
+     observed centre:
+         const _spreadOk = _head.basis === 'sales';
+         low:  ... _spreadOk ? displayMarket * 0.85 : null
+         high: ... _spreadOk ? displayMarket * 1.15 : null
+     That was the Q3-C narrowing, and it was correct for the defect it targeted
+     -- a 0.85 floor taken off an ask blend published `low` ABOVE `mid`, so the
+     "Lowest listing" row rendered above the median ask.
+
+     Q7 deleted both synthesizers outright, so `_spreadOk` no longer exists and
+     this assertion can only fail. It is not re-pointed at the new code, because
+     the thing worth asserting is no longer "the guard is correct" but "there is
+     nothing to guard" -- and that is asserted in the Q7 integration block
+     below, together with the reason the guard was never the weak part: the
+     client inferred provenance from value presence, so a correctly-tagged
+     derived endpoint was relabelled as provider data on arrival.
+
+     The inversion this protected against is now unreachable by construction:
+     no centre-derived endpoint is published at all. */
+  check('no spread is synthesized around any centre, observed or not',
+        !/_spreadOk/.test(code.replace(/\/\*[\s\S]*?\*\//g, '')),
+        'Q7 removed the synthesizers; a reintroduced guard means a reintroduced spread');
 
   check('each published endpoint carries its origin',
         /marketBasis: _head\.basis/.test(code)
@@ -499,7 +517,8 @@ console.log('\n[Quick Pricing — wiring]');
    function, `_crMeasuredRange`, and it is extracted from the live bundle and
    run rather than grepped, because "the synthesizer is gone" is a claim about
    a surface while "a malformed pair does not render" is a claim about
-   behaviour -- instance 30 of audit/PATTERN_ASSERTION_SURFACE.md. */
+   behaviour -- instance 1 of audit/PATTERN_ASSERTION_SURFACE.md.
+   (This cited a nonexistent "instance 30" until 2026-09-08.) */
 {
   console.log('\n[Q7 — measured range gate]');
   const core = readCoreBundle().source;
@@ -558,9 +577,28 @@ console.log('\n[Quick Pricing — wiring]');
   check('Q7: the copied mid is tagged rather than passed off as a median ask',
         /mid: mkt, midBasis: 'derived'/.test(core),
         'mid === market is the market value printed twice, not a median');
-  check('Q7: the live TCGplayer variant tags its endpoints too',
-        /high: null, highBasis: null, mid: d\.market, midBasis: 'derived'/.test(core),
-        'the live path had the same copied mid and an untagged absent high');
+  /* CHANGED 2026-09-08. This used to assert the live variant hardcoded its tags:
+       lowBasis: Number(d.low) > 0 ? 'tcgplayer' : null
+       high: null, highBasis: null
+     and it passed, which is worth recording, because the line it was pinning
+     was the defect. It confirmed that endpoints were tagged; it never asked
+     WHERE the tag came from. The tag came from `Number(d.low) > 0` -- value
+     presence -- so a server-synthesized 0.85 x market low arriving correctly
+     labelled 'derived' on the wire was relabelled 'tcgplayer' here and passed
+     the measured-range gate as provider data.
+
+     An assertion that a provenance field is populated is not an assertion that
+     the provenance is true. The check now requires the value to be READ off the
+     wire, and the behavioural consequence is covered end-to-end in the Q7
+     integration block below. */
+  check('Q7: the live variant reads endpoint provenance off the wire',
+        /lowBasis:\s*_dLow\s*!=\s*null\s*\?\s*\(d\.lowBasis\s*\|\|\s*null\)/.test(core)
+          && /highBasis:\s*_dHigh\s*!=\s*null\s*\?\s*\(d\.highBasis\s*\|\|\s*null\)/.test(core),
+        'provenance must never be inferred from value presence');
+  check('Q7: the live variant still tags its copied mid as derived',
+        /mid:\s*d\.market,\s*midBasis:\s*'derived'/.test(core),
+        'mid is the market value copied, not a median ask');
+
   check('Q7: origin metadata survives the trip into the pricing basis',
         (core.match(/lowBasis:\s+b\.lowBasis/).length > 0) && /highBasis: p\.highBasis/.test(core),
         'dropping the tags at _qpBasis and re-deriving them at the render site '
@@ -591,6 +629,221 @@ console.log('\n[Quick Pricing — wiring]');
         (core.match(/not a '\s*\+\s*'provider range|not a \\?'?provider range/g) || []).length >= 1
           || (core.match(/provider range/g) || []).length >= 2,
         'the specific misreading to head off is "this is what the source said"');
+}
+
+
+/* ── Q7 integration: ingestion -> basis -> gate ───────────────────────────────
+   2026-09-08. The gate tests above prove _crMeasuredRange refuses malformed
+   pairs. They do NOT prove a synthesized endpoint cannot reach it wearing a
+   provider tag, because they hand the gate its basis fields directly. That was
+   the actual defect, and it lived in the seam:
+
+     server api/tcg-price.js  synthesized  low = displayMarket * 0.85
+                              and tagged   lowBasis = 'derived'   (honest)
+     client js/core ingestion stamped      lowBasis = 'tcgplayer' (from
+                                           VALUE PRESENCE, ignoring the wire)
+     gate                     saw          'tcgplayer' in _CR_MEASURED_ORIGINS
+                              and          RENDERED it as a measured range.
+
+   Tagging the synthesized number did not protect anything, because the consumer
+   inferred the tag instead of reading it. So this block runs the REAL ingestion
+   expression, lifted from the live bundle, against payload shapes the server
+   can actually emit, and composes its output into the REAL gate. A surface
+   assertion ("the 0.85 is gone") cannot establish this; only running the chain
+   can. Instance 29 of audit/PATTERN_ASSERTION_SURFACE.md.
+
+   CHANGED-FROM: nothing. This block is new; no prior assertion covered the
+   ingestion seam, which is why the defect survived the Q7 commit. */
+{
+  console.log('\n[Q7 — ingestion to gate, integration]');
+  const core = readCoreBundle().source;
+
+  // ---- 1. the two server synthesizers are gone from BOTH paths ----
+  const server = readFileSync(new URL('../api/tcg-price.js', import.meta.url), 'utf8');
+  /* Strip comments properly. A first pass filtered lines starting with // or *,
+     which was not enough and failed loudly: the commit that deleted these
+     synthesizers QUOTES the deleted lines inside a block comment, so the naive
+     filter kept `low: r.low ?? (` as if it were live code and the assertion
+     measured the explanation rather than the program. Block comments have to
+     come out as regions, not as lines. */
+  const _codeOnly = server
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter(l => !/^\s*\/\//.test(l))
+    .join('\n');
+  check('server tcgcsv path no longer synthesizes low from market',
+        !/low:\s*r\.low\s*\?\?\s*\(/.test(_codeOnly),
+        'the 0.85 spread must be deleted, not re-guarded');
+  check('server tcgcsv path no longer synthesizes high from market',
+        !/high:\s*r\.high\s*\?\?\s*\(/.test(_codeOnly));
+  check('server free-API path no longer synthesizes low from market',
+        !/low:\s*fb\.low\s*\?\?\s*\(fb\.market/.test(_codeOnly));
+  check('server free-API path no longer synthesizes high from market',
+        !/high:\s*fb\.high\s*\?\?\s*\(fb\.market/.test(_codeOnly));
+  check('no percentage spread multiplier survives in server code',
+        !/\*\s*0\.85|\*\s*1\.15/.test(_codeOnly),
+        'both multipliers must be absent from executable lines');
+  check('server free-API path now attributes its endpoints',
+        /lowBasis:\s*fb\.low\s*!=\s*null\s*\?\s*'provider'/.test(_codeOnly),
+        'Scryfall/lorcana/ygoprodeck endpoints must name a provider, not inherit one');
+  check('clamping a high invalidates its observed basis',
+        /if\s*\(data\.highBasis\s*!=\s*null\)\s*data\.highBasis\s*=\s*'derived'/.test(_codeOnly),
+        'a clamped high is computed from anchor, so it is our number not the provider\u2019s');
+
+  // ---- 2. lift the REAL ingestion expression out of the live bundle ----
+  const a = core.indexOf("const _dLow  = Number(d.low)");
+  const b = core.indexOf("currentPrices['tcgplayer_live'] = liveVariant;");
+  check('the live-variant ingestion is locatable in the bundle', a !== -1 && b > a,
+        'if this fails every assertion below is testing nothing');
+  const ingest = new Function('d', core.slice(a, b) + '; return liveVariant;');
+
+  // ---- 3. extract the gate ----
+  const gi = core.indexOf('const _CR_MEASURED_ORIGINS');
+  const gj = core.indexOf('const _CR_NO_RANGE_NOTE');
+  const gate = new Function(core.slice(gi, gj) + '; return _crMeasuredRange;')();
+
+  // The composed chain, exactly as production runs it.
+  const chain = (payload) => {
+    const v = ingest(payload);
+    // _qpBasis carries these three through verbatim; asserted separately above.
+    return { variant: v, verdict: gate({ low: v.low, high: v.high,
+                                         lowBasis: v.lowBasis, highBasis: v.highBasis }) };
+  };
+
+  // ---- 4. the defect case: a derived endpoint must NOT become provider data ----
+  {
+    // Shape the OLD server emitted: synthesized low, honestly tagged 'derived'.
+    const r = chain({ market: 100, low: 85, lowBasis: 'derived', high: null, highBasis: null });
+    check('a wire-tagged derived low is not relabelled as provider data',
+          r.variant.lowBasis === 'derived',
+          'ingestion must READ lowBasis off the wire, never infer it from value presence');
+    check('a derived endpoint cannot pass the gate through ingestion',
+          r.verdict.ok === false,
+          'this is the exact bypass: 0.85 x market rendering as a TCGplayer range');
+  }
+  {
+    // Both endpoints synthesized and tagged derived - the full old shape.
+    const r = chain({ market: 100, low: 85, lowBasis: 'derived', high: 115, highBasis: 'derived' });
+    check('a fully derived pair is refused with derived-endpoint',
+          r.verdict.ok === false && r.verdict.why === 'derived-endpoint');
+  }
+  {
+    // The free-API path used to send endpoints with NO basis at all.
+    const r = chain({ market: 100, low: 85, high: 115 });
+    check('untagged endpoints do not acquire a tag from ingestion',
+          r.variant.lowBasis === null && r.variant.highBasis === null,
+          'the field they arrive on must not lend them its vendor name');
+    check('untagged endpoints are refused as unattributed',
+          r.verdict.ok === false && r.verdict.why === 'unattributed');
+  }
+  {
+    // A clamped high arrives tagged derived; the pair must not render.
+    const r = chain({ market: 100, low: 90, lowBasis: 'observed',
+                      high: 300, highBasis: 'derived', highClamped: true });
+    check('a clamped high does not render as a measured endpoint',
+          r.verdict.ok === false && r.verdict.why === 'derived-endpoint');
+  }
+
+  // ---- 5. the converse: a genuinely supplied range MUST still render ----
+  {
+    const r = chain({ market: 100, low: 90, lowBasis: 'observed', high: 130, highBasis: 'observed' });
+    check('a genuinely observed pair renders through the whole chain',
+          r.verdict.ok === true,
+          'the gate must not have been tightened into refusing everything');
+  }
+  {
+    /* The case the reviewer asked for explicitly. 85/115 around a 100 comp is
+       the fabrication SHAPE, but here both endpoints are attributed observed
+       provider figures that genuinely came back symmetric. Symmetry must
+       neither authenticate nor disqualify: the tags decide, and only the tags.
+       Same numbers as the defect case above, opposite verdict, and the ONLY
+       difference is provenance. */
+    const r = chain({ market: 100, low: 85, lowBasis: 'observed', high: 115, highBasis: 'observed' });
+    check('a genuinely supplied symmetric range still renders',
+          r.verdict.ok === true,
+          'symmetry must not disqualify an attributed range');
+    const bad = chain({ market: 100, low: 85, lowBasis: 'derived', high: 115, highBasis: 'derived' });
+    check('identical numbers flip verdict on provenance alone',
+          r.verdict.ok === true && bad.verdict.ok === false,
+          'the pair 85/115 renders or withholds purely on its tags');
+  }
+  {
+    // Mixed origin across two real providers is still refused.
+    const r = chain({ market: 100, low: 90, lowBasis: 'tcgplayer', high: 130, highBasis: 'ebay-sold' });
+    check('two providers do not compose one measured range',
+          r.verdict.ok === false && r.verdict.why === 'mixed-origin',
+          'an ask floor under a sold ceiling is not one measurement context');
+  }
+  {
+    // high absent entirely - the common real shape for this endpoint.
+    const r = chain({ market: 100, low: 90, lowBasis: 'observed' });
+    check('a lone observed low is still withheld',
+          r.verdict.ok === false && r.verdict.why === 'low-only');
+  }
+
+  // ---- 6. the copy claim: Comp keeps its basis label ----
+  check('Comp retains a source/basis label rather than being called calculated',
+        core.includes('Comp is the displayed source value'),
+        'only Sell Now and Patient are calculated suggestions');
+  check('only the two outer tiers are called calculated suggestions',
+        /Sell Now and Patient are calculated/.test(core) &&
+        !/Comp[^.]{0,40}calculated suggestion/.test(core));
+}
+
+/* ── BIAS-5: the unidentified-card scope must not be shared ─────────────────
+   2026-09-08. _crGradingScope used to `return 'unknown'` with no card identity,
+   which made every unidentified card ONE scope -- so a cost entered against one
+   scanned-but-unresolved card was subtracted from the next one's comps. That is
+   the cross-card inheritance the (card, grader) scope exists to prevent,
+   arriving through the one key that ignores the card.
+
+   CHANGED-FROM: no prior assertion existed for the no-identity branch; the
+   earlier scope tests all supplied either a pc.url or a name. */
+{
+  console.log('\n[BIAS-5 — unidentified card scope]');
+  const core = readCoreBundle().source;
+  const i = core.indexOf('const _crGradingAnonScope');
+  const j = core.indexOf('function _crGradingGrader');
+  check('the scope function is locatable', i !== -1 && j > i);
+  const scope = new Function(core.slice(i, j) + '; return _crGradingScope;')();
+
+  check('no-identity branch no longer returns the shared literal',
+        scope(null, {}) !== 'unknown',
+        "'unknown' was a single shared bucket for every unidentified card");
+
+  const cardA = {}, cardB = {};
+  check('two unidentified cards get different scopes',
+        scope(null, cardA) !== scope(null, cardB),
+        'this is the inheritance case: A\u2019s cost must not reach B');
+  check('the same unidentified card keeps its scope across re-renders',
+        scope(null, cardA) === scope(null, cardA),
+        'a fresh key each render would silently discard what the seller typed');
+
+  check('a server scan id is preferred over a minted token',
+        scope(null, { scan_id: 'sc_123' }) === 'scan:sc_123',
+        'a real per-analysis id beats anything we mint');
+  check('two analyses of the same scan id share one scope',
+        scope(null, { scan_id: 'sc_9' }) === scope(null, { scan_id: 'sc_9' }));
+  check('different scan ids do not share a scope',
+        scope(null, { scan_id: 'sc_1' }) !== scope(null, { scan_id: 'sc_2' }));
+
+  // Identity, when present, still wins and is still stable.
+  check('an identified card still scopes by printing url',
+        scope({ url: 'https://x/y' }, {}) === 'pc:https://x/y');
+  check('returning to an identified card restores its own scope',
+        scope({ url: 'https://x/y' }, cardA) === scope({ url: 'https://x/y' }, cardB),
+        'the intended behaviour: identity wins over the per-analysis token');
+  check('name+set scoping is unchanged',
+        scope(null, { name: 'Pikachu', set: 'Base', number: '58' })
+          === 'card:Pikachu|Base|58');
+  check('two different named cards do not share a scope',
+        scope(null, { name: 'A' }) !== scope(null, { name: 'B' }));
+
+  // With no data object at all there is nothing to be stable against, so reuse
+  // is withheld rather than faked.
+  check('no data object withholds reuse entirely',
+        scope(null, null) !== scope(null, null),
+        'we cannot tell whether the next render is the same card');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

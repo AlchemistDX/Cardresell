@@ -262,18 +262,40 @@ export default async function handler(req, res) {
       // these" (:847), NOT a settled rule. This change deliberately does not
       // answer it; it only stops synthesizing around a centre that is itself
       // derived.
-      const _spreadOk = _head.basis === 'sales';
+      /* 2026-09-08 (Q7 option (iii), server side). The two synthesizers that
+         used to live on these lines are GONE:
+             low:  r.low  ?? (_spreadOk ? displayMarket * 0.85 : null)
+             high: r.high ?? (_spreadOk ? displayMarket * 1.15 : null)
+         `_spreadOk` and the 'derived' tags below went with them.
+
+         Q3-C had narrowed them to fire only around an observed centre and had
+         tagged the result `lowBasis: 'derived'`, which was honest at this
+         boundary. It was not sufficient, and the reason is worth recording
+         because the tag looked like the fix:
+
+         the client did not read the tag. js/core ingestion stamped
+         `lowBasis = 'tcgplayer'` from VALUE PRESENCE -- `if (Number(d.low) > 0)`
+         -- so a 0.85 x market figure crossed the wire correctly labelled
+         'derived' and was relabelled as provider data on arrival, then passed
+         the measured-range gate as a TCGplayer endpoint. Tagging a synthesized
+         number does not protect a consumer that infers the tag instead of
+         reading it. Deleting the number is what protects it.
+
+         So there is no percentage spread on this path at any confidence level.
+         A missing endpoint stays null and the range is withheld downstream.
+         Do not reintroduce these under a tighter `_spreadOk`; the guard was
+         never the weak part. */
       const data = {
         market: displayMarket,
-        low:    r.low  ?? (_spreadOk ? displayMarket * 0.85 : null),
+        low:    r.low  ?? null,
         mid:    r.mid  ?? displayMarket,
-        high:   r.high ?? (_spreadOk ? displayMarket * 1.15 : null),
+        high:   r.high ?? null,
         // Origin of each published figure. Absent-vs-"checked, does not apply"
         // was previously indistinguishable because there was no field to leave
         // blank (pattern instance 22).
         marketBasis: _head.basis,
-        lowBasis:  r.low  != null ? 'observed' : (_spreadOk ? 'derived' : null),
-        highBasis: r.high != null ? 'observed' : (_spreadOk ? 'derived' : null),
+        lowBasis:  r.low  != null ? 'observed' : null,
+        highBasis: r.high != null ? 'observed' : null,
         source: 'tcgcsv',
         game,
         categoryId: r.categoryId ?? categoryId,
@@ -321,11 +343,29 @@ export default async function handler(req, res) {
         fb = await priceFromYgoprodeck({ name, number });
       }
       if (fb && fb.market != null) {
+        /* 2026-09-08 (Q7 (iii)). Same two synthesizers were here:
+               low:  fb.low  ?? (fb.market * 0.85)
+               high: fb.high ?? (fb.market * 1.15)
+           This path was worse than the tcgcsv one in two ways. It had NO basis
+           fields at all, so the payload could not describe itself even in
+           principle; and its provider is Scryfall, lorcana-api or YGOProDeck,
+           so anything the client stamped 'tcgplayer' was misattributed to a
+           vendor that never saw the card. A symmetric pair around `market`
+           from a source that publishes no range is the exact fabrication
+           shape the gate exists to refuse.
+
+           Endpoints now pass through or stay null, and the basis fields name
+           the real provider so a downstream consumer reads attribution
+           instead of inventing it. */
         const data = {
           market: fb.market,
-          low:  fb.low  ?? (fb.market * 0.85),
+          low:  fb.low  ?? null,
           mid:  fb.mid  ?? fb.market,
-          high: fb.high ?? (fb.market * 1.15),
+          high: fb.high ?? null,
+          marketBasis: 'provider',
+          lowBasis:  fb.low  != null ? 'provider' : null,
+          highBasis: fb.high != null ? 'provider' : null,
+          midBasis:  fb.mid  != null ? 'provider' : 'derived',
           source: fb.source,
           game, categoryId,
           cardName: fb.cardName || name,
@@ -568,6 +608,14 @@ function _clampHighPriceInPlace(data) {
     data.highRaw     = data.high;
     data.highClamped = true;
     data.high        = Math.round(anchor * _HIGH_CAP_MULT * 100) / 100;
+    /* 2026-09-08 (Q7 (iii)). The clamped value is computed from `anchor`, so
+       after this line `high` is OUR number, not the provider's. Leaving
+       highBasis as 'observed' would have let a 3 x market figure render as a
+       measured endpoint -- the same defect as the deleted percentage spreads,
+       reached through the outlier guard instead of the absent-value path.
+       The original stays in `highRaw` for anything that wants to report what
+       upstream actually published. */
+    if (data.highBasis != null) data.highBasis = 'derived';
   }
   return data;
 }

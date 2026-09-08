@@ -99,7 +99,87 @@ arithmetic is the cost disclosed to the seller.**
 
 ---
 
-## Re-verification, 2026-09-07 — and a disagreement, disclosed not averaged
+## Retrieval conflict, 2026-09-07 vs 2026-09-08 — recorded, and my 09-07 read corrected
+
+Two retrievals of PSA's own pages disagreed. One of them was mine and was
+wrong. The record below is the point of this section; the product decision does
+not rest on any of it.
+
+### The postage rate — I cited a stale page
+
+PSA serves **two** postage pages, both live:
+
+| Final URL | Page header | Domestic card table |
+|---|---|---|
+| `https://www.psacard.com/submissions/postage/` | "PSA & PSA/DNA Postage Rates - **Effective January 24, 2023**" | **1–8** items, **$1–$1,000**, **$19.00** |
+| `https://www.psacard.com/info/postage` | "**Last Updated November 14, 2024**" | **1–4** items, **$2,000**, **$19.99** |
+
+Retrieved 2026-09-07 (first row) and 2026-09-08 (second row). Excerpt from the
+current page, verbatim:
+
+> `|No. of Items|$2,000|$12,500|$25,000|...|`
+> `|1 - 4|$19.99|$34.99|$49.99|...|`
+> `|5 - 9|$24.99|$39.99|$54.99|...|`
+
+**The reviewer's figure is the correct and current one.** On 2026-09-07 I
+retrieved the 2023 page, treated it as current because it was still served
+under a plausible URL, and concluded "the number has not moved." That
+conclusion was wrong. The supplied URL redirects to `/info/postage`, which is
+where the maintained table lives.
+
+### Regular $79.99 — agreed
+
+Both retrievals agree. The submission-updates page states "Regular: $74.99 →
+$79.99" ([PSA submission updates](https://www.psacard.com/info/submission-updates)).
+
+### Whether Value services are paused — unresolved here, not refuted
+
+The reviewer's 2026-09-08 retrieval of
+[PSA grading services](https://www.psacard.com/services/tradingcardgrading)
+shows an explicit "Value Services Are Temporarily Paused" notice with those
+services marked unavailable.
+
+That page is client-rendered and returns **no readable body to this sandbox** —
+0 bytes of HTML on a `return_html` fetch, and an extraction pass that reported
+service names and prices as "not stated". So nothing retrievable here can
+confirm or refute the notice, and it is recorded as the reviewer's finding
+rather than adjudicated.
+
+My 2026-09-07 verdict of "Unverified" was reached by an argument that does not
+hold: that Value appearing in a price-increase list on the submission-updates
+page established availability. A price list is not an availability statement,
+and the absence of a pause notice from one page says nothing about a notice on
+another. **That inference is withdrawn.**
+
+### What is retracted
+
+The 2026-09-07 pass concluded "$51.99 was never stale" and offered a chronology
+in which PSA's numbers had not moved. **Both are retracted.** Neither is
+established by these conflicting retrievals: the postage component did move
+($19.00 → $19.99, with the band and cap changing too), the service component
+may be unavailable entirely, and one of the two surfaces cannot be read from
+here. No chronology of PSA prices should be read out of this file.
+
+### What is unaffected
+
+The product behavior. No default ships; the seller supplies the assumption. That
+decision never depended on these figures being current, which is precisely why
+it is the one the implementation rests on: a default would be a guess at inputs
+a scan cannot observe — service eligibility and selection, Collectors Club
+membership, submission size, declared value, and **inbound** postage, which
+appears in no PSA table at all because the seller buys it from their own
+carrier. Two readers of the same vendor, one of them reading a stale page still
+served by that vendor, is itself an argument against pinning any of it into the
+product as an automatic cost.
+
+Per the owner's direction, no further grading-price research cycle is opened to
+finish this implementation.
+
+---
+
+## Superseded: re-verification, 2026-09-07 (kept for the record, conclusions retracted above)
+
+
 
 The owner supplied newer PSA evidence when resolving BIAS-5 and instructed that
 this file be corrected against it. It was re-read from **raw page text**, per the

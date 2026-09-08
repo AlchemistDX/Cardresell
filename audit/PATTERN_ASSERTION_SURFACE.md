@@ -1,17 +1,21 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**25 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 25; that number, not this sentence, is the
+**29 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 29; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
 The file also carries two entries that are **not** instances and are not counted:
-a **Rule** (withhold rather than relabel, and its rider) and a **Class** (states
+a **Rule** (withhold rather than relabel, and its riders) and a **Class** (states
 the surface cannot distinguish, which subsumes 22, 22c/T2.14, and the
-`--text-faint` collapse). Both sit after instance 25. Headings use two styles for
-historical reasons — `## N.` for 18 onward, `### Instance N —` for the earlier
-ones — so counting `## N.` headings returns 7, not 25. That is the same trap this
-header fell into before; count by highest number, not by grep.
+`--text-faint` collapse). Both sit after instance 25. Headings use three styles
+for historical reasons — `## N.`, `## Instance N —`, and `### Instance N —` — so
+counting any single style undercounts. Count by highest number, not by grep.
+
+This header was itself stale on 2026-09-08: it read "25 instances" while the file
+already ran to 28, and a test comment cited a nonexistent "instance 30". Both are
+corrected above. A counter maintained by hand beside the thing it counts is the
+same defect this file is about.
 
 > 2026-09-07: this header read **"Six instances"** while the file carried 19 — a
 > stamped count, stale by thirteen, in the document about claims that outlive
@@ -1668,3 +1672,50 @@ were reached.
 two commits, which is where nothing looks." That line was written about
 production data. It describes tooling too, and this instance is the first time
 it cost work rather than describing a risk.
+
+---
+
+## Instance 29 — a populated provenance field is not true provenance
+
+**2026-09-08, Q7 ingestion seam.**
+
+The bundle carried an assertion that passed for weeks:
+
+> `Q7: the live TCGplayer variant tags its endpoints too` —
+> `lowBasis: Number(d.low) > 0 ? 'tcgplayer' : null`
+
+It is a fair reading of that line that endpoints are attributed. The line was
+also the defect. The tag was computed from **value presence** — if a low came
+back at all, it was stamped `'tcgplayer'` — so a server-synthesized
+`displayMarket * 0.85`, which the server had honestly labelled `'derived'` on
+the wire, arrived here, lost its label, and passed `_crMeasuredRange` as
+provider data.
+
+The gate was never wrong. Nine assertions covered it and all nine were sound.
+They all handed the gate its basis fields directly, so none of them could see
+that the fields production supplies are manufactured one frame earlier.
+
+**The surface said "provenance is recorded." The behaviour was "provenance is
+inferred from the thing it is supposed to describe."** Those are indistinguishable
+by grep, by reading the field name, and by any test that constructs its own input.
+
+The correction is not a tighter guard. It is that the consumer must **read** the
+field off the wire (`d.lowBasis`), and that the test must run the real ingestion
+expression lifted from the live bundle rather than a reconstruction of it. The
+new integration block composes server-shaped payload → real ingestion → real
+gate, and its sharpest case is two runs with **identical numbers** (85/115
+around a 100 comp) and opposite verdicts, differing only in tags — symmetry
+neither authenticating nor disqualifying.
+
+**Rider, added to the withhold-rather-than-relabel rule:** a provenance field is
+only load-bearing once something asserts where its value came from. Populating it
+is not the same as sourcing it.
+
+**Second-order note.** While writing that block, the first version of the
+"synthesizer is gone" check stripped comments by dropping lines starting with
+`//` or `*`. The commit that deleted the synthesizers quotes the deleted lines
+inside a block comment, so the check matched my own explanation and reported the
+live code as unfixed. It failed loudly and was caught, but it is the same shape
+one level up: **the assertion was reading the wrong artifact and its name did
+not say so.**
+

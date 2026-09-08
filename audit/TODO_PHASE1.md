@@ -398,6 +398,37 @@ mislabel into an invisible omission, that this is an improvement and not a
 closure, and that anyone reading `9a3c7ac` as "the Lowest-listing row is now
 honest" is reading it too generously.
 
+**Surface identified, 2026-09-08.** The open item is the **Quick Pricing ladder
+floor row**, and it is a different surface from the review-screen withheld-discount
+fee row, which was completed and is not reopened here.
+
+- **Where:** the ladder row assembly in `renderQuickPricing`, live bundle
+  `js/core.8e031c8f.js`, at the guard
+  `if (basis.low != null && !_lowExceedsAsk) { rows.push([_lowIsObserved ? 'Lowest listing' : 'Estimated low', ...]) }`.
+- **Rendered element:** the `.qp-row` carrying key `Lowest listing` inside `#qpRows`.
+- **The collapse:** two distinct states both fall through the same `if` and emit
+  no row — `basis.low == null` (upstream sent no floor) and
+  `basis.low != null && _lowExceedsAsk` (we have a floor and the tripwire
+  distrusts it). The DOM is byte-identical in both.
+
+**Q7 did not close this, and made the two states diverge somewhere else.** The
+new `_CR_NO_RANGE_NOTE` is emitted off `_crMeasuredRange`, which reads the
+low/high *range*, not this ladder row. So:
+
+| state | range line | ladder floor row |
+|---|---|---|
+| no floor upstream | note shown (`low-only` / `no-endpoints`) | absent |
+| floor present, distrusted by `_lowExceedsAsk` | range may RENDER normally | absent |
+
+The second row is the awkward one: after Q7 a distrusted floor can sit inside a
+rendering measured range while being suppressed from the ladder beneath it. That
+is not a regression Q7 introduced — the suppression predates it — but it means
+"Q7 shipped a disclosure" must not be read as "T2.14 is disclosed."
+
+Still **not fixed unilaterally**, for the reason already recorded: the copy would
+assert something about why the book is inverted. What changed today is only that
+the surface is named, so the fix has somewhere to land.
+
 **Cross-reference:** recorded as instance **22c** in
 `audit/PATTERN_ASSERTION_SURFACE.md`, and the withhold-rather-than-relabel rule
 now carries a mandatory rider there — withholding is only complete once the
