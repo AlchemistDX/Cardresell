@@ -1103,5 +1103,87 @@ console.log('\nB7 — unverified aspect values');
         'a cheaper fee must mean a cheaper list price for the same payout');
 }
 
+// ===========================================================================
+// THE FEE-SCHEDULE STAMP — found by sequencing, not by a red test
+//
+// Found while wiring the client, BEFORE anything rendered a packet, and that
+// order is the only reason it was found at all. The docblock for
+// buildListingPacket said feeScheduleVerified comes from
+// `PLATFORMS.ebay.verified`. No such field exists. The real one is
+// `feeAuditedOn: '2026-09-01'` — and `YYYY-MM-DD` matched neither branch of
+// normalizeVerifiedStamp, so it fell out as null.
+//
+// Three defects stacked, each individually survivable:
+//   1. the docblock named a field that does not exist, and it is the only
+//      instruction whoever wires a caller has;
+//   2. the format the real field uses was not accepted;
+//   3. a null result was reported NOWHERE — no code, no severity, nothing.
+//
+// (3) is what made the other two invisible. A packet with a silently-null
+// stamp is not blocked and raises no finding, so a client wired straight from
+// the docblock produces a clean-LOOKING packet with a missing field, and the
+// first person to notice is debugging the review screen's renderer.
+// TAXONOMY_VERSION_ASSUMED, in the same code table, is the precedent: when a
+// version is not live-read, a code says so. The omission was an omission.
+// ===========================================================================
+console.log('\nthe fee-schedule stamp: the real field format, and the two ways it can be missing');
+{
+  const FS_CARD = () => ({
+    name: 'Charizard', setName: 'Base Set', number: '4', year: 1999,
+    game: 'pokemon', condition: 'near mint',
+  });
+  const codesOf = (p) => (p.notes || []).map((w) => w.code);
+
+  check('\u{1F534} the YYYY-MM-DD stamp the venue table really carries is accepted',
+        normalizeVerifiedStamp('2026-09-01') === '2026-09',
+        `got ${JSON.stringify(normalizeVerifiedStamp('2026-09-01'))} \u2014 that string is PLATFORMS.ebay.feeAuditedOn verbatim`);
+  check('the day is dropped, not carried',
+        normalizeVerifiedStamp('2026-09-30') === '2026-09',
+        'a fee schedule has month granularity; the stamp answers WHICH schedule, not when we looked');
+  for (const [inp, want] of [['2026-09', '2026-09'], ['Sep 2026', '2026-09'], ['Sept. 2026', '2026-09']])
+    check(`the previously-accepted form ${JSON.stringify(inp)} still normalizes`,
+          normalizeVerifiedStamp(inp) === want, `got ${normalizeVerifiedStamp(inp)}`);
+  for (const bad of ['2026-9-1', '09/01/2026', 'garbage', '2026'])
+    check(`${JSON.stringify(bad)} is still refused rather than guessed at`,
+          normalizeVerifiedStamp(bad) === null,
+          'widening this into a general date parser would start inventing months');
+
+  const absent = buildListingPacket(FS_CARD(), { feeModelRevision: 1, now: NOW });
+  check('\u{1F534} an absent stamp is now REPORTED rather than silently null',
+        codesOf(absent).includes(PACKET_CODES.FEE_SCHEDULE_DATE_ABSENT),
+        JSON.stringify(codesOf(absent)));
+
+  const drifted = buildListingPacket(FS_CARD(), {
+    feeModelRevision: 1, feeScheduleVerified: '09/01/2026', now: NOW,
+  });
+  check('\u{1F534} a stamp that arrived but could not be read is a DIFFERENT code',
+        codesOf(drifted).includes(PACKET_CODES.FEE_SCHEDULE_DATE_UNPARSEABLE)
+        && !codesOf(drifted).includes(PACKET_CODES.FEE_SCHEDULE_DATE_ABSENT),
+        JSON.stringify(codesOf(drifted))
+        + ' \u2014 unparseable means the format on the other side MOVED; absent does not');
+
+  check('both leave the packet UNBLOCKED',
+        absent.blocked === false && drifted.blocked === false,
+        'a listing is publishable without knowing which month the schedule was audited, and the '
+        + 'arithmetic version it would gate is already carried by feeModelRevision');
+  check('and both leave the stamp null rather than defaulting it to this month',
+        absent.metadata.feeScheduleVerified === null
+        && drifted.metadata.feeScheduleVerified === null,
+        'same no-default rule as feeModelRevision: an unknown month is not this month');
+
+  const good = buildListingPacket(FS_CARD(), {
+    feeModelRevision: 1, feeScheduleVerified: '2026-09-01', now: NOW,
+  });
+  check('a readable stamp raises NEITHER code',
+        !codesOf(good).includes(PACKET_CODES.FEE_SCHEDULE_DATE_ABSENT)
+        && !codesOf(good).includes(PACKET_CODES.FEE_SCHEDULE_DATE_UNPARSEABLE),
+        JSON.stringify(codesOf(good)));
+  check('whitespace counts as absent, not as drift',
+        codesOf(buildListingPacket(FS_CARD(), {
+          feeModelRevision: 1, feeScheduleVerified: '   ', now: NOW,
+        })).includes(PACKET_CODES.FEE_SCHEDULE_DATE_ABSENT),
+        'a caller that sent nothing is not a format that changed');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -46,6 +46,14 @@ export const PACKET_CODES = {
   UNVERIFIED_ASPECT_VALUES:   'UNVERIFIED_ASPECT_VALUES',
   TAXONOMY_VERSION_ASSUMED:   'TAXONOMY_VERSION_ASSUMED',
   NO_PRICE:                   'NO_PRICE',
+  // Split deliberately, and for the same reason `feeAudited` vs a live read is
+  // split above: "nobody sent a fee-schedule date" and "someone sent one this
+  // module could not read" are different events with different causes. Absent
+  // is an incomplete caller. UNPARSEABLE is FORMAT DRIFT — the venue table
+  // changed shape and this module did not hear about it — and folding it into
+  // the absent case would hide the only signal that drift produces.
+  FEE_SCHEDULE_DATE_ABSENT:      'FEE_SCHEDULE_DATE_ABSENT',
+  FEE_SCHEDULE_DATE_UNPARSEABLE: 'FEE_SCHEDULE_DATE_UNPARSEABLE',
 };
 
 // ── C0 — schema version handling (Block C entry criterion) ────────────────
@@ -242,6 +250,15 @@ export function normalizeVerifiedStamp(v) {
   const s = String(v ?? '').trim();
   if (!s) return null;
   if (/^\d{4}-\d{2}$/.test(s)) return s;                      // already normalized
+  // `YYYY-MM-DD`, which is the format the venue table actually uses. This was
+  // NOT here when the client wiring was written against the docblock, and the
+  // consequence was invisible rather than loud: `feeAuditedOn: '2026-09-01'`
+  // matched neither branch, fell out as null, and nothing anywhere reported
+  // it. A month is the granularity a fee schedule has, so the day is dropped
+  // rather than carried — the stamp answers "which published schedule", not
+  // "when did we look".
+  const ymd = s.match(/^(\d{4}-\d{2})-\d{2}$/);
+  if (ymd) return ymd[1];
   const m = s.match(/^([A-Za-z]{3,})\.?\s+(\d{4})$/);
   if (!m) return null;
   const mm = MONTHS[m[1].slice(0, 3).toLowerCase()];
@@ -359,7 +376,11 @@ function buildOptionalAspects(row, ident, categoryId) {
  *
  * `ctx` must carry:
  *   feeModelRevision     integer from core.js FEE_MODEL_REVISION (required)
- *   feeScheduleVerified  'Sep 2026' or '2026-09' (from PLATFORMS.ebay.verified)
+ *   feeScheduleVerified  'Sep 2026', '2026-09' or '2026-09-01', from
+ *                        PLATFORMS.ebay.feeAuditedOn in core.js. NOT `.verified`
+ *                        — this line said `.verified` for three commits and no
+ *                        such field exists, so the one instruction available to
+ *                        whoever wires a caller pointed at nothing.
  *   taxonomyTreeVersion  live-read version string, optional
  *   pricing              the listPriceForTargetNet result, optional
  *   basisMeta            _basisMeta-shaped price basis, optional
@@ -397,13 +418,23 @@ export function buildListingPacket(row = {}, ctx = {}) {
       + `(${VERIFIED_TREE_VERSION}) and labelling it as such.`);
   }
 
+  // Normalized before the metadata block so the two failure modes can be
+  // reported. Unlike feeModelRevision this is NOT blocking: a listing is
+  // publishable without knowing which month's fee schedule was audited, and
+  // the number it would gate is already carried by feeModelRevision. It is
+  // recorded loudly and allowed through.
+  const rawSchedule       = ctx.feeScheduleVerified;
+  const scheduleSupplied  = rawSchedule !== null && rawSchedule !== undefined
+                            && String(rawSchedule).trim() !== '';
+  const feeScheduleVerified = normalizeVerifiedStamp(rawSchedule);
+
   const metadata = {
     packetSchemaVersion: PACKET_SCHEMA_VERSION,
     taxonomyTreeVersion: treeVersionLive || VERIFIED_TREE_VERSION,
     // Never claim a live read we did not perform.
     taxonomyTreeVersionSource: treeVersionLive ? 'live' : 'verified-constant',
     feeModelRevision,
-    feeScheduleVerified: normalizeVerifiedStamp(ctx.feeScheduleVerified),
+    feeScheduleVerified: feeScheduleVerified,
     generatedAt: new Date(now).toISOString(),
   };
 
@@ -454,6 +485,18 @@ export function buildListingPacket(row = {}, ctx = {}) {
   if (!pricing || pricing.ok !== true || !(pricing.listPrice > 0)) {
     add(PACKET_CODES.NO_PRICE, SEVERITY.WARNING,
         'No list price computed. Set a target payout to get one.');
+  }
+
+  if (feeScheduleVerified === null) {
+    if (scheduleSupplied) {
+      // The alarming one. A value arrived and this module could not read it,
+      // which means the format on the other side moved.
+      add(PACKET_CODES.FEE_SCHEDULE_DATE_UNPARSEABLE, SEVERITY.WARNING,
+          'Fee-schedule audit date was supplied in a format this packet cannot read.');
+    } else {
+      add(PACKET_CODES.FEE_SCHEDULE_DATE_ABSENT, SEVERITY.WARNING,
+          'No fee-schedule audit date recorded for this packet.');
+    }
   }
 
   notes.push(...cond.notes);
