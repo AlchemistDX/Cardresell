@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**29 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 29; that number, not this sentence, is the
+**31 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 31; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1719,3 +1719,68 @@ live code as unfixed. It failed loudly and was caught, but it is the same shape
 one level up: **the assertion was reading the wrong artifact and its name did
 not say so.**
 
+
+## Instance 30 — a comment stated the rule and the line beneath it broke the rule (2026-09-08)
+
+Ingestion B (`tplCardToNormalized`, TPL raw path) carried a comment block added
+the previous day that stated the correct rule in full:
+
+> a basis is READ, never invented. When the nested object carries its own
+> attribution we use it; when it does not, the endpoint is unattributed and
+> `_crMeasuredRange` refuses it ('unattributed') instead of it inheriting a
+> vendor name from the field it was nested under.
+
+The executable line directly beneath it read:
+
+```js
+lowBasis = _tp.lowBasis || 'tcgplayer';
+```
+
+which does the opposite. The gap was not a near-miss. TPL is reached through
+`api/tpl-proxy.js`, a **pass-through** that forwards the request and normalizes
+nothing, and `lowBasis` is our own vocabulary — not a field the vendor emits. So
+the left operand was *always* undefined and the fallback was not an edge case,
+it was the entire behaviour. Every TPL endpoint in production was stamped
+`'tcgplayer'` on the strength of the key it happened to be nested under.
+
+**Why it is this pattern and not simple carelessness.** The comment is what a
+reviewer or a later author reads to learn the rule, and it was accurate about
+the rule and silent about the code. The checkpoint that reported this fix
+described it as landed. Nothing was asserting the behaviour, so the only
+artifact claiming it was prose — and prose does not execute. *Writing down a
+rule does not install it*; the corollary is that a comment stating a rule is
+evidence about the author's intent, never about the program.
+
+**Second-order, same day, same file.** The first version of the ingestion-B
+absence assertions regexed the raw bundle text for `_tp.lowBasis || 'tcgplayer'`
+to prove it was gone. They failed — because the comment documenting the removal
+**quotes the removed line verbatim**, so the assertion matched its own
+explanation. This is the identical mechanism recorded under instance 29's
+second-order note, recurring within 24 hours in a different file, which is the
+argument for making it structural rather than remembered: absence assertions now
+run against a comment-stripped view, and a **meta-assertion checks that the
+stripper actually removed the quotation** — present in the text, absent from the
+code — so the three absence checks cannot silently prove nothing.
+
+**Rider.** An origin token is a claim with nothing behind it until something
+names the guarantee that makes it true. Two endpoints tagged `'observed'`
+satisfy an allow-list while establishing neither a common provider nor a
+compatible currency, condition or measurement context. `_CR_ORIGIN_CONTRACT` now
+records provider, instrument (ask vs sale), currency and the structural
+guarantee per token, and the allow-list is `Object.keys` of it rather than a
+second literal that could drift.
+
+## Instance 31 — the gate's own extraction anchor depended on a line it no longer contained (2026-09-08)
+
+Two suites lifted the live gate out of the bundle by slicing from
+`const _CR_MEASURED_ORIGINS` to `const _CR_NO_RANGE_NOTE` and `eval`-ing the
+result. When the allow-list became `Object.keys(_CR_ORIGIN_CONTRACT)`, the slice
+stopped containing its own dependency and threw `ReferenceError`.
+
+This one **failed loudly and immediately**, which is why it is filed as a
+near-miss rather than a defect: the technique of lifting real code instead of
+restating it is what made the breakage visible. Had the suites restated the
+gate's logic locally — the tempting shortcut — they would have kept passing
+against a copy while the shipped gate changed underneath them, which is the
+failure this whole file catalogues. Recorded because it is evidence *for* the
+extraction technique, not against it.

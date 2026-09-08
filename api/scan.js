@@ -2350,6 +2350,20 @@ Respond ONLY with valid JSON, no explanation:
       return res.status(200).json({
         success:       true,
         mode:          'grade',
+        /* 2026-09-08, BIAS-5 lifecycle. Every scan already mints `scanId`
+           above, but only identify responses returned it, so on the grading
+           surface the per-analysis identifier did not exist and the client's
+           grading-cost scope fell through to object identity for any card it
+           could not name. Object identity happens to be correct today -- the
+           client parses a fresh response per analysis -- but that is a property
+           of the current call path, not a guarantee, and it is not the thing
+           the scope should depend on.
+
+           Exposed as `analysis_id`, deliberately NOT as `scan_id`: the refund
+           path keys on `scan_id` and is only claimable for scans logged to KV,
+           which grade responses are not. Reusing the name would imply a refund
+           claim that does not exist. */
+        analysis_id:   scanId,
         deepGrade:     isDeepGrade,
         creditsUsed:   gradeCost,
         photoCount:    totalPhotos,

@@ -363,7 +363,48 @@ Applies symmetrically: keeping the low ask means the headline stays ~4% below a
 mid/market centre permanently, and *that* needs stating too, since nothing
 currently discloses that the published price is trimmed downward at all.
 
-### T2.14 — the withheld floor row is indistinguishable from having no floor data
+### T2.14 — CLOSED 2026-09-08 — the withheld floor row is indistinguishable from having no floor data
+
+**Closed.** The reviewer supplied copy that discloses the withholding without
+explaining its cause, which is what let this close ahead of T2.10 (naming *why*
+the provider and the book disagree is still that item's subject and still open).
+
+Shipped in `js/core.1eea628c.js`: when `basis.low != null && _lowExceedsAsk` the
+ladder renders
+
+```
+Provider low (not used)                    —
+Not used in this comparison because it exceeds Market price.
+```
+
+The value is an em dash, so no figure is printed and nothing can be read as a
+price. The reference is named when it has a visible row of its own (`Market
+price`) and stays generic — "the comparison reference" — when the reference is
+`mid`, which has no row in this ladder and so has no label the seller can see.
+When `basis.low == null` the row is **omitted entirely**, so absence still reads
+as absence.
+
+Two assertions were retired with CHANGED-FROM records in
+`tests/quick-pricing.mjs`; both asserted `label(...) === null`, i.e. that the row
+vanishes, which was the defect rather than the fix. Both had passed for the
+entire time the hole was open because each checked one state in isolation. The
+replacements assert the two states **against each other**, plus that no price is
+printed, that condition (2) still fires on observed endpoints, and that the copy
+names no cause (`/invert|wrong|incorrect|error|fabricat|stale|bad data/i` must
+not match).
+
+`.qp-row` gained `flex-wrap:wrap` and a `.qp-row-note` rule using `--text-muted`
+rather than `--text-faint`, the latter having already been too low-contrast for
+the footnote it was raised out of. Rendered at 420px: no overflow, no mid-word
+break, the dashed `.qp-row + .qp-row` separator is preserved because the note
+sits *inside* the row.
+
+**Still unverified:** actual screen-reader announcement of the row and its note.
+The note is visible text in document order, but element presence alone does not
+establish a usable announcement, and no screen reader has been run.
+
+Original entry follows.
+
 
 Found by the D3 visual pass on `9a3c7ac`, not by any assertion. All 20
 width/theme/state combinations render correctly — no overflow, no wrapping, the

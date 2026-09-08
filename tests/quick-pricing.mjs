@@ -462,10 +462,10 @@ console.log('\n[Quick Pricing — wiring]');
   const rowFn = new Function('basis', 'condMult', 'fmt', 'rows',
                              core.slice(i, j) + '; return rows;');
   const money = (v) => '$' + v.toFixed(2);
-  const label = (basis) => {
-    const r = rowFn(basis, 1, money, []);
-    return r.length ? r[0][0] : null;   // null === row withheld
-  };
+  const row0  = (basis) => { const r = rowFn(basis, 1, money, []); return r.length ? r[0] : null; };
+  const label = (basis) => { const r = row0(basis); return r ? r[0] : null; };
+  const value = (basis) => { const r = row0(basis); return r ? r[1] : null; };
+  const note  = (basis) => { const r = row0(basis); return r ? (r[3] || null) : null; };
 
   // Condition (1): provenance decides the NAME.
   check('an observed floor is called a listing',
@@ -480,17 +480,80 @@ console.log('\n[Quick Pricing — wiring]');
   // must hold on OBSERVED endpoints too -- that is the whole point of it being
   // a separate condition. If someone folds (2) into (1), this is the assertion
   // that fails.
-  check('an observed floor above the median ask is withheld, not relabelled',
-        label({ low: 255, mid: 100, lowBasis: 'observed' }) === null,
-        'a floor above an observed ask is not a floor; T2.10, healthy path');
+  /* CHANGED-FROM, 2026-09-08 (T2.14). Two assertions stood here:
+         'an observed floor above the median ask is withheld, not relabelled'
+         'a derived floor above the median ask is also withheld'
+     both asserting `label(...) === null`, i.e. that the row VANISHES.
 
-  check('a derived floor above the median ask is also withheld',
-        label({ low: 255, mid: 100, lowBasis: 'derived' }) === null,
-        'both conditions can fire at once and the row must still vanish');
+     They are retired because the behaviour they pinned was the defect, not the
+     fix. Withholding the figure was correct; rendering the withholding as an
+     empty space was not, because it made "we have a floor and distrust it"
+     byte-identical to "upstream sent no low". Both assertions passed for the
+     entire time that hole was open -- each checked one state on its own and
+     nothing compared the two absences, which is the specific blind spot the
+     replacements below are shaped to close.
+
+     What is still asserted, and must not regress: no PRICE is printed in this
+     state, and condition (2) still fires on observed endpoints (it was never
+     folded into the provenance test). Those were the real content of the
+     retired pair and they are carried forward, not dropped. */
+  check('a floor above the median ask still prints no price',
+        value({ low: 255, mid: 100, lowBasis: 'observed' }) === '\u2014',
+        'the figure is withheld; only an em dash may stand in for it');
+
+  check('condition (2) still fires on an OBSERVED endpoint',
+        label({ low: 255, mid: 100, lowBasis: 'observed' }) === 'Provider low (not used)',
+        'if (2) were folded into the provenance test this would read Lowest listing');
+
+  check('condition (2) also fires on a DERIVED endpoint',
+        label({ low: 255, mid: 100, lowBasis: 'derived' }) === 'Provider low (not used)',
+        'both conditions can fire at once and the withheld row must still win');
+
+  check('the withheld row does not print listing language',
+        label({ low: 255, mid: 100, lowBasis: 'observed' }).indexOf('listing') === -1,
+        'no listing at this price was established, so no listing wording');
 
   check('no low means no row',
         label({ low: null, mid: 100, lowBasis: null }) === null,
         'baseline -- guards must not invent a row');
+
+  /* The comparison the retired assertions never made. These two states are the
+     ones a seller most needs told apart, so they are asserted AGAINST EACH
+     OTHER rather than each against null. */
+  {
+    const suppressed = row0({ low: 255, mid: 100, lowBasis: 'observed' });
+    const neverHad   = row0({ low: null, mid: 100, lowBasis: null });
+    check('present-but-withheld and never-supplied render differently',
+          JSON.stringify(suppressed) !== JSON.stringify(neverHad),
+          'this is T2.14: the two absences must not collapse into one shape');
+    check('only the withheld state carries an explanation',
+          typeof note({ low: 255, mid: 100, lowBasis: 'observed' }) === 'string'
+          && neverHad === null,
+          'absence stays silent; withholding is disclosed');
+  }
+
+  /* The copy discloses the withholding WITHOUT explaining its cause. If any of
+     these words appear, the row has started adjudicating why the provider and
+     the book disagree, which is T2.10 and is still open. */
+  {
+    const n = note({ low: 255, mid: 100, lowBasis: 'observed' });
+    check('the disclosure names no cause',
+          !/invert|wrong|incorrect|error|fabricat|stale|bad data/i.test(n),
+          'it reports non-use in this comparison, not a verdict on the provider');
+    check('the disclosure is phrased against this comparison',
+          /not used in this comparison/i.test(n));
+  }
+
+  /* "Use the actual reference's established label if available." Market price
+     is a visible row in this ladder, so it may be named. `mid` has no row of
+     its own, so naming it would cite a label the seller cannot see. */
+  check('the reference is named when it has a visible row',
+        /exceeds Market price\./.test(note({ low: 255, mid: null, market: 100, lowBasis: 'observed' })),
+        'market has an established label in this ladder, so use it');
+
+  check('the reference is generic when it has no visible row',
+        /exceeds the comparison reference\./.test(note({ low: 255, mid: 100, lowBasis: 'observed' })),
+        'mid has no row here, so naming it would cite a label the seller cannot see');
 
   check('an observed floor with no median ask keeps its name',
         label({ low: 80, mid: null, lowBasis: 'observed' }) === 'Lowest listing',
@@ -522,7 +585,11 @@ console.log('\n[Quick Pricing — wiring]');
 {
   console.log('\n[Q7 — measured range gate]');
   const core = readCoreBundle().source;
-  const i = core.indexOf('const _CR_MEASURED_ORIGINS');
+  /* CHANGED-FROM: this anchored on 'const _CR_MEASURED_ORIGINS'. On 2026-09-08
+     that constant became Object.keys(_CR_ORIGIN_CONTRACT), so the old slice no
+     longer contained its own dependency and threw ReferenceError. The anchor
+     moved rather than the gate being restated here. */
+  const i = core.indexOf('const _CR_ORIGIN_CONTRACT');
   const j = core.indexOf('const _CR_NO_RANGE_NOTE');
   check('the range gate is locatable in the bundle', i !== -1 && j > i,
         'if this fails every assertion below is testing nothing');
@@ -698,7 +765,14 @@ console.log('\n[Quick Pricing — wiring]');
   const ingest = new Function('d', core.slice(a, b) + '; return liveVariant;');
 
   // ---- 3. extract the gate ----
-  const gi = core.indexOf('const _CR_MEASURED_ORIGINS');
+  /* Start the slice at _CR_ORIGIN_CONTRACT, not _CR_MEASURED_ORIGINS.
+     CHANGED-FROM: this read core.indexOf('const _CR_MEASURED_ORIGINS').
+     On 2026-09-08 the allow-list stopped being a literal array and became
+     Object.keys(_CR_ORIGIN_CONTRACT), so a slice starting at the old anchor
+     would evaluate with _CR_ORIGIN_CONTRACT undefined and throw. Anchoring at
+     the contract keeps the extracted gate identical to the shipped one, which
+     is the whole point of lifting it instead of restating it. */
+  const gi = core.indexOf('const _CR_ORIGIN_CONTRACT');
   const gj = core.indexOf('const _CR_NO_RANGE_NOTE');
   const gate = new Function(core.slice(gi, gj) + '; return _crMeasuredRange;')();
 
@@ -781,6 +855,165 @@ console.log('\n[Quick Pricing — wiring]');
           r.verdict.ok === false && r.verdict.why === 'low-only');
   }
 
+  // ---- 5b. INGESTION B: the TPL raw path, chained to the same gate ----
+  /* The integration cases above all enter through ingestion A (the live-variant
+     site). Ingestion B is a different function reading a different upstream,
+     and it had its own copy of the defect -- a `|| 'tcgplayer'` fallback that,
+     because TPL emits no attribution field at all, was not a fallback but the
+     whole behaviour. Lifted from the bundle the same way, so these assertions
+     cannot pass against a fixed test while the shipped code differs. */
+  {
+    const va = core.indexOf('function _crTplAskEndpoints(');
+    const vb = core.indexOf('function tplCardToNormalized(');
+    check('the TPL contract validator is locatable in the bundle',
+          va !== -1 && vb > va,
+          'if this fails every ingestion-B assertion below is testing nothing');
+    const askFn = new Function(core.slice(va, vb) + '; return _crTplAskEndpoints;')();
+
+    // The chain for this path: validator -> gate, as production composes them.
+    const bChain = (condData, key, raw) => {
+      const a = askFn(condData, key, raw);
+      return { ask: a, verdict: gate({ low: a.low, high: a.high,
+                                       lowBasis: a.lowBasis, highBasis: a.highBasis }) };
+    };
+
+    /* The case the reviewer named: an untagged POSITIVE endpoint. Under the old
+       line this produced lowBasis 'tcgplayer' from nothing but value presence.
+       It must now be attributed from the CONTRACT (which this block satisfies)
+       rather than from the field name -- so the distinction the assertion has
+       to make is not "tagged vs untagged" but "conforming vs not". */
+    {
+      const raw = { near_mint: { tcgplayer: { market: 100, low: 90, high: 130 } } };
+      const r = bChain(raw.near_mint, 'near_mint', raw);
+      check('a conforming TPL block attributes both endpoints',
+            r.ask.lowBasis === 'tcgplayer' && r.ask.highBasis === 'tcgplayer',
+            'attribution comes from the documented contract, checked here');
+      check('a conforming TPL range renders through ingestion B',
+            r.verdict.ok === true);
+    }
+    {
+      // A positive low with NO tcgplayer block at all: nothing may attribute it.
+      const raw = { near_mint: { market: 100, low: 90, high: 130 } };
+      const r = bChain(raw.near_mint, 'near_mint', raw);
+      check('a positive endpoint outside the tcgplayer block stays unattributed',
+            r.ask.low === null && r.ask.lowBasis === null,
+            'the contract covers raw[cond].tcgplayer only; nothing else inherits it');
+      check('an unattributed ingestion-B pair is refused',
+            r.verdict.ok === false && r.verdict.why === 'no-endpoints');
+    }
+    {
+      /* The structural half of the guarantee. A block that is NOT the one the
+         raw map holds under the condition being priced establishes no
+         co-context, so it is refused rather than attributed. */
+      const raw = { near_mint: { tcgplayer: { low: 90, high: 130 } } };
+      const foreign = { tcgplayer: { low: 5, high: 9 } };
+      const r = bChain(foreign, 'near_mint', raw);
+      check('a block not held under the priced condition is refused',
+            r.ask.lowBasis === null && r.ask.why === 'block-not-condition-scoped',
+            'co-context is structural: it comes from raw[cond], not from a key name');
+    }
+    {
+      // A clamped high is our arithmetic, so it must not render as measured.
+      const raw = { near_mint: { tcgplayer: { market: 100, low: 90, high: 300, highClamped: true } } };
+      const r = bChain(raw.near_mint, 'near_mint', raw);
+      check('a clamped TPL high is re-tagged derived',
+            r.ask.highBasis === 'derived',
+            'the clamp is applied client-side too; this path skips the server clamp');
+      check('a clamped TPL high cannot pass the gate',
+            r.verdict.ok === false && r.verdict.why === 'derived-endpoint');
+    }
+    {
+      // A lone endpoint is not a range on this path either.
+      const raw = { near_mint: { tcgplayer: { market: 100, low: 90 } } };
+      const r = bChain(raw.near_mint, 'near_mint', raw);
+      check('a lone TPL low is withheld',
+            r.verdict.ok === false && r.verdict.why === 'low-only');
+    }
+    {
+      // Zero and negative are not endpoints.
+      const raw = { near_mint: { tcgplayer: { market: 100, low: 0, high: -3 } } };
+      const r = bChain(raw.near_mint, 'near_mint', raw);
+      check('non-positive TPL endpoints are not attributed',
+            r.ask.low === null && r.ask.high === null
+            && r.ask.lowBasis === null && r.ask.highBasis === null);
+    }
+
+    /* These next assertions are about ABSENCE in the shipped program, so they
+       must not be run against the raw bundle text. The comments documenting
+       each removal QUOTE the removed line verbatim, so matching `core` matches
+       the explanation and reports fixed code as broken -- which is exactly what
+       happened when this block was first written, and is the same defect one
+       level up that audit/PATTERN_ASSERTION_SURFACE.md records for the server
+       strip. Block comments have to come out as REGIONS; line comments are
+       dropped only when the line starts with `//`, so an https:// inside a
+       string is left alone. */
+    const _coreCode = core
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter(l => !/^\s*\/\//.test(l))
+      .join('\n');
+    check('the comment stripper actually removed the quoted old lines',
+          /_tp\.lowBasis\s*\|\|\s*'tcgplayer'/.test(core)
+          && !/_tp\.lowBasis\s*\|\|\s*'tcgplayer'/.test(_coreCode),
+          'the quotation must be present in the text and absent from the code, '
+          + 'otherwise the three assertions below prove nothing either way');
+
+    // The dead field this replaced must not come back.
+    check('ingestion B no longer invents a basis from a field name',
+          !/_tp\.lowBasis\s*\|\|\s*'tcgplayer'/.test(_coreCode)
+          && !/_tp\.highBasis\s*\|\|\s*'tcgplayer'/.test(_coreCode),
+          'this is the exact line the reviewer flagged');
+    check('ingestion B records market provenance too',
+          /marketBasis:\s*_mktBasis/.test(_coreCode),
+          'the ?? ladder reaches into eBay sold averages, a different instrument');
+
+    /* The graded-variant site in the same function. Found while extending this
+       test, not part of the reported fix: it used eBay 30-day and 1-day MEANS
+       as range endpoints. Averages are not endpoints. */
+    check('the graded-variant site no longer uses averages as endpoints',
+          !/const low\s*=\s*ebay\.avg_30d\s*\?\?\s*mkt/.test(_coreCode)
+          && !/const high\s*=\s*ebay\.avg_1d\s*\?\?\s*mkt/.test(_coreCode),
+          'a 30-day mean is not the bottom of anything');
+  }
+
+  // ---- 5c. the origin contract: a token must carry a guarantee ----
+  {
+    const ci = core.indexOf('const _CR_ORIGIN_CONTRACT');
+    const cj = core.indexOf('const _CR_MEASURED_ORIGINS');
+    check('the origin contract is locatable in the bundle', ci !== -1 && cj > ci);
+    const contract = new Function(core.slice(ci, cj) + '; return _CR_ORIGIN_CONTRACT;')();
+
+    check('every accepted origin declares provider, instrument and currency',
+          Object.values(contract).every(v =>
+            typeof v.provider === 'string' && typeof v.instrument === 'string'
+            && typeof v.currency === 'string' && typeof v.guarantee === 'string'),
+          'a token with nothing behind it is a claim, which is what Q7 forbids');
+
+    check('the allow-list is derived from the contract, not restated',
+          /_CR_MEASURED_ORIGINS\s*=\s*Object\.keys\(_CR_ORIGIN_CONTRACT\)/.test(core),
+          'one business rule, one implementation: a second list would drift');
+
+    /* Ask and sale must stay distinguishable. The gate enforces
+       lowBasis === highBasis, so the two can never be mixed inside one range;
+       this asserts the fact that makes that enforcement meaningful. */
+    check('TCGplayer tokens are recorded as asks, not sales',
+          contract['tcgplayer'].instrument === 'ask'
+          && contract['observed'].instrument === 'ask',
+          'the vendor documents low/high as listing prices');
+    check('eBay sold comps are recorded as sales',
+          contract['ebay-sold'].instrument === 'sale');
+    check('the free-API token does not claim an instrument it cannot establish',
+          contract['provider'].instrument === 'unknown',
+          'its vendor varies per response, so asks vs sales is not established');
+    check('mixing an ask origin with a sale origin is refused',
+          gate({ low: 90, high: 130, lowBasis: 'observed', highBasis: 'ebay-sold' }).why
+            === 'mixed-origin');
+    check('an origin absent from the contract is refused',
+          gate({ low: 90, high: 130, lowBasis: 'made-up', highBasis: 'made-up' }).why
+            === 'derived-endpoint',
+          'admission is contract membership, not string plausibility');
+  }
+
   // ---- 6. the copy claim: Comp keeps its basis label ----
   check('Comp retains a source/basis label rather than being called calculated',
         core.includes('Comp is the displayed source value'),
@@ -844,6 +1077,96 @@ console.log('\n[Quick Pricing — wiring]');
   check('no data object withholds reuse entirely',
         scope(null, null) !== scope(null, null),
         'we cannot tell whether the next render is the same card');
+}
+
+/* BIAS-5 lifecycle, 2026-09-08.
+
+   The reviewer accepted the shared-key correction but narrowed the claim:
+   distinct objects receive distinct WeakMap tokens, which establishes OBJECT
+   isolation -- not that two analyses are necessarily distinct. That extra step
+   depends on production creating a separate object per analysis rather than
+   mutating and reusing one. So the assumption gets checked against the actual
+   scan lifecycle instead of being asserted.
+
+   What the lifecycle says:
+     - js/core, submitGradeScan: `const data = await response.json()` produces a
+       FRESH object per analysis, and that object is what reaches
+       renderGradingUpside. So on today's path the assumption holds.
+     - _crGradingPanelArgs stores that same object and re-renders from it, which
+       is the reuse we WANT (a re-render is not a new analysis).
+     - But api/scan.js minted `scanId` for every scan and returned it only on
+       identify responses, so on the grading surface the per-analysis identifier
+       did not exist and the WeakMap was doing all the work. Object identity was
+       load-bearing for a property it cannot guarantee.
+
+   The fix is the one the reviewer asked for -- use the existing lifecycle, do
+   not build another identity system: the grade response now carries
+   `analysis_id` (the id it already had), and the scope prefers it over the
+   WeakMap. These assertions pin the ORDER, because the order is the fix. */
+{
+  console.log('\n[BIAS-5 — analysis lifecycle]');
+  const core = readCoreBundle().source;
+  const i = core.indexOf('const _crGradingAnonScope');
+  const j = core.indexOf('function _crGradingGrader');
+  check('the scope function is locatable', i !== -1 && j > i,
+        'if this fails every assertion below is testing nothing');
+  const scope = new Function(core.slice(i, j) + '; return _crGradingScope;')();
+
+  // ---- the mutate-and-reuse case the reviewer named ----
+  {
+    /* ONE object, reused across two analyses -- the exact shape that would make
+       object identity wrong. With only a WeakMap this returns the same token
+       twice and two analyses share one grading cost. */
+    const reused = { analysis_id: 'a1' };
+    const first  = scope(null, reused);
+    reused.analysis_id = 'a2';              // same object, next analysis
+    const second = scope(null, reused);
+    check('a reused object still separates two analyses',
+          first !== second,
+          'the server id must outrank the WeakMap, or a mutated object merges analyses');
+    check('the analysis id is what distinguishes them',
+          first === 'scan:a1' && second === 'scan:a2');
+  }
+
+  // ---- the identifier must outrank the WeakMap, not replace card identity ----
+  check('an analysis id outranks the anonymous token',
+        scope(null, { analysis_id: 'x9' }) === 'scan:x9',
+        'the WeakMap is the last resort, not the mechanism');
+  check('identify-shaped responses still work through scan_id',
+        scope(null, { scan_id: 'legacy1' }) === 'scan:legacy1',
+        'identify responses carry scan_id; both name one analysis');
+  check('card identity still outranks the analysis id',
+        scope(null, { name: 'Charizard', set: 'Base', number: '4', analysis_id: 'zz' })
+          === 'card:Charizard|Base|4',
+        'a NAMED card must keep its cost across rescans -- the accepted restoration');
+  check('the product URL still outranks everything',
+        scope({ url: 'u1' }, { analysis_id: 'zz' }) === 'pc:u1');
+
+  // ---- the WeakMap remains for the genuinely id-less case ----
+  {
+    const a = {}, b = {};
+    check('with no id at all two objects are still separated',
+          scope(null, a) !== scope(null, b),
+          'the WeakMap still covers payloads carrying no identifier');
+    check('and one object is still stable across re-renders',
+          scope(null, a) === scope(null, a),
+          'a re-render is not a new analysis');
+  }
+
+  // ---- the lifecycle facts these assertions rest on ----
+  const server = readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
+  const _srvCode = server
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+  check('the grade response now carries the analysis identifier',
+        /analysis_id:\s*scanId/.test(_srvCode),
+        'without this the scope silently falls through to object identity');
+  check('the analysis id is NOT exposed as scan_id on the grade path',
+        !/mode:\s*'grade'[\s\S]{0,400}?scan_id:/.test(_srvCode),
+        'scan_id keys the refund path and grade scans are not logged as claimable');
+  check('the client parses a fresh response object per analysis',
+        /const data = await response\.json\(\)/.test(core),
+        'this is the production fact that made object identity work by accident');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
