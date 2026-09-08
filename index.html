@@ -1124,8 +1124,14 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
    fee recipe. They are deliberately quieter than the fee rows they precede:
    they state the shape of the estimate, not money leaving the seller. */
 .review-fees-basis{margin-left:6px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-muted)}
-.review-fee-qual{margin-left:5px;font-size:.8rem;color:var(--text-muted);opacity:.85}
-.review-fee-amount[data-fee-row="basis"]{color:var(--text-muted)}
+.review-fee-qual{margin-left:1px;font-size:.8rem;color:var(--text-muted);opacity:.85} /* 5px -> 1px 2026-09-07: the markup now carries a literal space for the accessible name, so the full margin double-spaced it visually */
+/* Both rows carry a stated non-value, so both are de-emphasised. Added
+   data-fee-row="withheld" on 2026-09-07 with T2.14: the selector was scoped to
+   "basis" alone, so the withheld row's em dash rendered at full --text weight
+   while the tax row's identical em dash was muted -- the same value with two
+   emphases, which reads as the withheld one being an amount. */
+.review-fee-amount[data-fee-row="basis"],
+.review-fee-amount[data-fee-row="withheld"]{color:var(--text-muted)}
 .review-fee-pill{display:inline-block;margin-top:10px;padding:3px 9px;font-size:.72rem;
   border-radius:999px;text-decoration:none;background:var(--surface-2);
   border:1px solid var(--border);color:var(--text-muted)}

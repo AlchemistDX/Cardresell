@@ -6947,9 +6947,34 @@ const FEE_DISCLOSURE = {
   // confirms. It used to name handling time alone as the missing condition,
   // which understated what a draft is missing: the discount needs the whole
   // listing to qualify, and a draft records none of it.
+  // 2026-09-07, T2.14. The withheld discount used to exist ONLY as the prose
+  // note below. That made a deliberate withholding render as an absent row, and
+  // an absent row already means something else on this surface: it means the
+  // venue has no such fee. A seller scanning the <dl> for what was applied saw
+  // no line for the discount at all, and the disclosure lived in a paragraph
+  // underneath that a screen reader reaches only after the total.
+  //
+  // Q-A settled the vocabulary for the whole class: WITHHELD renders as a
+  // present dt/dd pair carrying a stated non-value, NEVER-HAD renders as no
+  // pair. This is the withheld arm. The em dash plus a parenthetical qualifier
+  // is the tax row's existing mechanism, reused rather than reimplemented --
+  // "$0.00" would be a claim that the discount was computed and came to
+  // nothing, and it was not computed at all.
+  //
+  // The never-had arm is NOT exercised here. This screen models exactly one
+  // slot (CR_REVIEW_FEE_SLOT = 'ebay:fixed-price') and refuses every other one,
+  // so no venue on this surface lacks a Top Rated program. T2.14's two-arm
+  // contract is half-verified by construction; the second half needs a second
+  // modelled venue.
+  trsWithheldLabel:     'Top Rated Plus discount',
+  trsWithheldQualifier: 'not applied',
+  // The separators are em dashes, not the `--` this codebase uses in comments.
+  // The ASCII pair was reaching the seller literally, visible in
+  // audit/d3/ax-fee-priced-light.png as "qualifying -- same-". Typography only;
+  // no word, number or disclosure changed.
   trsWithheldNote: 'No Top Rated Plus discount is applied here. That 10% off the percentage fee '
-              + 'depends on the listing itself qualifying -- same- or 1-business-day handling, a '
-              + 'seller resident in the US, and not local-pickup only -- none of which this draft '
+              + 'depends on the listing itself qualifying \u2014 same- or 1-business-day handling, a '
+              + 'seller resident in the US, and not local-pickup only \u2014 none of which this draft '
               + 'records yet, so your fee may be lower than shown.',
 };
 
@@ -19993,13 +20018,21 @@ function _reviewFeeRow(kind, label, amount) {
    and the row states it rather than the estimate implying otherwise.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+// The literal space before the qualifier span is load-bearing, added
+// 2026-09-07. `.review-fee-qual{margin-left}` supplied the visual gap, but
+// margin is not text: the accessible name computed to "Fee base(item)" and
+// "Top Rated Plus discount(not applied)" with no separator, because the AX name
+// concatenates text content and CSS box spacing contributes nothing to it. The
+// ranking surface's equivalent row in _platTileHtml has always carried the
+// space; this one had drifted without it. Verified in the AX tree, not assumed.
 // The qualifier-in-parentheses row from the ranking surface's fee recipe. The
 // parenthetical is what makes a zero honest: "$0.00" is a claim, "(not
 // modeled) $0.00" is a disclosure.
-function _reviewBasisRow(label, qualifier, amount) {
+function _reviewBasisRow(label, qualifier, amount, kind) {
+  const k = _reviewEsc(kind || 'basis');
   return `
-          <dt class="review-fee-label" data-fee-row="basis">${_reviewEsc(label)}<span class="review-fee-qual">(${_reviewEsc(qualifier)})</span></dt>
-          <dd class="review-fee-amount" data-fee-row="basis">${_reviewEsc(amount)}</dd>`;
+          <dt class="review-fee-label" data-fee-row="${k}">${_reviewEsc(label)} <span class="review-fee-qual">(${_reviewEsc(qualifier)})</span></dt>
+          <dd class="review-fee-amount" data-fee-row="${k}">${_reviewEsc(amount)}</dd>`;
 }
 
 // Same staleness thresholds, same source of truth, same methodology link as
@@ -20068,6 +20101,7 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN)}${feeRows}
+${_reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld')}
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </dl>
         <div class="review-fees-note">${_reviewEsc(FEE_DISCLOSURE.estimateNote)}</div>
