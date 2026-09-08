@@ -162,6 +162,13 @@ Ordered by cost of leaving them broken, not by ease.
 
 - **PUSH GATE — do not push before the Cert ID is rotated.** `94dc777` is unreachable from `origin/main`, so the credential fragments exist only in unpushed history. The push is the publishing event. This is additive to the deploy-authorization rule below, not a replacement: rotation removes one blocker, it does not authorize a push. Recorded at `audit/DECISION_94dc777.md`.
 - **eBay Cert ID rotation** — sha256[:12] `e3f0a0bc343d` was printed in plaintext in an earlier session. Rotation is mandatory and now gates the first push. Sequence, environment dependencies, and the 18/19-vs-19/19 distinction are in `audit/DECISION_94dc777.md`. Once rotated and verified, delete `refs/recovery/pre-scrub-c2366b2`. Do not use the unblock URL.
+- **A crashed suite is not a passing suite, and nothing currently detects one.**
+  `tests/quick-pricing.mjs` crashed after 205 of 219 assertions for six
+  revisions (`a8dc3d6`..`ffa735d`) and was only noticed because a neighbouring
+  change touched the same extraction. Restored to 219/0 at `da13bee`, which does
+  **not** validate the revisions inside the window. Per-revision counts, what was
+  lost, and the un-built prevention item: `audit/SUITE_COVERAGE_INTERRUPTIONS.md`
+  SI-1. **Prevention (an expected-assertion-count floor per suite) is OPEN.**
 - **Run `tests/asset-fingerprints.mjs` after ANY edit to a hashed bundle — before reporting suites green.** Missing this let T2.9 rev3 land in `0c759cd` with `js/core.59d4b1ab.js` no longer hashing to its own bytes; the fix is recorded at `audit/BUNDLE_RENAME_9f0f6b30.md` and the mechanism at `audit/PATTERN_ASSERTION_SURFACE.md` instance 38. Suite selection driven by *what changed semantically* does not cover a defect whose mechanism is *the file changed*. Rename method is copy-to-new-address + restore the retired name's own bytes — **never `git mv`**, because `vercel.json:47` serves `/js/*.<8hex>.js` `immutable` for a year.
 - **WITHDRAWN 2026-09-08 — the tax captures do *not* require a history rewrite.**
   Commit `6011b67` added 25 full external page captures (2,569,243 bytes) under
@@ -223,8 +230,22 @@ Deadline recorded HERE and not only in `audit/d3/DISCLOSURE_PARITY_Q3.md`, becau
 a date that lives only in an audit document is a date nobody greps.
 
 **Outcome.** `taxOn` + `taxBasis` on all fifteen venues; one shared
-`venueTaxNote(pid)`; the hardcoded line deleted. Disclosure went **1 of 15 → 9
-of 15** (2 confirmed tax-inclusive, 7 unknown, suppressed on 6 confirmed zeros).
+`venueTaxNote(pid)`; the hardcoded line deleted. Disclosure went **1 of 15 → 10
+of 15** (2 confirmed tax-inclusive, 8 unknown, suppressed on 5 confirmed zeros).
+
+> **This line read "9 of 15 (2 / 7 / suppressed on 6)" until 2026-09-08.** Wrong
+> on all three numbers, in the same direction each time. The audit record was
+> right — `audit/d3/TAX_TREATMENT_T2_9.md:331` says 10 of 15 and its result
+> table sums to it — so this was a bad summary of a good record, and **only the
+> summary is corrected.** The audit is not reopened.
+>
+> **Separately: 10 of 15 is model coverage, not seller visibility.** On the
+> listing path only **eBay** is reachable (the D1 slot is `ebay:fixed-price`).
+> On the payout panel, **eBay and TCGplayer** on a free plan with defaults
+> (`VENUE_DEFAULT_ENABLED`, `FREE_PLATFORMS`, `js/core.86000bf2.js:6881-6883`);
+> the ineligible branch renders no fee block at all (`:8869`), so the remaining
+> 8 states need the venue enabled AND the plan. Reconciled in full at
+> `audit/PHASE1_RECONCILIATION_2026-09-08.md` §7.3.
 Per-venue tables, verbatim source quotes and the reasoning:
 `audit/d3/TAX_TREATMENT_T2_9.md`. Restated publicly in a third table on
 `accuracy.html`, which the parity suite now holds to the model bidirectionally

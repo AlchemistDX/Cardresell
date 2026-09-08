@@ -1508,6 +1508,16 @@ console.log('\n[Quick Pricing — wiring]');
   const renderSrc = core.slice(_rsA, core.indexOf(';', _rsA) + 1);
   const rangeSrc  = _fnSrc(core, 'function _rangeParts(');
 
+  /* 2026-09-08: this block CRASHED, it did not fail, for six revisions
+     (`a8dc3d6`..`ffa735d`) -- ReferenceError: _crRetrievedAtFrom is not
+     defined, thrown inside the `new Function` below. 205 of 219 assertions were
+     reached and the run exited non-zero with no `✗` line, which reads as a pass
+     to anything grepping for failures. The 14 assertions from here to the end of
+     the file were not run against the 34fb750c or c61a6ef9 bundles and today's
+     restored 219/0 does not retroactively validate those revisions. Full record,
+     with the measured per-revision counts: audit/SUITE_COVERAGE_INTERRUPTIONS.md
+     SI-1. The locatability assertion below now also covers the three helper
+     fragments, so a future rename fails HERE instead of crashing 8 lines down. */
   check('every hop of the chain is locatable',
         !!(mainSrc && fbSrc && clampSrc && divSrc && clampHighSrc
            && sentSrc && _adA > -1 && _adE > _adB && _cbA > -1 && _rsA > -1 && rangeSrc

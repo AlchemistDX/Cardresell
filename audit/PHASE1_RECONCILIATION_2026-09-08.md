@@ -35,6 +35,12 @@ removal from Phase 1.
 - Do not wire it opportunistically. The inversion rule stands: invert by
   bisection on the forward function, never re-derive algebra.
 
+**What §0 does NOT cover: expected net.** Corrected on review — see §7.1. Showing
+the seller what an *existing* asking price nets is a forward computation the
+shipped fee function already performs, and it is not gated on this item. Only
+the reverse direction — seller names a payout, we solve for the price — is
+target-net work and out of this lane.
+
 ---
 
 ## 1. The Phase 1 user flow, step by step
@@ -62,7 +68,7 @@ renderer (`_reviewPacketHtml`, `_reviewFeesHtml`):
 | Title | `title.text` | Yes |
 | Category and aspects | `category`, `aspects` with per-aspect provenance | Yes |
 | Price | draft `price` | Yes |
-| Expected net | only via `pricing.achievedNet`, populated only for a target-net call that never happens | **No** |
+| Expected net | see the correction in §7.1 — this is **not** blocked on target-net inversion | **No**, and it is the cheapest of the four |
 | Fee **and shipping** breakdown | no shipping field exists in the packet at all | Fees yes; **shipping no** |
 | Condition guidance | `condition` (`api/_conditionDescriptors.js`) | Condition label yes; guidance text **no** |
 | Description | **no description field exists in the packet** | **No** |
@@ -114,7 +120,7 @@ From `audit/TODO_PHASE1.md`. None was closed by Lane A work.
 | T2.6 bulk `needsPicker` renders as a confident ✓ | Open |
 | T2.7 grading panel's flat $25 against our own tiers | Open, four named parts |
 | T2.8 shipped copy says "beta" (`api/verify-send.js:155`) | Open |
-| T2.9 venue tax treatment | **DONE 2026-09-08**, 1 of 15 → 9 of 15 disclosed |
+| T2.9 venue tax treatment | **DONE 2026-09-08**, 1 of 15 → **10 of 15** renderer states. Count corrected and reachability separated in §7.3. |
 
 Also carried, from the audit corpus rather than from tracks: `applyEdit` never
 updates `priceSource`; `feeBase`/`feeBaseLabel` emit on 2 of 15 venues; four
@@ -143,3 +149,99 @@ entries; RV-1…RV-6; four duplicate `codes` helpers in
   renderer's own field lists. An absence is easier to establish than a
   presence, but a grep is still a grep — each is stated with the symbol or
   field list it was read against so it can be checked.
+
+---
+
+## 7. Corrections to this document (2026-09-08, on review)
+
+Three corrections, all accepted. Each changes a conclusion, not just wording.
+
+### §7.1 Expected net is not target-net inversion
+
+**What §2 implied and what is true.** §2 originally listed expected net as
+reachable "only via `pricing.achievedNet`, populated only for a target-net call
+that never happens", which folded two different computations into one blocked
+item. They are opposite directions:
+
+| Direction | What it needs | Status |
+|---|---|---|
+| **Forward** — a price exists, what does it net? | `feeEbay(price, …)` plus the shipping and cash-out inputs the payout panel already supplies | **Shipped arithmetic, already used.** The payout panel computes `netPayout` per venue from exactly this (`js/core.86000bf2.js:8483-8490`), and the review screen's fee breakdown reconciles to the cent against the same function. |
+| **Reverse** — a payout is named, what price achieves it? | `listPriceForTargetNet`, inverted by bisection on the forward function | **Never wired. §0.** |
+
+So **expected net on the review screen is a rendering task over an existing
+forward function**, not a target-net feature. It does not require the seller to
+choose a payout, and it must not be implemented by adding a second fee model —
+rule 1. The correct move is to render the number the existing function already
+produces, beside the fee breakdown that already reconciles to it.
+
+Nothing in §0 changes: `listPriceForTargetNet` stays unwired and out of Lane A.
+What changes is that expected net is **no longer parked behind it**, and it is
+now the cheapest of the four §2 gaps rather than the most blocked.
+
+### §7.2 Packet membership is not the completion test
+
+**What §2's table implied.** Its middle column read "in the packet", and its
+prose said four requirements "exist nowhere in the packet". Stated that way,
+absence from `buildListingPacket`'s return value looks like the definition of
+incomplete. **It is not.** A Phase 1 requirement is complete when it has an
+owner and a working seller path; where the value is stored is an architectural
+choice, not the test.
+
+The three affected requirements, restated against the right test:
+
+| Requirement | Right owner (proposal, not a decision) | Why not the packet |
+|---|---|---|
+| **Shipping breakdown** | The client fee/payout layer that already owns `shipCharge`, `sellerShip` and postage inputs (`js/core.86000bf2.js:8483-8490`) | Shipping is a **seller-and-venue** input, not a card fact. Freezing it into a packet built from card identity would make the packet stale on every postage change, and the packet's staleness gate is keyed on card and price inputs, not seller settings. |
+| **Description** | Undecided owner. Either a server-side generator beside `_listingTitle.js`, or a client template. **Needs an owner decision before any code.** | If it is generated from card facts it belongs in the packet; if it is seller-authored prose it belongs on the draft. That question is open, and picking the packet by default would answer it silently. |
+| **Local photo state** | The device. D7's own requirement says local-only, no server upload, with cross-device limitation copy | A packet is a server record. Putting device-local photo state in it would either lie about portability or force the upload D7 forbids. **Packet membership here would be a defect, not completion.** |
+
+Condition guidance is the one where packet membership is right and partially
+present: `condition` is already in the packet
+(`api/_listingPacket.js:860`) and only the guidance **text** is unrendered.
+
+**The corrected completion test, used from here on:** a requirement is complete
+when (a) an owner is named, (b) a seller can reach it on a real path, and (c)
+what is shown is true and provenanced. Storage location is an implementation
+detail of (a).
+
+### §7.3 T2.9 — the count, reconciled
+
+Two figures were in circulation. **Both were describing different things and
+one was arithmetically wrong.** Reconciled here without reopening the audit:
+
+**The renderer-state count is 10 of 15, and it is the one in the source record.**
+`audit/d3/TAX_TREATMENT_T2_9.md:331` states "the disclosure goes from 1 venue to
+10 of 15", and its own result table (`:325-330`) breaks down as:
+
+| `taxOn` | count | venues |
+|---|---|---|
+| `true` | **2** | eBay, Whatnot |
+| `'unknown'` | **8** | TCGplayer, Poshmark, COMC, Mana Pool, Cardsphere, Cardmarket, Fanatics Collect, TCG Bulk |
+| `false` (suppressed) | **5** | Mercari, CardNexus, Card Kingdom, CoolStuffInc, Star City Games |
+
+2 + 8 = **10 render a disclosure; 5 are suppressed.**
+
+**`audit/TODO_PHASE1.md` said "9 of 15 (2 confirmed tax-inclusive, 7 unknown,
+suppressed on 6 confirmed zeros)". That is wrong on three numbers** — 9 for 10,
+7 for 8, 6 for 5 — and it is wrong in the same direction each time, which is
+what an off-by-one carried through a sum looks like. It is the summary, not the
+audit, that was wrong. **Corrected in `audit/TODO_PHASE1.md`; the audit record
+is unchanged and is not reopened.**
+
+**Reachability is a separate count, and it was never stated. Stating it now:**
+
+| Surface | Venues whose tax row a seller can actually reach |
+|---|---|
+| Review screen / listing path | **eBay only.** The D1 slot is `ebay:fixed-price`; no second venue reaches this screen. This is the reviewer's point and it is correct **for this surface**. |
+| Payout comparison panel | **eBay and TCGplayer on a free plan with default settings.** `VENUE_DEFAULT_ENABLED = ['ebay', 'tcgplayer']` (`js/core.86000bf2.js:6883`) and `FREE_PLATFORMS` is the same pair (`:6881`). The ineligible branch renders no fee block at all (`:8869`), so a disabled or plan-locked venue shows no tax row. |
+| The other 8 states | Require the seller to enable the venue in the picker **and** hold the plan: 6 more at PRO (`PRO_PLATFORMS`, `:6882`), the last 2 at PRO MAX (`:6883`). |
+
+**So "10 of 15" is a model-coverage figure, not a seller-visibility figure**, and
+the two were being quoted as if interchangeable. Both are now stated with the
+surface they belong to. The parity suite holds `accuracy.html` to the model
+bidirectionally (34 checks), and `accuracy.html` is reachable by anyone —
+which is why the model figure is worth publishing at all, but it is not the
+listing path.
+
+**Not reopened:** no `taxOn` value, no venue classification, and no wording in
+`audit/d3/TAX_TREATMENT_T2_9.md` is changed by this correction.
