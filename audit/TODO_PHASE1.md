@@ -19,7 +19,7 @@ Status per `audit/CARDRESELL_PLAN_AND_ROADMAP.md` §6.2.
 | D3 (review screen) | Later in D | Render every missing field by server reason; fee breakdown reconciles to the cent. |
 | D4 (number provenance) | Later in D | Provider, source URL, absolute retrieval time, fee revision, seller/manual attribution visible. |
 | D5 (copy-ready handoff) | Later in D | One-tap field copying and eBay continuation; no publish control. |
-| D6 (new-seller warning) | Later in D | Show before handoff when applicable; do not invent eligibility. |
+| D6 (new-seller warning) | Later in D | Show before handoff when applicable; do not invent eligibility. **Entry gate decided 2026-09-08 (`audit/d6/D6_ENTRY_GATE.md`): unconditional guidance, no trigger.** No signal CardResell owns discriminates new sellers -- the profile default is identical to a deliberate answer, `countDrafts` measures our history not eBay's, and `PUBLISHED` is unreachable in Phase 1. Remaining work is copy sourced from eBay's published pages, placement, and a presence test. |
 | D7 (local photos) | Later in D | Ordered local photo state, validation, removal, cross-device limitation copy; no server upload. |
 
 ### D2.1 entry gate — CLOSED 2026-09-06
