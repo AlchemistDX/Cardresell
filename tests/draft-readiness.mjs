@@ -5,6 +5,7 @@
 
 import { readinessOf } from '../api/_draftService.js';
 import { validateDraftForSlot, SLOT_RULES, VIOLATION, PRICE_SOURCES } from '../api/_draftStore.js';
+import { packetInputFingerprint } from '../api/_listingPacket.js';
 
 let FAIL = 0;
 const ok = (name, cond, detail) => {
@@ -12,7 +13,13 @@ const ok = (name, cond, detail) => {
   else { console.log(`  FAIL  ${name}${detail ? ` — ${detail}` : ''}`); FAIL = 1; }
 };
 
-const base = (over = {}) => ({
+/* `packetInputs` is computed from the finished row with the production
+ * fingerprint rather than written as a literal. A literal would be a second
+ * implementation of the fingerprint format living in a test, and it would go
+ * stale silently the first time a field joined PACKET_INPUT_FIELDS. The
+ * fingerprint here is fixture construction -- it makes the row look like one a
+ * writer actually produced -- not the thing under assertion. */
+const base = (over = {}) => withFingerprint({
   draftId: 'd_test', sku: 'sku_test', instanceId: 'i_test',
   slot: 'ebay:fixed-price', status: 'draft', rev: 1,
   title: 'Charizard Base Set Holo', price: 250, quantity: 1,
@@ -22,9 +29,17 @@ const base = (over = {}) => ({
   // the store would never persist. Nothing failed, because readinessOf and
   // validateDraftForSlot read the field without validating it -- so the
   // fixture could hold an unpersistable value indefinitely.
-  priceSource: 'comp', packet: { source: 'test' },
+  priceSource: 'comp', packet: { packetSchemaVersion: 1, source: 'test' },
   createdAt: 1, updatedAt: 1, ...over,
 });
+
+/* Attach the input fingerprint a writer would have stored, AFTER overrides are
+ * applied -- base({price: 999}) must fingerprint 999, or the fixture would
+ * describe a packet that does not cover its own row. */
+function withFingerprint(row) {
+  if (!Object.prototype.hasOwnProperty.call(row, 'packet') || row.packet == null) return row;
+  return { ...row, packetInputs: packetInputFingerprint(row) };
+}
 
 /* WHY THIS EXISTS
  *
@@ -243,9 +258,35 @@ console.log('\nCase 15 — the fixtures reach the states they are named for');
    * was not a wire key at all; it was this. */
   const codesOf = (d) => validateDraftForSlot(d, d.slot).violations.map((v) => v.code);
 
-  ok('base() carries a packet key, so it makes no provenance finding',
+  /* CHANGED, and the old wording is kept here because it names the bug.
+   *
+   * This used to assert: "base() carries a packet KEY, so it makes no
+   * provenance finding" -- and that was literally true of the gate, which was
+   * `!hasOwnProperty(draft, 'packet')`. Key presence alone silenced the
+   * finding, which meant `packet: { source: 'test' }` -- not a packet, no
+   * schema version, no relation to the price -- counted as provenance for a
+   * $250 price.
+   *
+   * The gate now requires the packet to COVER the row: a recorded input
+   * fingerprint that still matches the draft's current price and title. So the
+   * assertion is no longer about a key existing; it is about the snapshot
+   * actually describing this price. The fixture had to gain a fingerprint to
+   * keep reaching the state its name claims. */
+  ok('base() carries a packet that COVERS its price, so it makes no provenance finding',
      Object.prototype.hasOwnProperty.call(base(), 'packet')
+     && base().packetInputs === packetInputFingerprint(base())
      && !codesOf(base()).some((c) => c === VIOLATION.NO_PROVENANCE || c === VIOLATION.SELLER_PRICED));
+
+  /* The new negative control, and the reason the change was worth making: a
+   * packet whose recorded inputs no longer match the draft is not provenance.
+   * Reprice the row without rebuilding the packet and the finding returns. */
+  ok('a repriced draft whose packet was NOT rebuilt raises NO_PROVENANCE again',
+     codesOf({ ...base(), price: 999 }).includes(VIOLATION.NO_PROVENANCE),
+     JSON.stringify(codesOf({ ...base(), price: 999 })));
+
+  ok('and a packet key with NO recorded inputs is not provenance either',
+     codesOf((() => { const r = { ...base() }; delete r.packetInputs; return r; })())
+       .includes(VIOLATION.NO_PROVENANCE));
 
   ok('noPacket() genuinely removes the key',
      !Object.prototype.hasOwnProperty.call(noPacket(), 'packet'));

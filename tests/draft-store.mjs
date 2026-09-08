@@ -420,7 +420,19 @@ const pkBase = () => ({
   draftId: 'drf_' + 'a'.repeat(32), instanceId: 'i1', sku: 's1',
   slot: 'ebay:fixed-price', title: 'T', price: 10,
 });
-const pk_stored = (extra) => JSON.stringify({ ...DS.buildDraft(pkBase()), ...extra });
+// A `packet` in `extra` is routed THROUGH buildDraft rather than spread over
+// its output. Spreading bypassed the writer, which is now what records the
+// input fingerprint beside the packet, so a spread fixture arrived looking
+// like a packet stored by no known writer -- and read as STALE
+// (PACKET_INPUTS_UNRECORDED) instead of exercising the version axis these
+// checks are about. The fixture was wrong in a way that only became visible
+// once absence stopped being read as agreement.
+const pk_stored = (extra = {}) => {
+  const { packet, ...rest } = extra;
+  const base = packet === undefined ? DS.buildDraft(pkBase())
+                                    : DS.buildDraft({ ...pkBase(), packet });
+  return JSON.stringify({ ...base, ...rest });
+};
 
 check('a draft with no packet reads clean',
       DS.readStoredDraft(pk_stored({})).packetStatus === undefined);
@@ -465,5 +477,92 @@ const pk_tomb = DS.readStoredDraft(JSON.stringify({
 }));
 check('a tombstone is still DELETED regardless of what packet it carries',
       pk_tomb.ok === false && pk_tomb.error === DS.ERR.DELETED);
+
+// ── Lane A: a packet may not outlive the inputs it was built from ──────────
+//
+// The version check answers "can this reader parse the snapshot". It cannot
+// answer "does the snapshot still describe this draft", and that second
+// question is the one that shows a WRONG NUMBER rather than an error: a
+// perfectly current v1 packet priced at $100 sitting on a draft the seller
+// has since repriced to $500.
+//
+// Before this, `applyEdit` spread `{...current}`, so the packet was carried
+// across a reprice byte-for-byte and `readStoredDraft` returned it as
+// CURRENT / usable. Nothing was wrong with the packet. It was simply about a
+// price that no longer existed.
+console.log('\na packet may not outlive the inputs it was built from');
+
+const laneA = (over = {}) => DS.buildDraft({
+  draftId: 'd_laneA', instanceId: 'i_laneA', sku: 'sku_laneA',
+  slot: 'ebay:fixed-price', title: 'Charizard Base Set Holo', price: 100,
+  rev: 1, priceSource: 'comp',
+  packet: { packetSchemaVersion: 1, pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
+  ...over,
+});
+
+const la_fresh = DS.buildDraft(laneA());
+check('the writer records the inputs a packet was built from',
+      typeof la_fresh.packetInputs === 'string' && la_fresh.packetInputs.length > 0);
+check('and a packet read back unedited is CURRENT and usable',
+      DS.readStoredDraft(JSON.stringify(la_fresh)).packetUsable === true
+      && DS.readStoredDraft(JSON.stringify(la_fresh)).packetStatus === 'CURRENT');
+
+// The defect, pinned. Note this goes through applyEdit -- the real edit path,
+// not a hand-built row -- so it fails if the carry-forward ever returns.
+const la_repriced = DS.applyEdit(la_fresh, { price: 500 }, { expectedRev: la_fresh.rev });
+const la_read     = DS.readStoredDraft(JSON.stringify(la_repriced));
+check('\ud83d\udd34 a reprice through applyEdit still carries the packet bytes forward',
+      la_repriced.packet && la_repriced.packet.pricing.listPrice === 100 && la_repriced.price === 500,
+      'the edit path does not know about packets, and must not have to');
+check('\ud83d\udd34 but the reader refuses it as STALE rather than showing $100 for a $500 draft',
+      la_read.packetUsable === false && la_read.packetStatus === 'STALE'
+      && la_read.packetReason === 'PACKET_INPUTS_CHANGED');
+check('and no packet is handed to the caller to render',
+      la_read.packet === null);
+check('while the draft itself reads fine -- advisory snapshot, authoritative draft',
+      la_read.ok === true && la_read.draft.price === 500);
+check('and the stale bytes are PRESERVED, not deleted',
+      !!la_read.packetRaw && la_read.packetRaw.pricing.listPrice === 100);
+
+// Title is a packet input too, because the packet carries title.text.
+const la_retitled = DS.applyEdit(la_fresh, { title: 'Charizard Base Set' }, { expectedRev: la_fresh.rev });
+check('a title edit also makes the packet stale',
+      DS.readStoredDraft(JSON.stringify(la_retitled)).packetStatus === 'STALE');
+
+// ...but an edit that cannot have changed a packet field must NOT invalidate.
+// An over-broad invalidation would be its own defect: it would throw away a
+// good snapshot, and re-earn a NO_PROVENANCE warning, for editing a note.
+const la_qty   = DS.applyEdit(la_fresh, { quantity: 4 },        { expectedRev: la_fresh.rev });
+const la_notes = DS.applyEdit(la_fresh, { notes: 'ship Monday' }, { expectedRev: la_fresh.rev });
+check('a quantity edit does NOT invalidate the packet',
+      DS.readStoredDraft(JSON.stringify(la_qty)).packetUsable === true);
+check('nor does a notes edit',
+      DS.readStoredDraft(JSON.stringify(la_notes)).packetUsable === true);
+
+// Absence is not agreement. A packet stored by a path that records no
+// fingerprint cannot be shown to match, so it is stale -- the same rule the
+// version check applies to a malformed version.
+const la_legacy = { ...la_fresh };
+delete la_legacy.packetInputs;
+check('a packet with no recorded inputs is stale, not assumed current',
+      DS.readStoredDraft(JSON.stringify(la_legacy)).packetStatus === 'STALE'
+      && DS.readStoredDraft(JSON.stringify(la_legacy)).packetReason === 'PACKET_INPUTS_UNRECORDED');
+
+// STALE and INCOMPATIBLE are different facts and must not collapse into one
+// message: one means "recompute", the other means "your app is behind".
+const la_ahead = DS.buildDraft(laneA({ packet: { packetSchemaVersion: 99 } }));
+check('a version-ahead packet is INCOMPATIBLE, not STALE',
+      DS.readStoredDraft(JSON.stringify(la_ahead)).packetStatus === 'INCOMPATIBLE');
+
+// The provenance finding follows the same rule: a packet that does not cover
+// the current price is not provenance for it. This is deliberately NOT
+// manufacturing provenance to clear a warning -- it is letting the warning
+// return when the thing that justified silencing it stopped being true.
+const codesFor = (d) => DS.validateDraftForSlot(d, 'ebay:fixed-price').violations.map((v) => v.code);
+check('a covered price makes no provenance finding',
+      !codesFor(la_fresh).includes(DS.VIOLATION.NO_PROVENANCE));
+check('\ud83d\udd34 a repriced draft whose packet was not rebuilt raises NO_PROVENANCE again',
+      codesFor(la_repriced).includes(DS.VIOLATION.NO_PROVENANCE),
+      'the price it documented is gone; nothing accounts for the new one');
 
 done();

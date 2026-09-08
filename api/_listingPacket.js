@@ -71,7 +71,60 @@ export const PACKET_COMPAT = {
   CURRENT:      'CURRENT',
   MIGRATED:     'MIGRATED',
   INCOMPATIBLE: 'INCOMPATIBLE',
+  // A readable packet of the right version that no longer describes the draft
+  // it is attached to. Separate from INCOMPATIBLE on purpose: nothing is wrong
+  // with the record, it is simply no longer current, and the two need
+  // different messages to a seller ("refresh the app" vs "recompute").
+  STALE:        'STALE',
 };
+
+/**
+ * ── Which draft fields the packet is a function of ──────────────────────────
+ *
+ * Declared in the packet module rather than the store, because the packet is
+ * the thing that depends on them: whoever adds a field to the packet is the
+ * one who must add it here, in the file they are already editing.
+ *
+ * `price` is here because the packet carries `pricing.listPrice`; `title`
+ * because it carries `title.text`. `quantity` and `notes` are deliberately
+ * absent — the packet does not derive from them, and listing them would
+ * invalidate packets on edits that cannot have changed a number.
+ */
+export const PACKET_INPUT_FIELDS = ['price', 'title'];
+
+/**
+ * A fingerprint of the draft inputs a packet was built from.
+ *
+ * ── Why a stored fingerprint instead of invalidating on edit ───────────────
+ *
+ * The obvious fix for a stale packet is to drop it in `applyEdit` when the
+ * price changes. That fix is one write path wide. `applyEdit` is not the only
+ * thing that can change a price — a migration, a repair script, a future
+ * bulk-reprice, or simply the next edit path someone adds are all free to
+ * write a draft record without knowing packets exist, and each one silently
+ * reintroduces the same stale display.
+ *
+ * So staleness is DERIVED AT READ TIME by comparing the fingerprint stored
+ * beside the packet against the draft as it actually is now. A write path
+ * that has never heard of packets cannot defeat it: changing the price changes
+ * the recomputed fingerprint, and the mismatch is what makes the packet
+ * unusable. Nothing has to remember to invalidate.
+ *
+ * Absence is not agreement. A packet stored with no fingerprint at all cannot
+ * be shown to still match, so it reads as stale rather than as current —
+ * the same "unknown provenance is not current" rule the version check uses.
+ */
+export function packetInputFingerprint(draft = {}) {
+  const parts = PACKET_INPUT_FIELDS.map((f) => {
+    const v = draft ? draft[f] : undefined;
+    // null and undefined are the same fact here (no value) and must fingerprint
+    // identically, or a draft would read as stale merely for having been
+    // rewritten by a path that omits an absent field instead of nulling it.
+    if (v === null || v === undefined) return `${f}=\u0000`;
+    return `${f}=${typeof v}:${String(v)}`;
+  });
+  return parts.join('|');
+}
 
 /**
  * Registered forward migrations, keyed by the version being migrated FROM.

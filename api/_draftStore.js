@@ -1,4 +1,4 @@
-import { readStoredPacket, PACKET_COMPAT } from './_listingPacket.js';
+import { readStoredPacket, PACKET_COMPAT, packetInputFingerprint } from './_listingPacket.js';
 // api/_draftStore.js
 //
 // C1 — authoritative persistence for listing drafts.
@@ -302,7 +302,15 @@ export function validateDraftForSlot(draft, slot = draft && draft.slot) {
   // that eBay refuses, and the slot rules refuse it as ZERO_PRICE rather than
   // mistaking it for absence.
   const hasPrice = draft && draft.price !== null && draft.price !== undefined;
-  if (hasPrice && !Object.prototype.hasOwnProperty.call(draft, 'packet')) {
+  // Presence of a packet KEY is not provenance for the price the draft holds
+  // now. A packet built against a different price documents the origin of a
+  // number that is no longer on the draft, so it leaves this price exactly as
+  // unaccounted-for as having no packet at all. Read via the shared
+  // fingerprint so this cannot disagree with what the reader refuses.
+  const packetCovers = Object.prototype.hasOwnProperty.call(draft || {}, 'packet')
+    && typeof draft.packetInputs === 'string'
+    && draft.packetInputs === packetInputFingerprint(draft);
+  if (hasPrice && !packetCovers) {
     if (draft.priceSource === PRICE_SOURCE.SELLER) {
       push(VIOLATION.SELLER_PRICED, 'price', PRICE_SOURCE.SELLER);
     } else {
@@ -394,6 +402,32 @@ export function readStoredDraft(stored) {
   // gone".
   if (d.packet !== undefined && d.packet !== null) {
     const read = readStoredPacket(d.packet);
+
+    // Staleness is checked SEPARATELY from version compatibility, and after
+    // it. A packet can be perfectly readable and still describe a price the
+    // seller has since changed — which is the more common failure of the two,
+    // and the one that shows a wrong number rather than an error.
+    //
+    // `packetInputs` absent means the packet was stored before this check
+    // existed, or by a path that does not record it. That cannot be read as
+    // agreement: an unknown fingerprint is not a matching one, so it is stale.
+    const liveInputs   = packetInputFingerprint(d);
+    const storedInputs = typeof d.packetInputs === 'string' ? d.packetInputs : null;
+    const stale        = storedInputs === null || storedInputs !== liveInputs;
+
+    if (read.usable && stale) {
+      // Same asymmetry as an incompatible packet: the draft stays fully
+      // readable, the snapshot is refused, and the bytes are preserved.
+      result.packet       = null;
+      result.packetStatus = PACKET_COMPAT.STALE;
+      result.packetUsable = false;
+      result.packetReason = storedInputs === null
+        ? 'PACKET_INPUTS_UNRECORDED'
+        : 'PACKET_INPUTS_CHANGED';
+      result.packetRaw    = d.packet;
+      return result;
+    }
+
     result.packet       = read.usable ? read.packet : null;
     result.packetStatus = read.status;
     result.packetUsable = read.usable;
@@ -487,6 +521,9 @@ export function buildDraft(input = {}) {
       throw new Error(`${ERR.FIELD_INVALID}:packet:not-an-object`);
     }
     draft.packet = input.packet;
+    // Recorded from the draft being built, not from the caller: a caller that
+    // could supply its own fingerprint could declare a stale packet fresh.
+    draft.packetInputs = packetInputFingerprint(draft);
   }
   return draft;
 }
