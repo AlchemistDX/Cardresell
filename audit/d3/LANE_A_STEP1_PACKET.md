@@ -638,20 +638,29 @@ not two functions — the rule that has bitten this codebase ten times.
 Implementation lands with the forwarding work, not before it; this section is
 the definition the forwarding gate asked for.
 
-## §13 — The estimate, on the record
+## §13 — Both percentages are superseded estimates
 
-The reviewer offers **provisionally 75–80% seller-reachable**, reasoning that
-the packet block is internally implemented and still unavailable to sellers.
-That reasoning is sound and §11b strengthens it: the block was not merely
-unread, it was unreadable, so its seller-reachable contribution was zero rather
-than partial.
+There is **no current Phase 1 completion percentage for this project.** Two
+have been offered and both have been withdrawn by the person who offered them:
 
-It is recorded as **the owner's provisional figure, not an audited one.** The
-80–85% was withdrawn in §10c because its basis had not been checked, and 75–80%
-is arrived at by adjusting that same unchecked basis — a better-reasoned number
-resting on the same unaudited foundation. Recording it as provisional is
-honest; presenting it as the output of the per-block pass would not be. The
-per-block reachability pass remains the thing that replaces both.
+| Figure | Origin | Status |
+|---|---|---|
+| **80–85% seller-reachable** | Owner's earlier estimate | **Superseded.** Withdrawn in §10c: its basis had never been checked. |
+| **75–80% seller-reachable** | Reviewer's adjustment of the same basis, offered provisionally | **Superseded.** Withdrawn by the reviewer on 2026-09-08. |
+
+Neither is a current owner figure, and neither should be quoted forward. The
+second was never independent of the first — it adjusted the same unaudited
+foundation, so withdrawing the foundation withdraws both. An earlier version of
+this section recorded 75–80% as "the owner's provisional figure"; that framing
+is wrong twice over, since it was the reviewer's figure and it is no longer
+offered. Corrected here rather than deleted, because the mistake is the useful
+part: a number survives by being repeated, not by being verified.
+
+**What replaces them.** Progress is measured against the seller workflow and
+the original Phase 1 requirements, not a percentage. For this lane the
+milestone is stated as a behaviour: *a stored packet that the seller can
+review, refresh and copy.* That is either true or it is not, on a given commit,
+and it does not average.
 
 **Sweep counts are leads, not measurements.** Per review, the §10a and §10b
 counts stand as discovery evidence pending classification of externally invoked
@@ -661,3 +670,320 @@ dispatch and interpolated `onclick`, and the `startTierCheckout` /
 moved 38 rows from "missing capability" to "superseded duplicate". The
 remaining classes are not yet done, so no completion percentage may be derived
 from these numbers.
+
+---
+
+## §14 — The four focused checks, and the two qualifications
+
+Commits `b8042ff` and `16f4a29` on `phase1-block-d`. Nothing pushed; `origin/main`
+is still `9aaf326`. Suites run individually with `timeout 240 node tests/<name>.mjs`;
+`tests/run-all.sh` was not run.
+
+### §14a — Bind the packet to the card, not only to its price
+
+**The check.** "Confirm that another card with the same title and price cannot
+inherit the packet."
+
+It could. Before this change `PACKET_INPUT_FIELDS` was `['price',
+'priceSource', 'title']`, so a packet built for one card covered a draft for a
+different card whenever the display title and price matched — a reprint, or the
+same card in two sets. That is not a narrow leak: **identity is most of a
+packet.** `packet.sku`, `packet.category`, `packet.aspects` and
+`packet.condition` are all derived from the card row, so card B's draft would
+have shown card A's category and aspect values as its own.
+
+**The projection now.** `api/_listingPacket.js`:
+
+```js
+export const PACKET_INPUT_FIELDS = ['sku', 'slot', 'price', 'priceSource', 'title'];
+export const PACKET_INPUT_PROJECTION = 2;
+```
+
+`sku` is the existing immutable identity and `slot` the existing immutable
+listing slot, as the review suggested — no new identity was invented.
+`packetInputFingerprint` emits `v=2|` as a prefix inside the fingerprint
+string, so a stamp taken under the narrow projection can never equal one taken
+under the wide projection. Without that prefix, widening the field list would
+have silently accepted every old three-field stamp that happened to collide.
+
+**Evidence.** `tests/draft-store.mjs`, three new assertions:
+
+- a packet stamped for `sku_laneA` attached to a draft for `sku_OTHER_CARD` at
+  identical title and price → `packetUsable === false`, `packetStatus === 'STALE'`;
+- the draft itself still reads (`ok === true`) — an unusable packet is not a
+  broken draft;
+- a packet stamped for `ebay:fixed-price` does not cover a draft in
+  `ebay:auction`.
+
+**And the opposite direction,** which is what makes a projection useful rather
+than merely strict: a notes-only edit leaves the packet `CURRENT` and leaves
+its bytes byte-identical. A projection that invalidated on every edit would
+teach sellers to ignore the staleness signal.
+
+`slot` is in the projection even though no edit path can change it today.
+"No edit path changes it today" is a claim about `normalizePatch`, not about
+the packet, and the fingerprint should not depend on another module's current
+behaviour.
+
+### §14b — The card row is now stored, and why that was forced
+
+A server-side rebuild needs the card row: `buildListingPacket(card, ctx)`
+derives identity, title, category, aspects and condition from it. The draft
+record did not carry it.
+
+Three ways to obtain it, two of which do not work:
+
+1. **Re-derive from `sku`.** Impossible. `skuFor` is
+   `sha256(identityString(row)).slice(0, N)` (`api/_cardIdentity.js:386`), and
+   there is no card-by-sku lookup anywhere in `api/` — `grep -rln
+   "cardById\|getCard\|fetchCard\|card_id" api/*.js` returns nothing.
+2. **Accept `card` on the rebuild request,** the same trust boundary the create
+   already uses. Works for a client that still holds the scan. **Fails after a
+   page reload,** because the draft GET response never contained the row — and
+   reload is explicitly inside the lifecycle this review requires
+   (create → reload → review → edit → rebuild → reload).
+3. **Persist the row at create.** Adopted.
+
+It is written once, from the same `card` the create derived `sku` and `title`
+from, and it is **immutable**: `normalizePatch` accepts only `title`, `price`,
+`status` and `notes`, so no edit path can move a draft onto a different card.
+It needs no invalidation story because it is the thing `sku` is a digest **of** —
+and if some future repair script did rewrite it, the widened fingerprint now
+covers `sku` and the packet would refuse to cover the row rather than quietly
+describing the wrong card.
+
+**Known limitation, stated rather than discovered later.** Drafts created
+before this commit have no stored row. A rebuild on one of those throws
+`PACKET_REBUILD_NO_CARD_ROW` — refused explicitly, not built from a partial
+row, because a packet whose category and aspects came from nowhere is worse
+than no packet. This is a different question from §14g: §14g establishes that
+no deployed code ever wrote a *packet*; it does not establish anything about
+drafts, which the deployed create path does write.
+
+### §14c — One builder, one attach
+
+Two functions now exist where the assembly used to be inline in
+`normalizeCreateInput`:
+
+- `buildPacketFor(card, { pricingContext, slot, price, priceSource, titleMax, now })`
+  in `api/drafts.js` — the only place a packet context is assembled. Create and
+  rebuild both call it. `slot` is documented on it as **the one input the
+  builder cannot derive**: the builder sees `maxTitleLength`, never the slot, so
+  a caller that forgets it stamps a fingerprint no real draft can match and the
+  packet reads stale forever. Fail-closed, but silently — hence the note.
+- `attachPacket(draft, packet)` in `api/_draftStore.js` — the only place a
+  packet and the fingerprint **it** stamped are recorded together. `buildDraft`
+  delegates to it. Passing `null` removes both, because a fingerprint with no
+  packet leaves the next reader comparing against nothing.
+
+`titleMaxForSlot(slot)` was also extracted, for the same reason: a rebuild
+under a different title bound would produce a title the create would not have
+stored, and the difference would surface as an unexplained `dropped` segment.
+
+### §14d — The rebuild is a PATCH, with the conditional write it already had
+
+Per the review, no new endpoint. One rule:
+
+> **A PATCH carrying `pricingContext` regenerates the packet from the
+> post-edit values. A PATCH without it does not.**
+
+That serves both cases: `PATCH {price, pricingContext}` is edit-and-recompute;
+`PATCH {pricingContext}` with no edit fields **is** the explicit recompute.
+
+A PATCH *without* `pricingContext` deliberately leaves the packet alone.
+Rebuilding from nothing would produce a packet with no declared fee revision —
+`MISSING_FEE_MODEL_REVISION`, `blocked: true` — and overwrite a previously good
+snapshot with a worse one, on an edit the seller made to their notes. A stale
+packet is more useful than that: it still records what it was built from, and
+the read gate already reports it as unusable rather than showing it as current.
+
+**Revision and retry protection.** The rebuild sits in
+`api/_draftService.js updateDraft` **between `applyEdit` and `putDraft`**, and
+both halves of that placement carry weight:
+
+- *Post-edit*, because the packet must describe the draft that will be stored.
+  Building from `cur.draft` would reproduce the defect this lane opened with.
+- *Before `putDraft`*, because `putDraft` → `claimRevision(kv, sub, draftId,
+  next.rev, …)` **is** the conditional write. A concurrent edit that lands first
+  takes the revision, this claim fails `REV_CONFLICT`, and the rebuilt packet is
+  discarded unwritten. That is the reviewer's race exactly — rev 7 captured,
+  seller edits to rev 8, the old build completes producing a rev-7-shaped packet,
+  and the attachment is rejected. **No new mechanism was added**, because the
+  packet rides the same record as the edit under one claim. There is deliberately
+  **no `await` between the build and the claim**, and the build is pure and
+  synchronous, so no interleaving point exists inside the window.
+
+### §14e — Retry identity: exclude the packet, and *therefore* include the context
+
+`packet` was already in `DERIVED_FIELDS` for `draft-create`, and correctly so:
+it stamps a build-time clock, so an identical request retried three seconds
+after a dropped response fingerprints differently and would be refused as key
+reuse — turning ordinary network retry, the thing idempotency exists to make
+safe, into a hard failure.
+
+But excluding it only kept its meaning once the **declared context counted**,
+and it did not. `pricingContext` was read locally in `normalizeCreateInput` and
+never reached the fingerprint. Consequence: the same key sent twice with
+`feeModelRevision: 7` and then `8` **replayed the first answer**, so the seller
+kept a packet whose declared fee revision was not the one their client runs —
+and a replay looks like a success, so nothing reported it.
+
+Now declared:
+
+```js
+'draft-create': {
+  sku: 'id', instanceId: 'id', slot: 'token', price: 'money',
+  title: 'text', strategy: 'token', priceSource: 'token',
+  pricingContext: 'digest',
+}
+```
+
+`digest` is a new kind that accepts a plain object and refuses arrays and
+non-objects. Key order needs no special handling: `canonicalize` already sorts
+keys at every depth, so a client that rebuilds the object in a different
+property order fingerprints identically.
+
+`card` is **derived**, and the existing docblock had already argued it: the row
+is represented by `sku`, a sha256 over its identity axes, and `sku` counts. Two
+creates whose rows differ anywhere identity reads produce different skus and
+conflict on that field. Two creates whose rows differ only outside those axes
+are the same card, so replaying the first is the correct answer rather than a
+missed conflict.
+
+### §14f — Quote age: the defect, asserted rather than described
+
+**The check.** "Rebuilding now must not make an earlier retrieval appear newer."
+
+It would have. `stampPriceBasisReporting` computed
+`retrievedAt = new Date(now - cacheAgeSec * 1000)`. `cacheAgeSec` is a
+**duration**, meaningful only against the clock that read it. Converting it is
+right on a create, where the build and the read are the same moment. On a
+rebuild it is wrong, and the test now asserts the wrong number on purpose:
+
+| | quote read | packet built | `retrievedAt` produced |
+|---|---|---|---|
+| create | 12:00 | 12:10 | 12:00 ✓ |
+| rebuild, same duration re-converted | 12:00 | 13:00 | **12:50** ✗ |
+| rebuild, absolute declared | 12:00 | 13:00 | 12:00 ✓ |
+
+An hour-old quote reading as ten minutes old, with nothing reporting it.
+
+`basisMeta.retrievedAt` (absolute ISO) is now accepted and **preferred** when
+present, so the answer no longer depends on when the rebuild ran. The relative
+form stays supported because the create path legitimately has only that. A
+rebuild may carry both — the client's cached basis still holds the duration it
+was built with — and absolute wins.
+
+Two subsidiary rules:
+
+- **A future timestamp is refused, not clamped**: `retrievedAt: null` plus
+  `PRICE_BASIS_RETRIEVAL_UNPARSEABLE`. Clamping would convert a wrong client
+  clock into a plausible retrieval time, the exact fabrication the null policy
+  exists to prevent. `RETRIEVAL_SKEW_MS = 60_000`, sized to forgive a fast
+  browser and nothing more.
+- **`PRICE_BASIS_AGE_ABSENT` is suppressed** when the absolute form is usable.
+  A "no retrieval time" warning printed beside a retrieval time is a warning
+  that wrongly appears, and those are noise.
+
+`metadata.generatedAt` and `priceBasis.retrievedAt` remain separate fields and
+the test pins both: generated 13:00, retrieved 12:00, `datedBySource: false`.
+Generating bytes is not re-fetching a source.
+
+### §14g — Qualification 2: "no packet has been read" ≠ "no packet has been stored"
+
+Accepted, and answered from **writer history** rather than from the absence of
+reads.
+
+Commits anywhere in this repository's history capable of writing a `packet`
+field: `52c7164`, `3db7169`, `db396da`, `0251642`, `0c560aa`, `5c7cb28`,
+`937c546`.
+
+```
+$ git merge-base --is-ancestor <each of the seven> origin/main
+→ NO, for every one
+$ git grep -c "packet" origin/main -- api/ js/
+→ (no output)
+```
+
+The shipped tree contains **zero** mentions of `packet` in `api/` or `js/`.
+`out.packet = buildListingPacket(...)` was introduced in `3db7169`, which is
+unpushed. So **no deployed code has ever written a packet field, and there is
+no legacy stored packet.** No dual-shape reader is needed — and that conclusion
+rests on positive evidence about writers, not on an inference from reads.
+
+Scope of the claim, stated precisely: this is about *packets*, not about
+drafts. The deployed create path does write drafts, which is why §14b's
+`PACKET_REBUILD_NO_CARD_ROW` path exists.
+
+### §14h — Qualification 1: the reason is now factual, not causal
+
+Accepted. `PACKET_INPUTS_CHANGED` → **`PACKET_INPUTS_DIFFER`**.
+
+"Changed" asserts a history: that the packet once matched and something moved
+it. At `rev === 1` that history is establishable and keeps its own reason,
+`PACKET_INPUTS_NEVER_MATCHED`. At a later revision it is not: a packet that
+never matched, on a draft that has since been edited, arrives at exactly the
+same comparison. The record cannot distinguish them, so the reason now states
+what is observed — the stored fingerprint differs from the live one — and the
+comment notes that a later-revision mismatch is *consistent with* an edit
+without asserting one.
+
+The test carries a line recording what it used to assert and why it changed,
+per the standing rule that commit messages are the one part of the corpus
+nobody greps.
+
+### §14i — Forwarding: four of five fields
+
+`readDraft` in `api/_draftService.js` previously discarded all five packet
+fields, with a long comment explaining that forwarding them would ship a field
+nothing read. **That state has ended** — the producer runs on create and on
+rebuild, and the consumer is next — so the comment was replaced rather than
+deleted, and four fields are forwarded: `packet`, `packetStatus`,
+`packetUsable`, `packetReason`.
+
+**`packetRaw` is withheld,** and that is not an oversight either. It is the
+unvalidated stored bytes, kept for diagnosing a record that failed to read.
+Putting it on a seller-facing response would make an unreadable packet's
+contents renderable by any client willing to ignore `packetUsable` — which is
+the whole point of having a `packetUsable` flag.
+
+`api/drafts.js` GET maps `undefined` to `null` / `false` so the wire shape is
+stable whether or not a packet exists.
+
+### §14j — What is NOT done in these two commits
+
+Stated plainly so the milestone is not read as met:
+
+- The client does not yet send `pricingContext` on create (`_crCreateDraft`).
+- The review screen does not yet consume the forwarded envelope, so **the
+  client-declared fee qualification does not yet appear on screen.**
+- The full lifecycle (create → reload → review → edit → rebuild → reload) is
+  not yet exercised end to end, and the requirement that previously displayed
+  packet content and copy-button payloads **disappear** when the packet becomes
+  unusable is not yet implemented or tested.
+
+The milestone — a stored packet the seller can review, refresh and copy — is
+therefore **not met**. Push and deployment remain blocked.
+
+### §14k — Suite results
+
+Run individually, after the two commits:
+
+| Suite | Result |
+|---|---|
+| `listing-packet-offline` | 230 passed, 0 failed |
+| `draft-store` | 135 passed, 0 failed |
+| `draft-crud-e2e` | 159 passed, 0 failed |
+| `draft-review-screen` | 180 passed, 0 failed |
+| `draft-readiness` | PASS |
+| `quick-pricing` | 219 passed, 0 failed |
+| `review-fee-dl` | 21 passed, 0 failed |
+| `accuracy-fee-parity` | 41 passed, 0 failed |
+
+Running these individually does not itself make them offline, and that debt is
+tracked separately from functional release evidence.
+
+**Fixture debt found, not fixed:** `tests/listing-packet-offline.mjs` defines a
+`codes` helper three times at different scopes (lines ~1205, ~1286, ~1376) plus
+a `codesOf` variant. One behaviour, four implementations — the architectural
+rule applies to test helpers too. Logged rather than folded into this pass.
