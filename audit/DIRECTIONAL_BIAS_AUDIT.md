@@ -836,3 +836,45 @@ has never been stated anywhere.** If T2.13 resolves toward excluding the low ask
 this becomes BIAS-11 with a direction already measured. If it resolves the other
 way, the finding is that the seven-item table was incomplete in a direction the
 audit had not looked for, which is worth knowing either way.
+
+
+## BIAS-11 — the grading-upside incremental computed at zero shipping overstates the upside
+
+**Metric:** the incremental figure the grading panel renders,
+`upsideNet = gradedNet - rawNet - GRADING_FEE`, in dollars.
+
+**Truth compared against:** the same figure computed with the seller's actual
+shipping charge through `feeEbay`, not against an alternative panel design.
+
+**Direction: optimistic.** Measured by executing the real `feeEbay` and
+differencing the two legs at `S ∈ {0, 5, 10, 20}`. The figure computed at
+`S = 0` is the **maximum** of the set in every case tested. Shipping charge
+therefore only ever reduces the true incremental upside relative to what a
+`S = 0` computation reports.
+
+**Magnitude, measured:**
+
+| condition | example | deviation at `S = 0` |
+|---|---|---|
+| both legs above $10, within tier | G $80 / R $12 | $0.00 (exact) |
+| raw leg straddles the $10 per-order step | G $80 / R $6 | **$0.10** |
+| no store, graded leg crosses $7,500 | G $9,000 / R $40 | **$2.18** |
+| basic store, graded leg crosses $2,500 | G $2,600 / R $30 | **$15.00** |
+
+**Why it is a bias and not a rounding note:** the error is bounded but its sign
+is constant. A bounded error with a consistent direction is a bias.
+
+**Incidence caution — do not quote the table as an incidence.** These are worked
+cases chosen to exhibit the failure conditions, not a distribution. The
+`$0.00` row is the ordinary case and is exact. What is *not* measured is how
+often real sellers sit in each condition, and the catalog distribution is the
+wrong evidence for that, because it says nothing about which cards sellers
+consult the grading panel for.
+
+**Relationship to BIAS-1:** discovered while verifying the fix for BIAS-1, and it
+is a property of that fix rather than of the code being replaced. The current
+flat `FEES_PCT = 13` has its own, larger error; this item exists so that
+replacing it is not recorded as making the number exact when it makes it exact
+only in the ordinary case.
+
+**Status:** open. Handling is the Q-C follow-up question, not yet decided.
