@@ -28,6 +28,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 import { generateReadFixtures } from './_draftListFixtures.mjs';
+import { readCoreBundle } from './_assetRefs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PW = '/home/user/node_modules/playwright/index.js';
@@ -1039,6 +1040,66 @@ try {
       Number.isFinite(_realAge) && _realAge >= 0,
       `verifiedAgeDays('ebay') = ${_realAge} — a non-finite age would make every ` +
       `boundary case below land on Infinity and assert nothing`);
+
+    /* ---- independent date arithmetic, not borrowed from the app ----
+       Added 2026-09-07 at review request. The boundary cases below take their
+       offset from `verifiedAgeDays`, which is the function under test: that is
+       right for threshold work (it isolates the `>` from the calendar) but it
+       means an age-calculation error would move the offsets and the thresholds
+       together and cancel out. So the calendar is checked ONCE here, against
+       absolute browser time and an explicit audit date, with the expected
+       number computed in the test.
+
+       The rule being pinned is `Math.floor((Date.now() - Date.UTC(y,m,d)) /
+       86400000)` -- UTC-elapsed, floored, anchored at UTC midnight of the
+       stamp. Consequence worth stating because it surprised this harness once:
+       for a `2026-09-01` stamp the answer is 6 at 10:00 EDT on 2026-09-07 and
+       7 at 22:00 EDT the SAME evening, because 22:00 EDT is already
+       2026-09-08T02:00Z. "Six calendar days" and "age 7" are both correct
+       readings of that instant. A local-calendar difference would report 6 all
+       day; this function does not, by design -- floor on UTC elapsed never
+       reports an audit as fresher than it is, wherever the reader sits. */
+    const _fixture = [
+      ['2026-09-01', '2026-09-07T14:00:00Z', 6],   // 10:00 EDT -> 6d 14h
+      ['2026-09-01', '2026-09-08T02:06:00Z', 7],   // 22:06 EDT same evening -> 7d 2h
+      ['2026-09-01', '2026-09-01T00:00:00Z', 0],   // the instant of the audit
+      ['2026-09-01', '2026-09-01T23:59:59Z', 0],   // same UTC day, not yet a day old
+      ['2026-09-01', '2026-09-02T00:00:00Z', 1],   // exactly one day
+      ['2026-03-01', '2026-03-31T12:00:00Z', 30],  // across a month end
+      ['2026-02-27', '2026-03-01T00:00:00Z', 2],   // non-leap February
+    ];
+    for (const [stamp, at, want] of _fixture) {
+      const m = stamp.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const anchorMs = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+      const got = Math.floor((Date.parse(at) - anchorMs) / 86400000);
+      T.check(`age arithmetic: ${stamp} read at ${at} is ${want} days`,
+        got === want, `got ${got}`);
+    }
+    /* The same rule through the REAL reader and the REAL config stamp, so the
+       fixture above is not merely checking a re-implementation of itself. */
+    {
+      /* The stamp is read from the bundle the document loads, not from a
+         `window.PLATFORMS` global -- `PLATFORMS` is module-scoped and exposing
+         it would be a test-only production global, which is forbidden. Same
+         regex shape `accuracy-fee-parity.mjs` uses on the same config. */
+      const _src = readCoreBundle().source;
+      const _m = _src.match(/\n\s*ebay:\s*\{[\s\S]*?feeAuditedOn:\s*'([^']*)'/);
+      const stamp = _m && _m[1];
+      T.check('the ebay stamp is a plain ISO date, so the arithmetic is defined',
+        /^\d{4}-\d{2}-\d{2}$/.test(stamp || ''), `feeAuditedOn = ${JSON.stringify(stamp)}`);
+      const sm = String(stamp).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const anchorMs = Date.UTC(+sm[1], +sm[2] - 1, +sm[3]);
+      for (const at of ['2026-09-07T14:00:00Z', '2026-09-08T02:06:00Z', '2026-10-17T00:00:00Z']) {
+        const want = Math.floor((Date.parse(at) - anchorMs) / 86400000);
+        await page.clock.setFixedTime(new Date(Date.parse(at)));
+        const got = await page.evaluate(() => window.verifiedAgeDays('ebay'));
+        T.check(`verifiedAgeDays('ebay') at ${at} is ${want}`,
+          got === want, `got ${got} from stamp ${stamp}`);
+      }
+      await page.clock.setFixedTime(new Date(_base));
+      await page.evaluate(() => window._reviewPaint());
+    }
+
     const atAge = async (days) => {
       await page.clock.setFixedTime(new Date(_base + (days - _realAge) * 86400000));
       await page.evaluate(() => window._reviewPaint());
