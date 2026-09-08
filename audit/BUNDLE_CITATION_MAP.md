@@ -1,6 +1,18 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.9fd82d6e.js` (21,345 lines).** New work cites that hash.
+**Live bundle: `js/core.2c7cf451.js` (21,353 lines).** New work cites that hash.
+
+> **`9fd82d6e` was live for one commit and is NOT in the retired-generation
+> tables either.** T2.9 landed on it, then a follow-up removed the D3 review
+> screen's duplicate sales-tax row (eight lines: a docblock and one ternary),
+> which changed its bytes and its name a second time in the same sitting:
+> `4c65092e` → `9fd82d6e` → `2c7cf451`. The T2.9 return packet cites `9fd82d6e`
+> because it was written against it; those citations sit **above** the review
+> screen at ~21,190, and the follow-up inserted only at that point, so every
+> T2.9 citation below ~6,247 and above ~21,190 still resolves at the same line
+> against `2c7cf451`. The eight inserted lines shift only citations at or below
+> `_reviewFeesHtml`. **Unresolved count re-derived by running the tool again
+> after this rename: still 109.**
 `24cd52cb` joined the retired set at the BIAS-6 rename on 2026-09-08 (commit
 `fa4739b`); `7f9c03ad` joined it at the D3 closeout rename on 2026-09-07.
 

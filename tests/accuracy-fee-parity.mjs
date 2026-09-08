@@ -165,6 +165,22 @@ T.check('tax: the render reads the disclosure from venueTaxNote(pid)',
   /taxNote:\s*venueTaxNote\(p\.pid\)/.test(bundle),
   'the render no longer sources taxNote from the shared helper');
 
+/* The second surface. The D3 review screen builds its own fee table and used to
+   emit the sales-tax row unconditionally -- right only because that screen is
+   pinned to `ebay:fixed-price` and eBay is `taxOn: true`. Two implementations
+   agreeing by coincidence of scope is the thing rule 1 forbids, so this asserts
+   the review screen routes through the same helper. It names the behaviour
+   ("both surfaces decide it the same way") and evidences the review-screen
+   render site specifically, because the tile-render assertion above cannot see
+   this one. */
+T.check('tax: the review screen also gates its tax row on venueTaxNote(pid)',
+  /venueTaxNote\(pid\)\s*\?\s*_reviewBasisRow\(FEE_DISCLOSURE\.taxLabel/.test(bundle),
+  'the review screen emits the sales-tax row without consulting the shared helper');
+
+T.check('tax: no unconditional _reviewBasisRow tax row survives',
+  !/\$\{_reviewBasisRow\(FEE_DISCLOSURE\.taxLabel/.test(bundle),
+  'an ungated review-screen tax row is still in the bundle');
+
 /* Behaviour, executed. Build the shipped PLATFORMS and the shipped helper in a
    sandbox and ask it about every venue. */
 let taxNoteFor = null;

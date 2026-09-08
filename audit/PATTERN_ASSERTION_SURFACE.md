@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
 **35 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 34; that number, not this sentence, is the
+The highest-numbered entry is instance 35; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1994,3 +1994,32 @@ that does not establish a zero.
 If the answer is "a person, later", it is not recorded — it is *mentioned*. And a
 comment describing a rule is the cheapest possible substitute for the field that
 would enforce it, which is precisely why it keeps getting chosen.
+
+**Fourth rider, found after the T2.9 commit and fixed in a follow-up.** The
+remedy replaced one hardcoded disclosure with a shared helper and asserted that
+*the venue-tile render* reads it. It did. Meanwhile the D3 review screen builds
+its own fee table and was emitting the sales-tax row **unconditionally** —
+`${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, …)}`, no helper, no field. That row
+was correct, but only because the review screen is pinned to
+`CR_REVIEW_FEE_SLOT = 'ebay:fixed-price'` and eBay happens to be `taxOn: true`.
+
+Two implementations of one business behaviour, **agreeing by coincidence of
+scope**. It is the rule-1 failure the project has been bitten by nine times, and
+it survived a remedy explicitly aimed at it — because the assertion named the
+behaviour ("the disclosure comes from the field") but evidenced *one* surface,
+which is this pattern's whole subject. `pid` was already in scope three lines
+above the row, so the fix was a ternary.
+
+The rendered output is **byte-identical today**, proven by executing the shipped
+`PLATFORMS` and `venueTaxNote` against the shipped slot constant rather than by
+reading the code and agreeing with it. The change buys nothing now and
+everything the moment that screen shows a second venue. Two assertions were
+added: one that the review screen consults the helper, one that no ungated
+`_reviewBasisRow(FEE_DISCLOSURE.taxLabel` survives anywhere in the bundle — the
+second exists because the first would pass if someone added a *third*
+unconditional copy elsewhere.
+
+**The generalisable check:** when a remedy replaces a hardcoded value with a
+derived one, grep for the *rendered label*, not for the variable that was
+deleted. The label finds every surface; the variable finds only the one you
+already knew about.

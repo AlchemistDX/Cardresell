@@ -21176,6 +21176,14 @@ function _reviewFeeVerifiedHtml(pid) {
   return `<a href="/accuracy#fees" class="${cls}" data-fee-verified="${state}" title="${_reviewEsc(title)}">${_reviewEsc(text)}</a>`;
 }
 
+/* The sales-tax row here reads `venueTaxNote(pid)` like every other surface.
+ * It used to be emitted unconditionally, which was correct only because this
+ * screen is pinned to one venue and that venue is `taxOn: true`. That is a
+ * second implementation of one business behaviour, agreeing with the first by
+ * coincidence of scope -- the failure mode we have been bitten by nine times.
+ * The rendered output is byte-identical today; the point is that it stays
+ * correct when this screen covers a venue whose answer differs.
+ */
 function _reviewFeesHtml() {
   const d = _reviewState.draft || {};
   const slot = d.slot ? String(d.slot) : '';
@@ -21217,7 +21225,7 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
         <dl class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
-${_reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN)}${feeRows}
+${venueTaxNote(pid) ? _reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN) : ''}${feeRows}
 ${_reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld')}
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </dl>
