@@ -653,7 +653,31 @@ export function applyEdit(current, patch = {}, opts = {}) {
 
   const next = { ...current };
   if (patch.title !== undefined)    next.title    = requireString(patch.title, 'title', { max: TITLE_HARD_MAX });
-  if (patch.price !== undefined)    next.price    = requireMoney(patch.price, 'price', { allowNull: false });
+  if (patch.price !== undefined) {
+    next.price = requireMoney(patch.price, 'price', { allowNull: false });
+    // ── A CHANGED PRICE IS A SELLER-SET PRICE ────────────────────────────
+    //
+    // Compared AFTER normalization, so 400 and 400.00 are the same price and
+    // do not touch attribution. Only a price that actually moved does.
+    //
+    // Without this, the review screen printed a sentence that was knowingly
+    // wrong: a draft created with priceSource 'comp' kept that value forever,
+    // so a seller who typed their own asking price over a comp-derived one was
+    // told the price they typed "was derived from the market data below". The
+    // stale field had been harmless while nothing rendered it; D4 rendered it.
+    //
+    // The basis itself is deliberately NOT dropped. It is still a true record
+    // of what the market said when the draft was made, and it stays useful
+    // next to a seller-set price -- as CONTEXT, which is exactly the role the
+    // review screen derives from priceSource 'seller'. Deleting it would
+    // destroy a fact to fix a label.
+    //
+    // Here rather than in a caller because this is the one edit owner: the
+    // service's updateDraft and the store's own guarded path both come through
+    // applyEdit, so a second copy of the rule is the bug (it is the same
+    // one-behaviour-one-implementation rule that the tombstone TTL learned).
+    if (next.price !== current.price) next.priceSource = PRICE_SOURCE.SELLER;
+  }
   if (patch.notes !== undefined)    next.notes    = requireString(patch.notes, 'notes', { max: 4000, allowEmpty: true });
   if (patch.quantity !== undefined) {
     if (!Number.isInteger(patch.quantity) || patch.quantity < 1) {

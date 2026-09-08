@@ -91,4 +91,76 @@ if (core) {
         'pointing at a retired copy');
 }
 
+// ── Retention: a recorded generation must still be FETCHABLE ────────────────
+//
+// WHY THIS IS A SEPARATE CHECK. Everything above answers "does each name match
+// its bytes?" for the assets index.html references today. That says nothing
+// about whether an OLDER asset a returning browser may still ask for is on
+// disk. The D4 rename used `git mv`, which passed every check above while
+// deleting js/core.86000bf2.js from the working tree — and a reviewer, not a
+// suite, caught it. Git recoverability answers the citation question ("what
+// did line 21938 say then?"); it does not answer the browser question ("does
+// GET /js/core.86000bf2.js return 200?"). Only a file on disk answers that.
+//
+// THE RULE. Every core generation named in the citation map must be present
+// with bytes that hash to its own name, or be listed below as unrecoverable
+// with the reason. Adding a hash to that list is a deliberate, reviewable act;
+// deleting a file is not.
+const MAP = 'audit/BUNDLE_CITATION_MAP.md';
+
+// Hashes no commit holds matching bytes for. These cannot be restored without
+// inventing content, so they are excluded by name and by reason, never by a
+// wildcard. Verified with `git log --all --diff-filter=A` plus a hash of the
+// blob at every commit that carried the path.
+const UNRECOVERABLE = new Map([
+  ['fec7fb3a', 'never committed under this name'],
+  ['611f4efe', 'never committed under this name'],
+  ['b7447fe5', 'never committed under this name (BIAS-6 intermediate)'],
+  ['69b38a85', 'committed empty at 2ffb351 and with non-matching bytes at ' +
+               'fa4739b: no commit holds bytes that hash to 69b38a85'],
+  // Not a generation at all: this is what the bytes committed under the name
+  // core.69b38a85.js actually hash to. The map states it so the mislabel is
+  // legible, and the parser above cannot tell a quoted byte hash from a
+  // filename, so it is excluded here by name rather than by loosening the
+  // parser -- a looser parser would also stop noticing real deletions.
+  ['75f9494e', 'a byte hash quoted in the map, never a filename'],
+]);
+
+const mapPath = new URL('../' + MAP, import.meta.url);
+const mapText = existsSync(mapPath) ? readFileSync(mapPath, 'utf8') : '';
+check(`${MAP} is readable`, mapText.length > 0,
+      'the retention rule is derived from this file; an unreadable map must ' +
+      'fail loudly rather than silently check nothing');
+
+const named = [...new Set(
+  [...mapText.matchAll(/core\.([0-9a-f]{8})\.js/g)].map((m) => m[1])
+    .concat([...mapText.matchAll(/`([0-9a-f]{8})`/g)].map((m) => m[1])),
+)].sort();
+
+check('the citation map names at least one core generation', named.length > 0,
+      'zero matches means the parser stopped matching, not that history is empty');
+
+for (const h of named) {
+  if (UNRECOVERABLE.has(h)) {
+    check(`${h} is a declared-unrecoverable generation`, true, UNRECOVERABLE.get(h));
+    continue;
+  }
+  const rel = `js/core.${h}.js`;
+  const abs = new URL('../' + rel, import.meta.url);
+  const there = existsSync(abs);
+  check(`${rel} is retained on disk`, there,
+        `the citation map records this generation but the file is gone. A ` +
+        `browser holding cached HTML that references it gets a 404; the ` +
+        `fingerprint checks above pass regardless, because they only look at ` +
+        `what index.html references TODAY. Restore it with its committed ` +
+        `bytes (git show <commit>:${rel} > ${rel}) rather than removing the ` +
+        `entry from the map.`);
+  if (!there) continue;
+  check(`${rel} still holds the bytes its name claims`,
+        sha8(readFileSync(abs)) === h,
+        `restored bytes hash to ${sha8(readFileSync(abs))}, not ${h} — a ` +
+        `retained file under a name it does not match is worse than an ` +
+        `absent one`);
+}
+
 done();

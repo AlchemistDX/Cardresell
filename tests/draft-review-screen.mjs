@@ -1824,6 +1824,25 @@ try {
     await page.waitForFunction(() => typeof window.startListingDraft === 'function', { timeout: 15000 });
     await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
 
+    // Record `_crBasis` AS the create leaves, from inside the page. The claim
+    // being evidenced is "the global was populated when the body was built",
+    // and the only place that instant exists is the call itself: reading the
+    // global after the click races the success handler that clears it, and
+    // reading it from the route handler stalls the paused request. This wraps
+    // fetch in the TEST page only -- no production global, no production hook.
+    await page.evaluate(() => {
+      const real = window.fetch;
+      window.__basisAtPost = null;
+      window.fetch = function (input, init) {
+        const url = String((input && input.url) || input || '');
+        const method = String((init && init.method) || (input && input.method) || 'GET');
+        if (method.toUpperCase() === 'POST' && /\/api\/drafts/.test(url)) {
+          window.__basisAtPost = (window._crBasis || {}).sourceUrl || null;
+        }
+        return real.apply(this, arguments);
+      };
+    });
+
     const priceCardB = (u) => page.evaluate((url) => {
       // Deliberately NOT bound: this stands in for a read that happened while
       // card B was on screen, whose binding is to B and not to A.
@@ -1892,9 +1911,19 @@ try {
         + JSON.stringify(posted && posted.pricingContext));
     T.check('\ud83d\udd34 REGRESSION: card B is nowhere in the create body',
       JSON.stringify(posted || {}).indexOf('CARD-B') === -1, JSON.stringify(posted));
-    T.check('the global was populated, so the absence is a refusal, not an empty read',
-      await page.evaluate((u) => (window._crBasis || {}).sourceUrl === u, FOREIGN) === true,
-      'a populated global that does not reach the wire is the whole point of the check');
+    // WAS: the same claim, read with page.evaluate AFTER the click returned.
+    // That read raced the create's success handler, which clears `_crBasis`.
+    // It passed while the bundle was smaller and failed once unrelated work
+    // changed the timing, then passed again on a rerun: the claim was right,
+    // the evidence sampled an instant the claim is not about. It is now
+    // captured in the page as the create leaves, which is exactly when the
+    // create body existed.
+    T.check('the global was populated when the create body was built, so the '
+      + 'absence is a refusal, not an empty read',
+      await page.evaluate(() => window.__basisAtPost) === FOREIGN,
+      'a populated global that does not reach the wire is the whole point of '
+        + 'the check; captured as the request left: '
+        + String(await page.evaluate(() => window.__basisAtPost)));
 
     // ── 3. The legitimate case must still work, or the binding has just
     // deleted comp provenance from every packet.
@@ -1982,6 +2011,9 @@ try {
       retrievedAbsent: !!q('[data-basis-retrieved-absent]'),
       dating: (q('[data-basis-dating]') || {}).getAttribute
         ? q('[data-basis-dating]').getAttribute('data-basis-dating') : null,
+      sourcePublished: (q('[data-basis-source-published]') || {}).getAttribute
+        ? q('[data-basis-source-published]').getAttribute('data-basis-source-published') : null,
+      sourceDatedUnrecorded: !!q('[data-basis-source-dated="unrecorded"]'),
     };
   });
 
@@ -2014,8 +2046,27 @@ try {
         F.packetCompPriced.body.packet.metadata.generatedAt);
       T.check('and the caption does not print the generation time',
         b && b.text.indexOf(F.packetCompPriced.body.packet.metadata.generatedAt) === -1);
-      T.check('PriceCharting publishes no as-of date, so the caption says we read it',
-        b && b.dating === 'retrieval' && /when we read the source/i.test(b.text), b && b.dating);
+      // WAS: 'PriceCharting publishes no as-of date, so the caption says we
+      // read it', asserting dating === 'retrieval' only when datedBySource was
+      // false -- which accepted the other arm, where the SAME retrieval instant
+      // was captioned "The source published this as-of date". Review named the
+      // hole: a datedBySource boolean does not establish that our retrieval
+      // instant is the source's as-of instant, and nothing records the latter.
+      // The caption is now unconditional and the assertion no longer has an
+      // arm to be wrong in.
+      T.check('\ud83d\udd34 the retrieval caption attributes the read to CardResell, never to the source',
+        b && b.dating === 'retrieval'
+          && /CardResell read the source/i.test(b.text)
+          // The retired FALSE claim, specifically. The corrected copy contains
+          // the words "the source published" in a denial, so a bare negative
+          // on that phrase fails on the fixed text -- the assertion has to name
+          // the claim, not the vocabulary.
+          && !/source published this as-of date/i.test(b.text),
+        b && b.dating + ' / ' + b.text);
+      T.check('\ud83d\udd34 no source-published date is shown, because none is recorded',
+        b && b.sourcePublished === null
+          && F.packetCompPriced.body.packet.priceBasis.sourcePublishedAt === undefined,
+        b && b.sourcePublished);
       await ctx.close();
     }
 
@@ -2115,6 +2166,83 @@ try {
         body.indexOf('PriceCharting loose') === -1);
       T.check('and no retrieval instant survives on screen',
         body.indexOf('2026-09-08T12:00') === -1);
+      await ctx.close();
+    }
+
+    // ── 7b. a feed that dates its own data, with no instant recorded ────────
+    // The gap is stated. It is NOT filled with our retrieval time, which is
+    // what the retired caption did.
+    {
+      T.check('setup: the stored basis claims datedBySource with no source instant',
+        F.packetDatedBySource.body.packet.priceBasis.datedBySource === true
+          && F.packetDatedBySource.body.packet.priceBasis.sourcePublishedAt === undefined);
+      const { ctx, page } = await boot(serveRead(F.packetDatedBySource));
+      await openReview(page, F.ids.packetDatedBySource);
+      const b = await basisOf(page);
+      T.check('\ud83d\udd34 the retrieval row is still attributed to CardResell',
+        b && b.dating === 'retrieval' && /CardResell read the source/i.test(b.text), b && b.dating);
+      T.check('\ud83d\udd34 and the missing source date is stated, not substituted',
+        b && b.sourceDatedUnrecorded === true
+          && /was not recorded with this quote/i.test(b.text)
+          && b.sourcePublished === null, b && b.text);
+      T.check('the retrieval instant is not offered as the source date',
+        b && !/source published this as-of date/i.test(b.text), b && b.text);
+      await ctx.close();
+    }
+
+    // ── 7c. a price EDIT re-attributes, and the basis survives as context ───
+    //
+    // The defect this closes: priceSource never moved on an edit, so a seller
+    // who typed over a comp-derived price was told their own number "was
+    // derived from the market data below". The fix is in the edit owner
+    // (applyEdit in api/_draftStore.js), and this asserts the seller-visible
+    // end of it after a real PATCH and a reload.
+    {
+      const before = F.packetCompPriced.body.draft;
+      const after  = F.packetPriceEdited.body.draft;
+      T.check('setup: the draft was created comp-derived and the edit moved the price',
+        before.priceSource === 'comp' && after.price === 365 && after.price !== before.price,
+        after.priceSource + ' / ' + after.price);
+      T.check('\ud83d\udd34 the edit recorded the price as SELLER-set',
+        after.priceSource === 'seller', after.priceSource);
+      T.check('\ud83d\udd34 and the original basis was preserved, not dropped',
+        F.packetPriceEdited.body.packet.priceBasis
+          && F.packetPriceEdited.body.packet.priceBasis.label === 'PriceCharting loose'
+          && F.packetPriceEdited.body.packet.priceBasis.retrievedAt === '2026-09-08T12:00:00.000Z',
+        JSON.stringify(F.packetPriceEdited.body.packet.priceBasis));
+      const { ctx, page } = await boot(serveRead(F.packetPriceEdited));
+      await openReview(page, F.ids.packetPriceEdited);
+      const b = await basisOf(page);
+      T.check('\ud83d\udd34 the screen no longer claims the seller\'s price was derived',
+        b && b.role === 'context' && !/derived from the market data/i.test(b.text),
+        b && b.role);
+      T.check('\ud83d\udd34 it reads as market context beside the price',
+        b && /market context/i.test(b.text) && /you set this asking price yourself/i.test(b.roleNote),
+        b && b.roleNote);
+      T.check('the preserved basis is still fully rendered',
+        b && b.linkText === 'PriceCharting loose' && b.retrievedAttr === '2026-09-08T12:00:00.000Z',
+        b && b.linkText + ' / ' + b.retrievedAttr);
+      const shown = await page.evaluate(() => document.getElementById('reviewWrap').innerText);
+      T.check('\ud83d\udd34 and the rebuilt packet documents the NEW price',
+        /\$365/.test(shown) && !/\$400\.00/.test(shown), shown.slice(0, 120));
+      await ctx.close();
+    }
+
+    // ── 7d. a NOTES-only edit must not move attribution ─────────────────────
+    // The control on 7c: "any edit means the seller set the price" would be a
+    // different false claim, and this is the assertion that forbids it.
+    {
+      T.check('\ud83d\udd34 a notes-only edit leaves the price attribution alone',
+        F.packetNotesEdited.body.draft.priceSource === 'comp',
+        F.packetNotesEdited.body.draft.priceSource);
+      T.check('setup: the notes edit did land',
+        F.packetNotesEdited.body.draft.notes === 'ships Monday',
+        F.packetNotesEdited.body.draft.notes);
+      const { ctx, page } = await boot(serveRead(F.packetNotesEdited));
+      await openReview(page, F.ids.packetNotesEdited);
+      const b = await basisOf(page);
+      T.check('\ud83d\udd34 and the screen still says the price was derived from the basis',
+        b && b.role === 'determining' && /derived from the market data/i.test(b.text), b && b.role);
       await ctx.close();
     }
 

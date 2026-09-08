@@ -51,7 +51,7 @@ Roadmap §1.2 defines four steps. Reconciled:
 |---|---|---|
 | 1 | Scan a card, or select a saved collection row | **Yes.** Both entry points exist and both create drafts — panel `#crSellBtn` (`index.html:2195`) and the Collection row button (`js/core.86000bf2.js:20515`). Server-owned eligibility gates both. |
 | 2 | Choose **Sell** | **Yes.** One create transport, `_crCreateDraft`. |
-| 3 | Receive a prepared listing | **Partial — see §2.** Title, category, aspects, condition and a fee breakdown render. Expected net, shipping breakdown, description and photo state do not. |
+| 3 | Receive a prepared listing | **Partial — see §2.** Title, category, aspects, condition, a fee breakdown, **`Estimated net (item only)`** (`js/core.84f79a1f.js`, `_reviewFeeRow('net', …)`) and **number provenance** (source label, safe link, retrieval instant attributed to CardResell, and whether the price was derived or seller-set — D4; §8) all render. Shipping breakdown, description and photo state do not, and the net stays item-price-only because buyer-paid shipping and tax are not recorded on the draft. |
 | 4 | Copy the prepared fields and continue in eBay's own flow | **Copy: yes** (`Copy title`, `Copy card details`, `Copy everything`, `_reviewCopyPayload`). **Continue in eBay: no** — there is no continuation control anywhere on the review screen; a grep for an eBay URL in the review slice returns nothing but comment text. |
 
 Step 3 is where the gap is, and it is a content gap rather than a plumbing one:
@@ -68,7 +68,7 @@ renderer (`_reviewPacketHtml`, `_reviewFeesHtml`):
 | Title | `title.text` | Yes |
 | Category and aspects | `category`, `aspects` with per-aspect provenance | Yes |
 | Price | draft `price` | Yes |
-| Expected net | **already rendered** as `Estimated net (item only)` — see §7.1; §2's original "absent" reading was wrong | **Yes, with an item-price-only boundary.** The remaining gap is shipping/tax inputs, not the net. |
+| Expected net | **Rendered today.** `Estimated net (item only)` is on the review screen, computed by the shipped forward fee function; §2's original "absent" reading was wrong and is withdrawn (§7.1). Verified by screenshot and by `review-fee-dl` 21/0 + `accuracy-fee-parity` 41/0. | **Yes, with an item-price-only boundary.** The remaining gap is shipping/tax inputs, not the net. |
 | Fee **and shipping** breakdown | no shipping field exists in the packet at all | Fees yes; **shipping no** |
 | Condition guidance | `condition` (`api/_conditionDescriptors.js`) | Condition label yes; guidance text **no** |
 | Description | **no description field exists in the packet** | **No** |
@@ -94,15 +94,17 @@ established reachability, it says so.
 | D2.0 — Readiness | Implemented | **Implemented.** One `identityReadiness()` owner. |
 | D2.1 — Draft list UI | Next | **Implemented this session.** All-drafts screen, paging, server-owned blocker copy, `draft-list-screen` 101/0. |
 | D3 — Review screen | Later | **Implemented this session.** Field rendering by server reason, packet arms, fee breakdown, refresh, copy. `draft-review-screen` 268/0. |
-| **D4 — Number provenance** | Later | **NOT IMPLEMENTED.** The review screen renders no provider, no source URL and no absolute retrieval time. The data exists — `priceBasis` carries `label`, `sourceUrl`, `low/mid/high`, `retrievedAt` (`api/_listingPacket.js:483-496`) and is now correctly bound to its card — but **nothing renders it.** Fee revision is disclosed (`clientDeclaredFeeModelRevision`, shown as "Declared by this app … not verified"). Seller/manual attribution is stored (`priceSource`) but not displayed. |
+| **D4 — Number provenance** | Later | **IMPLEMENTED.** The review screen renders the stored source label, a safely-rendered source link, the absolute retrieval instant labelled **Retrieved by CardResell**, and whether the price was **derived from** that market data or **set by the seller** with the data shown as context. A price edit re-attributes to `seller` at the single edit owner (`api/_draftStore.js:679`), so the role cannot go stale. No source-published date is claimed unless a real source instant is recorded, and none is recorded today. `draft-review-screen` **316/0**. Full write-up: `audit/d4/D4_NUMBER_PROVENANCE.md`. |
 | **D5 — Copy-ready handoff** | Later | **PARTIAL.** One-tap copying is done and tested. The eBay continuation is absent. No publish control — correct, and it must stay absent. |
 | **D6 — New-seller warning** | Later | **NOT IMPLEMENTED.** The seller profile exists (`SELLER_PROFILE_KEYS`, `js/core.86000bf2.js:6000`; default no-store / not-Top-Rated / Level 1–4) and feeds fee arithmetic, but no pre-handoff restriction warning is shown. Requirement stands: show when applicable, **do not invent eligibility**. |
 | **D7 — Local photos** | Later | **NOT IMPLEMENTED.** A grep for listing-photo state returns nothing. Scan-local photos exist and are a different thing. Requirement includes the cross-device limitation copy and no server upload. |
 | E — Gates and telemetry | Partially present, not closed | **Partially present.** Offline suites and the asset test are enforced; the real-KV, browser and prod-smoke legs are not closed. |
 
-**Order these four in.** D4 is the cheapest and the highest-truth-value: the
-data is already on the wire and already bound to the right card, so it is a
-renderer, not a feature. D5's continuation is one control. D6 needs an owner
+**Order these four in.** ~~D4 is the cheapest and the highest-truth-value~~ —
+**D4 is done** (`audit/d4/D4_NUMBER_PROVENANCE.md`), and it cost one server rule
+beyond the renderer: the edit owner now re-attributes a changed price, because a
+renderer that displays a stale role tells a lie the stored field was previously
+free to hold. **Next is D5's eBay continuation**, which is one control. D6 needs an owner
 decision on what "applicable" means before any copy is written. D7 is the
 largest and the only one that is genuinely new state.
 
@@ -168,11 +170,13 @@ item. They are opposite directions:
 | **Forward** — a price exists, what does it net? | `feeEbay(price, …)` plus the shipping and cash-out inputs the payout panel already supplies | **Shipped arithmetic, already used.** The payout panel computes `netPayout` per venue from exactly this (`js/core.86000bf2.js:8483-8490`), and the review screen's fee breakdown reconciles to the cent against the same function. |
 | **Reverse** — a payout is named, what price achieves it? | `listPriceForTargetNet`, inverted by bisection on the forward function | **Never wired. §0.** |
 
-**And it is not merely unblocked — it is already on the screen.** The review
+**And it is not merely unblocked — it is already on the screen.** (This row is
+current as of the D4 closeout: expected net EXISTS on the review screen. Any
+earlier sentence in this document calling it absent is withdrawn.) The review
 screen's fee panel renders `Estimated net (item only)` from the same forward
 function (`_reviewFeeRow('net', 'Estimated net (item only)', …)`,
-`js/core.ced9f5eb.js:21664`, with the qualifier mechanism documented at
-`:21560`). Verified by screenshot during the D4 work, on both the seller-priced
+`js/core.84f79a1f.js`, `_reviewFeeRow('net', …)`, with the qualifier mechanism
+in the same helper). Verified by screenshot during the D4 work, on both the seller-priced
 and comp-priced fixtures. **§2's "expected net is absent" was wrong**, and it
 was wrong because it was reasoning from packet membership — which is exactly the
 error §7.2 corrects. What is genuinely missing is narrower: the net is
@@ -256,3 +260,30 @@ listing path.
 
 **Not reopened:** no `taxOn` value, no venue classification, and no wording in
 `audit/d3/TAX_TREATMENT_T2_9.md` is changed by this correction.
+
+---
+
+## 8. D4 closeout — what changed in this document (2026-09-08, later same day)
+
+D4 shipped and then took a review pass. Three items were accepted and are now
+reflected in the rows above, so this document no longer disagrees with the code:
+
+1. **§1 step 3** no longer says expected net is missing, and now lists the
+   provenance block among what renders.
+2. **§3's D4 row** reads IMPLEMENTED, with the edit-owner re-attribution named,
+   because that is the part that makes the rendered role true rather than merely
+   present.
+3. **§7.1** is marked current rather than a pending correction.
+
+Two boundaries stay open and are not closed by D4: the net is item-price-only
+(no buyer-paid shipping or tax on the draft), and **SI-1** — the per-suite
+assertion-count floor that would prove a run was not truncated — is still open
+and separately tracked in `audit/SUITE_COVERAGE_INTERRUPTIONS.md`.
+
+Bundle citations in this document naming `js/core.86000bf2.js` or
+`js/core.ced9f5eb.js` refer to retired generations. Both files are **retained on
+disk** with their committed bytes and the retention is now enforced by
+`tests/asset-fingerprints.mjs`; the live bundle is `js/core.84f79a1f.js`. See
+`audit/BUNDLE_CITATION_MAP.md`.
+
+**Not pushed, not deployed.** The Cert ID rotation gate is unchanged.

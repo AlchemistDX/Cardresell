@@ -155,11 +155,13 @@ export const PACKET_COMPAT = {
  * the banner above `tests/draft-store.mjs`'s survival checks: would
  * `buildListingPacket()` produce different bytes? It would.
  *
- * It is here even though `applyEdit` cannot currently change `priceSource`.
- * Leaving it out would be safe only for as long as that stays true, which is
- * a coupling to another module's behaviour and exactly the assumption the
- * read-time fingerprint exists to stop making. The write site that makes
- * `priceSource` editable is one nobody has written yet.
+ * It was listed here BEFORE any write site could change `priceSource`, on the
+ * grounds that leaving it out would be safe only for as long as that stayed
+ * true -- a coupling to another module's behaviour, and exactly the assumption
+ * the read-time fingerprint exists to stop making. That has now been paid off
+ * rather than merely justified: `applyEdit` sets `priceSource` to 'seller'
+ * when an edit moves the normalized price, so a price edit changes two of
+ * these fields and the fingerprint moves for both.
  */
 export const PACKET_INPUT_FIELDS = ['sku', 'slot', 'price', 'priceSource', 'title'];
 

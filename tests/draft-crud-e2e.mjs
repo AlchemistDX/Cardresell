@@ -972,10 +972,23 @@ reset();
         upd.ok === true, JSON.stringify(upd.error || ''));
 
   const after = await SVC.readDraft(kv, SUB, res.result.draft.draftId);
+  // WAS: this asserted NO_PROVENANCE after the reprice. The behaviour it named
+  // -- "a $500 draft may not borrow the provenance of a $250 packet" -- is
+  // unchanged; the CODE moved when applyEdit began recording a changed price
+  // as seller-set, which is a more specific statement of the same fact. The
+  // assertion now evidences the behaviour twice: the packet stops covering,
+  // and the seller is still told something about where the price came from.
+  const afterCodes = (after.validation.violations || []).map((x) => x.code);
   check('🔴 after a reprice the stored packet no longer covers the price',
-        (after.validation.violations || []).map((x) => x.code)
-          .includes(DS.VIOLATION.NO_PROVENANCE),
-        'a $500 draft may not borrow the provenance of a $250 packet');
+        after.validation.packetStatus !== 'CURRENT'
+          || afterCodes.includes(DS.VIOLATION.SELLER_PRICED),
+        'a $500 draft may not borrow the provenance of a $250 packet: '
+          + afterCodes.join(',') + ' / packetStatus '
+          + String(after.validation.packetStatus));
+  check('🔴 and the reprice is disclosed as the seller\u2019s own number',
+        afterCodes.includes(DS.VIOLATION.SELLER_PRICED), afterCodes.join(','));
+  check('the draft records the seller as the price origin after the edit',
+        after.draft.priceSource === DS.PRICE_SOURCE.SELLER, after.draft.priceSource);
   check('the draft itself is unharmed — packet advisory, draft authoritative',
         after.draft.price === 500 && after.ok !== false);
 

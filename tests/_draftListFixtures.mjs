@@ -200,6 +200,42 @@ export async function generateReadFixtures() {
   await patch(compId, { expectedRev: packetCompPriced.body.draft.rev, pricingContext: ctx() }, 'pkt-comp-rebuild');
   const packetCompRebuilt = await call({ id: compId });
 
+  // ── The price edit that must re-attribute ───────────────────────────────
+  //
+  // A comp-derived draft, then a real PATCH that moves the price AND asks for a
+  // rebuild -- the exact sequence a seller performs when they type over a
+  // suggested price. The rebuild carries the prior basis forward from the
+  // record (api/drafts.js does that, not the client), so the fixture exercises
+  // the whole chain: attribution flips to seller, the basis survives as
+  // context, and the packet documents the NEW price.
+  const madeEdited = await post({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-edit');
+  const editedId = madeEdited.body.draftId;
+  const beforeEdit = await call({ id: editedId });
+  await patch(editedId, {
+    expectedRev: beforeEdit.body.draft.rev, price: 365, pricingContext: ctx(),
+  }, 'pkt-edit-price');
+  const packetPriceEdited = await call({ id: editedId });
+
+  // The control: a NOTES-only edit on the same shape. Attribution must not
+  // move, because nothing about the price did. Without this the fix could be
+  // "any edit means the seller set the price", which is a different lie.
+  const madeNotes = await post({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-notes');
+  const notesId = madeNotes.body.draftId;
+  const beforeNotes = await call({ id: notesId });
+  await patch(notesId, {
+    expectedRev: beforeNotes.body.draft.rev, notes: 'ships Monday', pricingContext: ctx(),
+  }, 'pkt-notes-edit');
+  const packetNotesEdited = await call({ id: notesId });
+
+  // A feed that CLAIMS to date its own data, with no instant recorded for that
+  // claim -- the shape that used to caption our retrieval time as the source's
+  // published date.
+  const madeDated = await post({
+    ...httpInput(), priceSource: 'comp',
+    pricingContext: ctx({ ...PRICING_CONTEXT.basisMeta, datedBySource: true }),
+  }, 'pkt-dated');
+  const packetDatedBySource = await call({ id: madeDated.body.draftId });
+
   // A stored link that must never become an href.
   const madeHostile = await post({
     ...httpInput(), priceSource: 'comp',
@@ -228,6 +264,7 @@ export async function generateReadFixtures() {
     packetCurrent, packetStale, packetAbsent, packetBlocked,
     packetSellerPriced, packetCompPriced, packetCompRebuilt,
     packetHostileUrl, packetPartialBasis, packetNoBasis,
+    packetPriceEdited, packetNotesEdited, packetDatedBySource,
     PRICING_CONTEXT,
     ids: {
       blockedTitle: longIds[0], blockedPrice: noPriceIds[0], blockedBoth: bothIds[0], publishable: okIds[0],
@@ -237,6 +274,8 @@ export async function generateReadFixtures() {
       packetHostileUrl: madeHostile.body.draftId,
       packetPartialBasis: madePartial.body.draftId,
       packetNoBasis: madeNoBasis.body.draftId,
+      packetPriceEdited: editedId, packetNotesEdited: notesId,
+      packetDatedBySource: madeDated.body.draftId,
     },
   };
 }

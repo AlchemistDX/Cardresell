@@ -1,6 +1,55 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.ced9f5eb.js` (22,509 lines).** New work cites that hash.
+**Live bundle: `js/core.84f79a1f.js` (22,552 lines).** New work cites that hash.
+
+> ### Generation 8, and a retention rule that had been quietly broken
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 8 | `ced9f5eb` → `84f79a1f` | *(this commit)* | D4 closeout: the retrieval caption is unconditional and attributed to CardResell, a source-published row renders only from a recorded source instant, an unrecorded source date is stated as a gap, and the `_reviewWhen` doc comment stops equating a relative age with re-deriving the stamp. |
+>
+> **`ced9f5eb` is retained on disk, and so is every other recoverable
+> generation this file names.** The D4 rename used `git mv`, which removed
+> `js/core.86000bf2.js` from the working tree. A review caught it and named the
+> distinction this map had been blurring: git recoverability answers the
+> *citation* question — what did that line say then — but only a file on disk
+> answers the *browser* question, whether `GET /js/core.86000bf2.js` returns
+> 200 for a client holding cached HTML. `tests/asset-fingerprints.mjs` passed
+> throughout, because it only checks the assets `index.html` references today.
+>
+> Checking the whole set rather than the one file the review named found the
+> same deletion had happened **seven times**. All seven are restored from the
+> commit that carried them, bytes verified against their own names:
+>
+> | generation | restored from | bytes hash to its name |
+> |---|---|---|
+> | `2c7cf451` | `79dc1bd` | yes |
+> | `34fb750c` | `a8dc3d6` | yes |
+> | `4c65092e` | `2ffb351` | yes |
+> | `541c4c39` | `19cb94c` | yes |
+> | `9fd82d6e` | `251f3a0` | yes |
+> | `c61a6ef9` | `0cc4477` | yes |
+> | `86000bf2` | `c16d579` | yes |
+>
+> **Two corrections to what this file said below.** The notes on generations
+> naming `4c65092e` and `9fd82d6e` say no file with those bytes survives to
+> align against. That was wrong: both were committed with matching bytes
+> (`2ffb351`, `251f3a0`) and both are now on disk. What was true of them is
+> true only of `69b38a85` and `b7447fe5`.
+>
+> **`69b38a85` cannot be restored, and the reason is worse than absence.** It
+> was committed empty at `2ffb351`, then committed at `fa4739b` with bytes that
+> hash to `75f9494e` — a name that never matched its content in any commit,
+> which is the exact defect the fingerprint suite exists to prevent, sitting in
+> history. It is declared unrecoverable by name in the suite rather than
+> restored under a name it would contradict. Same for `b7447fe5`, `fec7fb3a`
+> and `611f4efe`, which no commit contains at all.
+>
+> **The rule is now enforced, not remembered.** `tests/asset-fingerprints.mjs`
+> reads this file, extracts every `core.<hash>` it names, and fails unless each
+> one is on disk with bytes matching its name or listed in the suite's
+> `UNRECOVERABLE` map with a reason. Deleting a retained bundle is now a red
+> suite; excusing one is a reviewable edit.
 
 > ### Four generations this file did not record when they happened
 >

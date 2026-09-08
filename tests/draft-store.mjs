@@ -686,8 +686,86 @@ check('a version-ahead packet is INCOMPATIBLE, not STALE',
 const codesFor = (d) => DS.validateDraftForSlot(d, 'ebay:fixed-price').violations.map((v) => v.code);
 check('a covered price makes no provenance finding',
       !codesFor(la_fresh).includes(DS.VIOLATION.NO_PROVENANCE));
-check('\ud83d\udd34 a repriced draft whose packet was not rebuilt raises NO_PROVENANCE again',
-      codesFor(la_repriced).includes(DS.VIOLATION.NO_PROVENANCE),
-      'the price it documented is gone; nothing accounts for the new one');
+// WAS: 'a repriced draft whose packet was not rebuilt raises NO_PROVENANCE
+// again'. It stopped being true when applyEdit began recording a changed price
+// as seller-set, which routes this draft to the SELLER_PRICED arm instead.
+// That is the same disclosure told more precisely: NO_PROVENANCE says "we
+// cannot say where this number came from", and after a seller edit we can --
+// the seller typed it. The finding the assertion existed to protect is the one
+// that must not vanish, so it is asserted on the arm that now carries it, plus
+// an explicit check that the draft did not fall silent between the two.
+check('\ud83d\udd34 a repriced draft still raises a price-origin finding',
+      codesFor(la_repriced).includes(DS.VIOLATION.SELLER_PRICED),
+      'after applyEdit re-attributes, the origin of the new number is stated '
+      + 'as seller-set rather than unaccounted-for: ' + codesFor(la_repriced).join(','));
+check('and it is not silent about the price it no longer documents',
+      codesFor(la_repriced).some((c) => c === DS.VIOLATION.SELLER_PRICED
+        || c === DS.VIOLATION.NO_PROVENANCE),
+      codesFor(la_repriced).join(','));
+check('setup: the reprice is what moved it to the seller arm',
+      la_repriced.priceSource === DS.PRICE_SOURCE.SELLER
+        && la_fresh.priceSource !== DS.PRICE_SOURCE.SELLER,
+      la_fresh.priceSource + ' -> ' + la_repriced.priceSource);
+
+// ── The edit owner re-attributes a changed price ────────────────────────────
+//
+// The defect: priceSource was written at create and never moved, so a draft
+// created 'comp' stayed 'comp' after a seller typed their own price over it.
+// Harmless while nothing rendered the field; D4 renders it as the sentence
+// "this price was derived from the market data below", which made a stale
+// field into a false claim on screen.
+{
+  const base = () => DS.buildDraft({ ...laneA() });
+  const withSource = (src) => ({ ...base(), priceSource: src });
+
+  const comp = withSource('comp');
+  check('setup: the draft starts comp-derived at a known price',
+        comp.priceSource === 'comp' && typeof comp.price === 'number', String(comp.price));
+
+  const moved = DS.applyEdit(comp, { price: comp.price + 65 }, { expectedRev: comp.rev });
+  check('\ud83d\udd34 a price the seller changed is recorded as seller-set',
+        moved.priceSource === DS.PRICE_SOURCE.SELLER, moved.priceSource);
+
+  // The basis is a true record of what the market said. It stays; only its
+  // ROLE changes, which is what the review screen derives from priceSource.
+  check('\ud83d\udd34 and the edit does not destroy the pricing record to fix a label',
+        JSON.stringify(moved.packet) === JSON.stringify(comp.packet));
+
+  // The control on the rule: "any edit re-attributes" would be a different
+  // false claim, told about every seller who fixed a typo in their notes.
+  const noted = DS.applyEdit(comp, { notes: 'ships Monday' }, { expectedRev: comp.rev });
+  check('\ud83d\udd34 a notes-only edit leaves the attribution alone',
+        noted.priceSource === 'comp', noted.priceSource);
+  check('setup: the notes edit did land', noted.notes === 'ships Monday');
+
+  const titled = DS.applyEdit(comp, { title: 'Charizard Base Set Holo 4/102' }, { expectedRev: comp.rev });
+  check('a title-only edit leaves the attribution alone', titled.priceSource === 'comp');
+
+  const qty = DS.applyEdit(comp, { quantity: 2 }, { expectedRev: comp.rev });
+  check('a quantity-only edit leaves the attribution alone', qty.priceSource === 'comp');
+
+  // Normalization first, comparison second. A form that round-trips 400 as
+  // "400.00" resubmits the same price; calling that a seller decision would
+  // re-attribute a price nobody moved.
+  const same = DS.applyEdit(comp, { price: Number(comp.price.toFixed(2)) }, { expectedRev: comp.rev });
+  check('\ud83d\udd34 a price resubmitted unchanged after normalization does NOT re-attribute',
+        same.priceSource === 'comp', same.priceSource + ' @ ' + same.price);
+  // A string price never reaches the comparison at all: requireMoney refuses
+  // it first. Asserted so the normalization claim above is not read as
+  // covering a shape the guard rejects.
+  let stringRejected = null;
+  try { DS.applyEdit(comp, { price: comp.price.toFixed(2) }, { expectedRev: comp.rev }); }
+  catch (e) { stringRejected = e.message; }
+  check('a price sent as a string is refused before attribution is considered',
+        typeof stringRejected === 'string' && /price/.test(stringRejected),
+        String(stringRejected));
+
+  // A seller-set price edited again stays seller-set: the rule sets, it does
+  // not toggle.
+  const seller = withSource('seller');
+  const again = DS.applyEdit(seller, { price: seller.price + 1 }, { expectedRev: seller.rev });
+  check('a seller-set price edited again is still seller-set',
+        again.priceSource === DS.PRICE_SOURCE.SELLER, again.priceSource);
+}
 
 done();
