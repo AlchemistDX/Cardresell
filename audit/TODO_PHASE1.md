@@ -362,3 +362,44 @@ catch, and they will be reading it correctly on the evidence available to them.
 Applies symmetrically: keeping the low ask means the headline stays ~4% below a
 mid/market centre permanently, and *that* needs stating too, since nothing
 currently discloses that the published price is trimmed downward at all.
+
+### T2.14 — the withheld floor row is indistinguishable from having no floor data
+
+Found by the D3 visual pass on `9a3c7ac`, not by any assertion. All 20
+width/theme/state combinations render correctly — no overflow, no wrapping, the
+dotted leader self-adjusts (497px vs 494px across the two label lengths, floor is
+`min-width:1rem` and the narrowest observed was 45px), and the withheld case
+leaves no orphan separator because `.qp-row + .qp-row` is sibling-scoped with no
+`nth-child` anywhere.
+
+The defect is what the correct rendering means. Compare two states:
+
+| state | what the seller sees |
+|---|---|
+| low endpoint absent upstream | `Market price  $96.00  TCGPlayer market` |
+| low endpoint present, above the median ask, withheld by condition (2) | `Market price  $300.00  TCGPlayer market` |
+
+Identical layout. The seller cannot tell "we have no floor for this card" from
+"we have a floor and judged it untrustworthy". **We know which case we are in and
+we do not say.**
+
+This is the same shape as instance 24: a suppression justified by a judgement the
+user never sees. Condition (2) is still correct — a floor above an observed ask
+is not a floor, and printing it was the worse option. But "withhold rather than
+relabel" was accepted here on the strength of matching the server's behaviour,
+and the server's version has the same gap (Q3-B decided the copy omits the
+numeric spread, which is a different question from whether the omission is
+announced at all).
+
+**Not fixing this unilaterally.** Any disclosure copy here asserts something
+about why the book is inverted, and that is T2.10's subject, which needs a Q7
+decision. What is recorded is that the fix as shipped converts a visible
+mislabel into an invisible omission, that this is an improvement and not a
+closure, and that anyone reading `9a3c7ac` as "the Lowest-listing row is now
+honest" is reading it too generously.
+
+Detection note, generalisable: this was invisible to nine passing behavioural
+assertions because every one of them checks a single state in isolation. The
+defect is in the **collision between two states**, which only a side-by-side
+render shows. Worth asking of any withhold-on-condition fix: does the withheld
+state look different from the never-had-it state?
