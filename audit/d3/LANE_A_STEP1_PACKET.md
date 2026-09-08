@@ -7,7 +7,7 @@
 >
 > **The sections below are a running record, written as the work happened, and
 > the early ones have been overtaken.** Nothing in them has been rewritten to
-> look prescient. What is true as of **2026-09-08, commit `f0e4e4d`** (the
+> look prescient. What is true as of **2026-09-08, commit `da13bee`** (the
 > create-path check in §17; the three §16 checks landed at `0cc4477`):
 >
 > | Section | Says | Actually |
