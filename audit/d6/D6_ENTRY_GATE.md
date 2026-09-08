@@ -194,11 +194,84 @@ instruction the seller performs. No duration, no dollar amount, no claim about
 this seller's standing. "Seller Hub" is named without the deep tab path, since
 navigation moves more readily than the destination.
 
-**Still open:** final wording, exact placement relative to the D5 check-the-card
-imperative and the seed note, severity, and whether the two restriction kinds
-read better as one sentence or two.
+### 5.5 Three copy decisions, taken deliberately
 
-**Not decided here:** placement and severity.
+Raised on review 2026-09-08, before the rendered-screen pass, because each was
+about to be inherited rather than chosen.
+
+**(a) The verb: "will", not "can" — but about the class, never the reader.**
+
+The draft in §5.4 said new sellers "can have" payout holds. eBay says they
+**will** experience transaction holds, unhedged. That is the one clause where
+the draft *softened a definite source statement*, which is the opposite of the
+§5.3 error and just as much a divergence from the source. Both directions are
+the same defect: our sentence should carry the source's confidence, no more and
+no less.
+
+The reason the draft flinched is real — we cannot confirm this seller is new
+(§1, §2). But that is an argument about **whose standing we assert**, not about
+**how confident eBay's policy is**. Both are satisfied by keeping the definite
+verb and making the subject the class:
+
+- Refused: *"You will have holds"* — a claim about this seller's standing, which
+  §2 says we cannot make.
+- Refused: *"New sellers can have holds"* — weaker than the source, so we
+  understate a restriction the seller will actually meet.
+- **Adopted:** *"New sellers will have transaction holds…"* — a statement about
+  eBay's published treatment of a class, at the source's confidence, leaving the
+  reader to place themselves in it or not.
+
+**(b) Drop the self-selection opener.**
+
+"New to selling on eBay?" was doing in copy exactly what the gate refused to do
+in code: conditioning the content on the seller's standing. It is more honest
+than a code trigger, because the seller does the classifying — but it produces
+the same miss. An established seller stops reading at the question mark, and
+**the holds content is not new-seller-only.** Per §5.1, eBay also holds funds for
+high-priced items and unusual selling patterns. **A graded card can be both**,
+and this app exists to sell graded cards, so that clause is squarely on-topic for
+the experienced seller the opener just dismissed.
+
+So the copy addresses everyone — which is what §3 decided anyway. The opener was
+a conditional smuggled back in at the sentence level.
+
+**(c) Lower visual weight than the check-the-card line.**
+
+Both are instructions, but they are not the same kind, and they arrive at the
+same moment:
+
+| | D5 check line | D6 guidance |
+|---|---|---|
+| Where | on the screen you are about to see | elsewhere, in the seller's account |
+| When | now, before continuing | before listing, at the seller's pace |
+| Specificity | a named number to compare (`074/073`) | a kind of restriction to look up |
+| Failure if ignored | wrong card listed | a surprise later, recoverable |
+
+Two competing imperatives flatten each other, and the one with a specific number
+and an immediate failure mode should win. **D6 therefore takes the default note
+styling — muted (`--text-muted`, `index.html:1159`) — and NOT
+`data-packet-note-severity="WARNING"`, which the D5 check line uses to take full
+`--text` weight (`:1160`).** No new severity value is needed; the existing
+default already means "quieter than a warning."
+
+Order within the block: the D5 check imperative stays first, the seed note
+second, D6 last — furthest from the click, since it is the only one of the three
+that is not about this specific hand-off.
+
+### 5.6 Revised draft copy
+
+> eBay can hold your payout and cap how much you list. New sellers will have
+> transaction holds while they build selling history, and eBay can also hold
+> funds on high-priced or unusual sales. Your selling limits and any funds on
+> hold are shown in your eBay Seller Hub.
+
+Clause by clause: sentence 1 is eBay's published policy in general; sentence 2
+carries the source's definite verb about a class and adds the non-new-seller
+case that makes it relevant to everyone; sentence 3 is an instruction with the
+destination named. No duration, no amount, no claim about this reader.
+
+**Still open:** wording review against the rendered screen, and the presence
+test.
 Naming specific holds or selling limits requires sourcing them from eBay's own
 published pages — no invented day-ranges, no invented amounts, per the standing
 rule. That is D6 step 1's research, and until it is sourced the copy stays
