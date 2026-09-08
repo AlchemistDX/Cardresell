@@ -117,6 +117,62 @@ const norm = s => s.toLowerCase()
   .replace(/\s*\((buylist|aggregator)\)\s*/g, '')
   .replace(/[^a-z0-9]/g, '');
 
+/* NAMED ANCHORS, not a pinned count.
+ *
+ * 2026-09-07. The floor above proves the parser found SOMETHING. It does not
+ * prove it found the right things: a floor of 10 still passes if five venues
+ * vanish from the model and the page together, because parity between two
+ * equally-wrong surfaces is still parity. The external reviewer asked for a
+ * pinned count ("assert it found 15 rows") plus a known-venue presence check.
+ * We are taking the second and declining the first, because a pinned count is
+ * filed in this corpus as instance 19 -- `minors-011-012-013` pinned 125 gold
+ * text usages, found 130, and reported an IMPROVEMENT as a defect. Adding a
+ * sixteenth venue is the same shape of improvement, and it must not turn this
+ * file red.
+ *
+ * Anchors give what the pin was reaching for -- identity rather than
+ * cardinality -- and survive growth. They are chosen as the three venues a
+ * removal would be least likely to be deliberate about: the default venue, the
+ * TCG-native marketplace, and the one consignment venue.
+ *
+ * FALLIBILITY DEMONSTRATED, not assumed. Per the practice adopted 2026-09-07,
+ * a guard does not count until observed failing. This one guards a defect that
+ * has never occurred, so neither the stash-the-fix nor the assertion-first
+ * route applies and mutation is the remaining option. Two mutations were run
+ * and reverted (`js/core.7f9c03ad.js` verified byte-identical afterwards by
+ * sha256):
+ *
+ *   1. ONE-SIDED: renamed `eBay` -> `eBoy` in the fee table only.
+ *      Result 12 passed / 5 failed. The pre-existing directional checks catch
+ *      this on their own, so it does NOT justify these assertions.
+ *
+ *   2. SYMMETRIC: removed eBay from the fee table, the cross-border table,
+ *      PLATFORMS and CROSS_BORDER -- the deletion a careless refactor makes.
+ *      Result 15 passed / 2 failed, and the only two failures were these two
+ *      anchor checks. Every pre-existing assertion reported ok: both
+ *      directional parity checks (two surfaces that agree about 14 venues do
+ *      agree), both floors (14 >= 10), and the cross-border pair.
+ *
+ * Mutation 2 is the reason this exists. The product's DEFAULT venue can be
+ * deleted from its published fee table and its fee model together, and a
+ * 15-assertion bidirectional parity suite stays green, because parity between
+ * two equally-wrong surfaces is still parity. */
+const ANCHORS = ['eBay', 'TCGplayer', 'Fanatics Collect'];
+
+const pageAnchorsMissing = ANCHORS.filter(a => ![...pageFees.keys()].some(n => norm(n) === norm(a)));
+T.check(`page: named anchor venues present (${ANCHORS.join(', ')})`,
+  pageAnchorsMissing.length === 0,
+  `absent from the fee table: ${pageAnchorsMissing.join(', ')} -- the parser ` +
+  `met its floor while missing a venue we know is published, so the floor was ` +
+  `measuring quantity and not identity`);
+
+const modelAnchorsMissing = ANCHORS.filter(a => ![...modelVenues.values()].some(v => norm(v.name) === norm(a)));
+T.check(`model: named anchor venues present (${ANCHORS.join(', ')})`,
+  modelAnchorsMissing.length === 0,
+  `absent from PLATFORMS: ${modelAnchorsMissing.join(', ')} -- a symmetric ` +
+  `deletion from both surfaces keeps every parity check green, and only a ` +
+  `named check catches it`);
+
 const modelByNorm = new Map([...modelVenues].map(([k, v]) => [norm(v.name), { key: k, ...v }]));
 const pageByNorm  = new Map([...pageFees].map(([n, d]) => [norm(n), { label: n, date: d }]));
 
