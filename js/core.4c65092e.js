@@ -6434,10 +6434,14 @@ const PLATFORMS = {
   //       published fee fixes the fee, not the offer it is charged against.
   // Base caveat: the terms say the fee is "deducted from the Seller's
   // proceeds" and never state what the fee is a percentage OF. We compute it
-  // as 10% of the offer (see feeBuylist), reading "proceeds" as the
-  // pre-deduction offer. On a $100 retail card that is $5.00; the alternative
-  // reading (10% of the post-fee amount) would be $4.55. Documented as a
-  // reading, not asserted as the published base.
+  // as 10% of the offer (see feeBuylist), i.e. we read "proceeds" as the
+  // pre-deduction offer. On a $100 retail card that is $5.00.
+  //   The open question is narrow: OUR base is unconfirmed against the vendor.
+  //   It is NOT that two vendor interpretations compete. Any other base we
+  //   might compute — 10% of the post-fee amount, for instance — is a
+  //   hypothetical arithmetic variant we invented to size the exposure, and it
+  //   is evidence of nothing about TCG Bulk's practice. Do not present such a
+  //   figure as a rival published reading, and do not average it with ours.
   //   Sources:
   //     https://tcgbulk.com/  (workflow + games verified 2026-08-29)
   //     https://tcgbulk.com/page/terms-of-service  (fee text above, retrieved
@@ -7800,7 +7804,22 @@ function feeCardmarket(price, shipCharge) {
    side of the line the bar sits on, so it can no longer be lost.
 
    Numeric amounts and the row ordering are untouched by this function; it
-   returns geometry only.
+   returns geometry only. That alone does not prove the CALLER preserved them,
+   so the claim is carried by a rendered-ranking comparison against the
+   pre-change build (fa4739b^) rather than by this function's signature --
+   see audit/RELEASE_VALIDATION_QUEUE.md, RV-5.
+
+   THE MINIMUM WIDTH IS A DELIBERATE VISIBILITY FLOOR, NOT A SCALE ARTEFACT.
+   `Math.max(0.8, ...)` exists so that a real loss too small to occupy a pixel
+   still renders as something the eye can find; a bar allowed to reach zero
+   width would read as "no loss here", which is a worse lie than an imprecise
+   one. The cost of that choice is exact and worth stating plainly: magnitudes
+   small enough to land on the floor are drawn EQUAL to one another. With a
+   payout spread of roughly 60x or more, the smallest losses become visually
+   indistinguishable from each other. Their signs, their amounts and their
+   ordering all remain correct -- only the relative bar length among the
+   floored group stops being informative. This is the floor doing its job,
+   not the linear scale failing.
    ========================================================= */
 function _payoutBarGeom(net, maxAbs, signed) {
   // maxAbs <= 0 means every visible payout is exactly zero. Render a hairline
@@ -7810,7 +7829,8 @@ function _payoutBarGeom(net, maxAbs, signed) {
   }
   const mag = Math.min(1, Math.abs(net) / maxAbs);
   if (!signed) {
-    // All payouts positive: unchanged left-anchored bar, 6% visibility floor.
+    // All payouts positive: unchanged left-anchored bar. 6% deliberate
+    // visibility floor -- see the header note on what the floor costs.
     return { left: 0, width: Math.max(6, mag * 100), neg: false, zero: net === 0 };
   }
   const half = Math.max(0.8, mag * 50);
@@ -9782,16 +9802,28 @@ function exportFlips() {
     // Export the cost components too — a bare net profit column cannot be
     // reconciled against a marketplace statement without them.
     const c = _flipNetOf(f);
-    // 2026-09-08 BIAS-6/F: a exported net whose inputs were partly unknown is
-    // an upper bound. Say which fields were blank in the file, so the export
-    // can be reconciled against a marketplace statement without guessing.
+    // 2026-09-08 BIAS-6/F: an exported net whose inputs were partly unknown must
+    // stay distinguishable from a complete one in the file, so the export can be
+    // reconciled against a marketplace statement without guessing.
+    //
+    // The Missing Inputs cell is EMPTY for two opposite reasons — a complete
+    // record has nothing missing, and a pre-tracking record cannot say what is
+    // missing — so the status column has to carry that distinction on its own
+    // and must never be read as "blank means fine". Invalid entries are named
+    // in their own clause, because they are neither missing nor usable.
+    // No missing-field list is invented for legacy records.
     const _st = c.completeness === 'untracked'
-      ? 'unverified (logged before cost tracking)'
-      : (c.provisional ? 'provisional' : 'complete');
+      ? 'unknown (predates cost tracking; missing inputs not recoverable)'
+      : (c.provisional ? 'provisional' : 'complete for tracked inputs');
+    let _gap = _missingCostText(c.missingCosts);
+    if (c.invalidCosts && c.invalidCosts.length) {
+      _gap = (_gap ? _gap + '; ' : '') + `invalid entry: ${_missingCostText(c.invalidCosts)}`;
+    }
+    if (!_gap) _gap = c.completeness === 'untracked' ? 'not recorded' : 'none';
     rows.push([f.date, f.card, f.set||'', c.buyPrice.toFixed(2), c.sellPrice.toFixed(2),
                c.fees.toFixed(2), c.shippingCost.toFixed(2), c.gradingCost.toFixed(2),
                (f.profit != null ? Number(f.profit) : c.net).toFixed(2), f.platform,
-               _st, _missingCostText(c.missingCosts)]);
+               _st, _gap]);
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -11077,26 +11109,52 @@ function _msUpdateProfitPreview() {
   // when nothing had been subtracted, so the least-evidenced number carried the
   // least-qualified label. Now a blank field is named, and the result is marked
   // provisional with the direction of the error stated.
+  // BOTH sentences below are generated from the SAME field states, in one pass.
+  // They used to be generated from two different things and could contradict
+  // each other: the breakdown said "No fees, shipping or grading entered yet"
+  // (derived from an empty `parts` list) while the note underneath named only
+  // fees and shipping as missing, because grading had been explicitly entered
+  // as $0. Both sentences describe the same three fields, so both read the same
+  // three states.
+  //
   // `parts` only ever covers the three deducted extras; the purchase price is
-  // carried by the ROI basis, not this list. The earlier fallback said "no
-  // costs entered" whenever `parts` was empty, which was false for a card that
-  // had a purchase price and a confirmed $0 fee — so the copy is now derived
-  // from the recorded field states rather than from an empty list.
+  // carried by the ROI basis, not this list.
   const _three = ['fees', 'shippingCost', 'gradingCost'];
   const _m = r.costMeta || {};
+  const _zeroed  = _three.filter(k => _m[k] === 'zero');
+  const _blank   = _three.filter(k => _m[k] === 'blank' || _m[k] == null);
+  const _invalid = _three.filter(k => _m[k] === 'invalid');
+  // A negated list reads with "or", not "and": "no fees, shipping or grading".
+  const _orList = (keys) => _missingCostText(keys).replace(/ and (?=[^ ]*$)/, ' or ');
   let breakdown, provisionalNote = '';
   if (parts.length) {
     breakdown = `after ${parts.join(' + ')}`;
-  } else if (_three.every(k => _m[k] === 'zero')) {
+  } else if (!_blank.length && _zeroed.length === 3) {
     breakdown = 'No fees, shipping or grading \u2014 all three entered as $0';
+  } else if (!_zeroed.length && !_invalid.length) {
+    breakdown = `No ${_orList(_blank)} entered yet`;
   } else {
-    breakdown = 'No fees, shipping or grading entered yet';
+    // Mixed. Emit a clause ONLY for a non-empty group -- an earlier version
+    // hard-coded a two-clause sentence and produced the dangling fragment
+    // "shipping and grading entered as $0; not entered yet" whenever the
+    // remaining field was invalid rather than blank, because the blank list
+    // was empty and its clause was printed anyway.
+    const cl = [];
+    if (_zeroed.length)  cl.push(`${_missingCostText(_zeroed)} entered as $0`);
+    if (_blank.length)   cl.push(`${_missingCostText(_blank)} not entered yet`);
+    if (_invalid.length) cl.push(`${_missingCostText(_invalid)} not a valid amount`);
+    breakdown = cl.join('; ');
+    // Capitalise the sentence regardless of which group opened it.
+    breakdown = breakdown.charAt(0).toUpperCase() + breakdown.slice(1);
   }
   if (r.invalidCosts.length) {
     provisionalNote = `\u26a0 ${_missingCostText(r.invalidCosts)} not a valid amount \u2014 treated as unknown`;
   } else if (r.missingCosts.length) {
-    // Every omitted cost can only reduce net, so the figure shown is a ceiling.
-    provisionalNote = `Provisional \u2014 ${_missingCostText(r.missingCosts)} not entered. Actual ${r.net >= 0 ? 'profit' : 'result'} is at most this.`;
+    // SCOPED, not an upper-bound claim. An "at most this" ceiling would also be
+    // asserting that the sale revenue and the entered costs are themselves
+    // correct, which this record cannot establish — a seller-entered figure is
+    // an answer, not an independent verification. State only what is excluded.
+    provisionalNote = `Excludes ${_missingCostText(r.missingCosts)} \u2014 not entered`;
   }
   pv.innerHTML = `<span style="color:${color};font-weight:800">${sign}$${Math.abs(r.net).toFixed(2)}</span>` +
     (r.roiPct !== null ? `<span style="color:${color};opacity:.75;margin-left:.35rem;font-weight:700">(${r.roiPct >= 0 ? '+' : '\u2212'}${Math.abs(r.roiPct).toFixed(1)}%)</span>` : '') +
@@ -11315,12 +11373,18 @@ function renderFlipsView() {
   if (_tpLabel) _tpLabel.textContent = _anyProv ? 'Total Profit (provisional)' : 'Total Profit';
   const _tpNote = document.getElementById('pnlTotalProfitNote');
   if (_tpNote) {
+    // NEUTRAL, not an upper bound. "At most this" only holds if the revenue and
+    // the entered costs are correct AND the only gaps are nonnegative costs
+    // read as zero. A record that predates cost tracking cannot establish which
+    // inputs were captured at all, so a total containing one has UNKNOWN
+    // completeness, not a guaranteed ceiling. Mixing the two under one "at most"
+    // claim asserted more than the weaker record supports.
     const bits = [];
     const _rec = (n) => `${n} record${n === 1 ? '' : 's'}`;
-    if (_nIncomplete) bits.push(`${_rec(_nIncomplete)} missing cost inputs`);
-    if (_nUntracked)  bits.push(`${_rec(_nUntracked)} logged before costs were tracked`);
+    if (_nIncomplete) bits.push(`${_rec(_nIncomplete)} ${_nIncomplete === 1 ? 'has' : 'have'} missing cost inputs`);
+    if (_nUntracked)  bits.push(`${_rec(_nUntracked)} ${_nUntracked === 1 ? 'predates' : 'predate'} cost tracking`);
     _tpNote.textContent = _anyProv
-      ? `At most this \u2014 ${bits.join(', ')}.`
+      ? `Provisional total \u2014 ${bits.join('; ')}.`
       : '';
     _tpNote.style.display = _anyProv ? 'block' : 'none';
   }

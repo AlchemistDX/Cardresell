@@ -1,7 +1,7 @@
 # Pattern — An assertion that names a behaviour and evidences a surface
 
-**33 instances**, plus one subclass (18b) deliberately not given its own number.
-The highest-numbered entry is instance 33; that number, not this sentence, is the
+**34 instances**, plus one subclass (18b) deliberately not given its own number.
+The highest-numbered entry is instance 34; that number, not this sentence, is the
 thing to check. A subclass shares a mechanism with its parent and is filed under
 it rather than counted separately — see 18b for the reasoning.
 
@@ -1840,9 +1840,14 @@ fix is to read it.
 three fields is greater than zero. That predicate cannot separate the three
 cases that matter:
 
-- every cost confirmed as $0 (complete, and the profit figure is exact);
-- one cost entered while two were never typed (incomplete, profit is an upper
-  bound);
+- every cost confirmed as $0 (**complete for the tracked inputs** — corrected
+  2026-09-08 from "the profit figure is exact"; a seller-entered zero
+  establishes an answer to the question we asked, not independent verification
+  of the transaction, so exactness is more than the record can support);
+- one cost entered while two were never typed (incomplete; the figure **excludes
+  the costs not entered** — corrected 2026-09-08 from "profit is an upper bound",
+  which is only true if the revenue and the entered costs are themselves correct
+  and the sole gaps are nonnegative deductions read as zero);
 - nothing typed at all (incomplete, and nothing is known).
 
 The first and third both make `hasCosts` false; the first is complete and the
@@ -1868,3 +1873,53 @@ reading it would actually have been correct before recording the fix as wiring.
 A predicate that cannot distinguish the cases its name implies is not
 under-consumed — it is mis-named, and consuming it would ship the mis-naming to
 the user.
+
+---
+
+## Instance 34 — an aggregate claimed the strength of its strongest member (2026-09-08)
+
+**The assertion.** The provisional profit total was labelled **"At most this"**,
+and the per-record note said **"Actual profit is at most this."** Both were
+written while fixing instance 33, i.e. while explicitly reasoning about what a
+record can and cannot establish.
+
+**The surface it actually evidences.** An upper bound holds only under
+conditions the total does not check:
+
+1. the sale revenue is correct;
+2. the entered costs are correct;
+3. the only gaps are additional **nonnegative** costs, treated as zero.
+
+For a record with known revenue and blank fee fields, (3) holds and the ceiling
+is real. For a record logged **before cost tracking existed**, none of the three
+can be established — the record cannot say which inputs were ever captured. Its
+completeness is *unknown*, not *bounded*.
+
+The headline summed both kinds together and then took the label of the stronger
+one. One pre-tracking record is enough to void the claim for the whole total,
+and the shipped screenshot contained exactly that mix: one missing-input record
+and one legacy record, totalled under "At most this."
+
+**Why the shape recurs.** Instance 33 was a boolean that could not separate the
+cases its name implied. This is the same error moved up a level: an aggregate
+that could not separate the *kinds* of provisional it was adding, and resolved
+the ambiguity upward. Weakening a per-record claim is visible work; noticing
+that the aggregate inherits the *weakest* member's certainty, not the strongest,
+is the step that gets skipped.
+
+**Corrected to.** Aggregate: `Provisional total — 1 record has missing cost
+inputs; 1 record predates cost tracking.` — neutral, and it names the two kinds
+separately instead of merging them. Per record: `Excludes fees and shipping —
+not entered.` — scoped to what is actually excluded, and it no longer implies
+everything else has been verified. In the audit prose, *"complete — the profit
+figure is exact"* became *"complete for the tracked inputs"*: a seller-entered
+zero is an answer to the question we asked, not independent verification of the
+transaction.
+
+**Rider.** When a summary statistic carries a qualifier, check the qualifier
+against the **weakest** contributing record, not the typical one. An aggregate
+inherits the floor of its inputs' certainty, never the ceiling. And when a
+correction pass introduces new copy, that copy is not exempt from the audit that
+prompted it — this instance, the dangling `"...entered as $0; not entered yet"`
+fragment, and the false `"no costs entered yet"` line were all authored during
+BIAS-6 remediation.

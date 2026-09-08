@@ -84,14 +84,32 @@ failing the first; the low-ask candidate below is the first one held out for the
 second.
 
 Everything below the line marked **HISTORICAL** is superseded and kept only to
-show how the claim moved. In particular, the original headline — "seven
-simplifications, all seven overstate, none run the other way" — **is withdrawn.**
-It was wrong about the count, wrong about the mechanism, and wrong about which
-term matters.
+show how the claim moved. **Two headline claims in it are retracted, and neither
+is the current verdict:**
+
+| retracted claim | where it appears | status |
+|---|---|---|
+| "seven simplifications, all seven overstate, none run the other way" | HISTORICAL opening, § *The seven simplifications* | **WITHDRAWN.** Wrong about the count, the mechanism, and which term matters. |
+| "12 of 12 — every estimate surface leans the same way" | § *Direction summary* under BIAS-6 | **WITHDRAWN 2026-09-08.** These were related failure modes, not twelve independent observations. |
+
+The current verdict on BIAS-6 is the narrower one, and it is the only one that
+should be quoted: *Missing costs can overstate recorded profit. The payout chart
+also represents negative values misleadingly. These findings do not establish a
+universal direction across CardResell's estimates.*
+
+Historical text is retained because the way a claim collapses is itself
+evidence — but a reader arriving mid-document must not be able to lift a
+retracted count out of it. Every retracted passage below carries its own
+inline withdrawal marker for that reason.
 
 ---
 
 ## HISTORICAL — superseded framings, kept for the record
+
+> ⚠ **NOTHING FROM HERE DOWN IS A CURRENT FINDING.** This section preserves
+> earlier drafts of claims that were later narrowed or withdrawn. Do not cite a
+> count, a direction, or a verdict from this section. The live verdict is in
+> **CURRENT FINDING** at the top of this file.
 
 **Superseded opening (2026-09-07, first pass):** "There is a systematic optimism
 lean, and it is concentrated in one function. `renderGradingUpside`
@@ -1369,7 +1387,13 @@ These are related failure modes, not twelve independent observations.
 - ~~No production code was changed for BIAS-6.~~ **Superseded by commit
   `fa4739b`:** the chart geometry, the cost-record model and the fee-source
   comment were all corrected. See the BIAS-6 return packet.
-- Still not established: the residual small-negative floor collapse under a
-  ≥60× payout spread is a known linear-scale limit of the corrected chart, not
-  a solved problem. Signs and ordering stay correct; relative magnitude among
-  very small losses does not.
+- Still not established: under a payout spread of roughly ≥60×, the smallest
+  losses are drawn at equal length. **Corrected characterisation 2026-09-08:**
+  this is a **deliberate visibility floor**, not an unavoidable linear-scale
+  limitation. The minimum bar width exists so a real loss too small to occupy a
+  pixel still renders as something the eye can find, because a zero-width bar
+  would read as *no loss here* — a worse error than an imprecise one. The
+  accepted cost is that sufficiently small magnitudes become visually equal to
+  each other. Signs, amounts and ordering all stay correct; relative bar length
+  within the floored group does not. Calling it a scale limit implied nothing
+  could be done, which was not the honest description of a choice we made.

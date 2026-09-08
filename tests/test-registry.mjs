@@ -80,6 +80,16 @@ const EXCLUDED = {
     'up. UNRESOLVED, not benign: it is excluded because it cannot pass here, ' +
     'not because it should not run. Needs an offline harness or an explicit ' +
     'env gate like the DRAFT_KV_LIVE pattern already used at slot 24.',
+  'flip-completeness-e2e.mjs':
+    'Added 2026-09-08 (BIAS-6). Drives the shipped page in a real browser to ' +
+    'follow one flip record through save, reload, aggregate and CSV export -- ' +
+    'the surfaces the original hasCosts defect actually reached, and the ones ' +
+    'a helper-level unit test cannot speak for. Needs Playwright plus a local ' +
+    'HTTP server, neither of which this offline runner provides, and the repo ' +
+    'has no package.json to depend on Playwright from. Registering it as an ' +
+    'offline slot would make an environment-dependent check look like part of ' +
+    'the offline gate. Run by hand: node tests/flip-completeness-e2e.mjs ' +
+    '(22/22 as of 2026-09-08). Tracked as RV-5 in RELEASE_VALIDATION_QUEUE.md.',
 };
 
 /* A stale exclusion is its own drift: it grants an exemption to a file that no
