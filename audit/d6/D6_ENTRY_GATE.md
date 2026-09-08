@@ -123,7 +123,82 @@ produced. It holds even if a precise figure is findable and correctly sourced
 today — sourcing establishes that a number was true when read, which is exactly
 the property that does not survive.
 
-**Not decided here:** the exact copy, and which eBay restrictions to name.
+**Copy sourced in §5 below.** Placement, wording review, and the presence test
+remain.
+
+## 5. Sourced: what eBay publishes, and the figure we are not going to stamp
+
+Researched 2026-09-08 from eBay's own help pages. No account needed; both are
+public.
+
+### 5.1 The kinds, from the source
+
+**Holds** — [eBay, "Payments on
+hold"](https://www.ebay.com/help/selling/getting-paid/getting-paid-items-youve-sold/payments-hold?id=4816)
+names three types: *transaction holds*, *payment dispute holds*, and *payout
+holds*. On new sellers specifically it is not hedged — "New or infrequent
+sellers **will** experience transaction holds while learning best selling
+practices, becoming established, and building a strong selling history on eBay."
+Holds are also described for open cases or disputes, restricted or suspended
+accounts, high-priced items or unusual selling patterns, and Authenticity
+Guarantee verification.
+
+**Selling limits** — [eBay, "Selling
+limits"](https://www.ebay.com/help/selling/listings/selling-limits?id=4107)
+describes monthly limits reviewed and adjusted each month based on sales volume
+and buyer feedback, with active and sold listings both counting. It separately
+notes **category limits**: "New sellers in a particular category may have limits
+on how much they can sell." Listings over the limit may be ended by eBay.
+
+Both restrictions therefore apply to the seller *before* they finish listing,
+which is what makes hand-off the right place to say so.
+
+### 5.2 Where eBay tells the seller to look
+
+- **Funds and hold status** — Seller Hub → **Payments** tab → **Summary** →
+  Payments shows "Available, On hold and Processing funds"; the **All
+  transactions** section shows a reason for each hold "and an estimated release
+  date, where possible" ([eBay, "Using the Payments tab in Seller
+  Hub"](https://www.ebay.com/help/selling/selling-tools/seller-hub/using-payments-tab-seller-hub?id=4798)).
+- **Selling limits** — Seller Hub → **Overview** tab → **Monthly limits**
+  ([eBay, "Selling limits"](https://www.ebay.com/help/selling/listings/selling-limits?id=4107)).
+
+The seller's own account is the authority on whether either binds them. That is
+the whole reason the warning points rather than predicts.
+
+### 5.3 The figure, and why it is not in the copy
+
+The holds page states: **"New sellers typically experience holds for up to 30
+days, although sometimes it may be longer."**
+
+That is a clean citation, from the primary source, correct as read today — and
+it is exactly the sentence §3.1 rules out, found the same afternoon the rule was
+written. It is recorded here and **stays out of the shipped copy.** eBay can
+change it without notice, nothing on our side goes red when they do, and the app
+would keep rendering a confident number that had quietly stopped being true.
+Note that eBay hedges it twice in its own sentence ("typically", "sometimes it
+may be longer") — reproducing it in our UI would strip the hedges and make our
+version more definite than the source.
+
+This is the concrete instance the sourcing rule was written for, and it lands on
+the correct side only because the rule predated the citation.
+
+### 5.4 Draft copy (wording not final)
+
+> **New to selling on eBay?** New sellers can have payout holds and monthly
+> selling limits on their account. Check your eBay account before you list —
+> your limits and any funds on hold are shown in Seller Hub.
+
+Every clause is either what eBay publishes about its own policy, or an
+instruction the seller performs. No duration, no dollar amount, no claim about
+this seller's standing. "Seller Hub" is named without the deep tab path, since
+navigation moves more readily than the destination.
+
+**Still open:** final wording, exact placement relative to the D5 check-the-card
+imperative and the seed note, severity, and whether the two restriction kinds
+read better as one sentence or two.
+
+**Not decided here:** placement and severity.
 Naming specific holds or selling limits requires sourcing them from eBay's own
 published pages — no invented day-ranges, no invented amounts, per the standing
 rule. That is D6 step 1's research, and until it is sourced the copy stays
