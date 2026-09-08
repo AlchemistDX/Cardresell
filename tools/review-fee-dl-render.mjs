@@ -68,10 +68,22 @@ const helperSrc = [
   fnSource('feeEbay'),
   constObjSource('FEE_DISCLOSURE'),
   "const FEE_UNKNOWN = '\\u2014';",
+  /* 2026-09-08. PLATFORMS and the two tax functions are pulled from the bundle
+     for the same reason as everything else here: the wording of the tax row is
+     now SELECTED BY PRODUCTION CODE from a production field, so a harness that
+     stubbed either would be testing its own copy of the decision. This is what
+     the earlier "executed the helper and got true" check could not establish --
+     that the row the screen RENDERS matches the state the field declares.
+     Pulling PLATFORMS also means a classification change (a venue moving from
+     false to unknown) shows up in this suite's rendered output. */
+  constObjSource('PLATFORMS'),
+  fnSource('venueTaxNote'),
+  fnSource('_reviewTaxRow'),
+  fnSource('venueEstimateNote'),
 ].join('\n');
 
 const helpers = new Function(
-  helperSrc + '; return { _reviewEsc, _reviewMoney, _reviewFeeRow, _reviewBasisRow, feeEbay, FEE_DISCLOSURE, FEE_UNKNOWN };'
+  helperSrc + '; return { _reviewEsc, _reviewMoney, _reviewFeeRow, _reviewBasisRow, feeEbay, FEE_DISCLOSURE, FEE_UNKNOWN, PLATFORMS, venueTaxNote, _reviewTaxRow, venueEstimateNote };'
 )();
 
 /* The two template literals, sliced from the bundle as text. Anchored on the
@@ -91,10 +103,25 @@ export const TEMPLATES = {
   unpriced: sliceTemplate('unpriced'),
 };
 
-/** Render one branch. `price` null renders the unpriced branch. */
-export function renderFeeBlock(price, profile) {
+/** Every pid the shipped PLATFORMS table declares, for state coverage. */
+export const PIDS = Object.keys(helpers.PLATFORMS);
+/** The production tax decision, for tests that assert state, not markup. */
+export const venueTaxNote = helpers.venueTaxNote;
+export const venueEstimateNote = helpers.venueEstimateNote;
+
+/**
+ * Render one branch. `price` null renders the unpriced branch.
+ *
+ * `pid` defaults to the pid the live screen is pinned to. It is a PARAMETER so
+ * the suite can render the unestablished and suppressed tax states too. Those
+ * states are not reachable on the live screen today -- `CR_REVIEW_FEE_SLOT`
+ * pins it to eBay -- so rendering them here proves the branch works, NOT that a
+ * seller can currently see it. Tests must not claim otherwise.
+ */
+export function renderFeeBlock(price, profile, pid) {
   const prof = Object.assign({ ebayStore: 'none', ebayPromo: 0 }, profile || {});
   const H = helpers;
+  const venue = pid || 'ebay';
 
   if (price === null || price === undefined) {
     return new Function('_reviewFeeRow', 'pill', 'return `' + TEMPLATES.unpriced + '`')(
@@ -110,10 +137,10 @@ export function renderFeeBlock(price, profile) {
 
   return new Function(
     'c', 'pill', 'feeRows', '_reviewFeeRow', '_reviewBasisRow', '_reviewEsc', '_reviewMoney',
-    'FEE_DISCLOSURE', 'FEE_UNKNOWN',
+    'FEE_DISCLOSURE', 'FEE_UNKNOWN', '_reviewTaxRow', 'venueEstimateNote', 'pid',
     'return `' + TEMPLATES.priced + '`'
   )(c, '', feeRows, H._reviewFeeRow, H._reviewBasisRow, H._reviewEsc, H._reviewMoney,
-    H.FEE_DISCLOSURE, H.FEE_UNKNOWN);
+    H.FEE_DISCLOSURE, H.FEE_UNKNOWN, H._reviewTaxRow, H.venueEstimateNote, venue);
 }
 
 export const DISCLOSURE = helpers.FEE_DISCLOSURE;

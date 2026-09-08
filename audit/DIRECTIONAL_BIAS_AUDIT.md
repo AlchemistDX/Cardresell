@@ -743,12 +743,29 @@ Nothing in this document has been changed in code. Recorded as findings:
   **STATUS 2026-09-08 — the tax half is CLOSED, the fee-base half is NOT.**
   T2.9 landed `taxOn` + `taxBasis` on all fifteen venues behind one shared
   `venueTaxNote(pid)`, deleted the hardcoded `items.taxNote = true`, and took the
-  tax disclosure from **1 of 15 to 9 of 15** (2 confirmed tax-inclusive, 7
-  unknown; suppressed on 6 confirmed zeros — either a published base that
-  excludes tax, or a buylist where no buyer checkout exists). Per-venue tables
-  and source quotes: `audit/d3/TAX_TREATMENT_T2_9.md`. Restated on
-  `accuracy.html` and held to the model by `tests/accuracy-fee-parity.mjs`
-  (34 checks, mutation-tested).
+  tax disclosure from **1 of 15 to 10 of 15**. Per-venue tables and source
+  quotes: `audit/d3/TAX_TREATMENT_T2_9.md`. Restated on `accuracy.html` and held
+  to the model by `tests/accuracy-fee-parity.mjs` (**41 checks**,
+  mutation-tested).
+
+  **REVISED 2026-09-08 after review. The first version of this status block said
+  "9 of 15 … suppressed on 6 confirmed zeros — either a published base that
+  excludes tax, or a buylist where no buyer checkout exists." Both halves of
+  that were wrong and are corrected here rather than overwritten.**
+
+  1. **The buylist argument does not hold.** TCG Bulk's own terms say it "does
+     not take legal title to the Products and is not the seller or buyer"
+     (`audit/d3/sources/taxaudit/tcgbulk.txt:9`) — an intermediary, not a buyer.
+     "No buyer checkout" was an inference, not evidence, and it cannot support a
+     tax exemption. TCG Bulk is now `'unknown'`.
+  2. **"Confirmed zero" is withdrawn** for Card Kingdom, CoolStuffInc and SCG.
+     They are `taxBasis: 'no-seller-fee'`: the supported finding is that **no
+     seller service fee is published**, so there is no fee of ours for a
+     buyer-tax component to sit inside. That answers the model-specific fee
+     question without asserting the transaction was untaxed. Card Kingdom is
+     additionally **A-2** — no affirmative "no fees" sentence exists on its page.
+  3. **Counts now:** `true` **2** · `false` **5** (Mercari, CardNexus
+     `published-exclusive`; CK, CSI, SCG `no-seller-fee`) · `'unknown'` **8**.
 
   Three corrections to *this entry's own numbers*, which were written against a
   twelve-venue set and were already stale at fifteen: **"one venue of twelve"**
@@ -760,10 +777,22 @@ Nothing in this document has been changed in code. Recorded as findings:
   **Not closed by T2.9:** `feeBase` / `feeBaseLabel` still emit on only **2 of
   15**, so the *stated base* row retains exactly the single-venue shape the tax
   row just lost. Split-basis venues cannot yet say *which* component carries the
-  tax-inclusive base. The magnitude finding above stands unchanged: the omission
-  is still proportional to fee rate on the seven `'unknown'` venues, because
-  disclosing that we do not know does not make the estimate right — it makes it
-  honest. **No tax rate is modelled anywhere.**
+  tax-inclusive base. **No tax rate is modelled anywhere.**
+
+  **The magnitude finding is NARROWED, not restated unchanged.** Three limits,
+  adopted from review:
+  - **`taxOn: true` establishes policy inclusion, not a positive omitted amount
+    on every transaction.** On an order carrying no buyer tax the omission is
+    zero. Supportable phrasing: *"may understate fees when buyer-paid tax
+    applies."*
+  - **No net direction is claimed across the set.** TCGplayer may run in **both**
+    directions: its published Note exempts debit orders from tax in the fee base,
+    and no capture contains a debit worked example establishing that a processing
+    fee exists on debit at all — so our flat 2.5% + $0.30 may **overstate** there.
+  - **No ranking effect has been ruled out.** The earlier "order is unchanged"
+    result was measured on the twelve-venue set at one price point with one
+    assumed rate. Different corrections across venues can change ordering near a
+    tie, and that was not tested. **Open and untested**, not resolved.
 - **Binding rule established here:** **no invented input to a fee model.** Not
   the narrower "no invented tax rate" — an invented fee input propagates into
   every venue simultaneously and silently, so it cannot surface as an outlier. It

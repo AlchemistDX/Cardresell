@@ -1,0 +1,22 @@
+The fees on the site are:
+
+
+
+**Marketplace Fee**
+
+- The Mana Pool marketplace fee is 5% of the price of the merchandise
+
+- the fee is not applied to shipping charges, only the price of the product
+
+
+
+**Credit Card Fees**
+
+- We charge Stripe's credit card fees (2.9% + 30 cents as of 12-7-23).
+
+- The only markup on this is that we charge $0.30 per seller, per order, while we are only charged per order. This avoids complication in our software code, and it provides a buffer for chargebacks and refunds.
+
+
+
+Please sign in to leave a comment.
+

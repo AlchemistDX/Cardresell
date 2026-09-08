@@ -1,0 +1,227 @@
+# Terms of Service
+
+**Effective date:** August 26, 2026
+
+These Terms of Service ("Terms") govern your access to and use of the TCG Bulk websites, mobile applications, marketplace, card scanner, Binder, submission tools, messaging, and related services (collectively, the "Service"). The Service is provided by CCGCastle LLC, located at 2 Craftsman Road, East Windsor, Connecticut 06088, United States ("TCG Bulk", "we", "us", or "our").
+
+By creating an account, accessing, or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
+
+TCG Bulk provides technology that connects sellers of physical trading cards with buyers. Except where we expressly state otherwise, the contract for the sale of Products is between the Seller and the Buyer. TCG Bulk facilitates the transaction but does not take legal title to the Products and is not the seller or buyer under that contract.
+
+### Definitions
+- **Buyer** means a company, sole trader, or other person or entity using the Service for purposes related to its trade, business, craft, or profession to offer to purchase Products.
+- **Seller** means a person or entity using the Service to offer or submit Products for sale. A Seller may act as a consumer or in a business capacity, as disclosed and permitted by applicable law.
+- **Product** or **Products** means physical trading cards or other physical trading-card products accepted by the Service.
+- **Offer to Purchase** means a Buyer's published rates, accepted categories, quantities, limits, conditions, territory, and other terms for purchasing Products.
+- **Submission** means the Products and related information a Seller submits to a Buyer through the Service.
+- **Contract of Sale** means the agreement under which a Seller transfers or agrees to transfer ownership of Products to a Buyer and the Buyer pays or agrees to pay the applicable purchase price.
+- **Binder** means a digital inventory or collection-management feature within the Service.
+- **Payment Service Account** means an account or payment method you maintain with a payment provider such as PayPal or Stripe.
+
+### Eligibility and Accounts
+
+You must have the legal capacity to enter binding contracts. If you are under 18 or under the age of full legal capacity where you live, you may use the Service only with the informed authorization and supervision required by applicable law. We may ask for evidence of age, identity, authority, or parental or guardian authorization.
+
+Buyers use the marketplace in a business capacity and may be required to complete business, identity, payment, reputation, financial-standing, or compliance verification before being approved. We may deny or restrict a Buyer application where reasonably necessary to protect the marketplace or comply with law.
+
+You must provide accurate, complete, and current account information; keep your credentials secure; and promptly notify us if you suspect unauthorized access. If you create an account for an organization, you represent that you are authorized to bind that organization.
+
+Some browsing, scanning, or Binder features may be available without a registered account. Creating a Submission, completing a transaction, accessing account-only features, or preserving certain data across devices may require an account.
+
+### The Service and Physical Goods
+
+Transactions facilitated by TCG Bulk concern physical trading cards and related physical goods. The Binder, scanner results, account balance, estimates, and other digital records are Service features; they are not digital goods, legal title documents, stored-value products, or independently transferable assets.
+
+The Service requires a compatible device and internet connection. Platform, operating-system, browser, and device requirements may change. Current compatibility information is provided in the relevant app-store listing or on the Service.
+
+You are responsible for your device, internet access, carrier charges, and the security of your device and account.
+
+### Card Scanner and Binder
+
+The card scanner uses automated recognition to suggest a possible card, set, printing, or variant from an image. Scanner results are suggestions and may be incomplete or incorrect. They are not guarantees of identity, authenticity, condition, rarity, value, sale eligibility, or price.
+
+You are responsible for reviewing and correcting the suggested card, set, variant, language, finish, condition, quantity, and other details before saving a card to a Binder or including it in a Submission. If the scanner cannot confidently identify a card, you must identify it manually or refrain from submitting it until the information is verified.
+
+Binder contents are informational records based on data you or the Service provide. A Binder entry does not create an Offer to Purchase or Contract of Sale and does not guarantee that a Buyer will accept the card or pay a displayed or estimated amount. Applicable rates, limits, fees, and eligibility are those shown when a Seller creates and confirms a Submission.
+
+You may scan or upload only images you are entitled to use. You must not use the scanner to submit counterfeit, altered, proxied, resealed, stolen, or otherwise prohibited Products.
+
+Scanner images and related information are processed as described in our Privacy Policy.
+
+### Offers, Submissions, and Contract Formation
+
+A Buyer creates an Offer to Purchase by publishing rates, accepted Products, quantities, minimums, maximums, budgets, territory, and other restrictions. A Buyer must keep its public Offer to Purchase accurate and must honor a qualifying Submission made against the offer while it is active.
+
+A Seller creates a Submission by selecting a Buyer and confirming the Products, quantities, rates, shipping destination, fees, and other displayed terms. Unless the Service clearly states otherwise, the Contract of Sale becomes binding when the Seller confirms the Submission against the Buyer's active Offer to Purchase.
+
+The prices and rates shown and accepted at confirmation are binding for that Submission even if market prices later change. Neither party may cancel merely because market prices, preferences, or business circumstances change. Any cancellation, return, or adjustment must follow these Terms and the workflow shown in the Service.
+
+A Seller must respect all Buyer quantity limits, submission caps, minimums, budgets, categories, territories, and other restrictions. Creating multiple Submissions, accounts, or shipments to evade a limit is prohibited.
+
+Before confirming, each party must review the transaction summary. If displayed transaction-specific terms conflict with a general description elsewhere in the Service, the transaction-specific terms accepted at confirmation control for that Submission, subject to mandatory law and these Terms.
+
+### Shipping and Submission Status
+
+Unless the Offer to Purchase expressly states otherwise, the Seller is responsible for packaging and outbound shipping costs. The Seller must package Products securely, use accurate shipment information, and enter one valid tracking number for each parcel.
+
+When a Seller confirms a Submission, it is normally shown as **Pending**. When valid tracking is added, it may be shown as **On the way**, and the Buyer's payment method may be authorized or charged according to the transaction workflow. If the Seller does not add required tracking within five days, the Submission may be canceled.
+
+The status labels and steps displayed in the Service record operational progress. A technical or display delay does not by itself change the parties' underlying obligations.
+
+Shipping carriers are independent providers. TCG Bulk is not responsible for carrier delay, loss, customs handling, damage, or other shipping failure except to the extent expressly covered by an optional TCG Bulk protection program or required by law.
+
+### Inspection, Completion, and Adjustments
+
+After delivery, the Buyer has up to 14 days, unless a different period is displayed for the Submission, to inspect the Products. The Buyer must inspect promptly and in good faith.
+
+If the Products match the Submission and applicable requirements, the Buyer marks the transaction **Complete**. The applicable funds are then credited to the Seller's account balance. Completion is final except where reversal is required by law, payment-provider rules, fraud, or a documented error.
+
+If Products are missing, damaged, substandard, incorrectly identified, counterfeit, inauthentic, or otherwise inconsistent with the Submission, the Buyer may propose an order adjustment through the Service. The adjustment must reflect the verified discrepancy and be supported by appropriate evidence, such as photographs, descriptions, inventory records, or expert information.
+
+If a parcel arrives completely destroyed, the Buyer should promptly contact the Seller, document the damage, and create an adjustment. A verified destroyed shipment may be canceled or resolved under the applicable carrier, insurance, or dispute process.
+
+### Condition and Authenticity
+
+Unless an Offer to Purchase expressly accepts another condition or category, Sellers must submit Products in Near Mint condition or better. Sellers must accurately identify material damage, alterations, printing differences, language, variant, and other characteristics requested by the Buyer.
+
+Sellers represent and warrant that they own or are authorized to sell every submitted Product and that the Products are authentic and not counterfeit, altered, reprinted, proxied, resealed, stolen, or otherwise inauthentic or unlawful.
+
+If a Buyer reasonably suspects an authenticity or ownership problem, it may place the Submission under review and provide supporting evidence. We may suspend the transaction, restrict account activity, withhold funds during the review, request further evidence, and take action permitted by law and these Terms.
+
+A confirmed violation may result in cancellation, nonpayment for affected Products, return or lawful disposal of prohibited Products, recovery of losses and costs, account suspension, or permanent termination. Nothing in these Terms requires a party to return an item where doing so would violate applicable law.
+
+### Disputes, Returns, and Cooperation
+
+Buyers and Sellers must cooperate promptly and in good faith with transaction reviews, returns, payment reviews, identity checks, authenticity investigations, and disputes. We may request photographs, videos, documents, shipping records, explanations, or other relevant evidence within a reasonable stated period.
+
+If a return is agreed or required, the responsible party must provide the necessary return label, address, documentation, and shipment within the period stated in the Service or by support. Responsibility for return costs depends on the reason for return, the accepted Offer to Purchase, the parties' agreement, and applicable law.
+
+If a party is unresponsive for more than 72 hours during an active transaction, return, or dispute, we may proceed using the available evidence. To the extent permitted by law, we may complete or cancel the transaction, release or withhold funds, require a return, adjust the Submission, or otherwise resolve the case.
+
+Failure to respond or cooperate may affect the nonresponsive party's claim, payout, account access, or dispute outcome. Our operational decision is final within the Service, but it does not remove any non-waivable right or remedy available under applicable law.
+
+### Buyer and Seller Commitments
+
+**Buyers:** Published rates and qualifying Offers to Purchase must be accurate and funded. Once a Seller confirms a qualifying Submission, the Buyer must honor it, inspect it fairly, pay amounts due, and not reject or return Products merely because the Buyer changes its mind. A Buyer that wrongfully rejects or returns a Submission may be responsible for the Seller's reasonable shipping costs and may be restricted or removed.
+
+**Sellers:** Once a Seller confirms a Submission, the Seller must ship the described Products on time, at the accepted rates, and comply with the Buyer's reasonable packaging, tracking, quantity, condition, and documentation requirements. A Seller that requests a discretionary return after submitting may be responsible for return shipping if the Buyer agrees to the return.
+
+Each party is responsible for complying with laws applicable to the sale, purchase, export, import, tax, customs, and shipment of Products.
+
+### Payments, Payouts, and Fees
+
+Buyers must maintain a valid payment method. By using the Service as a Buyer, you authorize TCG Bulk and its payment providers to authorize or charge your selected payment method and collect transaction amounts, adjustments, shipping reimbursements, and other amounts you validly owe under these Terms.
+
+Sellers must maintain a valid Payment Service Account for payouts. A Seller may request transfer of an available account balance. We may take up to two business days to initiate a payout while we process and verify the request, and payment providers may require additional processing time.
+
+Unless a different fee is clearly shown before the Seller confirms a Submission, a 10% TCG Bulk service fee applies to the transaction and is deducted from the Seller's proceeds. The final transaction summary will show the applicable fee. We may change fees for future transactions by giving notice or clearly displaying the new fee before confirmation; a change does not alter a fee already accepted for an existing Submission.
+
+Payment providers, card issuers, banks, and payout services may impose their own terms, holds, currency conversions, or fees. Transactions or payouts may be declined, delayed, frozen, or reviewed because of insufficient funds, fraud prevention, chargebacks, sanctions, anti-money-laundering requirements, or other legal or provider requirements.
+
+You are responsible for determining and paying taxes that apply to your transactions or income. We may collect, retain, or report tax and transaction information where required by law.
+
+### Optional Shipment Protection
+
+If optional shipment protection is offered and selected for a Submission, the displayed fee, coverage limit, evidence requirements, exclusions, and claim process apply. Under the current program, where shown at checkout, the fee may be 3.5% and coverage may be limited to USD 200 for a package confirmed lost by the carrier.
+
+Shipment protection does not cover product-condition disputes, inaccurate Submissions, Seller default, insufficient Products, or other exclusions shown in the offer. Claims require reasonable evidence and are subject to verification. Fraudulent or abusive claims may result in denial, account restriction, recovery action, or referral to authorities.
+
+### Marketplace Integrity and Prohibited Conduct
+
+You must not:
+
+- share contact information or use TCG Bulk communications to move a transaction outside the Service or avoid applicable fees;
+- create or use multiple accounts, alternate identities, third parties, repeated Submissions, reused tracking numbers, devices, or technical methods to evade a block, limit, suspension, Buyer restriction, or enforcement action;
+- harass, threaten, intimidate, coerce, dox, extort, spam, or abuse users, staff, or service providers;
+- submit false, misleading, illegal, infringing, malicious, or harmful content or Products;
+- interfere with security, availability, other users, or normal operation of the Service;
+- introduce malware, harmful code, or fraudulent data;
+- scrape, harvest, or automatically extract data or make automated requests except through an interface we expressly authorize;
+- reverse engineer, decompile, disassemble, bypass, or attempt to discover source code, models, algorithms, security controls, or non-public interfaces, except where applicable law expressly permits it; or
+- use the scanner, Binder, marketplace data, or Service to build or operate a competing database or recognition service without our written permission.
+
+We may use account information, behavior, device and network indicators, transaction data, and other reasonably available evidence to investigate circumvention or abuse. Enforcement will be proportionate to the circumstances and subject to applicable law.
+
+### Communications and Safety Review
+
+We may monitor, automatically screen, and, where necessary, manually review Offers to Purchase, marketplace communications, attachments, and activity to operate the Service, detect fraud or abuse, enforce these Terms, resolve disputes, and comply with law.
+
+Users should report suspected fraud, counterfeit Products, harassment, threats, off-platform solicitation, or other violations to [email protected].
+
+### User Content and Intellectual Property
+
+You retain ownership of content you submit. You grant TCG Bulk a non-exclusive, worldwide, royalty-free, sublicensable license to host, store, reproduce, process, adapt, display, and transmit that content only as reasonably necessary to provide, secure, improve, promote, and enforce the Service, complete transactions, and comply with law. This license continues only for as long as reasonably necessary for those purposes and any legally required retention.
+
+You represent that you have the rights needed to provide your content and that it does not violate law or another person's rights. We may remove content that violates these Terms or applicable law.
+
+The Service, including its software, design, text, graphics, logos, non-user databases, recognition technology, and other materials, is owned by TCG Bulk or its licensors and is protected by intellectual-property law. We grant you a limited, non-exclusive, non-transferable, revocable license to use the Service in accordance with these Terms. No other rights are granted.
+
+If you provide feedback or suggestions, you permit us to use them without restriction or compensation.
+
+### Privacy and Cookies
+
+Our Privacy Policy explains how we collect, use, share, and retain personal information, including scanner images, account information, transactions, analytics, and advertising measurement. Our Cookie Policy explains the cookies and similar technologies used on our websites and how to change your choices.
+
+### Account Deletion, Suspension, and Termination
+
+You may request deletion from within the TCG Bulk app or through our Account Deletion page. Eligible requests are normally completed within seven calendar days.
+
+Deletion may be delayed while an active Submission, unresolved dispute, unpaid payout, positive account balance, payment reversal, fraud review, or other transaction obligation requires resolution. We will explain any action required. When deletion is completed, account information that is no longer needed is deleted or anonymized. Transaction, payment, shipping, fraud-prevention, dispute, tax, accounting, and legal records may be retained where required by law or reasonably necessary to protect transaction participants and legal rights.
+
+We may warn, restrict, suspend, or terminate an account; cancel or hold a Submission; remove content; limit payouts; or take other reasonable action if we believe the user violated these Terms, created risk for other users or the Service, failed verification, engaged in fraud or abuse, or if action is required by law or a service provider. Urgent action may be taken without advance notice where necessary to prevent harm, fraud, loss, or legal violation.
+
+Where reasonably possible, we will notify you of a suspension or termination and any available review process. Termination does not affect rights, payment duties, disputes, liabilities, or provisions that by their nature should continue.
+
+### Service Availability and Changes
+
+We may update, add, remove, suspend, or discontinue features, supported games, scanner capabilities, territories, or all or part of the Service. We do not guarantee uninterrupted, error-free, or permanently available operation.
+
+We may update these Terms to reflect changes to the Service, law, or our practices. We will post the updated Terms and effective date and provide additional notice where required. Material changes ordinarily take effect after reasonable notice. Changes needed for a new feature, security, fraud prevention, or legal compliance may take effect sooner. Continued use after the effective date means you accept the updated Terms.
+
+### Disclaimers
+
+To the maximum extent permitted by law, the Service is provided "as is" and "as available". TCG Bulk does not guarantee scanner accuracy, Product authenticity or condition, Binder or price accuracy, Buyer or Seller performance, shipment performance, availability, or that the Service will meet every requirement.
+
+TCG Bulk does not control and does not guarantee a user's legal title, authority, truthfulness, ability to pay, ability to ship, or compliance with a Contract of Sale. Nothing in these Terms excludes responsibilities that cannot lawfully be excluded.
+
+### Limitation of Liability and Indemnity
+
+To the maximum extent permitted by applicable law, TCG Bulk and its directors, officers, employees, and contractors will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages; loss of profit, business, opportunity, goodwill, or data; network charges; or losses caused by connectivity, carrier, user, or third-party-provider failures.
+
+Where applicable law permits a monetary limitation, TCG Bulk's total liability arising from the Service or these Terms will not exceed the TCG Bulk service fees paid in connection with your transactions during the 12 months before the event giving rise to the claim. This limitation does not apply where prohibited by law, including to liability that cannot be limited for fraud, willful misconduct, death, personal injury, or mandatory consumer rights.
+
+To the extent permitted by law, you agree to indemnify and hold TCG Bulk and its personnel harmless from third-party claims, losses, and reasonable costs arising from your unlawful use of the Service, your breach of these Terms, your Products or content, or your infringement of another person's rights. This indemnity does not apply to the extent a claim was caused by TCG Bulk's own breach or wrongdoing.
+
+### Force Majeure
+
+No party is liable for delay or failure caused by events beyond its reasonable control, including natural disasters, war, terrorism, civil disorder, labor disputes, carrier or infrastructure failure, power or internet outage, epidemic, government action, or similar events. Affected obligations are suspended only for the duration and extent of the event, except for payment obligations already due.
+
+### Governing Law and Dispute Resolution
+
+The United Nations Convention on Contracts for the International Sale of Goods does not govern these Terms.
+
+**If you are a consumer:** these Terms and your relationship with TCG Bulk are governed by the laws of your country of residence, without removing any mandatory consumer protection. Courts in your country of residence have non-exclusive jurisdiction. You may also use an applicable consumer alternative-dispute-resolution body. The European Commission maintains a list of consumer dispute-resolution bodies.
+
+**If you are a company:** these Terms and your relationship with TCG Bulk are governed by the laws applicable in the State of Connecticut, United States, without regard to conflict-of-law rules, and disputes are subject to the competent state or federal courts located in Connecticut, unless mandatory law requires otherwise.
+
+Either party may seek urgent injunctive or equivalent relief in any court with jurisdiction.
+
+### General
+
+If any provision is invalid or unenforceable, it will be limited to the minimum extent necessary and the remaining provisions will continue. Headings are for convenience only. Failure to enforce a provision is not a waiver. You may not assign these Terms without our written consent; we may assign them in connection with a merger, reorganization, financing, sale of assets, or transfer of the Service, subject to applicable law.
+
+No agency, employment, partnership, fiduciary relationship, or joint venture is created between TCG Bulk and a user or between a Buyer and Seller merely by using the Service.
+
+These Terms, the accepted transaction-specific terms, the Privacy Policy, the Cookie Policy, and any expressly incorporated policy form the agreement between you and TCG Bulk concerning the Service.
+
+### Contact Us
+
+For questions, complaints, or notices concerning these Terms, contact:
+
+CCGCastle LLC
+2 Craftsman Road
+East Windsor, Connecticut 06088
+United States
+[email protected]
+
+These Terms are available at https://tcgbulk.com/page/terms-of-service and may also be made available in the app. Please save a copy for your records.

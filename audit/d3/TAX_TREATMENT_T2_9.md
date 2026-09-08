@@ -45,7 +45,7 @@ keep the answer.
 |---|---|---|
 | `true` | `published-inclusive` | The page states the base includes tax. |
 | `false` | `published-exclusive` | The page states the base excludes tax, or enumerates the base closed and tax is not in the enumeration. **A confirmed zero.** |
-| `false` | `no-buyer-tax` | Buylist / direct purchase. The venue is the buyer; there is no buyer checkout and therefore no buyer sales tax to include. **A confirmed zero, established structurally rather than by a sentence.** |
+| `false` | `no-seller-fee` | Buylist / direct purchase where the venue publishes that it charges the seller **no service fee**. `taxOn: false` records that there is no seller fee for a tax component to sit inside — it does **not** assert that the transaction was untaxed. **This is a fee finding, not a tax finding.** |
 | `'unknown'` | `payment-method` | Policy is published, but the deciding input — how the buyer paid — is not knowable at draft time. |
 | `'unknown'` | `unstated` | The published fee page does not address it. |
 
@@ -73,10 +73,46 @@ The gap closes by disclosure, per the binding rule.
 | | |
 |---|---|
 | **Published fee base** | "TCGplayer charges fees based on the subtotal (item amount + shipping cost). **We do not charge fees on taxes for orders paid by debit card.** However, **credit cards and PayPal do include taxes when determining the fee** … (item amount + shipping cost + taxes)." Worked example: commission 10.25% of **Subtotal** $66.30 = $6.80; processing 2.5% + $0.30 of **Order Total** $70.78 = $2.07, where "Order Total = Subtotal + Sales Tax". Sources: [TCGplayer fees](https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees), [fee calculation examples](https://help.tcgplayer.com/hc/en-us/articles/360047732673-Fee-Calculation-Examples) |
-| **Current implementation** | `feeTCGPlayer(price, shipCharge, tcgLevel)`. `base = price + shipCharge` for both components. `out.feeBase` emitted. Commission base is **correct**; the processing base is correct for debit and **understated for credit card / PayPal**. |
+| **Current implementation** | `feeTCGPlayer(price, shipCharge, tcgLevel)`. `base = price + shipCharge` for both components, and `out.feeBase` is emitted. Commission base **matches** the published subtotal definition. For the processing component the direction of error is **not established in one direction**: against credit card / PayPal our base is **understated** (theirs adds tax); against debit, see the withdrawal below. |
 | **Missing inputs** | The buyer's payment method, plus the tax amount. The payment method is not merely unmeasured — it does not exist until checkout, after the draft is written. |
 | **Seller-facing disclosure** | Fee base row renders. **No tax row.** The split basis appears nowhere on any surface. |
 | **Required correction** | `taxOn: 'unknown'`, `taxBasis: 'payment-method'`. This is not ignorance of the policy — the policy is fully published — it is a genuinely conditional outcome, and the condition resolves after the estimate is made. Renders the disclosure. |
+
+
+**WITHDRAWN: "the processing base is correct for debit."** The first version of
+this document asserted that. It is withdrawn, and it is withdrawn in the
+direction that is worse for us, not better.
+
+*The passage is real and I have it.* `taxaudit/raw/tcgplayer.txt:9`, an italic
+Note sitting immediately above the Marketplace Fees table on
+[TCGplayer's fees article](https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees):
+"We do not charge fees on taxes for orders paid by debit card. However, credit
+cards and PayPal do include taxes when determining the fee." The applicable
+configuration is stated only as the buyer's **payment method** — the passage
+names no seller tier, no store configuration and no region.
+
+*What I cannot establish is the thing I asserted.* "Correct for debit" requires
+knowing that on a debit order TCGplayer charges a 2.5% + $0.30 processing fee on
+the tax-exclusive subtotal. The Note establishes only that **taxes are not in the
+fee base** for debit. It does not establish that the processing fee **exists** on
+debit orders at all. **All eight worked configurations** in
+`taxaudit/raw/tcgplayer_examples.txt` are credit card or PayPal; there is no
+debit example anywhere in either capture. Our model charges 2.5% + $0.30 on 100%
+of orders.
+
+*Consequence, stated against the boundary rather than as a number.* If debit
+orders carry no processing fee, our model **overstates** fees on every debit
+order — the opposite direction from the credit-card case, on the same venue.
+That would mean TCGplayer's total error is **not signed**: it depends on a
+payment method unknown at draft time. This is recorded as an **open item, not a
+finding**, because no source establishes either branch. Until it is reconciled,
+neither "correct for debit" nor "overstates on debit" is published as
+established.
+
+*Reproducibility note.* The reviewer's own fetch of the fees article did not
+return this Note. The raw captures under `taxaudit/raw/` are therefore being
+committed to the repository with this change, so the passage can be checked
+against the bytes I actually read rather than against a re-fetch.
 
 ## 3. Poshmark
 
@@ -163,34 +199,57 @@ other half of the same schedule. Two consequences worth keeping:
 | **Seller-facing disclosure** | None. |
 | **Required correction** | `taxOn: 'unknown'`, `taxBasis: 'unstated'`. Renders the disclosure. This is the venue where the disclosure copy fits worst — the label says "Buyer sales tax" and the regime is VAT, where EU displayed prices are conventionally gross, the opposite default from US sales tax. Recorded as an open copy question in §12 rather than silently resolved. |
 
-## 10. Card Kingdom · 11. CoolStuffInc · 12. Star City Games · 13. TCG Bulk — the buylist class
+## 10. Card Kingdom · 11. CoolStuffInc · 12. Star City Games — the no-seller-fee buylists
 
-These four share one structure and one answer, so they share one table. The
-distinction from the marketplace venues is stated rather than collapsed, per the
-reviewer's instruction.
+**These three, and NOT TCG Bulk.** My first pass put all four in one class on the
+strength of a structural argument — "the venue is the buyer, so there is no buyer
+checkout, so there is no buyer tax." The reviewer rejected that argument, and
+TCG Bulk is the venue that shows why: its own terms say it **does not take legal
+title** and **is not the seller or buyer**. It is an intermediary. The structural
+premise is false there, and once it is false for one member it cannot be the
+thing that defines the class. TCG Bulk is therefore split out into §13 below and
+recorded `'unknown'`.
+
+What survives for these three is narrower and better evidenced: each publishes
+that it charges the seller no service fee.
 
 | | |
 |---|---|
-| **Published fee base** | Card Kingdom: "Payments for cards are done by a percentage system based on the **NM buy price** for a card"; the seller ships in and is paid by check, PayPal or store credit ([Card Kingdom](https://www.cardkingdom.com/purchasing/how_to_sell)). CoolStuffInc: "**no fees on any collections**", "you receive the full value for your cards without any deductions" ([CoolStuffInc](https://www.coolstuffinc.com/main_fullservice_selllist.php)). SCG Sell List: "**Pay no Service Fees**" ([Star City Games](https://sellyourcards.starcitygames.com/)). TCG Bulk: "a **10% TCG Bulk service fee** applies to the transaction and is deducted from the **Seller's proceeds**" ([TCG Bulk terms](https://tcgbulk.com/page/terms-of-service)). None mentions tax in a fee base. |
-| **Current implementation** | All four route through `feeBuylist(price, ratio, serviceFeePct)`. The "fee" is the retail-to-offer haircut; `serviceFeePct` is set for TCG Bulk (10%) and left undefined for the three direct buylists, so that row never renders for them. |
-| **Missing inputs** | None for the tax question. TCG Bulk's fee base against the vendor remains separately unconfirmed — that is an **open item that predates this audit and is not closed by it**. |
-| **Seller-facing disclosure** | No tax row, and correctly so. |
-| **Required correction** | `taxOn: false`, `taxBasis: 'no-buyer-tax'` on all four. |
+| **Published fee base** | Card Kingdom: "Payments for cards are done by a percentage system based on the **NM buy price** for a card"; the seller ships in and is paid by check, PayPal or store credit ([Card Kingdom](https://www.cardkingdom.com/purchasing/how_to_sell)). CoolStuffInc: "**no fees on any collections**", "you receive the full value for your cards without any deductions" ([CoolStuffInc](https://www.coolstuffinc.com/main_fullservice_selllist.php)). SCG Sell List: "**Pay no Service Fees**" ([Star City Games](https://sellyourcards.starcitygames.com/)). |
+| **Current implementation** | All three route through `feeBuylist(price, ratio, serviceFeePct)` (`js/core.59d4b1ab.js:8035`) and pass **no** `serviceFeePct`. The "fee" they display is the retail-to-offer haircut, not a charge. |
+| **Strength of the evidence, per venue** | CoolStuffInc and SCG publish an affirmative "no fees" / "pay no Service Fees" sentence. **Card Kingdom does not.** Its page states a buy-price percentage and never says the word fee either way — an A-2 pattern (absence of a fee, or a fee never checked for). Card Kingdom's `false` therefore rests on weaker evidence than the other two, and that difference is recorded here rather than averaged away. |
+| **Missing inputs** | For the **fee** question: none for CoolStuffInc and SCG; Card Kingdom is A-2. For the **tax** question: not answered, and not claimed to be. |
+| **Seller-facing disclosure** | No tax row. `venueTaxNote` returns `null` when `taxOn === false` (`js/core.59d4b1ab.js:6746`). |
+| **Required correction** | `taxOn: false`, `taxBasis: 'no-seller-fee'` (`js/core.59d4b1ab.js:6438, 6452, 6472`). |
 
-**Why this is a confirmed zero and not an unknown.** A buylist transaction has no
-buyer checkout. The venue **is** the buyer; the seller ships cards in and
-receives an offer. No buyer-paid sales tax is created anywhere in the
-transaction, so there is no tax that any fee base could include — the question
-is answered by the shape of the deal rather than by a sentence on the page. That
-makes it a stronger result than an argument from silence and a weaker one than a
-quoted exclusion, which is precisely why `taxBasis` records `'no-buyer-tax'`
-instead of laundering it into `'published-exclusive'`.
+**What `false` means here, stated precisely.** It means: *no seller service fee
+is published, so there is no fee of ours for a buyer-tax component to be charged
+on.* It does **not** mean the transaction carried no tax, and it does not mean
+anyone confirmed a zero. "Confirmed zero" has been withdrawn as a description of
+this class — in this document, in `accuracy.html`, and in the published summary.
+A historical blank cannot be retrospectively declared a confirmed zero.
+
+**Why the suppression is still correct.** Our estimate charges these venues no
+service fee. A disclosure whose subject is "a fee we charge you may be charged on
+buyer-paid tax" has no referent when there is no fee. The row is suppressed
+because the *question does not arise*, not because the answer is known to be
+zero.
 
 **COMC and Fanatics are deliberately not in this class.** Both require shipping
-cards in, which makes them *feel* like buylists, but both are **consignment**:
-a third-party buyer checks out and the seller's proceeds derive from that
-buyer's payment. The buyer-tax question therefore applies to them in full, and
-both are recorded `'unknown'` above.
+cards in, which makes them *feel* like buylists, but both are **consignment**: a
+third-party buyer checks out and the seller's proceeds derive from that buyer's
+payment. Both are recorded `'unknown'` above.
+
+## 13. TCG Bulk — split out, and unknown
+
+| | |
+|---|---|
+| **Published fee base** | "a **10% TCG Bulk service fee** applies to **the transaction** and is deducted from the **Seller's proceeds**" (`taxaudit/raw/tcgbulk.txt:117`, [TCG Bulk terms](https://tcgbulk.com/page/terms-of-service)). A separate optional 3.5% shipment protection, capped at USD 200 (`:125`). |
+| **Why it is not a buylist** | Same terms, `:9`: TCG Bulk "**does not take legal title to the Products and is not the seller or buyer**". The structural argument that carried §10–12 does not apply. |
+| **Missing inputs** | **"The transaction" is never composed anywhere in the document.** It is not enumerated, no worked example decomposes it, and no sentence states whether it includes tax or shipping. So the 10% fee's base is unknown, and whether buyer-paid tax sits inside it is unknown. |
+| **Current implementation** | `feeBuylist(...)` with `serviceFeePct = 0.10` — a real seller charge, unlike §10–12. |
+| **Seller-facing disclosure** | Tax row renders in the **unestablished** state: *Buyer sales tax (treatment not established)*. |
+| **Required correction** | `taxOn: 'unknown'`, `taxBasis: 'unstated'` (`js/core.59d4b1ab.js:6544`). |
 
 ## 14. CardNexus
 
@@ -219,17 +278,37 @@ both are recorded `'unknown'` above.
 | `taxOn` | count | venues |
 |---|---|---|
 | `true` | **2** | eBay, Whatnot |
-| `false` | **6** | Mercari, CardNexus (published-exclusive) · Card Kingdom, CoolStuffInc, Star City Games, TCG Bulk (no-buyer-tax) |
-| `'unknown'` | **7** | TCGplayer (payment-method) · Poshmark, COMC, Mana Pool, Cardsphere, Cardmarket, Fanatics Collect (unstated) |
+| `false` | **5** | Mercari, CardNexus (`published-exclusive`) · Card Kingdom, CoolStuffInc, Star City Games (`no-seller-fee`) |
+| `'unknown'` | **8** | TCGplayer (payment-method) · Poshmark, COMC, Mana Pool, Cardsphere, Cardmarket, Fanatics Collect, **TCG Bulk** (unstated) |
 
-**The disclosure goes from 1 venue to 9.** It is suppressed on 6, every one of
-them for a recorded reason that can be re-opened by grep.
+**The disclosure goes from 1 venue to 10 of 15.** It is suppressed on 5, every
+one of them for a recorded reason that can be re-opened by grep — and on three of
+those five the reason is "no seller fee exists here", not "tax was confirmed
+absent".
 
 **BIAS-10's own counts are stale and are corrected here, not rewritten
 elsewhere.** The finding was filed against a 12-venue set and its text says
 "one of twelve", "eleven venues" and "ten venues" in three places. The set is
 now 15, and the pre-fix disclosure coverage was **1 of 15**. The magnitude
 argument is unaffected — it never depended on the count.
+
+**What this result does and does not license, restated after review.** Eight
+venues are `'unknown'`. An unknown treatment cannot support a confirmed
+magnitude or a confirmed direction, so the following three narrowings apply
+everywhere this audit is summarised:
+
+1. **`taxOn: true` establishes policy inclusion, not a positive omitted amount on
+   every transaction.** eBay and Whatnot include buyer tax in a published fee
+   base; on an order where no buyer tax applies, the omitted amount is zero. The
+   supportable phrasing is *"may understate fees when buyer-paid tax applies"* —
+   not "understates fees".
+2. **No net direction is claimed across the venue set.** TCGplayer alone may run
+   in **both** directions depending on the buyer's payment method (§2). A signed
+   total requires the unknowns to be resolved, and they are not.
+3. **No ranking effect has been ruled out.** Different corrections across venues
+   can change the ordering near a tie, and this work did not test for that. The
+   earlier statement that ranking was unaffected is withdrawn; the honest
+   statement is that the ranking question is **open and untested**.
 
 ## 17. The stamp — `feeAuditedOn` is NOT bumped
 
@@ -249,8 +328,14 @@ verified" for the *schedule*; bumping it would publish a claim this work does no
 support.
 
 **Consequence, stated so it cannot be lost:** the fee re-audit remains due, on
-its own clock. All 15 stamps stay at `2026-09-01` — amber at `2026-10-01`, stale
-at `2026-10-16`. And per the one-date decision, **no `taxCheckedOn` field is
+its own clock. All 15 stamps stay at `2026-09-01`.
+
+**Corrected dates.** The first version of this section said amber `2026-10-01`
+and stale `2026-10-16`. That was wrong, and the reviewer's correction is
+adopted. `feeAuditAgeDays` (`js/core.59d4b1ab.js:6686`) floors a `Date.UTC`
+difference, and the thresholds are strict: stale at `> 45`, amber at `> 30`. A
+2026-09-01 stamp reaches age 30 on 2026-10-01 — which is **not** `> 30` — so it
+turns **amber on 2026-10-02** and **stale on 2026-10-17**. And per the one-date decision, **no `taxCheckedOn` field is
 added**; a second date earns its place only if a venue publishes tax treatment
 somewhere other than its fee schedule, which none of these fifteen does.
 
@@ -261,14 +346,25 @@ somewhere other than its fee schedule, which none of these fifteen does.
   express *which component*. Adequate for the disclosure, which is a warning and
   not a calculation. It would not be adequate for anything that computed from it
   — and nothing may, because of the binding rule.
-- **The Cardmarket copy mismatch.** "Buyer sales tax" is the wrong noun for a VAT
-  regime. Not fixed here; fixing it means either a per-venue label or a broader
-  one, and both are copy decisions rather than audit findings.
+- **The Cardmarket copy mismatch — now CLOSED by this revision.** "Buyer sales
+  tax" was the wrong noun for a VAT regime. Cardmarket now carries
+  `taxNoun: 'Buyer VAT'` (`js/core.59d4b1ab.js:6406`) and its standing note is
+  VAT-appropriate. Critically, the note does **not** imply that a
+  VAT-inclusive price needs another tax amount added on top: it says only that
+  the published schedule *does not establish* whether VAT forms part of any fee
+  base.
+- **Disclosure is not completeness.** The seller-facing note opens by conceding
+  that showing the caveat does not make the estimate arithmetically complete. A
+  warning names today's missing inputs; it does not supply them.
 - **`feeBase` / `feeBaseLabel` still emit on 2 venues of 15** (eBay, TCGplayer).
   That is BIAS-10's *other* half and T2.9 does not cover it. Thirteen venues
   continue to show a fee total with no stated base. **Explicitly still open.**
 - **TCG Bulk's fee base against the vendor** — open before this audit, open
-  after it.
+  after it, and now the reason §13 is `'unknown'` rather than `false`.
+- **Does a TCGplayer processing fee exist at all on debit orders?** See the
+  withdrawal in §2. Possible **overstatement**, unresolved, no source either way.
+- **Card Kingdom is A-2.** Its `false` rests on the absence of a fee statement
+  rather than on an affirmative "no fees" sentence, unlike CoolStuffInc and SCG.
 - **Poshmark's base is unobtainable from published text**, not merely
   tax-silent. Five URLs attempted; the Fee Policy is incorporated by reference
   and does not resolve to a distinct page.

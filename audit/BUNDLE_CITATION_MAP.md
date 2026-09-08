@@ -1,6 +1,28 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.2c7cf451.js` (21,353 lines).** New work cites that hash.
+**Live bundle: `js/core.59d4b1ab.js` (21,491 lines).** New work cites that hash.
+
+> **`2c7cf451` was renamed to `59d4b1ab` on 2026-09-08 by the T2.9 review pass,
+> and it is NOT in the retired-generation tables below** — same reason as its
+> predecessors: the edit was in place, so no file with those bytes survives to
+> align against. The pass reclassified four venues' `taxOn`/`taxBasis`, turned
+> `venueTaxNote` into a state-returning helper, split `FEE_DISCLOSURE.estimateNote`
+> into `estimateStem` plus a new `venueEstimateNote(pid)`, and added four
+> per-venue fields (`taxNoun`, `taxBaseName`, `taxBaseIncludes`,
+> `taxBaseFeeName`). 138 lines net.
+>
+> **Concrete consequence:** the insertions land in two regions — inside
+> `PLATFORMS` (~6,290–6,345) and around `venueTaxNote`/`FEE_DISCLOSURE`
+> (~6,730–7,460). A citation naming `2c7cf451` **below ~6,290** now points high
+> against live, by roughly 12 lines between there and the helper block and by
+> roughly 138 lines below it. The **first** T2.9 return packet cited `2c7cf451`;
+> this revision re-derives every citation against `59d4b1ab` directly, so the
+> drift affects the superseded packet only.
+>
+> **Unresolved count re-derived by running `tools/bundle-citation-map.mjs` after
+> the rename: still 109** (108 `d9e1b484`, 1 `8e031c8f`) — unchanged, because the
+> insertions landed in regions no retired citation points at. Re-ran the
+> artifact; did not re-implement its query.
 
 > **`9fd82d6e` was live for one commit and is NOT in the retired-generation
 > tables either.** T2.9 landed on it, then a follow-up removed the D3 review

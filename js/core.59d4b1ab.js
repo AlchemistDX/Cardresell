@@ -6296,6 +6296,14 @@ function esc(s) {
 const PLATFORMS = {
   ebay:      { name: 'eBay',              color: '#e53238', emoji: '🛒', feeAuditedOn: '2026-09-01',
     taxOn: true, taxBasis: 'published-inclusive',
+    // What the venue's published base contains BEYOND the item price. Named
+    // per venue because `venueEstimateNote` must say which components this
+    // estimate leaves out, and buyer-paid shipping is a second omission --
+    // dropping it from the sentence lost a disclosure the review screen had
+    // been making since D3 (caught by tests/draft-review-screen.mjs).
+    taxBaseName:     'total sale',
+    taxBaseFeeName:  'its fee',
+    taxBaseIncludes: 'buyer-paid shipping and buyer sales tax',
     effort: 'easy',   effortLabel: 'Easy · you list, you ship, you get paid',
     workflow: 'list', payoutTime: '2–5 days after buyer clears',
     hassle: 'Biggest audience + buyer protection. Timeline depends on price — cheap cards move fast, high-ask cards can sit.',
@@ -6333,6 +6341,15 @@ const PLATFORMS = {
     redFlags: ['📦 Ship-in to vault required (Fanatics holds the card)', '⚾ Sports-first audience — slower for raw TCG', '📅 Weekly auction cycle', '🔒 Card locked in vault once accepted', '⚠️ 12% seller fee (not 6%) if you list at or above 120% of Card Ladder market value', '🧾 $3 one-time fee on sub-$50 vault items still unsold after 30 days'] },
   whatnot:   { name: 'Whatnot',           color: '#fbbf24', emoji: '📡', feeAuditedOn: '2026-09-01',
     taxOn: true, taxBasis: 'published-inclusive',
+    // What the venue's published base contains BEYOND the item price. Named
+    // per venue because `venueEstimateNote` must say which components this
+    // estimate leaves out, and buyer-paid shipping is a second omission --
+    // dropping it from the sentence lost a disclosure the review screen had
+    // been making since D3 (caught by tests/draft-review-screen.mjs).
+    taxBaseName:     'total order value',
+    // Commission excludes tax; only processing is charged on the inclusive total.
+    taxBaseFeeName:  'its payment processing fee',
+    taxBaseIncludes: 'buyer-paid shipping and buyer sales tax',
     effort: 'medium', effortLabel: 'Medium · live auction, you host',
     workflow: 'list', payoutTime: '1–3 days after sale ships',
     hassle: 'Live-auction TCG juggernaut — fastest way to move volume if you can host a stream. Fixed-price listings work too.',
@@ -6381,7 +6398,12 @@ const PLATFORMS = {
   //     https://www.cardmarket.com/en/Policies/Fees (official fee table)
   //     https://tcg-pricetracker.com/en/blog/cardmarket-fees (analysis)
   cardmarket:{ name: 'Cardmarket',        color: '#0369a1', emoji: '🌐', feeAuditedOn: '2026-09-01',
-    taxOn: 'unknown', taxBasis: 'unstated',
+    // 2026-09-08: the tax at issue here is EU VAT, which is normally already
+    // inside the displayed item price rather than added at checkout the way US
+    // sales tax is. "Buyer sales tax" was the wrong noun, and the default row
+    // read as though a further amount were missing from every order. The open
+    // question is narrower: whether VAT sits inside the 5% commission base.
+    taxOn: 'unknown', taxBasis: 'unstated', taxNoun: 'Buyer VAT',
     // 2026-09-01: region flag. Cardmarket's 5% commission is the LOWEST of all
     // 15 venues, so it ranks near the top on raw net payout — but a US seller
     // can't realistically capture that number. International postage, ~3% FX
@@ -6413,7 +6435,7 @@ const PLATFORMS = {
   // These are estimates — the tile discloses this clearly and pushes the user
   // to verify against the live quote before shipping.
   cardkingdom:{ name: 'Card Kingdom',     color: '#dc2626', emoji: '👑', feeAuditedOn: '2026-09-01',
-    taxOn: false, taxBasis: 'no-buyer-tax',
+    taxOn: false, taxBasis: 'no-seller-fee',
     effort: 'medium', effortLabel: 'Medium · buylist — instant offer, lower payout',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Buylist model — they quote you a fixed offer, no fees but ~50% of retail for cash (or ~65% for store credit). CSV bulk upload supported.',
@@ -6427,7 +6449,7 @@ const PLATFORMS = {
   //     https://www.coolstuffinc.com/main_fullservice_selllist.php (verified)
   //     https://www.reddit.com/r/yugioh/comments/ngtcqa/ (community confirmation of 25% bonus)
   coolstuffinc:{ name: 'CoolStuffInc',    color: '#7c3aed', emoji: '💪', feeAuditedOn: '2026-09-01',
-    taxOn: false, taxBasis: 'no-buyer-tax',
+    taxOn: false, taxBasis: 'no-seller-fee',
     effort: 'medium', effortLabel: 'Medium · buylist — strong for YGO + MTG',
     workflow: 'buylist', payoutTime: '1–2 business days after approval',
     hassle: 'Buylist — fixed offer, no fees. Strong Yu-Gi-Oh! + MTG buylist rates. 25% store credit bonus.',
@@ -6443,7 +6465,11 @@ const PLATFORMS = {
   //     https://sellyourcards.starcitygames.com/  (fee tiers verified 2026-08-29)
   //     https://help.starcitygames.com/en-US/articles/sell-to-us-229858
   scg:{ name: 'Star City Games',       color: '#003366', emoji: '⭐', feeAuditedOn: '2026-09-01',
-    taxOn: false, taxBasis: 'no-buyer-tax',
+    // Basis is program-specific. This model implements the Sell List program,
+    // which the venue states carries no service fee; Ship + Sell carries 10%
+    // (5% over $10,000) and is NOT what `buylistRatio` prices. So "no seller
+    // fee" is true of the modelled program, not of the venue as a whole.
+    taxOn: false, taxBasis: 'no-seller-fee',
     effort: 'medium', effortLabel: 'Medium · buylist — 0% fee on sorted lists',
     workflow: 'buylist', payoutTime: 'Fast — check, PayPal, or +30% store credit',
     hassle: 'Sell List (sorted): NO service fee, ~55% of retail cash / ~72% store credit. Ship + Sell (unsorted): 10% service fee (5% over $10K). MTG + Pokemon + Lorcana + FAB + Riftbound.',
@@ -6504,7 +6530,18 @@ const PLATFORMS = {
   //     https://tcgbulk.com/page/terms-of-service  (fee text above, retrieved
   //       2026-09-08; terms effective 2026-08-26)
   tcgbulk:{ name: 'TCG Bulk',           color: '#059669', emoji: '📊', feeAuditedOn: '2026-09-01',
-    taxOn: false, taxBasis: 'no-buyer-tax',
+    // 2026-09-08 CORRECTION. This was `false`, justified as "the venue is the
+    // buyer, so there is no buyer checkout and no buyer tax". TCG Bulk's own
+    // terms contradict the premise: it "does not take legal title to the
+    // Products and is not the seller or buyer under that contract" -- it is an
+    // intermediary between the seller and a third-party business Buyer. It also
+    // charges the only real seller fee in this group: 10% "applies to the
+    // transaction and is deducted from the Seller's proceeds". "The
+    // transaction" is never composed, and the terms leave tax compliance to the
+    // parties, so whether any buyer tax sits in that base is unestablished.
+    // Unlike the three direct buylists, there IS a fee base here to be wrong
+    // about, which is why this one cannot ride on "no fee, no fee base".
+    taxOn: 'unknown', taxBasis: 'unstated',
     effort: 'medium', effortLabel: 'Medium · aggregator — compare buylist offers',
     workflow: 'buylist', payoutTime: 'PayPal after buyer confirms receipt',
     hassle: 'Aggregator — compare offers from multiple verified US buylist buyers, ship to the buyer you pick. Pokemon, MTG, One Piece, YGO, Lorcana, FAB, Riftbound.',
@@ -6680,7 +6717,16 @@ function feeAuditedLabel(pid) {
   return `${_AUDIT_MON[+m[2] - 1]} ${+m[3]}, ${m[1]}`;
 }
 
-/* Does the seller see the "Buyer sales tax (not estimated)" row for this venue?
+/* What tax caveat does the seller see for this venue, and in what words?
+ *
+ * RETURNS A NOTE OR NULL, NOT A BOOLEAN (2026-09-08, T2.9 review). The boolean
+ * version could only decide WHETHER to warn; each surface then supplied its own
+ * fixed sentence, and that sentence said "not estimated" for every venue. That
+ * is the right words for eBay, where the published schedule puts buyer-paid tax
+ * in a fee base we exclude, and the wrong words for Cardmarket, where nothing
+ * about the treatment is established and the tax in question is VAT already
+ * inside the item price. One warning shape cannot carry two different claims,
+ * so the wording moved in here with the decision that selects it.
  *
  * ONE implementation, reading ONE field. Until 2026-09-08 this was the line
  * `items.taxNote = true` hardcoded inside `feeEbay`, which is why fourteen of
@@ -6689,13 +6735,76 @@ function feeAuditedLabel(pid) {
  * pattern instance 22 -- a fact encoded as a line inside one implementation is
  * invisible everywhere that implementation is not.
  *
- * Renders unless the venue is a CONFIRMED zero. `'unknown'` renders, matching
- * how `feeAuditAgeDays` fails closed: an unverified treatment presents as
- * unverified. An unrecognised pid also renders -- failing closed here means
- * showing the caveat, never hiding it.
+ * Suppressed only when `taxOn === false`, which means "no fee base this model
+ * charges against can contain buyer tax" -- either the venue publishes its fee
+ * as tax-exclusive, or this model charges the seller no fee at all. It does NOT
+ * mean the buyer paid no tax, and it is not a tax determination about the
+ * venue. `'unknown'` renders, matching how `feeAuditAgeDays` fails closed: an
+ * unestablished treatment presents as unestablished. An unrecognised pid also
+ * renders -- failing closed here means showing the caveat, never hiding it.
  */
 function venueTaxNote(pid) {
-  return PLATFORMS[pid]?.taxOn !== false;
+  const p = PLATFORMS[pid];
+  if (p && p.taxOn === false) return null;
+  const known = p ? p.taxOn === true : false;
+  return {
+    state:     known ? 'included' : 'unestablished',
+    label:     (p && p.taxNoun) || FEE_DISCLOSURE.taxLabel,
+    qualifier: known ? FEE_DISCLOSURE.taxQualifier : FEE_DISCLOSURE.taxQualifierUnknown,
+  };
+}
+
+// The STANDING NOTE, keyed to the same state as the row above it.
+//
+// 2026-09-08, review. `FEE_DISCLOSURE.estimateNote` was one hardcoded string
+// that named eBay and described eBay's base, emitted unconditionally under
+// every venue's <dl>. On the review screen that was RIGHT ONLY BY SCOPE -- the
+// screen is pinned to `ebay:fixed-price`, so the only venue that could render
+// it was the one it described. Rendering the other states through the offline
+// harness is what surfaced it: the cardmarket and TCG Bulk blocks both printed
+// "eBay charges its fee on the total sale" directly under a row that had just
+// correctly said the treatment was not established. Two implementations of one
+// venue fact agreeing because one of them can only be reached in one scope is
+// the shape rule 1 forbids, and it stops being latent the day this screen
+// accepts a second venue -- which is D4's whole purpose.
+//
+// It is also the reviewer's point stated as code: deciding WHETHER to warn and
+// deciding WHAT the warning says are two decisions, and the helper that owns
+// the first must own the second, or the wording drifts from the state.
+function venueEstimateNote(pid) {
+  const note = venueTaxNote(pid);
+  const stem = FEE_DISCLOSURE.estimateStem;
+  if (!note) return stem;
+  const p     = PLATFORMS[pid];
+  const venue = (p && p.name) || 'This venue';
+  // FIRST LETTER ONLY, not `.toLowerCase()`. The label is a sentence-initial
+  // noun being spliced mid-sentence, but it may contain an acronym: lowercasing
+  // the whole string turned Cardmarket's "Buyer VAT" into "buyer vat".
+  const noun  = note.label.charAt(0).toLowerCase() + note.label.slice(1);
+  // Known inclusion: name the omission and say which way it errs. The
+  // conditional is not hedging -- an order with no tax has nothing missing, so
+  // "where it applies" is the accurate scope, and the missing amount is a share
+  // of the tax at the fee rate, never the tax itself.
+  if (note.state === 'included') {
+    // Uses the venue's OWN published term for the base, then names the
+    // components inside it that this estimate leaves out. Both are per-venue
+    // fields rather than one sentence, because "total sale" is eBay's word
+    // and "total order value" is Whatnot's, and a generic paraphrase of
+    // either is a claim neither venue published.
+    const baseName = (p && p.taxBaseName) || 'total sale';
+    const comps    = (p && p.taxBaseIncludes) || noun;
+    // WHICH fee, per venue. Whatnot's commission excludes tax; only its
+    // payment processing fee is charged on the tax-inclusive total, so
+    // "charges its fee" would have overstated the scope on that venue.
+    const feeName  = (p && p.taxBaseFeeName) || 'its fee';
+    return stem + ' ' + venue + ' charges ' + feeName + ' on the ' + baseName
+         + ', which includes ' + comps + ' and this estimate excludes, so on an '
+         + 'order where ' + noun + ' applies your actual proceeds may be lower.';
+  }
+  // Unestablished: concede nothing about an amount. We do not know there is one.
+  return stem + ' ' + venue + '\u2019s published fee schedule does not establish whether '
+       + noun + ' forms part of any fee base, so we cannot say whether this '
+       + 'estimate is complete on that point.';
 }
 
 const FREE_PLATFORMS     = new Set(['ebay', 'tcgplayer']);
@@ -7357,14 +7466,24 @@ function feeEbay(price, shipCharge, ebayStore, ebayPromo, trsEligible) {
 const FEE_UNKNOWN = '\u2014';
 const FEE_DISCLOSURE = {
   taxLabel:     'Buyer sales tax',
-  taxQualifier: 'not estimated',
+  // Two qualifiers, because the two states are two different claims. "not
+  // estimated" concedes a known omission: the venue's published schedule puts
+  // buyer-paid tax in a base this model excludes. "treatment not established"
+  // concedes we do not know that, and must not be read as a known omission --
+  // it may turn out to be zero. Venues may override the noun via `taxNoun`.
+  taxQualifier:        'not estimated',
+  taxQualifierUnknown: 'treatment not established',
   baseLabel:    'Fee base',
   // Describes OUR estimate, not the venue's rule. The earlier wording -- "Fees
   // are charged on the item price only" -- read as a statement about eBay, and
   // as a statement about eBay it was false.
-  estimateNote: 'An estimate, not a payout. This estimate calculates fees on the item price only. '
-              + 'eBay charges its fee on the total sale, which includes buyer-paid shipping and buyer '
-              + 'sales tax, so your actual proceeds may be lower.',
+  // 2026-09-08: was `estimateNote`, ONE string ending in a hardcoded sentence
+  // about eBay's base. The venue-specific half now lives in
+  // `venueEstimateNote(pid)`, which reads the same state as the tax row, so a
+  // venue whose treatment is merely unestablished no longer renders a
+  // confident sentence about a different venue's published base. This stem is
+  // the part that is true of every venue: it describes OUR estimate.
+  estimateStem: 'An estimate, not a payout. This estimate calculates fees on the item price only.',
   // 2026-09-07. Said on the review screen, where the Top Rated Plus discount is
   // deliberately NOT applied because the confirmation belongs to a listing and
   // no draft carries one yet. Errs toward a fee that is too high rather than a
@@ -8734,7 +8853,7 @@ function calc() {
           <div class="fee-row fee-recipe-row"><span>Price used <span class="fee-basis">(${esc(r.priceLabel)})</span></span><span class="fee-val">${fmt(r.priceUsed)}</span></div>
           ${r.shipCharge > 0 ? `<div class="fee-row fee-recipe-row"><span>Buyer-paid shipping</span><span class="fee-val">${fmt(r.shipCharge)}</span></div>` : ''}
           ${r.feeBase != null ? `<div class="fee-row fee-recipe-row"><span>Fee base <span class="fee-basis">(${esc(r.feeBaseLabel || 'item')})</span></span><span class="fee-val">${fmt(r.feeBase)}</span></div>` : ''}
-          ${r.taxNote ? `<div class="fee-row fee-recipe-row"><span>${FEE_DISCLOSURE.taxLabel} <span class="fee-basis">(${FEE_DISCLOSURE.taxQualifier})</span></span><span class="fee-val">${FEE_UNKNOWN}</span></div>` : ''}
+          ${r.taxNote ? `<div class="fee-row fee-recipe-row" data-tax-state="${r.taxNote.state}"><span>${esc(r.taxNote.label)} <span class="fee-basis">(${esc(r.taxNote.qualifier)})</span></span><span class="fee-val">${FEE_UNKNOWN}</span></div>` : ''}
           ${r.feeFormula ? `<div class="fee-row fee-recipe-row"><span>Fee formula</span><span class="fee-val">${esc(r.feeFormula)}</span></div>` : ''}
         </div>
         ${r.feeItems.map(f => `<div class="fee-row"><span>${f.l}</span><span class="fee-val">−${fmt(f.a)}</span></div>`).join('')}
@@ -21152,6 +21271,25 @@ function _reviewBasisRow(label, qualifier, amount, kind) {
           <dd class="review-fee-amount" data-fee-row="${k}">${_reviewEsc(amount)}</dd>`;
 }
 
+/* The tax row for one venue, or nothing.
+ *
+ * The DECISION and the WORDING both come from `venueTaxNote` -- the same call
+ * the platform tiles make -- so the two surfaces cannot drift into saying
+ * different things about the same venue. What differs here is only markup: this
+ * screen owes a dt/dd pair inside a <dl>, the tiles owe div/span. That is a
+ * presentation difference, not a second implementation of the rule.
+ *
+ * Until 2026-09-08 this screen emitted the row UNCONDITIONALLY and hardcoded
+ * eBay's wording. It was correct only because `CR_REVIEW_FEE_SLOT` pins the
+ * screen to eBay, which is `taxOn: true` -- two implementations agreeing by
+ * coincidence of scope. Pattern instance 35, fourth rider.
+ */
+function _reviewTaxRow(pid) {
+  const note = venueTaxNote(pid);
+  if (!note) return '';
+  return _reviewBasisRow(note.label, note.qualifier, FEE_UNKNOWN, 'tax-' + note.state);
+}
+
 // Same staleness thresholds, same source of truth, same methodology link as
 // the ranking surface. Reading PLATFORMS/isFeeStale rather than restating the
 // window means a re-verification moves both screens at once.
@@ -21225,11 +21363,11 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
         <dl class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
-${venueTaxNote(pid) ? _reviewBasisRow(FEE_DISCLOSURE.taxLabel, FEE_DISCLOSURE.taxQualifier, FEE_UNKNOWN) : ''}${feeRows}
+${_reviewTaxRow(pid)}${feeRows}
 ${_reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld')}
 ${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
         </dl>
-        <div class="review-fees-note">${_reviewEsc(FEE_DISCLOSURE.estimateNote)}</div>
+        <div class="review-fees-note">${_reviewEsc(venueEstimateNote(pid))}</div>
         <div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>
         ${pill}
       </div>`;

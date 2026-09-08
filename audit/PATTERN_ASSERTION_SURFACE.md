@@ -2010,9 +2010,18 @@ behaviour ("the disclosure comes from the field") but evidenced *one* surface,
 which is this pattern's whole subject. `pid` was already in scope three lines
 above the row, so the fix was a ternary.
 
-The rendered output is **byte-identical today**, proven by executing the shipped
-`PLATFORMS` and `venueTaxNote` against the shipped slot constant rather than by
-reading the code and agreeing with it. The change buys nothing now and
+**CORRECTED 2026-09-08.** This paragraph previously read: *"The rendered output
+is byte-identical today, proven by executing the shipped `PLATFORMS` and
+`venueTaxNote` against the shipped slot constant."* That is exactly the error
+this page is about — the claim names **rendered output** but the evidence was a
+**helper return value**. Executing `venueTaxNote('ebay')` and obtaining a truthy
+object establishes what the helper returns; it establishes nothing about the
+bytes the review screen emits. The claim is withdrawn and replaced with the
+evidence that actually supports it: `tests/draft-review-screen.mjs` (180/180) and
+`tests/review-fee-dl.mjs` (19/19) render the fee block and assert on the emitted
+markup, and the three reachable states were rendered and read —
+`data-fee-row="tax-included"` for eBay, `tax-unestablished` for Cardmarket and
+TCG Bulk, and no row at all for Card Kingdom. The change buys nothing now and
 everything the moment that screen shows a second venue. Two assertions were
 added: one that the review screen consults the helper, one that no ungated
 `_reviewBasisRow(FEE_DISCLOSURE.taxLabel` survives anywhere in the bundle — the
@@ -2023,3 +2032,58 @@ unconditional copy elsewhere.
 derived one, grep for the *rendered label*, not for the variable that was
 deleted. The label finds every surface; the variable finds only the one you
 already knew about.
+
+
+---
+
+## Instance 36 — a standing note that was right only because of where it was shown
+
+**Found 2026-09-08, during the T2.9 review pass. Mine, not inherited.**
+
+`FEE_DISCLOSURE.estimateNote` was a single constant string, emitted
+unconditionally beneath the review screen's fee breakdown. Its text named eBay
+and described eBay's fee base:
+
+> "Fees are charged on the total sale, which includes buyer-paid shipping and
+> buyer sales tax."
+
+Every assertion on it passed. It renders on exactly one screen, and that screen
+is pinned to `ebay:fixed-price`, so on the only surface anyone had rendered, the
+sentence was true.
+
+**The defect:** the same constant would print *"eBay charges its fee on the total
+sale"* directly underneath a row reading *"Buyer VAT (treatment not
+established)"* the moment D4 lets the review screen show a second venue. A
+sentence that is true only because of the caller's configuration is a latent
+false claim, not a correct one — the identical shape as Instance 35, one layer
+up: 35 was a *value* right only by scope, 36 is *prose* right only by scope.
+
+**Found by rendering, not by reading.** It was invisible in the code and
+invisible to the suite. It appeared the moment the reviewer's instruction — show
+representative rendered known-inclusive, unknown and excluded states — was
+carried out, because the unknown state printed eBay's sentence under a
+Cardmarket row and the contradiction was on one line of output.
+
+**The remedy:** `estimateNote` → `estimateStem` (the venue-neutral opening) plus
+`venueEstimateNote(pid)` (`js/core.59d4b1ab.js:6774`), which composes the
+state-appropriate second half from per-venue fields. Two follow-on defects
+surfaced in the *rendered* sentence and would not have surfaced in the helper:
+`.toLowerCase()` flattened Cardmarket's "Buyer VAT" to "buyer vat", and
+"charges its fee" overstated Whatnot's scope (only its payment **processing**
+fee uses the tax-inclusive total; its commission does not). Both are now asserted
+on the rendered string.
+
+**One regression it caused, recorded rather than quietly fixed.** Replacing the
+constant dropped **buyer-paid shipping** from the eBay sentence — a second, real
+omission that the screen had been disclosing since D3.
+`tests/draft-review-screen.mjs` caught it (2 failures), which is the suite doing
+its job. Restored via per-venue `taxBaseName` / `taxBaseIncludes` so each venue's
+own published term is used ("total sale" is eBay's word; "total order value" is
+Whatnot's) rather than a paraphrase neither venue published.
+
+**The generalisable check:** *an assertion that a string is correct is only as
+wide as the configurations it was rendered under.* When one surface is pinned to
+one value, render the other values before believing the copy — and when the
+subject of an assertion is deleted, re-point the assertion, because
+`!/--/.test(undefined)` passes forever. That vacuous pass was live in
+`tests/review-fee-dl.mjs:208` for the length of this sitting.

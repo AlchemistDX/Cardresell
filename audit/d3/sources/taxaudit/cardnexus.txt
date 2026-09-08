@@ -1,0 +1,69 @@
+## Buyer Fees
+
+Every time you check out, a service fee is added on top of your cart total:
+
+|**Currency**|**Fee**|
+|--|--|
+|**EUR (€)**|2.5% + €0.30|
+|**USD ($)**|2.5% + $0.30|
+|**GBP (£)**|2.5% + £0.25|
+|**CHF**|2.5% + CHF 0.30|
+|**SEK**|2.5% + 3.50 SEK|
+|**DKK**|2.5% + 2.25 DKK|
+|**NOK**|2.5% + 3.50 NOK|
+|**PLN**|2.5% + 1.30 PLN|
+|**HUF**|2.5% + 120 HUF|
+
+The fee is calculated on your entire cart (items + shipping) and applied **once per checkout**, regardless of how many sellers are in your cart. The fixed portion varies by currency to reflect approximately the same value (~€0.30 equivalent).
+
+**Example:** You buy cards from two EU sellers for a total of €88 (including shipping). Your buyer fee is (€88 × 2.5%) + €0.30 = **€2.50**. You pay **€90.50** at checkout.
+
+If you pay with your **seller balance**, a different fee applies: a flat **1%**, with no fixed fee.
+
+The buyer fee is always shown clearly before you confirm your payment — no surprises.
+
+## Seller Fees
+
+Sellers pay a commission on each order they fulfill:
+
+|**Region**|**Commission**|
+|--|--|
+|**Europe**|5% of order total|
+|**North America**|8% of order total|
+
+The "order total" includes the item subtotal and the shipping cost. The commission is deducted automatically from your payout — you never have to pay it upfront.
+
+**Example:** A buyer purchases €55 worth of cards from you with €5 shipping (€60 total). Your seller fee is €60 × 5% = **€3.00**. You receive **€57.00**.
+
+If a buyer uses a promo code, the discount is absorbed by CardNexus — not by you. You always receive the full sale amount minus your commission.
+
+## Why Are NA Fees Higher Than EU?
+
+North American transactions have higher payment processing costs and tax compliance requirements. The 8% rate reflects these additional operational costs. We're actively working to bring this down as volume grows.
+
+## What About Coupons and Promo Codes?
+
+When a buyer applies a promo code at checkout, **CardNexus covers the discount**. Sellers are never affected — you receive the same payout as if no coupon was used.
+
+## Payment Methods
+
+All payments are processed securely through **Stripe**. Depending on your region, available payment methods include:
+
+- Credit and debit cards (Visa, Mastercard, Amex)
+- Apple Pay and Google Pay
+- Regional methods like SEPA, iDEAL, and Bancontact (EU)
+
+CardNexus supports 9 currencies across Europe and North America. Each cart is limited to a single region (EU or North America) — you can't mix regions in one cart, but you can mix currencies within a region.
+
+## Accepted offers
+
+When a buyer's offer is accepted (see Receiving and answering offers), the seller commission and the buyer fee are both calculated on the agreed, discounted price — not the original listing price. Shipping is unchanged.
+
+## Quick Summary
+
+| |**Buyer**|**Seller (EU)**|**Seller (NA)**|
+|--|--|--|--|
+|**Fee**|2.5% + €/$0.30 fixed fee (varies by currency)|5%|8%|
+|**Applied to**|Full cart total|Per order total|Per order total|
+|**When charged**|At checkout|Deducted from payout|Deducted from payout|
+|**Coupon impact**|Reduces your total|None — CardNexus absorbs it|None — CardNexus absorbs it|

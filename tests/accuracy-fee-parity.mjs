@@ -110,8 +110,15 @@ T.check('model: every venue carries a feeAuditedOn stamp',
  * Two claims, and they are different claims:
  *   1. every venue CARRIES a `taxOn` -- so "never considered" cannot masquerade
  *      as "checked and does not apply", which is the hole BIAS-10 named;
- *   2. the disclosure renders iff `taxOn !== false` -- so a confirmed zero is
- *      the ONLY thing that can suppress the seller-facing caveat.
+ *   2. the disclosure renders iff `taxOn !== false` -- so only an established
+ *      fee-base answer can suppress the seller-facing caveat.
+ *
+ * "CONFIRMED ZERO" WAS THE WRONG NAME FOR `false` (2026-09-08, review). It was
+ * read, including by the author of this file, as "the buyer paid no tax". It
+ * means something narrower: no fee base this model charges against can contain
+ * buyer tax -- because the venue publishes the fee as tax-exclusive, or because
+ * this model charges the seller no fee at all. The renamed vocabulary below
+ * carries that distinction so the next reader cannot make the same inference.
  *
  * Claim 2 is checked by EXECUTING the shipped `venueTaxNote` against the
  * shipped PLATFORMS, not by regex-matching its body. A regex would assert the
@@ -120,8 +127,16 @@ T.check('model: every venue carries a feeAuditedOn stamp',
  * answer without a recorded basis is how `false` stops meaning what it says.
  */
 const TAX_ON     = new Set(['true', 'false', "'unknown'"]);
+/* `no-buyer-tax` was RETIRED, not renamed for style. It asserted a fact about
+   the buyer's tax that none of the four venues carrying it had established --
+   three were inferred from "there is no retail checkout", which is not a tax
+   determination, and the fourth (TCG Bulk) was inferred from "the venue is the
+   buyer", which its own terms deny. `no-seller-fee` states what the repo can
+   actually establish from its own code: this model charges no fee here, so
+   there is no fee base for tax to enter. Leaving the old string out of the
+   vocabulary is what stops it being reintroduced. */
 const TAX_BASIS  = new Set(['published-inclusive', 'published-exclusive',
-                            'no-buyer-tax', 'payment-method', 'unstated']);
+                            'no-seller-fee', 'payment-method', 'unstated']);
 
 const taxFields = new Map();     // key -> { on, basis }
 for (const m of platformsBlk.matchAll(
@@ -139,14 +154,31 @@ T.check('tax: every taxOn and taxBasis is one of the declared values',
   badVal.length === 0,
   `off-vocabulary: ${badVal.map(([k, v]) => `${k}=${v.on}/${v.basis}`).join(', ')}`);
 
-/* A `false` may only rest on a basis that actually establishes a zero. This is
-   the guard that keeps "the page never mentioned tax" from being written down
-   as a confirmed zero -- the exact substitution T2.9 exists to prevent. */
-const ZERO_BASES = new Set(['published-exclusive', 'no-buyer-tax']);
-const weakZero = [...taxFields].filter(([, v]) => v.on === 'false' && !ZERO_BASES.has(v.basis));
-T.check('tax: taxOn:false only ever rests on a basis that establishes a zero',
+/* A `false` may only rest on a basis that actually establishes the exclusion.
+   This is the guard that keeps "the page never mentioned tax" from being
+   written down as an answer -- the exact substitution T2.9 exists to prevent.
+   It enforces CONSISTENCY between a field and its recorded basis; it cannot
+   establish that the basis is true of the venue. That is a source question and
+   is answered in audit/d3/TAX_TREATMENT_T2_9.md, not here. */
+const SETTLED_BASES = new Set(['published-exclusive', 'no-seller-fee']);
+const weakZero = [...taxFields].filter(([, v]) => v.on === 'false' && !SETTLED_BASES.has(v.basis));
+T.check('tax: taxOn:false only ever rests on a basis that establishes the exclusion',
   weakZero.length === 0,
-  `claimed zero on a non-establishing basis: ${weakZero.map(([k, v]) => `${k}=${v.basis}`).join(', ')}`);
+  `excluded on a non-establishing basis: ${weakZero.map(([k, v]) => `${k}=${v.basis}`).join(', ')}`);
+
+/* `no-seller-fee` is a claim ABOUT THIS MODEL, so this file can check it: the
+   venue must reach feeBuylist without a serviceFeePct argument. TCG Bulk is the
+   counter-example that gives this check teeth -- it passes 0.10, which is why it
+   may not carry this basis. Without this, `no-seller-fee` would be as
+   unfalsifiable as the string it replaced. */
+const feeFreeClaim = [...taxFields].filter(([, v]) => v.basis === 'no-seller-fee').map(([k]) => k);
+const feeFreeBroken = feeFreeClaim.filter((k) => {
+  const m = bundle.match(new RegExp(`feeBuylist\\(price,\\s*PLATFORMS\\.${k}\\.buylistRatio\\.cash([^)]*)\\)`));
+  return !m || /,/.test(m[1]);
+});
+T.check(`tax: every no-seller-fee venue (${feeFreeClaim.length}) really charges no modelled fee`,
+  feeFreeClaim.length > 0 && feeFreeBroken.length === 0,
+  `claims no seller fee but passes a serviceFeePct (or was not found): ${feeFreeBroken.join(', ')}`);
 
 /* The hardcoded line must be GONE, not merely superseded. Two implementations
    of one behaviour is the bug this repo has been bitten by nine times, and a
@@ -174,7 +206,8 @@ T.check('tax: the render reads the disclosure from venueTaxNote(pid)',
    render site specifically, because the tile-render assertion above cannot see
    this one. */
 T.check('tax: the review screen also gates its tax row on venueTaxNote(pid)',
-  /venueTaxNote\(pid\)\s*\?\s*_reviewBasisRow\(FEE_DISCLOSURE\.taxLabel/.test(bundle),
+  /function _reviewTaxRow\(pid\)\s*\{[\s\S]{0,200}?venueTaxNote\(pid\)/.test(bundle)
+  && /\$\{_reviewTaxRow\(pid\)\}/.test(bundle),
   'the review screen emits the sales-tax row without consulting the shared helper');
 
 T.check('tax: no unconditional _reviewBasisRow tax row survives',
@@ -187,7 +220,12 @@ let taxNoteFor = null;
 try {
   const helperSrc = bundle.slice(bundle.indexOf('function venueTaxNote(pid)'));
   const helper = helperSrc.slice(0, helperSrc.indexOf('\n}') + 2);
-  taxNoteFor = new Function(`${platformsBlk}\n${helper}\nreturn venueTaxNote;`)();
+  /* FEE_DISCLOSURE is now a dependency of the helper, because the WORDING moved
+     in with the decision. Sliced from the bundle rather than stubbed -- a stub
+     would let the shipped qualifiers drift from what this suite reads. */
+  const discAt = bundle.indexOf('const FEE_DISCLOSURE = {');
+  const disc = bundle.slice(discAt, bundle.indexOf('\n};', discAt) + 3);
+  taxNoteFor = new Function(`${platformsBlk}\n${disc}\n${helper}\nreturn venueTaxNote;`)();
 } catch (e) {
   taxNoteFor = null;
 }
@@ -196,16 +234,47 @@ T.check('tax: PLATFORMS + venueTaxNote evaluate, so the check below is not vacuo
   'could not evaluate the shipped table and helper together');
 
 if (typeof taxNoteFor === 'function') {
-  const wrong = [...taxFields].filter(([k, v]) => taxNoteFor(k) !== (v.on !== 'false'));
+  const wrong = [...taxFields].filter(([k, v]) => !!taxNoteFor(k) !== (v.on !== 'false'));
   T.check('tax: disclosure renders if and only if taxOn !== false, for all 15 venues',
     taxFields.size > 0 && wrong.length === 0,
-    `disagreement on: ${wrong.map(([k, v]) => `${k} (taxOn=${v.on}, renders=${taxNoteFor(k)})`).join(', ')}`);
+    `disagreement on: ${wrong.map(([k, v]) => `${k} (taxOn=${v.on}, renders=${!!taxNoteFor(k)})`).join(', ')}`);
+
+  /* STATE, not just presence. The helper now picks the WORDING, and the whole
+     point of the review correction is that a known omission and an
+     unestablished treatment must not read the same. `true` must yield the
+     conceding qualifier; `'unknown'` must yield the non-committal one. */
+  const stateWrong = [...taxFields].filter(([k, v]) => {
+    const n = taxNoteFor(k);
+    if (v.on === 'false') return n !== null;
+    return n.state !== (v.on === 'true' ? 'included' : 'unestablished');
+  });
+  T.check('tax: the note state follows taxOn (included / unestablished / none)',
+    stateWrong.length === 0,
+    `wrong state: ${stateWrong.map(([k, v]) => `${k} taxOn=${v.on} -> ${JSON.stringify(taxNoteFor(k))}`).join(', ')}`);
+
+  const unkNote = taxNoteFor('cardmarket');
+  T.check('tax: an unestablished treatment does not read as a known omission',
+    unkNote && unkNote.qualifier !== taxNoteFor('ebay').qualifier
+    && /not established/i.test(unkNote.qualifier),
+    `unknown venues reuse the known-omission wording: ${JSON.stringify(unkNote)}`);
+
+  /* Cardmarket's tax is VAT, normally already inside the item price. Naming it
+     "Buyer sales tax" made a US-shaped claim about a European venue. */
+  T.check('tax: Cardmarket names VAT rather than US sales tax',
+    /VAT/.test(taxNoteFor('cardmarket').label)
+    && !/sales tax/i.test(taxNoteFor('cardmarket').label),
+    `Cardmarket label is ${JSON.stringify(taxNoteFor('cardmarket').label)}`);
+
+  T.check('tax: TCG Bulk is unestablished, not excluded (its 10% fee has a base)',
+    taxNoteFor('tcgbulk') && taxNoteFor('tcgbulk').state === 'unestablished',
+    'TCG Bulk suppresses the caveat again -- the intermediary premise was withdrawn');
 
   /* Fail-closed, asserted rather than assumed. An unrecognised venue must SHOW
      the caveat; a helper that returned false here would hide a disclosure for
      every venue it failed to find. */
   T.check('tax: an unrecognised venue still renders the disclosure (fails closed)',
-    taxNoteFor('no-such-venue-xyz') === true,
+    !!taxNoteFor('no-such-venue-xyz')
+    && taxNoteFor('no-such-venue-xyz').state === 'unestablished',
     'an unknown pid suppresses the caveat -- fails OPEN');
 
   const rendering = [...taxFields.keys()].filter(k => taxNoteFor(k)).length;
@@ -444,10 +513,25 @@ const taxSection = accuracy.slice(
   accuracy.indexOf(FEE_TABLE_END),
   accuracy.indexOf('<h3>International &amp; cross-border selling</h3>'));
 
-const PAGE_TAX = { yes: 'true', no: 'false', unknown: "'unknown'" };
+/* USED TO BE `(Yes|No|Unknown)` (changed 2026-09-08, review). The published
+   column gained a fourth answer, "No fee to charge it on", because the three
+   buylists reach `false` by a different route than Mercari and CardNexus do:
+   not "the venue publishes a tax-exclusive base" but "this model charges no fee
+   here, so there is no base". Both map to `taxOn: false`, and the parser must
+   accept both -- a closed three-word alternation would have silently dropped
+   those rows to 12 parsed, cleared the floor of 10, and passed vacuously on the
+   exact venues this review pass corrected. The alternation stays CLOSED (no
+   `[^<]+`) so a genuinely new answer still fails loudly instead of being
+   mapped to a default. */
+const PAGE_TAX = {
+  'yes': 'true',
+  'no': 'false',
+  'no fee to charge it on': 'false',
+  'unknown': "'unknown'",
+};
 const pageTax = new Map();       // normalised display name -> taxOn literal
 for (const row of taxSection.matchAll(
-  /<tr><td>([^<]+)<\/td><td><strong>(Yes|No|Unknown)<\/strong><\/td>/g)) {
+  /<tr><td>([^<]+)<\/td><td><strong>(Yes|No fee to charge it on|No|Unknown)<\/strong><\/td>/g)) {
   pageTax.set(norm(row[1]), PAGE_TAX[row[2].toLowerCase()]);
 }
 
@@ -484,7 +568,13 @@ const renderCount = counts.true + counts["'unknown'"];
    which passes on any bold number anywhere in the section -- a check that
    cannot fail is worse than no check, because it reports `ok`. */
 for (const claim of [`<strong>${counts.true} are confirmed tax-inclusive</strong>`,
-                     `<strong>${counts.false} are confirmed zero</strong>`,
+                     /* USED TO ASSERT `${n} are confirmed zero` (changed
+                        2026-09-08, review). "Confirmed zero" read as a claim
+                        about the buyer's tax amount; `false` only ever meant
+                        the amount is outside any fee base we charge. The count
+                        is unchanged as an assertion -- only the noun it holds
+                        the page to. */
+                     `<strong>${counts.false} are excluded</strong>`,
                      `<strong>${counts["'unknown'"]} are unknown</strong>`,
                      `<strong>${renderCount} of ${taxFields.size}</strong>`]) {
   T.check(`tax: the page publishes the model's count \u2014 "${claim.replace(/<\/?strong>/g, '')}"`,

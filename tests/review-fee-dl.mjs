@@ -55,7 +55,7 @@
  */
 
 import { harness } from './_assert.mjs';
-import { renderFeeBlock, DISCLOSURE, BUNDLE_PATH } from '../tools/review-fee-dl-render.mjs';
+import { renderFeeBlock, DISCLOSURE, BUNDLE_PATH, venueEstimateNote } from '../tools/review-fee-dl-render.mjs';
 
 const T = harness('review-fee-dl');
 
@@ -204,8 +204,51 @@ T.check('copy: the withheld note uses em dashes, not the codebase\'s comment "--
   !/--/.test(DISCLOSURE.trsWithheldNote),
   `literal "--" in seller-facing copy: ${JSON.stringify(DISCLOSURE.trsWithheldNote)}`);
 
-T.check('copy: the estimate note likewise',
-  !/--/.test(DISCLOSURE.estimateNote),
-  `literal "--" in seller-facing copy: ${JSON.stringify(DISCLOSURE.estimateNote)}`);
+/* USED TO ASSERT `!/--/.test(DISCLOSURE.estimateNote)` (changed 2026-09-08).
+   `estimateNote` became `estimateStem` plus the per-state sentences composed by
+   `venueEstimateNote(pid)`, and the old line WOULD HAVE PASSED ANYWAY -- on
+   `undefined`, stringified to "undefined", which contains no double hyphen. An
+   assertion whose subject no longer exists reports `ok` forever, so it now
+   reads every state the seller can actually be shown, and asserts the set is
+   non-empty so it cannot pass on nothing again. */
+const COPY_STATES = ['ebay', 'cardmarket', 'cardkingdom'].map(venueEstimateNote);
+const hyphenated  = [DISCLOSURE.estimateStem, ...COPY_STATES].filter(t => /--/.test(t));
+T.check('copy: the estimate note likewise, in every state it can render',
+  COPY_STATES.filter(Boolean).length === 3 && hyphenated.length === 0,
+  `literal "--" in seller-facing copy: ${JSON.stringify(hyphenated)}`);
+
+/* The reviewer's distinction, asserted on the rendered wording rather than on
+   the flag that chooses it: a venue we KNOW puts tax in a fee base must concede
+   the omission, and a venue whose treatment we could not establish must not --
+   it may turn out to be zero. Same helper, two sentences, and they may not
+   collapse into each other. */
+T.check('copy: known inclusion concedes an omission; unestablished does not',
+  /proceeds may be lower/.test(venueEstimateNote('ebay'))
+  && /does not establish whether/.test(venueEstimateNote('cardmarket'))
+  && !/proceeds may be lower/.test(venueEstimateNote('cardmarket')),
+  `unestablished venues reuse the known-omission sentence: ${JSON.stringify(venueEstimateNote('cardmarket'))}`);
+
+/* Caught by READING the rendered sentence rather than trusting the helper that
+   composes it: splicing a sentence-initial noun mid-sentence needs the first
+   letter lowered, not the whole string, and `.toLowerCase()` had turned
+   Cardmarket's "Buyer VAT" into "buyer vat". */
+T.check('copy: an acronym in the tax noun survives being spliced mid-sentence',
+  /buyer VAT/.test(venueEstimateNote('cardmarket'))
+  && !/buyer vat/.test(venueEstimateNote('cardmarket')),
+  `acronym flattened: ${JSON.stringify(venueEstimateNote('cardmarket'))}`);
+
+/* Whatnot's commission EXCLUDES tax -- only its payment processing fee is
+   charged on the tax-inclusive total. "charges its fee" claimed the whole
+   schedule, which is the same over-reach the venue's first-pass reading made. */
+T.check('copy: Whatnot names the processing fee, not its whole schedule',
+  /its payment processing fee on the total order value/.test(venueEstimateNote('whatnot')),
+  `Whatnot's note overstates which fee uses the inclusive base: ${JSON.stringify(venueEstimateNote('whatnot'))}`);
+
+/* The bug that rendering the states surfaced: the note named eBay under every
+   venue, right only because this screen is pinned to eBay. */
+T.check('copy: a non-eBay venue\u2019s note does not describe eBay\u2019s fee base',
+  !/eBay/.test(venueEstimateNote('cardmarket'))
+  && !/eBay/.test(venueEstimateNote('tcgbulk')),
+  `the eBay-specific sentence still renders off-eBay: ${JSON.stringify(venueEstimateNote('cardmarket'))}`);
 
 T.done();

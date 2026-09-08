@@ -1,0 +1,598 @@
+Listing an item is always free on Mercari. Fees are charged when an item sells or when a service is used. The
+following charts explain fees on Mercari.
+
+### Buyer-Paid Fees
+Starting January 6, 2025, a Buyer Protection fee of 3.6% will apply to the item price and buyer-paid shipping for new and updated listings. When you make a purchase, a service fee will be charged. An additional payment processing fee will not apply. The amount of the fee will be displayed as part of the final price of your item on the checkout page. This fee is charged to the buyer and may not be refunded, depending on the reason for a return. Learn more about Buyer Protection here.
+
+**Effective January 6, 2025:**
+
+**Effective January 6, 2025:
+Buyer Protection**
+3.6% Item Price + buyer-paid Shipping
+
+Listings created before January 6, 2025
+A 10% buyer fee will apply to the buyer until the listing is updated.
+
+**Buyer Protection**
+3.6% of the item price + buyer-paid shipping
+
+Listings created* or updated on or after January 6, 2025
+A Buyer Protection fee of 3.6% of the combined amount of item price and buyer-paid shipping will be charged to the buyer.
+
+** Based on launch time and if the listing is created with the latest app version or from the web.*
+
+### Seller-Paid Fees
+
+Effective January 6, 2025, a 10% selling fee will apply to item price and buyer-paid shipping for new and updated listings.
+
+Note: Existing listings created before January 6, 2025 will be updated automatically within a week. The new fee structure will also apply when you update an existing listing.
+
+##### Effective January 6, 2025:
+
+**10% Selling fee**
+10% of the item price + buyer-paid shipping
+
+Existing listings created before January 6, 2025
+A selling fee will not be applied until the listing is updated.
+
+**10% Selling Fee**
+10% of the item price + buyer-paid shipping
+
+Listings created* or updated on or after January 6, 2025
+A 10% selling fee of the combined amount of item price and buyer-paid shipping will be charged to the seller.
+
+** Based on launch time and if the listing is created with the latest app version or from the web.*
+
+### Transaction and Payment Fees
+
+Mercari incurs fees related to payment processing and balance withdrawals by our financial services partners. Some of these service fees have been passed along to our users.
+
+#### Payment Processing
+
+Effective January 6, 2025, Mercari will no longer charge buyers a payment processing fee at the time of purchase on new or updated listings.
+
+**Effective January 6, 2025:**
+
+No payment processing fee
+
+Listings created before January 6, 2025
+Until the listing is updated, a Payment Processing Fee of $0.50 plus 2.9% of the transaction price (includes the item price, shipping, service fee and sales tax) will be charged to the buyer.
+This fee may not be refunded for returned or canceled orders.
+
+**Effective January 6, 2025**
+No Payment Processing Fee
+
+Listings created* or updated on or after January 6, 2025
+No separate payment processing fee will be applied after this date.
+
+** Based on launch time and if the listing is created with the latest app version or from the web.*
+
+#### Balance Withdrawals
+
+**Direct Deposit**:
+
+Effective January 6, 2025 at 2:00 PM PT, there is no longer a $2 non-refundable fee per cash-out.
+
+Once you’ve added your checking account and have a balance, you can request a cash-out request to your bank once a day using direct deposit. This transaction is typically processed within 5 business days depending on your bank’s processing times. There is $2 non-refundable fee for each failed direct deposit request.
+
+**Instant Pay**:
+
+Instant Pay is the fastest way to get paid when you need that extra cash. To do this, go to your balance, tap “Instant Pay,” complete your ID validation (if you haven’t already), and add a debit card. You can use Instant Pay for up to $600 per month, once per day on eligible debit cards. There is a $3 flat fee per cash-out. In some cases, depending on your bank’s processing time, it can take up to 30 minutes to see the balance in your bank account.
+
+$0 fee
+
+For each completed Direct Deposit to your bank account.
+
+*Note: A $2 fee will apply to any failed deposits.*
+
+$3 fee
+
+For each completed Instant Pay transfer.
+
+### Shipping and Delivery Fees on Mercari
+
+Mercari prepaid labels offer low, fixed rates with USPS, FedEx, and UPS for packages weighing up to 100 lbs. These
+rates offer an average of 54% savings compared to the retail pricing of each carrier; all fees and rates are based
+on a comparison completed January 6, 2026*.
+
+The package must weigh less than or equal to the weight specified on the label and must be under 100 pounds or the longest side is not greater than 30” and the girth is not greater than 130”.
+Shipping carriers will use either the package weight or the dimensional weight of the package. We do not support
+national shipping for motorized items, furniture, bicycles or major appliances.
+
+If your package weighs more than 100 pounds (either by weight or size), you’ll need to ship it on your own. You will
+be responsible for all costs associated with the shipping process. Packages over 150 lb will be charged a flat freight rate of $2500.
+
+If a return is approved for an item over 100 pounds or a package that exceeds the size limit, sellers are
+responsible for providing a shipping label to receive the item back. Mercari’s recommendations for prepaid labels
+when listing an item do not factor in the dimensional weight. If the app recommends a shipping label of 100 pounds
+but the package for an approved return exceeds the weight or size limit, sellers will still be responsible for
+providing a return label.
+
+#### Mercari prepaid label rate updates:
+
+Starting May 7, 2026, USPS Ground Advantage and Priority Mail prepaid label rates reflect USPS’s fuel surcharge. USPS First-Class Envelopes and Media Mail are not impacted. Read more in Shipping change announcements.
+
+Mercari prepaid labels still offer an average of 54% savings* compared to retail carrier rates. Plus, every label
+includes up to $200 in Shipping Protection and $20 for First-Class Envelope.
+
+*Fees and rates are based on a comparison to the retail prices and surcharges for standard and economy shipments
+of our carriers (USPS, UPS, FedEx) for items between 0.25 lb - 100 lbs. Comparison completed January 6, 2026.
+
+See shipping price examples below:
+
+## Current 2026 Shipping Rates
+
+USPS Ground Advantage and Priority Mail rates updated May 7, 2026.
+
+**USPS**
+
+**Label (lb)** **Ground Adv** **Priority Mail**
+
+**0.25**
+
+$4.91
+$5.49
+
+**0.5**
+
+$5.66
+$5.99
+
+**0.75**
+
+$6.73
+$6.99
+
+**1**
+
+$7.48
+$7.59
+
+**2**
+
+$12.83
+$13.49
+
+$15.29
+$16.29
+
+**3**
+
+$12.83
+$14.99
+
+$19.25
+$18.89
+
+**4**
+
+$13.90
+$15.99
+
+$22.46
+$22.94
+
+**5**
+
+$14.97
+$16.99
+
+$24.60
+$24.49
+
+**6**
+
+$16.04
+$17.99
+
+$27.81
+$26.94
+
+**7**
+
+$17.11
+$18.99
+
+$29.96
+$29.39
+
+**8**
+
+$18.18
+$19.99
+
+$33.17
+$31.99
+
+**9**
+
+$19.25
+$20.99
+
+$35.31
+$34.39
+
+**10**
+
+$20.32
+$21.99
+
+$38.52
+$37.09
+
+**UPS**
+
+**Label (lb)** **Ground Saver** **Ground**
+
+**0.25**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**0.5**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**0.75**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**1**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**2**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**3**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**4**
+
+$7.97
+$9.99
+
+$11.99
+$17.95
+
+**5**
+
+$7.97
+$10.99
+
+$11.99
+$18.95
+
+**6**
+
+$11.99
+$19.95
+
+**7**
+
+$11.99
+$20.95
+
+**8**
+
+$11.99
+$21.95
+
+**9**
+
+$11.99
+$22.95
+
+**10**
+
+$11.99
+$23.95
+
+**50**
+
+$49.99
+$140.00
+
+**100**
+
+$120.00
+$350.00
+
+**FedEx**
+
+**Label (lb)** **Economy** **Home**
+
+**0.25**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**0.5**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**0.75**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**1**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**2**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**3**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**4**
+
+$7.97
+$9.99
+
+$15.99
+$25.00
+
+**5**
+
+$7.97
+$12.99
+
+$15.99
+$25.00
+
+**6**
+
+$11.99
+$17.00
+
+$15.99
+$25.00
+
+**7**
+
+$11.99
+$18.00
+
+$15.99
+$25.00
+
+**8**
+
+$11.99
+$19.00
+
+$15.99
+$26.00
+
+**9**
+
+$11.99
+$19.99
+
+$15.99
+$27.00
+
+**10**
+
+$11.99
+$19.99
+
+$15.99
+$28.00
+
+**50**
+
+$49.99
+$160.00
+
+**100**
+
+$120.00
+$375.00
+
+| |**USPS**|**USPS**|**UPS**|**UPS**|**FedEx**|**FedEx**|
+|--|--|--|--|--|--|--|
+|**Label (lb)**|**Ground Adv**|**Priority Mail**|**Ground Saver**|**Ground**|**Economy**|**Home**|
+|**0.25**|$4.91 $5.49| |$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**0.5**|$5.66 $5.99| |$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**0.75**|$6.73 $6.99| |$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**1**|$7.48 $7.59| |$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**2**|$12.83 $13.49|$15.29 $16.29|$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**3**|$12.83 $14.99|$19.25 $18.89|$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**4**|$13.90 $15.99|$22.46 $22.94|$7.97 $9.99|$11.99 $17.95|$7.97 $9.99|$15.99 $25.00|
+|**5**|$14.97 $16.99|$24.60 $24.49|$7.97 $10.99|$11.99 $18.95|$7.97 $12.99|$15.99 $25.00|
+|**6**|$16.04 $17.99|$27.81 $26.94| |$11.99 $19.95|$11.99 $17.00|$15.99 $25.00|
+|**7**|$17.11 $18.99|$29.96 $29.39| |$11.99 $20.95|$11.99 $18.00|$15.99 $25.00|
+|**8**|$18.18 $19.99|$33.17 $31.99| |$11.99 $21.95|$11.99 $19.00|$15.99 $26.00|
+|**9**|$19.25 $20.99|$35.31 $34.39| |$11.99 $22.95|$11.99 $19.99|$15.99 $27.00|
+|**10**|$20.32 $21.99|$38.52 $37.09| |$11.99 $23.95|$11.99 $19.99|$15.99 $28.00|
+|**50**| | | |$49.99 $140.00| |$49.99 $160.00|
+|**100**| | | |$120.00 $350.00| |$120.00 $375.00|
+
+Best rates are listed in black and standard rates are listed below in gray.
+
+Add package dimension info when you list to unlock lower Best rate pricing. If your package meets size limits
+(1 cu ft / 22″ longest side), Best rates apply. If it's larger, standard rates apply, and we'll price by
+dimensional weight to help generate a more accurate label. See how it works
+here.
+
+## Media Mail Rates
+
+**WEIGHT**
+
+**Media Mail**
+
+1 lb
+
+$4.99
+
+2 lbs
+
+$5.99
+
+3 lbs
+
+$6.99
+
+Mercari prepaid labels for USPS Media Mail are available only for eligible* media categories (books,
+movies, recorded and printed music).
+Media Mail packages are subject to search by USPS. Sellers are responsible for overage fees and
+fines associated with improper use of Media Mail (prohibited contents, incorrect weight).
+
+Please see our Media Mail Guide for full shipping and category requirements.
+
+## First-Class Envelopes Rates
+
+**WEIGHT**
+
+**First-Class Envelopes**
+
+1 oz
+
+$0.74
+
+2 oz
+
+$1.03
+
+3 oz
+
+$1.32
+
+Mercari prepaid labels for USPS First-Class Envelopes are available exclusively for the trading cards category.
+Envelopes must be maximum 11 ½” length and 6 ⅛” height and ¼” thick (non-compressed). Please see our
+First-Class Envelope Guide for full shipping and category requirements. Shipping Protection is available for First-Class Envelopes up to $20.
+
+### Fees for underpaid shipping labels
+
+To help ensure your item is delivered on time and without additional charges, it's important to weigh and measure
+your final package accurately. Learn more here. Mercari uses the package size and weight provided by the shipping carrier to determine the additional fee. If you ship a package that exceeds the size and weight limits on the label, you may be subject to additional fees.
+
+### Other Shipping Fees
+
+You’re responsible for proper packaging meaning that you’ll need to cover
+additional fees for using improper packaging (i.e. Priority Express or Flat Rate boxes with Mercari prepaid labels
+or applying USPS Ground Advantage (formerly First-Class) (0-15.9 oz) or FedEx labels on USPS Priority Mail boxes,
+hazmat markings, incorrect drop off, and seizure of packages). Sellers are responsible for overage fees and fines
+associated with improper use of Media Mail (prohibited contents, incorrect weight).
+
+Other shipping fees can include:
+
+**Shipping with wrong packaging**
+(e.g. Priority Express or Flat Rate boxes, USPS Ground Advantage™ (formerly First-Class) (0-15.9 oz) or FedEx labels on Priority Mail boxes)
+
+- Mercari may deduct any additional costs from the balance
+
+- In these situations, Mercari is not responsible for returning the item back to the seller
+**- 100% of fines from FedEx or USPS paid by seller**
+
+**Shipping prohibited items**
+
+- Media Mail packages are subject to inspection by the Postal Service. Upon inspection, content not
+eligible for Media Mail rates may be assessed at the higher price.
+- Mercari may deduct any additional costs or overage fees from the balance.
+**- 100% of costs from USPS paid by seller**
+
+### Cancelation Fees on Mercari
+
+Cancelations should only occur if the seller cannot fulfill an order. If a seller has frequent cancelations, Mercari may charge a cancelation fee of 5% of the item price (maximum of $25) to cover the cost of any transaction fees, operational and/or shipping label costs we incur. You will receive warnings if you reach this limit before a fee is charged. This fee will be subtracted from your balance and/or charged to the card on file within 30 days after you receive a notification from us.
+
+5% of the item price
+$25 maximum
+
+The seller may be charged a cancelation fee if an item is canceled.
+
+*Note: If you cancel repeatedly, listings may be removed and your account may be limited.*
+
+### Legal Fees on Mercari
+
+Mercari releases information about our customers only when presented with an official legal request, as described in
+our Information for Law Enforcement and other Government Agencies Policy.
+
+Mercari reserves the right to charge fees for any processing of legal documents.
+
+$25 per hour
+
+Cost of subpoena processing (i.e. subpoena, court order, or
+search warrant).
+Paid by Law Enforcement/Government Agencies.
+
+### Other Service Fees on Mercari
+
+Mercari provides access to additional services for buyers or sellers on our platform. The purchase of additional
+products or services facilitated by Mercari or offered outside of Mercari will be communicated at the time of the
+Service and these fees may vary. Separate Mercari Terms & Conditions apply to each of these services and you may be
+asked to accept additional terms offered through a third party to use these services and/or handle payments and fees
+outside of Mercari.
+
+Mercari Authenticate: $5
+
+Seller is charged to list an item over a set $ amount by a
+third party authentication service.
+Paid by Seller.
+
+Mercari Authenticate Certificate:
+$10
+
+Certificate of Authenticity provided by a third party service
+on Authenticated items.
+Paid by Seller.
+
+Warranty
+
+Warranties are offered through a third party for certain
+items. Fees are charged through the third party.
+Paid by Buyer.
+
+Updated 05/07/2026

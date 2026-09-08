@@ -1,0 +1,120 @@
+There are two kinds of fees that will always impact your earnings on a sale – Whatnot’s
+
+**commission fee** (Whatnot’s “cut” of the sale) and the **payment processing fee** (covering services provided by our payment processor). These fees are charged once your item is sold and are automatically deducted from your revenue from that sale.
+
+While we use the term “fee(s)” broadly in this article, for clarity, a
+
+**“commission” is a charge calculated as a percentage of the final price** of an item (i.e. a sales commission). The final price refers to the **price the item sold for to the buyer**, which does not include shipping or taxes. For example, if the seller started the auction at $1 and a buyer won the auction for $20, the final price would be $20. If a seller has a BIN price listed at $50, and a buyer offers $45 and the seller accepts that offer, then the final price is $45. Whatnot does not charge sellers for the creation, storage, retrieval, or maintenance of listings, nor any similar or ancillary services related to such listings.
+
+A “
+
+**payment processing fee” is a charge calculated as a percentage of the total order value of a transaction**. This includes the ** final price of the item sold plus shipping and buyer-paid tax**. For a breakdown of how payment processing fees differ in other countries, visit Earnings Payout Timeline.
+
+In certain circumstances, Whatnot is required to charge tax on our commission fee and payment processing fee. The applicable taxes depend upon the seller’s location and, outside the US, a seller's tax registration status. For more information, please visit this article.
+
+**US, Canada and Australia Seller Fee Structure**
+
+|Category|Commission Fee|Payment Processing Fee|
+|--|--|--|
+|Comics & Anime, Toys & Hobbies, Trading Card Games, and Sports Singles (see other restrictions)|8% on final price up to $1,500; 0% on portion over $1,500 (limited time only)|2.9% on total order value + $0.30|
+|Coins & Money|4% on final price up to $1,500; 0% on portion over $1,500 (limited time only)|2.9% on total order value + $0.30|
+|All other categories (some restrictions apply)|8% on final price|2.9% on total order value + $0.30|
+**Special Promotions:**
+
+From Thursday, July 17, to Wednesday, October 15, 2025
+
+**all orders placed with Australian sellers between 2:00 AM and 4:00 PM AEST/AEDT, **will have ** 4% commission**. Fees will automatically be adjusted for all eligible orders. For orders placed outside of this promotional window, normal commission fees apply. Standard payment processing fees will remain the same.
+
+For a limited time,
+
+**all orders placed with Canadian sellers **in the **Women's Fashion category** will have **0% commission**. Fees will automatically be adjusted for all eligible orders. For orders placed outside of this promotional window, normal commission fees apply. Standard payment processing fees will remain the same.
+
+**EU & UK Seller Fee Structure**
+
+|Category|Commission Fee|Payment Processing Fee|
+|--|--|--|
+|Comics & Anime, Toys & Hobbies, Trading Card Games, and Sports Singles (see other restrictions)|6.67% + VAT on final price up to €/£1,500; 0% on portion over €/£1,500 (limited time only)|2.42% on total order value + €/£0.25|
+|Coins & Money|4% + VAT on final price up to €/£1,500; 0% on portion over €/£1,500 (limited time only)|2.42% on total order value + €/£0.25|
+|All other categories (some restrictions apply)|6.67% + VAT on final price|2.42% on total order value + €/£0.25|
+## FAQs
+
+*How can I calculate my earnings?*
+
+Earnings are calculated at the order level. In most cases, you can calculate your earnings from an order by deducting the commission fee and payment processing fee from the final sale price.
+
+For example, let’s say that you as a US seller have sold an item for $50 on Whatnot. Assume that you are not offering the buyer free or reduced shipping, and no special tax situations apply.
+
+From that $50 final sale price, Whatnot takes an 8% commission ($50 x 8% = $4). To calculate the payment processing fee, we have to look at the total order value, which includes buyer-paid shipping and tax. In total, the buyer paid $58.70 for the order, so we take ($58.70 x 2.9%) and add $0.30, which gives us a total of $2 for the payment processing fee. $50 minus the commission fee ($4) and payment processing fee ($2) is $44, which are your take-home earnings.
+
+Note - fees are calculated based on the order sale price and total order value, not on your total earnings amount.
+
+*Where can I find my commission fees, payment processing fees, and earnings for an order?*
+
+You can reference your fees for a particular order on the order receipt. This receipt is accessible from the order details page on iOS or Android (Orders > select Order > Receipt and earnings details), and from the Orders page in the Seller Hub (click on an order and scroll down in the right side rail).
+
+*What happens when the seller pays for part of or all of the shipping costs?*
+
+When a seller pays for shipping costs on an order (i.e., offers “free shipping” or “reduced shipping”), this cost is also deducted from the seller’s potential earnings.
+
+However, your payment processing fees will be slightly lower, given these fees are based on the buyer total order value which would otherwise include buyer-paid shipping.
+
+*What fees do you charge on giveaways?*
+
+Since the total order value paid by the buyer is $0 for giveaways, there is no payment processing fee or commission fee. The only cost you pay is the cost of shipping the order.
+
+*How do coupons impact fees and my earnings?*
+
+If a buyer makes a purchase using a seller-generated coupon, this coupon amount will be deducted from the final sale price. For example, if you’re offering a $5 coupon which a buyer uses on a $20 order, the final sale price of that item will be $15 ($20 - $5). The commission rate will apply to the $15 price.
+
+Whatnot-generated coupons used by buyers will
+
+* not *impact your earnings. For example, if a new buyer uses a $5 Whatnot coupon on their first purchase on your $20 item, your final sale price will still be $20. *Why are my earnings different numbers for orders sold at the same price?*
+
+You may notice that items sold for the same price end up having different earnings amounts. This may be due to:
+
+
+
+**Shipping costs:**The buyer’s shipping cost impacts the total order value, which determines the total value of the payment processing fee paid by the seller
+
+- A buyer may have higher shipping costs if they live further away from you, meaning you’d end up paying more in payment processing fees
+
+- A buyer may have lower shipping costs if this is a secondary item they purchased in a bundle, meaning you’d pay less in payment processing fees on that order
+
+
+
+**Taxes:**A buyer’s locality could have higher taxes, which also impacts total order value and thus payment processing fees *How can I get a breakdown of the fees deducted from my live sale?*
+
+From the Analytics page in the Seller Hub, you can view your sales and earnings from live shows hosted in the last 30 days. Navigate to the “Livestream” tab on this page, and select the show you want to view.
+
+Please note this page is refreshed once a day. The sales and earnings numbers displays do account for any cancelations or refunds that occurred before the last data refresh. For example, if I sold $1000 in a show, but then I had a refund for $50, my sales from that show should say $950.
+
+*When will I get my earnings from a sale?*
+
+The answer to this question will depend on whether or not you’re a seller with Early Payout, and the shipping method you’re using. Visit Earnings Payout Timeline for more info.
+
+For a majority of in North America, earnings are available in your account balance within 4 hours when the order is confirmed as delivered to buyers. For most sellers outside North America, earnings begin processing once the 96 hour settlement period ends and the order is delivered.
+
+#### Was this article helpful?
+
+### Articles in this section
+
+- Understand the earnings payout timeline
+
+- Whatnot Seller Fees and Commissions Schedule
+
+- Set up and start a payout
+
+- Track your earnings or payout status
+
+- Troubleshoot issues with earnings or payouts
+
+- Early Payout Program
+
+- Cancel an order as a seller
+
+- Seller Weekly Orders Report
+
+- Seller Provided Support for Sellers
+
+- Whatnot - 2026 Tax guide - Australia
+
