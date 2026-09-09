@@ -1810,7 +1810,13 @@ is not a question about the work:
 
 ---
 
-## RC-2 item 1 — shipping assumptions in the listing packet (`552df07`, local)
+## RC-2 item 1 — shipping assumptions in the listing packet (`552df07`, `37269c9`, local)
+
+> **Status 2026-09-09: item closed locally.** `552df07` recorded shipping in the
+> packet; `37269c9` carried it to the seller and answered both questions above.
+> Read the two subsections at the end of this item — "The gap `552df07` left"
+> and "Verification of create → save → reload → review" — before treating the
+> earlier prose as current.
 
 **Status: implemented, local only.** Nothing pushed; `origin/main` is still
 `9aaf326` and production still serves Phase 0.
@@ -1893,18 +1899,21 @@ I am reasonably confident this is right, but it is the kind of call that is
 cheap now and expensive later, so it is written down and asserted in a test
 rather than left as an accident of what I happened not to add.
 
-### Questions for you
+### Decisions taken (2026-09-09)
 
-- **Q-RC2-1 (business).** When a seller has declared shipping and the packet's
-  net excludes it, should the review screen show the two figures side by side —
-  net excluding shipping, and net including their declared shipping — or keep
-  showing one figure with the boundary stated in words? Showing both is more
-  useful and is also a new number on a release-completion task, which is why I
-  have not done it. The wiring is separate work either way.
-- **Q-RC2-2.** The zero-unconfirmed note is currently informational. If you would
-  rather a seller be actively stopped and asked to confirm free shipping before
-  a draft is considered ready, that is a readiness change, not a packet change —
-  say so and I will scope it as its own item.
+- **Q-RC2-1 — DECIDED.** One net figure for Phase 1, labelled **"Estimated net
+  before shipping"**, with the recorded shipping assumptions displayed beside
+  it. A second calculated figure is **deferred**. Implemented in `37269c9`:
+  the label changed at both render sites, and the assumptions render through
+  `_reviewBasisRow` — the existing qualifier-in-parentheses mechanism for a
+  number that is disclosed but not counted — rather than as fee rows, which
+  are deductions the model applied. A test asserts the net still equals gross
+  minus the fee rows alone, so shipping cannot quietly start being deducted.
+- **Q-RC2-2 — DECIDED.** Zero-unconfirmed stays **informational**; an untouched
+  default must not silently become confirmed free shipping, and this is **not**
+  a new readiness blocker. Implemented as a qualified row
+  ("declared zero, unconfirmed") plus a notice, with a test asserting the
+  notice carries no blocking imperative and that readiness is unaffected.
 
 ### Verification
 
@@ -1932,3 +1941,180 @@ and restores, and asserts the restore.
 
 **Next in RC-2:** item 2, condition guidance; item 3, listing description text.
 Target-net entry stays deferred.
+
+---
+
+## RC-2 item 1 — the gap `552df07` left, and its closure (`37269c9`, local)
+
+`552df07` was reported as sound, and the packet side was. It was also, on its
+own, invisible: **no seller could ever have seen a shipping figure.** Two
+independent breaks, one at each end of the chain, both established by reading
+the live bundle rather than inferred:
+
+| End | Finding | Evidence |
+| --- | --- | --- |
+| Send | `_crPricingContext` returned only `{feeModelRevision, feeScheduleVerified?, basisMeta?}` — no shipping key existed | `js/core.2cb1e377.js:20903` before `37269c9` |
+| Render | No shipping rendering at all; `grep` for `packet.shipping` and `SHIPPING_[A-Z_]*` in the live bundle returned **zero matches** | live bundle, pre-`37269c9` |
+
+So in production every draft would have recorded `SHIPPING_ABSENT` and the
+review screen would have shown nothing. The suite totals in the previous
+section were true and did not establish this, which is exactly why the
+create → save → reload → review demand was the right gate.
+
+### The prior decision this had to respect, not overrule
+
+Wiring the obvious way — read `#shipCharge`/`#shipCost` from the review screen
+— would have reintroduced a bug a previous decision had explicitly refused. The
+fee-breakdown comment in `_reviewFeesHtml` states the rule:
+
+> shipCharge and shipCost live on the scan surface and describe the card
+> currently in hand … Reading those inputs here would quietly attribute the
+> last scanned card's postage to an unrelated draft, which is precisely the
+> invented figure Sec 5.5 refuses.
+
+That reasoning is correct and is preserved. The resolution is **when** the
+values are read, not whether the rule holds:
+
+- **Capture at create**, gated on the same identity test the price basis
+  already passes — `_crIntentToken(cardInHand) === _crIntentToken(cardBeingDrafted)`.
+  Fails closed: no card, or a different card, and shipping is omitted, which
+  the server reports as `SHIPPING_ABSENT` rather than as a declared zero.
+- **Render from the persisted packet only**, with **no fallback** to the live
+  inputs — so the misattribution the comment refuses cannot occur even for
+  drafts whose packet is missing.
+- Raw strings go up **unparsed**. The ranking surface's `|| 0` coercion is
+  deliberately not applied: it converts an unreadable entry into a confident
+  zero, the precise failure the packet's vocabulary exists to prevent.
+
+One clause of that comment — "a draft record carries no shipping field at all"
+— was made false by `552df07` and is now **corrected in place**, with the
+reasoning it supported restated and kept.
+
+### A copy defect the new tests found
+
+Five shipping messages interpolated internal object keys into seller-facing
+prose. `notes[].message` is rendered **verbatim** to the seller, so this was
+seller-visible, not cosmetic:
+
+> Shipping **buyerPays** and **sellerCost** came through as zero. That field
+> starts at zero, so **this packet** cannot tell …
+
+One `SHIPPING_SIDE` map now supplies "what the buyer pays" / "your postage" to
+every branch, so the two names cannot drift between codes, and
+`SHIPPING_NOT_IN_NET` no longer says "this packet". `notes[].fields` still
+carries the internal keys, because that side is machine-read — a rename there
+would have broken every consumer. A guard in the offline suite now runs every
+shipping shape and rejects internal spellings in any note message.
+
+### Verification of create → save → reload → review
+
+Not suite totals. Three fixtures created through the **real POST handler** and
+read through the **real GET**, then asserted in the browser:
+
+| Fixture | Declared | Read back at review |
+| --- | --- | --- |
+| `packetShipDeclared` | `5.99` / `4.50` | both figures render, qualified "not in net" |
+| `packetShipZero` | `0` / `0` | shown, qualified "declared zero, unconfirmed", `SHIPPING_ZERO_UNCONFIRMED` INFO |
+| `packetShipUnreadable` | `"four dollars"` / `4.50` | rejected text handed back verbatim; readable side still shown |
+
+What the assertions pin, beyond the figures appearing:
+
+- The zero notice is **actually visible** — measured via `offsetWidth`/
+  `getClientRects`, not merely present in the DOM. This screen has shipped a
+  banner with dead styling before, so DOM presence is not accepted as proof.
+- **Exactly one** net figure is shown, per the decision.
+- The net still equals **gross minus the fee rows alone**, so shipping is
+  disclosed and not deducted.
+- The unreadable entry is **not coerced to `$0.00`** and does not vanish.
+- The notice carries no blocking imperative, and readiness is unchanged.
+
+Two assertions were **re-pointed, neither relaxed**:
+
+1. `shipping is not rendered as a $0.00 fee row` matched `/ship|postage/i`
+   against every label. It passed only while no label anywhere contained the
+   word — and the relabel to "Estimated net before shipping" made it fail on
+   the very label whose job is to disclose the exclusion. A guard that fires on
+   an honest disclosure is testing spelling, not behaviour. It now matches on
+   row **kind**, and gained a companion that still forbids an invented shipping
+   figure in a fee row.
+2. The net-label assertion moved from `/item only/` to `/before shipping/`,
+   per Q-RC2-1.
+
+| Suite | Result |
+| --- | --- |
+| `tests/listing-packet-offline.mjs` | **395 / 0** (was 270; +125 incl. the copy guard) |
+| `tests/draft-review-screen.mjs` | **389 / 0** (was 370) |
+| `tests/draft-crud-e2e.mjs` | 192 / 0 |
+| `tests/draft-index-recovery.mjs` | 259 / 0 |
+| `tests/draft-store.mjs` | 147 / 0 |
+| `tests/draft-readiness.mjs` | PASS |
+| `tests/run-all.sh` | **not run**, per standing instruction |
+
+### Bundle naming — deliberately not renamed yet
+
+`js/core.2cb1e377.js` now hashes to `80f64317`, so `tests/asset-fingerprints.mjs`
+is **69 / 4** and red by design. The standing decision is one rename at the
+**end of the block**, not per step, and RC-2 has two items left. The rename and
+the `index.html:3837` update come when RC-2's bytes settle.
+
+### New finding — three retired bundles are missing from disk
+
+Raised, not fixed, because it **pre-dates this work** and is not RC-2 scope.
+`tests/asset-fingerprints.mjs` reports `js/core.176e4a56.js`,
+`js/core.73a71fac.js` and `js/core.e9f21f4e.js` absent. This is a real user
+impact rather than bookkeeping: `vercel.json:47-48` serves `/js/*` as
+`immutable`, so a browser holding cached `index.html` that references one of
+these gets a **404 and a blank app**.
+
+Two of the three are recoverable from git — `73a71fac` from `33434a6` and
+`e9f21f4e` from `6cf5922` — by the method the test itself prescribes
+(`git show <commit>:js/core.<hash>.js > js/core.<hash>.js`). `176e4a56` appears
+in **no commit** and may be unrecoverable, in which case it needs a
+declared-unrecoverable entry like `fec7fb3a` already has rather than a restore.
+
+**Question for you — Q-RC2-3.** Both restores touch retired bundles rather than
+live code, so they are low risk, but they are outside RC-2 as scoped. Restore
+the two recoverable ones and declare `176e4a56` unrecoverable as part of
+finishing RC-2, or file it as its own release-validation item? These files
+became reachable through commits that are on the branch and not in production,
+so I have not established whether any production `index.html` ever referenced
+them; I can determine that before acting if you would rather decide on
+evidence.
+
+---
+
+## R4 / TPL verification — correction accepted (2026-09-09)
+
+The record previously implied that removing the Preview `CARDSELL_TPL_KEY`
+would demonstrate R4. **It does not, and that is now recorded as the standard.**
+A missing key can bypass the reservation path entirely, so an absent-key
+response proves only that the key was absent.
+
+Verification of R4 requires all of:
+
+| Requirement | Why the weaker version fails |
+| --- | --- |
+| The **real isolated Redis store** | A shared store cannot show that writes landed in the right place |
+| A **controlled upstream fixture** | Without one, a pass may reflect upstream behaviour rather than R4 |
+| Evidence the **reservation, caching and refusal paths actually ran** | A response shape alone does not show which path produced it |
+
+Also recorded: **previously built deployments retain their old credentials**,
+so isolation is not complete while they remain reachable — this is the same
+open Safeguard 2, and it applies to R4 verification directly.
+
+Two further corrections to the surrounding record:
+
+- Redis separation is **configured**; **deployed verification remains pending**.
+  The newer environment records do not by themselves close RV-10.
+- The provider screenshot is **no longer required**.
+
+Standing constraint restated because it governs how this gets verified: the
+deployment being activated must contain **both R4's implementation and its
+intended configuration**. Changing environment variables after a deployment
+requires a **new deployment** to carry those settings; reading them at call
+time does not change that.
+
+### Phase 1 completion
+
+**Approximately 92%**, by judgment. Production remains on the **Phase 0**
+experience.
