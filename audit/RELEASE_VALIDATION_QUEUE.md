@@ -2057,7 +2057,12 @@ is **69 / 4** and red by design. The standing decision is one rename at the
 **end of the block**, not per step, and RC-2 has two items left. The rename and
 the `index.html:3837` update come when RC-2's bytes settle.
 
-### New finding — three retired bundles are missing from disk
+### New finding — three retired bundles are missing from disk (SUPERSEDED)
+
+> **Superseded 2026-09-09 by "Q-RC2-3 — resolved" below.** The section as
+> written overstated the impact. It is kept because the correction is the
+> point, but the production-defect claim in it is **withdrawn**. Read the
+> resolution instead.
 
 Raised, not fixed, because it **pre-dates this work** and is not RC-2 scope.
 `tests/asset-fingerprints.mjs` reports `js/core.176e4a56.js`,
@@ -2118,3 +2123,148 @@ time does not change that.
 
 **Approximately 92%**, by judgment. Production remains on the **Phase 0**
 experience.
+
+---
+
+## RC-2 item 1 — the sender, closed on evidence (`535f8fc`, local)
+
+The earlier closure was incomplete and the gap was correctly identified: the
+three fixtures prove **POST → storage → GET → display**, but they hand
+`pricingContext.shipping` to the POST handler themselves. `_crPricingContext`
+— the half that was actually broken — is never invoked by them. **A fixture
+that supplies the value cannot detect a sender that never produces it.** Those
+three sections would have stayed green against the exact defect they were
+written for.
+
+### The case that closes it
+
+One browser case, from the button a seller presses to the reopened review
+screen, with the **real endpoint and store** in between:
+
+| Step | What is real |
+| --- | --- |
+| Card on the panel | `loadCardUI()`, the production render path — so the Sell row has a visible ancestor for the reason it does in production |
+| Sell button revealed | the real `applySellGate()`, off an eligibility response; `_crSellApproved` is set by the gate, not by the test |
+| Shipping entered | typed into `#shipCharge` / `#shipCost`, not injected into a context object |
+| Create | `page.click('#crSellBtn')` → the real `startListingDraft()` → `_crCreateDraft()` → `_crPricingContext()` |
+| Server | the browser's own POST body handed to the **production handler**; the GET reads it back through the same handler |
+| Reopen | `openDraftReview()` on the id the handler returned |
+
+Between create and reopen the case does the thing the boundary exists for: it
+**changes the card in hand** to card B via the real path and sets the shipping
+inputs to `99.99` / `88.88`. The draft must still show `7.25` / `3.10`.
+
+### What is now asserted that was not before
+
+- The create body's `pricingContext.shipping` **exists** and carries `7.25` /
+  `3.10` — the sender asserted directly, on its own output.
+- The values arrive **unparsed and uncoerced**, as strings.
+- After the card change, the review screen shows the **created** figures and
+  **not** `99.99` / `88.88`. A fallback to the live inputs fails here.
+- The Sell button is **genuinely on screen** (`offsetWidth` / `getClientRects`),
+  not merely `display:block` under a hidden ancestor.
+- **The sell path and the identity gate agree on which card is in hand.** This
+  one was unplanned and matters: `startListingDraft()` drafts
+  `window._crSellApproved` while the capture gate compares against
+  `selectedCard`. Nothing previously established that those two agree, and if
+  they ever diverge, shipping is silently dropped on **every legitimate press**
+  — the original bug, restored, with all other assertions still green.
+
+### The case was verified by making it fail
+
+A green new test proves nothing on its own, so the sender was mutated
+(`if (false && …) ctx.shipping = ship`) and the suite re-run. It failed at
+exactly the intended assertion, and the context the mutant produced was
+
+```
+{"feeModelRevision":1,"feeScheduleVerified":"2026-09-01"}
+```
+
+— **byte-identical to the pre-fix shape**. So this case detects the original
+defect, not merely a hypothetical one. The mutation was reverted and the
+assertion made null-safe so a future regression reports a failure rather than
+throwing past the remaining checks.
+
+`tests/draft-review-screen.mjs`: **399 / 0** (was 389).
+
+**Item 1 is closed.**
+
+---
+
+## Q-RC2-3 — resolved as release cleanup. No production defect existed.
+
+### 1. The production-defect claim is withdrawn
+
+I said a cached `index.html` referencing a missing bundle would 404 into a
+blank app. **No deployed `index.html` ever referenced any of the three.**
+
+| Check (`origin/main`) | 176e4a56 | 73a71fac | e9f21f4e |
+| --- | --- | --- | --- |
+| Commits referencing it in `index.html` | 0 | 0 | 0 |
+| Commits referencing it in **any** file | 0 | 0 | 0 |
+| Ever added to `origin/main` | no | no | no |
+
+`origin/main`'s `index.html` references exactly one bundle —
+**`js/core.569ff536.js`** — and that file is present on disk (911,576 bytes).
+All three missing generations are **branch-only artifacts** of the RV-13 work,
+retired before anything shipped.
+
+Two corrections to my own reasoning, both accepted:
+
+- **Branch-only references do not establish a production defect.** I inferred
+  reachability from the citation map, which tracks branch history, and did not
+  check `origin/main`. The check takes one command and I should have run it
+  before filing an impact claim.
+- **The `/js/*` immutable header does not establish that an older HTML document
+  is still cached.** `vercel.json:47-48` sets caching for **JavaScript**
+  responses; the lifetime of a previously served `index.html` is governed by
+  that document's own headers, which I did not examine. The header made the
+  consequence *conditional*, and I stated it as established.
+
+So this is **citation hygiene** — keeping the bundles a reviewer's `file:line`
+citations point into — not a reachable-asset defect.
+
+### 2. One bundle restored, byte-exact
+
+Every commit carrying each path was enumerated and the **blob hashed** rather
+than trusting the commit noted earlier — which was wrong in both cases:
+
+| Bundle | Earlier note | Verified |
+| --- | --- | --- |
+| `73a71fac` | "recoverable from `33434a6`" | recoverable from **`1321d7b5`** |
+| `e9f21f4e` | "recoverable from `6cf5922`" | **not recoverable at all** |
+
+`js/core.73a71fac.js` restored from `1321d7b5`, verified `sha256[:8] = 73a71fac`
+at 1,212,859 bytes, and `node --check` clean.
+
+### 3. Two are unrecoverable — established, not assumed
+
+`e9f21f4e` was recorded as recoverable. It is not. The two commits carrying
+that path hold bytes hashing to `b5eefbc0` and `b46e38e2`; **neither matches
+the name.** Restoring from either would have put wrong bytes behind a hash that
+claims to identify them — worse than the absence, and precisely what the
+fingerprint rule exists to prevent.
+
+Both were then checked beyond their own paths: **every `js/core.*.js` blob in
+`--all` (56 objects) was hashed**, and none produces `e9f21f4e` or `176e4a56`.
+Both are now declared unrecoverable by name with that reason, which is the
+mechanism's deliberate, reviewable act — not a wildcard.
+
+Because neither was ever deployed, an exception entry **does** resolve this
+one: there is no compatibility question to leave open. Had either been
+deployed, the entry alone would not have been sufficient, and the standard for
+that case is recorded here.
+
+### 4. The rename, and why it is not done in this commit
+
+`tests/asset-fingerprints.mjs` is **73 / 1**, up from 69 / 4. The single
+remaining failure is the live bundle (`js/core.2cb1e377.js` now hashes to
+`80f64317`) and is the planned end-of-block rename.
+
+The standing decision (`audit/BUNDLE_RENAME_24cd52cb.md`) is one rename at the
+**end of the block**, from bytes that have settled. RC-2 item 2 — condition
+guidance and description text — still edits this bundle, so renaming now would
+mean renaming twice and re-pointing every citation twice. The rename and the
+`index.html:3837` update are the **last** step of RC-2, and the asset check
+goes green there, before release. Recorded so the red is legible as sequencing
+rather than as an outstanding defect.

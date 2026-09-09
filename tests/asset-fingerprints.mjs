@@ -124,6 +124,18 @@ const UNRECOVERABLE = new Map([
   // filename, so it is excluded here by name rather than by loosening the
   // parser -- a looser parser would also stop noticing real deletions.
   ['75f9494e', 'a byte hash quoted in the map, never a filename'],
+  // Both retired by the RV-13 fix on 2026-09-09 and both branch-only: neither
+  // was ever added to origin/main, and no index.html on origin/main ever
+  // referenced either (`git log origin/main -S`, 0 commits each). Production
+  // has only ever served core.569ff536.js, which is present. So these are
+  // citation-history gaps, not a reachable-asset defect.
+  ['176e4a56', 'never committed under this name; no blob in any commit hashes ' +
+               'to it (scanned every js/core.*.js blob in --all). Branch-only, ' +
+               'never referenced by index.html on origin/main'],
+  ['e9f21f4e', 'the two commits carrying this path hold non-matching bytes ' +
+               '(f51864d2 -> b5eefbc0, 33434a6e -> b46e38e2) and no blob in ' +
+               'any commit hashes to e9f21f4e. Branch-only, never referenced ' +
+               'by index.html on origin/main'],
 ]);
 
 const mapPath = new URL('../' + MAP, import.meta.url);
