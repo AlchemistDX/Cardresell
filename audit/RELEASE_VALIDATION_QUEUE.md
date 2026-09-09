@@ -207,10 +207,36 @@ custom environment and incurs no additional cost.
    does so, and cleanly, must be **read back from the Environment Variables page
    after the change** rather than assumed. Step 5 already requires that check.
 
-   **Cost remains unconfirmed.** The current database is on Upstash's **Free**
-   plan, which establishes nothing about whether a **second** free database is
-   permitted on this account, or what its limits are. Confirm with Upstash
-   before creating it, per the standing caveat.
+   **Cost — partly answered, and it raises a decision (17:25).** The existing
+   database is **Upstash for Redis - Free**. The **Install Integration →
+   Installation Plans** screen reached from *Create Database* lists **no free
+   option in the visible region**: Pay As You Go at **$0.2 per 100K commands**,
+   then Fixed 250MB **$10/mo**, Fixed 1GB **$20/mo**, and upward to 500GB at
+   **$1500/mo** — each *plus* a per-read-region multiplier. Whether a free plan
+   exists above or below that scroll region is **not established**.
+
+   **Before treating that as the price, note the flow may be the wrong one.**
+   That screen says *Install Integration*, i.e. a **new installation** with its
+   own plan — not a second database inside the existing one. The existing store
+   page carries an **All Databases** tab alongside *Installation*, which implies
+   the current installation can hold more than one database. **Creating the
+   second database inside the existing installation is the path to try first**,
+   both because it may inherit the current free plan and because a fresh install
+   of the same integration is exactly the event that could rewrite the five
+   variables just retargeted (the standing warning against reconnecting).
+
+   **QUESTION FOR WILL — Q-CONTAIN-1.** If the existing installation cannot hold
+   a second database and isolation requires a paid plan, which do you want?
+   (a) **Pay As You Go, $0.2 per 100K commands** — for preview-only traffic this
+   is close to nothing, but it is a real recurring charge and a new vendor
+   commitment; (b) **stay free by other means** — reuse a single database with a
+   key prefix per environment, which is *weaker isolation* since one credential
+   still reaches both datasets and a prefix bug crosses them; (c) **another
+   provider** — the dialog also offers *Redis - Official Redis for Vercel*,
+   unpriced here. **This is a spend decision and remains yours. Not
+   recommended-by-default, not assumed.** My own lean is (a) if the existing
+   installation refuses, because (b) reintroduces the shared-credential shape
+   this whole item exists to remove.
 
    **NEW FINDING 2 (17:20) — `CARDSELL_TPL_KEY` targets Production AND
    Preview.** Visible on the same page, padlocked, "Updated". This is the paid
