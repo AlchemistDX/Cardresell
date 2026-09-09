@@ -105,13 +105,14 @@ assertion now fails if the basis is not actually visible to the builder.
 - **No speculative restore of the last non-null basis.** Reinstating a basis
   whose card is no longer certain recreates exactly that leak.
 
-What the reproduction does establish is a requirement the clear does not
-currently distinguish: dropping a **foreign** basis on a card change and
-dropping the **current card's own** basis on a reload of that same card are
-different things, and only the first is intended. Whether a same-card reload
-should keep the basis is an **open product question, recorded and not decided
-here**. The original binding fix prevented foreign provenance; retaining a
-legitimate basis is a separate requirement and is not met.
+What the reproduction does establish is that **the clear treats both cases
+alike**: dropping a **foreign** basis on a card change and dropping the
+**current card's own** basis on a reload of that same card go through the same
+path and get the same outcome. Whether a same-card reload should keep the basis
+is an **open product question, recorded and not decided here** — so this packet
+does not rank the two cases either. The original binding fix prevented foreign
+provenance; retaining a legitimate basis is a separate requirement and is not
+met.
 
 ## 6. "Silently vanish" — withdrawn
 
@@ -127,9 +128,11 @@ Already asserted, not newly claimed: `tests/draft-review-screen.mjs:2519`
 with no basis is flagged as owing one"). The loss is **disclosed, and flagged
 as owing a source** in the comp-derived case.
 
-**Reachability outside test setup: not demonstrated.** Binding a basis requires
-a priced read, so a seller cannot be holding one inside the first 400ms of a
-page load. Recorded as undemonstrated rather than ruled out.
+**Production reachability has not been demonstrated.** Recorded as
+undemonstrated rather than ruled out. Earlier I argued a seller could not be
+holding a basis inside the first 400ms because binding one requires a priced
+read; that exceeds the evidence — a priced read establishes no minimum
+duration, and nothing here measures one.
 
 ## 7. Run accounting, including the interrupted command
 
@@ -157,6 +160,11 @@ Focused iteration needed a way to run one section. `tests/_assert.mjs` now
 honours an opt-in `CR_ONLY` substring filter. Absent the variable nothing
 changes and every section runs.
 
+What this does and does not do: it makes a focused run **distinguishable to a
+reader**. It does **not** close SI-1, and it does **not** establish that any
+automated release runner rejects an incomplete run — nothing consumes the
+marker programmatically today. Those remain separate open items.
+
 A filtered run is an **incomplete** run, so it cannot be allowed to print the
 same summary line as a full one: each skipped section prints `skipped by
 CR_ONLY`, and the summary appends `-- INCOMPLETE RUN: N section(s) skipped by
@@ -167,6 +175,10 @@ report one failure instead of eleven.
 ## 9. Status
 
 - D7 implementation: **closed**, unchanged by this work.
+- This is recorded as a **resolved test-setup race**. **No production behaviour
+  was fixed here**, and the passing reproduction intentionally documents the
+  clear as it currently stands. **Same-card basis retention is tracked
+  separately** — see `audit/RELEASE_VALIDATION_QUEUE.md`.
 - Basis loss: **cause established** — the bundle's 400ms startup restore
   reloading the same card and clearing its basis, with the test's bind landing
   inside that window. Request miscorrelation: **eliminated**. Reproduction:

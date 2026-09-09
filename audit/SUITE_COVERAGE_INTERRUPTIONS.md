@@ -181,11 +181,16 @@ source, already asserted at `tests/draft-review-screen.mjs:2519` and `:2521`),
 and `_crPricingContext({})` without a card withholds the basis by design, which
 would have made the reproduction pass for the wrong reason.
 
-Open product question, recorded not decided: a same-card reload should probably
-keep the basis it was just given, but the clear also protects against carrying
-another card's provenance, and that is the worse failure. Reachability outside
-test setup is undemonstrated.
+Recorded as a RESOLVED TEST-SETUP RACE. No production behaviour was fixed, and
+the passing reproduction intentionally documents the clear as it stands. The
+clear treats both cases alike -- a foreign basis on a card change and the
+current card's own basis on a reload of it take the same path to the same
+outcome -- and the desired same-card behaviour is open, tracked separately in
+`audit/RELEASE_VALIDATION_QUEUE.md`. Production reachability is undemonstrated;
+no minimum duration is claimed.
 
 `tests/_assert.mjs` gained an opt-in `CR_ONLY` section filter. A filtered run
-prints per-section skips and appends `-- INCOMPLETE RUN` to the summary, so it
-can never be mistaken for a full pass.
+prints per-section skips and appends `-- INCOMPLETE RUN` to the summary, which
+makes a focused run distinguishable TO A READER. It does not close SI-1 and it
+does not establish that an automated release runner rejects incomplete runs --
+nothing consumes the marker programmatically. Those stay separate.

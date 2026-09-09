@@ -158,6 +158,38 @@ asserted because glare is advisory, not a gate.
 
 ---
 
+## Open behaviour question — same-card basis retention (opened 2026-09-08)
+
+Tracked here rather than left inside the D7 basis-loss packet, because it is a
+product decision with a release consequence and it is nobody's side note.
+
+**What is established.** `loadCardUI` (`js/core.3f83abec.js:3556`) clears
+`_crBasis` on every card load. The clear **treats both cases alike**: a load of
+a DIFFERENT card, where dropping the previous card's basis is the leak
+prevention the binding work was built for, and a reload of the SAME card, where
+the basis just bound for that card is dropped too. Demonstrated deterministically
+by `a same-card reload drops that card's own bound basis` in
+`tests/draft-review-screen.mjs`, driven through the real
+`_restoreLastLoadedCard()` path.
+
+**What is not established.** Whether a same-card reload SHOULD retain the
+basis. Retention is not obviously safe: reinstating a basis whose card is no
+longer certain recreates the foreign-provenance leak. Production reachability
+is also undemonstrated — the only observed occurrence was a test binding a
+basis while a startup card load was still pending. No minimum duration is
+claimed in either direction.
+
+**Why it is not urgent.** The consequence is disclosed, not silent: the review
+screen states `data-packet-basis="absent"` with "No price source was recorded
+with these listing details.", and flags a comp-derived price as owing a source
+(`tests/draft-review-screen.mjs:2519`, `:2521`).
+
+**What would close it.** A decision on the intended same-card behaviour, and if
+retention is chosen, a rule that distinguishes the two loads by card identity
+rather than by timing. Production clearing stays unchanged until then.
+
+---
+
 ## Not in this queue
 
 Everything else registered in `tests/run-all.sh` runs offline and was run at the

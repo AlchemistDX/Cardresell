@@ -1960,15 +1960,19 @@ try {
        * The last non-null basis is NOT restored. Reinstating a basis whose
          card is no longer certain would recreate the leak.
 
-     What it does establish is the requirement the clear does not currently
-     distinguish: dropping a FOREIGN basis on a card change and dropping the
-     CURRENT card's own basis on a reload of that same card are different
-     things, and only the first is intended. Whether a same-card reload should
-     keep the basis is an open product question, recorded, not decided here.
+     What it does establish is that the clear TREATS BOTH CASES ALIKE: dropping
+     a FOREIGN basis on a card change and dropping the CURRENT card's own basis
+     on a reload of that same card go through the same path to the same
+     outcome. Whether a same-card reload should keep the basis is an open
+     product question, recorded, not decided here -- so this section does not
+     rank the two cases either.
 
-     Reachability: not demonstrated outside test setup. Binding a basis needs a
-     priced read, so a seller cannot hold one inside the first 400ms of a page
-     load. The consequence if it did happen is disclosed rather than silent --
+     Production reachability has NOT been demonstrated, and is recorded as
+     undemonstrated rather than ruled out. (An earlier draft argued a seller
+     could not hold a basis inside the first 400ms because binding one needs a
+     priced read. That exceeded the evidence: a priced read establishes no
+     minimum duration.) The consequence if it did happen is disclosed rather
+     than silent --
      see "no recorded source is stated as absent" and "a comp-derived price
      with no basis is flagged as owing one" in the provenance-block section.
   ───────────────────────────────────────────────────────────────────────── */
@@ -2197,10 +2201,11 @@ try {
     // 4e2c6b7b, the same key the basis was stamped to -- so the clear is a
     // same-card reload dropping that card's own basis.
     //
-    // That ordering is an artifact of this setup, not of the product: a real
-    // seller cannot bind a basis inside the first 400ms, because binding one
-    // requires a priced read. The restore is therefore stubbed out so this
-    // section measures basis binding rather than racing startup. The ordering
+    // That ordering is an artifact of THIS SETUP -- the bind lands inside a
+    // startup card load that has not finished. Production reachability is not
+    // demonstrated either way and no minimum duration is claimed here. The
+    // restore is stubbed out so this section measures basis binding rather
+    // than racing startup. The ordering
     // itself is reproduced deliberately in the next section, and the clear is
     // left exactly as it is -- it protects against carrying another card's
     // provenance across a card change, which is what the binding work was for.
