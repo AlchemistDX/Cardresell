@@ -824,8 +824,39 @@ invisible to the person they are refusing.** That is a defect in the pair, not i
 either half, and it is the correct target of the burst observation \u2014 **not** the
 per-IP number, which remains unresized and Unverified.
 
-**Severity: user-facing, and it makes the failure mode actively
-counterproductive.** Not yet fixed anywhere.
+### CORRECTION — the seller-facing consequence was asserted, not traced
+
+**The `null` proves the helper merges outcomes. It does not prove every screen
+says "no such card", and I wrote it as though it did.** Tracing the eight
+callers in `js/core.569ff536.js`:
+
+| Caller | Guard | Established end state |
+| --- | --- | --- |
+| `:1459` generic `gameSlug` | `if (!data \|\| !data.length)` | **Renders `"${emptyMsg} Try a different name."`** — every failure mode reaches this |
+| `:938` pokemon, `:1236` mtg, `:1489` yugioh | `if (tplData)` | falls through — **end state not established** |
+| `:1336` lorcana, `:1420` onepiece | `if (tplData && tplData.length)` | falls through — **not established** |
+| `:1074` pokemon-jp | no guard at the call | falls through to TCGdex / PokemonTCG.io fallbacks — **not established** |
+| `:12258` scan | `if (tplHits && tplHits.length)` | falls through to other match strategies — **not established** |
+
+**So the confirmed blast radius is one caller, not the interface.** The other
+seven may mask the failure behind a fallback provider, may leave the dropdown
+untouched, or may reach a different empty state — **unestablished, and that is
+exactly what the mocked render must settle.**
+
+**Now established (it was not, from the snippet I showed):** the `catch` block at
+`:307` does `console.warn` then `return null`, so **thrown timeouts and network
+failures merge into the same null** as a `429`. The merge is real across all
+four input conditions; only the *display* varies.
+
+**Severity: real loss of error information, to be corrected before R4
+activation.** The interface-wide phrasing is withdrawn.
+
+### `window.tplApiKey` — checked, not a finding
+
+`js/config.20ebe911.js:4`: `window.CARDSELL_TPL_KEY = '__PROXIED__'; // sentinel
+— real key stays server-side`. It is a **presence gate**, matching the earlier
+record. **Not a credential, not a new finding**, and closed here rather than
+left hanging as an open question.
 
 **Open question, not a finding:** `:297` reads `window.tplApiKey`. Whether that
 is a boolean gate or a value is **unestablished** and worth establishing before

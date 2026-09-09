@@ -22,7 +22,7 @@ below the line at §H.
 | Remaining path | Six owner steps, one at a time (§E). |
 
 **Correction to my last summary.** I wrote "every offline suite green" and
-"none is blocked on writing more code." Both were too broad. The first was an
+"none WAS blocked on writing more code — **superseded 2026-09-09, see below**." Both were too broad. The first was an
 impression from twelve suites I had run, not a record of all of them — running
 the full set individually found **two suites already red at HEAD**, both on
 evidence shape rather than behaviour, now repaired and recorded. The second
@@ -1432,3 +1432,19 @@ guessed at.
   multiplier just moves the ceiling** \u2014 so the two are tracked as separate
   items, and the multiplier is fixed first so the cap is sized against
   post-fix behaviour rather than against the waste.
+
+
+## Headline superseded — 2026-09-09
+
+**"None is blocked on writing more code" no longer describes the release.** Three
+things changed:
+
+- **TPL rotation is complete.** #518 revoked, replacement serving, **G11 and CH-3
+  closed** (CH-3 worded: the public and plain-storage exposures are closed).
+- **CH-2 is prepared, not shipped.**
+- **RV-13 adds actual code work** — preserving the `429` / budget-refusal /
+  network-failure / empty-result distinction through to the UI, to be corrected
+  **before R4 activation**.
+
+**Phase 1 remains roughly 85–90% complete. RV-13 is a bounded correction inside
+the remaining work, not an expansion of scope.**
