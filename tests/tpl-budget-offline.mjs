@@ -19,7 +19,8 @@ import {
   reserveUpstream, releaseReservation, storeResult,
   budgetConfig, cacheKey, OUTCOME, BUDGET_DEFAULTS,
 } from '../api/_tplBudget.js';
-import handler, { setBudgetStore, budgetStoreActive, budgetMode, BUDGET_MODE } from '../api/tpl-proxy.js';
+import handler, { setBudgetStore, budgetStoreActive, budgetMode, BUDGET_MODE, resetBudgetStore } from '../api/tpl-proxy.js';
+import { kvConfigured } from '../api/_tplBudgetStore.js';
 
 let passed = 0, failed = 0;
 function check(name, cond, hint = '') {
@@ -519,6 +520,142 @@ console.log('\n11. disabled vs enabled-but-unbound');
     globalThis.fetch = realFetch;
     setBudgetStore(null);
     delete process.env.CARDSELL_TPL_KEY;
+    delete process.env.TPL_BUDGET_ENFORCE;
+    delete process.env.TPL_BUDGET_MAX;
+    delete process.env.TPL_BUDGET_WINDOW_SEC;
+  }
+}
+
+// ── 12. The DEPLOYED function binds its own store ───────────────────────────
+// Section 11 proved the calling path with an INJECTED mock. That is not what
+// runs on Vercel: nothing there ever calls setBudgetStore, so before this the
+// deployed slot stayed null and enabling enforcement (G12) would have turned
+// every uncached lookup into a 503. This section proves the function resolves
+// its own store from the environment, with no injection anywhere.
+//
+// The store is isolated -- an in-process fake KV behind the same REST shape --
+// and the upstream provider is mocked. No real KV, no real provider, no quota.
+console.log('\n12. production binding: the function resolves its own store');
+{
+  const mkRes = () => {
+    const r = { headers: {}, code: null, body: null };
+    r.setHeader = (k, v) => { r.headers[k.toLowerCase()] = v; };
+    r.status = (c) => { r.code = c; return r; };
+    r.json = (b) => { r.body = b; return r; };
+    r.send = (b) => { r.body = b; return r; };
+    r.end = () => r;
+    return r;
+  };
+  const req = (q) => ({ method: 'GET', headers: { 'x-forwarded-for': '203.0.113.9' },
+                        query: q || { path: '/v1/cards/search', q: 'Pikachu', game: 'pokemon', limit: '20' } });
+
+  // An ISOLATED store: Redis-ish semantics over the REST URL shape the real
+  // store uses, held in this process. Nothing leaves the test.
+  const kvData = new Map();
+  const kvOps  = [];
+  let providerCalls = 0;
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.startsWith('http://kv.isolated.test/')) {
+      const parts = u.replace('http://kv.isolated.test/', '').split('/').map(decodeURIComponent);
+      const [cmd, key, ...rest] = parts;
+      kvOps.push([cmd, key]);
+      if (!opts || !/^Bearer /.test(opts.headers?.Authorization || '')) {
+        return { ok: false, status: 401, json: async () => ({}) };
+      }
+      if (cmd === 'get')    return { ok: true, status: 200, json: async () => ({ result: kvData.get(key) ?? null }) };
+      if (cmd === 'set')    { kvData.set(key, rest[0]); return { ok: true, status: 200, json: async () => ({ result: 'OK' }) }; }
+      if (cmd === 'incr')   { const n = Number(kvData.get(key) || 0) + 1; kvData.set(key, String(n));
+                              return { ok: true, status: 200, json: async () => ({ result: n }) }; }
+      if (cmd === 'decr')   { const n = Number(kvData.get(key) || 0) - 1; kvData.set(key, String(n));
+                              return { ok: true, status: 200, json: async () => ({ result: n }) }; }
+      if (cmd === 'expire') return { ok: true, status: 200, json: async () => ({ result: 1 }) };
+      return { ok: false, status: 400, json: async () => ({}) };
+    }
+    // The provider, mocked.
+    providerCalls++;
+    return { status: 200, headers: { get: () => 'application/json' },
+             text: async () => JSON.stringify({ cards: [{ id: 'x' }] }) };
+  };
+
+  process.env.CARDSELL_TPL_KEY = 'test-key-not-real';
+
+  try {
+    // ── The environment a deployed, R4-enabled function would see ──────────
+    setBudgetStore(null);          // no injection: this is the whole point
+    resetBudgetStore();
+    process.env.KV_REST_API_URL   = 'http://kv.isolated.test';
+    process.env.KV_REST_API_TOKEN = 'isolated-token';
+    process.env.TPL_BUDGET_ENFORCE   = '1';
+    process.env.TPL_BUDGET_MAX       = '2';
+    process.env.TPL_BUDGET_WINDOW_SEC = '3600';
+
+    check('KV reads as configured from the environment', kvConfigured() === true);
+    check('with KV configured and enforcement on, the mode is ENFORCING — NOT unbound',
+          budgetMode() === BUDGET_MODE.ENFORCING,
+          'if this reports ENABLED_UNBOUND, enabling G12 would 503 every uncached lookup');
+    check('…and it got there with nothing injected', budgetStoreActive() === true);
+
+    // First call: a miss. Metered against the self-resolved store, then cached.
+    const r1 = mkRes();
+    await handler(req(), r1);
+    check('an uncached lookup SUCCEEDS rather than 503-ing', r1.code === 200,
+          'the failure this section exists to catch');
+    check('…it called the provider exactly once', providerCalls === 1);
+    check('…and it spent allowance in the self-resolved store',
+          kvOps.some(([c, k]) => c === 'incr' && /^tpl:budget:/.test(k)));
+    check('…and wrote the result to that store', kvOps.some(([c]) => c === 'set'));
+    check('…setting a TTL on the window it created', kvOps.some(([c]) => c === 'expire'));
+
+    // Second identical call: served from the store, no provider call.
+    const r2 = mkRes();
+    await handler(req(), r2);
+    check('an identical lookup is served from the resolved store', r2.code === 200);
+    check('…without a second provider call', providerCalls === 1,
+          'the cache is only real if it is the one the deployed function reads');
+    check('…and says so in the header', r2.headers['x-tpl-cache'] === 'hit');
+
+    // A different card exhausts the budget of 2, and exhaustion is REACHED
+    // through the real store rather than a mock's counter.
+    const r3 = mkRes();
+    await handler(req({ path: '/v1/cards/search', q: 'Charizard', game: 'pokemon', limit: '20' }), r3);
+    check('a second distinct lookup still fits the budget of 2', r3.code === 200 && providerCalls === 2);
+    const r4res = mkRes();
+    await handler(req({ path: '/v1/cards/search', q: 'Blastoise', game: 'pokemon', limit: '20' }), r4res);
+    check('the third exhausts it, through the self-resolved store', r4res.code === 503);
+    check('…naming an exhausted budget, not an unbound store',
+          r4res.body && r4res.body.reason === 'budget_exhausted',
+          'these two must stay distinguishable in production');
+    check('…and made no further provider call', providerCalls === 2);
+
+    // ── The fail-closed case is still fail-closed ──────────────────────────
+    // Enforcement on and KV genuinely absent. This is the ONLY situation that
+    // should produce budget_store_unbound once G12 is on.
+    resetBudgetStore();
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+    check('with KV absent the mode is ENABLED_UNBOUND', budgetMode() === BUDGET_MODE.ENABLED_UNBOUND);
+    const before = providerCalls;
+    const r5 = mkRes();
+    await handler(req({ path: '/v1/cards/search', q: 'Venusaur', game: 'pokemon', limit: '20' }), r5);
+    check('…and it blocks the paid call', providerCalls === before && r5.code === 503);
+    check('…for the unbound reason specifically', r5.body && r5.body.reason === 'budget_store_unbound');
+
+    // An injected store must still win, or every earlier section is testing
+    // a path production does not take.
+    resetBudgetStore();
+    setBudgetStore(mockStore());
+    check('an injected store still overrides environment resolution',
+          budgetMode() === BUDGET_MODE.ENFORCING);
+  } finally {
+    globalThis.fetch = realFetch;
+    setBudgetStore(null);
+    resetBudgetStore();
+    delete process.env.CARDSELL_TPL_KEY;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
     delete process.env.TPL_BUDGET_ENFORCE;
     delete process.env.TPL_BUDGET_MAX;
     delete process.env.TPL_BUDGET_WINDOW_SEC;

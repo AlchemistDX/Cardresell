@@ -9,6 +9,7 @@
 // with header:   X-API-Key: process.env.CARDSELL_TPL_KEY
 
 import { validateTplRequest } from './_tplContract.js';
+import { createKvBudgetStore, kvConfigured } from './_tplBudgetStore.js';
 import {
   reserveUpstream, releaseReservation, storeResult, OUTCOME,
 } from './_tplBudget.js';
@@ -48,11 +49,33 @@ export const BUDGET_MODE = {
   ENFORCING: 'enforcing',               // on and bound
 };
 
+// The deployed function binds its OWN store. Without this, `_budgetStore` is
+// null on Vercel -- the mock only ever arrives from a test -- so the moment G12
+// enables enforcement every uncached lookup becomes ENABLED_UNBOUND and 503s.
+// Correct fail-closed behaviour, and a total outage. Self-initialization is
+// what makes enabling R4 safe rather than an outage switch.
+//
+// Lazy, not module-scope: at import time the KV variables may not be readable,
+// and an offline suite sets them per-case in one process. An injected store
+// always wins, so a test never reaches KV by accident.
+function resolveBudgetStore() {
+  if (_budgetStore) return _budgetStore;
+  if (!kvConfigured()) return null;
+  _budgetStore = createKvBudgetStore();
+  return _budgetStore;
+}
+
 export function budgetMode(env = process.env) {
   const enforce = env.TPL_BUDGET_ENFORCE === '1' || env.TPL_BUDGET_ENFORCE === 'true';
   if (!enforce) return BUDGET_MODE.DISABLED;
-  return _budgetStore ? BUDGET_MODE.ENFORCING : BUDGET_MODE.ENABLED_UNBOUND;
+  // Ask for the store rather than reading the slot: on the deployed function
+  // the slot is empty until the first call resolves it, and reading the raw
+  // slot here would report ENABLED_UNBOUND for a perfectly bindable store.
+  return resolveBudgetStore() ? BUDGET_MODE.ENFORCING : BUDGET_MODE.ENABLED_UNBOUND;
 }
+
+// Test seam: drop a resolved store so the next call re-resolves from env.
+export function resetBudgetStore() { _budgetStore = null; }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -90,6 +113,9 @@ export default async function handler(req, res) {
   let budgetConfigForResult = null;
 
   const mode = budgetMode();
+  // Hoisted: the cache-write and refund paths below run after the reservation
+  // block closes and need the same store instance the reservation used.
+  let store = null;
 
   // Enabled but unbound: fail closed. An operator who turned the control on is
   // entitled to assume it is on, so a missing binding blocks the paid call and
@@ -103,8 +129,9 @@ export default async function handler(req, res) {
   }
 
   if (mode === BUDGET_MODE.ENFORCING) {
+    store = resolveBudgetStore();
     const ip = (req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || null;
-    const r4 = await reserveUpstream({ store: _budgetStore, path, upstreamQuery, ip });
+    const r4 = await reserveUpstream({ store, path, upstreamQuery, ip });
 
     if (r4.outcome === OUTCOME.CACHE_HIT) {
       res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
@@ -157,9 +184,9 @@ export default async function handler(req, res) {
     // explicit and removes the dependency on that platform behaviour.
     if (r.status >= 200 && r.status < 300) {
       res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
-      if (_budgetStore && budgetKeyForResult) {
+      if (budgetKeyForResult) {
         try {
-          await storeResult(_budgetStore, budgetKeyForResult, JSON.parse(body),
+          await storeResult(store, budgetKeyForResult, JSON.parse(body),
                             budgetConfigForResult);
         } catch { /* an unparseable body is not cacheable; not the caller's problem */ }
       }
@@ -172,7 +199,7 @@ export default async function handler(req, res) {
     // have counted it — a timeout or a 5xx tells us nothing about what was
     // consumed upstream. Refunding here would let a failing provider silently
     // reset our own accounting, which is the opposite of a spending control.
-    if (reservation) await releaseReservation(_budgetStore, reservation, { started: true });
+    if (reservation) await releaseReservation(store, reservation, { started: true });
     res.setHeader('Cache-Control', 'no-store');
     res.status(502).json({ error: 'TPL upstream failed', detail: String(e?.message || e) });
   }

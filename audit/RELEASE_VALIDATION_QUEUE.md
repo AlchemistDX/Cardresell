@@ -12,6 +12,53 @@ field was written, never that it arrives.
 
 ---
 
+## ADJUDICATED 2026-09-09 — verdicts
+
+Every entry below now carries a verdict: **passed**, **blocking**, or
+**deferred with its limitation**. The offline and read-only items were finished
+without waiting on credentials; three items that had been parked behind "needs
+Playwright and a local server" were run on 2026-09-09.
+
+| Item | Verdict |
+| --- | --- |
+| RV-1 grade response contract | **BLOCKING** — needs the deployed function |
+| RV-2 T2.14 disclosure accessibility | **DEFERRED** — needs a real screen reader; dagger name still unverified |
+| RV-3 eBay live suite | **BLOCKING** — Production-only credentials (G2) |
+| RV-4 draft KV live | **BLOCKING** — no live KV binding (G1) |
+| RV-5 flip completeness | **PASSED** — re-run 2026-09-09, 22 / 0 |
+| RV-6 rendered ranking | **PASSED, narrowed** — re-run 2026-09-09, identical in 4 / 4 cases, two default-tier rows only |
+| RV-7 D7 listing photos | **PASSED** — re-run 2026-09-09, 92 / 0; Safari/iOS limitation retained |
+| RV-8 preview reads production KV | **BLOCKING** — decide before the first push (G1) |
+| RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
+| RV-10 containment mechanism | **BLOCKING** — control and scope not established |
+| CH-1 published verification token | **BLOCKING** — G3 |
+| CH-2 code fallback to that token | **BLOCKING** — code change, deliberately not made unasked |
+| CH-3 unencrypted TPL key | **BLOCKING** — G11 rotation, G12 activation |
+| Same-card basis retention | **DEFERRED** — product decision; consequence is disclosed, not silent |
+| D5 §8.3 signed-in continuation | **PASSED for one tested case**; stays in the queue. Q-D5-5 desktop never exercised |
+
+**4 passed · 9 blocking · 3 deferred.** Every blocking item is credential-,
+configuration-, or deployment-gated. None is blocked on writing more code.
+
+### 2026-09-09 run records
+
+- **RV-5** — `CR_E2E_URL=http://127.0.0.1:<port>/index.html node tests/flip-completeness-e2e.mjs`
+  against the current bundle `js/core.73a71fac.js`: **22 passed, 0 failed.**
+- **RV-7** — `node tests/listing-photos.mjs` against `js/core.73a71fac.js`:
+  **92 passed, 0 failed.** Limitation unchanged: headless Chromium only, and no
+  storage-ceiling experiment.
+- **RV-6** — compared `HEAD~1` against `HEAD`, which is the right pair: the RC-1
+  blank-shipping note is inserted immediately above the ranking. Rendered
+  `.payout-rank-row` name/amount pairs **identical in all four cases**
+  ($3.00 · $1.00 · $45.00 · $400.00). **Narrowing, stated rather than hidden:**
+  the harness rendered the **two** default-tier rows, not the six-row Pro
+  ranking of the 2026-09-08 run — the tier gate reads a module-scoped value that
+  could not be lifted from page scope. Non-vacuous, but narrower. A first attempt
+  returned **zero** rows and was discarded as vacuous rather than reported as a
+  pass.
+
+---
+
 ## RV-1 — grade response contract (added 2026-09-08, from the BIAS-5 change)
 
 **Why offline assertions are not enough.** `tests/quick-pricing.mjs` asserts that

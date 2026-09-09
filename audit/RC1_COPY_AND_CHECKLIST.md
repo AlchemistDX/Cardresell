@@ -1,13 +1,332 @@
 # RC-1 — comparison copy and release checklist
 
-**Date:** 2026-09-09 · commit `15aa143`, branch `phase1-block-d`
-Scope: the copy for the initial Phase 1 release, and the checklist of what
-ships, what is deferred, and which gates are open. No deployment authorization
-is claimed or implied.
+**Date:** 2026-09-09 · branch `phase1-block-d`
+**Nothing is pushed, deployed, or rotated.** No deployment authorization is
+claimed or implied. This document is the single current execution view for the
+Phase 1 initial release; the correction history that produced it is preserved
+below the line at §H.
 
 ---
 
-## 0. Correction first — my §3 was wrong, and it changes the copy you specified
+## A. Where the release stands
+
+| | |
+| --- | --- |
+| Feature work | **Complete for this candidate.** D1–D7 closed. No further expansion. |
+| Copy | **Closed.** Your wording is implemented and pinned (§H-7). |
+| Offline verification | **Complete.** Every offline suite green, including `fee-truth-offline` (§C). |
+| Browser verification | **Complete.** The three Playwright-gated queue items ran today (§D). |
+| Credential-gated verification | **Blocked.** Four queue items need credentials or a signed-in account (§D). |
+| Configuration | **Blocked.** Production KV is shared with nonproduction; two credentials are exposed. |
+| Remaining path | Five owner steps, one at a time (§E). |
+
+**What blocks the release is configuration and credentials, not code.**
+
+---
+
+## B. Release gates
+
+| # | Gate | State |
+| --- | --- | --- |
+| G1 | Production KV isolated from nonproduction | **Open** — blocks G12 |
+| G2 | eBay Cert ID rotated at the provider, production-only | **Open** — owner |
+| G3 | Verification token regenerated, production-only | **Open** — owner |
+| G4 | Exact live Phase 0 commit rebuilt with new configuration (**not** a promotion) | **Open** |
+| G5 | `node tools/verify-challenge.mjs` PASSES — READY is not proof | **Open** |
+| G6 | eBay portal save and challenge completed | **Open** |
+| G7 | `bash tools/run-ebay-live.sh` recorded and adjudicated per check, never by total | **Open** |
+| G8 | Containment control verified (gates steps 11a–13) | **Open** — RV-10 |
+| G9 | Release-validation queue adjudicated, warnings and skips explicit | **Adjudicated (§D).** Closes when its four blocking items close |
+| G10 | §1 copy approved and implemented | **Closed** |
+| G11 | TPL paid key rotated at the provider and stored non-plain | **Open** — owner |
+| G12 | R4 activated: `TPL_BUDGET_ENFORCE=1`, KV store resolved, budget numbers set by Will | **Open** — needs G1 + G11 |
+
+G11 and G12 exist because **disabling R4 is a scope choice and does not resolve
+CH-3's cost exposure.** With R4 off and no rotation item, the exposed paid key
+would have disappeared from the gate list entirely.
+
+---
+
+## C. R4 — what actually ships, and in which mode
+
+R4 ships **present and self-binding, activated by configuration, not by code.**
+The earlier "ships inactive" phrasing contradicted G12 and is withdrawn: G12
+requires activation, so the release cannot both require it and ship without it.
+What is true is that R4 is **inert until `TPL_BUDGET_ENFORCE=1` is set**, and
+setting it is G12's job.
+
+Three modes, deliberately distinguishable in production:
+
+| Mode | Condition | Behaviour |
+| --- | --- | --- |
+| `DISABLED` | `TPL_BUDGET_ENFORCE` unset or `'0'` | Passes through, exactly as before R4. **Unmetered by choice.** |
+| `ENABLED_UNBOUND` | enforcement on, KV genuinely unconfigured | **503 `budget_store_unbound`**, `Cache-Control: no-store`, **no paid call**. |
+| `ENFORCING` | enforcement on, store resolved | Meters, caches, and returns `budget_exhausted` at the cap. |
+
+`budget_store_unbound` and `budget_exhausted` are separate reasons on purpose.
+The first says the meter is missing; the second says the meter ran out. Reading
+one as the other would hide a broken deployment behind a plausible cost message.
+
+### The production binding — your point, and the fix
+
+You were right that an injected mock proves only the calling path. Nothing on
+Vercel calls `setBudgetStore`, so the store slot would have stayed `null` in
+production and **every uncached lookup would have become
+`budget_store_unbound` the moment G12 flipped enforcement on** — correct
+fail-closed behaviour and a total outage at the same time.
+
+`api/_tplBudgetStore.js` is the real KV-backed store, and
+`api/tpl-proxy.js:resolveBudgetStore()` resolves it **lazily from the
+environment on first use**. Lazy rather than at module load, because the offline
+suite has to toggle configured and unconfigured states inside one process, and
+because an injected store must still win so the existing sections are not
+quietly testing a path production never takes.
+
+**Verified with an isolated store, enforcement enabled, upstream mocked, and no
+injection anywhere** — `tests/tpl-budget-offline.mjs` §12, 20 checks:
+
+- KV reads as configured from the environment, and the mode reports
+  **`ENFORCING`, not `ENABLED_UNBOUND`** — the check that would have caught the
+  outage.
+- An uncached lookup **returns 200 rather than 503**, calls the mocked provider
+  exactly once, and spends allowance against a `tpl:budget:` key in the
+  self-resolved store, with a TTL set on the window it created.
+- An identical lookup is served from that store with **no second provider
+  call**, and says `X-TPL-Cache: hit`.
+- A cap of 2 is reached **through the self-resolved store**, returning 503
+  `budget_exhausted` — not `budget_store_unbound` — and making no further call.
+- With KV genuinely absent, the mode is `ENABLED_UNBOUND`, the paid call is
+  blocked, and the reason is `budget_store_unbound`.
+- An injected store still overrides environment resolution.
+
+`tpl-budget-offline`: **101 passed, 0 failed.** No real KV, no real provider, no
+quota consumed.
+
+**Still open:** the store has never touched a real KV. G12 stays open, and its
+first activation is the first time this code meets Vercel KV. The budget numbers
+in `BUDGET_DEFAULTS` (max 1000 / hour, per-IP 60, 6 h cache, 24 h stale) are
+**explicit placeholders, not policy** — see §E-3.
+
+---
+
+## D. Release validation — adjudicated
+
+Every item is classified **passed**, **blocking**, or **deferred with its
+limitation**. I did not wait on credentials to finish the offline and read-only
+items; three items that had been sitting behind "needs Playwright" ran today.
+
+### D-1. Offline suite results
+
+Run individually, never through `run-all.sh`.
+
+| Suite | Result |
+| --- | --- |
+| `tpl-budget-offline` | **101 / 0** — includes the new §12 production-binding section |
+| `tpl-proxy-offline` | 65 / 0 |
+| `draft-review-screen` | 370 / 0 |
+| `listing-packet-offline` | 232 / 0 |
+| `review-fee-dl` | 21 / 0 |
+| `copy-truth-offline` | all passed — includes the 12 RC-1 copy assertions |
+| `payout-honesty` | 32 / 0 |
+| `accuracy-fee-parity` | 41 / 0 |
+| `contrast-tokens` | 12 / 0 |
+| `decision-restatements` | 34 / 0 |
+| `asset-fingerprints` | 72 / 0 |
+| `test-registry` | 12 / 0 |
+| **`fee-truth-offline`** | **PASSES.** Final outcome below. |
+
+**`fee-truth-offline` — final outcome.** **Green.** It was **already red at
+HEAD before any RC-1 work** — confirmed by stashing the RC-1 changes and
+re-running. It failed on **evidence, not behaviour**: two vocabulary reads were
+pinned as adjacent template interpolations within 120 characters, and the
+earlier refactor into `venueTaxNote()` broke that textual shape without changing
+what a seller sees. Rewritten to the standing pattern — name the behaviour,
+evidence the surface: the helper reads the shared vocabulary, the ranking takes
+its note from the helper, and each literal string occurs exactly once. No
+production behaviour changed to make it pass.
+
+### D-2. Queue adjudication
+
+| Item | Verdict | Basis / limitation |
+| --- | --- | --- |
+| **RV-1** grade response contract | **BLOCKING** | Needs a grade scan against the deployed function. `tests/test-scan.mjs` has no offline harness, so nothing here can substitute. The risk is precisely a silent one: `_crGradingScope` falls back to a WeakMap when `analysis_id` is missing, so a source assertion cannot see the failure. |
+| **RV-2** T2.14 disclosure accessibility | **DEFERRED** — limitation stated | Needs a real screen reader. `page.accessibility` is absent from the installed Playwright build, so no automated proxy exists here. **The dagger's accessible name remains unverified and is carried, not claimed.** Element presence is established; announcement is not. |
+| **RV-3** eBay live suite | **BLOCKING** | Needs `EBAY_APP_ID` / `EBAY_CERT_ID`, Production-only. Gated behind G2. Adjudicate per check — the harness prints counts, never a fraction, and a clean run can print 18 passed. |
+| **RV-4** draft KV live | **BLOCKING** | No live KV binding here. The only registered suite that cannot run in this sandbox. Gated behind G1. |
+| **RV-5** flip completeness, real record path | **PASSED** | Re-run today against the current bundle: **22 passed, 0 failed.** Explicit zeros survive reload as complete, a blank cost stays provisional through reload and aggregate, a pre-tracking record stays untracked with no invented missing-field list, and all three stay distinguishable in the export. |
+| **RV-6** rendered ranking across the change | **PASSED, with a stated narrowing** | Re-run today comparing `HEAD~1` against `HEAD` — the RC-1 blank-shipping note is inserted immediately above the ranking, so this is the right comparison to make. Rendered `.payout-rank-row` name/amount pairs **identical in all four cases** ($3 · $1 · $45 · $400). **Limitation:** the harness rendered the **two** default-tier rows, not the six-row Pro ranking recorded on 2026-09-08; the tier could not be lifted from page scope. The check is non-vacuous but narrower than the original run. |
+| **RV-7** D7 listing photos | **PASSED, with the Safari limitation retained** | Re-run today against the current bundle: **92 passed, 0 failed** — store transaction, real file picker, reorder across a full reload, missing-photo tile, the 12 cap attributed to CardResell, failure leaving the prior collection intact, and no request body. **Limitation unchanged:** headless Chromium only. It says nothing about Safari or iOS, which is exactly where the storage behaviour that motivated the browser-local design is most likely to differ. No storage-ceiling experiment was run, by decision. |
+| **RV-8** Preview and Development read production KV | **BLOCKING — decide before the first push** | A push creates a Preview, and the Preview is the exposure, so this cannot be resolved afterwards. SSO protection is access control, **not data isolation**: a preview build with a bad key prefix writes to the production store whether or not anyone opens it. This is G1. |
+| **RV-9** the other eighteen live-harness checks | **BLOCKING** | Only check 19 has ever been established, and only because it needs no credential. The rotation run establishes the baseline for the remaining eighteen. Same gate as RV-3. |
+| **RV-10** containment mechanism | **BLOCKING** | The "disable automatic Preview deployment" toggle was **never established to exist with that scope**. What the project exposes is `gitProviderOptions.createDeployments`, which appears to govern Git-triggered deployments **as a whole, production included**. Read-only inspection has gone as far as it can; the exact control must be identified in the dashboard **before** a window that needs to deploy. |
+| **CH-1** production verification token is the repo default | **BLOCKING** | Measured: production's challenge response equals the committed default **plus a trailing newline**, so the variable is set to a published value carrying stray whitespace. Closed by G3. |
+| **CH-2** code falls back to a published token | **BLOCKING — code, and I have not changed it** | `api/ebay-notifications.js:17` still reads `… || '<repo literal>'`. Removing the fallback makes the endpoint **fail closed** if the variable is ever unset — which is correct, and is also a behaviour change landing in the same window that revalidates the endpoint. **I am not making that change unasked;** it is a decision for you, and the safe order is to change it *after* G3 and G6 succeed, never during. |
+| **CH-3** `CARDSELL_TPL_KEY` stored unencrypted | **BLOCKING** | Assessed read-only. The route is anonymous and unmetered, and every query parameter is forwarded verbatim, so the edge cache is bypassable. The deployed client sends no cache-buster, so this is **abuse potential, not observed bleeding** — whether it has been abused is **Unverified** and lives in the provider dashboard. R2 and R3 shipped; **R1 rotation is G11 and R4 activation is G12**. CORS is withdrawn as a control: origin and `Referer` are client-asserted. |
+| **Same-card basis retention** | **DEFERRED — product decision, not a defect** | The consequence is disclosed rather than silent: the review screen states `data-packet-basis="absent"` and flags a comp-derived price as owing a source. Retention is not obviously safe — reinstating a basis whose card is no longer certain recreates the leak the binding work exists to prevent. Production clearing stays unchanged. |
+| **D5 §8.3 signed-in eBay continuation** | **PASSED for one tested case; stays in the queue** | 2026-09-08, owner-attested, iOS Safari mobile web: verbatim search and `caty=183454` displayed, comparable match shown. **A pass establishes that case, not a continuing compatibility guarantee** — these are undocumented eBay internals. **Q-D5-5 desktop has never been exercised** and remains open. |
+
+**Score: 4 passed · 9 blocking · 3 deferred with limitations.** Every blocking
+item is credential-, configuration-, or deployment-gated. **None of them is
+blocked on writing more code.**
+
+---
+
+## E. Your next steps — one at a time
+
+Not six dashboard tasks handed over at once. Do these in order; each one's
+result changes what the next one should be.
+
+### Step 1 — Prepare the TPL rotation and activation procedure
+
+**Prepare only. Nothing is rotated yet.** Sign in to the TCGPriceLookup
+provider and confirm three things privately, without pasting any value here:
+
+1. That you can generate a **new** key while the current one still works — a
+   rotation with no overlap is an outage.
+2. Where the plan's **allowance and current usage** are displayed (Step 3 needs
+   both numbers, and I have never seen either).
+3. That the current key can be revoked **after** the new one is live.
+
+Then confirm the Vercel side of the plan: `CARDSELL_TPL_KEY` is stored as
+`type: plain`, and **Vercel cannot convert a variable in place** — it must be
+deleted and re-added as encrypted. Treat the existing value as exposed
+regardless of what the dashboard shows.
+
+**Do not rotate yet.** Rotation is a live-traffic change and belongs with the
+maintenance window in Step 4.
+
+### Step 2 — Isolate the store, then let me verify the binding
+
+One configuration change: provision a **separate non-production KV store** so
+Preview and Development stop reading and writing the store behind
+`www.cardresell.org`. Every KV row on the project is currently a single row
+targeting `production,preview,development`.
+
+This is G1, and it unblocks both RV-4 and RV-8. When it is done, tell me and I
+will verify the R4 binding **against the real store with enforcement enabled and
+the provider still mocked** — the same shape as the offline §12 proof, but
+meeting Vercel KV for the first time.
+
+**One caution.** The earlier claim that separating environments would invalidate
+completed functional tests was wrong and is struck. Those tests assert behaviour
+against a KV interface, not a particular store. A new store needs its
+configuration checked; it does not need the results re-earned.
+
+### Step 3 — Choose the budget numbers, grounded in the real plan
+
+Bring me the two numbers from Step 1 — **plan allowance and current usage** —
+and we will set `TPL_BUDGET_MAX`, `TPL_BUDGET_WINDOW_SEC` and
+`TPL_BUDGET_PER_IP_MAX` from them.
+
+**I will not invent them.** The values presently in `BUDGET_DEFAULTS` (1000 per
+hour, 60 per IP) are **placeholders chosen to be obviously arbitrary**, not a
+recommendation. Your actual TPL plan allowance and usage are **Unverified** —
+they exist only in the provider dashboard, which I have never seen and will not
+guess at.
+
+**And one thing I should not have let stand:** a request allowance is **not a
+dollar spending cap**. Saying "cap it at $X" when the plan meters *requests*
+would be a made-up conversion. Once you have the real allowance, there are two
+honest framings, and which is available depends on how your plan actually bills:
+
+| If your plan… | Then the budget means | And the option is |
+| --- | --- | --- |
+| includes a fixed request allowance, overage refused | a share of the allowance you are willing to spend before refusing traffic | pick a per-hour number that leaves headroom for a normal day |
+| bills per request beyond an allowance | a request ceiling that **maps to** a dollar figure at the published per-request rate | the dollar figure is derived, and I will show the arithmetic rather than assert it |
+
+Until the plan is read, neither framing is available and no number is defensible.
+
+### Step 4 — The bounded eBay maintenance window, when you authorize it
+
+`audit/ROTATION_EXECUTION_CHECKLIST.md`, unchanged. It rotates the Cert ID (G2)
+and the verification token (G3), rebuilds the **exact live Phase 0 commit** with
+the new configuration — **a rebuild, not a promotion of an existing deployment**
+— then completes the portal challenge (G6) and runs the live harness (G7).
+
+Two things to hold onto during it:
+
+- **`READY` is not proof.** G5 is `node tools/verify-challenge.mjs` actually
+  passing.
+- **A revoked or exposed secret is not a safe rollback target.** The rollback
+  plan cannot be "put the old key back."
+
+**RV-10 gates the window's containment steps (11a–13).** Identify the exact
+control and its true scope in the dashboard first — if `createDeployments`
+suppresses production deployments too, that matters to a window whose whole
+purpose is to deploy.
+
+### Step 5 — Close validation, then ask me for the release commit
+
+When Steps 2 and 4 are done, the nine blocking items in §D collapse into a small
+set of live runs: RV-1, RV-3, RV-4, RV-9, and the containment control. I will
+run them, adjudicate each **per check rather than by total**, and bring you the
+results with warnings and skips named individually.
+
+Only then do I ask you to approve **the exact commit and the exact deployment
+scope**. No push happens before that approval, and pushing to `main`
+auto-deploys, so there is no rehearsal.
+
+---
+
+## F. Two wording points, corrected
+
+**Zero is a fallback assumption, not an established shipping cost.** When a
+shipping field is blank, the ranking treats it as `$0` — `parseFloat(raw) || 0`
+at `js/core.73a71fac.js:8357-8358`. That is an assumption the product is making
+on the seller's behalf, and it is now visible beside the comparison it feeds
+(`:8720`, `data-ship-assumed`): *"Shipping: … is blank, so this ranking assumes
+$0. Venues differ in how shipping is treated, so entering it can change the
+order."* It says **assumes**, not *is*. **An intentionally entered zero remains
+a valid input** and produces no note — the note fires only on a genuinely blank
+field, so a seller who meant zero is never told they left something out.
+
+There is no saved shipping state to reconcile: the inputs at `index.html:2509`
+and `:2515` both default to `value="0"` and **nothing persists them**, so
+"blank" only ever means the seller cleared the field.
+
+**Shipping can affect venue ordering.** It plainly does — venues differ in
+whether they keep buyer shipping and in what postage costs. My earlier "cannot
+reorder" was wrong. The accurate and narrower claim: **the ranking already
+accounts for shipping, so the order it shows is not missing that effect.** And
+the formula establishes the *shipping treatment* specifically — not the broader
+claim that every deduction is covered. Tax stays unmodelled by design, and two
+venues still lack a declared `feeBase`.
+
+---
+
+## G. What ships, and what is visibly deferred
+
+**Ships:** D1 Sell entry point · D2 draft creation and the frozen list API · D3
+review screen, field rendering, fee breakdown · D4 number provenance · D5 eBay
+continuation · D6 new-seller and restriction guidance · D7 browser-local listing
+photos · CH-3 R2 proxy contract validation · CH-3 R3 cache-header correction ·
+§1 review copy · R4 metering, inert until G12.
+
+**One deployment manifest.** D1–D7 and R2/R3 deploy together as a single
+commit, as you directed. R2/R3 are not a separate deployment.
+
+| Deferred | Why | Reopened by |
+| --- | --- | --- |
+| Target-net user entry | Engine implemented and tested; entry surface deferred | Product decision |
+| Shipping in the listing packet | The ranking models it; the packet has no shipping term | **RC-2, first** |
+| Condition guidance text | Interface promises a draft, not a listing | **RC-2, second** |
+| Listing description text | Same | **RC-2, third** |
+| R4 activation | Inert until enforcement is enabled | G1 + G11 → G12 |
+
+**RC-2 order is settled and not reopened here:** packet shipping → condition
+guidance → description text, with target-net entry deferred. Packet shipping is
+framed as **carrying the seller's existing shipping assumptions into the
+draft** — not as building a new shipping model.
+
+---
+---
+
+# §H. Correction history
+
+Kept below the execution view, unedited. This is how the sections above were
+arrived at, including the claims that were wrong.
+
+## H-0. Correction first — my §3 was wrong, and it changes the copy you specified
 
 Your Q-RC-3 instruction was premised on my claim that net excludes shipping and
 that shipping could therefore reorder the recommendation. **I checked the
@@ -52,7 +371,9 @@ surface where a seller picks a venue already has it.
 
 ---
 
-## 1. The real residual risk, and the copy that addresses it
+---
+
+## H-1. The real residual risk, and the copy that addresses it
 
 One product now shows a seller two different net figures for the same card:
 
@@ -95,7 +416,9 @@ established what the fields default to or whether the UI prompts for them.
 
 ---
 
-## 2. Description and condition guidance — you were right to push
+---
+
+## H-2. Description and condition guidance — you were right to push
 
 I called shipping the only item affecting product claims. That was also wrong,
 for the reason you gave: if the interface promises a complete or ready-to-publish
@@ -115,112 +438,9 @@ describe the output as complete, ready to publish, or ready to list.**
 
 ---
 
-## 3. What ships in the Phase 1 initial release
-
-Named as you asked — an initial release with deferred work visible, not a
-silently smaller Phase 1.
-
-**Included:**
-
-| Item | State |
-| --- | --- |
-| D1 Sell entry point | Closed |
-| D2 Draft creation, list API (frozen contract) | Closed |
-| D3 Review screen, field rendering, fee breakdown | Closed |
-| D4 Number provenance | Closed |
-| D5 eBay continuation, verified signed-in | Closed |
-| D6 New-seller and restriction guidance | Closed |
-| D7 Browser-local listing photos | Closed |
-| CH-3 R2 proxy contract validation | Built, tested, **in this deployment manifest** |
-| CH-3 R3 cache-header correction | Built, tested, **in this deployment manifest** |
-| §1 review-screen copy | **To write, pending your approval of the wording** |
-
-**Deployment manifest:** the release deploys one commit carrying D1–D7 **and**
-R2/R3 together. R2/R3 are not a separate deployment — they are part of what this
-release ships, as you directed.
-
-**Deferred, and visible:**
-
-| Deferred item | Why | Reopened by |
-| --- | --- | --- |
-| Target-net user entry | Engine implemented and tested; entry surface deferred | Product decision |
-| Shipping in the listing packet | Ranking surface already models it; packet does not | §1 discrepancy, if copy proves insufficient |
-| Listing description text | Interface promises a draft, not a listing | Any copy claiming completeness |
-| Condition guidance text | Same | Same |
-| CH-3 R4 activation | **Inactive** — built, wired, no store injected | KV isolation |
-
-Per Q-RC-1, the target-net record now reads **"engine implemented and tested;
-user entry deferred."** I checked the original decision text and it states the
-implementation state rather than a prohibition, so no prohibition is preserved.
-
 ---
 
-## 4. Release gates — all open
-
-| # | Gate | State |
-| --- | --- | --- |
-| G1 | Production KV isolated from nonproduction | **Open** |
-| G2 | eBay Cert ID rotated at the provider, production-only | **Open** — owner action, needs Will's go |
-| G3 | Verification token regenerated, production-only | **Open** |
-| G4 | Exact live Phase 0 commit rebuilt with new configuration (**not** a promotion of an existing deployment) | **Open** |
-| G5 | `node tools/verify-challenge.mjs` PASSES — READY is not proof | **Open** |
-| G6 | eBay portal save and challenge completed | **Open** |
-| G7 | `bash tools/run-ebay-live.sh` recorded and adjudicated | **Open** |
-| G8 | Containment control verified (gates steps 11a–13) | **Open** |
-| G9 | Release validation queue RV-1…RV-10 adjudicated, warnings and skips explicit | **Open** |
-| G10 | §1 copy approved and implemented | **Closed** — implemented, pinned (§7) |
-| G11 | **TPL paid key rotated** at the provider and stored non-plain | **Open** — owner action |
-| G12 | **R4 activated**: `TPL_BUDGET_ENFORCE=1`, KV store bound, budget numbers set by Will | **Open** |
-
-**G11 and G12 are corrections, and the reason matters.** My previous version
-said "R4 is not a gate" and listed ten gates. That was wrong in effect: with R4
-inactive and no rotation item, the exposed paid key vanished from the visible
-gate list entirely, so a reader working the checklist would have shipped without
-ever confronting it. **Disabling R4 is a scope choice; it does not resolve CH-3's
-cost exposure.** The key is still exposed and still paid for. R4 is not a gate on
-*functioning*, but rotation and activation are gates on *the exposure*, and they
-are now named where they cannot be missed.
-
----
-
-## 5. R4 status in this release
-
-Built, corrected against your two points, and wired to the proxy — but shipping
-**inactive**.
-
-- Unusable configuration now **blocks** the call rather than reporting itself:
-  `usable = configured && no invalid keys`, and `reserveUpstream` returns
-  `NOT_CONFIGURED` instead of `RESERVED`. Garbage never activates a placeholder.
-  A fresh cached value is still served with no configuration, since reading is
-  not spending.
-- Refunds are narrowed on both axes you named. A call that left the process is
-  never refunded — a timeout or 5xx may still have consumed provider quota. And
-  a reservation carries its `windowId`, so a refund arriving after the window
-  rolled is refused rather than crediting the new window with allowance the old
-  one paid for. Both asserted.
-- The calling path is exercised offline against an injected mock: cache hit
-  spends nothing, reordered parameters hit one entry, exhaustion returns 503
-  naming `budget_exhausted` rather than an empty 200, and an upstream timeout
-  keeps its reservation.
-- With no store injected the route behaves exactly as before R4. Activation
-  needs G1 plus your budget numbers, which I am not inventing.
-
-71 passed, 0 failed. No KV, no provider call, no quota consumed.
-
----
-
-## 6. Decisions needed
-
-1. **§1 copy** — approve, amend, or reject the review-screen wording.
-2. **Ranking-surface qualifier** — do you want one for unentered shipping
-   inputs? I would need to establish the field defaults first.
-3. **RC-2 order** — with shipping already modelled in the ranking surface, is
-   packet shipping still the top follow-on, or do condition guidance and
-   description move ahead of it?
-
----
-
-## 7. Implemented since the last packet
+## H-7. Implemented since the last packet
 
 **Review-screen copy — your wording, verbatim** (`js/core.73a71fac.js:7652`,
 rendered at `:22073`). Added to `FEE_DISCLOSURE` rather than typed inline, so it
@@ -271,7 +491,9 @@ misconfiguration cannot read as a spent budget.
 
 ---
 
-## 8. Release validation — results
+---
+
+## H-8. Release validation — as recorded at the time — results
 
 Fourteen suites, run individually (never `run-all.sh`).
 
@@ -322,16 +544,9 @@ unexercised on desktop.
 
 ---
 
-## 9. Outstanding owner actions — only you can do these
+---
 
-1. **Rotate the TPL paid key** at the provider; store it non-`plain`. Exposed now (G11).
-2. **Rotate the eBay Cert ID** and **regenerate the verification token**, production-only (G2, G3).
-3. **Isolate production KV** from nonproduction (G1) — also unblocks R4.
-4. **Set the R4 budget numbers.** `BUDGET_DEFAULTS` (1000/hr, 60/IP) are placeholders I invented as shape, not policy. I will not guess your spend ceiling.
-5. **Authorize the deployment.** ~235 commits outgoing; pushing `main` auto-deploys.
-6. **Decide RC-2 order.** Recorded as: packet shipping carrying the seller's existing assumptions into the draft, then condition guidance, then description text. Target-net entry stays deferred.
-
-## 10. Decisions taken this round — recorded, not reopened
+## H-10. Decisions taken this round — recorded, not reopened
 
 - Ranking relabel **withdrawn** at your instruction; ranking and packet
   calculations stay distinct until they share inputs.
@@ -342,3 +557,5 @@ unexercised on desktop.
 
 Nothing pushed, nothing deployed, no credential rotated. Nothing here was taken
 as authorization for either.
+
+---
