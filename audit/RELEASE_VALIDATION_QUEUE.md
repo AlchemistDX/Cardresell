@@ -448,18 +448,26 @@ table rather than a sentence:
 | --- | --- |
 | The **first push** to `main` — a push creates a Preview, and the Preview is the exposure | Rotating the eBay Cert ID or verification token **at the provider** |
 | Containment **steps 11a–13** of the maintenance window | Rotating or revoking the TPL key at TCGPriceLookup |
-| The rebuild **deployment** | Reading a dashboard, choosing budget numbers, provisioning an isolated store |
+| | **The exact-commit maintenance rebuild** — a deployment, separately authorized by the owner |
+| | Reading a dashboard, choosing budget numbers, provisioning an isolated store |
 
-**Rotation comes first; containment comes second.** Both drifts inverted this,
-because containment reads like a precaution and precautions feel like they
-belong at the front. They do not, here: containment protects a **deployment**,
-and the credential window contains no deployment. Treating containment as a
-prerequisite for rotation would hold an exposed credential open while waiting on
-a dashboard control nobody has yet located — the exact failure containment
-exists to prevent.
+**Struck, 2026-09-09 (second pass).** An earlier version of this table listed
+"the rebuild **deployment**" in the gated column and justified it with the claim
+that "the credential window contains no deployment." **Both are wrong.** The
+credential window **does** contain a deployment — the exact-commit rebuild. The
+rebuild sits outside RV-10 because the **owner authorizes it directly**, not
+because it is somehow not a deployment. The tidier phrasing was doing work the
+facts do not support.
 
-**So RV-10 blocking does not block the no-push credential work.** It blocks the
-push and the containment steps.
+**The surviving distinction:** containment gates **the push and steps 11a–13**,
+and does **not** gate the separately authorized maintenance rebuild or the
+provider-side credential work.
+
+**Rotation comes first; containment comes second.** Both earlier drifts inverted
+this, because containment reads like a precaution and precautions feel like they
+belong at the front. Treating containment as a prerequisite for rotation would
+hold an exposed credential open while waiting on a dashboard control nobody has
+yet located — the exact failure containment exists to prevent.
 
 **Containment does not revoke production-KV access from existing deployments or
 from local development** — `KV_*`, `KV_URL` and `REDIS_URL` target

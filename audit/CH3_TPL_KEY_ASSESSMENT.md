@@ -47,7 +47,7 @@ closing.
 | Upstream timeout | **Present** | 8s abort, `:42-45` |
 | Method restriction | **Present** | GET/OPTIONS only, `:15-16` |
 | Key leakage into URLs or errors | **None found** | Key travels in a header `:44`; the 502 body returns `e.message` only, `:53` |
-| Provider spending cap | **Unverified** | Not determinable from the repo. TCGPriceLookup dashboard, owner-side |
+| Provider spending cap | **ESTABLISHED 2026-09-09 — there is no spending cap, because there is no spending dimension** | Owner read the TCGPriceLookup dashboard: **Starter, 2,500 requests/day, midnight UTC reset, requests blocked at the limit.** Overage is **refused, not billed**, so no dollar cap exists to verify. See §6. |
 
 **CORS is not the boundary, and I should not have implied it was.** Adopted:
 `Access-Control-Allow-Origin: *` at `:12` governs what *browsers* permit
@@ -71,7 +71,12 @@ cache works for legitimate traffic. (Deployed is `js/core.569ff536.js` at commit
 `9aaf326e7`; `js/core.66c39922.js` is outgoing. An earlier draft of this section
 called 66c39922 deployed — see R2 for the correction.)
 This is **abuse potential, not active bleeding.** Whether it has been abused is
-**Unverified** and answerable only from usage records (§5).
+now **substantially answered**: at the owner's dashboard reading on 2026-09-09,
+usage stood at **1 request used of 2,500 for the day**, with 2,499 remaining.
+That is a single day's window against a midnight-UTC reset, so it does not rule
+out abuse on an earlier day — but it does establish there is **no sustained
+draw** on the key at the time of reading, which is the scenario that would have
+made rotation urgent rather than merely necessary.
 
 **Secondary issue, with its evidence corrected.** I claimed an unconditional
 `Cache-Control` meant a `401`, `429` or `5xx` — including the **dead key after
@@ -85,6 +90,33 @@ still lands, on the narrower ground that intent should be explicit rather than
 dependent on platform behaviour we do not control.
 
 ---
+
+## 3a. Plan facts — established, owner-supplied 2026-09-09
+
+| Item | Established |
+| --- | --- |
+| Plan | **Starter — 2,500 requests/day** |
+| Usage at reading | 1 used, 2,499 remaining |
+| Reset | **Midnight UTC**, daily |
+| Overage | **Requests blocked at the limit** (owner confirmation) |
+| Key overlap | Dashboard permits **five active keys**; one active |
+| Pro tier | **10,000 requests/day + commercial-use licence** |
+| Upgrade | Owner willing; **completion unconfirmed** |
+
+**Two consequences for this assessment:**
+
+1. **The exposure is bounded by availability, not by cost.** With overage
+   refused, the worst case from the published key is **denial of service on card
+   lookups until midnight UTC** — not an unbounded bill. That lowers the
+   financial severity and leaves the availability severity intact. Rotation is
+   still required; the reason is now stated correctly.
+2. **Overlap is available**, so rotation needs **no outage**: generate the new
+   key alongside the old, deploy, verify a genuine provider hit, then revoke.
+
+**Open, and a rights question rather than a quota one:** the Pro tier bundles a
+**commercial-use licence**. Whether commercial use is permitted on Starter at
+all is **Unverified** and not determinable from the repo. If it is not, the
+upgrade is a compliance requirement, not a performance choice.
 
 ## 4. This is a class of two, not one route
 
@@ -119,14 +151,25 @@ them. Not a spending question — a terms question. Filed, not resolved here.
 
 ## 5. What I could not establish
 
-- **Whether the key has been abused.** Requires the TCGPriceLookup usage
-  dashboard (owner-side) and Vercel function invocation records for
-  `/api/tpl-proxy`. I did not probe the provider, by instruction and because
+**Two of the three were closed on 2026-09-09 by the owner's dashboard reading
+(§3a). Struck through rather than deleted, so the change of state is visible:**
+
+- ~~**Whether a provider-side spending cap or plan limit exists.**~~ **CLOSED.**
+  Starter, 2,500 requests/day, midnight UTC reset, **blocked at the limit.**
+  There is a plan limit and **no spending dimension at all.**
+- ~~**Whether the key has been abused.**~~ **SUBSTANTIALLY CLOSED for the
+  current window.** 1 of 2,500 used at the reading — no sustained draw. Still
+  open for **earlier days**: a daily counter against a midnight reset cannot
+  speak to history, and Vercel function invocation records for `/api/tpl-proxy`
+  were not consulted. I did not probe the provider, by instruction and because
   probing would itself spend quota.
-- **Whether a provider-side spending cap or plan limit exists.** Owner-side.
-- **What the current KV-cached PriceCharting hit rate is.** Would require
-  reading the production KV store, which is out of scope while production KV is
-  the only store.
+- **What the current KV-cached PriceCharting hit rate is.** **Still open.**
+  Would require reading the production KV store, which is out of scope while
+  production KV is the only store — the same blocker as G1.
+
+**Newly opened by the same reading:** whether **commercial use is permitted on
+Starter**, given that the Pro tier lists a commercial-use licence as a feature.
+A rights question, not a quota one, and not answerable from the repo.
 
 ---
 
@@ -140,6 +183,22 @@ Issue a new key at the provider, revoke the old one, and set it in Vercel as an
 **`encrypted`** variable. Vercel cannot convert a `plain` row in place, so:
 delete the row, re-add it as encrypted. Same rotation hygiene as the eBay
 window — no whitespace, and nothing pasted into a shell.
+
+**Sequence refined 2026-09-09, now that overlap is known to be available**
+(five key slots, one in use). The order matters and the revocation is the step
+that closes the exposure:
+
+| | Action | Note |
+| --- | --- | --- |
+| a | Generate the new key, old one still live | **No outage required** — confirmed by the five-slot allowance |
+| b | Delete `CARDSELL_TPL_KEY`, re-add **encrypted** | The only path; Vercel cannot convert in place |
+| c | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` (commit `9aaf326`)** — not a branch deploy | An env change reaches **no running deployment**. `phase1-block-d` is ~237 commits ahead and must not ship as a side effect of a rotation. |
+| d | Verify a lookup that **reaches the provider**: `200` with **no `X-TPL-Cache` header**, for a card not requested in the previous 5 minutes | `X-TPL-Cache: hit`/`stale` proves nothing about the key. `s-maxage=300` means a repeat query can be answered by the edge with the function never running. |
+| e | **Revoke the old key** | **The step that actually closes CH-3.** Everything before it adds a good key; only this removes the exposed one. |
+| f | Then R4 activation | A mitigation, not the remedy. Must not delay (e). |
+
+**A revoked or exposed secret is not a rollback target.** If (d) fails, the
+rollback is a *newly generated* key — never the old one.
 
 **Correction — one code reader is not one running consumer.** I wrote that the
 update was "a single row" because `api/tpl-proxy.js:18` is the only reader in

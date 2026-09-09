@@ -43,16 +43,21 @@ configuration and credentials.**
 | G5 | `node tools/verify-challenge.mjs` PASSES — READY is not proof | **Open** |
 | G6 | eBay portal save and challenge completed | **Open** |
 | G7 | `bash tools/run-ebay-live.sh` recorded and adjudicated per check, never by total | **Open** |
-| G8 | Containment control verified — gates **the first push and the containment steps 11a–13**, and does *not* gate the no-push credential window | **Open** — RV-10 |
+| G8 | Containment control verified — gates **the first push and the containment steps 11a–13**, and does *not* gate the separately authorized maintenance rebuild or the provider-side credential work | **Open** — RV-10 |
 | G9 | Release-validation queue adjudicated, warnings and skips explicit | **Adjudicated (§D).** Closes when its four blocking items close |
 | G10 | §1 copy approved and implemented | **Closed** |
-| G11 | TPL paid key rotated at the provider and stored non-plain | **Open** — owner |
+| G11 | TPL paid key rotated at the provider and stored non-plain — closes at **revocation of the old key** (§E-2d), not at generation | **Open** — owner. Plan now established, no outage needed (five key slots) |
 | G12 | R4 activated: `TPL_BUDGET_ENFORCE=1`, KV store resolved, budget numbers set by Will — **and real-store verification recorded first (§E-3), so activation is not itself the first experiment** | **Open** — needs G1 + G11 + recorded real-store evidence |
 | G13 | CH-2 published-token fallback removed — **in the later release, after the replacement token is verified in production**, never in the rebuild | **Prepared, not shipped** (§D-4) |
 
 G11 and G12 exist because **disabling R4 is a scope choice and does not resolve
-CH-3's cost exposure.** With R4 off and no rotation item, the exposed paid key
-would have disappeared from the gate list entirely.
+CH-3's exposure.** With R4 off and no rotation item, the exposed paid key would
+have disappeared from the gate list entirely.
+
+**One word corrected there: "cost".** The plan refuses requests at the ceiling
+rather than billing past it, so the exposure's worst case is **lookup
+denial-of-service until the midnight-UTC reset, not an unbounded bill.** The
+gates stand unchanged — only the reason is now stated accurately.
 
 ---
 
@@ -111,10 +116,17 @@ injection anywhere** — `tests/tpl-budget-offline.mjs` §12, 20 checks:
 `tpl-budget-offline`: **101 passed, 0 failed.** No real KV, no real provider, no
 quota consumed.
 
-**Still open:** the store has never touched a real KV. G12 stays open, and its
-first activation is the first time this code meets Vercel KV. The budget numbers
-in `BUDGET_DEFAULTS` (max 1000 / hour, per-IP 60, 6 h cache, 24 h stale) are
-**explicit placeholders, not policy** — see §E-3.
+**Still open:** the store has never touched a real KV. G12 stays open, and
+its first activation must **not** be the first time this code meets Vercel KV —
+that is what the recorded real-store evidence in Step 3 is for.
+
+**The budget numbers are no longer a blank, though.** `BUDGET_DEFAULTS` (max
+1000 / hour, per-IP 60, 6 h cache, 24 h stale) remain **explicit placeholders,
+not policy** — but the plan they must respect is now established rather than
+Unverified: **Starter, 2,500 requests/day, midnight UTC reset, refused at the
+ceiling.** Step 4 derives the values from that and shows the arithmetic. The
+placeholder 1000/hour would permit **24,000/day against a 2,500/day allowance**,
+which is the concrete reason it was never a recommendation.
 
 ---
 
@@ -134,12 +146,27 @@ registered suite files**, one process each, and wrote a per-suite record with
 timestamps and exit codes to **`audit/evidence/suite-record.txt`**. That file is
 the citation; this table is a cache of it.
 
+**And the first version of that record was itself wrong by omission** — it named
+only `draft-kv-live` as skipped and said nothing about the four suites the
+registry *declares* as excluded from the runner. Corrected accounting:
+
 | | |
 | --- | --- |
-| Registered suite files | **47** (52 runner slots — some suites own both a run branch and a SKIPPED branch) |
-| Recorded exit 0 | **47** |
-| Of which explicit skips | **1** — `draft-kv-live`, needs `DRAFT_KV_LIVE=1` and a live store (RV-4). **A skip is recorded as a skip, not counted as a pass.** |
-| Red at HEAD before today, now repaired | **2** — both on evidence shape, neither on behaviour (below) |
+| Non-helper suite files on disk | **51** |
+| Invoked by the runner | **47** — all exit 0 (52 slots; some suites own both a run branch and a SKIPPED branch) |
+| **Declared exclusions** | **4** — not invoked, not counted, each stated below |
+| Runtime skips within the 47 | **1** — `draft-kv-live` (RV-4). **A skip is recorded as a skip, never counted as a pass.** |
+| Red at HEAD before today | **2** — both on evidence shape, one with fragility still open |
+
+**The four declared exclusions, stated individually — exit zero cannot settle
+any of them:**
+
+| Suite | Disposition |
+| --- | --- |
+| **`ebay-live`** | **NOT RUN.** Not "excluded by me" and not "skipped by the runner" — it is **not invoked by `run-all.sh` at all**, and I did not run it separately. Invoked bare it **self-skips and exits 0**, which is exactly why exit zero could never have settled this. **Deliberately not run now:** the local Cert ID is the pre-rotation credential slated for G2, and this run *is* G7's baseline, to be taken **after** rotation. Running it now would spend live quota on a credential about to be revoked. Its declared note claims "currently 18/19" — treat that as a **historical** reading; it also sits uneasily with RV-9, which records only check 19 as ever established. |
+| **`test-scan`** | **NOT RUN. Declared UNRESOLVED, not benign** — it cannot pass offline and needs an offline harness or an `EBAY_LIVE`-style gate. Same gap RV-1 records. |
+| **`listing-photos`** | **Ran separately: 92 / 0.** Needs Playwright and its own server. Headless Chromium only (RV-7). |
+| **`flip-completeness-e2e`** | **Ran separately: 22 / 0.** Same Playwright dependency (RV-5). |
 
 **What running the full set actually found.** Two suites were **already red at
 HEAD before any of today's work**, and my narrower claim had concealed both:
@@ -156,11 +183,12 @@ HEAD before any of today's work**, and my narrower claim had concealed both:
   asserted **behaviourally** against the function that owns it (a negative fee
   clamps to zero rather than crediting back). **107 passed, 0 failed.** No
   production behaviour changed, and no assertion was deleted to reach green.
-- **`condition-applicability`** — passes run alone (**17 / 0**). It crashed once
-  when run back to back with another server-starting suite in the same shell.
-  Recorded from the isolated run; the batch crash is noted in the record rather
-  than hidden, because a suite that fails under concurrency is a real if minor
-  fragility.
+- **`condition-applicability`** — **an isolated pass with startup fragility that
+  was not repaired.** 17 / 0 run alone; it crashed when run back to back with
+  another server-starting suite in the same shell. I changed nothing about that:
+  no port allocation, no teardown, no root cause established. The recorded line
+  is the isolated run, and **the fragility is open.** It should not be described
+  as simply green.
 
 This is the third instance of the same defect shape in three days
 (`fee-truth-offline`, then these two): **a green assertion resting on an
@@ -213,7 +241,7 @@ production behaviour changed to make it pass.
 | **RV-10** containment mechanism | **BLOCKING** | The "disable automatic Preview deployment" toggle was **never established to exist with that scope**. What the project exposes is `gitProviderOptions.createDeployments`, which appears to govern Git-triggered deployments **as a whole, production included**. Read-only inspection has gone as far as it can; the exact control must be identified in the dashboard **before** a window that needs to deploy. |
 | **CH-1** production verification token is the repo default | **BLOCKING** | Measured: production's challenge response equals the committed default **plus a trailing newline**, so the variable is set to a published value carrying stray whitespace. Closed by G3. |
 | **CH-2** code falls back to a published token | **BLOCKING — code. Now written locally, and deliberately not shipped** (§D-4) | Was `api/ebay-notifications.js:17`. Prepared today, held out of the rebuild, lands after the replacement token is verified. |
-| **CH-3** `CARDSELL_TPL_KEY` stored unencrypted | **BLOCKING** | Assessed read-only. The route is anonymous and unmetered, and every query parameter is forwarded verbatim, so the edge cache is bypassable. The deployed client sends no cache-buster, so this is **abuse potential, not observed bleeding** — whether it has been abused is **Unverified** and lives in the provider dashboard. R2 and R3 shipped; **R1 rotation is G11 and R4 activation is G12**. CORS is withdrawn as a control: origin and `Referer` are client-asserted. |
+| **CH-3** `CARDSELL_TPL_KEY` stored unencrypted | **BLOCKING** | Assessed read-only. The route is anonymous and unmetered, and every query parameter is forwarded verbatim, so the edge cache is bypassable. The deployed client sends no cache-buster, so this is **abuse potential, not observed bleeding**. Whether it has been abused is now **substantially answered for the current window**: the owner's 2026-09-09 dashboard reading showed **1 of 2,500 daily requests used**, so there is no sustained draw. Earlier days remain unestablished — a daily counter against a midnight-UTC reset cannot speak to history. **The plan is Starter, 2,500/day, blocked at the limit**, so the exposure's worst case is **lookup denial-of-service until midnight UTC, not an unbounded bill**. R2 and R3 shipped; **R1 rotation is G11 and R4 activation is G12**. CORS is withdrawn as a control: origin and `Referer` are client-asserted. |
 | **Same-card basis retention** | **DEFERRED — product decision, not a defect** | The consequence is disclosed rather than silent: the review screen states `data-packet-basis="absent"` and flags a comp-derived price as owing a source. Retention is not obviously safe — reinstating a basis whose card is no longer certain recreates the leak the binding work exists to prevent. Production clearing stays unchanged. |
 | **D5 §8.3 signed-in eBay continuation** | **PASSED for one tested case; stays in the queue** | 2026-09-08, owner-attested, iOS Safari mobile web: verbatim search and `caty=183454` displayed, comparable match shown. **A pass establishes that case, not a continuing compatibility guarantee** — these are undocumented eBay internals. **Q-D5-5 desktop has never been exercised** and remains open. |
 
@@ -254,6 +282,17 @@ literal — it is gone from the source tree outside `./audit/`. Three specifics:
    module load. A module-load capture freezes the value for the life of a warm
    instance, which is how a rotated token can keep failing after the variable is
    corrected.
+
+   > **This does not replace the redeploy, and must not be read as doing so.**
+   > A call-time read only removes one *additional* failure mode — a warm
+   > instance holding a stale value. It does nothing about the primary one: on
+   > Vercel, **an environment-variable change does not reach any running
+   > deployment at all.** The new value is only present in the process
+   > environment of a deployment created *after* the change. So the sequence is
+   > unchanged and non-negotiable: **change the variable, then deploy, then
+   > verify.** Call-time reading makes the deployed code honest about what it
+   > has; it does not give it something it was never handed. The same applies to
+   > `CARDSELL_TPL_KEY` at 2c — which is why 2c is a redeploy and not an edit.
 2. **GET fails closed.** No token → `503 verification_token_unset`,
    `Cache-Control: no-store`, and **no `challengeResponse` field at all**. The
    dangerous property of the old code was never that the value was published —
@@ -294,22 +333,38 @@ Six steps, in order, and each one's result changes what the next should be.
 **Step 1 is a single dashboard read** — that is all I need from you to keep
 moving. Nothing below Step 1 is asked of you yet.
 
-### Step 1 — One dashboard read. That is the whole step.
+### Step 1 — DONE. The plan is now established, not Unverified.
 
-Open the **TCGPriceLookup dashboard** and report five things:
+You answered all five questions. This step is closed, and the numbers below are
+**established fact** everywhere they appear in this document. No key values were
+exchanged, which is exactly right.
 
-1. **Plan allowance** — the metered quantity the plan includes.
-2. **Current usage** — against that allowance.
-3. **Reset period** — per hour, per day, per month.
-4. **Overage policy** — refused at the ceiling, or billed beyond it.
-5. **Whether an old and a new key can be live at the same time.**
+| Item | Established |
+| --- | --- |
+| Plan | **Starter — 2,500 requests/day** |
+| Usage at the reading | 1 used, 2,499 remaining |
+| Reset | **Midnight UTC**, daily |
+| Overage | **Requests are blocked at the limit** (your confirmation) |
+| Key overlap | Dashboard permits **five active keys**; one was active |
+| Pro tier | **10,000 requests/day, plus a commercial-use license** |
+| Upgrade | You are willing to upgrade; **completion unconfirmed** |
 
-**No key values. Do not paste a key, a prefix, or a fragment of one anywhere,
-including to me.** I need the *policy*, not the secret.
+**Three consequences, none of them cosmetic:**
 
-Everything else that used to be in this step — the Vercel storage change, the
-generation, the revocation, the activation — is now **Step 2**, sequenced and
-authorized on its own. Nothing is rotated by this step.
+1. **Overlap is available.** Five key slots with one in use means 2a can generate
+   the new key while the old one still serves. **The rotation needs no outage**,
+   and the contingency I wrote for the no-overlap case is not needed.
+2. **Overage is refused, not billed.** So exhausting the allowance is an
+   **availability failure, not a bill.** This settles the wording problem for
+   good: there is no per-request overage rate, therefore **no dollar figure to
+   convert to.** The request-allowance framing is the only honest one available
+   — see Step 4.
+3. **The Pro upgrade carries a commercial-use licence, and that is a question
+   about rights, not quota** — see the question at the end of Step 4.
+
+**Your one remaining plan question: has the Pro upgrade completed?** Everything
+below is sequenced to work on Starter, so the answer changes the numbers but
+blocks nothing.
 
 ### Step 2 — The TPL rotation window: its own sequence, its own authorization
 
@@ -325,9 +380,9 @@ two windows.** This one needs Step 1's answers first and nothing else; it does
 
 | # | Action | Why in this position |
 | --- | --- | --- |
-| 2a | **Generate the new key** at TCGPriceLookup, old one still live | Step 1 question 5 decides whether this is possible. If keys **cannot** overlap, this becomes a short deliberate outage and the order changes — tell me and I will re-sequence rather than improvise mid-window. |
+| 2a | **Generate the new key** at TCGPriceLookup, old one still live | **Confirmed available** — five key slots, one in use. No outage is required, and the no-overlap contingency is withdrawn. |
 | 2b | **Delete** `CARDSELL_TPL_KEY` and **re-add it encrypted** with the new value | Vercel **cannot convert a variable in place.** Re-adding is the only path, and it is why this cannot be a quiet edit. |
-| 2c | **Redeploy**, then confirm a live price lookup still resolves | An environment variable change does not reach a running function. Until a deployment carries it, the old value is still in use. |
+| 2c | **Redeploy a named target, then confirm a lookup that actually reaches the provider** — exact target and check below | "Redeploy" alone is ambiguous and dangerous here, and a cached 200 proves nothing. Both are specified below rather than left to the moment. |
 | 2d | **Revoke the old key at the provider** | **The step that actually closes CH-3.** Everything before it adds a good key; only this removes the exposed one. If the window ends here, the exposure is closed even if 2e never happens. |
 | 2e | **Then** R4 activation (G12) — with Step 4's real numbers and Step 3's recorded real-store evidence | Enforcement is worth having, but it is a *mitigation*. It must not be mistaken for the remedy, and it must not delay 2d. |
 
@@ -337,6 +392,50 @@ speed limit on a road anyone can still drive.
 
 **And a revoked or exposed secret is not a rollback target.** If 2c fails, the
 rollback is a *newly generated* key, not the old one.
+
+#### 2c in full — the exact target, and a check that can actually fail
+
+"Redeploy" was doing far too much work in one word. Two distinct hazards:
+
+**Hazard 1 — redeploying the wrong thing.** This branch is `phase1-block-d`,
+**~237 commits ahead of `origin/main`**. A plain "deploy" here would ship all of
+that as a side effect of a key rotation. That must not happen. The target is the
+commit **already live**, redeployed only to pick up the new variable:
+
+| | |
+| --- | --- |
+| Commit | **`9aaf326`** (`9aaf326e75b235ee500cf134eeb5f869f299b2a4`) |
+| Existing production deployment | `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`, `READY`, created **2026-09-05T17:17:47Z**, ref `main` |
+| Action | **Redeploy that deployment** — Vercel's "Redeploy" on that specific entry. Not a branch deploy, not a push, not `--prod` from this working tree. |
+| Configuration it must carry | `CARDSELL_TPL_KEY` = the new value, **`type: encrypted`** |
+| Must NOT carry | Any commit from `phase1-block-d`, and **not** the CH-2 change (G13) |
+
+This is the same target as the exact-commit maintenance rebuild, and it is a
+deployment — so it needs your authorization, and it is **not** gated by RV-10.
+
+**Hazard 2 — an edge-cached 200 proving nothing.** The proxy sets
+`Cache-Control: public, s-maxage=300` on successes, so for five minutes after any
+lookup the edge can answer without the function running at all. A green result
+under those conditions would be evidence about the cache, not about the key.
+
+The proxy distinguishes the paths itself, and this is the signal to use:
+
+| Response | Means |
+| --- | --- |
+| **`X-TPL-Cache` header absent** | The request **reached the provider with the new key.** This is the only outcome that verifies 2c. |
+| `X-TPL-Cache: hit` | Served from the KV result cache. **Proves nothing about the key.** |
+| `X-TPL-Cache: stale` | Served stale, with `X-TPL-Stale-Reason`. **Proves nothing about the key.** |
+| `401` / `403` from the provider | The new key is wrong or not yet active. **Do not revoke the old key** — stop and fix. |
+
+So the check is: **a lookup for a card not requested in the previous five
+minutes, against the redeployed target, returning `200` with no `X-TPL-Cache`
+header.** Verify the deployment's own URL first (it proves the key without
+depending on promotion), then `www.cardresell.org` after promotion to prove the
+alias moved. One request each — two of a 2,500/day allowance, which is
+verification, not quota abuse.
+
+**Only after that green does 2d revoke the old key.** Revoking on the strength
+of a cached 200 would be exactly the mistake this section exists to prevent.
 
 ### Step 3 — Isolate the store, then let me verify the binding on it
 
@@ -354,6 +453,42 @@ consumers that already hold the production values. Three of them:
 | **Local copies** — `.env` files, shells, notes, anything pulled with `vercel env pull` | Nothing on the dashboard touches a developer machine. | Confirm the local copies are removed, and treat the values as **exposed** until the store credential is rotated. |
 | **The production store credential itself** | It has been readable from non-production for the whole life of the project. | It is the only thing whose rotation makes every stale copy above simultaneously useless. |
 
+**This is no longer hypothetical — I found one, in this sandbox.**
+`cardresell/.env.production` exists here, 2,257 bytes, 43 variables. It is
+`.gitignore`d at `.gitignore:5` (`.env.*`), so it was never committed — that
+part is fine. But it is a live local copy holding production credentials, and it
+is precisely the consumer that retargeting the dashboard variables does not
+touch. **By name only, never values**, it carries:
+
+| Group | Variables present |
+| --- | --- |
+| **Production KV / Redis** | `KV_REST_API_URL`, `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`, `KV_URL`, `REDIS_URL` |
+| **The exposed TPL key** | `CARDSELL_TPL_KEY` |
+| **eBay** | `EBAY_APP_ID`, `EBAY_CERT_ID`, `EBAY_VERIFICATION_TOKEN` |
+| **Payments** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, + 8 price IDs |
+| **Other** | `OPENAI_API_KEY`, `CARDGRADER_API_KEY`, `BLOB_*` |
+
+Three things follow:
+
+1. **This file is why `ebay-live` reported "creds present: true / true"** when I
+   invoked it. The suite would have run against production eBay with the
+   **pre-rotation** Cert ID had it been given `EBAY_LIVE=1`. Another reason it
+   stays not-run until after G2.
+2. **It holds write-capable production KV tokens.** Any local script pointed at
+   it writes to the store behind `www.cardresell.org` — the exact hazard G1
+   exists to close, and it is open right now regardless of what the dashboard
+   variables target.
+3. **Retargeting `KV_*` to a new store will not change this file.** It must be
+   deleted or repointed as its own action, and until the **store credential
+   itself is rotated**, every value in it stays exposed — deleting the file
+   removes the copy, not the validity of what it contained.
+
+I have not deleted it: it is the only local record of which variables exist, it
+is needed to reason about the rotation, and removing your credential file
+unasked is not my call. **Recommend deleting it after Step 2 and Step 3 close,
+and rotating the KV store credential as part of Step 3 rather than only
+provisioning a second store.** Say the word and I will remove it.
+
 So G1 reads: **isolated, and the previous consumers demonstrably stopped using
 production credentials.** Changing environment targets alone does not establish
 that.
@@ -370,29 +505,60 @@ completed functional tests was wrong and is struck. Those tests assert behaviour
 against a KV interface, not a particular store. A new store needs its
 configuration checked; it does not need the results re-earned.
 
-### Step 4 — Choose the budget numbers, grounded in the real plan
+### Step 4 — The budget numbers, now derivable from a real allowance
 
-Bring me Step 1's answers — **allowance, usage, reset period, overage policy** —
-and we will set `TPL_BUDGET_MAX`, `TPL_BUDGET_WINDOW_SEC` and
-`TPL_BUDGET_PER_IP_MAX` from them.
+Step 1 closed the input, so this stops being a placeholder. **2,500 requests per
+day, resetting at midnight UTC, refused at the ceiling.**
 
-**I will not invent them.** The values presently in `BUDGET_DEFAULTS` (1000 per
-hour, 60 per IP) are **placeholders chosen to be obviously arbitrary**, not a
-recommendation. Your actual TPL plan allowance and usage are **Unverified** —
-they exist only in the provider dashboard, which I have never seen and will not
-guess at.
+**The shape mismatch, first, because it drives the recommendation.** R4 enforces
+a **rolling window** (`TPL_BUDGET_MAX` per `TPL_BUDGET_WINDOW_SEC`); the plan
+enforces a **daily quota with a fixed reset**. These do not compose exactly, and
+I am not going to pretend they do. But an hourly cap can be chosen so that
+**daily exhaustion becomes arithmetically impossible**, which is the property
+worth having:
 
-**And one thing I should not have let stand:** a request allowance is **not a
-dollar spending cap**. Saying "cap it at $X" when the plan meters *requests*
-would be a made-up conversion. Once you have the real allowance, there are two
-honest framings, and which is available depends on how your plan actually bills:
-
-| If your plan… | Then the budget means | And the option is |
+| Hourly cap | Saturated for 24 h | Headroom under 2,500 |
 | --- | --- | --- |
-| includes a fixed request allowance, overage refused | a share of the allowance you are willing to spend before refusing traffic | pick a per-hour number that leaves headroom for a normal day |
-| bills per request beyond an allowance | a request ceiling that **maps to** a dollar figure at the published per-request rate | the dollar figure is derived, and I will show the arithmetic rather than assert it |
+| 104/hr | 2,496/day | 4 (0.2%) — technically safe, no margin for a reset-boundary straddle |
+| **100/hr** | **2,400/day** | **100 (4.0%)** |
+| 120/hr | 2,880/day | **overshoots by 380** — a saturated day exhausts the plan |
 
-Until the plan is read, neither framing is available and no number is defensible.
+**Recommended, and stated as a recommendation rather than a fact:**
+
+| Variable | Value | Reasoning |
+| --- | --- | --- |
+| `TPL_BUDGET_MAX` | **100** | 2,400/day even if every hour saturates — under the allowance with ~4% reserve for the reset boundary. |
+| `TPL_BUDGET_WINDOW_SEC` | **3600** | Matches the cap above. A daily window would let one burst consume the whole allowance by mid-morning. |
+| `TPL_PER_IP_MAX` | **15** | **This one is a judgement, not arithmetic.** Per-IP is an abuse control, not a plan constraint — the plan says nothing about it. 15/hr is 15% of the hourly cap, so no single caller can starve the rest, while still allowing a seller to price a decent run of cards. Raise it if you hit it in normal use; it is the number I am least confident in. |
+
+Note the real variable name is **`TPL_PER_IP_MAX`** — an earlier draft of this
+section said `TPL_BUDGET_PER_IP_MAX`, which does not exist
+(`api/_tplBudget.js:52`). Setting the wrong name would have silently left the
+placeholder 60 in force, which is the class of defect Rule 2 is about.
+
+**The result cache does real work here.** Successes cache for 6 h with a 24 h
+stale window, so repeat lookups of the same card do not spend allowance. The
+100/hr ceiling applies to *provider* calls, not user actions.
+
+**The dollar-cap question is now definitively closed.** You confirmed requests
+are **blocked at the limit**, not billed beyond it. So there is no per-request
+overage rate, and therefore **no conversion to a dollar figure exists.** Hitting
+the cap is an **availability** event, not a cost event. Any earlier phrasing of
+this budget as a spending cap is withdrawn — not softened.
+
+**On Pro.** 10,000/day supports **400/hr** on the same arithmetic (9,600/day
+saturated, 4% reserve). If the upgrade completes, tell me and I will restate
+these three numbers; nothing else in the sequence changes.
+
+> **Question for you — a rights question, not a quota one.** The Pro listing
+> includes a **commercial-use licence**. CardResell is a commercial product that
+> charges for scans, so it is worth establishing whether commercial use is
+> *permitted* on Starter at all, or whether that licence is the term that makes
+> our current usage compliant. If it is the latter, the upgrade is a
+> **compliance requirement rather than a performance choice**, and it should be
+> sequenced accordingly. I cannot read the licence terms from here, and I am not
+> going to assume either answer. This sits alongside the PriceCharting
+> permission questions as the second open licensing item.
 
 ### Step 5 — The bounded eBay maintenance window, when you authorize it
 
@@ -408,23 +574,26 @@ Two things to hold onto during it:
 - **A revoked or exposed secret is not a safe rollback target.** The rollback
   plan cannot be "put the old key back."
 
-**What RV-10 gates — stated precisely, because I have now drifted on it twice.**
-RV-10 gates **the first push and the containment steps 11a–13 of this window.**
-It does **not** gate the credential work that happens with no push at all.
+**What RV-10 gates.**
 
 | Gated by RV-10 | Not gated by RV-10 |
 | --- | --- |
-| The first push to `main` (a push creates a Preview, and the Preview is the exposure) | Rotating the eBay Cert ID and verification token at the provider |
-| Containment steps 11a–13 | Steps 1–4 above, and the whole TPL sequence |
-| The rebuild deployment | Reading a dashboard, choosing numbers, isolating a store |
+| The **first push** to `main` — a push creates a Preview, and the Preview is the exposure | Rotating the eBay Cert ID and verification token **at the provider** |
+| Containment **steps 11a–13** | **The exact-commit maintenance rebuild**, which you authorize separately |
+| | Steps 1–4 above, and the whole TPL sequence |
 
-**The direction that matters: rotation comes first, containment second.** Every
-time I have restated this I have quietly inverted it, because containment reads
-like a precaution and precautions feel like they belong at the front. They do
-not, here. Containment protects a **deployment**; the credential window has no
-deployment in it. Making containment a prerequisite for the rotation would hold
-an exposed credential open waiting on a dashboard control nobody has found yet
-— which is the exact failure the containment work exists to prevent.
+**Correction.** I previously wrote that "the credential window has no deployment
+in it" and listed "the rebuild deployment" as gated by RV-10. Both are struck.
+**The credential window does contain a deployment** — the exact-commit rebuild
+is a deployment, and pretending otherwise made the distinction sound cleaner
+than it is. The rebuild is not gated by RV-10 because **you authorize it
+directly**, not because it isn't a deployment.
+
+The distinction that survives, and the only one being claimed: **containment
+gates the push and steps 11a–13 — not the separately authorized maintenance
+rebuild, and not the provider-side credential work.** Rotation still comes
+before containment, because making containment a prerequisite would hold an
+exposed credential open waiting on a dashboard control nobody has yet located.
 
 Identify the exact control and its true scope in the dashboard **before the
 push** — if `createDeployments` suppresses production deployments too, that

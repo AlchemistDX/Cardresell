@@ -1,21 +1,68 @@
 # Per-suite record — 2026-09-09T13:27:46Z · 7c4fc6b+dirty
 # Run individually, one process each. run-all.sh NOT used (standing instruction).
 #
-# 47 registered suite files / 52 runner slots -- slots exceed files because some
-# suites occupy a slot with a SKIPPED branch as well as a run branch.
+# ACCOUNTING (corrected 2026-09-09, second pass). The earlier header said
+# "47 recorded, 47 exit 0, one explicit skip" and named only draft-kv-live.
+# That was wrong by omission: it counted the INVOKED set and said nothing about
+# the four suites the registry declares as excluded from the runner.
 #
-# 47 recorded, 47 exit 0, of which ONE is an explicit skip:
-#   draft-kv-live -- SKIPPED, needs DRAFT_KV_LIVE=1 and a live store (RV-4).
-#   A skip is recorded as a skip, not counted as a pass.
+#   51  non-helper suite files on disk (tests/*.mjs, excluding tests/_*.mjs)
+#   47  invoked by run-all.sh          -> recorded below, all exit 0
+#    4  DECLARED EXCLUSIONS in tests/test-registry.mjs -> NOT below; see next
+#   52  runner slots (some suites own both a run branch and a SKIPPED branch)
 #
-# Two entries required a repair before they could be recorded, and both were
-# ALREADY RED AT HEAD before today's work:
-#   majors-flip-and-pack -- lifted _flipNetOf without its _flipCompleteness
-#     callee, and pinned the deleted `hasCosts` field plus an inline clamp that
-#     had been consolidated into _flipNetOf. Evidence shape, not behaviour.
-#   condition-applicability -- passes run alone; it crashed once when run back
-#     to back with another server-starting suite in the same shell. Recorded
-#     from the isolated run, and the batch crash is noted rather than hidden.
+# NOT RUN / NOT COUNTED -- the four declared exclusions, each stated:
+#
+#   ebay-live.mjs        NOT RUN TODAY. Neither excluded by me nor skipped by
+#                        the runner -- it is not invoked by run-all.sh at all,
+#                        and I did not run it separately. Invoked bare it
+#                        SELF-SKIPS and exits 0, so exit zero could never have
+#                        settled this either way; that is why it is stated
+#                        rather than counted. It needs EBAY_LIVE=1 and hits
+#                        api.ebay.com for real. Its declared note claims
+#                        "currently 18/19" -- treat that as a HISTORICAL
+#                        reading, not a current one, and note it sits uneasily
+#                        with RV-9, which records only check 19 as ever
+#                        established. Deliberately not run now: the local
+#                        Cert ID is the pre-rotation credential slated for G2,
+#                        and the run is G7's baseline, to be taken AFTER
+#                        rotation. Running it now would spend live quota on a
+#                        credential about to be revoked. RV-3 / RV-9 / G7.
+#
+#   test-scan.mjs        NOT RUN. Declared UNRESOLVED, not benign: it cannot
+#                        pass offline (expects a live handler environment) and
+#                        needs an offline harness or an EBAY_LIVE-style gate.
+#                        This is the same gap RV-1 records.
+#
+#   listing-photos.mjs   RAN SEPARATELY, 92 passed / 0 failed. Needs Playwright
+#                        and its own ephemeral server, which the offline runner
+#                        does not provide. Headless Chromium only -- says
+#                        nothing about Safari or iOS (RV-7).
+#
+#   flip-completeness    RAN SEPARATELY, 22 passed / 0 failed. Same Playwright
+#     -e2e.mjs           dependency (RV-5).
+#
+# WITHIN the 47 invoked: one runtime skip, recorded as a skip and not counted
+# as a pass -- draft-kv-live (needs DRAFT_KV_LIVE=1 and a live store, RV-4).
+#
+# Two of the 47 were ALREADY RED AT HEAD before today's work:
+#
+#   majors-flip-and-pack  Lifted _flipNetOf without its _flipCompleteness
+#                         callee; asserted the deleted `hasCosts` field; and
+#                         grepped each write path for an inline clamp that had
+#                         been consolidated into _flipNetOf. Evidence shape,
+#                         not behaviour. Repaired behaviourally, 107/0.
+#
+#   condition-applicability
+#                         ISOLATED PASS WITH STARTUP FRAGILITY NOT REPAIRED.
+#                         17/0 when run alone. It crashed when run back to back
+#                         with another server-starting suite in the same shell,
+#                         and nothing was done about that: no port allocation
+#                         changed, no teardown was added, no root cause was
+#                         established. The recorded line below is the isolated
+#                         run. The fragility is open, and the suite should not
+#                         be described as simply green.
+#
 asset-fingerprints.mjs                        rc=0   asset-fingerprints: 72 passed, 0 failed
 copy-truth-offline.mjs                        rc=0   ALL CHECKS PASSED
 fee-truth-offline.mjs                         rc=0   All fee-truth checks passed.
