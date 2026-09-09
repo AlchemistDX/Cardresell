@@ -260,7 +260,20 @@ custom environment and incurs no additional cost.
    storage** as well. This is the same class of defect as RV-8 and is **not**
    addressed by any Redis work. Recorded here so it is not mistaken for covered;
    it needs its own decision before isolation can be called complete.
-2. **Create the second database** there.
+2. **Create the second database** there. **DONE 2026-09-09 17:31.**
+   **`upstash-kv-aureolin-door`**, Upstash for Redis, **Pay As You Go**, primary
+   region `iad1`, connected to project `cardresell` ("Connected Project
+   cardresell to Database"). Creation parameters recorded: **Prod Pack
+   (+$200/month) False**, **Auto Upgrade False**, **Eviction False**, Read
+   Regions none, Max Commands/sec 10000. Eviction False is deliberate — an
+   evicted budget counter reads as "no spend yet" and would silently reopen R4's
+   cap. The production database `upstash-kv-bistre-arrow` **remains on Free**;
+   the Pay As You Go charge applies only to the new non-production store. Will
+   took option (a) of Q-CONTAIN-1 knowingly.
+
+   **Not yet verified:** that the connection landed on **Preview and Development
+   only**, with **unprefixed** names. Both are read back in step 5, and neither
+   is assumed here.
 3. **Save its credentials directly into Vercel.** Never into this session, never
    into a local file, never into a commit message.
 4. **Superseded 17:06 — the variable rows have no Edit.** Do it at the
@@ -294,7 +307,19 @@ custom environment and incurs no additional cost.
    careless isolation check for entirely the wrong reason. The second connection
    must inject **the same five names**, differing only in environment.
 
-   *Sensitive toggle — recommended on for the new connection.* It makes the
+   *Sensitive toggle — UNAVAILABLE, recorded as an accepted gap (17:29).*
+   Vercel **greys the Sensitive control out unless Production is among the
+   selected environments**, so a Preview/Development-only connection cannot be
+   marked write-only. **Selecting Production to unlock it was rejected** — that
+   would recreate the overlap this item exists to remove, and the overlap guard
+   would refuse it regardless. The new credentials are therefore **readable back
+   from the dashboard**. Accepted, because they grant access only to a
+   throwaway preview database holding no production data; this is a materially
+   different exposure from the readable *production* credentials found at 17:03,
+   which the narrowing has since closed. **Recorded as a known limitation with
+   its reason, not an oversight, and not closeable at this surface.**
+
+   *Original reasoning, retained — it is why the toggle was sought:* It makes the
    values write-only, the same hardening applied to the TPL key at `3570d97`.
    It does not impede step 5: separation is verified from **names and
    environment scopes**, which stay visible, not from values. The one cost is
