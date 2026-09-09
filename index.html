@@ -1167,6 +1167,31 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .review-packet-sell{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
 .review-packet-sell a.draft-more-btn{display:inline-block;text-decoration:none}
 .review-packet-sell .review-packet-note strong{color:var(--text);font-weight:700}
+/* D7 listing photos. Uses existing tokens only -- no new colour is declared
+   here, because four undeclared CSS tokens are already an open finding and
+   adding a fifth would make it worse. The missing-photo tile is deliberately
+   NOT red: a photo the browser dropped is not the seller's error, and styling
+   it as one would read as an accusation. It gets the dashed border that means
+   "nothing here" plus its own sentence, which is what distinguishes it from an
+   empty collection. */
+.photo-block{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.photo-head{margin:0 0 6px;font-size:.9rem;font-weight:700;color:var(--text)}
+.photo-limit{margin:0 0 10px;font-size:.8rem;line-height:1.45;color:var(--text-muted)}
+.photo-controls{margin-bottom:10px}
+.photo-add-btn{font-size:.82rem;font-weight:600;padding:7px 13px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text)}
+.photo-add-btn[disabled]{opacity:.55}
+.photo-status{margin:0 0 10px;font-size:.8rem;line-height:1.45;color:var(--text-muted)}
+.photo-status.is-error{color:var(--text)}
+.photo-empty{margin:0;font-size:.82rem;line-height:1.45;color:var(--text-muted)}
+.photo-grid{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px}
+.photo-item{position:relative;width:96px;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--surface)}
+.photo-item.is-gone{border-style:dashed}
+.photo-pos{display:block;font-size:.68rem;font-weight:700;color:var(--text-muted);margin-bottom:4px}
+.photo-thumb{display:block;width:100%;height:72px;object-fit:cover;border-radius:5px;background:var(--surface-2)}
+.photo-gone{display:flex;align-items:center;min-height:72px;font-size:.68rem;line-height:1.35;color:var(--text-muted)}
+.photo-actions{display:flex;gap:4px;margin-top:6px}
+.photo-btn{flex:0 0 auto;font-size:.68rem;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)}
+.photo-btn[disabled]{opacity:.4}
 .review-packet-blocking{margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)}
 .review-packet-blocking .review-packet-p{margin:0}
 .review-packet-blocking .review-packet-p + .review-packet-p{margin-top:6px}
@@ -3804,7 +3829,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </div><!-- /wrap -->
 
 <script defer src="/js/config.20ebe911.js"></script>
-<script defer src="/js/core.ea2f03c4.js"></script>
+<script defer src="/js/core.3f83abec.js"></script>
 <script defer src="/js/ui.6b3a528e.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.5cf1cd22.js"></script>

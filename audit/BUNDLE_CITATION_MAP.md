@@ -1,6 +1,14 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.ea2f03c4.js` (22,969 lines).** New work cites that hash.
+**Live bundle: `js/core.3f83abec.js` (23,261 lines).** New work cites that hash.
+
+> ### Generation 12 — the listing-photo screen
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 12 | `ea2f03c4` → `3f83abec` | *(this commit)* | D7 photo UI on the review screen: add through a real picker, reorder as a store-side operation (`photosMove` takes an id and a direction, never an order array), remove, a missing-photo tile distinct from the empty line, the browser-local limitation rendered outside the grid/empty branch so no state can hide it, decode validation calling the scan path's `_validateScanFile` for format and HEIC guidance, and a partial-batch line attributing the 12-photo cap to CardResell rather than to eBay. Two UI defects fixed while testing: `busy` was not released on a throw (dead Add button, no error shown), and `input.value = ''` before reading `input.files` emptied the live list. |
+>
+> **`ea2f03c4` is retained on disk**, copied rather than moved.
 
 > ### Generation 11 — local listing photos
 >

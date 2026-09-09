@@ -128,6 +128,36 @@ first two rows.
 
 ---
 
+## RV-7 — D7 listing photos, store and screen (added 2026-09-08)
+
+`tests/listing-photos.mjs`, **92 checks, 92 passing, run twice** on
+2026-09-08 against `js/core.3f83abec.js`. It is a **declared exclusion** in
+`tests/test-registry.mjs`, not an offline slot, on the same grounds as
+`flip-completeness-e2e.mjs`: it needs Playwright and a local HTTP server the
+offline runner does not stand up.
+
+Run by hand: `node tests/listing-photos.mjs`.
+
+What only this suite covers:
+
+| area | what it establishes |
+|---|---|
+| store transaction | a fault fired after every blob `put` reports success but before commit ⇒ caller sees a rejection, no orphan blob survives, manifest byte-identical |
+| picker | files arrive via `setInputFiles` on the real hidden input, not a synthesised `File` in page JS |
+| reorder | the chosen order survives a **full page reload**, not just a repaint |
+| missing photo | renders as its own tile with its own sentence while its neighbours still show thumbnails, and the empty line stays hidden |
+| cap | 12 is attributed to CardResell and explicitly not to eBay |
+| failure | the previously displayed collection is intact, the failure is shown, and no success line appears beside it |
+| no upload | add, reorder and remove issue no request with a body, scoped after boot |
+
+**What it does not establish.** It runs in headless Chromium only, so it says
+nothing about Safari or iOS, where the storage behaviour that motivated the
+browser-scoped copy is most likely to differ. It does not establish a storage
+ceiling — no quota-exhaustion experiment was run, by decision. Glare is not
+asserted because glare is advisory, not a gate.
+
+---
+
 ## Not in this queue
 
 Everything else registered in `tests/run-all.sh` runs offline and was run at the

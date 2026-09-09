@@ -90,6 +90,17 @@ const EXCLUDED = {
     'offline slot would make an environment-dependent check look like part of ' +
     'the offline gate. Run by hand: node tests/flip-completeness-e2e.mjs ' +
     '(22/22 as of 2026-09-08). Tracked as RV-5 in RELEASE_VALIDATION_QUEUE.md.',
+  'listing-photos.mjs':
+    'Added 2026-09-08 (D7). Drives the IndexedDB photo store and the review ' +
+    'screen photo UI in a real browser -- the picker, reorder, remove, the ' +
+    'missing-photo tile, and the abort-before-commit rollback, none of which ' +
+    'exist outside a browser. Excluded for the SAME reason as ' +
+    'flip-completeness-e2e.mjs and on that precedent, not as a fresh ' +
+    'judgement: it needs Playwright and a local HTTP server this offline ' +
+    'runner does not stand up, and registering it as an offline slot would ' +
+    'make the offline gate depend on an environment it does not provide. ' +
+    'Run by hand: node tests/listing-photos.mjs (92/92 as of 2026-09-08). ' +
+    'Tracked as RV-7 in RELEASE_VALIDATION_QUEUE.md.',
 };
 
 /* A stale exclusion is its own drift: it grants an exemption to a file that no

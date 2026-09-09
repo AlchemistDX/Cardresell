@@ -131,9 +131,23 @@ would be testing the stub.
 
 The abort case fires the fault *after* every blob `put` has reported `success`
 and *before* the manifest write and commit, then asserts: the caller sees a
-rejection; **no ghost blob survives**; the manifest is byte-identical to before;
-the store still works afterwards. Had request-success been treated as storage,
-that call would resolve and two orphans would remain.
+rejection; no ghost blob survives; the manifest is byte-identical to before; the
+store still works afterwards.
+
+**CORRECTED 2026-09-08 — two properties, not one.** An earlier draft of this
+section said that resolving early on request success would leave two orphan
+blobs. That conflates two independent things:
+
+| Property | What establishes it | If it broke |
+|---|---|---|
+| No premature success | the **rejection** assertion | the UI reports a save that never landed |
+| Rollback is real | the **no-ghost-blob** and **unchanged-manifest** assertions | orphan bytes and a torn pair survive the abort |
+
+Resolving early would falsely report a save; it would **not** by itself leave
+orphans, because the abort still rolls the transaction back regardless of what
+the promise did. The two assertions are checking different failures and neither
+substitutes for the other. Claiming one implied the other overstated a single
+check into a proof of both.
 
 ### The one failure, and why it was the check's bug
 

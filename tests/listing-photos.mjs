@@ -374,6 +374,358 @@ const dropBlob = (page, photoId) => page.evaluate((pid) => new Promise((resolve,
   await ctx.close();
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// PART TWO — the SCREEN. Everything above tests the store; a store that makes
+// no requests establishes nothing about what its caller sends, and a store
+// that returns a `missing` flag establishes nothing about what a seller sees.
+// These drive the real picker on the real review screen.
+// ═════════════════════════════════════════════════════════════════════════
+
+import { generateReadFixtures } from './_draftListFixtures.mjs';
+const FX = await generateReadFixtures();
+
+/** Boot the review screen for one draft, with the draft read stubbed. */
+async function reviewPage(ctx) {
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+  await page.route('**/api/drafts*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FX.publishable.body) });
+  });
+  await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+  await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+  return page;
+}
+
+async function openReview(page, id) {
+  await page.evaluate((i) => window.openDraftReview(i), id);
+  await page.waitForFunction(() => window._reviewState && window._reviewState.loading === false, { timeout: 15000 });
+  await page.waitForFunction(() => !!document.querySelector('[data-photo-block]'), { timeout: 15000 });
+  await page.waitForFunction(() => window._photoUi && window._photoUi.loaded === true, { timeout: 15000 });
+}
+
+/* Write real image files to disk so the picker receives them the way a
+   seller's picker does — setInputFiles, not a synthesised File in page JS. */
+const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'd7photos-'));
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+function pngAt(name, salt) {
+  const abs = path.join(TMP, name);
+  fs.writeFileSync(abs, Buffer.concat([PNG, Buffer.from([salt])]));
+  return abs;
+}
+function junkAt(name, body) {
+  const abs = path.join(TMP, name);
+  fs.writeFileSync(abs, Buffer.from(body));
+  return abs;
+}
+
+/* TWO CHECK BUGS FOUND HERE, RECORDED BECAUSE THEY BOTH LOOKED LIKE PRODUCT
+   FAILURES.
+
+   v1 waited for `busy === false`, which is the state BEFORE the add starts, so
+   every assertion sampled a blank screen and the suite reported the UI broken.
+   v2 waited for the `busy` edge true-then-false. That works for a batch that
+   reaches IndexedDB, and CANNOT work for a batch rejected during validation:
+   HEIC is refused with no await that yields to the event loop, so the flag
+   goes up and down inside one task and no poller can observe it. The suite
+   then blamed the UI for a wait it could never satisfy.
+
+   v3 waits on the RENDERED BLOCK instead of on internal state -- what the
+   seller would see change. It needs no production counter, and it is the same
+   surface the assertions read. */
+const blockHtml = (page) => page.evaluate(() => {
+  const el = document.querySelector('[data-photo-block]');
+  return el ? el.innerHTML : '';
+});
+
+const pick = async (page, files) => {
+  const before = await blockHtml(page);
+  await page.setInputFiles('[data-photo-input]', files);
+  await page.waitForFunction((prev) => {
+    const el = document.querySelector('[data-photo-block]');
+    return !!el && el.innerHTML !== prev && !/data-photo-loading/.test(el.innerHTML)
+      && !el.querySelector('[data-photo-add][disabled]');
+  }, before, { timeout: 30000 });
+  await page.evaluate(() => new Promise(r => setTimeout(r, 250)));
+};
+
+const tiles = (page) => page.evaluate(() => (
+  [...document.querySelectorAll('[data-photo-item]')].map((el) => ({
+    id: el.getAttribute('data-photo-item'),
+    pos: (el.querySelector('.photo-pos') || {}).innerText || '',
+    gone: !!el.querySelector('[data-photo-missing]'),
+    goneText: (el.querySelector('[data-photo-missing]') || {}).innerText || '',
+    hasImg: !!el.querySelector('img.photo-thumb'),
+    upDisabled: !!el.querySelector('[data-photo-move="up"]').disabled,
+    downDisabled: !!el.querySelector('[data-photo-move="down"]').disabled,
+  }))
+));
+
+const screenState = (page) => page.evaluate(() => ({
+  limitVisible: !!document.querySelector('[data-photo-limit]'),
+  limitText: (document.querySelector('[data-photo-limit]') || {}).innerText || '',
+  emptyShown: !!document.querySelector('[data-photo-empty]'),
+  emptyText: (document.querySelector('[data-photo-empty]') || {}).innerText || '',
+  status: (document.querySelector('[data-photo-status]') || {}).innerText || '',
+  statusKind: (document.querySelector('[data-photo-status]') || {}).getAttribute
+    ? document.querySelector('[data-photo-status]').getAttribute('data-photo-status-kind') : null,
+  gridShown: !!document.querySelector('[data-photo-grid]'),
+}));
+
+// ── 8. the seller adds through the picker ────────────────────────────────
+{
+  console.log('\n8. add through the real picker');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-1');
+
+  const before = await screenState(page);
+  T.check('an empty draft shows the empty line, not a grid',
+    before.emptyShown && !before.gridShown, JSON.stringify(before));
+  T.check('the empty line is the browser-scoped one',
+    /no listing photos are available in this browser/i.test(before.emptyText), before.emptyText);
+  T.check('the browser-local limitation is visible with NO photos present',
+    before.limitVisible && /browser/i.test(before.limitText), before.limitText);
+
+  await pick(page, [pngAt('one.png', 1), pngAt('two.png', 2), pngAt('three.png', 3)]);
+  const after = await screenState(page);
+  const t = await tiles(page);
+  T.check('three tiles render after the pick', t.length === 3, String(t.length));
+  // GUARDED: `every` on an empty array is true, so this assertion passed
+  // vacuously on the first run while the screen was blank. A count check is
+  // part of the condition now, not a separate line that can fail alone.
+  T.check('each tile shows a real thumbnail',
+    t.length === 3 && t.every(x => x.hasImg && !x.gone), JSON.stringify(t));
+  T.check('positions are numbered 1..3', t.map(x => x.pos).join(',') === '1,2,3', t.map(x => x.pos).join(','));
+  T.check('the empty line is gone once photos exist', !after.emptyShown);
+  T.check('the browser-local limitation is STILL visible with photos present',
+    after.limitVisible && /browser/i.test(after.limitText), after.limitText);
+  T.check('the batch line states how many were added', /added 3 photos/i.test(after.status), after.status);
+  T.check('first tile cannot move up, last cannot move down',
+    t.length === 3 && t[0].upDisabled && !t[0].downDisabled
+    && t[2].downDisabled && !t[2].upDisabled, JSON.stringify(t.map(x => [x.upDisabled, x.downDisabled])));
+  await ctx.close();
+}
+
+// ── 9. reorder, and the chosen order after reload ────────────────────────
+{
+  console.log('\n9. reorder through seller controls, verified after reload');
+  const ctx = await ctxWith();
+  let page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-2');
+  await pick(page, [pngAt('r1.png', 11), pngAt('r2.png', 12), pngAt('r3.png', 13)]);
+  const ids = (await tiles(page)).map(x => x.id);
+
+  // Move the LAST photo up one place: 1,2,3 -> 1,3,2
+  await page.click(`[data-photo-item="${ids[2]}"] [data-photo-move="up"]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
+  let order = (await tiles(page)).map(x => x.id);
+  T.check('moving the last photo up swaps it with its neighbour',
+    JSON.stringify(order) === JSON.stringify([ids[0], ids[2], ids[1]]), JSON.stringify(order));
+
+  // And move the first one down: 1,3,2 -> 3,1,2
+  await page.click(`[data-photo-item="${ids[0]}"] [data-photo-move="down"]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 300)));
+  order = (await tiles(page)).map(x => x.id);
+  T.check('moving the first photo down swaps it the other way',
+    JSON.stringify(order) === JSON.stringify([ids[2], ids[0], ids[1]]), JSON.stringify(order));
+
+  /* THE REQUIREMENT: the CHOSEN order after a reload, not just after a
+     repaint. A screen that reordered only its own array would pass everything
+     above and fail here. */
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+  await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+  await openReview(page, 'draft-ui-2');
+  const afterReload = (await tiles(page)).map(x => x.id);
+  T.check('THE CHOSEN ORDER SURVIVES A FULL RELOAD',
+    JSON.stringify(afterReload) === JSON.stringify([ids[2], ids[0], ids[1]]), JSON.stringify(afterReload));
+  T.check('positions renumber 1..3 after reordering — ids are what stayed stable',
+    (await tiles(page)).map(x => x.pos).join(',') === '1,2,3');
+  await ctx.close();
+}
+
+// ── 10. remove through seller controls ───────────────────────────────────
+{
+  console.log('\n10. remove through seller controls');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-3');
+  await pick(page, [pngAt('d1.png', 21), pngAt('d2.png', 22), pngAt('d3.png', 23)]);
+  const ids = (await tiles(page)).map(x => x.id);
+  await page.click(`[data-photo-item="${ids[1]}"] [data-photo-remove]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 300)));
+  const left = await tiles(page);
+  T.check('the removed tile is gone from the screen', left.length === 2);
+  T.check('survivors keep relative order and renumber',
+    JSON.stringify(left.map(x => x.id)) === JSON.stringify([ids[0], ids[2]])
+    && left.map(x => x.pos).join(',') === '1,2', JSON.stringify(left.map(x => [x.id, x.pos])));
+
+  // Removing the last one returns the browser-scoped empty line, not a blank.
+  await page.click(`[data-photo-item="${ids[0]}"] [data-photo-remove]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 250)));
+  await page.click(`[data-photo-item="${ids[2]}"] [data-photo-remove]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 250)));
+  const end = await screenState(page);
+  T.check('removing every photo shows the empty line again',
+    end.emptyShown && /available in this browser/i.test(end.emptyText), end.emptyText);
+  T.check('and the limitation line is still there', end.limitVisible);
+  await ctx.close();
+}
+
+// ── 11. missing photo renders distinctly from an empty collection ────────
+{
+  console.log('\n11. missing placeholder vs empty collection, on screen');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-4');
+  await pick(page, [pngAt('m1.png', 31), pngAt('m2.png', 32), pngAt('m3.png', 33)]);
+  const ids = (await tiles(page)).map(x => x.id);
+  await dropBlob(page, ids[1]);
+  await page.evaluate(() => window._photoUi && (window._photoUi.loaded = false));
+  await page.evaluate(() => window.loadDraftReview('draft-ui-4'));
+  await page.waitForFunction(() => window._photoUi && window._photoUi.loaded === true, { timeout: 15000 });
+  const t = await tiles(page);
+  const st = await screenState(page);
+  T.check('all three tiles still render — the lost one is not dropped', t.length === 3, String(t.length));
+  T.check('the lost photo renders as its OWN element with its own sentence',
+    t[1].gone && /no longer available in this browser/i.test(t[1].goneText), JSON.stringify(t[1]));
+  T.check('the lost photo shows no image', !t[1].hasImg);
+  T.check('THE EMPTY LINE IS NOT SHOWN — a lost photo is not an empty collection',
+    !st.emptyShown && st.gridShown, JSON.stringify(st));
+  T.check('its neighbours still show their thumbnails', t[0].hasImg && t[2].hasImg);
+  T.check('the lost tile is still reorderable and removable',
+    (await page.evaluate((id) => !!document.querySelector(`[data-photo-item="${id}"] [data-photo-remove]`), ids[1])));
+  await ctx.close();
+}
+
+// ── 12. decoding validation and HEIC guidance, through the picker ────────
+{
+  console.log('\n12. validation through the picker');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-5');
+
+  await pick(page, [pngAt('good.png', 41), junkAt('bad.png', 'this is not a png at all, not even close')]);
+  let st = await screenState(page);
+  let t = await tiles(page);
+  T.check('the decodable file was added', t.length === 1 && t[0].hasImg, String(t.length));
+  T.check('the undecodable file was NOT added', t.length === 1);
+  T.check('the status names the rejected file', /bad\.png/.test(st.status), st.status);
+  T.check('the status reports the partial outcome, both halves',
+    /added 1 photo/i.test(st.status) && /not added/i.test(st.status), st.status);
+
+  await pick(page, [junkAt('photo.heic', 'heic-ish bytes')]);
+  st = await screenState(page);
+  T.check('a HEIC file is refused with the iPhone Settings guidance',
+    /most compatible/i.test(st.status), st.status);
+  T.check('the HEIC guidance is the SCAN path wording, not a second copy of it',
+    st.status.includes('Settings › Camera › Formats'), st.status);
+  T.check('a refused batch does not remove what was already there',
+    (await tiles(page)).length === 1);
+  await ctx.close();
+}
+
+// ── 13. the cap is described as ours, not eBay's ─────────────────────────
+{
+  console.log('\n13. partial batch and the cap wording');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-6');
+  const many = Array.from({ length: 14 }, (_, i) => pngAt(`b${i}.png`, 60 + i));
+  await pick(page, many);
+  const st = await screenState(page);
+  const t = await tiles(page);
+  T.check('exactly the cap was stored', t.length === 12, String(t.length));
+  T.check('the status says how many were added', /added 12 photos/i.test(st.status), st.status);
+  T.check('the status says how many were skipped', /2 photos were not added/i.test(st.status), st.status);
+  T.check('the cap is attributed to CARDRESELL', /cardresell keeps up to 12/i.test(st.status), st.status);
+  T.check('the cap is explicitly NOT presented as an eBay requirement',
+    /not an ebay requirement/i.test(st.status), st.status);
+  T.check('the cap line scopes itself to this browser', /in this browser/i.test(st.status), st.status);
+  await ctx.close();
+}
+
+// ── 14. transaction failure on screen ───────────────────────────────────
+{
+  console.log('\n14. transaction failure preserves the displayed collection');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-7');
+  await pick(page, [pngAt('safe1.png', 81), pngAt('safe2.png', 82)]);
+  const kept = (await tiles(page)).map(x => x.id);
+  T.check('two photos are displayed before the failure', kept.length === 2);
+
+  await page.evaluate(() => { window._photoStoreFaults = { abortBeforeCommit: true }; });
+  await pick(page, [pngAt('doomed.png', 83)]);
+  const st = await screenState(page);
+  const t = await tiles(page);
+  T.check('THE PREVIOUSLY DISPLAYED COLLECTION IS INTACT',
+    JSON.stringify(t.map(x => x.id)) === JSON.stringify(kept), JSON.stringify(t.map(x => x.id)));
+  T.check('every kept tile still shows its thumbnail', t.every(x => x.hasImg && !x.gone));
+  T.check('the failure is shown', st.status.length > 0 && st.statusKind === 'error', JSON.stringify(st));
+  /* WAS: `!/added/i && !/saved/i` on the whole status. That failed on correct
+     behaviour -- the frozen failure copy is "...could not be saved..., so they
+     were NOT ADDED", which contains both words as negations. A substring ban
+     cannot tell a claim from its denial. Now it bans the two POSITIVE shapes:
+     the added-count phrasing the success path emits, and an affirmative save
+     claim. */
+  T.check('NO saved confirmation appears beside the failure',
+    !/Added \d+ photo/i.test(st.status)
+    && !/\bphotos? (?:were|was|are|is) saved\b/i.test(st.status)
+    && !/\bsaved to this browser\b/i.test(st.status), st.status);
+  T.check('and the failure copy states the photos were NOT added',
+    /were not added/i.test(st.status), st.status);
+  T.check('the failure does not guess a cause',
+    !/private|incognito|blocked|probably|likely/i.test(st.status), st.status);
+  T.check('the empty line is not shown — the collection was not cleared', !st.emptyShown);
+
+  await page.evaluate(() => { window._photoStoreFaults = null; });
+  await pick(page, [pngAt('after.png', 84)]);
+  T.check('the screen recovers and accepts the next add',
+    (await tiles(page)).length === 3, String((await tiles(page)).length));
+  const rec = await screenState(page);
+  T.check('the error line is replaced, not appended to',
+    rec.statusKind === 'ok' && /added 1 photo/i.test(rec.status), JSON.stringify(rec));
+  await ctx.close();
+}
+
+// ── 15. no upload, through the picker and every UI action ───────────────
+{
+  console.log('\n15. no upload through the actual UI actions');
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, 'draft-ui-8');
+  await page.evaluate(() => new Promise(r => setTimeout(r, 800)));
+  /* Scoped AFTER boot and the draft read, and covering every mutation the
+     seller can perform — add, reorder, remove. A store that issues no
+     requests says nothing about what its caller sends. */
+  const sent = [];
+  page.on('request', (req) => {
+    const m = req.method();
+    if (m === 'POST' || m === 'PUT' || m === 'PATCH') {
+      let d = ''; try { d = req.postData() || ''; } catch (_) { d = '[unreadable]'; }
+      sent.push({ url: req.url(), method: m, len: d.length, head: d.slice(0, 120) });
+    }
+  });
+  await pick(page, [pngAt('u1.png', 91), pngAt('u2.png', 92)]);
+  const ids = (await tiles(page)).map(x => x.id);
+  await page.click(`[data-photo-item="${ids[1]}"] [data-photo-move="up"]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 300)));
+  await page.click(`[data-photo-item="${ids[0]}"] [data-photo-remove]`);
+  await page.evaluate(() => new Promise(r => setTimeout(r, 600)));
+
+  T.check('add, reorder and remove sent NO request with a body',
+    sent.every(x => x.len === 0), JSON.stringify(sent));
+  T.check('no request went to an upload-shaped endpoint',
+    !sent.some(x => /upload|photo|image|media|blob/i.test(x.url)), JSON.stringify(sent));
+  T.check('no request body carries a picked filename',
+    !sent.some(x => /u1\.png|u2\.png/.test(x.head)), JSON.stringify(sent));
+  T.check('no request body carries base64 image bytes',
+    !sent.some(x => /iVBORw0KGgo|data:image/.test(x.head)), JSON.stringify(sent));
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 T.done();

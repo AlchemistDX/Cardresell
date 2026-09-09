@@ -70,3 +70,32 @@ The cheap version is a per-suite expected-count floor, asserted by the suite
 itself, so a truncated run is a failure rather than a shorter success. Not
 built. Recorded here so the next interruption is caught by a check instead of by
 luck.
+
+
+---
+
+## 2026-09-08 — a suite had drifted out of the runner, found incidentally again
+
+Registering the D7 photo suite made `tests/test-registry.mjs` go red on a file
+that is not the D7 one: **`tests/decision-restatements.mjs`**, added at
+`d0e9665`, present on disk, never invoked by `tests/run-all.sh` and never
+declared excluded. `git log -S` over the runner shows it was never referenced
+there at any point, so this is not a regression — it never landed. It is the
+same failure class the exclusions block was written to stop, and it survived
+because nothing forced anyone to look until an unrelated slot was added.
+
+Both files are now accounted for, and **in different ways, deliberately**:
+
+- `decision-restatements.mjs` is now **slot 48**, an ordinary offline slot. It
+  needs nothing the runner does not have.
+- `listing-photos.mjs` is a **declared exclusion**, on the
+  `flip-completeness-e2e.mjs` precedent — Playwright and a local server. Its
+  results live in `RELEASE_VALIDATION_QUEUE.md` as RV-7.
+
+**Not fixed by this.** The detection was still incidental. The registry only
+answers "is every file accounted for", asked whenever someone happens to run
+it; nothing runs it on a change to `tests/`. And the per-suite assertion-count
+floor recorded in the previous entry is **still not built** — a suite that
+crashes partway still reads as a pass to anything checking only the exit code.
+`decision-restatements.mjs` was 33/33 when run by hand at this checkpoint; that
+is a hand-run number, not a gate.
