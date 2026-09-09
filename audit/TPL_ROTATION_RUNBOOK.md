@@ -221,7 +221,24 @@ the value has left the owner's control regardless of intent. That is the whole
 class of failure CH-3 exists to close, and it recurred in the middle of closing
 it.
 
-**Which key it belongs to is unestablished and decides the response.** Do not
+**RESOLVED, 2026-09-09: the value was old Key #518**, confirmed by the owner.
+That is the **already-exposed** key — the one hard-coded into `index.html` and
+served to every anonymous visitor, which is CH-3's original disclosure. So the
+paste **adds no new exposure in kind**, the replacement key remains
+unexposed, and **the plan is unchanged**: #518 stays active until the
+replacement verifies, then is revoked at step 11. No third key is needed and
+nothing is revoked early.
+
+It does sharpen one thing already in the plan: #518's value is now in a second
+retained location, so **step 11 stops being merely tidy bookkeeping**. It is the
+step that actually ends this credential's life. It was always last for a good
+reason; it should not be allowed to drift.
+
+The original branching analysis is retained below, because the reasoning is
+what made the resolution safe rather than lucky — the response was determined
+before the answer was known.
+
+**Which key it belongs to was unestablished and decided the response.** Do not
 revoke anything until it is identified, because the two cases invert:
 
 | If the value is | Then | Response |
