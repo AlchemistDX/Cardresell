@@ -243,10 +243,36 @@ inverts the response:
   snapshot — so it can be revoked with **zero production impact**.
 - **#518 stays active.** It remains the key serving production and is still not
   revoked until a replacement verifies.
-- Required: a **third** key, another Vercel delete-and-add, then revoke the
-  exposed replacement. Slots permit 5; 2 are active.
-- The step-A baseline must be **re-taken for the third key**. The readings below
-  belong to a key that is being discarded.
+- I recommended a **third** key, another delete-and-add, then revoking the
+  exposed replacement.
+
+**OWNER DECISION, 2026-09-09: keep `cardresell production replacement`.** No
+third key. Recorded as the owner's call, not as my recommendation, and taken
+as final.
+
+**The risk that decision accepts, stated plainly and not re-argued.** The
+value sits in a retained conversation transcript and in an uploaded screenshot.
+It was **not** published, not committed, and not served to visitors. The blast
+radius is **provider quota only** — 10,000/day on Pro — not customer data, not
+payments, not the site. Access to the transcript already implies account access,
+and per Q-CH3-15 account access retrieves every key value anyway via the
+dashboard's `Copy` button, revoked keys included. So the marginal exposure is
+small, and the judgement is defensible.
+
+**What this changes in the record, and it is only wording.** The rotation still
+removes two real exposures: a key hard-coded into `index.html` and served to
+**every anonymous visitor**, and a key stored `plain` and retrievable by any
+project-token holder. Both are large reductions. What it does **not** produce is
+an unexposed credential.
+
+So **CH-3's closure must be worded as "the public and plain-storage exposures
+are closed"** — never as "the TPL credential is unexposed." The second sentence
+would be false, and stamping it is the one thing this decision does not license.
+
+**The step-A baseline stands as recorded:** name `cardresell production
+replacement`, created Sep 9 2026 11:10 AM, **`Last used: Never`**, counter
+**0 / 10,000**. `Never` remains the ideal baseline, so verification is unchanged
+and Q-CH3-12 stays dissolved.
 
 **Why the branch was written before the answer was known.** Had the response
 been decided after the identification, an incorrect identification would have
