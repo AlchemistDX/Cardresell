@@ -354,6 +354,48 @@ function tplOutcomeHtml(res, emptyHtml) {
   return emptyHtml;
 }
 
+/* ── When a FALLBACK provider does not answer at all ────────────────────────
+   RV-13 item 2. Three callers did `const r = await fetch(url)` bare, so a
+   provider that never answered rejected out of the caller and the
+   unavailability panel above never rendered — the promised recoverable state
+   was unreachable precisely when it was needed. Two of them additionally
+   treated any non-ok status as "no such card", which is the same conflation
+   RV-13 fixed one layer up.
+
+   ONE implementation of "the provider might not answer" (Rule 1), returning a
+   discriminated result instead of throwing, plus one adjudicator that decides
+   whether the seller is looking at an absence or an incomplete search.        */
+async function fetchFallbackJson(url, opts) {
+  try {
+    const r = await fetch(url, opts);
+    let json = null;
+    try { json = await r.json(); } catch (_) { json = null; }
+    return { reached: true, status: r.status, resOk: r.ok, json };
+  } catch (e) {
+    console.warn('[fallback] provider did not answer:', url, e && e.message);
+    return { reached: false, status: 0, resOk: false, json: null };
+  }
+}
+
+/* `notFound` lists the statuses this provider uses to mean "no such card" —
+   Scryfall uses 404, YGOProDeck answers 400 for an empty name search. Anything
+   else non-ok is the provider failing, not the card being absent. A provider
+   that answered normally hands the decision back to the TPL outcome, so a
+   genuine empty search still reads as a genuine empty search. */
+function fallbackOutcome(tplRes, fb, notFound) {
+  // A fallback that COMPLETED returns ok:true and nothing else — deliberately
+  // not tplRes. Returning tplRes here was a real regression, caught by the
+  // suite's own preserve-the-fallback case: with TPL rate-limited and
+  // PokemonTCG.io answering normally, it panelled over a working result set,
+  // which is exactly the failure this whole item exists to prevent. The
+  // caller's own give-up point still consults tplRes to decide whether an
+  // empty result may be called an absence; that decision does not belong here.
+  if (fb.reached && fb.resOk) return { ok:true, cards:null };
+  if (!fb.reached) return { ok:false, cards:null, reason:'network' };
+  if ((notFound || [404]).indexOf(fb.status) !== -1) return { ok:true, cards:null };
+  return { ok:false, cards:null, reason:'unavailable' };
+}
+
 /* The TPL raw-price contract, named and checked in one place.
 
    https://tcgpricelookup.com/faq, retrieved 2026-09-08, verbatim:
@@ -1205,9 +1247,16 @@ async function searchPokemon(q) {
 
   // Fallback: PokemonTCG.io
   const url = `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(q)}*&pageSize=250&orderBy=set.releaseDate&select=id,name,set,number,rarity,images,tcgplayer,supertype,subtypes`;
-  const r = await fetch(url);
-  const data = await r.json();
+  const _fb = await fetchFallbackJson(url);
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-22 [F4]
+  const _fbRes = fallbackOutcome(_tplRes, _fb, [404]);
+  if (_fbRes.ok === false) {
+    // Neither provider completed. Saying "no cards found" here would assert an
+    // absence from a search that did not run. RV-13 item 2.
+    dropList.innerHTML = tplOutcomeHtml(_fbRes, '');
+    return;
+  }
+  const data = _fb.json || {};
   let cards = data.data || [];
 
   // Sort: exact match first, then by rarity (rarest first), then by set date desc
@@ -1497,13 +1546,23 @@ async function searchMTG(q) {
 
   // Fallback: Scryfall
   const url = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=prints&order=usd&dir=desc`;
-  const r = await fetch(url);
+  const _fb = await fetchFallbackJson(url);
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
-  if (!r.ok) {
-    if (r.status === 404) { dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Magic cards found. Try a different name.</div>'); return; }
-    throw new Error(`Scryfall ${r.status}`);
+  // Was: an uncaught rejection when Scryfall never answered, and
+  // `throw new Error('Scryfall ' + status)` for any non-404. Both meant the
+  // unavailability panel could not render. RV-13 item 2.
+  const _fbRes = fallbackOutcome(_tplRes, _fb, [404]);
+  if (_fbRes.ok === false) {
+    dropList.innerHTML = tplOutcomeHtml(_fbRes, '');
+    return;
   }
-  const data = await r.json();
+  if (_fb.status === 404) {
+    // Scryfall genuinely has no such card. TPL still decides whether we may
+    // call that an absence: if TPL was unavailable, the search was incomplete.
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Magic cards found. Try a different name.</div>');
+    return;
+  }
+  const data = _fb.json || {};
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   const cards = (data.data || []).slice(0, 20);
 
@@ -1766,13 +1825,22 @@ async function searchYugioh(q) {
 
   // Fallback: YGOProDeck
   const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}&num=20&offset=0`;
-  const r = await fetch(url);
+  const _fb = await fetchFallbackJson(url);
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
-  if (!r.ok) {
+  // YGOProDeck answers 400 when a name matches nothing, so 400 IS "no such
+  // card" for this provider and only for it. Every other non-ok status was
+  // previously rendered as "no cards found" — a provider failure told to the
+  // seller as an absence. RV-13 item 2.
+  const _fbRes = fallbackOutcome(_tplRes, _fb, [400, 404]);
+  if (_fbRes.ok === false) {
+    dropList.innerHTML = tplOutcomeHtml(_fbRes, '');
+    return;
+  }
+  if (!_fb.resOk) {
     dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>');
     return;
   }
-  const data = await r.json();
+  const data = _fb.json || {};
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   const cards = (data.data || []).slice(0, 20);
 
