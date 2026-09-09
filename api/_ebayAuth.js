@@ -74,13 +74,20 @@ export function cleanCredential(raw) {
 export function describeCredential(name, raw) {
   const cleaned = cleanCredential(raw);
   const original = raw == null ? '' : String(raw);
+  // A prefix is only safe for a value that is not itself a secret. App IDs are
+  // public. Cert IDs, tokens and keys are not, and eight characters of a secret
+  // in a Vercel log — or in an audit file pasted to a reviewer — is still eight
+  // characters of a secret. Capping the length was not the same as withholding.
+  // Withheld EXPLICITLY via prefixWithheld: a silently empty prefix would read
+  // as "the value was empty", which is a different and misleading fact.
+  const isSecret = /CERT|SECRET|TOKEN|PASSWORD|KEY/i.test(name);
   return {
     name,
     present: cleaned.length > 0,
     length: cleaned.length,
     wasDirty: original !== cleaned,
-    // First 8 chars only — App IDs are not secret, Cert IDs are, so cap hard.
-    prefix: cleaned.slice(0, 8),
+    prefix: isSecret ? '' : cleaned.slice(0, 8),
+    prefixWithheld: isSecret,
   };
 }
 

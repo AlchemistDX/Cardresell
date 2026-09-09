@@ -96,6 +96,25 @@ check('describeCredential never returns the full secret',
       d.prefix.length <= 8 && !JSON.stringify(d).includes('1111-2222-3333'),
       'error paths get logged; a Cert ID must not land in logs');
 
+// Added 2026-09-09. Capping a secret's prefix at 8 characters was not the same
+// as withholding it: the rotation runbook has the operator paste harness output
+// into an audit file two reviewers read, and 8 characters of a Cert ID is 8
+// characters of a Cert ID. Discovered by running the new secret-input runner,
+// which printed `"prefix":"appid"` from this very diagnostic.
+check('a secret-bearing name yields NO fragment at all',
+      d.prefix === '' && d.prefixWithheld === true,
+      'a capped fragment of a Cert ID still travels into logs and audit files');
+check('withholding is explicit, not a silently empty string',
+      Object.prototype.hasOwnProperty.call(d, 'prefixWithheld'),
+      'an empty prefix with no flag reads as "the value was empty" \u2014 a different fact');
+
+const pub = describeCredential('EBAY_APP_ID', 'CardRese-cardsell-PRD-abcdef123-45678901');
+check('a non-secret name still gets its prefix for diagnosis',
+      pub.prefix === 'CardRese' && pub.prefixWithheld === false,
+      'App IDs are public; withholding them would cost diagnosability for nothing');
+check('the token name is treated as secret too',
+      describeCredential('EBAY_VERIFICATION_TOKEN', 'abcdefghijkl').prefix === '');
+
 // ── 3. Missing-credential handling ────────────────────────────────────────
 console.log('\nmissing credentials');
 

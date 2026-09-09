@@ -208,10 +208,12 @@ the exact defect measured on 2026-09-08.
 | 3 | Generate a **fresh verification token** — a new random value, **not** the repo literal, **not** the literal with the newline removed. | operator's generator |
 | 4 | Set `EBAY_CERT_ID` and `EBAY_VERIFICATION_TOKEN`, **Production only**, **no whitespace**. Preview holds no eBay credential and must not gain one. | Vercel → Environment Variables |
 | 5 | **Redeploy the exact live commit `9aaf326e7`.** Verify the new deployment reports **that commit**, not a branch head. | Vercel → Deployments → `dpl_AuwggY9Y…` → Redeploy |
-| 6 | Wait for READY. The endpoint now answers with the new token. | — |
-| 7 | **Save the new verification token in eBay's portal** and let its challenge run. Record the portal's result. | eBay portal |
+| 6 | Wait for READY. **READY is not proof the replacement token is active** — it means the build finished. | — |
+| 6a | **Verify the new deployment's commit is `9aaf326e7`**, not a branch head. | dashboard, or ask me — read-only, no secret |
+| 6b | **Verify the endpoint hashes the new token: `node tools/verify-challenge.mjs`.** Hidden prompt, nothing echoed or stored. **Must PASS before step 7.** | operator shell |
+| 7 | **Only after 6a and 6b pass:** save the new verification token in eBay's portal and let its challenge run. Record the portal's result. | eBay portal |
 | 8 | Confirm the **old Cert ID is retired**, and check what happens to **already-issued tokens** — secret rotation does not necessarily invalidate live ones. | eBay portal |
-| 9 | `EBAY_VERIFICATION_TOKEN=<new> EBAY_APP_ID=… EBAY_CERT_ID=… EBAY_LIVE=1 node tests/ebay-live.mjs` — from a checkout, exported for the run, not persisted. | operator shell |
+| 9 | **`bash tools/run-ebay-live.sh`** — hidden prompts, no secret in argv, history or logs. Do **not** use the inline `VAR=… node …` form. | operator shell |
 | 10 | **Record per §1**: failures by name, every warning, every skipped branch, deployment id, commit, timestamp, verbatim summary line. | audit file |
 | 11 | Adjudicate any changed behaviour explicitly (§1). | — |
 
@@ -250,6 +252,41 @@ deletion precedes completed verification.
 
 ---
 
+## 6a. Two leaks found while building the runbook's own tooling
+
+Both found by *using* the tools rather than reading them, and both fixed.
+
+**The harness printed a credential fragment.** A test run through the new secret
+runner emitted `"prefix":"appid"` from `describeCredential`
+(`api/_ebayAuth.js:74`). It capped secrets at 8 characters — but capping is not
+withholding, and the runbook has the operator paste harness output into an audit
+file two reviewers read. Eight characters of a Cert ID is eight characters of a
+Cert ID. Now withheld entirely for any name matching
+`CERT|SECRET|TOKEN|PASSWORD|KEY`, and withheld **explicitly** via
+`prefixWithheld: true` — a silently empty prefix would read as "the value was
+empty", a different and misleading fact. App ID prefixes are kept: they are
+public and dropping them costs diagnosability for nothing. Four assertions
+added; `tests/ebay-auth-offline.mjs` → **57 passed, 0 failed**. Only the test and
+the throw path in `getEbayCredentials` consume this function, so the change is
+contained. It is outgoing work, so it cannot reach the maintenance deployment —
+but it **does** take effect for the window's harness run, which executes from the
+checkout.
+
+**My own whitespace guard was dead code.** `read -rs` without `IFS=` strips
+leading and trailing whitespace before assignment, so the check that claimed to
+reject a padded paste could never fire — a trailing space was silently accepted
+in testing. Fixed to `IFS= read -rs`; the guard now fires. Worth stating plainly:
+the *safety* was never lost (a stripped value tested against a padded deployment
+still fails, loudly), but the guard advertised a protection it did not provide.
+
+**The challenge verifier is tested against real production state.** Fed a wrong
+value it reports no known malformed shape; fed the repo literal it reports
+"hashing your token plus a trailing newline" — matching the defect measured
+independently on 2026-09-08. Both branches exercised, so it is not being handed
+over untested.
+
+---
+
 ## 7. New hygiene finding — disclosure
 
 While reading the project configuration to answer §4, the project detail
@@ -261,6 +298,24 @@ endpoint returned **environment variable values in cleartext for rows stored as
 It was not recorded in any file, and it is not reproduced here or anywhere in the
 repo. But it entered this session, so treat it as exposed rather than assume
 otherwise.
+
+**What it authenticates — established from the repo, without printing it again.**
+`CARDSELL_TPL_KEY` is the **paid TCGPriceLookup API key**: `api/tpl-proxy.js:18`
+sends it as `X-API-Key` to `https://api.tcgpricelookup.com`. The whole point of
+that proxy is to keep the paid key off the client — `js/config.20ebe911.js:4`
+ships the sentinel `'__PROXIED__'` instead of a value. So the exposure is a
+billable third-party key, not an internal identifier: the risk is quota and
+billing abuse.
+
+**Storage type alone would not invalidate an exposed key. It must be rotated at
+TCGPriceLookup**, and re-created as encrypted, in that order of importance.
+
+**Separate pre-existing observation** (not caused by the exposure):
+`api/tpl-proxy.js:12` sets `Access-Control-Allow-Origin: *` with no referer or
+rate check, so anyone can spend our TPL quota through the proxy. The path
+allow-list bounds it to three card-lookup endpoints, so it is quota abuse rather
+than arbitrary API access. Filed with CH-3 since both concern the same key's
+cost exposure.
 
 **CH-3:** `CARDSELL_TPL_KEY` is stored as `plain` rather than `encrypted` and
 targets `production,preview,development`. If it is a live API key it should be
@@ -286,4 +341,21 @@ release registry 49, RV-1…RV-9, CH-1…CH-3, 4 duplicate `codes` helpers,
 T2.1–T2.8, SI-1, A-2, net is item-price-only, two reachability sweeps unrun, no
 Safari or iOS in CI, no per-suite assertion-count floor.
 
-**Status: checklist complete and awaiting authorization. Nothing executed.**
+## 9. Stop conditions
+
+Written down so they are decided in advance rather than in the moment.
+
+- **§5 step 0 is a gate, not a formality.** If the containment control's scope
+  or its effect on the manual redeploy is unclear after reading the dashboard,
+  **stop before changing any credential.** An unclear containment state plus a
+  changed credential is the worst of both: the old value is gone and the blast
+  radius is unknown.
+- **Step 6b fails → stop.** Do not save the token in eBay's portal. Fix the
+  Vercel value or the deployment, redeploy, re-run 6b.
+- **Any required check in step 9 fails → stop.** No push, no recovery-ref
+  deletion, and classify the failure before deciding whether to roll back.
+- **Rolling back is the expected response to a failed gate**, not a last resort.
+
+**Status: checklist complete and awaiting authorization. Nothing executed — no
+credential written, nothing pushed, nothing deployed, Cert ID not rotated,
+`refs/recovery/pre-scrub-c2366b2` intact.**
