@@ -981,7 +981,25 @@ async function autoRunExampleCard() {
   try {
     if (activeGame !== 'pokemon') { try { onGameSelectChange('pokemon'); } catch(_){} }
     const si = document.getElementById('searchInput');
+    // 2026-09-09 [RV-13]: if anything is already in the box, the seller got
+    // there first — a demo that clobbers real input is worse than no demo.
+    // This is the same rule as the poll guard below, applied at the write.
+    if (si && si.value.trim() !== '') return 'abandoned';
     if (si) si.value = 'Charizard';
+    // 2026-09-09 [RV-13]: the poll below runs for up to nine seconds, and a
+    // seller who starts typing inside that window used to have a printing
+    // chosen for them: the poll found the FIRST row of THEIR results and
+    // clicked it. Once they touch the box the demo is over — it stops before
+    // the click, and it never restores its own text.
+    let _sellerTyped = false;
+    const _yield = () => { _sellerTyped = true; };
+    if (si) {
+      for (const ev of ['input', 'keydown', 'paste']) {
+        si.addEventListener(ev, _yield, { once: true });
+      }
+    }
+    const _demoAbandoned = () =>
+      _sellerTyped || (si && si.value !== 'Charizard');
     try { window.trackEvent?.('example_card_auto', { name: 'Charizard' }); } catch(_){}
     if (typeof doSearch !== 'function') return false;
     doSearch('Charizard');
@@ -991,8 +1009,13 @@ async function autoRunExampleCard() {
     const dl = document.getElementById('dropList');
     if (!dl) return false;
     for (let waited = 0; waited < 9000; waited += 150) {
+      // 'abandoned' rather than false: false means the demo FAILED and the
+      // caller pulses the "Try Charizard" CTA. A seller who is already typing
+      // does not need to be pulsed at.
+      if (_demoAbandoned()) return 'abandoned';   // the seller is driving now
       const first = dl.querySelector('.drop-item');
       if (first) {
+        if (_demoAbandoned()) return 'abandoned'; // re-check: rows may be THEIRS
         // A real click so the existing handler runs: it builds the card via
         // cardFactory, calls loadCardUI, and auto-fills the price override.
         first.click();
@@ -14371,6 +14394,13 @@ async function _loadScannedCardExactImpl(pending) {
   // real price so we can skip the miss panel and avoid double-panels.
   let _synthCardLoadedWithPrice = false;
 
+  // 2026-09-09 [RV-13]: the panel below has to be able to tell "we looked and
+  // this card has no live prices" apart from "we could not complete the
+  // lookup". Without this the panel says the same sentence either way while
+  // the dropdown behind it says something more precise, and the seller is left
+  // to reconcile the two. Holds the LAST TPL outcome the scan path saw.
+  let _scanTplOutcome = null;
+
   // 2026-08-16 FAST PATH: if the server-side scan endpoint already resolved
   // this card in pokemontcg.io via set_code + number, hit /v2/cards/<id>
   // directly — no fuzzy matching, no risk of picking the wrong card.
@@ -14696,6 +14726,7 @@ async function _loadScannedCardExactImpl(pending) {
     if (window.tplApiKey) {
       try {
         const _tplScanRes = await searchWithTPL(cleanName, 'pokemon');
+        _scanTplOutcome = _tplScanRes;
         const tplHits = _tplScanRes.cards;
         if (tplHits && tplHits.length) {
           // Same match strategy: exact number → partial number → rarity+set
@@ -14933,7 +14964,7 @@ async function _loadScannedCardExactImpl(pending) {
       }
     }
   } catch(e) { /* enrichment is best-effort */ }
-  _renderScanMissPanel(pending);
+  _renderScanMissPanel(pending, _scanTplOutcome);
   _logScanMiss(pending);
   // Bug fix 2026-08-13: After a scan misses, the main card area still
   // showed "No card selected" until the user manually pressed Enter on the
@@ -14953,8 +14984,19 @@ async function _loadScannedCardExactImpl(pending) {
 // search buttons for eBay and TCGplayer + an "adjust name" affordance.
 // Injects into the lookup view above the search input, replacing any
 // previous scan-miss panel so repeated scans don't stack.
-function _renderScanMissPanel(pending) {
+function _renderScanMissPanel(pending, tplRes) {
   const { name, number, setName, rarity, imageUrl } = pending || {};
+  // 2026-09-09 [RV-13]: an incomplete lookup is not an absent price. The
+  // dropdown behind this panel already discriminates; the panel used to say
+  // the same sentence either way, leaving the seller to reconcile the two.
+  // Same reason vocabulary as tplOutcomeHtml — one vocabulary, not a second.
+  const _tplFailed = !!(tplRes && tplRes.ok === false);
+  const _tplReason = _tplFailed ? (tplRes.reason || 'unavailable') : null;
+  const _headline = _tplFailed ? 'Price lookup unavailable' : 'Live pricing unavailable';
+  const _explain = _tplFailed
+    ? (TPL_UNAVAILABLE_MSG[_tplReason] || TPL_UNAVAILABLE_MSG.unavailable) +
+      ' This card loaded, so nothing is lost — we just could not finish checking its price. The sold-comp links below still work.'
+    : "This card loaded but we don't have live market prices yet — you can still track it in your Collection and check sold comps on eBay/TCGplayer below.";
   const displayName = name || 'Unknown card';
   const displayNumber = number ? `#${number}` : '';
   const displaySet = setName || '';
@@ -15014,13 +15056,13 @@ function _renderScanMissPanel(pending) {
 
   panel.innerHTML = `
     <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;font-weight:700;color:var(--gold,#f2c14e);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem">
-      <span>Live pricing unavailable</span>
+      <span>${esc(_headline)}</span>
     </div>
     <div style="margin-bottom:.9rem">
       <div style="font-size:1rem;font-weight:800;color:var(--text,#fff);line-height:1.25;letter-spacing:-.01em">${esc(displayName)} ${esc(displayNumber)}</div>
       ${displaySet ? `<div style="font-size:.78rem;color:var(--text-muted,#9a9a9a);margin-top:.2rem">${esc(displaySet)}</div>` : ''}
       ${displayRarity ? `<div style="font-size:.72rem;color:var(--text-muted,#9a9a9a);margin-top:.15rem">${esc(displayRarity)}</div>` : ''}
-      <div style="font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.4">This card loaded but we don't have live market prices yet — you can still track it in your Collection and check sold comps on eBay/TCGplayer below.</div>
+      <div style="font-size:.72rem;color:rgba(255,255,255,.55);margin-top:.5rem;line-height:1.4" data-scan-price-state="${_tplFailed ? 'unavailable' : 'no_price'}"${_tplFailed ? ` data-tpl-reason="${_tplReason}"` : ''}>${esc(_explain)}</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:.5rem">
       <button type="button" onclick="_scanMissAddToCollection()" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1rem;background:var(--gold,#f2c14e);color:#000;border:none;border-radius:10px;font-size:.88rem;font-weight:800;cursor:pointer">➕ Add to My Collection</button>
@@ -20375,6 +20417,8 @@ window.addEventListener('load', () => {
       // Give the game selector and search wiring a beat to attach, then run.
       setTimeout(() => {
         autoRunExampleCard().then((ok) => {
+          // Any truthy result means no fallback prompt is wanted: `true` ran
+          // the demo, 'abandoned' means the seller took over mid-poll.
           if (!ok) {
             // Fall back to the old attention pulse so a failed auto-run still
             // leaves an obvious next action instead of a dead landing page.

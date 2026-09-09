@@ -164,6 +164,54 @@ async function mountTpl(p, act) {
   await p.route(TPL_RE, async (route) => { tplHits++; await act(route); });
 }
 
+/**
+ * A proxy mock that charges allowance where api/_tplBudget.js charges it.
+ *
+ * Counting requests to /api/tpl-proxy answers the wrong question. R4 reads its
+ * cache FIRST (`reserveUpstream`, api/_tplBudget.js:117-127) and returns
+ * CACHE_HIT before it touches either counter — so a cache hit increments
+ * neither the per-IP counter nor the aggregate allowance, and costs nothing at
+ * the provider. Only a MISS reaches `store.incr` and only a miss can become a
+ * paid call.
+ *
+ * So this mock mirrors the real key (`cacheKey`, :78 — contracted params sorted,
+ * so param order does not fork an entry) and reports three numbers separately:
+ *   requests  — what hit the endpoint
+ *   cacheHits — served from cache; not charged, not per-IP counted
+ *   charged   — misses; what the per-IP cap governs and what can cost money
+ */
+function makeChargingProxy(act) {
+  const cache = new Map();
+  const m = { requests: 0, cacheHits: 0, charged: 0, keys: [], act };
+  m.handler = async (route) => {
+    m.requests++;
+    const u = new URL(route.request().url());
+    const path = u.searchParams.get('path') || '';
+    const parts = [...u.searchParams.entries()]
+      .filter(([k]) => k !== 'path')
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`);
+    const key = `tpl:${path}${parts.length ? '?' + parts.join('&') : ''}`;
+    if (cache.has(key)) {          // CACHE_HIT — never spending
+      m.cacheHits++;
+      return route.fulfill(cache.get(key));
+    }
+    m.charged++;                   // a miss: reserved, per-IP counted, payable
+    m.keys.push(key);
+    let captured = null;
+    await m.act({
+      request: () => route.request(),
+      fulfill: (r) => { captured = r; return route.fulfill(r); },
+      abort: (...a) => route.abort(...a),
+    });
+    // Successes only, as api/tpl-proxy.js:187 does — failures are not cached.
+    if (captured && (captured.status === undefined || captured.status === 200)) {
+      cache.set(key, captured);
+    }
+  };
+  return m;
+}
+
 async function dropHtml(p) {
   return p.evaluate(() => document.getElementById('dropList')?.innerHTML || '');
 }
@@ -412,6 +460,13 @@ try {
         const el = document.getElementById('scanMissPanel');
         return el ? el.innerText.replace(/\s+/g, ' ').trim() : null;
       }),
+      // The panel's own discrimination, read off the element rather than
+      // inferred from copy.
+      panelState: await sp.evaluate(() => {
+        const el = document.querySelector('#scanMissPanel [data-scan-price-state]');
+        return el ? { state: el.getAttribute('data-scan-price-state'),
+                      reason: el.getAttribute('data-tpl-reason') } : null;
+      }),
       drop: await dropHtml(sp),
       value: await inputValue(sp),
     };
@@ -440,15 +495,113 @@ try {
       T.check(`G/scan-revisit/${cond.label}: and no surface tells the seller the card was not found`,
         !NOT_FOUND_WORDING.test(dropText), surface);
     }
-    T.check(`G/scan-revisit/${cond.label}: the scan notice reads as recoverable, not as an absence`,
-      !!g.missPanel && /live pricing unavailable/i.test(g.missPanel),
-      g.missPanel ? JSON.stringify(g.missPanel.slice(0, 140)) : 'no panel rendered');
+    // The panel itself must say which of the two situations this is. Before
+    // this change it read "Live pricing unavailable" either way, and only the
+    // dropdown behind it discriminated — leaving the seller to reconcile a
+    // generic panel against a more precise one.
+    const ps = g.panelState;
+    if (cond.label === '200 with zero results') {
+      T.check('G/scan-revisit/200 with zero results: the panel says we looked and there is no live price',
+        !!ps && ps.state === 'no_price' && ps.reason === null,
+        JSON.stringify(ps) + ' :: ' + (g.missPanel || '').slice(0, 120));
+      T.check('G/scan-revisit/200 with zero results: and it does NOT claim the lookup failed',
+        !!g.missPanel && !/could not finish checking/i.test(g.missPanel),
+        (g.missPanel || '').slice(0, 140));
+    } else {
+      T.check(`G/scan-revisit/${cond.label}: the panel says the LOOKUP failed, and names the reason`,
+        !!ps && ps.state === 'unavailable' && ps.reason === cond.key,
+        JSON.stringify(ps) + ' :: ' + (g.missPanel || '').slice(0, 120));
+      T.check(`G/scan-revisit/${cond.label}: the panel reassures that the card itself is not lost`,
+        !!g.missPanel && /nothing is lost/i.test(g.missPanel),
+        (g.missPanel || '').slice(0, 160));
+      T.check(`G/scan-revisit/${cond.label}: panel and dropdown now agree on the reason`,
+        !!ps && ps.reason === reason, `panel=${ps && ps.reason}, dropdown=${reason}`);
+    }
   }
   T.check(`G: one revisit of one card issued ${revisitHits} proxy request(s)`, true,
     'restore hydrates twice (the panel is cleared and re-hydrated), and each hydration runs the scan path plus its doSearch');
   T.check('G: no uncaught rejection escaped the scan path in any condition',
     scanErrors.length === 0, JSON.stringify(scanErrors.slice(0, 3)));
 
+
+  /* ── H. the seller types BEFORE the startup demo finishes ─────────────────
+     Waiting for the demo to settle keeps the other cases honest, but it proves
+     nothing about a seller who starts typing straight away. The demo writes
+     "Charizard" into the box and then polls up to NINE SECONDS for a dropdown
+     row to click. This case opens that window deliberately: the proxy answers
+     slowly, and the seller starts typing while the demo is still polling. */
+
+  const hCtx = await browser.newContext();
+  const hp = await hCtx.newPage();
+  const hErrors = [];
+  hp.on('pageerror', e => hErrors.push(String(e && e.message || e)));
+  await isolate(hp);
+  // NOTE: no cs_landing_seen and no saved card, so the demo DOES run.
+  const slow = async (r) => {
+    const q = (new URL(r.request().url()).searchParams.get('q') || '').toLowerCase();
+    await new Promise(res => setTimeout(res, 900));   // hold the poll window open
+    const name = q.includes('pikachu') ? 'Pikachu' : 'Charizard';
+    return r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ data: [
+        { id: name + '1', name: name + ' ex', number: '001', set: { name: 'Test Set A' },
+          rarity: 'Double Rare', image_url: '', images: {},
+          prices: { raw: { near_mint: { tcgplayer: { market: 10 } } } } },
+        { id: name + '2', name: name + ' V', number: '002', set: { name: 'Test Set B' },
+          rarity: 'Ultra Rare', image_url: '', images: {},
+          prices: { raw: { near_mint: { tcgplayer: { market: 20 } } } } },
+      ], total: 2, limit: 100, offset: 0 }) });
+  };
+  await mountTpl(hp, slow);
+  await hp.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+  await hp.waitForFunction(() => typeof window.searchWithTPL === 'function', { timeout: 15000 });
+  // The demo is scheduled shortly after boot and is now mid-poll. Type over it.
+  // Wait for the demo's own write rather than guessing at its timer, then type
+  // over it while its poll is still open.
+  await hp.waitForFunction(
+    () => /charizard/i.test(document.getElementById('searchInput')?.value || ''),
+    { timeout: 8000 });
+  const demoRan = await hp.evaluate(() => document.getElementById('searchInput').value);
+  await hp.click('#searchInput');
+  await hp.fill('#searchInput', '');
+  await hp.type('#searchInput', 'pikachu', { delay: 60 });
+  const rightAfterTyping = await inputValue(hp);
+  // Let the demo's poll find rows and do whatever it is going to do.
+  await hp.waitForTimeout(3000);
+  const afterDemo = await inputValue(hp);
+  const dropAfter = await dropHtml(hp);
+
+  T.check('H: the startup demo did write "Charizard" into the box before the seller typed',
+    /charizard/i.test(demoRan), `value at boot: ${JSON.stringify(demoRan)}`);
+  T.check('H: the seller\'s text is in the box immediately after typing',
+    rightAfterTyping === 'pikachu', JSON.stringify(rightAfterTyping));
+  T.check('H: the demo does not overwrite the seller\'s input once they start typing',
+    afterDemo === 'pikachu',
+    `value after the demo finished: ${JSON.stringify(afterDemo)}`);
+  // The original failure mode was not a stale value — it was the demo's poll
+  // finding the FIRST row of the seller's OWN results and clicking it, which
+  // left "Pikachu ex" selected as though the seller had chosen that printing.
+  T.check('H: the demo does not choose a printing out of the seller\'s own results',
+    !/ ex$| V$/.test(afterDemo.trim()),
+    `value after the demo finished: ${JSON.stringify(afterDemo)}`);
+  T.check('H: the seller\'s own results are still on screen for them to choose from',
+    /pikachu/i.test(dropAfter), dropAfter.replace(/\s+/g, ' ').slice(0, 160));
+  T.check('H: no uncaught rejection escaped while the demo and the seller overlapped',
+    hErrors.length === 0, JSON.stringify(hErrors.slice(0, 3)));
+  await hCtx.close();
+
+  // And the demo must still work for a visitor who does nothing — a guard that
+  // silently disables the feature it guards is not a fix.
+  const h2Ctx = await browser.newContext();
+  const h2 = await h2Ctx.newPage();
+  await isolate(h2);
+  await mountTpl(h2, slow);
+  await h2.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+  await h2.waitForFunction(() => typeof window.searchWithTPL === 'function', { timeout: 15000 });
+  await h2.waitForTimeout(5000);   // the demo writes, searches, polls, clicks
+  const h2Value = await inputValue(h2);
+  T.check('H: left alone, the demo still runs and still selects the example printing',
+    /charizard/i.test(h2Value), `value: ${JSON.stringify(h2Value)}`);
+  await h2Ctx.close();
 
   /* ── E. a SELLER SESSION, driven through the UI ───────────────────────────
      RV-13 item 4. The previous version of this case called searchPokemon()
@@ -498,16 +651,24 @@ try {
     await sp.route(pat, r => r.abort());
   }
   await sp.addInitScript(() => localStorage.setItem('cs_landing_seen', '1'));
-  await mountTpl(sp, MANY);
+  const meter = makeChargingProxy(MANY);
+  await mountTpl(sp, meter.handler);
   await sp.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
   await sp.waitForFunction(() => typeof window.searchWithTPL === 'function', { timeout: 15000 });
   await settle(sp);
 
   const marks = [];
-  let lastProxy = tplHits, lastUp = upstream;
+  let lastReq = 0, lastHit = 0, lastCharged = 0, lastUp = 0;
   const mark = (label) => {
-    marks.push({ label, proxy: tplHits - lastProxy, upstream: upstream - lastUp });
-    lastProxy = tplHits; lastUp = upstream;
+    marks.push({
+      label,
+      proxy: meter.requests - lastReq,
+      cached: meter.cacheHits - lastHit,
+      charged: meter.charged - lastCharged,
+      upstream: upstream - lastUp,
+    });
+    lastReq = meter.requests; lastHit = meter.cacheHits;
+    lastCharged = meter.charged; lastUp = upstream;
   };
   mark('page load, before the seller touches anything');
 
@@ -568,21 +729,24 @@ try {
   // TPL answered every lookup, and a fallback provider is only consulted when
   // TPL returns nothing. So drive one segment where TPL is empty, to show the
   // two counters move independently.
-  await mountTpl(sp, r => r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ data: [], total: 0, limit: 100, offset: 0 }) }));
+  meter.act = r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ data: [], total: 0, limit: 100, offset: 0 }) });
   await typeCard('gyarados');
   mark('typed "gyarados" while TPL had nothing — the fallback provider is consulted');
 
-  const totalProxy = marks.reduce((a, m) => a + m.proxy, 0);
-  const totalUp = marks.reduce((a, m) => a + m.upstream, 0);
-  const CARDS_HANDLED = 3;   // charizard ex, blastoise, pikachu
+  const sum = k => marks.reduce((a, m) => a + m[k], 0);
+  const totalProxy = sum('proxy'), totalCached = sum('cached'),
+        totalCharged = sum('charged'), totalUp = sum('upstream');
+  const CARDS_HANDLED = 4;   // charizard ex, blastoise, pikachu, gyarados
   const SELECTIONS = [picked1, picked2, picked3].filter(Boolean).length;
 
-  T.check(`E: the scripted session issued ${totalProxy} proxy request(s) and ` +
-          `${totalUp} mocked upstream call(s)`, true,
-    marks.map(m => `${m.label}: proxy ${m.proxy}, upstream ${m.upstream}`).join(' | '));
+  T.check(`E: the session issued ${totalProxy} proxy request(s), of which ` +
+          `${totalCharged} were chargeable misses and ${totalCached} were cache hits; ` +
+          `${totalUp} mocked fallback-provider call(s)`, true,
+    marks.map(m => `${m.label}: req ${m.proxy}/charged ${m.charged}/cached ${m.cached}/fallback ${m.upstream}`).join(' | '));
   T.check('E: every result the seller clicked was actually there to click',
     SELECTIONS === 3, `selections that found a result: ${SELECTIONS} of 3`);
+
   // The debounce is established by the correction segment specifically: one
   // card, two pauses past 180 ms, two requests. Twelve keystrokes typed
   // straight through produced ONE request, which is the debounce holding.
@@ -592,28 +756,45 @@ try {
     straight && straight.proxy === 1, `proxy=${straight && straight.proxy}`);
   T.check('E: the same card typed across two pauses cost TWO — the debounce boundary was crossed',
     corrected && corrected.proxy === 2, `proxy=${corrected && corrected.proxy}`);
+
+  // Where R4 actually charges: a cache hit returns before either counter is
+  // touched (api/_tplBudget.js:117-127), so revisiting a card the seller
+  // already looked up is free at the provider and does not count against the
+  // per-IP cap either.
+  const revisit = marks.find(m => m.label.startsWith('came back'));
+  T.check('E: coming back to a card already looked up charged nothing — it was a cache hit',
+    revisit && revisit.proxy >= 1 && revisit.charged === 0 && revisit.cached >= 1,
+    `req=${revisit && revisit.proxy}, charged=${revisit && revisit.charged}, cached=${revisit && revisit.cached}`);
+  T.check('E: chargeable calls are strictly fewer than proxy requests, so the two are NOT interchangeable',
+    totalCharged < totalProxy, `charged=${totalCharged} of ${totalProxy} requests`);
+
   const fbSeg = marks.find(m => m.label.startsWith('typed "gyarados"'));
-  T.check('E: proxy and upstream move independently — the empty-TPL segment consulted the fallback',
-    fbSeg && fbSeg.proxy >= 1 && fbSeg.upstream >= 1,
-    `that segment: proxy=${fbSeg && fbSeg.proxy}, upstream=${fbSeg && fbSeg.upstream}`);
-  T.check('E: proxy and upstream are reported as separate counts, never summed',
-    true, `proxy=${totalProxy}, upstream=${totalUp}`);
+  T.check('E: the fallback provider is counted apart from TPL — the empty-TPL segment consulted it',
+    fbSeg && fbSeg.charged >= 1 && fbSeg.upstream >= 1,
+    `that segment: charged=${fbSeg && fbSeg.charged}, fallback=${fbSeg && fbSeg.upstream}`);
+  T.check('E: TPL allowance and fallback-provider traffic are reported separately, never summed',
+    true, `charged=${totalCharged}, fallback=${totalUp}`);
   T.check('E: no uncaught rejection escaped during the session',
     sessionErrors.length === 0, JSON.stringify(sessionErrors.slice(0, 3)));
 
-  console.log('\n  SELLER SESSION — one scripted session, driven through the UI:');
+  console.log('\n  SELLER SESSION — one scripted session, driven through the UI.');
+  console.log('  "charged" = a cache MISS: what R4 reserves against the aggregate');
+  console.log('  allowance and counts against the per-IP cap. A cache hit is neither.');
+  console.log('    req  chrg cach  fb   action');
   for (const m of marks) {
-    console.log(`    ${String(m.proxy).padStart(3)} proxy  ${String(m.upstream).padStart(3)} upstream   ${m.label}`);
+    console.log(`    ${String(m.proxy).padStart(3)} ${String(m.charged).padStart(4)} ` +
+                `${String(m.cached).padStart(4)} ${String(m.upstream).padStart(3)}   ${m.label}`);
   }
-  console.log(`    ${String(totalProxy).padStart(3)} proxy  ${String(totalUp).padStart(3)} upstream   TOTAL ` +
-              `(4 distinct cards, ${SELECTIONS} selections, 1 revisit, 1 reload)`);
-  console.log('    Selecting a printing costs 0 proxy requests. A reload after a');
-  console.log('    selection costs 0 as well, because the full card was persisted; the');
-  console.log('    scan-revisit case (G) shows 4 when only a name was stored.');
-  console.log('    Mocked providers throughout; no live request was made.');
-  console.log('    This is ONE session shape, not a distribution. It does not establish');
-  console.log('    a defensible per-IP cap — that needs a session mix and a real-traffic');
-  console.log('    percentile, which is recorded as still Unverified.\n');
+  console.log(`    ${String(totalProxy).padStart(3)} ${String(totalCharged).padStart(4)} ` +
+              `${String(totalCached).padStart(4)} ${String(totalUp).padStart(3)}   TOTAL ` +
+              `(${CARDS_HANDLED} cards, ${SELECTIONS} selections, 1 revisit, 1 reload)`);
+  console.log('    Selecting a printing costs 0. A reload after a selection costs 0;');
+  console.log('    the scan-revisit case (G) costs 4 requests when only a name was stored.');
+  console.log('    The cache here is per-session; production shares one cache across');
+  console.log('    sellers, so real charged counts are a CEILING, not a prediction.');
+  console.log('    One session shape, not a distribution. Provisional limits can be set');
+  console.log('    from scenarios like this and labelled provisional; a real-traffic');
+  console.log('    percentile refines them later and is not a launch prerequisite.\n');
 
   await sessionCtx.close();
 

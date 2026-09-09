@@ -784,7 +784,7 @@ condition to the status, not to the caching.
 ## RV-13 — FIXED ON BRANCH. Lookup failure no longer reads as "no such card"
 
 **Status: implemented and mock-tested on `phase1-block-d`, in bundle
-`js/core.613f164a.js`. Still present in the live bundle `js/core.569ff536.js`,
+`js/core.2cb1e377.js`. Still present in the live bundle `js/core.569ff536.js`,
 which is what production serves — so RV-13 stays in this queue until a push.**
 
 The original filing overstated the blast radius (one caller was traced, seven
@@ -875,8 +875,8 @@ question is struck rather than deleted so the record shows it was answered.
 
 ### RV-13 — the fix, and what the browser actually rendered
 
-**Bundle: `js/core.613f164a.js`** (renamed three times during this work, per
-the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `613f164a`; only
+**Bundle: `js/core.2cb1e377.js`** (renamed four times during this work, per
+the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `2cb1e377`; only
 `613f164a` matches its own content and only it is referenced by
 `index.html:3837`).
 
@@ -1047,63 +1047,166 @@ Verified in the browser (case group F, four cases plus recovery):
 `.catch(() => [])` — and `searchPokemonJP`'s fallback fetch was already wrapped.
 `searchOnePiece` and `searchTPLGame` have no fallback fetch.
 
-### Seller-session measurement — through the UI, two counters
+### Seller-session measurement — counted where R4 charges
 
-**The previous twenty-card number is withdrawn as a session metric.** It called
-`searchPokemon()` twenty times in a loop and reported 1.00 requests per card. No
-typing, so the 180 ms debounce never ran; no selection; no revisit. It is a
-lookup baseline and nothing else, and it cannot support a per-IP cap.
+**Two numbers have now been withdrawn from this section, and both were mine.**
+First the twenty-call loop, which reported 1.00 requests per card without ever
+typing, selecting or revisiting. Then the six-request session that replaced it:
+it counted requests to `/api/tpl-proxy` and called them TPL demand. **They are
+not.** `reserveUpstream` reads its cache *first* and returns `CACHE_HIT` before
+it touches either counter (`api/_tplBudget.js:117-127`) — so a cache hit
+increments neither the per-IP counter nor the aggregate allowance, and costs
+nothing at the provider. Only a **miss** reaches `store.incr`, and only a miss
+can become a paid call. Counting endpoint requests overstates paid demand and
+mis-sizes the per-IP cap in the same motion.
 
-This is one scripted session driven through the real surface — keystrokes with
-per-key delays, pauses past the debounce, clicking results, coming back to a
-card, and a reload — counting **proxy requests** (`/api/tpl-proxy`, what a
-per-IP cap governs) separately from **mocked upstream provider calls**
-(pokemontcg.io and friends). They are different budgets; summing them would
-overstate one and hide the other.
+The session is now metered where the charge happens. The fixture mirrors the
+real key (`cacheKey`, `api/_tplBudget.js:78` — contracted params sorted, so
+param order does not fork an entry) and caches successes only, as
+`api/tpl-proxy.js:187` does. Three counters, never summed:
 
-| Seller action | proxy | upstream |
-| --- | --- | --- |
-| page load, before touching anything | 0 | 0 |
-| typed "charizard ex" — 12 keystrokes 70 ms apart, then a 700 ms pause | **1** | 0 |
-| selected the first printing | 0 | 0 |
-| typed "blastois", paused 400 ms, finished it — one card, two pauses | **2** | 0 |
-| selected that printing | 0 | 0 |
-| typed "pikachu" | 1 | 0 |
-| selected that printing | 0 | 0 |
-| came back to the first card | 1 | 0 |
-| selected it again | 0 | 0 |
-| reloaded — the last card restores itself | **0** | 0 |
-| typed "gyarados" while TPL had nothing | 1 | **1** |
-| **total** | **6** | **1** |
+- **req** — requests that reached the endpoint
+- **chrg** — cache misses: what R4 reserves against the aggregate allowance and
+  counts against the per-IP cap
+- **cach** — served from cache: not charged, not per-IP counted
+- **fb** — mocked fallback-provider calls (pokemontcg.io and friends), a
+  different budget entirely
 
-Four distinct cards, three selections, one revisit, one reload.
+| Seller action | req | chrg | cach | fb |
+| --- | --- | --- | --- | --- |
+| page load, before touching anything | 0 | 0 | 0 | 0 |
+| typed "charizard ex" — 12 keystrokes 70 ms apart, then a 700 ms pause | 1 | 1 | 0 | 0 |
+| selected the first printing | 0 | 0 | 0 | 0 |
+| typed "blastois", paused 400 ms, finished it — one card, two pauses | 2 | 2 | 0 | 0 |
+| selected that printing | 0 | 0 | 0 | 0 |
+| typed "pikachu" | 1 | 1 | 0 | 0 |
+| selected that printing | 0 | 0 | 0 | 0 |
+| came back to the first card | 1 | **0** | 1 | 0 |
+| selected it again | 0 | 0 | 0 | 0 |
+| reloaded — the last card restores itself | 0 | 0 | 0 | 0 |
+| typed "gyarados" while TPL had nothing | 1 | 1 | 0 | **1** |
+| **total** | **6** | **5** | **1** | **1** |
+
+Four cards, three selections, one revisit, one reload.
 
 What this establishes:
 
 - **The debounce holds.** Twelve keystrokes typed straight through cost **one**
   lookup. The same card typed across two pauses cost **two** — the boundary was
-  crossed deliberately, and that is what exercises it.
-- **Selecting a printing costs zero proxy requests.** The click path does not
-  re-look-up.
-- **A reload after a selection costs zero**, because the full card was
-  persisted. The scan-revisit case costs **4** for the same gesture, because
-  only a name was stored. Same seller action, very different demand — which is
-  the kind of thing a loop of direct calls cannot see.
-- **The two counters move independently.** Upstream stays at 0 while TPL
-  answers, because a fallback provider is only consulted when TPL returns
-  nothing; the empty-TPL segment moves both.
-- **The first-visitor demo costs 1 proxy request before the seller types
-  anything.** `autoRunExampleCard()` writes "Charizard" into the search box,
-  runs `doSearch()`, polls for the dropdown and clicks the top printing. It is
-  startup behaviour, not a defect, but it is session demand and it was
-  invisible until the session was driven through the UI.
+  crossed deliberately, because that is what exercises it.
+- **Selecting a printing costs nothing.** The click path does not re-look-up.
+- **Revisiting a card already looked up charges nothing** — one request, one
+  cache hit, zero allowance, and it does not count against the per-IP cap
+  either. Asserted on the counters, not assumed from the cache's existence.
+- **Chargeable calls are strictly fewer than proxy requests** (5 of 6 here),
+  which is the whole reason the two cannot be used interchangeably. The suite
+  asserts that inequality so the distinction cannot quietly collapse again.
+- **A reload after a selection costs nothing**, because the full card was
+  persisted. The scan-revisit case costs 4 requests for the same gesture,
+  because only a name was stored.
+- **Fallback-provider traffic moves independently.** It stays at 0 while TPL
+  answers, because a fallback is only consulted when TPL returns nothing.
 
-**What this does NOT establish: a defensible per-IP cap.** One session shape is
-not a distribution. Sizing `TPL_PER_IP_MAX` needs a session mix and a
-percentile from real traffic. **The per-IP number stays Unverified.** No live
-request was made in any of this — providers and the proxy are mocked
-throughout, successful-response caching is untouched, and no limit was probed.
+**What it still does not establish, and what that does *not* block.** One
+session shape is not a distribution, and the fixture's cache is per-session
+while production shares one cache across every seller — so **5 charged calls
+for 4 cards is a ceiling, not a prediction.** That is enough to set the six
+`TPL_*` values as **explicitly provisional**, justified by scenarios like this
+one and by the ceiling property. It is not enough to call them measured.
+Refining them from a real-traffic percentile is a post-launch improvement and
+**is not a launch prerequisite** — collecting traffic cannot be a precondition
+for the release that generates the traffic. What remains genuinely blocking is
+unchanged and is configuration, not measurement: **the six `TPL_*` variables
+are absent from Vercel, so none of these defaults are in force in production.**
 
+No live request was made anywhere in this work. Providers and the proxy are
+mocked throughout, successful-response caching is untouched, and no limit was
+probed.
+
+### Early input versus the startup demo — a defect, found and fixed
+
+Waiting for the demo to settle kept the other cases honest and proved nothing
+about a seller who starts typing straight away. Driving that case found a real
+defect, and it was worse than a stale value.
+
+`autoRunExampleCard()` writes "Charizard" into the search box, runs `doSearch`,
+then **polls for up to nine seconds** for a dropdown row and clicks the first
+one it finds. A seller typing inside that window had their own results clicked
+for them: the fixture typed `pikachu`, and the box ended up holding
+**"Pikachu ex"** — a printing chosen by the page, not by the seller, on a card
+they were still mid-way through searching for. Everything downstream — the
+price panel, the payout comparison, the listing draft — would have been built
+from that unrequested selection.
+
+Two guards, one rule: **once there is real input, the demo is over.**
+
+1. **It will not clobber a non-empty box.** If anything is already in the search
+   input when the demo starts, it returns without writing. This also removed a
+   fixture flake in which the demo's own late write overwrote a case's text and
+   failed a random caller each run — the same defect, one beat earlier.
+2. **It abandons its poll the moment the seller touches the box** — `input`,
+   `keydown` or `paste`, plus a value re-check immediately before the click,
+   because the rows the poll is about to click may be *theirs*.
+
+It returns `'abandoned'` rather than `false` in both cases: `false` means the
+demo *failed* and the caller pulses the "Try Charizard" prompt, and a seller who
+is already typing does not need to be pulsed at.
+
+Verified in the browser (case group H, six assertions): the demo does write
+"Charizard" before the seller starts, the seller's `pikachu` is in the box
+immediately after typing, **it is still `pikachu` after the demo's poll window
+closes**, no printing was chosen out of the seller's own results, their results
+are still on screen to choose from, and no uncaught rejection escaped while the
+two overlapped. Plus one that matters as much: **left alone, the demo still runs
+and still selects the example printing** — a guard that silently disables the
+feature it guards is not a fix.
+
+### The scan panel now discriminates too
+
+Adjudicated: the seller should not have to reconcile a generic panel against a
+more precise dropdown, and this is inside RV-13's existing purpose rather than
+new scope.
+
+`_renderScanMissPanel` said **"Live pricing unavailable"** whether we had looked
+and found no live price or had never completed the lookup. It took no lookup
+outcome at all — it could not have discriminated. The scan path now keeps the
+last TPL outcome it saw and hands it to the panel, which renders:
+
+| Situation | Headline | Body | Attribute |
+| --- | --- | --- | --- |
+| lookup completed, no live price | "Live pricing unavailable" | unchanged — track it, check sold comps | `data-scan-price-state="no_price"` |
+| lookup did not complete | **"Price lookup unavailable"** | the reason, then "This card loaded, so nothing is lost — we just could not finish checking its price. The sold-comp links below still work." | `data-scan-price-state="unavailable"` + `data-tpl-reason` |
+
+The reason sentences come from `TPL_UNAVAILABLE_MSG`, the same vocabulary the
+dropdown uses — one vocabulary, not a second one that can drift from it (Rule 1).
+
+Case group G asserts this on the element rather than on the copy, in all four
+conditions: the failed conditions carry `state="unavailable"` with the matching
+reason, the successful-empty condition carries `state="no_price"` with **no**
+reason and does not claim the lookup failed, and **panel and dropdown agree on
+the reason** in every failing condition. That last assertion is the one that
+would catch the two surfaces drifting apart again.
+
+### Follow-up — the four-request scan revisit (not a release blocker)
+
+Adjudicated as a follow-up optimization: request count alone does not make it
+one, and after the change above those four requests are also mostly cache hits
+in production, where the cache is shared.
+
+Revisiting a scanned card costs **4 `/api/tpl-proxy` requests** because the
+restore hydrates twice — it detects the panel was cleared and re-hydrates — and
+each hydration runs the scan path and then its `doSearch`. Measured, not
+argued.
+
+**The constraint on fixing it: card identity must survive.** The double
+hydration is doing something. The restore path deals with a snapshot that has a
+name, number, set and rarity but no `_fullCard` and no grounded id, and the
+match strategies that resolve it — exact number, then leading-zero-stripped
+number, then rarity+set — are exactly what keeps a revisit from silently landing
+on a *different* printing of the same name. Any de-duplication has to keep the
+resolved card identical to what the un-optimized path resolves, and that is the
+test to write first: same snapshot in, same card id out, fewer requests. **Not
+attempted in this pass.**
 ### Three things the suite found about the suite
 
 Recorded because each produced a confident false result first, and a harness
@@ -1121,20 +1224,23 @@ that lies deserves the same scrutiny as code that lies:
 3. **The page writes to the search box on its own at startup.** The
    first-visitor demo overwrote the seller's text mid-case, and a random caller
    failed each run reporting the input as "Charizard". The element-level input
-   assertion is what surfaced it; the copy-level check never could. Cases now
-   wait for the page to stop writing before asserting.
+   assertion is what surfaced it; the copy-level check never could. Cases wait
+   for the page to stop writing before asserting — **and this one turned out not
+   to be a harness artefact at all.** Driving the case deliberately (group H)
+   showed the same demo could overwrite, and then auto-select from, a real
+   seller's input. It is fixed in the product, not worked around in the fixture;
+   the section above records it. A flaky test was reporting a real defect.
 
 ### Questions for Will — RV-13
 
-1. **The revisit-after-scan cost is 4 proxy requests for one card**, because the
-   restore hydrates twice. Worth a follow-up defect, or acceptable? I have not
-   touched it — it is outside RV-13 and would be a behaviour change to a working
-   path.
-2. **The scan notice says "Live pricing unavailable" identically** whether we
-   genuinely have no prices for that card or the lookup was refused. The
-   dropdown behind it now discriminates, so the information is on screen, but
-   the panel itself does not. Fix the panel to carry the reason, or leave it?
-3. **Nothing is pushed.** This is branch-local: `phase1-block-d`, live bundle
+Both earlier questions here have been decided by you and are implemented above —
+the four-request revisit is recorded as a follow-up optimization with the
+identity constraint attached, and the scan panel now discriminates. What is left
+is not a question about the work:
+
+1. **Nothing is pushed.** This is branch-local: `phase1-block-d`, live bundle
    `core.569ff536.js` still has RV-13. Production still serves Phase 0 and still
-   shows the old behaviour. A push to `main` auto-deploys, so it waits on you
-   saying so explicitly.
+   shows the old behaviour on all three of these — the generic scan panel, the
+   demo that can overwrite early input, and the lookup failure that reads as
+   "no such card". A push to `main` auto-deploys, so it waits on you saying so
+   explicitly.
