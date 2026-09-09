@@ -1,7 +1,8 @@
 # D6 — The New-Seller Warning, Implemented
 
-Branch `phase1-block-d`. Live bundle **`js/core.d5fcdced.js`** (renamed this
-commit, `index.html:3833`). Nothing pushed, nothing deployed. Credential
+Branch `phase1-block-d`. Live bundle **`js/core.fa9c358d.js`** (`index.html:3834`; renamed twice
+this session, `3f83abec` → `d5fcdced` → `fa9c358d`, both recorded in
+`audit/BUNDLE_CITATION_MAP.md`). Nothing pushed, nothing deployed. Credential
 rotation still gates pushing.
 
 The requirement: *"Show before handoff when applicable; do not invent

@@ -22668,17 +22668,38 @@ function _reviewSellStart() {
  * condition an account disclosure on our own builder's outcome, which is not
  * a difference in the seller's situation.
  *
- * The verbs are eBay's, at eBay's confidence, about a CLASS and never about the
- * reader: "new sellers WILL have transaction holds" because the source is
- * unhedged, and "limits are REVIEWED monthly" -- not "raised" -- because the
- * source promises a cadence, not a direction. No day-ranges, no amounts, no
- * claim about this seller's standing.
- * Sources: eBay "Selling limits" (id=4107); eBay "Getting paid for items
- * you've sold" / holds on new-seller, high-priced and unusual sales.
+ * THE VERBS ARE THE SOURCE'S, AND WEAKER THAN AN EARLIER DRAFT.
+ *
+ * "New sellers CAN FACE transaction holds" -- corrected 2026-09-08 from "will
+ * have". The holds page is conditional in its governing sentence ("We MAY place
+ * a transaction hold on funds DEPENDING ON your seller status, changes to your
+ * account status, or other factors") and distinguishes circumstances, even
+ * though its new-seller bullet then reads "will experience". Where a source
+ * carries both readings, the copy takes the weaker one: overstating a
+ * restriction discourages the action this screen exists to enable.
+ *
+ * "Limits are REVIEWED monthly" -- the page does say "we'll increase your
+ * limit", so an increase is not unsupported. We still do not promise one TO
+ * THIS SELLER, because the same monthly review adjusts on sales volume and
+ * feedback and can move either way. Cadence is a fact about eBay's process;
+ * direction would be a prediction about this account.
+ *
+ * "eBay can also hold funds on high-priced or unusual sales" -- the page says
+ * "High priced items or unusual selling patterns MAY LEAD to transaction
+ * holds", so "can" matches. This clause is what makes the note relevant to an
+ * established seller, and graded cards can be both.
+ *
+ * No day-ranges and no amounts, though the source offers them ("up to 30
+ * days"): a duration we print becomes a promise about this seller's timeline.
+ * No claim about this reader's standing.
+ *
+ * The two links are the general disclosure's own sources, understated and
+ * descriptive. Seller Hub tells the seller where to inspect THEIR account; the
+ * help pages explain the rule. No citation numbers, no second warning block.
  */
 function _reviewSellLimitsHtml() {
   return `
-          <div class="review-packet-note" data-sell-start-limits="">eBay can hold your payout and cap how much you list, and limits are reviewed monthly. New sellers will have transaction holds while they build selling history, and eBay can also hold funds on high-priced or unusual sales. Your selling limits and any funds on hold are shown in your eBay Seller Hub.</div>`;
+          <div class="review-packet-note" data-sell-start-limits="">eBay can hold your payout and cap how much you list, and limits are reviewed monthly. New sellers can face transaction holds while they build selling history, and eBay can also hold funds on high-priced or unusual sales. Your selling limits and any funds on hold are shown in your eBay Seller Hub. <a data-limits-source="selling-limits" href="https://www.ebay.com/help/selling/listings/selling-limits?id=4107" target="_blank" rel="noopener noreferrer">eBay selling limits</a> \u00b7 <a data-limits-source="payment-holds" href="https://www.ebay.com/help/selling/getting-paid/getting-paid-items-youve-sold/payments-hold?id=4816" target="_blank" rel="noopener noreferrer">Payment holds</a></div>`;
 }
 
 function _reviewSellStartHtml() {

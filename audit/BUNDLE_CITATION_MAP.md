@@ -349,6 +349,16 @@ this row is the mapping. `audit/d7/basis-loss-trace.json` records
 `3f83abec` because that is the bundle the trace was captured from — a captured
 artifact is not renamed to match a later generation.
 
+## `core.d5fcdced.js` → `core.fa9c358d.js` (retired 2026-09-08, same day)
+
+A short-lived generation: `d5fcdced` carried the D6 note for one commit before
+the closeout amendments (verb weakened to "can face", two help links added)
+changed the same function's bytes again. Both edits are inside
+`_reviewSellLimitsHtml` at ~22646, so **every citation above that point is
+unshifted across both renames** — `loadCardUI :3556`, the startup timer
+`:20252`, `_crPricingContext :20687`, `_reviewBasisHtml :22262`. Re-verified:
+`:20252` still reads the 400ms `setTimeout` in `core.fa9c358d.js`.
+
 ## Not claimed
 
 - **This does not verify that a citation is still *apt*.** It proves the cited line's bytes are

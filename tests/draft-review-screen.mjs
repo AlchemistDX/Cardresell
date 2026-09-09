@@ -2052,7 +2052,7 @@ try {
      retained trace (audit/d7/basis-loss-trace.json): a basis bound for card A
      was cleared 14ms later by `loadCardUI`, reached from `doHydrate` inside
      `_restoreLastLoadedCard`, which the bundle schedules on a 400ms startup
-     timer (js/core.d5fcdced.js:20252). The card active at the clear was card A
+     timer (js/core.fa9c358d.js:20252). The card active at the clear was card A
      itself, so a same-card reload dropped that card's own basis.
 
      Neutralising the timer above makes that section deterministic, but on its
@@ -2303,7 +2303,7 @@ try {
     // the intermittent failure: at t=289ms this section binds a basis for card
     // A; at t=303ms `loadCardUI` clears it, called from `doHydrate` inside
     // `_restoreLastLoadedCard`, which the bundle schedules on a 400ms timer at
-    // startup (js/core.d5fcdced.js:20252) and which re-hydrates itself once
+    // startup (js/core.fa9c358d.js:20252) and which re-hydrates itself once
     // more "after a beat". The card active at the clear is card A itself --
     // 4e2c6b7b, the same key the basis was stamped to -- so the clear is a
     // same-card reload dropping that card's own basis.
@@ -2390,7 +2390,7 @@ try {
         const f = '/home/user/workspace/cardresell/audit/d7/basis-loss-trace.json';
         if (!fs.existsSync(f)) {
           fs.writeFileSync(f, JSON.stringify({ why, capturedAt: new Date().toISOString(),
-            bundle: 'js/core.d5fcdced.js', payload: JSON.parse(payload) }, null, 2));
+            bundle: 'js/core.fa9c358d.js', payload: JSON.parse(payload) }, null, 2));
         }
       } catch (e) { console.log('  [trace retain failed] ' + e.message); }
     };
