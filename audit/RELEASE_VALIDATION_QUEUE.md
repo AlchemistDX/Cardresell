@@ -161,7 +161,24 @@ custom environment and incurs no additional cost.
 ### Execution order — owner, and none of it executed
 
 1. **Identify the actual Redis provider** from the integration or variable
-   metadata.
+   metadata. **Partly advanced 2026-09-09 17:03** from the owner's Environment
+   Variables page: exactly the five KV rows — `KV_REST_API_URL`, `REDIS_URL`,
+   `KV_REST_API_READ_ONLY_TOKEN`, `KV_URL`, `KV_REST_API_TOKEN`, all *Added
+   Jul 4* — carry a **provider badge beside the name that no other variable on
+   the page has**. That corroborates integration ownership from a second,
+   independent surface. **The badge is not legible at this resolution and the
+   provider is still unnamed** — I am not guessing a vendor from an icon.
+   Corroboration on the cause: all five display **"All Environments"** in the
+   dashboard, matching the API's `production,preview,development` targets
+   exactly. **Safeguard 1's stop condition is therefore live**, not
+   hypothetical: these are integration-managed rows, so whether they can be
+   edited at all must be established before step 4.
+
+   Also visible and worth separating: the five KV rows show the `<>` glyph and a
+   reveal control, unlike `TURNSTILE_SECRET_KEY`'s padlock. They are **not**
+   write-only sensitive, so they are readable back — the same weakness the TPL
+   key had before it was moved to `sensitive`. Note it; it is not part of this
+   step.
 2. **Create the second database** there.
 3. **Save its credentials directly into Vercel.** Never into this session, never
    into a local file, never into a commit message.
