@@ -22,7 +22,7 @@ import {
   buildListingPacket, stampPriceBasis, ageFromRetrievedAt, normalizeVerifiedStamp,
   findRelativeAgeKeys, FORBIDDEN_AGE_KEYS, PACKET_SCHEMA_VERSION, PACKET_CODES,
   PACKET_INPUT_FIELDS, packetInputFingerprint, stampPriceBasisReporting,
-  readStoredPacket, PACKET_COMPAT,
+  readStoredPacket, PACKET_COMPAT, PACKET_MIGRATIONS, normalizeShippingAssumptions,
 } from '../api/_listingPacket.js';
 import { CONDITION, CONDITION_DESCRIPTOR, DESCRIPTOR_VALUES_RESOLVED } from '../api/_ebayTaxonomy.js';
 import { cardIdentity, skuFor } from '../api/_cardIdentity.js';
@@ -1533,6 +1533,178 @@ const codes = (p) => (p.notes || []).map((n) => n.code);
         pk.priceBasis.datedBySource === false);
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RC-2.1 — shipping assumptions: recorded, never applied
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The thing these tests exist to protect is a NEGATIVE: this packet must not
+// grow a second shipping model. The venue comparison already owns that
+// behaviour end to end, and two implementations of one business rule is the
+// failure this repo has a standing rule against. So the assertions below check
+// that shipping is CARRIED and DISCLOSED, and that every pricing figure is
+// left exactly as it was.
+console.log('\nRC-2.1 — shipping assumptions');
+{
+  const scodes = (p) => (p.notes || []).map((n) => n.code).filter((c) => c.startsWith('SHIPPING'));
+  const noteFor = (p, code) => (p.notes || []).find((n) => n.code === code);
+  const build = (shipping, extra = {}) => buildListingPacket(CARDS[0], {
+    feeModelRevision: 7, feeScheduleVerified: '2026-09-01', slot: 'ebay:fixed-price',
+    price: 100, priceSource: 'comp', maxTitleLength: 80,
+    now: Date.parse('2026-09-09T13:00:00.000Z'),
+    shipping, ...extra,
+  });
+
+  // ── The disclosure is unconditional ──────────────────────────────────────
+  // Same property FEE_METADATA_CLIENT_DECLARED has, and for the same reason:
+  // it reports a boundary, not a missing value, so a complete input must not
+  // be able to buy silence about it.
+  const full = build({ buyerPays: 5, sellerCost: 4.5 });
+  check('a fully specified shipping pair is recorded',
+        full.shipping.buyerPays.amount === 5 && full.shipping.sellerCost.amount === 4.5
+        && full.shipping.buyerPays.declared === true && full.shipping.sellerCost.declared === true);
+  check('🔴 supplying both sides cannot suppress the not-applied disclosure',
+        scodes(full).includes(PACKET_CODES.SHIPPING_NOT_IN_NET),
+        'a seller who filled the fields in is the one most likely to assume they were applied');
+  check('and the block states it structurally, not only in prose',
+        full.shipping.appliedToPricing === false);
+  check('the disclosure is INFO — a labelled boundary is not a defect',
+        noteFor(full, PACKET_CODES.SHIPPING_NOT_IN_NET).severity === SEVERITY.INFO);
+  check('and it names the surface that DOES include shipping',
+        /venue comparison/i.test(noteFor(full, PACKET_CODES.SHIPPING_NOT_IN_NET).message),
+        'telling a seller a number is incomplete without saying where the complete one is is not guidance');
+  check('the copy says the comparison MAY differ, never WILL',
+        /may differ/.test(noteFor(full, PACKET_CODES.SHIPPING_NOT_IN_NET).message)
+        && !/will differ/.test(noteFor(full, PACKET_CODES.SHIPPING_NOT_IN_NET).message));
+
+  // ── The negative: no second fee model ────────────────────────────────────
+  const noShip   = build(undefined);
+  const withShip = build({ buyerPays: 25, sellerCost: 12 });
+  check('🔴 shipping does not move ANY pricing figure in the packet',
+        JSON.stringify(noShip.pricing) === JSON.stringify(withShip.pricing),
+        'the moment shipping changes a number here, this file owns a second shipping model');
+  check('and shipping is not blocking at any severity',
+        withShip.blockingCodes.every((c) => !c.startsWith('SHIPPING'))
+        && noShip.blockingCodes.every((c) => !c.startsWith('SHIPPING')));
+
+  // ── Absent, and the empty object that means the same thing ───────────────
+  check('nothing supplied is reported as absent, not as zero',
+        noShip.shipping === null && scodes(noShip).includes(PACKET_CODES.SHIPPING_ABSENT));
+  check('🔴 and absent is NOT recorded as a declared zero',
+        noShip.shipping === null,
+        'a silent zero here would read downstream as "the seller ships free"');
+  const empty = build({});
+  check('an empty object agrees with a missing one',
+        empty.shipping === null && scodes(empty).includes(PACKET_CODES.SHIPPING_ABSENT),
+        'two shapes for one state means a consumer branching on null gets two answers');
+  // The collapse to null must not swallow a value the seller needs back.
+  const onlyJunk = build({ buyerPays: 'four dollars' });
+  check('🔴 but "nothing declared" does NOT collapse away rejected text',
+        onlyJunk.shipping !== null && onlyJunk.shipping.buyerPays.rejected === 'four dollars',
+        'the rejected value is the one thing the seller needs in order to correct it');
+  check('🔴 and that case is never reported as absent',
+        scodes(onlyJunk).includes(PACKET_CODES.SHIPPING_UNPARSEABLE)
+        && !scodes(onlyJunk).includes(PACKET_CODES.SHIPPING_ABSENT),
+        'ABSENT beside UNPARSEABLE is self-contradictory: one says empty, the other quotes the contents');
+  check('it is a partial, and names the side genuinely left alone',
+        scodes(onlyJunk).includes(PACKET_CODES.SHIPPING_PARTIAL)
+        && noteFor(onlyJunk, PACKET_CODES.SHIPPING_PARTIAL).missing === 'sellerCost');
+  check('and neither reports a partial',
+        !scodes(noShip).includes(PACKET_CODES.SHIPPING_PARTIAL)
+        && !scodes(empty).includes(PACKET_CODES.SHIPPING_PARTIAL));
+
+  // ── The blank-is-zero conflation, stated rather than inherited ───────────
+  const zero = build({ buyerPays: 0, sellerCost: 0 });
+  check('a declared zero is recorded as declared, with the amount kept',
+        zero.shipping.buyerPays.declared === true && zero.shipping.buyerPays.amount === 0);
+  check('🔴 but the packet says it cannot tell free shipping from an untouched field',
+        scodes(zero).includes(PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED),
+        'index.html declares both inputs value="0", so zero is the default, not a statement');
+  check('and it names both sides when both are zero',
+        noteFor(zero, PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED).fields.join(',') === 'buyerPays,sellerCost');
+  check('a nonzero pair raises no zero note',
+        !scodes(full).includes(PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED));
+  check('an ABSENT side does not also raise the zero note',
+        !scodes(noShip).includes(PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED),
+        'absence is already reported; saying it twice under a second name is noise');
+
+  // ── Partial ──────────────────────────────────────────────────────────────
+  const partial = build({ sellerCost: 4.5 });
+  check('one side supplied is reported as partial, naming the missing side',
+        scodes(partial).includes(PACKET_CODES.SHIPPING_PARTIAL)
+        && noteFor(partial, PACKET_CODES.SHIPPING_PARTIAL).missing === 'buyerPays');
+  check('and the supplied side is still kept',
+        partial.shipping.sellerCost.amount === 4.5 && partial.shipping.buyerPays.declared === false);
+  check('a partial is not also an absent',
+        !scodes(partial).includes(PACKET_CODES.SHIPPING_ABSENT));
+
+  // ── Unparseable, split from absent ───────────────────────────────────────
+  const junk = build({ buyerPays: '5.00 usd', sellerCost: 4 });
+  check('an unreadable value is reported as unparseable, not as absent',
+        scodes(junk).includes(PACKET_CODES.SHIPPING_UNPARSEABLE)
+        && !scodes(junk).includes(PACKET_CODES.SHIPPING_ABSENT));
+  check('🔴 and the seller\u2019s own text is handed back, not blanked',
+        junk.shipping.buyerPays.rejected === '5.00 usd' && junk.shipping.buyerPays.amount === null,
+        'a seller cannot correct a value the product refuses to show them');
+  const blank = build({ buyerPays: '   ', sellerCost: 4 });
+  check('whitespace is absence, not corruption',
+        !scodes(blank).includes(PACKET_CODES.SHIPPING_UNPARSEABLE)
+        && blank.shipping.buyerPays.declared === false
+        && blank.shipping.buyerPays.rejected === null);
+
+  // ── Negative, recorded rather than clamped ───────────────────────────────
+  const neg = build({ buyerPays: 5, sellerCost: -4 });
+  check('a negative cost is reported',
+        scodes(neg).includes(PACKET_CODES.SHIPPING_NEGATIVE)
+        && noteFor(neg, PACKET_CODES.SHIPPING_NEGATIVE).fields.join(',') === 'sellerCost');
+  check('🔴 and is kept as supplied, not clamped to zero',
+        neg.shipping.sellerCost.amount === -4,
+        'clamping makes a sign error indistinguishable from free shipping');
+
+  // ── The normalizer is testable on its own ────────────────────────────────
+  const direct = normalizeShippingAssumptions({ buyerPays: '7', sellerCost: '' });
+  check('the normalizer is pure and reports without a packet',
+        direct.shipping.buyerPays.amount === 7
+        && direct.findings.map((f) => f.code).includes(PACKET_CODES.SHIPPING_PARTIAL));
+  check('a non-object is absent, not a crash',
+        normalizeShippingAssumptions('4.50').shipping === null
+        && normalizeShippingAssumptions([]).shipping === null);
+
+  // ── v1 → v2 migration ────────────────────────────────────────────────────
+  // The bump exists because a v1 packet has no shipping key at all, and an
+  // undefined at the consumer is indistinguishable from "the seller declared
+  // nothing". These two are not the same event and must not read the same.
+  check('the schema is at 2 and the 1→2 hop is registered',
+        PACKET_SCHEMA_VERSION === 2 && typeof PACKET_MIGRATIONS[1] === 'function');
+  const v1 = { sku: 'x', title: { text: 'T' }, metadata: { packetSchemaVersion: 1, generatedAt: 'G' } };
+  const read = readStoredPacket(v1);
+  check('a v1 packet migrates rather than reading as current',
+        read.status === PACKET_COMPAT.MIGRATED && read.usable === true
+        && read.migrationsApplied.join(',') === '1->2');
+  check('and lands an explicit null shipping block',
+        read.packet.shipping === null);
+  check('🔴 the migration does not invent findings the original build never made',
+        read.packet.notes === undefined,
+        'a v1 packet was built by code that could not observe shipping; stamping SHIPPING_ABSENT would claim it looked');
+  check('the rest of the packet survives the hop',
+        read.packet.sku === 'x' && read.packet.title.text === 'T'
+        && read.packet.metadata.generatedAt === 'G');
+  check('🔴 and the stored object is not mutated in place',
+        v1.shipping === undefined && v1.metadata.packetSchemaVersion === 1,
+        'migrating a caller\u2019s object under them corrupts whatever else holds a reference');
+
+  // ── The fingerprint deliberately does NOT cover shipping ─────────────────
+  // Same treatment as priceBasis and pricing: those arrive as CONTEXT, not as
+  // stored draft fields, and the fingerprint's job is to detect a packet that
+  // no longer describes the DRAFT it is attached to. Adding a non-draft field
+  // would invalidate packets on a change the draft cannot record.
+  check('shipping is not in the draft-input projection',
+        !PACKET_INPUT_FIELDS.includes('shipping'),
+        'the projection lists persisted draft fields; shipping arrives through pricingContext');
+  check('so changing shipping does not restamp the fingerprint',
+        full.metadata.inputFingerprint === noShip.metadata.inputFingerprint);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

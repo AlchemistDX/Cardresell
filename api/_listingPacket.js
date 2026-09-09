@@ -28,7 +28,7 @@ import {
 } from './_ebayTaxonomy.js';
 
 /** Ours. Bump when the packet's own shape changes. */
-export const PACKET_SCHEMA_VERSION = 1;
+export const PACKET_SCHEMA_VERSION = 2;
 
 /**
  * Any of these keys inside a persisted packet is a bug: they encode "how long
@@ -106,6 +106,50 @@ export const PACKET_CODES = {
   // value cannot buy silence, because supplying a value is the thing being
   // disclosed.
   FEE_METADATA_CLIENT_DECLARED:  'FEE_METADATA_CLIENT_DECLARED',
+
+  // ── Shipping assumptions (RC-2, first item) ─────────────────────────────
+  //
+  // What this is NOT: a shipping model. One already exists, in the venue
+  // comparison, and it is complete -- it computes
+  // `netPayout = price + effectiveShipCharge - totalFees - sellerShip`,
+  // zeroing the buyer charge per venue where the venue keeps it. Building a
+  // second one here would violate the standing rule that one business
+  // behaviour gets exactly one implementation, and would produce two net
+  // figures that disagree for reasons no seller could reconstruct.
+  //
+  // What this IS: the packet RECORDING the seller's shipping assumptions so a
+  // draft can say what was assumed when it was built. The packet's own pricing
+  // stays item-only and is not recomputed. That is why SHIPPING_NOT_IN_NET is
+  // unconditional -- it discloses a boundary, and supplying values must not be
+  // able to buy silence about it.
+  SHIPPING_NOT_IN_NET:      'SHIPPING_NOT_IN_NET',
+
+  // Absent split from unparseable, for the third time in this file and for the
+  // same reason: an incomplete caller and a feed that changed shape want
+  // different responses.
+  SHIPPING_ABSENT:          'SHIPPING_ABSENT',
+  SHIPPING_UNPARSEABLE:     'SHIPPING_UNPARSEABLE',
+
+  // One of the two supplied. Worth its own code because a packet carrying a
+  // postage cost and no buyer charge is not half-informed -- it is skewed, and
+  // reads as a worse deal than the seller actually set up.
+  SHIPPING_PARTIAL:         'SHIPPING_PARTIAL',
+
+  // Negative postage or a negative buyer charge is not a shipping assumption,
+  // it is a sign error. Recorded rather than clamped: clamping to 0 would make
+  // a data-entry fault indistinguishable from free shipping.
+  SHIPPING_NEGATIVE:        'SHIPPING_NEGATIVE',
+
+  // 🔴 The blank-is-zero conflation, carried here deliberately rather than
+  // inherited silently. Both client inputs are declared `value="0"`
+  // (`index.html:2512`, `:2518`), so a zero arriving at this builder cannot be
+  // distinguished from a field the seller never touched. RC-1 established the
+  // same thing on the ranking surface: "Zero is a fallback assumption, not an
+  // established shipping cost." The packet cannot resolve that ambiguity --
+  // the information does not exist by the time it gets here -- so it states
+  // it. Recording 0 as though the seller had declared free shipping would be a
+  // stamped claim the input never supported.
+  SHIPPING_ZERO_UNCONFIRMED: 'SHIPPING_ZERO_UNCONFIRMED',
 };
 
 // ── C0 — schema version handling (Block C entry criterion) ────────────────
@@ -245,7 +289,30 @@ export function packetInputFingerprint(draft = {}) {
  * data change rather than a control-flow change.
  */
 export const PACKET_MIGRATIONS = {
-  // 1: (packet) => ({ ...packet, packetSchemaVersion: 2, /* ... */ }),
+  // ── v1 → v2: the `shipping` block (RC-2, first item) ────────────────────
+  //
+  // Why this is a version bump and not just a new optional field. A v1 packet
+  // has no `shipping` key. Read by v2 code without a bump it would report
+  // CURRENT, and `packet.shipping` would be `undefined` -- indistinguishable
+  // at the consumer from "the seller declared nothing", which is precisely the
+  // silent null this repo treats as the bug. It is neither: a v1 packet was
+  // built by code that could not record shipping at all.
+  //
+  // `shipping: null` is therefore correct and honest here -- it is the same
+  // value a v2 build produces when nothing was supplied, and the accompanying
+  // SHIPPING_ABSENT note in `notes` is NOT synthesised, because this migration
+  // must not invent findings the original build never made. A consumer that
+  // wants to know whether absence was observed or inherited reads
+  // `migrationsApplied`.
+  //
+  // The version is written NESTED, at metadata.packetSchemaVersion, because
+  // that is where the reader looks (see the guard in readStoredPacket, which
+  // rejects a migration that bumps anywhere else).
+  1: (packet) => ({
+    ...packet,
+    shipping: null,
+    metadata: { ...(packet && packet.metadata ? packet.metadata : {}), packetSchemaVersion: 2 },
+  }),
 };
 
 /**
@@ -517,6 +584,117 @@ const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
  * had no idea how old it was. "Unknown" is the honest answer; a wrong age is
  * worse than a blank one because the seller prices against it.
  */
+/**
+ * ── Shipping assumptions, normalized and reported ───────────────────────────
+ *
+ * Pure and separately exported for the same reason `stampPriceBasisReporting`
+ * is: the findings have to be testable without building a whole packet, and a
+ * normalizer that reports through a shared `notes` array cannot be.
+ *
+ * Returns `{ shipping, findings }`. `shipping` is null only when NOTHING
+ * usable arrived -- a partial or an out-of-range value still produces a block,
+ * because dropping it would hide the very input that needs correcting.
+ *
+ * Each side carries its own `declared` flag rather than relying on `null`,
+ * so a consumer never has to guess whether a missing number means "absent" or
+ * "rejected". The rejected ones keep their raw text in `rejected` for the same
+ * reason: a seller who typed "5.00 usd" is owed the string back, not a blank.
+ */
+export function normalizeShippingAssumptions(raw) {
+  const findings = [];
+  const supplied = raw && typeof raw === 'object' && !Array.isArray(raw);
+
+  if (!supplied) {
+    findings.push({ code: PACKET_CODES.SHIPPING_ABSENT });
+    return { shipping: null, findings };
+  }
+
+  // One reader for both sides, so the two can never drift in how they treat a
+  // blank string, a null, or a non-numeric.
+  const readSide = (v) => {
+    if (v === null || v === undefined || String(v).trim() === '') {
+      return { declared: false, amount: null, rejected: null };
+    }
+    const n = Number(v);
+    if (!Number.isFinite(n)) {
+      return { declared: false, amount: null, rejected: String(v) };
+    }
+    return { declared: true, amount: n, rejected: null };
+  };
+
+  const buyerPays  = readSide(raw.buyerPays);
+  const sellerCost = readSide(raw.sellerCost);
+
+  const unreadable = [];
+  if (buyerPays.rejected  !== null) unreadable.push('buyerPays');
+  if (sellerCost.rejected !== null) unreadable.push('sellerCost');
+  if (unreadable.length) {
+    findings.push({ code: PACKET_CODES.SHIPPING_UNPARSEABLE, fields: unreadable });
+  }
+
+  const negative = [];
+  if (buyerPays.declared  && buyerPays.amount  < 0) negative.push('buyerPays');
+  if (sellerCost.declared && sellerCost.amount < 0) negative.push('sellerCost');
+  if (negative.length) {
+    findings.push({ code: PACKET_CODES.SHIPPING_NEGATIVE, fields: negative });
+  }
+
+  // ── Absent vs partial turns on whether the seller SAID anything ──────────
+  // Not on whether we could read it. These were keyed on `declared` alone,
+  // which made an unreadable-but-present value report as SHIPPING_ABSENT
+  // alongside SHIPPING_UNPARSEABLE: two findings that contradict each other,
+  // one saying the field was empty and the other quoting its contents. A
+  // rejected value is an attempt, so it counts as having been said, and the
+  // classification below is about attempts.
+  const buyerSaid  = buyerPays.declared  || buyerPays.rejected  !== null;
+  const sellerSaid = sellerCost.declared || sellerCost.rejected !== null;
+  if (!buyerSaid && !sellerSaid) {
+    findings.push({ code: PACKET_CODES.SHIPPING_ABSENT });
+  } else if (!buyerSaid || !sellerSaid) {
+    findings.push({
+      code: PACKET_CODES.SHIPPING_PARTIAL,
+      missing: !buyerSaid ? 'buyerPays' : 'sellerCost',
+    });
+  }
+
+  // See SHIPPING_ZERO_UNCONFIRMED. Fires on a declared zero on either side,
+  // and only on a declared one: an absent field is already reported above and
+  // does not need a second note saying the same thing twice.
+  const zeroes = [];
+  if (buyerPays.declared  && buyerPays.amount  === 0) zeroes.push('buyerPays');
+  if (sellerCost.declared && sellerCost.amount === 0) zeroes.push('sellerCost');
+  if (zeroes.length) {
+    findings.push({ code: PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED, fields: zeroes });
+  }
+
+  // ── One spelling of "nothing was declared" ───────────────────────────────
+  // `undefined` in returned a null block while `{}` returned a hollow block
+  // whose every field was false/null. Both mean the same thing, and a consumer
+  // branching on `shipping === null` got two different answers for one state.
+  //
+  // The collapse is conditional on there being nothing to hand back: if a side
+  // is undeclared because its value was REJECTED, the block is kept so the
+  // seller's own text survives. Collapsing that to null would delete the only
+  // record of what they typed, which is the value they need in order to fix
+  // it. So: null when nothing was said, a block whenever something was said --
+  // even if what was said was unreadable.
+  const nothingSaid = !buyerPays.declared && !sellerCost.declared
+    && buyerPays.rejected === null && sellerCost.rejected === null;
+  if (nothingSaid) return { shipping: null, findings };
+
+  return {
+    shipping: {
+      buyerPays:  { declared: buyerPays.declared,  amount: buyerPays.amount,  rejected: buyerPays.rejected },
+      sellerCost: { declared: sellerCost.declared, amount: sellerCost.amount, rejected: sellerCost.rejected },
+      // Stated on the block itself, not only in a note, so a consumer reading
+      // the packet structurally cannot miss it and treat these as applied.
+      appliedToPricing: false,
+      source: 'seller-declared',
+    },
+    findings,
+  };
+}
+
 export function ageFromRetrievedAt(retrievedAt, nowMs) {
   // Must be a real timestamp string. Numbers, arrays and objects all coerce
   // into something Date.parse will happily interpret.
@@ -837,6 +1015,50 @@ export function buildListingPacket(row = {}, ctx = {}) {
     }
   }
 
+  // ── Shipping assumptions (RC-2, first item) ─────────────────────────────
+  const { shipping, findings: shippingFindings } =
+    normalizeShippingAssumptions(ctx.shipping);
+
+  for (const f of shippingFindings) {
+    if (f.code === PACKET_CODES.SHIPPING_ABSENT) {
+      add(f.code, SEVERITY.WARNING,
+          'No shipping assumptions recorded on this draft. What the buyer is '
+        + 'charged and what postage costs you both affect the real payout, and '
+        + 'this draft does not say what either was.');
+    } else if (f.code === PACKET_CODES.SHIPPING_UNPARSEABLE) {
+      add(f.code, SEVERITY.WARNING,
+          `Shipping ${f.fields.join(' and ')} was supplied in a form this packet `
+        + 'could not read, so it has not been recorded.', { fields: f.fields });
+    } else if (f.code === PACKET_CODES.SHIPPING_NEGATIVE) {
+      add(f.code, SEVERITY.WARNING,
+          `Shipping ${f.fields.join(' and ')} is negative. Recorded as supplied `
+        + 'rather than corrected, because a clamped value would look like a '
+        + 'deliberate zero.', { fields: f.fields });
+    } else if (f.code === PACKET_CODES.SHIPPING_PARTIAL) {
+      add(f.code, SEVERITY.WARNING,
+          `Only one side of shipping was supplied; ${f.missing} is missing. A `
+        + 'draft carrying one side reads as a worse or better deal than the '
+        + 'seller actually set up.', { missing: f.missing });
+    } else if (f.code === PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED) {
+      add(f.code, SEVERITY.INFO,
+          `Shipping ${f.fields.join(' and ')} came through as zero. That field `
+        + 'starts at zero, so this packet cannot tell a deliberate free-shipping '
+        + 'choice from an untouched field, and does not claim to.',
+          { fields: f.fields });
+    }
+  }
+
+  // Unconditional, for the same reason FEE_METADATA_CLIENT_DECLARED is: it
+  // discloses a boundary rather than reporting a missing value, so supplying
+  // shipping figures must not be able to buy silence about the fact that they
+  // were not applied.
+  add(PACKET_CODES.SHIPPING_NOT_IN_NET, SEVERITY.INFO,
+      'Any figure in this packet covers the item price only. Shipping is '
+    + 'recorded here but not applied to it. The venue comparison counts what '
+    + 'the buyer pays for shipping and what postage costs you, so its number '
+    + 'may differ; use the comparison to choose where to sell.',
+      { appliedToPricing: false });
+
   notes.push(...cond.notes);
 
   const blocking = notes.filter((n) => n.severity === SEVERITY.ERROR);
@@ -871,6 +1093,10 @@ export function buildListingPacket(row = {}, ctx = {}) {
         }
       : null,
     priceBasis: stampedBasis,
+    // Recorded, never applied. `pricing` above stays item-only; see
+    // SHIPPING_NOT_IN_NET and the code table's note on why there is no second
+    // shipping model here.
+    shipping,
     metadata,
     notes,
     // C7 severity tiers: only ERROR blocks the handoff.

@@ -342,15 +342,28 @@ for (const junk of [null, undefined, [], 'packet', 7]) {
   check(`non-object ${JSON.stringify(junk)} is refused`,
         r.status === PACKET_COMPAT.INCOMPATIBLE && r.usable === false);
 }
-const older = readStoredPacket({ metadata: { packetSchemaVersion: 1 }, sku: 'x' }, { currentVersion: 2 });
+// Uses 2 -> 3, NOT 1 -> 2. When this was written the migration table was
+// empty, so v1 was a convenient "no hop registered" fixture. RC-2 registered a
+// real 1 -> 2 migration for the shipping block, which made this assertion
+// vacuous-then-failing: it started exercising a hop that now exists. The
+// BEHAVIOUR under test is unchanged and still worth pinning -- a version with
+// no registered hop must be refused rather than assumed current -- so the
+// fixture moves to a version that genuinely has none, rather than the check
+// being relaxed.
+const older = readStoredPacket({ metadata: { packetSchemaVersion: 2 }, sku: 'x' }, { currentVersion: 3 });
 check('an older version with no registered migration is incompatible, not assumed',
       older.status === PACKET_COMPAT.INCOMPATIBLE
       && older.reason === 'PACKET_NO_MIGRATION_PATH',
-      'silently treating v1 as v2 is the outcome C0 exists to prevent');
+      'silently treating an old packet as current is the outcome C0 exists to prevent');
 check('an unmigratable old packet is still preserved', older.packet.sku === 'x');
 
 // migration table wired up for real
 const { PACKET_MIGRATIONS } = await import('../api/_listingPacket.js');
+// Saved, not assumed absent. Hop 1 is now a REAL production migration, and the
+// `delete` this block used to end with would have removed it for every later
+// assertion in this process -- a test silently disabling the thing it shares a
+// module with.
+const REAL_MIGRATION_1 = PACKET_MIGRATIONS[1];
 PACKET_MIGRATIONS[1] = (p) => ({ ...p, metadata: { ...p.metadata, packetSchemaVersion: 2 }, migratedField: true });
 const migrated = readStoredPacket({ metadata: { packetSchemaVersion: 1 }, sku: 'x' }, { currentVersion: 2 });
 check('a registered migration runs and the packet becomes usable',
@@ -369,7 +382,13 @@ check('a migration that does not advance the version fails loudly',
       stuck.status === PACKET_COMPAT.INCOMPATIBLE
       && stuck.reason === 'PACKET_MIGRATION_DID_NOT_ADVANCE_VERSION',
       'a half-applied chain must not be handed back as usable');
-delete PACKET_MIGRATIONS[1]; delete PACKET_MIGRATIONS[2];
+// Restore the real hop rather than deleting it; only hop 2 was invented here.
+PACKET_MIGRATIONS[1] = REAL_MIGRATION_1;
+delete PACKET_MIGRATIONS[2];
+check('the real 1->2 migration is restored after the overrides',
+      typeof PACKET_MIGRATIONS[1] === 'function'
+      && PACKET_MIGRATIONS[1]({ metadata: { packetSchemaVersion: 1 } }).shipping === null,
+      'a test that leaves the production migration table modified poisons every later assertion');
 
 
 // ── 3g. Stale index entries — pruning only on POSITIVE absence ────────────

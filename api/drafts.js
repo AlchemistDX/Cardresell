@@ -801,6 +801,12 @@ export function buildPacketFor(card, { pricingContext, slot, price, priceSource,
     feeScheduleVerified: typeof pc.feeScheduleVerified === 'string' ? pc.feeScheduleVerified : undefined,
     pricing:             (pc.pricing   && typeof pc.pricing   === 'object' && !Array.isArray(pc.pricing))   ? pc.pricing   : undefined,
     basisMeta:           (pc.basisMeta && typeof pc.basisMeta === 'object' && !Array.isArray(pc.basisMeta)) ? pc.basisMeta : undefined,
+    // Shipping assumptions, passed through with the same shape check as
+    // basisMeta and normalized inside the builder rather than here. Deliberate:
+    // the absent/unparseable/partial split is a packet-reporting concern, and
+    // pre-cleaning it at this layer would turn an unreadable value into an
+    // absent one before the packet could say which it was.
+    shipping:            (pc.shipping  && typeof pc.shipping  === 'object' && !Array.isArray(pc.shipping))  ? pc.shipping  : undefined,
     // The SERVER-normalized price and source, not the raw client fields, for
     // the same reason sku and title are server-derived: the packet must
     // document the draft that will actually be stored. Reading pc.price here

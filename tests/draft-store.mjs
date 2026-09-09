@@ -2,7 +2,17 @@
 import { harness } from './_assert.mjs';
 import * as DS from '../api/_draftStore.js';
 import * as INV from '../api/_inventoryInstance.js';
-import { packetInputFingerprint } from '../api/_listingPacket.js';
+import { packetInputFingerprint, PACKET_SCHEMA_VERSION } from '../api/_listingPacket.js';
+
+// Fixtures below that mean "a CURRENT packet" say so by importing the constant
+// rather than hardcoding its value. They used to hardcode 1, which was true
+// until RC-2 bumped the schema to 2 for the shipping block -- at which point
+// four assertions about currency started failing for a reason unrelated to
+// what they test. A fixture pinned to a literal tests the literal, not the
+// behaviour. The version-specific cases (a MALFORMED top-level version, a
+// version AHEAD of the reader) keep their literals on purpose: those depend on
+// the exact number, and are in tests/draft-index-recovery.mjs besides.
+const CURV = PACKET_SCHEMA_VERSION;
 
 const { check, checkAsync, done } = harness('draft-store');
 
@@ -454,7 +464,7 @@ const pk_stored = (extra = {}) => {
 check('a draft with no packet reads clean',
       DS.readStoredDraft(pk_stored({})).packetStatus === undefined);
 
-const pk_cur = DS.readStoredDraft(pk_stored({ packet: { metadata: { packetSchemaVersion: 1 }, title: 'X' } }));
+const pk_cur = DS.readStoredDraft(pk_stored({ packet: { metadata: { packetSchemaVersion: CURV }, title: 'X' } }));
 check('a current packet is returned as usable',
       pk_cur.ok === true && pk_cur.packetUsable === true && pk_cur.packetStatus === 'CURRENT');
 check('and it is the packet itself, not a copy of the draft', pk_cur.packet.title === 'X');
@@ -486,7 +496,7 @@ check('a non-object packet is refused at WRITE time', (() => {
   catch (e) { return e.message.endsWith(':packet:not-an-object'); }
 })());
 check('a packet is stored verbatim with the version it declared',
-      DS.buildDraft({ ...pkBase(), packet: { metadata: { packetSchemaVersion: 1 }, a: 1 } }).packet.metadata.packetSchemaVersion === 1,
+      DS.buildDraft({ ...pkBase(), packet: { metadata: { packetSchemaVersion: CURV }, a: 1 } }).packet.metadata.packetSchemaVersion === CURV,
       'stamping our own version onto someone else\u2019s packet destroys the fact that makes it safe to read');
 
 const pk_tomb = DS.readStoredDraft(JSON.stringify({
@@ -515,7 +525,7 @@ const laneA = (over = {}) => DS.buildDraft({
   rev: 1, priceSource: 'comp',
   // Stamped as a real producer stamps it: from the inputs the packet
   // consumed, not from the draft it is attached to.
-  packet: { metadata: { packetSchemaVersion: 1,
+  packet: { metadata: { packetSchemaVersion: CURV,
               inputFingerprint: packetInputFingerprint({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
                 price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
             pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
@@ -618,7 +628,7 @@ check('a version-ahead packet is INCOMPATIBLE, not STALE',
 {
   const fpOf = (o) => packetInputFingerprint(o);
   const mismatched = DS.buildDraft(laneA({
-    packet: { metadata: { packetSchemaVersion: 1,
+    packet: { metadata: { packetSchemaVersion: CURV,
                 // built from $100, about to be attached to a $500 draft
                 inputFingerprint: fpOf({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
                   price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
@@ -643,7 +653,7 @@ check('a version-ahead packet is INCOMPATIBLE, not STALE',
   // have shown A's category, aspects and condition block.
   const wrongCard = DS.buildDraft(laneA({
     sku: 'sku_OTHER_CARD',
-    packet: { metadata: { packetSchemaVersion: 1,
+    packet: { metadata: { packetSchemaVersion: CURV,
                 inputFingerprint: fpOf({ sku: 'sku_laneA', slot: 'ebay:fixed-price',
                   price: 100, priceSource: 'comp', title: 'Charizard Base Set Holo' }) },
               pricing: { listPrice: 100 }, title: { text: 'Charizard Base Set Holo' } },
