@@ -148,7 +148,65 @@ about a thing he could not see is not compliance with the term he wrote down.
 The gap in §2 is small and cheap to close; I would rather close it than treat
 it as pre-forgiven.
 
-**Q1 — Where does the linkback go, and how many of them?**
+### Owner decision, 2026-09-08
+
+The owner's reading: *"'Cite us in your product' means let people know your
+prices come from us, which we do, and once our Stripe revenue is over $1000 we
+can email and negotiate a fee."*
+
+**Accepted on the revenue term.** "Revenue" is now defined for our purposes as
+**Stripe revenue**, and the plan at the threshold is to email PriceCharting and
+negotiate. Recorded as the operating definition. Two residual notes, neither a
+disagreement: Stripe revenue is itself two numbers — gross charges or net
+payouts after Stripe's fees — and the difference is real money at this scale;
+and the term reads "until you reach $1000/mo," so the email needs to go *before*
+the line is crossed, not after we notice. That is why §4 wants the alert at
+roughly $750. Nothing about the definition changes that.
+
+**One correction on the citation term, then it is yours to call.** The
+parenthetical is *"either an icon or text with a linkback to our product
+page."* It parses two ways:
+
+- **A.** either [an icon] or [text **with a linkback**] — an icon alone is
+  enough; text needs the link.
+- **B.** either [an icon] or [text], **with a linkback** — the link is required
+  either way.
+
+Our three short surfaces are **unlinked text**. Under reading A they need the
+link. Under reading B they need the link. There is no parse of that sentence
+under which bare unlinked text is the satisfied form — the only linkless option
+he offered was an icon, which we do not currently show. So "we already do this"
+is true of the *naming* and not yet true of the *citation as he described it*.
+
+I am not arguing we are in breach of anything he would care about. His name is
+visibly on every price surface, the intent of the term is plainly met, and no
+reasonable person at PriceCharting would write to complain. I am saying the
+cheapest possible version of being unambiguously correct is available, and
+below is what it costs.
+
+### Q1 (narrowed) — one small change, yes or no?
+
+Make the source text that already exists into a link. No new UI, no badge, no
+second credit line, no visual change beyond the label becoming clickable:
+
+| Surface | Today | After |
+|---|---|---|
+| Price row caption (`js/core.3f83abec.js:4937`) | text | same text, linked |
+| Listing basis label (`js/core.3f83abec.js:2618`, `:2690`) | text | same text, linked |
+| Quick Pricing ladder no-url fallback (`:4467`) | text | linked to their canonical page |
+
+That is a small, contained edit to the display layer. It removes the ambiguity
+entirely, under either parse, and it needs no reply from Brady. The first two
+surfaces already have the card's PriceCharting id available, so the link can be
+the specific product page rather than a generic one — which is *better* than the
+term asks for.
+
+**Say yes and I will build it into the next slice. Say no and I will record
+that the naming-only reading is the decision of record and stop raising it.**
+Either answer is fine; what I do not want is for this to sit undecided in a
+file while we both assume it is handled.
+
+**Q1 (original) — Where does the linkback go, and how many of them?**
 Options: (a) one persistent credit in the footer or an About/Sources panel,
 linked, plus the existing unlinked labels left as-is; (b) every source label
 becomes a link, so the citation travels with each number; (c) both. (b) is the
