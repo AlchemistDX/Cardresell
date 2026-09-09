@@ -226,6 +226,22 @@ custom environment and incurs no additional cost.
    connection from All Environments to Production**, then **connect the second
    database scoped to Preview and Development**. The target state is unchanged;
    only the surface is.
+
+   **Order within step 4 is load-bearing (17:15).** Narrow the existing
+   connection to Production **first**, and only then connect the second
+   database. Both connections inject the *same five key names*; while
+   `upstash-kv-bistre-arrow` still claims All Environments, a second store
+   scoped to Preview/Development would be claiming key names already held there.
+   Expect that to be refused as a conflict, or — worse — to resolve silently in
+   an order nobody chose. Narrowing first vacates Preview and Development so the
+   second connection lands on unclaimed names.
+
+   Between the two operations, **Preview and Development have no Redis
+   binding.** That is acceptable and expected: nothing currently depends on
+   Preview, and `budgetMode` already answers `ENABLED_UNBOUND` → 503
+   `budget_store_unbound` for an unbound store (`api/tpl-proxy.js:44-56,:123`)
+   rather than failing open. Do not treat a 503 from a Preview deployment during
+   that interval as a defect.
 5. **Verify all five names show the correct separation before pushing.**
 6. **Create a Preview deployment and prove writes land only in the new
    database** — the step that converts the design into evidence.
