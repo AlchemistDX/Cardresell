@@ -1016,6 +1016,22 @@ export function buildListingPacket(row = {}, ctx = {}) {
   }
 
   // ── Shipping assumptions (RC-2, first item) ─────────────────────────────
+  //
+  // `notes[].message` is rendered verbatim to the seller by the review screen,
+  // so these sentences are UI copy and the two shipping sides must be named
+  // the way the seller sees them. The findings carry the internal keys
+  // (`buyerPays`, `sellerCost`) because `notes[].data` is machine-read and
+  // must stay stable; interpolating those keys into the sentence put
+  // "Shipping buyerPays and sellerCost came through as zero" in front of a
+  // seller, which names our object graph rather than their listing.
+  //
+  // One map, used by every branch below, so the two names cannot drift apart
+  // between codes. The fallback is the raw key: an unmapped side is a bug to
+  // find, not a sentence to silently drop a subject from.
+  const SHIP_SIDE = { buyerPays: 'what the buyer pays', sellerCost: 'your postage' };
+  const shipSide  = (k) => SHIP_SIDE[k] || String(k);
+  const shipSides = (ks) => (Array.isArray(ks) ? ks : []).map(shipSide).join(' and ');
+
   const { shipping, findings: shippingFindings } =
     normalizeShippingAssumptions(ctx.shipping);
 
@@ -1027,23 +1043,24 @@ export function buildListingPacket(row = {}, ctx = {}) {
         + 'this draft does not say what either was.');
     } else if (f.code === PACKET_CODES.SHIPPING_UNPARSEABLE) {
       add(f.code, SEVERITY.WARNING,
-          `Shipping ${f.fields.join(' and ')} was supplied in a form this packet `
+          `Shipping \u2014 ${shipSides(f.fields)} \u2014 was entered in a form we `
         + 'could not read, so it has not been recorded.', { fields: f.fields });
     } else if (f.code === PACKET_CODES.SHIPPING_NEGATIVE) {
       add(f.code, SEVERITY.WARNING,
-          `Shipping ${f.fields.join(' and ')} is negative. Recorded as supplied `
-        + 'rather than corrected, because a clamped value would look like a '
-        + 'deliberate zero.', { fields: f.fields });
+          `Shipping \u2014 ${shipSides(f.fields)} \u2014 is negative. Recorded as `
+        + 'entered rather than corrected, because changing it to zero would '
+        + 'look like a deliberate choice you did not make.', { fields: f.fields });
     } else if (f.code === PACKET_CODES.SHIPPING_PARTIAL) {
       add(f.code, SEVERITY.WARNING,
-          `Only one side of shipping was supplied; ${f.missing} is missing. A `
-        + 'draft carrying one side reads as a worse or better deal than the '
-        + 'seller actually set up.', { missing: f.missing });
+          `Only one side of shipping was entered; ${shipSide(f.missing)} is `
+        + 'missing. With one side recorded, this draft reads as a better or '
+        + 'worse deal than the one you actually set up.', { missing: f.missing });
     } else if (f.code === PACKET_CODES.SHIPPING_ZERO_UNCONFIRMED) {
       add(f.code, SEVERITY.INFO,
-          `Shipping ${f.fields.join(' and ')} came through as zero. That field `
-        + 'starts at zero, so this packet cannot tell a deliberate free-shipping '
-        + 'choice from an untouched field, and does not claim to.',
+          `Shipping \u2014 ${shipSides(f.fields)} \u2014 came through as zero. `
+        + 'Those boxes start at zero, so a deliberate free-shipping choice and '
+        + 'an untouched box look the same here. This is recorded as unconfirmed '
+        + 'rather than as free shipping.',
           { fields: f.fields });
     }
   }
@@ -1053,8 +1070,8 @@ export function buildListingPacket(row = {}, ctx = {}) {
   // shipping figures must not be able to buy silence about the fact that they
   // were not applied.
   add(PACKET_CODES.SHIPPING_NOT_IN_NET, SEVERITY.INFO,
-      'Any figure in this packet covers the item price only. Shipping is '
-    + 'recorded here but not applied to it. The venue comparison counts what '
+      'Any figure shown here covers the item price only. Shipping is '
+    + 'recorded but not applied to it. The venue comparison counts what '
     + 'the buyer pays for shipping and what postage costs you, so its number '
     + 'may differ; use the comparison to choose where to sell.',
       { appliedToPricing: false });

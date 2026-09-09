@@ -905,11 +905,22 @@ try {
     T.check('the note does not assert the item-only base as eBay\u2019s rule',
       !/^(?!.*this estimate).*fees are charged on the item price only/i.test(f.note), f.note);
 
-    // The failure this guards: a zero that reads as a fact. Shipping is not
-    // modelled AND its value is unknown, so it gets no row at all.
-    T.check('shipping is not rendered as a $0.00 fee row',
-      !f.rows.some((r) => /ship|postage/i.test(r.label)),
-      JSON.stringify(f.rows.map((r) => r.label)));
+    // The failure this guards: a zero that reads as a fact. This draft's packet
+    // records no shipping, so there must be no shipping row -- an unrecorded
+    // assumption gets no row at all, rather than a $0.00 one.
+    //
+    // Matched on ROW KIND, not on the label text. It used to test
+    // `/ship|postage/i` against every label, which passed only while no label
+    // anywhere contained the word: RC-2 renamed the net row to "Estimated net
+    // before shipping" and this assertion began failing on the very label
+    // whose job is to disclose the exclusion. A guard that fires on an
+    // honest disclosure is testing spelling, not behaviour.
+    T.check('an unrecorded shipping assumption gets no row, not a $0.00 one',
+      !f.rows.some((r) => String(r.kind || '').startsWith('ship')),
+      JSON.stringify(f.rows.map((r) => `${r.kind}:${r.label}`)));
+    T.check('and no shipping figure is invented in a fee row',
+      !f.rows.some((r) => r.kind === 'fee' && /ship|postage/i.test(r.label)),
+      JSON.stringify(f.rows.filter((r) => r.kind === 'fee').map((r) => r.label)));
 
     // Tax is the opposite case and must not be collapsed into the same rule.
     // eBay charges the final value fee on a total that INCLUDES sales tax
@@ -1174,8 +1185,121 @@ try {
       /item price only/i.test(f.heading), f.heading);
 
     const net = f.rows.find((r) => r.kind === 'net');
+    // Accepted decision 2026-09-09: one net figure for Phase 1, named for what
+    // it OMITS rather than for what it covers. Was /item only/, which is
+    // accurate but describes the basis; the exclusion is the part the seller
+    // can act on, and the recorded assumptions now sit beside the number.
     T.check('the total row is qualified too, not just the heading',
-      !!net && /estimat/i.test(net.label) && /item only/i.test(net.label), net && net.label);
+      !!net && /estimat/i.test(net.label) && /before shipping/i.test(net.label), net && net.label);
+    T.check('and the qualifier names the exclusion, not a completeness',
+      !!net && !/after all deductions/i.test(net.label), net && net.label);
+    await ctx.close();
+  });
+
+  /* ── RC-2: the seller's shipping assumptions, read back ────────────────
+   *
+   * The question these answer is not "does the normalizer work" -- the offline
+   * suite covers that -- but "does a figure the seller declared at create time
+   * reach their eyes at review time". Every fixture below was created through
+   * the real POST handler and read through the real GET, so the chain under
+   * test is create -> save -> reload -> review, end to end.
+   *
+   * The rows must come from the PACKET. #shipCharge/#shipCost are never
+   * consulted here; doing so would attribute the last scanned card's postage
+   * to whichever draft is open, which is the misattribution the fee-breakdown
+   * comment in core.js refuses.
+   */
+  await T.section('recorded shipping assumptions survive to the review screen', async () => {
+    const { ctx, page } = await boot(serveRead(F.packetShipDeclared));
+    await openReview(page, F.ids.packetShipDeclared);
+    const f = await feesOf(page);
+
+    const buyer  = f.rows.find((r) => /Buyer-paid shipping/i.test(r.label));
+    const seller = f.rows.find((r) => /Your postage/i.test(r.label));
+
+    T.check('the buyer-paid figure the seller declared is read back',
+      !!buyer && amt(buyer.amount) === 5.99, buyer && `${buyer.label} ${buyer.amount}`);
+    T.check('the seller\u2019s own postage is read back too',
+      !!seller && amt(seller.amount) === 4.50, seller && `${seller.label} ${seller.amount}`);
+
+    // The decision was ONE net figure. If a second appeared, or if the net
+    // moved to include shipping, this is where it would show.
+    T.check('exactly one net figure is shown',
+      f.rows.filter((r) => r.kind === 'net').length === 1,
+      JSON.stringify(f.rows.map((r) => r.kind)));
+    const net = f.rows.find((r) => r.kind === 'net');
+    T.check('the net is labelled for the exclusion',
+      !!net && /before shipping/i.test(net.label), net && net.label);
+
+    // The rows are DISCLOSED, not DEDUCTED. If either were counted, the net
+    // would no longer equal gross minus the fee rows alone.
+    const gross = f.rows.find((r) => r.kind === 'gross');
+    const fees  = f.rows.filter((r) => r.kind === 'fee').reduce((a, r) => a + amt(r.amount), 0);
+    T.check('shipping is not subtracted from the net',
+      Math.abs((amt(gross.amount) + fees) - amt(net.amount)) < 0.005,
+      `gross ${gross.amount} fees ${fees} net ${net.amount}`);
+    T.check('and the shipping rows are marked as not counted',
+      !!buyer && /not in net/i.test(buyer.label), buyer && buyer.label);
+    await ctx.close();
+  });
+
+  await T.section('a declared zero is shown as unconfirmed, not as free shipping', async () => {
+    const { ctx, page } = await boot(serveRead(F.packetShipZero));
+    await openReview(page, F.ids.packetShipZero);
+    const f = await feesOf(page);
+
+    const buyer = f.rows.find((r) => /Buyer-paid shipping/i.test(r.label));
+    T.check('the zero is shown rather than hidden',
+      !!buyer && amt(buyer.amount) === 0, buyer && buyer.amount);
+    // Both inputs carry value="0" in index.html, so an untouched field and a
+    // deliberate "I ship free" are indistinguishable. The qualifier is what
+    // keeps the zero from becoming a claim.
+    T.check('and it is qualified as unconfirmed on the row itself',
+      !!buyer && /unconfirmed/i.test(buyer.label), buyer && buyer.label);
+    T.check('the zero is not described as free shipping',
+      !/free shipping/i.test(JSON.stringify(f.rows)), JSON.stringify(f.rows.map((r) => r.label)));
+
+    const note = await page.evaluate(() => {
+      const n = document.querySelector('#reviewWrap [data-fee-ship="zero-unconfirmed"]');
+      return n ? { text: n.textContent || '', shown: !!(n.offsetWidth || n.offsetHeight || n.getClientRects().length) } : null;
+    });
+    T.check('the unconfirmed-zero notice is present', !!note, JSON.stringify(note));
+    // Present in the DOM is not the same as visible to a seller. The stale-fee
+    // banner in this file shipped once with dead styling and was invisible.
+    T.check('and it is actually visible, not just in the DOM',
+      !!note && note.shown === true, JSON.stringify(note));
+    // Informational per the accepted decision. Tested on the IMPERATIVES that
+    // make copy read as a blocker, not on the word "cannot" -- the honest
+    // sentence here legitimately describes what the record cannot distinguish,
+    // and the first version of this assertion failed on exactly that.
+    T.check('the notice is informational, not phrased as a blocker',
+      !!note && !/\byou must\b|\bmust be\b|\bblocked\b|\bfix (this |it )?before\b|\bcannot list\b|\brequired\b/i.test(note.text),
+      note && note.text);
+    // The copy is rendered verbatim from the packet, so internal key names
+    // reaching it are a seller-visible defect. This fired: the message read
+    // "Shipping buyerPays and sellerCost came through as zero".
+    T.check('the notice names the two sides in the seller\u2019s words, not ours',
+      !!note && !/buyerPays|sellerCost|packet|findings/i.test(note.text), note && note.text);
+    T.check('and it says which sides came through as zero',
+      !!note && /buyer/i.test(note.text) && /postage/i.test(note.text), note && note.text);
+    await ctx.close();
+  });
+
+  await T.section('an unreadable shipping entry is handed back, not swallowed', async () => {
+    const { ctx, page } = await boot(serveRead(F.packetShipUnreadable));
+    await openReview(page, F.ids.packetShipUnreadable);
+    const f = await feesOf(page);
+
+    const buyer = f.rows.find((r) => /Buyer-paid shipping/i.test(r.label));
+    // Rule 2: a silent omission is the bug. "four dollars" must not vanish,
+    // and must not become $0.00 either.
+    T.check('the rejected text is shown verbatim so it can be corrected',
+      !!buyer && /four dollars/.test(buyer.amount), buyer && buyer.amount);
+    T.check('and it is not coerced into a zero',
+      !!buyer && !/\$0\.00/.test(buyer.amount), buyer && buyer.amount);
+    T.check('the readable side is still shown',
+      f.rows.some((r) => /Your postage/i.test(r.label) && amt(r.amount) === 4.50),
+      JSON.stringify(f.rows.map((r) => `${r.label} ${r.amount}`)));
     await ctx.close();
   });
 

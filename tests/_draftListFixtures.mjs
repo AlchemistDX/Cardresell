@@ -259,7 +259,38 @@ export async function generateReadFixtures() {
   const bareIds = await seedPublishable(1);
   const packetAbsent = await call({ id: bareIds[0] });
 
+  // ── RC-2: shipping assumptions, created through the real POST handler ────
+  //
+  // These exist to answer a question the suite totals could not: does a
+  // shipping assumption a seller declares at CREATE survive being written,
+  // read back, and rendered? Every one of these goes through the real POST and
+  // the real read, so what the screen receives is what production would store.
+  //
+  // Three states, because the display has three behaviours:
+  //   packetShipDeclared  — both sides declared, nonzero; rows read back
+  //   packetShipZero      — a declared zero, which cannot be told from an
+  //                         untouched value="0" input, so it must be marked
+  //                         unconfirmed rather than shown as free shipping
+  //   packetShipUnreadable — an entry that did not parse, handed back verbatim
+  const shipCtx = (shipping) => ({ ...PRICING_CONTEXT, shipping });
+
+  const madeShipDeclared = await post(
+    { ...httpInput(), pricingContext: shipCtx({ buyerPays: '5.99', sellerCost: '4.50' }) }, 'pkt-ship-declared');
+  const shipDeclaredId = madeShipDeclared.body.draftId;
+  const packetShipDeclared = await call({ id: shipDeclaredId });
+
+  const madeShipZero = await post(
+    { ...httpInput(), pricingContext: shipCtx({ buyerPays: '0', sellerCost: '0' }) }, 'pkt-ship-zero');
+  const shipZeroId = madeShipZero.body.draftId;
+  const packetShipZero = await call({ id: shipZeroId });
+
+  const madeShipUnreadable = await post(
+    { ...httpInput(), pricingContext: shipCtx({ buyerPays: 'four dollars', sellerCost: '4.50' }) }, 'pkt-ship-unreadable');
+  const shipUnreadableId = madeShipUnreadable.body.draftId;
+  const packetShipUnreadable = await call({ id: shipUnreadableId });
+
   return {
+    packetShipDeclared, packetShipZero, packetShipUnreadable,
     blockedTitle, blockedPrice, blockedBoth, publishable,
     packetCurrent, packetStale, packetAbsent, packetBlocked,
     packetSellerPriced, packetCompPriced, packetCompRebuilt,
@@ -276,6 +307,9 @@ export async function generateReadFixtures() {
       packetNoBasis: madeNoBasis.body.draftId,
       packetPriceEdited: editedId, packetNotesEdited: notesId,
       packetDatedBySource: madeDated.body.draftId,
+      packetShipDeclared: shipDeclaredId,
+      packetShipZero: shipZeroId,
+      packetShipUnreadable: shipUnreadableId,
     },
   };
 }

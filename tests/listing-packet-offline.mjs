@@ -1706,5 +1706,72 @@ console.log('\nRC-2.1 — shipping assumptions');
         full.metadata.inputFingerprint === noShip.metadata.inputFingerprint);
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Note copy is UI. `notes[].message` is rendered verbatim to the seller by the
+// review screen, so an internal identifier reaching it is a seller-visible
+// defect, not a cosmetic one. This fired on the shipping notes, which read
+// "Shipping buyerPays and sellerCost came through as zero" -- our object graph
+// quoted at a seller. Guarded across EVERY code the module can emit, not just
+// the shipping ones, because the next author has no reason to know the rule.
+console.log('\nNote copy is seller-facing');
+{
+  const COPY_CTX = {
+    feeModelRevision: 7, feeScheduleVerified: '2026-09-01', slot: 'ebay:fixed-price',
+    price: 100, priceSource: 'comp', maxTitleLength: 80,
+    now: Date.parse('2026-09-09T13:00:00.000Z'),
+  };
+  // Internal spellings that must never appear in a sentence. camelCase keys,
+  // snake_case codes, and our own words for our own machinery.
+  const FORBIDDEN = /buyerPays|sellerCost|appliedToPricing|basisMeta|priceBasis|feeModelRevision|packetSchemaVersion|inputFingerprint|migrationsApplied|[a-z]+_[A-Z]|\bthis packet\b|\bfindings\b/;
+
+  // Every shipping shape that produces a finding, so each branch's copy is
+  // actually exercised rather than assumed.
+  const cases = [
+    ['absent',       undefined],
+    ['unparseable',  { buyerPays: 'four dollars', sellerCost: '4.50' }],
+    ['negative',     { buyerPays: '-3', sellerCost: '4.50' }],
+    ['partial',      { sellerCost: '4.50' }],
+    ['zero',         { buyerPays: '0', sellerCost: '0' }],
+    ['declared',     { buyerPays: '5.99', sellerCost: '4.50' }],
+  ];
+
+  const seen = new Set();
+  for (const [name, shipping] of cases) {
+    const pk = buildListingPacket(CARDS[0], { ...COPY_CTX, shipping });
+    for (const n of pk.notes) {
+      seen.add(n.code);
+      const bad = FORBIDDEN.exec(String(n.message || ''));
+      check(`${name}: ${n.code} copy names no internals` + (bad ? ` (found "${bad[0]}")` : ''),
+            !bad, n.message);
+      // A sentence that ends mid-clause is what a missing interpolation looks
+      // like once the identifier is removed rather than replaced.
+      check(`${name}: ${n.code} copy is a finished sentence`,
+            /[.!?]$/.test(String(n.message || '').trim())
+            && !/\s(and|or|;)\s*[.]/.test(String(n.message || '')),
+            n.message);
+      check(`${name}: ${n.code} copy leaves the code out of the prose`,
+            !String(n.message || '').includes(n.code), n.message);
+    }
+  }
+
+  // The machine-readable side must keep the internal keys. Fixing the prose by
+  // renaming the data would break every consumer reading notes[].data.
+  const zero = buildListingPacket(CARDS[0], { ...COPY_CTX, shipping: { buyerPays: '0', sellerCost: '0' } });
+  const zn = zero.notes.find((n) => n.code === 'SHIPPING_ZERO_UNCONFIRMED');
+  // On the note itself, not under a `data` wrapper -- `add()` spreads its
+  // fourth argument onto the note. Asserted against the real shape rather
+  // than the one this assertion first assumed.
+  check('while the note still carries the internal field keys for machines',
+        !!zn && Array.isArray(zn.fields)
+        && zn.fields.join(',') === 'buyerPays,sellerCost',
+        JSON.stringify(zn));
+
+  check('and the shipping copy branches were all reached',
+        ['SHIPPING_ABSENT','SHIPPING_UNPARSEABLE','SHIPPING_NEGATIVE',
+         'SHIPPING_PARTIAL','SHIPPING_ZERO_UNCONFIRMED','SHIPPING_NOT_IN_NET']
+          .every((c) => seen.has(c)),
+        [...seen].join(','));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

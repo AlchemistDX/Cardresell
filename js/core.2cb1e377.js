@@ -20950,6 +20950,44 @@ function _crPricingContext(opts) {
     if (retrievedAt) meta.retrievedAt = retrievedAt;
     if (Object.keys(meta).length) ctx.basisMeta = meta;
   }
+
+  // ── Shipping assumptions, captured HERE and never re-read later ──────────
+  //
+  // The fee-breakdown comment in _reviewFeesHtml states why the review screen
+  // must not read #shipCharge/#shipCost: those inputs describe the card
+  // currently in hand, so reading them while looking at an older draft
+  // attributes the last scanned card's postage to an unrelated listing. That
+  // reasoning is correct and is preserved -- the review screen still never
+  // touches them. It reads the values STAMPED INTO THE PACKET at create time.
+  //
+  // Capture is legitimate at exactly this moment, and only under the same
+  // binding test the basis above must pass: the inputs may be attributed to
+  // this draft only when the card being drafted IS the card in hand. Same
+  // identity function, same fail-closed behaviour -- no card, or a different
+  // card, and shipping is omitted, which the server reports as
+  // SHIPPING_ABSENT rather than as a declared zero.
+  //
+  // The raw strings go up unparsed. The server owns the
+  // absent/unparseable/partial/zero-unconfirmed classification, and a second
+  // classifier here -- however small -- is the duplicated-business-rule
+  // failure this file has been bitten by before. In particular the `|| 0`
+  // coercion used on the ranking surface must NOT be applied: it turns an
+  // unreadable entry into a confident zero, which is the whole thing the
+  // packet's vocabulary exists to avoid.
+  const shipEls = {
+    buyerPays:  document.getElementById('shipCharge'),
+    sellerCost: document.getElementById('shipCost'),
+  };
+  if (o.card && (shipEls.buyerPays || shipEls.sellerCost)) {
+    const inHand = (typeof selectedCard !== 'undefined') ? selectedCard : null;
+    if (inHand && _crIntentToken(inHand) === _crIntentToken(o.card)) {
+      const ship = {};
+      if (shipEls.buyerPays)  ship.buyerPays  = String(shipEls.buyerPays.value);
+      if (shipEls.sellerCost) ship.sellerCost = String(shipEls.sellerCost.value);
+      if (Object.keys(ship).length) ctx.shipping = ship;
+    }
+  }
+
   return ctx;
 }
 
@@ -22028,13 +22066,28 @@ function _reviewFieldsHtml() {
  * and a registered test asserts that sum agrees with the model's own net to
  * the cent -- if those two ever disagree the model is wrong, not the label.
  *
- * SHIPPING IS EXCLUDED, and that is a stated limitation rather than a zero
- * dressed up as a fact. shipCharge and shipCost live on the scan surface and
- * describe the card currently in hand; a draft record carries no shipping
- * field at all. Reading those inputs here would quietly attribute the last
- * scanned card's postage to an unrelated draft, which is precisely the
- * invented figure Sec 5.5 refuses. So the basis is the item price alone and
- * the screen says so, in the surface, not only in this comment.
+ * SHIPPING IS EXCLUDED FROM THE NET, and that is a stated limitation rather
+ * than a zero dressed up as a fact. The net row is named for the exclusion --
+ * "Estimated net before shipping" -- so the surface says it, not only this
+ * comment.
+ *
+ * Updated 2026-09-09 (RC-2). The original wording of this paragraph ended
+ * "a draft record carries no shipping field at all", and that clause is no
+ * longer true: the packet now carries a `shipping` block stamped at create
+ * time. The REASONING it supported is unchanged and still binding, so read it
+ * as the rule it always was --
+ *
+ *   shipCharge and shipCost live on the scan surface and describe the card
+ *   currently IN HAND. Reading those inputs from this screen would attribute
+ *   the last scanned card's postage to an unrelated draft, which is precisely
+ *   the invented figure Sec 5.5 refuses.
+ *
+ * -- which is why `_reviewShippingRows` reads the persisted packet and has no
+ * fallback to the live inputs. What changed is only WHEN the values are read:
+ * at create, bound to the card being drafted (see _crPricingContext), instead
+ * of never. The seller's assumptions are displayed BESIDE the net, marked as
+ * not counted; they are not folded into it, and this screen still computes no
+ * shipping arithmetic of its own.
  *
  * NO PROVENANCE COLUMN, AND NO HEADER FOR ONE. The table is shaped to grow a
  * column -- fixed row structure, one amount cell per row -- but it does not
@@ -22119,7 +22172,16 @@ function _reviewFeeRow(kind, label, amount) {
    is the one place it CANNOT be: the ranking surface says "Net after all
    deductions" because it models seller shipping, and this screen does not, so
    borrowing that label would claim a completeness the number lacks. Hence
-   "Estimated net (item only)" -- the qualifier mechanism, not the label.
+   "Estimated net before shipping" -- the qualifier mechanism, not the label.
+
+   2026-09-09, RC-2: the label was "Estimated net (item only)". "Item only"
+   is accurate but says what the number IS rather than what it OMITS, and the
+   omission is the part a seller can act on. Accepted decision: one net figure
+   for Phase 1, named for its exclusion, with the recorded shipping
+   assumptions shown beside it rather than folded in. A second calculated
+   net -- item price minus fees plus buyer shipping minus postage -- is
+   deliberately NOT computed here; that arithmetic already exists once, on the
+   ranking surface, and this screen having its own copy is rule 1 again.
 
    Tax stays unmodelled on purpose. eBay charges the final value fee on the
    total sale INCLUDING sales tax (ebay.com/help/selling/fees-credits-invoices/
@@ -22160,6 +22222,67 @@ function _reviewBasisRow(label, qualifier, amount, kind) {
  * screen to eBay, which is `taxOn: true` -- two implementations agreeing by
  * coincidence of scope. Pattern instance 35, fourth rider.
  */
+/* Recorded shipping assumptions, from the packet and ONLY from the packet.
+ *
+ * Reads `_reviewState.packet.shipping` -- the values stamped when the draft was
+ * created, while the card was in hand. It must never fall back to
+ * #shipCharge/#shipCost: that is the misattribution the fee-breakdown comment
+ * above rejects, and a fallback would reintroduce it silently for exactly the
+ * drafts whose packet is missing.
+ *
+ * These are the SELLER'S assumptions, not the product's estimate, and they are
+ * not added to the net. So they render through `_reviewBasisRow` -- the
+ * existing qualifier-in-parentheses mechanism the ranking surface uses to mark
+ * a number as disclosed-but-not-counted -- rather than through the fee rows,
+ * which are deductions the model actually applied.
+ *
+ * Returns '' when nothing was recorded. Absence already has a voice: the
+ * exclusion note below the table, which is unconditional. A row reading
+ * "not recorded -- $0.00" would be a zero dressed up as a fact.
+ */
+function _reviewShippingRows() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  const sh = (pk && pk.shipping && typeof pk.shipping === 'object' && !Array.isArray(pk.shipping))
+    ? pk.shipping : null;
+  if (!sh) return '';
+
+  // One side at a time. A partial record shows the side that exists rather
+  // than suppressing both, because a seller who entered postage and not the
+  // buyer charge should still see their postage read back.
+  const side = (o, label) => {
+    if (!o || typeof o !== 'object') return '';
+    if (o.declared === true && Number.isFinite(Number(o.amount))) {
+      // A declared zero is shown, and shown AS unconfirmed. Both inputs are
+      // declared value="0" in index.html, so a zero here cannot be
+      // distinguished from a field the seller never touched.
+      const qual = Number(o.amount) === 0 ? 'declared zero, unconfirmed' : 'not in net';
+      return _reviewBasisRow(label, qual, _reviewMoney(Number(o.amount)), 'ship');
+    }
+    // Handed back verbatim so the seller can see what they typed and correct
+    // it. Blanking it leaves them guessing which field was rejected.
+    if (typeof o.rejected === 'string' && o.rejected !== '') {
+      return _reviewBasisRow(label, 'could not be read', o.rejected, 'ship-unreadable');
+    }
+    return '';
+  };
+
+  return side(sh.buyerPays, 'Buyer-paid shipping') + side(sh.sellerCost, 'Your postage');
+}
+
+/* The unconfirmed-zero notice.
+ *
+ * Accepted decision, 2026-09-09: informational, NOT a readiness blocker. An
+ * untouched default must not silently become a confirmed "I ship free", but a
+ * seller who genuinely does ship free should not be stopped from listing.
+ */
+function _reviewShippingZeroNote() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  const notes = (pk && Array.isArray(pk.notes)) ? pk.notes : [];
+  const hit = notes.find((n) => n && n.code === 'SHIPPING_ZERO_UNCONFIRMED');
+  if (!hit) return '';
+  return `<div class="review-fees-note" data-fee-ship="zero-unconfirmed">${_reviewEsc(String(hit.message || ''))}</div>`;
+}
+
 function _reviewTaxRow(pid) {
   const note = venueTaxNote(pid);
   if (!note) return '';
@@ -22223,7 +22346,7 @@ function _reviewFeesHtml() {
         <div class="review-fees-net" data-fee-net-headline="">\u2014</div>
         <dl class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', '\u2014')}
-${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
+${_reviewFeeRow('net', 'Estimated net before shipping', '\u2014')}
         </dl>
         <div class="review-fees-note">Add a price to see the fee breakdown. Shipping is not included.</div>
         ${pill}
@@ -22239,12 +22362,13 @@ ${_reviewFeeRow('net', 'Estimated net (item only)', '\u2014')}
         <dl class="review-fees-table">
 ${_reviewFeeRow('gross', 'Item price', _reviewMoney(c.price))}
 ${_reviewBasisRow(FEE_DISCLOSURE.baseLabel, 'item', _reviewMoney(c.price))}
-${_reviewTaxRow(pid)}${feeRows}
+${_reviewTaxRow(pid)}${feeRows}${_reviewShippingRows()}
 ${venueTrsNote(pid) ? _reviewBasisRow(FEE_DISCLOSURE.trsWithheldLabel, FEE_DISCLOSURE.trsWithheldQualifier, FEE_UNKNOWN, 'withheld') : ''}
-${_reviewFeeRow('net', 'Estimated net (item only)', _reviewMoney(c.net))}
+${_reviewFeeRow('net', 'Estimated net before shipping', _reviewMoney(c.net))}
         </dl>
         <div class="review-fees-note">${_reviewEsc(venueEstimateNote(pid))}</div>
         <div class="review-fees-note" data-fee-crosssurface="">${_reviewEsc(FEE_DISCLOSURE.crossSurfaceNote)}</div>
+        ${_reviewShippingZeroNote()}
         ${venueTrsNote(pid) ? `<div class="review-fees-note" data-fee-trs="withheld">${_reviewEsc(FEE_DISCLOSURE.trsWithheldNote)}</div>` : ''}
         ${pill}
       </div>`;
