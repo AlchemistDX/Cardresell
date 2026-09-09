@@ -1,8 +1,10 @@
 # D5 — Signed-in continuation: what I could verify, and the one check I cannot run
 
 **Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **Live bundle:** `js/core.66c39922.js` (`index.html:3834`)
-**Suite:** `draft-review-screen` **367 passed, 0 failed**
-**Status: signed-in behaviour still UNVERIFIED. Nothing pushed, nothing deployed.**
+**Suite:** `draft-review-screen` **370 passed, 0 failed**
+**Status: OBSERVED 2026-09-08 on iOS Safari (§9). Pass row of the pre-committed
+table, for that tested case only. One caveat is open — see §9.3.
+Nothing pushed, nothing deployed.**
 
 D5 §8.3 reclassified signed-in continuation from a footnote to the critical path,
 on the grounds that every probe was logged out and every real seller is signed
@@ -195,6 +197,22 @@ Specifically, and decided now rather than after the observation:
 - **Keep** the seed on screen — it becomes the thing the seller copies by hand,
   so it matters more in this branch, not less.
 - **Remove** only wording that assumes a particular screen.
+- **Relabel, because the label describes the action.** If the fallback stops
+  putting the search in the URL, "We send eBay this search" becomes false and
+  also tells the seller the wrong thing to do. It becomes **"Copy this search
+  into eBay."** The text stays useful either way — in that branch it is the
+  thing the seller carries by hand, so it matters more, not less.
+
+  **Now enforced, not promised** (`tests/draft-review-screen.mjs`): the claim is
+  asserted as an *implication* — if the note says we send the search, the
+  link's `title` parameter must equal the seed shown on screen. Drop the
+  parameter and the assertion fails, which forces the relabel rather than
+  leaving it to whoever edits next.
+
+  The existing no-deeplink branch was checked against this rule and already
+  complies: it says "Copy the details above and search from eBay's own start
+  page", never "we send". That is now pinned by two assertions rather than by
+  wording.
 - **Do not** hunt for further undocumented parameters to preserve prefill.
   Prefill is a convenience; the identity guarantee is the product. Chasing
   internals we cannot see documented (§2) trades a small convenience for a
@@ -234,3 +252,72 @@ of which depends on which screen eBay chooses.
 **Nothing pushed. Nothing deployed. Cert ID not rotated.** The eBay-side
 questions above change copy and documentation only; none of them requires a
 credential or a deploy to answer.
+
+---
+
+## 9. The observation (2026-09-08)
+
+Owner-run, since the build environment has no signed-in instrument. Screenshot
+retained at `audit/d5/evidence/2026-09-08-signed-in-ios-safari.jpeg`.
+
+### 9.1 Context
+
+| Field | Value |
+| --- | --- |
+| Date | 2026-09-08, 22:40 ET |
+| Browser | **iOS Safari, mobile web** — Safari toolbar and `ebay.com` address chip visible in the screenshot |
+| Opened in the eBay app instead? | **No.** It stayed in the browser. Worth recording: an app hand-off was a live possibility on mobile and would have taken the seller somewhere our URL cannot reach. |
+| Account | Owner's, reported as signed in — see §9.3 |
+| Card | Fixture: Charizard VMAX 074/073 Champions Path, `caty=183454` |
+
+### 9.2 Result — the pass row of §7.1
+
+| Criterion | Observed |
+| --- | --- |
+| **Is our search displayed?** | **Yes.** `Find a match` / `for "Charizard VMAX 074/073 Champions Path"` — verbatim. |
+| **Is our category displayed?** | **Yes.** `Toys & Hobbies > Collectible Card Games > CCG Individual Cards`, the `caty=183454` we sent. |
+| **Can the seller follow the hand-off instruction?** | **Yes.** Top pick: `Charizard VMAX (Secret) 074/073 Champions Path Holo`. The collector number is on screen and matches the number the check note tells them to compare against. |
+| Final URL (evidence only) | Not readable from the screenshot — iOS Safari shows only `ebay.com`. **This is exactly the case §7.0 was corrected for:** the URL was never the criterion, and its absence here costs the observation nothing. |
+
+So the inputs reached the workflow **and the instruction is performable on a
+phone**, which is the surface a seller who just scanned a card is actually on.
+eBay also pre-filled its own facet chips (`Card Name: Charizard VMAX`,
+`Set: Champio…`) from our title.
+
+**Not claimed:** the "Stage: Champion" mis-parse from the logged-out desktop run
+is not visible in this screenshot — the chip row is cut off. Nothing here
+confirms or contradicts it.
+
+### 9.3 The open caveat, stated rather than buried
+
+**The screenshot does not independently evidence that the session was signed
+in.** eBay's simplified prelist view carries no account chrome, and my
+logged-out desktop baseline produced a screen with the same structure — so this
+observation cannot, by itself, distinguish signed-in from signed-out.
+
+That matters because §8.3's entire question was whether a **signed-in** seller
+is routed differently. If the session was in fact logged out, the run reproduces
+§3's baseline on a phone — valuable, but not the answer.
+
+What would settle it, at negligible cost: the same session showing an account
+indicator, or confirmation that eBay's Seller Hub was reachable in that browser
+without a fresh sign-in. Recorded as **Q-D5-4** rather than treated as closed.
+
+### 9.4 What this establishes
+
+That tested case: this card, this account, iOS Safari, 2026-09-08. **Not a
+continuing compatibility guarantee** — the parameters remain undocumented
+internals (§2), which is why the recurring pre-deploy check stays in
+`audit/RELEASE_VALIDATION_QUEUE.md` rather than being struck off.
+
+### 9.5 Questions
+
+- **Q-D5-4.** Were you signed in to eBay in that Safari session — and if you are
+  not sure, can you open Seller Hub in the same browser and say whether it
+  loaded without asking you to sign in? On the answer: **yes** closes §8.3 on
+  the pass row; **no or unsure** leaves §8.3 open with a mobile baseline
+  recorded, and the observation still stands as the first mobile-web run.
+- **Q-D5-5.** The mobile surface was not in the entry gate's scope, and it is
+  where scanning sellers are. Should the recurring pre-deploy check be run on
+  **both** mobile web and desktop, or is mobile alone the right default given
+  the app-hand-off risk this run just ruled out once?

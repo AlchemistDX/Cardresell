@@ -375,7 +375,10 @@ browser. That is a five-minute check and it is the highest-value one left in D5:
    survive: a seller told to compare against a number we sent, on a screen that
    never received it, has been given a task they cannot perform.
 
-**Status: Unverified — see `audit/d5/D5_SIGNED_IN_VERIFICATION.md` (2026-09-08)
+**Status: OBSERVED once, 2026-09-08, iOS Safari mobile web — the pass row, with
+one open caveat: the screenshot does not independently evidence that the session
+was signed in, and eBay's prelist view looks the same either way (Q-D5-4). See
+`audit/d5/D5_SIGNED_IN_VERIFICATION.md` §9. Earlier context below —
 for the logged-out baseline, the failed attempt to run this in the owner's
 browser, and the pre-committed consequence for each outcome.** No claim in this document or in the shipped copy asserts
 signed-in behaviour, and the shipped copy is written to survive being wrong about

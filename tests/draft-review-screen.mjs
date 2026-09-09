@@ -1591,6 +1591,26 @@ try {
     T.check('\ud83d\udd34 and it states a possible DISAGREEMENT, which is what we observed',
       !!seedShown && /may interpret it differently/i.test(seedShown)
                   && /catalogue sometimes disagrees/i.test(seedShown), seedShown);
+    /* THE CLAIM IS BOUND TO THE URL (added 2026-09-08). "We send eBay this
+     * search" is only true while the seed is actually in the link. Asserted as
+     * an implication rather than as two separate facts: if the note makes the
+     * claim, the href's `title` parameter must equal the seed shown. If the
+     * fallback later drops the parameter, this fails and forces the label to
+     * change to "Copy this search into eBay" -- which is the rule, and it is
+     * now enforced instead of promised. */
+    const bound = await page.evaluate(() => {
+      const note = document.querySelector('[data-sell-start-seed]');
+      const a = document.querySelector('[data-sell-start="ebay"]');
+      if (!note) return null;
+      const claimsWeSend = /we send ebay this search/i.test(note.innerText);
+      let urlSeed = null;
+      try { urlSeed = a ? new URL(a.href).searchParams.get('title') : null; } catch (e) { urlSeed = null; }
+      const strong = note.querySelector('strong');
+      return { claimsWeSend, urlSeed, shownSeed: strong ? strong.innerText.trim() : null };
+    });
+    T.check('\ud83d\udd34 if the copy says WE send the search, the link actually carries it',
+      !!bound && (!bound.claimsWeSend || (bound.urlSeed !== null && bound.urlSeed === bound.shownSeed)),
+      JSON.stringify(bound));
     T.check('\ud83d\udd34 and it claims no INSTABILITY, which we never demonstrated',
       !!seedShown && !/same way twice|inconsistent|varies|unpredictab|different each time|not repeatab/i.test(seedShown),
       seedShown);
@@ -1843,6 +1863,19 @@ try {
      * in the seller's situation. */
     T.check('\ud83d\udd34 the payout-hold note is still shown when no deeplink could be built',
       !!st.limits && /selling limits/i.test(st.limits), st.limits);
+    /* THE LABEL DESCRIBES THE ACTION (added 2026-09-08). "We send eBay this
+     * search" is a claim about what our URL carries. In a branch where no URL
+     * is built, the seller is the one doing the sending, so the same sentence
+     * would be false and would also tell them the wrong thing to do. This
+     * branch already says "Copy the details above and search from eBay's own
+     * start page"; the assertion pins that rather than leaving it to wording.
+     * It matters beyond this branch: D5's pre-committed fallback keeps the
+     * search text but may stop putting it in the URL, and the label has to
+     * follow the action rather than the text surviving. */
+    T.check('\ud83d\udd34 and it does not claim we sent a search when we sent nothing',
+      !!st.note && !/we send ebay/i.test(st.note), st.note);
+    T.check('\ud83d\udd34 and it tells the seller to carry the details themselves',
+      !!st.note && /copy the details/i.test(st.note), st.note);
     await ctx.close();
   });
 
