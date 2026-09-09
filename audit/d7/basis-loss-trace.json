@@ -1,0 +1,76 @@
+{
+  "why": "case 3: correlated create carried no basis for its own card",
+  "capturedAt": "2026-09-09T01:25:17.793Z",
+  "bundle": "js/core.3f83abec.js",
+  "payload": [
+    {
+      "t": 15,
+      "kind": "BIND",
+      "basisUrl": "https://www.pricecharting.com/CARD-B",
+      "basisCardKey": "bbbbbbbb",
+      "activeCard": null,
+      "heldWas": null,
+      "stack": "eval (eval at evaluate (:302:30), <anonymous>:4:23) <- UtilityScript.evaluate (<anonymous>:304:16) <- UtilityScript.<anonymous> (<anonymous>:1:44)"
+    },
+    {
+      "t": 27,
+      "kind": "CLEAR",
+      "basisUrl": null,
+      "basisCardKey": null,
+      "activeCard": null,
+      "heldWas": "https://www.pricecharting.com/CARD-B",
+      "stack": "loadCardUI (http://127.0.0.1:40089/js/core.3f83abec.js:3556:19) <- eval (eval at evaluate (:302:30), <anonymous>:2:13) <- UtilityScript.evaluate (<anonymous>:304:16) <- UtilityScript.<anonymous> (<anonymous>:1:44)"
+    },
+    {
+      "t": 176,
+      "kind": "CREATE",
+      "requestedCard": "Card A/inst_scan_4d8317f7-455c-41d5-963c-c538e878ee79",
+      "basisAtContext": null,
+      "basisCardKey": null,
+      "activeCard": null
+    },
+    {
+      "t": 187,
+      "kind": "BIND",
+      "basisUrl": "https://www.pricecharting.com/CARD-B",
+      "basisCardKey": "bbbbbbbb",
+      "activeCard": null,
+      "heldWas": null,
+      "stack": "eval (eval at evaluate (:302:30), <anonymous>:4:23) <- UtilityScript.evaluate (<anonymous>:304:16) <- UtilityScript.<anonymous> (<anonymous>:1:44)"
+    },
+    {
+      "t": 276,
+      "kind": "CREATE",
+      "requestedCard": "Card A/inst_col_row_a",
+      "basisAtContext": "https://www.pricecharting.com/CARD-B",
+      "basisCardKey": "bbbbbbbb",
+      "activeCard": null
+    },
+    {
+      "t": 289,
+      "kind": "BIND",
+      "basisUrl": "https://www.tcgplayer.com/CARD-A",
+      "basisCardKey": "4e2c6b7b",
+      "activeCard": null,
+      "heldWas": "https://www.pricecharting.com/CARD-B",
+      "stack": "eval (eval at evaluate (:302:30), <anonymous>:2:23) <- UtilityScript.evaluate (<anonymous>:304:16) <- UtilityScript.<anonymous> (<anonymous>:1:44)"
+    },
+    {
+      "t": 303,
+      "kind": "CLEAR",
+      "basisUrl": null,
+      "basisCardKey": null,
+      "activeCard": "4e2c6b7b",
+      "heldWas": "https://www.tcgplayer.com/CARD-A",
+      "stack": "loadCardUI (http://127.0.0.1:40089/js/core.3f83abec.js:3556:19) <- doHydrate (http://127.0.0.1:40089/js/core.3f83abec.js:765:11) <- _restoreLastLoadedCard (http://127.0.0.1:40089/js/core.3f83abec.js:792:16) <- http://127.0.0.1:40089/js/core.3f83abec.js:20252:32"
+    },
+    {
+      "t": 1242,
+      "kind": "CREATE",
+      "requestedCard": "Card A/inst_scan_4d8317f7-455c-41d5-963c-c538e878ee79",
+      "basisAtContext": null,
+      "basisCardKey": null,
+      "activeCard": "4e2c6b7b"
+    }
+  ]
+}

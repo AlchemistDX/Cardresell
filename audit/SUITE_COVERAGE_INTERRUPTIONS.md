@@ -159,3 +159,33 @@ exactly what the binding work existed to prevent.
 
 Unchanged: the per-suite assertion-count floor is still not built, and registry
 drift detection is still incidental.
+
+
+### 2026-09-08, later the same day — cause established
+
+The trace above was installed as directed and caught it. `loadCardUI`
+(`js/core.3f83abec.js:3556`), reached from `doHydrate` inside
+`_restoreLastLoadedCard` on the bundle's 400ms startup timer (`:20252`), clears
+the basis 14ms after the section binds one — with the SAME card active
+(`4e2c6b7b`) that the basis was stamped to. First failing trace retained at
+`audit/d7/basis-loss-trace.json`; full write-up in `audit/d7/BASIS_LOSS_CAUSE.md`.
+
+Confirmed by removal: 3-of-6 focused runs failing before the restore was
+stubbed in that section, 6-of-6 passing after, and 345/0 on four full runs. The
+ordering is reproduced deliberately in a new section rather than left resting on
+the artifact. The clear was NOT removed and no basis is speculatively restored.
+
+Two corrections recorded there: my "silently vanish" claim is withdrawn (the
+review screen states the absence and flags a comp-derived price as owing a
+source, already asserted at `tests/draft-review-screen.mjs:2519` and `:2521`),
+and `_crPricingContext({})` without a card withholds the basis by design, which
+would have made the reproduction pass for the wrong reason.
+
+Open product question, recorded not decided: a same-card reload should probably
+keep the basis it was just given, but the clear also protects against carrying
+another card's provenance, and that is the worse failure. Reachability outside
+test setup is undemonstrated.
+
+`tests/_assert.mjs` gained an opt-in `CR_ONLY` section filter. A filtered run
+prints per-section skips and appends `-- INCOMPLETE RUN` to the summary, so it
+can never be mistaken for a full pass.

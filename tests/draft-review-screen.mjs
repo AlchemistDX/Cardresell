@@ -1938,6 +1938,107 @@ try {
    * conflict fell through to "try again in a moment" -- advice that cannot
    * work, since the stale part is the revision being resent.
    */
+  /* ─────────────────────────────────────────────────────────────────────────
+     CONTROLLED REPRODUCTION of the basis loss, 2026-09-08.
+
+     The intermittent failure in the section above was diagnosed from a
+     retained trace (audit/d7/basis-loss-trace.json): a basis bound for card A
+     was cleared 14ms later by `loadCardUI`, reached from `doHydrate` inside
+     `_restoreLastLoadedCard`, which the bundle schedules on a 400ms startup
+     timer (js/core.3f83abec.js:20252). The card active at the clear was card A
+     itself, so a same-card reload dropped that card's own basis.
+
+     Neutralising the timer above makes that section deterministic, but on its
+     own it would leave the ordering untested and the diagnosis resting on one
+     saved artifact. This section reproduces the ordering DELIBERATELY, off any
+     timer, and states what happens. It is documentation of behaviour, not a
+     defect claim, and it deliberately does not change the behaviour:
+
+       * The clear is NOT removed. A card change must not carry the previous
+         card's provenance forward -- that leak is what the binding work
+         existed to stop, and it is a worse failure than losing a basis.
+       * The last non-null basis is NOT restored. Reinstating a basis whose
+         card is no longer certain would recreate the leak.
+
+     What it does establish is the requirement the clear does not currently
+     distinguish: dropping a FOREIGN basis on a card change and dropping the
+     CURRENT card's own basis on a reload of that same card are different
+     things, and only the first is intended. Whether a same-card reload should
+     keep the basis is an open product question, recorded, not decided here.
+
+     Reachability: not demonstrated outside test setup. Binding a basis needs a
+     priced read, so a seller cannot hold one inside the first 400ms of a page
+     load. The consequence if it did happen is disclosed rather than silent --
+     see "no recorded source is stated as absent" and "a comp-derived price
+     with no basis is flagged as owing one" in the provenance-block section.
+  ───────────────────────────────────────────────────────────────────────── */
+  await T.section('a same-card reload drops that card\'s own bound basis', async () => {
+    const CARD_A = { id: 'cra1', name: 'Card A', game: 'pokemon', set: 'Base Set', number: '4/102' };
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window._crBindBasis === 'function', { timeout: 15000 });
+
+    // Give the bundle's own 400ms restore timer, and the re-hydrate it
+    // schedules after itself, time to fire and finish BEFORE we bind. The
+    // ordering under test is then produced by an explicit call, not a race.
+    await page.evaluate((A) => {
+      localStorage.setItem('cr:lastCard:v1',
+        JSON.stringify({ ...A, _fullCard: A, _savedAt: Date.now() }));
+    }, CARD_A);
+    await new Promise((r) => setTimeout(r, 1200));
+
+    const bound = await page.evaluate((A) => {
+      try { window.setSelectedCard(A); } catch (e) { /* set below via bind card arg */ }
+      window._crBasis = window._crBindBasis({
+        value: 400, label: 'TCGplayer market', sourceUrl: 'https://www.tcgplayer.com/CARD-A',
+        low: 380, mid: 400, high: 430, retrievedAt: '2026-09-08T20:30:00.000Z',
+      }, A);
+      return { url: window._crBasis && window._crBasis.sourceUrl,
+        cardKey: window._crBasis && window._crBasis.cardKey };
+    }, CARD_A);
+    T.check('setup: a basis for card A is bound and stamped to card A',
+      bound.url === 'https://www.tcgplayer.com/CARD-A' && !!bound.cardKey, JSON.stringify(bound));
+
+    // The context builder, at the seam the create body is assembled from. If
+    // the basis survives, basisMeta is present here.
+    // The card MUST be passed: _crPricingContext withholds the ambient basis
+    // from a caller that cannot say which card it is pricing, so `{}` returns
+    // no basisMeta whatever the global holds. Asking it the wrong way would
+    // have made the "after" assertion pass for the wrong reason.
+    const ctxBefore = await page.evaluate((A) => {
+      try { return JSON.stringify(window._crPricingContext({ card: A }) || {}); }
+      catch (e) { return 'threw: ' + e.message; }
+    }, CARD_A);
+    T.check('setup: the pricing context carries the basis while it is bound',
+      /"basisMeta"/.test(ctxBefore) && /tcgplayer\.com\/CARD-A/.test(ctxBefore), ctxBefore);
+
+    // Now the ordering from the trace, on purpose: reload the SAME card.
+    const restored = await page.evaluate(() => {
+      try { return window._restoreLastLoadedCard(); } catch (e) { return 'threw: ' + e.message; }
+    });
+    T.check('setup: the restore path ran and reloaded the same card',
+      restored === true, JSON.stringify(restored));
+
+    T.check('\ud83d\udd34 the reload cleared the basis it had just been given for that same card',
+      await page.evaluate(() => window._crBasis) === null,
+      JSON.stringify(await page.evaluate(() => window._crBasis)));
+
+    const ctxAfter = await page.evaluate((A) => {
+      try { return JSON.stringify(window._crPricingContext({ card: A }) || {}); }
+      catch (e) { return 'threw: ' + e.message; }
+    }, CARD_A);
+    T.check('\ud83d\udd34 so the pricing context a create would carry has no basis at all, '
+      + 'asked with the same card that just had one',
+      !/"basisMeta"/.test(ctxAfter), ctxAfter);
+    T.check('and the rest of the declared context survives, so this is a lost basis '
+      + 'and not a lost context',
+      /"feeModelRevision"/.test(ctxAfter), ctxAfter);
+
+    await ctx.close();
+  });
+
   await T.section('a real conflict with another device is still reported', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await ctx.newPage();
@@ -2085,21 +2186,62 @@ try {
     // global after the click races the success handler that clears it, and
     // reading it from the route handler stalls the paused request. This wraps
     // fetch in the TEST page only -- no production global, no production hook.
-    // Trap every clear of the basis global, in the TEST page only, and keep
-    // the stack that did it. Only two sites in the bundle write null --
-    // loadCardUI and _onPrintingChange -- so a clear names its own cause, and
-    // "basisAtPost=null" stops being a dead end. No production hook.
+    // WHY THE STARTUP RESTORE IS NEUTRALISED HERE.
+    //
+    // The retained trace (audit/d7/basis-loss-trace.json) shows the cause of
+    // the intermittent failure: at t=289ms this section binds a basis for card
+    // A; at t=303ms `loadCardUI` clears it, called from `doHydrate` inside
+    // `_restoreLastLoadedCard`, which the bundle schedules on a 400ms timer at
+    // startup (js/core.3f83abec.js:20252) and which re-hydrates itself once
+    // more "after a beat". The card active at the clear is card A itself --
+    // 4e2c6b7b, the same key the basis was stamped to -- so the clear is a
+    // same-card reload dropping that card's own basis.
+    //
+    // That ordering is an artifact of this setup, not of the product: a real
+    // seller cannot bind a basis inside the first 400ms, because binding one
+    // requires a priced read. The restore is therefore stubbed out so this
+    // section measures basis binding rather than racing startup. The ordering
+    // itself is reproduced deliberately in the next section, and the clear is
+    // left exactly as it is -- it protects against carrying another card's
+    // provenance across a card change, which is what the binding work was for.
+    await page.evaluate(() => { window._restoreLastLoadedCard = () => false; });
+
+    // ONE COMPLETE SEQUENCE, captured before any setup runs.
+    //
+    // "basisAtPost=null" established that the global was already empty when
+    // the body was built, and stopped there: it cannot say what emptied it,
+    // whether emptying was correct for the card in view at that moment, or
+    // whether the ordering is an artifact of this setup. So the trace records
+    // three kinds of event on one clock -- every BIND (with the card it was
+    // stamped to), every CLEAR (with the stack that did it and the card then
+    // active), and every CREATE (with the card requested and the basis at the
+    // instant the context was built). Test page only; no production hook.
+    //
+    // Active-card identity is read through `_crBindBasis({})`, which stamps
+    // `cardKey` from the module-scope `selectedCard` the trace cannot reach
+    // directly. It mutates only the throwaway object passed in.
     await page.evaluate(() => {
       let held = window._crBasis;
-      window.__basisClears = [];
+      window.__traceT0 = Date.now();
+      window.__basisTrace = [];
+      window.__activeKey = () => {
+        try { const probe = window._crBindBasis ? window._crBindBasis({}) : null;
+          return (probe && probe.cardKey) || null; } catch (e) { return 'threw:' + e.message; }
+      };
       Object.defineProperty(window, '_crBasis', {
         configurable: true,
         get() { return held; },
         set(nv) {
-          if (nv === null && held !== null) {
-            window.__basisClears.push(String((new Error('cleared here')).stack || '')
-              .split('\n').slice(1, 5).join(' <- '));
-          }
+          window.__basisTrace.push({
+            t: Date.now() - window.__traceT0,
+            kind: nv === null ? 'CLEAR' : 'BIND',
+            basisUrl: (nv && nv.sourceUrl) || null,
+            basisCardKey: (nv && nv.cardKey) || null,
+            activeCard: window.__activeKey(),
+            heldWas: (held && held.sourceUrl) || null,
+            stack: String((new Error()).stack || '').split('\n').slice(2, 6)
+              .map((l) => l.trim().replace(/^at /, '')).join(' <- '),
+          });
           held = nv;
         },
       });
@@ -2112,10 +2254,34 @@ try {
         const method = String((init && init.method) || (input && input.method) || 'GET');
         if (method.toUpperCase() === 'POST' && /\/api\/drafts/.test(url)) {
           window.__basisAtPost = (window._crBasis || {}).sourceUrl || null;
+          let reqCard = null;
+          try { const b = JSON.parse((init && init.body) || '{}');
+            reqCard = ((b.card && b.card.name) || '?') + '/' + (b.instanceId || 'no-instance');
+          } catch (e) { reqCard = 'unparsed'; }
+          window.__basisTrace.push({
+            t: Date.now() - window.__traceT0,
+            kind: 'CREATE',
+            requestedCard: reqCard,
+            basisAtContext: (window._crBasis || {}).sourceUrl || null,
+            basisCardKey: (window._crBasis || {}).cardKey || null,
+            activeCard: window.__activeKey(),
+          });
         }
         return real.apply(this, arguments);
       };
     });
+
+    // Retain the FIRST failing trace to disk and never overwrite it. A later
+    // green run must not be able to erase the evidence of an earlier red one.
+    const retainTrace = (why, payload) => {
+      try {
+        const f = '/home/user/workspace/cardresell/audit/d7/basis-loss-trace.json';
+        if (!fs.existsSync(f)) {
+          fs.writeFileSync(f, JSON.stringify({ why, capturedAt: new Date().toISOString(),
+            bundle: 'js/core.3f83abec.js', payload: JSON.parse(payload) }, null, 2));
+        }
+      } catch (e) { console.log('  [trace retain failed] ' + e.message); }
+    };
 
     const priceCardB = (u) => page.evaluate((url) => {
       // Deliberately NOT bound: this stands in for a read that happened while
@@ -2198,13 +2364,17 @@ try {
     // __basisAtPost is null -- the global was already cleared before the body
     // was built. Report the trapped clear alongside it, so the two failures
     // can be compared rather than treated as separate mysteries.
+    if (await page.evaluate(() => window.__basisAtPost) !== FOREIGN) {
+      retainTrace('case 2: the foreign basis was gone before the create body was built',
+        await page.evaluate(() => JSON.stringify(window.__basisTrace || [])));
+    }
     T.check('the global was populated when the create body was built, so the '
       + 'absence is a refusal, not an empty read',
       await page.evaluate(() => window.__basisAtPost) === FOREIGN,
       'a populated global that does not reach the wire is the whole point of '
         + 'the check; captured as the request left: '
         + String(await page.evaluate(() => window.__basisAtPost))
-        + ' clearedBy=[' + await page.evaluate(() => (window.__basisClears || []).join(' ;; ')) + ']');
+        + ' trace=' + await page.evaluate(() => JSON.stringify(window.__basisTrace || [])));
 
     // ── 3. The legitimate case must still work, or the binding has just
     // deleted comp provenance from every packet.
@@ -2230,20 +2400,23 @@ try {
     //                 (something cleared the global first)
     // Without this, "basisMeta is undefined" cannot choose between the two.
     const basisAtPost3 = await page.evaluate(() => window.__basisAtPost);
-    const clears3 = await page.evaluate(() => (window.__basisClears || []).join(' ;; '));
+    const trace3 = await page.evaluate(() => JSON.stringify(window.__basisTrace || []));
     const meta = posted && posted.pricingContext && posted.pricingContext.basisMeta;
+    if (!(meta && meta.sourceUrl === 'https://www.tcgplayer.com/CARD-A')) {
+      retainTrace('case 3: correlated create carried no basis for its own card', trace3);
+    }
     // Detail is the retained log, not JSON.stringify(meta): when these two
     // failed intermittently, meta was `undefined`, so the detail printed
     // nothing at all and the run said only that something was absent.
     T.check('\ud83d\udd34 a basis read FOR this card is still sent',
       !!(meta && meta.sourceUrl === 'https://www.tcgplayer.com/CARD-A'),
       'basisMeta=' + JSON.stringify(meta) + ' basisAtPost=' + JSON.stringify(basisAtPost3)
-        + ' clearedBy=[' + clears3 + '] creates: ' + postLogDump());
+        + ' trace=' + trace3 + ' creates: ' + postLogDump());
     T.check('with its tiers and its own retrieval time intact',
       !!(meta && meta.low === 380 && meta.mid === 400 && meta.high === 430
          && meta.retrievedAt === '2026-09-08T20:30:00.000Z'),
       'basisMeta=' + JSON.stringify(meta) + ' basisAtPost=' + JSON.stringify(basisAtPost3)
-        + ' clearedBy=[' + clears3 + '] creates: ' + postLogDump());
+        + ' trace=' + trace3 + ' creates: ' + postLogDump());
 
     // ── 4. An unstamped basis is not usable. This is the standing guard for a
     // read path added later that forgets to bind: it loses provenance rather

@@ -8,7 +8,7 @@
 // Two of those shipped in this repo before the harness refused them, so this
 // is demonstrated rather than theoretical.
 export function harness(label) {
-  let passed = 0, failed = 0;
+  let passed = 0, failed = 0, skipped = 0;
   const check = (name, cond, hint) => {
     // A FUNCTION IS NOT A TRUTH VALUE EITHER — it is always truthy, so
     // `check(name, () => x.field.length > 0)` silently passed while testing
@@ -59,7 +59,20 @@ export function harness(label) {
    * A throw here is recorded as a failure of the case and the suite carries
    * on. It is never swallowed and never converted to a pass.
    */
+  // An opt-in section filter, for focused investigation of one failing case.
+  //
+  // WHY IT ANNOUNCES ITSELF. A filtered run is an INCOMPLETE run, and an
+  // incomplete run that prints the same summary line as a full one is a way to
+  // mistake "the rest did not execute" for "the rest passed". So a skip is
+  // printed per section and the count is carried into the summary, which also
+  // names the filter. Absent CR_ONLY nothing changes: every section runs.
+  const only = process.env.CR_ONLY || '';
   const section = async (name, fn) => {
+    if (only && !name.includes(only)) {
+      skipped++;
+      console.log(`\n⏭ ${name}\n  skipped by CR_ONLY`);
+      return true;
+    }
     console.log(`\n▶ ${name}`);
     try { await fn(); return true; }
     catch (e) {
@@ -72,8 +85,9 @@ export function harness(label) {
   };
 
   const done = () => {
-    console.log(`\n${label ? label + ': ' : ''}${passed} passed, ${failed} failed`);
+    console.log(`\n${label ? label + ': ' : ''}${passed} passed, ${failed} failed`
+      + (skipped ? ` -- INCOMPLETE RUN: ${skipped} section(s) skipped by CR_ONLY=${only}` : ''));
     process.exit(failed ? 1 : 0);
   };
-  return { check, checkAsync, section, done, counts: () => ({ passed, failed }) };
+  return { check, checkAsync, section, done, counts: () => ({ passed, failed, skipped }) };
 }
