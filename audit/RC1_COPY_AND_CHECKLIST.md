@@ -241,7 +241,7 @@ production behaviour changed to make it pass.
 | **RV-10** containment mechanism | **BLOCKING** | The "disable automatic Preview deployment" toggle was **never established to exist with that scope**. What the project exposes is `gitProviderOptions.createDeployments`, which appears to govern Git-triggered deployments **as a whole, production included**. Read-only inspection has gone as far as it can; the exact control must be identified in the dashboard **before** a window that needs to deploy. |
 | **CH-1** production verification token is the repo default | **BLOCKING** | Measured: production's challenge response equals the committed default **plus a trailing newline**, so the variable is set to a published value carrying stray whitespace. Closed by G3. |
 | **CH-2** code falls back to a published token | **BLOCKING — code. Now written locally, and deliberately not shipped** (§D-4) | Was `api/ebay-notifications.js:17`. Prepared today, held out of the rebuild, lands after the replacement token is verified. |
-| **CH-3** `CARDSELL_TPL_KEY` stored unencrypted | **BLOCKING** | Assessed read-only. The route is anonymous and unmetered, and every query parameter is forwarded verbatim, so the edge cache is bypassable. The deployed client sends no cache-buster, so this is **abuse potential, not observed bleeding**. Whether it has been abused is now **substantially answered for the current window**: the owner's 2026-09-09 dashboard reading showed **1 of 2,500 daily requests used**, so there is no sustained draw. Earlier days remain unestablished — a daily counter against a midnight-UTC reset cannot speak to history. **The plan is Starter, 2,500/day, blocked at the limit**, so the exposure's worst case is **lookup denial-of-service until midnight UTC, not an unbounded bill**. R2 and R3 shipped; **R1 rotation is G11 and R4 activation is G12**. CORS is withdrawn as a control: origin and `Referer` are client-asserted. |
+| **CH-3** `CARDSELL_TPL_KEY` stored unencrypted | **BLOCKING** | Assessed read-only. The route is anonymous and unmetered, and every query parameter is forwarded verbatim, so the edge cache is bypassable. The deployed client sends no cache-buster, so this is **abuse potential, not observed bleeding**. Whether it has been abused is now **substantially answered for the current window**: the owner's 2026-09-09 dashboard reading showed **1 of 2,500 daily requests used**, so there is no sustained draw. Earlier days remain unestablished — a daily counter against a midnight-UTC reset cannot speak to history. **The plan is Starter, 2,500/day, blocked at the limit**, so the exposure's worst case is **lookup denial-of-service until midnight UTC, not an unbounded bill**. **R2 and R3 are built and included in the proposed release — nothing has shipped.** Production still runs `9aaf326`, which contains neither. **R1 rotation is G11 and R4 activation is G12**. CORS is withdrawn as a control: origin and `Referer` are client-asserted. |
 | **Same-card basis retention** | **DEFERRED — product decision, not a defect** | The consequence is disclosed rather than silent: the review screen states `data-packet-basis="absent"` and flags a comp-derived price as owing a source. Retention is not obviously safe — reinstating a basis whose card is no longer certain recreates the leak the binding work exists to prevent. Production clearing stays unchanged. |
 | **D5 §8.3 signed-in eBay continuation** | **PASSED for one tested case; stays in the queue** | 2026-09-08, owner-attested, iOS Safari mobile web: verbatim search and `caty=183454` displayed, comparable match shown. **A pass establishes that case, not a continuing compatibility guarantee** — these are undocumented eBay internals. **Q-D5-5 desktop has never been exercised** and remains open. |
 
@@ -339,15 +339,17 @@ You answered all five questions. This step is closed, and the numbers below are
 **established fact** everywhere they appear in this document. No key values were
 exchanged, which is exactly right.
 
-| Item | Established |
-| --- | --- |
-| Plan | **Starter — 2,500 requests/day** |
-| Usage at the reading | 1 used, 2,499 remaining |
-| Reset | **Midnight UTC**, daily |
-| Overage | **Requests are blocked at the limit** (your confirmation) |
-| Key overlap | Dashboard permits **five active keys**; one was active |
-| Pro tier | **10,000 requests/day, plus a commercial-use license** |
-| Upgrade | You are willing to upgrade; **completion unconfirmed** |
+**Updated 2026-09-09 — the second dashboard reading shows Pro active.** Both
+readings are kept, because the transition is itself the evidence.
+
+| Item | Earlier reading | **Current** |
+| --- | --- | --- |
+| Plan | Starter — 2,500/day | **Pro — 10,000/day** ("10,000 requests remaining today") |
+| Daily usage | 1 used, 2,499 remaining | **0 of 10,000 (0%)**, "across all active API keys" |
+| Reset | Midnight UTC | **Unchanged** — rendered as Sep 9 08:00 PM local, i.e. midnight UTC |
+| Overage | **Blocked at the limit** (your confirmation) | Unchanged |
+| Key overlap | 5 slots permitted, 1 active | **5 slots, 1 active** — and two keys now show **Revoked** |
+| Licence | Commercial use needs Pro | **Satisfied** |
 
 **Three consequences, none of them cosmetic:**
 
@@ -359,12 +361,17 @@ exchanged, which is exactly right.
    good: there is no per-request overage rate, therefore **no dollar figure to
    convert to.** The request-allowance framing is the only honest one available
    — see Step 4.
-3. **The Pro upgrade carries a commercial-use licence, and that is a question
-   about rights, not quota** — see the question at the end of Step 4.
+3. **The Pro upgrade carried a commercial-use licence, and it is now active** —
+   so the compliance requirement is met, not merely planned.
+4. **Revocation is demonstrated on this account, not assumed.** Two keys already
+   carry a **Revoked** state, which is worth knowing before step 10 of the
+   rotation performs one.
+5. **The single active key is the exposed one** — Key #518, created Jun 28 2026,
+   the value stored `type: plain`. CH-3 stays open until it is replaced and
+   revoked. Pro changes the allowance; it does nothing about the exposure.
 
-**Your one remaining plan question: has the Pro upgrade completed?** Everything
-below is sequenced to work on Starter, so the answer changes the numbers but
-blocks nothing.
+**No plan question remains.** The numbers below are recalculated for Pro — and
+the hourly cap deliberately does **not** scale with the ceiling.
 
 ### Step 2 — The TPL rotation window: its own sequence, its own authorization
 
@@ -456,21 +463,42 @@ provider's status verbatim at `:46`. **This inference is specific to this
 commit** — it would not hold on this branch's 206-line handler, and it is not a
 general claim that a CDN `MISS` excludes an application cache.
 
-**Signal 3 — the provider-side usage delta. This is the confirming evidence.**
-Read the TCGPriceLookup usage counter immediately before and after. It must rise
-by exactly the number of verification requests. That is the provider stating it
-received and authenticated a request bearing the new key — the only signal from
-the party actually validating it; everything else is inference about our own
-infrastructure. The counter stood at **1 of 2,500**, so a delta of 1–2 is
-unambiguous.
+**Signal 3 — the replacement key's own `Last used` timestamp. This is the
+confirming evidence.** The dashboard lists each key with its own `Last used`
+value, so verification can be **attributed to the specific key under test**
+rather than inferred from an account-wide number. Record the new key's
+identifier (its **Key #** — never the secret) and its initial `Last used`
+state; after the verification request, that key's timestamp must **advance**.
+
+**Why not the account-wide total — and this is not hypothetical.** The current
+dashboard reading shows **Daily Usage 0 of 10,000** while the active key reports
+**`Last used: Sep 9, 2026, 06:23 AM`**, roughly four hours earlier and inside
+today's midnight-UTC window. The total covers all five possible key slots, moves
+with real user traffic, and in that reading did not reflect a same-day use at
+all — whether it lags or was reset by the plan change, I cannot tell from one
+screenshot and will not guess.
+
+**Had "the total must rise by exactly N" been the stop condition, that state
+would have failed a working rotation** and sent me to generate another key to
+fix a counter problem. The total is kept as **corroboration, not the decisive
+signal.**
+
+**If the new key's `Last used` does not advance:** wait briefly and refresh for
+dashboard lag. If it still has not advanced, **stop and leave the old key
+active.**
 
 **Signal 4 — runtime logs**, confirming an invocation of `/api/tpl-proxy` at the
 verification timestamp, as the documentation itself advises.
 
 **The check now has two properties it lacked.** It can **fail** — a dead key
-surfaces as a passed-through `401`/`403`. And it carries a **discriminating
-control**: repeat the identical request and expect `x-vercel-cache: HIT`,
-demonstrating the signal distinguishes states rather than reading one constant.
+surfaces as a passed-through `401`/`403`. And a repeated identical request
+returning `x-vercel-cache: HIT` is available as a **cache control**, showing the
+signal distinguishes states rather than reading one constant.
+
+**That control is diagnostic, not a pass criterion.** Once the replacement key's
+own `Last used` has advanced, authentication is established. A repeat that stays
+`MISS` is a **caching question to investigate separately** — it does not
+un-verify a working key, and it is not a rotation failure.
 
 **Request hygiene.** All params except `path` are forwarded verbatim
 (`9aaf326:api/tpl-proxy.js:32-36`), so a novel query value varies the CDN cache
@@ -492,23 +520,32 @@ this is the sequence to run when you say so.
 
 | # | Step | Stop condition |
 | --- | --- | --- |
-| 1 | Record the TCGPriceLookup usage counter **and its timestamp** | — |
-| 2 | Generate a new key; leave the old one live | Five slots exist, so no outage |
+| 1 | Generate the replacement key. **Leave the old key active.** | Five slots permitted, one in use — no outage |
+| 2 | Record the **new key's identifier (its Key #) and its initial `Last used` state** — empty, or its creation time. **Never the secret.** Note the account total as background. | This is the baseline the decisive check compares against |
 | 3 | In Vercel, **delete** `CARDSELL_TPL_KEY` and **re-add encrypted** with the new value | Cannot be converted in place |
 | 4 | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`** (commit `9aaf326`) from that deployment's own entry | **Not** a branch deploy, **not** a push, **not** `--prod` from this tree |
-| 5 | On the **deployment's own URL**, request a card not looked up in the last 5 min; capture full response headers | Expect `200` and `x-vercel-cache: MISS`/`BYPASS`. `HIT`/`STALE` → change the card and retry |
-| 6 | Repeat the **identical** request | Expect `x-vercel-cache: HIT`. If it is still `MISS`, the signal is not discriminating — **stop** |
-| 7 | Re-read the provider usage counter | Must have risen by **exactly** the number of requests from step 5. **No rise → the provider was never reached → stop, do not revoke** |
-| 8 | Check Vercel runtime logs for `/api/tpl-proxy` invocations at those timestamps | Corroboration for steps 5 and 7 |
+| 5 | **One** request to the **deployment's own URL** for a card not looked up in the last 5 min; capture full response headers | Expect **`200`** and **`x-vercel-cache: MISS`/`BYPASS`**. `HIT`/`STALE` → change the card and retry |
+| 6 | **Re-read the new key's own `Last used`. It must have advanced.** | **THE DECISIVE CHECK.** Not advanced → wait briefly and refresh; still not advanced → **stop, leave the old key active** |
+| 7 | Confirm **Vercel invocation logs** show `/api/tpl-proxy` at that timestamp | Corroboration for step 5 |
+| 8 | Read the account-wide total | **Corroboration only.** A flat total does **not** fail the rotation if step 6 passed |
 | 9 | After the alias points at the redeployed target, repeat step 5 against **`www.cardresell.org`** | Proves the alias moved, not just the deployment |
 | 10 | **Revoke the old key** | **This is the step that closes CH-3** |
 
-**Failure handling.** A `401`/`403` at step 5, or no counter movement at step 7,
-means **stop and leave the old key active**. The rollback is a **newly
-generated** key — never the old one, which is the exposed value.
+**Optional diagnostic, not a gate.** Repeating the step-5 request should return
+`x-vercel-cache: HIT`, which confirms the cache signal discriminates. If it
+stays `MISS`, **investigate caching separately** — a verified key is not
+un-verified by it.
 
-**Cost.** Two to four provider requests out of 2,500. These bypass R4 and spend
-the shared allowance, which is the accounting, not an objection.
+**Failure handling — and this is containment, not rollback.** A `401`/`403` at
+step 5, or no timestamp movement at step 6, means **stop and leave the old key
+active**. The old key was never deactivated, so there is nothing to restore and
+no rollback step: continuing to serve on it is **containment while the problem
+is diagnosed**. Generate a further replacement if needed. **The old key is
+never revoked until some replacement has been verified**, and it is never a
+target to restore *to*, because it is the exposed value.
+
+**Cost.** One to three provider requests out of 10,000. These bypass R4 and
+spend the shared allowance — the accounting, not an objection.
 
 **Explicitly not in this procedure:** R4 activation (G12, needs Step 3's
 real-store evidence and Step 4's numbers), the CH-2 change (G13), any
@@ -669,13 +706,31 @@ that said, here is the arithmetic it rests on:
 | **100/hr** | **2,400/day** | **100 (4.0%)** |
 | 120/hr | 2,880/day | **overshoots by 380** — a saturated day exhausts the plan |
 
+**Pro is now active (10,000/day) — and the recommendation stays 100/hr.** The
+allowance did not quadruple because demand grew; it grew because a licence was
+purchased. Multiplying the cap by four would convert all of it into exposed
+traffic capacity and leave the same 4% margin I had on Starter:
+
+| Hourly cap on Pro | Saturated for 24 h | Share of 10,000 | Unallocated |
+| --- | --- | --- | --- |
+| **100/hr (keep)** | 2,400/day | **24%** | **7,600/day** |
+| 400/hr (×4) | 9,600/day | 96% | 400/day |
+
+The unallocated 7,600 is not waste — it is the mitigation for exactly what the
+limiter provably cannot cover, which is the reason the impossibility claim was
+withdrawn: other keys, the still-live `9aaf326` deployment that contains no R4
+at all, local callers, verification requests, the hour-boundary burst, and an
+available-but-empty store re-granting a window. A limiter that cannot see those
+paths should not be sized as though it were the only spender. **Raise the cap
+when measured demand approaches it, not because the ceiling moved.**
+
 **Recommended, and stated as a recommendation rather than a fact:**
 
 | Variable | Value | Reasoning |
 | --- | --- | --- |
 | `TPL_BUDGET_MAX` | **100** | Caps the production function's contribution at 2,400/day if every hour saturates. **A traffic limit, not a guarantee** — see the three requirements above. |
 | `TPL_BUDGET_WINDOW_SEC` | **3600** | Fixed hourly window, epoch-aligned, nesting cleanly in the UTC plan day. A daily window would let one burst consume the whole allowance by mid-morning; the tradeoff is the hour-boundary burst noted above. |
-| `TPL_PER_IP_MAX` | **15** | **Unvalidated, and I have not measured a seller session.** See the sizing note below. |
+| `TPL_PER_IP_MAX` | **15** | **Unvalidated — blocks activation until a seller session is measured**, on Pro as much as on Starter. A per-IP cap protects individual users from each other; the plan size does not change whether 15 is the right number. See the sizing note below. |
 
 **Why 15 per IP is not yet a defensible number.** The unit is **provider calls,
 not seller actions**, and the live bundle spends more than one per action. There
@@ -740,9 +795,10 @@ charges for scans, so it is commercial, and there is no separate permission.
 reason to buy it, and the sequencing follows: the upgrade is not something to
 defer until traffic justifies it.
 
-**This should not be re-asked.** The only outstanding item is **confirmation
-that Pro is active** — and unlike the licence question, that one genuinely
-cannot be read from here.
+**This should not be re-asked — and the confirmation has now arrived too.** The
+dashboard reads **Current Plan: Pro**, so both halves are closed: the licence
+question was already answered by the pricing screen, and activation is
+observed. **No TPL plan question is open.**
 
 ### Step 5 — The bounded eBay maintenance window, when you authorize it
 
@@ -1157,6 +1213,60 @@ of abuse, on that day or any earlier one.
 commercial use is permitted on Starter. The supplied pricing screen states
 Starter is non-commercial. Pro is therefore a **compliance requirement**, and
 the only outstanding item is confirmation that it is active.
+
+---
+
+## H-13. Corrections made 2026-09-09 (fourth pass) — attribution, and a stopped rotation
+
+**The account-wide total was the wrong decisive signal, and the dashboard
+proves it.** I made "the provider counter must rise by exactly N" the
+confirming evidence. It answers the wrong question: it tells me *the account*
+spent requests, not that **the replacement key authenticated**. The per-key
+`Last used` field answers the actual question, and it is attributable.
+
+What makes this more than a refinement is visible in the supplied screenshot:
+**Daily Usage reads 0 of 10,000** while the active key reports **`Last used:
+Sep 9, 2026, 06:23 AM`** — inside today's midnight-UTC window. Whether the
+total lags or reset on the plan change, I cannot tell from one reading and will
+not guess. Either way: **my stop condition would have failed a working
+rotation**, and the failure would have been read as "the replacement key does
+not work" — sending me to generate another key to fix a counter problem. The
+total is now corroboration only.
+
+Same defect as last round, one level up. Last round the check **could not
+fail**; this round it **could fail for reasons unrelated to what it claimed to
+measure**. Both come from choosing a signal by availability rather than by
+asking what it actually attributes.
+
+**The `HIT` control is demoted from gate to diagnostic.** I had made it a stop
+condition, which meant a caching quirk could invalidate a key that had
+demonstrably authenticated. It stays as a useful check that the cache signal
+discriminates; a persistent `MISS` is now a **caching investigation**, not a
+rotation failure.
+
+**"Rollback" was the wrong word, and it mattered.** The old key stays active
+throughout, because nothing revokes it until a replacement verifies. So there
+is no state to restore and no rollback: continuing on the old key is
+**containment while the problem is diagnosed**. Writing it as a rollback
+implied a restoration step toward the exposed value — the opposite of the
+intent.
+
+**"R2 and R3 shipped" removed.** They are built, tested against mocks, and
+included in the proposed release. **Nothing has shipped.** Production runs
+`9aaf326`, which contains neither. A related overclaim went with it: the
+query-param row read "CLOSED by R2", now stated as addressed in the built
+change and not in production.
+
+**Pro is active, and the hourly cap deliberately did not scale with it.** The
+allowance grew because a licence was bought, not because demand grew.
+Multiplying 100/hr by four would put 96% of the plan into exposed traffic
+capacity and leave the same thin margin I had on Starter. Keeping 100/hr uses
+24% and leaves **7,600/day unallocated** — which is the mitigation for exactly
+what the limiter provably cannot see, and the reason the impossibility claim
+was withdrawn: other keys, the still-live no-R4 deployment, local callers,
+verification requests, the hour-boundary burst. Raise it against measured
+demand, not against a ceiling. **Per-IP 15 still blocks activation** until a
+seller session is measured; plan size has no bearing on whether 15 is right.
 
 ---
 

@@ -42,7 +42,7 @@ closing.
 | Caller authentication | **None** | No `_verifyToken` import; whole file is `api/tpl-proxy.js:11-55` |
 | Server-side usage limit | **None** | No counter, no KV, no per-IP or per-user accounting anywhere in the file |
 | Path restriction | **Present** | Allow-list of 3 exact patterns, `:23-30` |
-| Query-param restriction | **None as assessed; CLOSED by R2** | Was: every param except `path` forwarded verbatim, `:32-37`. Now: unknown and duplicate params rejected before any upstream call, `api/_tplContract.js` |
+| Query-param restriction | **None in production; addressed in the built R2, not shipped** | Production (`9aaf326`) forwards every param except `path` verbatim, `:32-36`. The built change rejects unknown and duplicate params before any upstream call (`api/_tplContract.js`) — **local and tested, not deployed.** |
 | Response caching | **Present but bypassable** | `s-maxage=300`, `:50` — see §3 |
 | Upstream timeout | **Present** | 8s abort, `:42-45` |
 | Method restriction | **Present** | GET/OPTIONS only, `:15-16` |
@@ -93,15 +93,47 @@ dependent on platform behaviour we do not control.
 
 ## 3a. Plan facts — established, owner-supplied 2026-09-09
 
-| Item | Established |
-| --- | --- |
-| Plan | **Starter — 2,500 requests/day** |
-| Usage at reading | 1 used, 2,499 remaining |
-| Reset | **Midnight UTC**, daily |
-| Overage | **Requests blocked at the limit** (owner confirmation) |
-| Key overlap | Dashboard permits **five active keys**; one active |
-| Pro tier | **10,000 requests/day + commercial-use licence** |
-| Upgrade | Owner willing; **completion unconfirmed** |
+**Superseded 2026-09-09 by a second dashboard reading: Pro is now active.**
+Both readings are kept, because the change of state is itself evidence.
+
+| Item | Reading 1 (earlier) | Reading 2 — **current** |
+| --- | --- | --- |
+| Plan | Starter — 2,500/day | **Pro — 10,000/day.** "10,000 requests remaining today" |
+| Daily usage | 1 used of 2,500 | **0 of 10,000 (0%)**, "across all active API keys" |
+| Reset | Midnight UTC | **Unchanged.** Shown as Sep 9 2026, 08:00 PM local = midnight UTC |
+| Overage | Blocked at the limit | Unchanged |
+| Active keys | 1 of 5 permitted | **1 of 5.** Two others listed **Revoked** |
+| Licence | Commercial use requires Pro | **Satisfied by the active Pro plan** |
+
+**Three things this settles.**
+
+1. **The Pro upgrade has completed.** The compliance requirement identified
+   below is met; it is no longer an open item.
+2. **Overlap is confirmed by demonstration, not just by the stated limit.** Two
+   keys already carry a **Revoked** state, so revocation is an exercised
+   operation on this account rather than an assumed one.
+3. **The exposed key is still the live one.** The single active key is
+   **Key #518**, created Jun 28 2026, and it is the value stored `type: plain`.
+   CH-3 remains open until it is rotated and revoked.
+
+### The account-wide total is not trustworthy as a stop condition
+
+The same screenshot shows **Daily Usage 0 of 10,000** while **Key #518 reports
+"Last used: Sep 9, 2026, 06:23 AM"** — about four hours before the reading, and
+after the midnight-UTC boundary that starts today's window (06:23 local is
+10:23 UTC; the reset is rendered as 08:00 PM local for midnight UTC, so the
+dashboard displays local time consistently).
+
+So a key was used inside today's window while the day's total reads zero. I
+cannot tell from one screenshot which explanation holds — the total may lag,
+or it may have reset when the plan changed — and I am not going to guess. But
+either way the conclusion is the same and it is the important one:
+
+**Had "the account-wide total must rise by exactly N" been the decisive stop
+condition, this dashboard state would have failed a working rotation** — and
+the failure would have been read as "the replacement key does not work",
+sending me to generate another key to fix a counter problem. The total stays as
+**corroboration only**. See §6b.
 
 **Two consequences for this assessment:**
 
@@ -365,31 +397,61 @@ provider's status verbatim at `:46`. This inference is **specific to this
 commit** and is not a general claim that a CDN `MISS` excludes an application
 cache — on this branch's 206-line handler it would not hold at all.
 
-**Signal 3 — the provider-side usage delta. This is the confirming evidence.**
-Read the TCGPriceLookup usage counter before and after. It must rise by exactly
-the number of verification requests. This is the provider stating that it
-received and authenticated a request bearing the new key — the only signal that
-comes from the party actually validating it. Everything upstream of it is
-inference about our own infrastructure. The counter stood at **1 of 2,500**, so
-a delta is legible rather than lost in noise.
+**Signal 3 — the replacement key's own "Last used" timestamp. This is the
+confirming evidence, and it is per-key rather than account-wide.** The
+dashboard lists every key with its own `Last used` value. Record the new key's
+identifier (its **Key #**, never the secret) and its initial `Last used` state
+— for a freshly created key that is empty or its creation time. After the
+verification request, that key's own timestamp must **advance**.
+
+This is stronger than the account total for three reasons, and the total's
+weakness is not hypothetical — see §3a, where the day's total read **0** while
+an active key reported a use four hours earlier:
+
+| | Account-wide total | Per-key `Last used` |
+| --- | --- | --- |
+| Scope | Every active key — five slots permitted | **The one key under test** |
+| Concurrent traffic | Real users move it independently | Attributable to the request just made |
+| Update behaviour | Observed reading zero despite same-day key use | The signal that was actually consistent in that reading |
+| Answers "did *this* key authenticate?" | **No** | **Yes** |
+
+So the total is demoted to **corroboration**. It is still worth reading — a
+large unexplained jump is informative — but it is **not the stop condition**.
+
+**If the new key's `Last used` does not advance:** wait briefly and refresh, in
+case of dashboard lag. If it still has not advanced, **stop and leave the old
+key active.**
 
 **Signal 4 — runtime logs**, corroborating an invocation of `/api/tpl-proxy` at
 the verification timestamp, per the documentation's own advice.
 
 **Two properties the check now has that it lacked.** It can **fail** — a dead
-key surfaces as the provider's `401`/`403` passed through at `:46`. And it
-includes a **discriminating control**: repeat the identical request and expect
-`x-vercel-cache: HIT`, which demonstrates the signal distinguishes states at
-all rather than reading one constant.
+key surfaces as the provider's `401`/`403` passed through at `:46`. And a
+repeated identical request returning `x-vercel-cache: HIT` is available as a
+**cache control**, demonstrating the signal distinguishes states rather than
+reading one constant.
+
+**But that control is diagnostic, not part of the pass criteria.** Once the
+replacement key's own `Last used` has advanced, authentication is established.
+If the repeat still shows `MISS`, that is a **caching question to investigate
+separately** — it does not make a verified key unverified, and it must not be
+treated as a rotation failure.
 
 **Cache-key note.** All params except `path` are forwarded verbatim (`:32-36`),
 so a novel query value both varies the edge cache key and reaches the provider
 as a legitimate query. Use a card genuinely not requested in the previous five
 minutes rather than an invented parameter, which the provider may reject.
 
-**Ordering is unchanged and matters more now:** revocation is last, and a
-failed verification rolls forward to a newly generated key — never back to the
-exposed one.
+**Ordering is unchanged and matters more now: revocation is last.**
+
+**And a failed verification is not a rollback.** I described continuing on the
+old key as "rolling forward"/"rollback", which mislabels it. Correctly: the old
+key is **still active throughout**, because nothing revokes it until a
+replacement is verified. If verification fails, continuing to serve on the old
+key is **containment while the problem is diagnosed** — there is no state to
+roll back to and no restoration step. Generate a further replacement if needed.
+**The old key is never revoked until some replacement has been verified**, and
+it is never itself a target to restore to, because it is the exposed value.
 
 ---
 
@@ -408,20 +470,26 @@ with the outgoing Phase 1 work or ship alone.
 can proceed without production KV, with live integration still blocked on store
 isolation. Say the word and I will build it with the aggregate safeguard.
 
-**Q-CH3-8 — Is the Pro plan active yet?** This is the **only** outstanding TPL
-question, and it is a confirmation rather than a decision. The licensing part
-is already settled by the supplied pricing screen (§3a): Starter is stated
-non-commercial, CardResell is commercial, so Pro is required on rights grounds.
-No further judgement is being asked of you.
+**Q-CH3-8 — Is the Pro plan active yet? — ANSWERED, and therefore closed.**
+The 2026-09-09 dashboard reading shows **Current Plan: Pro, 10,000 requests
+remaining today** (§3a). Both halves are settled: the licence question was
+already answered by the supplied pricing screen, and activation is now
+observed rather than assumed.
+
+**No TPL question is open.** What remains is authorization, which is yours to
+give and not a question for me to hold: rotation (R1/G11) and R4 activation
+(G12, which additionally needs the measured per-IP session and real-store
+evidence).
 
 ---
 
 ## 8. Status
 
 Assessment read-only; **no request was made to a paid API and no quota was
-spent.** R2 and R3 are now **built and tested locally** — 65 assertions, mocked
-upstream, registered as suite 49 of 50. **Local implementation is not
-authorization to deploy**, and nothing here is deployed.
+spent.** R2 and R3 are **built and tested locally** — 65 assertions, mocked
+upstream, registered as suite 49 of 50 — and are **included in the proposed
+release. Nothing has shipped.** Production still runs `9aaf326`, which contains
+neither. **Local implementation is not authorization to deploy.**
 
 R1 is yours at the provider, and its procedure now covers activation, existing
 deployments and local environments — not just the one code reader. R4 is
