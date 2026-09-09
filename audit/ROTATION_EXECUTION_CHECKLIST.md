@@ -167,8 +167,9 @@ anyway, so a push that creates nothing is the desired behaviour. But it is a
 different setting with a different blast radius than the one I described, and
 **the dashboard is the authoritative surface.** Verify the exact control and its
 scope there before relying on it. If it does turn out to suppress production
-deployments too, that must be understood before the maintenance window, since
-step 6 depends on being able to deploy.
+deployments too, that must be understood **before it is applied at 11b** — see
+§8a for why it is no longer applied ahead of the rotation, which needs to be
+able to deploy at step 5.
 
 **What containment does not do**, adopted from the ruling:
 
@@ -202,12 +203,10 @@ the exact defect measured on 2026-09-08.
 
 | # | Action | Surface |
 | --- | --- | --- |
-| 0 | **Verify the containment control** and its scope in the dashboard (§4). Confirm whether it suppresses production deployments too. | Vercel → Settings → Git |
-| 1 | **Apply containment**: stop Git-triggered deployments. | same |
 | 2 | Generate a replacement **eBay Cert ID**. | eBay developer portal |
 | 3 | Generate a **fresh verification token** — a new random value, **not** the repo literal, **not** the literal with the newline removed. | operator's generator |
 | 4 | Set `EBAY_CERT_ID` and `EBAY_VERIFICATION_TOKEN`, **Production only**, **no whitespace**. Preview holds no eBay credential and must not gain one. | Vercel → Environment Variables |
-| 5 | **Redeploy the exact live commit `9aaf326e7`.** Verify the new deployment reports **that commit**, not a branch head. | Vercel → Deployments → `dpl_AuwggY9Y…` → Redeploy |
+| 5 | **Redeploy the exact live commit `9aaf326e7`** (commit verification happens at 6a, once READY). | Vercel → Deployments → `dpl_AuwggY9Y…` → Redeploy |
 | 6 | Wait for READY. **READY is not proof the replacement token is active** — it means the build finished. | — |
 | 6a | **Verify the new deployment's commit is `9aaf326e7`**, not a branch head. | dashboard, or ask me — read-only, no secret |
 | 6b | **Verify the endpoint hashes the new token: `node tools/verify-challenge.mjs`.** Hidden prompt, nothing echoed or stored. **Must PASS before step 7.** | operator shell |
@@ -219,10 +218,15 @@ the exact defect measured on 2026-09-08.
 
 **Only after 10 and 11 are complete and the required checks pass:**
 
-| # | Action |
-| --- | --- |
-| 12 | Delete `refs/recovery/pre-scrub-c2366b2`. **Not before completed verification.** |
-| 13 | Push — **and only once §4 containment is verified applied**, since a push is what would otherwise create a Preview. |
+| # | Action | Surface |
+| --- | --- | --- |
+| 11a | **Verify the containment control** and its scope in the dashboard (§4, §8a). | Vercel → Settings → Git |
+| 11b | **Apply containment.** | same |
+| 12 | Delete `refs/recovery/pre-scrub-c2366b2`. **Not before completed verification.** | git |
+| 13 | Push — **only once 11a and 11b are done**, since the push is the trigger they contain. | git |
+
+**Containment is a gate on 11a–13, not on 2–11.** An unresolved containment
+control is **not** a reason to stop the rotation; it is a reason not to push.
 
 **Deployment of Phase 1 remains a separate authorization.** Phase 2 entry still
 requires official user OAuth, resolved descriptor value IDs, and the token
@@ -341,23 +345,31 @@ release registry 49, RV-1…RV-9, CH-1…CH-3, 4 duplicate `codes` helpers,
 T2.1–T2.8, SI-1, A-2, net is item-price-only, two reachability sweeps unrun, no
 Safari or iOS in CI, no per-suite assertion-count floor.
 
-## 8a. Step 0 reordered — the containment dependency can be removed
+## 8a. Containment reordered — it gates the push, not this window
 
 Owner decision 2026-09-09: **verify containment before deciding.** Holding.
 While specifying what to read, a simplification surfaced that is worth taking
 first, because it makes the gate smaller.
 
-**The only thing that creates an automatic deployment is a push. Steps 0–11
-contain no push.** The credential replacement and the redeploy of `9aaf326e7`
-are dashboard and portal actions. So containment is a **prerequisite for step
-13 (the push)**, not for the credential rotation — and sequencing it before
-step 4 buys nothing while introducing the exact risk the reviewer named: that
-disabling Git deployments also blocks the **manual redeploy** in step 5.
+**This window contains no push or other deployment trigger beyond the
+explicitly authorized redeploy.** That is the whole rationale, and it is
+narrower than what I wrote first: "only pushes create automatic deployments" is
+broader than anything established here — deploy hooks, integrations and the
+`enableAffectedProjectsDeployments` flag are all plausible triggers I have not
+enumerated. The claim that holds is about **this** window's contents, not about
+Vercel's trigger surface in general.
 
-**Proposed reorder:** leave containment unapplied during the window; apply and
-verify it immediately before step 13. Steps 0–1 move to sit between step 11 and
-step 12. Nothing else changes, and the window no longer depends on an
-unestablished capability.
+So containment is a **prerequisite for the push (step 13)**, not for the
+credential rotation — and sequencing it before step 4 buys nothing while
+introducing the exact risk the reviewer named: that disabling Git deployments
+also blocks the **manual redeploy** in step 5.
+
+**Accepted by the owner and the reviewer 2026-09-09, and now applied to the
+step table**: containment is unapplied during the window and verified and
+applied as **11a–11b**, immediately before the recovery-ref deletion and the
+push. The earlier §9 instruction to stop the rotation over an unresolved
+containment control **contradicted this and has been withdrawn**, not softened.
+The window no longer depends on an unestablished capability.
 
 **This does not dissolve the Q-ROT-7 findings**, which stand unchanged:
 production-KV remains reachable from existing deployments and local development,
@@ -389,16 +401,40 @@ In **Project → Settings → Git**, report back **verbatim**:
 
 Written down so they are decided in advance rather than in the moment.
 
-- **§5 step 0 is a gate, not a formality.** If the containment control's scope
-  or its effect on the manual redeploy is unclear after reading the dashboard,
-  **stop before changing any credential.** An unclear containment state plus a
-  changed credential is the worst of both: the old value is gone and the blast
-  radius is unknown.
+- **An unresolved containment control does NOT stop the rotation.** Superseded
+  2026-09-09; the earlier instruction to stop before changing credentials over
+  it contradicted §8a and is withdrawn. Containment gates **11a–13** only.
 - **Step 6b fails → stop.** Do not save the token in eBay's portal. Fix the
   Vercel value or the deployment, redeploy, re-run 6b.
 - **Any required check in step 9 fails → stop.** No push, no recovery-ref
-  deletion, and classify the failure before deciding whether to roll back.
-- **Rolling back is the expected response to a failed gate**, not a last resort.
+  deletion, and classify the failure first.
+
+### Recovery is failure-specific, and rollback is NOT the default
+
+Correcting the earlier "rolling back is the expected response", which was wrong
+in a way that matters here: **once the old Cert ID is revoked at eBay, an
+earlier deployment is not a safe rollback target.** Vercel resolves environment
+variables per deployment, so promoting or redeploying a pre-rotation deployment
+restores *configuration that references the revoked value* — trading a
+misconfigured endpoint for a definitively broken one. And the pre-rotation
+verification token is not merely old: it is **published in the repository**, so
+returning to it re-establishes the exposure this window exists to end.
+
+**A revoked or exposed secret is never a rollback target.**
+
+| Failure | Recovery |
+| --- | --- |
+| 6b reports a corruption shape | Re-enter the value in Vercel without the stray character, **redeploy `9aaf326e7` again**, re-run 6b. Fix forward; no rollback. |
+| 6b reports the endpoint hashes something unrecognised | Verify which deployment serves the domain and its commit **before** touching anything else. Likely the redeploy did not take effect, not a wrong value. |
+| eBay's portal challenge fails at step 7 | Operator and eBay hold different values. Re-save the portal value. The endpoint is already correct — proven by 6b — so **do not** change Vercel. |
+| A required check in step 9 fails on **authentication** | The new Cert ID is wrong or not yet active at eBay. Re-check the portal, then re-enter in Vercel and redeploy the same commit. |
+| A required check fails on **pre-existing behaviour** | Not a rotation failure. Adjudicate per §1 and record it; the credentials stand. |
+| The endpoint is unreachable entirely | Redeploy `9aaf326e7`. **Never** promote a pre-rotation deployment: it carries the revoked Cert ID and the published token. |
+
+**Every path recovers by re-deploying the same commit with corrected
+configuration.** Recovery must retain the valid replacement credentials. If the
+window has to be abandoned, the correct terminal state is `9aaf326e7` deployed
+with the **new** credentials — not a return to the old ones.
 
 **Status: checklist complete and awaiting authorization. Nothing executed — no
 credential written, nothing pushed, nothing deployed, Cert ID not rotated,
