@@ -1,7 +1,7 @@
 # D5 — Signed-in continuation: what I could verify, and the one check I cannot run
 
-**Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **Live bundle:** `js/core.fa9c358d.js` (`index.html:3834`)
-**Suite:** `draft-review-screen` **365 passed, 0 failed**
+**Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **Live bundle:** `js/core.66c39922.js` (`index.html:3834`)
+**Suite:** `draft-review-screen` **367 passed, 0 failed**
 **Status: signed-in behaviour still UNVERIFIED. Nothing pushed, nothing deployed.**
 
 D5 §8.3 reclassified signed-in continuation from a footnote to the critical path,
@@ -60,10 +60,11 @@ https://www.ebay.com/sl/prelist/identify?title=Charizard%20VMAX%20074%2F073%20Ch
 | 1. Does the identify/match screen appear? | **Yes.** "Find a match", eBay's own listing entry screen. No sign-in wall, no register prompt. |
 | 2. Does it show *that* search, not an empty box or a restored draft? | **Yes.** Verbatim: `Find a match for "Charizard VMAX 074/073 Champions Path"`, under `Toys & Hobbies > Collectible Card Games > CCG Individual Cards` — the `caty=183454` we sent. |
 | 3. Is the collector number on the offered match the one in the URL? | **Yes.** Top pick: `Charizard VMAX (Secret) 074/073 Champions Path Holo`. Same number, same set. |
-| 4. **Is the query still in the address bar after landing?** | **Yes.** Final URL identical to the sent URL — both `title` and `caty` present, no redirect, no strip, no rewrite. |
+| 4. Final URL after landing (**recorded, not a criterion** — see §7.0) | Identical to the sent URL: both `title` and `caty` present, no redirect. |
 
-So the failure mode step 4 was written to catch — a query dropped in transit,
-the same way the dead scan-miss link died — **does not happen logged out today.**
+The URL observation is reported because it is free and may explain a failure,
+**not because it decides one** — §7.0 corrects the reasoning I had attached to
+it.
 
 ## 4. One new finding, and it supports copy we already ship
 
@@ -73,16 +74,33 @@ eBay pre-filled its own facet chips from our title: `Card Name: Charizard VMAX`,
 The first two are right. The third is eBay's matcher mis-parsing "Champions
 Path" — a set name — into a "Stage" attribute. Nothing we sent said "Champion".
 
-This is worth recording because it is the first *direct* observation of the
-thing the shipped seed note asserts: "Their matcher decides what it matches, it
-does not always answer the same way twice, and their catalogue sometimes
-disagrees with ours." That sentence was previously reasoned from the sell-start
-contract; it now has an instance behind it. It also strengthens the case for the
-identity check being the loud line on the screen (full `--text`, WARNING
-severity) while the seed and limits notes stay muted: the seller really does
-have something to check.
+**It supports a parsing disagreement, and only that.** On review I had let it
+carry more than it can. The shipped seed note also claimed eBay's matcher "does
+not always answer the same way twice", and neither this observation nor the
+earlier 232/165 → 205/165 one demonstrates instability: both are eBay reading
+**one** search differently than we meant it. A variability claim needs repeated
+identical probes diverging, and we have never run them.
 
-**Not claimed:** that this mis-parse is stable, reproducible, or affects the
+So the claim is **withdrawn from the shipped copy, not softened.** The seed note
+now reads:
+
+> We send eBay this search: **Charizard VMAX 074/073 Champions Path**. eBay may
+> interpret it differently, and their catalogue sometimes disagrees with ours.
+> Nothing is listed or published until you do it there yourself.
+
+The assertion was **flipped rather than deleted**: it now forbids the
+variability vocabulary (`same way twice`, `inconsistent`, `varies`,
+`unpredictable`, …) and requires the disagreement wording, so the stronger claim
+cannot return without the evidence arriving first. What survives is the useful
+part, which was never the variability: the seller has something to check.
+
+I did **not** add "check the card details before selecting a match" to the seed.
+The imperative already exists one line above, in the WARNING-severity check note
+naming the collector number. One behaviour, one implementation — and a second
+"check the card" sentence in muted text directly under the loud one competes
+with it instead of reinforcing it.
+
+**Not claimed:** that the mis-parse is stable, reproducible, or affects the
 resulting listing. It was seen once. I did not click through to find out,
 because clicking a match begins a listing flow.
 
@@ -105,7 +123,7 @@ whatever the other side does; one keyed to theirs is a claim we cannot maintain*
 of every sentence in the block**, not as a check on today's wording, so a future
 edit that predicts eBay's screen fails here rather than shipping.
 
-`draft-review-screen`: **365 passed, 0 failed** (was 363).
+`draft-review-screen`: **367 passed, 0 failed** (was 363: two for the boundary invariant, two for the withdrawn variability claim).
 
 ## 6. The check itself — four steps, five minutes, your account
 
@@ -117,27 +135,81 @@ Self-contained. Nothing else needs to be open.
    a restored draft, or a different screen?
 3. Does it show `Charizard VMAX 074/073 Champions Path` as the search, and is
    `074/073 Champions Path` the collector number on the top offered match?
-4. **After it settles, is the query still in the address bar** — are both
-   `title=` and `caty=` still there, unchanged?
+4. **Record the final URL** — copy it as-is. This is an observation, not the
+   pass/fail criterion (§7.0). If it has changed, it may help explain a
+   failure in steps 2–3; on its own it decides nothing.
 
 **Please do not click a match or continue past that screen.** Landing is
 read-only; continuing begins a real listing on your account.
 
-## 7. Pre-committed consequences, so the result decides rather than the reading
+## 7. Pre-committed consequences
 
 Written before the observation, so no outcome can be argued into a pass.
 
-| Result | What it means | What I do |
-| --- | --- | --- |
-| All four match §3 | Signed-in behaviour equals the logged-out baseline. The exact-search note describes what the seller sees, and §8.1's compare-the-number instruction is performable. | Close §8.3, record the observation with its date, and leave the copy alone. |
-| Screen appears, **but the query is gone** from the address bar (step 4 fails) | The parameters are dropped for signed-in sellers. This is the dead-scan-miss failure mode, and it breaks §8.1: the seller is told to compare against a number that never arrived. | **Blocker.** The seed note's "we send eBay this search" becomes misleading in practice, and the identity check becomes unperformable. Copy changes before D5 closes. |
-| Screen appears with the search, but the **top match is a different card** | eBay's matcher disagreed. Already disclosed; not a defect in our behaviour. | No code change. Record it as a second instance behind the seed note. |
-| eBay routes you somewhere else entirely (Seller Hub, restored draft) | The note describes a screen the seller never sees. | **Blocker**, and the more serious one: §8.1's instruction is addressed to a screen that is not in front of them. |
-| Something else | — | Report it verbatim; I will not classify it in advance. |
+### 7.0 Correction: the URL is evidence, not the criterion
 
-Until one of those rows is observed, **§8.3 stays Unverified** and the shipped
-copy stays as it is — it says what we send and asks the seller to check what
-arrives, neither of which depends on which screen eBay chooses.
+My earlier table judged step 4 on the query string, and that inference was
+wrong in **both** directions:
+
+- **A missing query string does not prove eBay discarded the inputs.** eBay can
+  consume `title` and `caty`, resolve them server-side, and redirect to a
+  cleaner URL. The seller would then be on exactly the right screen with a
+  clean address bar, and my table would have called it a blocker.
+- **Parameters remaining in the address bar do not prove they were used.** An
+  unconsumed query survives a page that ignored it completely. My logged-out
+  baseline in §3 shows the parameters intact, and that fact alone establishes
+  nothing about them being read — what establishes it there is the **displayed**
+  search and category, which happened to be visible in the same screenshot.
+
+The criterion is therefore what a seller can see and do:
+
+1. **Does the landing screen display our search and category?**
+2. **Can the seller follow the hand-off instruction** — is there a card or match
+   in front of them whose collector number they can compare against ours?
+
+The final URL is recorded on every run because it is free and because it can
+*explain* a failure. It never decides one.
+
+### 7.1 The table, on the corrected criterion
+
+| Observation | What it means | What I do |
+| --- | --- | --- |
+| Search and category are displayed, and a match is offered to compare | The inputs reached the workflow and the instruction is performable — **however the URL ended up**. | Close §8.3 with the observation, its date and its account/browser context. Leave the copy alone. |
+| Search and category displayed, but the **offered match is a different card** | eBay read our search differently. Already disclosed by the seed note, and the check note is exactly what catches it. Not a defect in our behaviour. | No code change. Record it as a further instance of disagreement — **not** of variability (§4). |
+| **The search/category are not displayed** — empty box, restored draft, Seller Hub, or any screen without our card in it | The inputs did not reach the workflow *as far as the seller is concerned*, which is the only sense that matters. §8.1's compare-the-number instruction is addressed to something not in front of them. | **Blocker.** Fall to the Q-D5-2 fallback in §7.2. |
+| Screen appears but the seller cannot tell what to compare | Same blocker, softer cause. | As above. |
+| Anything else | — | Report it verbatim; I will not classify it in advance. |
+
+### 7.2 The pre-committed fallback (Q-D5-2, answered)
+
+If the inputs genuinely fail to reach the workflow: **keep a usable generic eBay
+continuation, with manual-copy instructions.** The seller can still list; a
+hand-off with honest copy beats no hand-off.
+
+Specifically, and decided now rather than after the observation:
+
+- **Keep** the button and a working eBay destination.
+- **Keep** the identity instruction, phrased to hold *wherever* eBay presents a
+  selection rather than at a named screen. This survives precisely because it
+  is keyed to our behaviour and to the seller's task, not to eBay's layout.
+- **Keep** the seed on screen — it becomes the thing the seller copies by hand,
+  so it matters more in this branch, not less.
+- **Remove** only wording that assumes a particular screen.
+- **Do not** hunt for further undocumented parameters to preserve prefill.
+  Prefill is a convenience; the identity guarantee is the product. Chasing
+  internals we cannot see documented (§2) trades a small convenience for a
+  dependency that can break silently.
+
+### 7.3 What a successful observation does and does not establish
+
+It establishes **that tested case**: that account, that browser, that card, that
+date. It is **not** a continuing compatibility guarantee — §2 already notes the
+parameters are undocumented internals with no compatibility promise. This is why
+the check is queued as recurring rather than closed once (Q-D5-3, accepted).
+
+Until §7.1 is observed, **§8.3 stays Unverified** and the shipped copy stays as
+it is — it says what we send and asks the seller to check what arrives, neither
+of which depends on which screen eBay chooses.
 
 ## 8. Questions
 
@@ -145,17 +217,17 @@ arrives, neither of which depends on which screen eBay chooses.
   answers? It is the highest-value check left in D5 and I have no instrument for
   it. Alternatively, if you would rather I drive it, reconnect the browser on
   your machine and I will run it read-only in front of you.
-- **Q-D5-2.** If step 4 fails — the query dropped for signed-in sellers — do you
-  want the hand-off to **keep the link and change the copy** (drop the exact
-  search sentence and the compare-the-number instruction, keep the button), or
-  **hold the link** until we find a parameter form that survives? My inclination
-  is the first: a seller can still list, and a hand-off with honest copy beats
-  no hand-off.
-- **Q-D5-3.** The `title`/`caty` parameters are undocumented internals with no
-  compatibility promise (§2). Do you want a release-validation item that re-runs
-  §6's four steps before each deploy, so a silent change on eBay's side surfaces
-  as a failed check rather than as a seller's confusion? It is cheap and manual;
-  it cannot be automated without a signed-in session we do not have.
+- **Q-D5-2 — answered, recorded in §7.2.** Generic continuation with
+  manual-copy instructions; identity verification preserved wherever eBay
+  presents a selection; only screen-assuming wording removed; no hunting for
+  more undocumented parameters. One thing I would flag rather than decide: this
+  fallback keeps the seed sentence, since in that branch it becomes the text the
+  seller copies. Say so if you would rather it went.
+- **Q-D5-3 — answered, accepted.** Folded into the existing D5
+  release-validation item, recording **date, account/browser context and
+  result** per run, and stating in the item itself that a pass establishes that
+  tested case only. Manual by necessity: it cannot be automated without a
+  signed-in session the build environment does not have.
 
 ---
 

@@ -209,7 +209,28 @@ point, not the answer.
 Pre-committed consequences for each outcome are in §7 of that document, written
 before the observation. Two of the five rows are blockers.
 
-Proposed as a recurring pre-deploy item under Q-D5-3, not yet accepted: the
-`title`/`caty` parameters we depend on are undocumented eBay internals with no
-compatibility promise, so a silent change on their side would surface as seller
-confusion rather than as a failed check.
+**Recurring pre-deploy check (Q-D5-3, ACCEPTED 2026-09-08).** The `title`/`caty`
+parameters we depend on are undocumented eBay internals with no compatibility
+promise, so a silent change on their side would otherwise surface as seller
+confusion rather than as a failed check. Manual by necessity — it cannot be
+automated without a signed-in session the build environment does not have.
+
+Each run records:
+
+| Field | Why |
+| --- | --- |
+| Date | A pass ages; eBay can change between deploys. |
+| Account + browser context | The result belongs to a case, not to the product. |
+| Landing screen — is our search and category displayed? | **The criterion.** |
+| Offered match — can the seller compare a collector number? | **The criterion.** |
+| Final URL, verbatim | Evidence only. A missing query does not prove the inputs were discarded (eBay may consume them and redirect to a clean URL), and a surviving query does not prove they were used. |
+
+**A pass establishes that tested case, not a continuing compatibility
+guarantee.** The item stays in this queue after a successful run rather than
+being struck off.
+
+Pre-committed fallback if the inputs do not reach the workflow: keep a usable
+generic eBay continuation with manual-copy instructions, keep the identity
+instruction phrased to hold wherever eBay presents a selection, remove only
+screen-assuming wording, and do not hunt for further undocumented parameters to
+preserve prefill (D5 verification §7.2).

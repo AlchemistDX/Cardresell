@@ -1,6 +1,6 @@
 # D6 — The New-Seller Warning, Implemented
 
-Branch `phase1-block-d`. Live bundle **`js/core.fa9c358d.js`** (`index.html:3834`; renamed twice
+Branch `phase1-block-d`. Live bundle **`js/core.66c39922.js`** (`index.html:3834`; renamed twice
 this session, `3f83abec` → `d5fcdced` → `fa9c358d`, both recorded in
 `audit/BUNDLE_CITATION_MAP.md`). Nothing pushed, nothing deployed. Credential
 rotation still gates pushing.

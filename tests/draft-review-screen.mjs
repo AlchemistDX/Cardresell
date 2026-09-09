@@ -1563,10 +1563,20 @@ try {
     T.check('it opens in a new tab without handing eBay our window',
       link && link.target === '_blank' && /noopener/.test(link.rel || ''), JSON.stringify(link));
 
-    // The seed is on screen, not only in the href. eBay answered one probe for
-    // card 232/165 with a product-library match on 205/165 -- their catalogue
-    // and ours disagree and their matcher answers anyway, so a seller who can
-    // read the query they are being sent with can catch it on arrival.
+    /* The seed is on screen, not only in the href. eBay answered one probe for
+     * card 232/165 with a product-library match on 205/165, and a probe for
+     * 074/073 pre-filled "Stage: Champion" from the set name "Champions Path"
+     * -- their catalogue and ours disagree and their matcher answers anyway,
+     * so a seller who can read the query they are being sent with can catch it
+     * on arrival.
+     *
+     * WITHDRAWN 2026-09-08. The copy previously also said the matcher "does
+     * not always answer the same way twice", and nothing here demonstrated it:
+     * both observations are of eBay reading ONE search differently than we
+     * meant it, which is disagreement, not instability. A variability claim
+     * needs repeated identical probes diverging, and we have never run them.
+     * The assertion below now forbids the claim rather than requiring it, so
+     * it cannot return without the evidence arriving first. */
     const seedShown = await page.evaluate(() => {
       const el = document.querySelector('[data-sell-start-seed]');
       return el ? el.innerText : null;
@@ -1578,6 +1588,12 @@ try {
       seedShown);
     T.check('and it says nothing is published until the seller does it there',
       !!seedShown && /nothing is listed or published/i.test(seedShown), seedShown);
+    T.check('\ud83d\udd34 and it states a possible DISAGREEMENT, which is what we observed',
+      !!seedShown && /may interpret it differently/i.test(seedShown)
+                  && /catalogue sometimes disagrees/i.test(seedShown), seedShown);
+    T.check('\ud83d\udd34 and it claims no INSTABILITY, which we never demonstrated',
+      !!seedShown && !/same way twice|inconsistent|varies|unpredictab|different each time|not repeatab/i.test(seedShown),
+      seedShown);
 
     /* The instruction, asserted separately from the seed and BEFORE it.
      *
@@ -2072,7 +2088,7 @@ try {
      retained trace (audit/d7/basis-loss-trace.json): a basis bound for card A
      was cleared 14ms later by `loadCardUI`, reached from `doHydrate` inside
      `_restoreLastLoadedCard`, which the bundle schedules on a 400ms startup
-     timer (js/core.fa9c358d.js:20252). The card active at the clear was card A
+     timer (js/core.66c39922.js:20252). The card active at the clear was card A
      itself, so a same-card reload dropped that card's own basis.
 
      Neutralising the timer above makes that section deterministic, but on its
@@ -2323,7 +2339,7 @@ try {
     // the intermittent failure: at t=289ms this section binds a basis for card
     // A; at t=303ms `loadCardUI` clears it, called from `doHydrate` inside
     // `_restoreLastLoadedCard`, which the bundle schedules on a 400ms timer at
-    // startup (js/core.fa9c358d.js:20252) and which re-hydrates itself once
+    // startup (js/core.66c39922.js:20252) and which re-hydrates itself once
     // more "after a beat". The card active at the clear is card A itself --
     // 4e2c6b7b, the same key the basis was stamped to -- so the clear is a
     // same-card reload dropping that card's own basis.
@@ -2410,7 +2426,7 @@ try {
         const f = '/home/user/workspace/cardresell/audit/d7/basis-loss-trace.json';
         if (!fs.existsSync(f)) {
           fs.writeFileSync(f, JSON.stringify({ why, capturedAt: new Date().toISOString(),
-            bundle: 'js/core.fa9c358d.js', payload: JSON.parse(payload) }, null, 2));
+            bundle: 'js/core.66c39922.js', payload: JSON.parse(payload) }, null, 2));
         }
       } catch (e) { console.log('  [trace retain failed] ' + e.message); }
     };

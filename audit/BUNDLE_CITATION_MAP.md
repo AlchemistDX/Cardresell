@@ -359,6 +359,18 @@ unshifted across both renames** — `loadCardUI :3556`, the startup timer
 `:20252`, `_crPricingContext :20687`, `_reviewBasisHtml :22262`. Re-verified:
 `:20252` still reads the 400ms `setTimeout` in `core.fa9c358d.js`.
 
+## `core.fa9c358d.js` → `core.66c39922.js` (retired 2026-09-08)
+
+The withdrawn variability claim changed the seed note and its comment inside
+`_reviewSellStartHtml` at ~22728. Every citation above that point is unshifted:
+`loadCardUI :3556`, the startup timer `:20252`, `_crPricingContext :20687`,
+`_reviewBasisHtml :22262`. Re-verified `:20252` in `core.66c39922.js`.
+
+Three live generations in one session — `d5fcdced`, `fa9c358d`, `66c39922` —
+each retired byte-identical. When restoring a retired file, take it from **the
+commit that shipped it**, not from `HEAD`: `HEAD` already carries the newer
+bytes under the older name, and `asset-fingerprints` catches the mismatch.
+
 ## Not claimed
 
 - **This does not verify that a citation is still *apt*.** It proves the cited line's bytes are
