@@ -251,8 +251,23 @@ custom environment and incurs no additional cost.
    with the standing rule not to demonstrate abuse by consuming paid quota. The
    remedy is the same shape as the eBay credentials, which are already
    `production` only: **retarget `CARDSELL_TPL_KEY` to Production only**, and
-   decide separately whether Preview gets its own low-value key or none. Not yet
-   done, not yet decided.
+   decide separately whether Preview gets its own low-value key or none.
+
+   **CLOSED 2026-09-09 17:33.** `CARDSELL_TPL_KEY` now reads **Production**,
+   Secret, updated 10m ago — down from "Production and Preview". Preview can no
+   longer spend production TPL quota, which also removes the obstacle to
+   verifying R4 in Preview without issuing chargeable calls. **Still open as a
+   choice, not a defect:** whether Preview eventually gets its own low-value TPL
+   key or stays without one. Unbound is the safer default and is what is in
+   place.
+
+   **Noted for Task B while the page was open:** `EBAY_APP_ID`,
+   `EBAY_CERT_ID`, and `EBAY_VERIFICATION_TOKEN` are Production-scoped but typed
+   **`Config`, not `Secret`** — readable back, unlike `CARDSELL_TPL_KEY`. Since
+   the rotation replaces the Cert ID and verification token anyway, and the
+   Sensitive toggle **is** available for Production-scoped variables, the
+   replacements should be written as **Sensitive**. Cheap hardening at the exact
+   moment the values change; not a reason to alter the rotation's order.
 
    **NEW FINDING — a second shared store, outside RV-8's scope.** The same
    Storage page lists **`cardresell-blob` (Blob Store, Private, created Jun 30)**
@@ -271,9 +286,25 @@ custom environment and incurs no additional cost.
    the Pay As You Go charge applies only to the new non-production store. Will
    took option (a) of Q-CONTAIN-1 knowingly.
 
-   **Not yet verified:** that the connection landed on **Preview and Development
-   only**, with **unprefixed** names. Both are read back in step 5, and neither
-   is assumed here.
+   **VERIFIED 2026-09-09 17:33 — both halves, disjoint, unprefixed.** The
+   Environment Variables page now groups the rows by owning store:
+
+   | Store | Names | Environments | Type |
+   | --- | --- | --- | --- |
+   | `upstash-kv-bistre-arrow` | the five | **Production** | Secret |
+   | `upstash-kv-aureolin-door` | the five | **Preview and Development** | Config |
+
+   The five are `KV_REST_API_READ_ONLY_TOKEN`, `KV_REST_API_TOKEN`,
+   `KV_REST_API_URL`, `KV_URL`, `REDIS_URL` in both groups — **identical names,
+   no prefix**, so the 32 files under `api/` bind in every environment and
+   Preview is isolated by *pointing elsewhere*, not by pointing at nothing. The
+   two failure modes watched for — an overlapping Production claim, and a
+   silently prefixed set — **did not occur.** The target state set at 15:57 is
+   reached.
+
+   `Config` versus `Secret` in that table is the Sensitive gap recorded at
+   17:29, visible here as the exact shape predicted: the production set is
+   write-only, the non-production set is readable.
 3. **Save its credentials directly into Vercel.** Never into this session, never
    into a local file, never into a commit message.
 4. **Superseded 17:06 — the variable rows have no Edit.** Do it at the
