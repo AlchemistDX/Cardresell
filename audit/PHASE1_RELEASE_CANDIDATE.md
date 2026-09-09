@@ -52,7 +52,19 @@ caveat. See §3.
 
 ---
 
-## 3. The one item that changes what the product claims
+## 3. WITHDRAWN — this section is wrong
+
+**Everything in §3 below is withdrawn (2026-09-09).** I grepped `api/` only and
+generalised from an empty result. The ranking surface models shipping in full —
+`js/core.66c39922.js:8549` computes `netPayout = price + effectiveShipCharge −
+totalFees − p.sellerShip`, per venue. Shipping therefore cannot reorder the
+recommendation, because the recommendation already includes it. The item-only
+net belongs to the connected-selling review screen, which already labels itself
+"Estimated net (item only)". See `audit/RC1_COPY_AND_CHECKLIST.md` §0 for the
+correction and §1 for what the real residual risk is. Retained unedited below so
+the error stays legible.
+
+## 3. ~~The one item that changes what the product claims~~ (WITHDRAWN)
 
 Everything else on the list is additive. Shipping is not.
 
