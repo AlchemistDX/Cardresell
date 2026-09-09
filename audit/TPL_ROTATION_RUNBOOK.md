@@ -208,6 +208,40 @@ tip but not from history, and rewriting history to redact six characters of a
 key that is about to be revoked is disproportionate and cuts against preserving
 completed work. Worth your explicit call rather than my silent one.
 
+## Incident: a full key value was pasted into the session transcript
+
+**2026-09-09, during step A reporting.** Asked for the Key # and baseline
+readings, the owner pasted a **complete `tcg_`-form key value** into the
+conversation. The value is **not recorded here, not in any commit, and not
+written to disk by me**; it was never used in a request. It is deliberately
+not quoted even in part.
+
+**It must be treated as exposed.** Conversation transcripts are retained, so
+the value has left the owner's control regardless of intent. That is the whole
+class of failure CH-3 exists to close, and it recurred in the middle of closing
+it.
+
+**Which key it belongs to is unestablished and decides the response.** Do not
+revoke anything until it is identified, because the two cases invert:
+
+| If the value is | Then | Response |
+| --- | --- | --- |
+| the **replacement** created minutes ago | nothing in service uses it — production still runs the old deployment's env snapshot | **Safe to revoke immediately, zero impact.** Create a third key, re-add in Vercel, revoke the exposed replacement. Slots allow it: 5 permitted |
+| the **old Key #518** | it is the already-exposed key, still serving production | **Change nothing.** The disclosure adds no new exposure and #518 is revoked at step 11 as planned |
+
+**Identifying it without revealing more:** the dashboard shows a masked prefix
+per key row. Compare only the leading characters against each row. No further
+disclosure is needed to tell the two apart.
+
+**This does not jeopardise production either way.** The live deployment carries
+its env snapshot from deploy time, so the replacement is not yet in service.
+The exposure's blast radius is provider quota, not the site.
+
+**Q-CH3-14:** the step-A instruction said "copy the value once, into Vercel
+only." It was followed for Vercel and then the value was also pasted here. The
+instruction named the destination but did not say plainly **"never paste it into
+this conversation, including to me."** That wording is now added to step A.
+
 ## Step C — HARD STOP
 
 **I stop here and wait for you.**
