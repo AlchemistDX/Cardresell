@@ -221,18 +221,38 @@ the value has left the owner's control regardless of intent. That is the whole
 class of failure CH-3 exists to close, and it recurred in the middle of closing
 it.
 
-**RESOLVED, 2026-09-09: the value was old Key #518**, confirmed by the owner.
-That is the **already-exposed** key — the one hard-coded into `index.html` and
-served to every anonymous visitor, which is CH-3's original disclosure. So the
-paste **adds no new exposure in kind**, the replacement key remains
-unexposed, and **the plan is unchanged**: #518 stays active until the
-replacement verifies, then is revoked at step 11. No third key is needed and
-nothing is revoked early.
+**RETRACTED. The owner's identification was mistaken, and the dashboard
+disproves it.** I recorded "the value was old Key #518" on the owner's word and
+committed it. A screenshot of the key list then showed that is **false**. The
+prior record is struck rather than quietly amended.
 
-It does sharpen one thing already in the plan: #518's value is now in a second
-retained location, so **step 11 stops being merely tidy bookkeeping**. It is the
-step that actually ends this credential's life. It was always last for a good
-reason; it should not be allowed to drift.
+**Evidence, from the dashboard's own masked forms — no value reprinted:**
+
+| Key | Masked form shown | Matches the pasted value? |
+| --- | --- | --- |
+| `cardresell production replacement` | prefix `tcg_1ff755`, suffix `8bae24` | **Yes** — both ends match |
+| `Key #518` | prefix `tcg_37ca6c`, suffix `d78e12` | **No** — neither end matches |
+
+**So the exposed value is the replacement**, the key now stored in Vercel as
+`sensitive`. This is the branch the table called the actionable one, and it
+inverts the response:
+
+- The replacement is **compromised on arrival** and must be **discarded, not
+  deployed**.
+- Nothing in service uses it — the live deployment still carries the old env
+  snapshot — so it can be revoked with **zero production impact**.
+- **#518 stays active.** It remains the key serving production and is still not
+  revoked until a replacement verifies.
+- Required: a **third** key, another Vercel delete-and-add, then revoke the
+  exposed replacement. Slots permit 5; 2 are active.
+- The step-A baseline must be **re-taken for the third key**. The readings below
+  belong to a key that is being discarded.
+
+**Why the branch was written before the answer was known.** Had the response
+been decided after the identification, an incorrect identification would have
+produced a wrong action — deploying an exposed key while believing it safe. The
+pre-committed branch is what turned a mistaken answer into a corrected step
+instead of a bad deployment.
 
 The original branching analysis is retained below, because the reasoning is
 what made the resolution safe rather than lucky — the response was determined
@@ -340,6 +360,46 @@ declined for that reason, rather than leaving it unexamined.
 
 This is stated **before** authorization, not after: authorize knowing the
 downside is outage-until-repeat.
+
+## Dashboard readings, 2026-09-09 (baseline for a key being discarded)
+
+Recorded because two of these facts change the procedure, not merely to log it.
+
+| Field | Reading |
+| --- | --- |
+| Daily Usage | **0 / 10,000**, 0% — "across all active API keys" |
+| API Keys | **2 total** active (4 rows; 2 revoked) |
+| Replacement | name `cardresell production replacement`, **Active**, created **Sep 9, 2026 11:10 AM**, **`Last used: Never`** |
+| Key #518 | **Active**, created Jun 28 2026 08:19 PM, `Last used: Sep 9, 2026, 06:23 AM` |
+| #517, `Website Key` | **Revoked** |
+
+**`Last used: Never` is the ideal baseline, and Q-CH3-12's granularity question
+dissolves.** From `Never`, any later value can only have come from the
+verification request, at any storage resolution. The concern about rendered
+versus stored precision does not arise. This carries to the third key, which
+should also read `Never` at creation.
+
+**Correction to my own instruction: there is no Key #.** I asked for "a
+three-digit number above 518", but a key created with a name shows that **name**
+in place of a number — the numbering is a fallback for unnamed keys. The
+identifier to record is the **name plus creation timestamp**. My expectation was
+wrong and sent the owner looking for a field that does not exist, which is part
+of how the wrong row got identified.
+
+**New finding — the provider allows unlimited read-back (Q-CH3-15).** Every key
+row carries a **`Copy` button, including the revoked ones**. So a TPL key value
+is retrievable from the dashboard at any time by anyone with account access.
+
+Two consequences worth stating plainly:
+
+- The "copy the value once" discipline **cannot** rest on the provider being
+  write-only. It is a handling rule, not a property of the system.
+- The exposure surface for TPL credentials **includes provider account access**,
+  permanently, for revoked keys as well as active ones. Vercel's `sensitive`
+  storage closes read-back on our side only.
+
+This does not change the current steps. It is recorded because it is the kind
+of assumption that would otherwise be discovered later and treated as new.
 
 ### Still outstanding before verification can run
 
