@@ -31,7 +31,7 @@ now carries this as a marked correction rather than a rewrite.
 
 | Requirement | Where | Assertion |
 |---|---|---|
-| Add, reorder, remove through seller controls; order verified after reload | `_photoAddFiles`, `_photoMove`, `_photoRemove`; store `photosMove` | §8 §9 §10 — including **the chosen order survives a full page reload** |
+| Add, reorder, remove through seller controls; order verified after reload | `_photoAddFiles`, `_photoMove`, `_photoRemove`; store `photosMove` | §8 §9 §10 — the chosen order **persists** across a full page reload (persistence only; see the narrowing below) |
 | Missing-photo placeholder distinct from an empty collection | `_photoItemHtml` (`[data-photo-missing]`, dashed border) vs `[data-photo-empty]` | §11 — three tiles still render, the lost one carries its own sentence, **the empty line is not shown** |
 | Browser-local limitation always visible | `_photoInnerHtml`, emitted **outside** the grid/empty branch | §8 — asserted with zero photos and with photos; §10 — still present after the last removal |
 | Decode validation, HEIC guidance reused | `_photoValidateFile` calls `_validateScanFile`, then actually attempts `createImageBitmap` | §12 — an undecodable file is refused; the HEIC line is the scan path's own wording |
@@ -40,9 +40,24 @@ now carries this as a marked correction rather than a rewrite.
 
 **Reorder is an operation, not an array.** `photosMove(draftId, photoId, 'up'|'down')`
 reads the manifest inside the write transaction and computes the new order
-there. A screen that posted its own array would reintroduce exactly the stale
-write-back the transaction exists to prevent, and it would pass every
-same-repaint assertion — which is why the reload check exists.
+there.
+
+**Narrowed on review, 2026-09-08.** I wrote that the reload check is what
+catches a screen posting its own stale array. It is not, and the distinction
+matters because I was leaning on the wrong assertion:
+
+| Claim | What actually establishes it |
+|---|---|
+| The chosen order persists | the **reload** check (§9) |
+| A stale UI array cannot overwrite a concurrent change | the **read-inside-transaction** implementation of `photosMove`, and the **two-tab** check for concurrent adds |
+
+A stale write-back persists just as well as a transaction-local reorder — both
+survive a reload, so reload cannot tell them apart. Reload establishes
+persistence and nothing more. What rules out the stale array is that
+`photosMove` never accepts one: it takes an id and a direction and reads the
+manifest inside the write transaction. That is a property of the
+implementation, supported by the earlier concurrency work, not something this
+slice's reload assertion demonstrates.
 
 **The cap wording.** 12 is described as CardResell's, scoped to this browser,
 and explicitly denied as an eBay requirement. A disclosure keyed to our own
@@ -153,3 +168,25 @@ Sources for the storage behaviour behind §2 remain the two verified in the
 gate: the [Storage Standard](https://storage.spec.whatwg.org/) on bucket
 clearing being all-or-nothing, and [MDN on IDBTransaction](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 on request success not meaning stored.
+
+
+---
+
+## 8. Release limits, restated explicitly
+
+These are not caveats buried in prose; they are the shape of what D7 does and
+does not establish.
+
+- **Safari and iOS are unverified.** All evidence is headless Chromium. The
+  storage behaviour behind the browser-local copy is exactly where these engines
+  are most likely to differ.
+- **Local photos do not transfer to eBay.** D7 establishes **local preparation
+  only**. Nothing uploads them, nothing attaches them to a packet, and no part
+  of the handoff carries them.
+- **Release validation is outstanding.** RV-7 records the browser-suite
+  obligation; the suite is a declared exclusion, not a gate that runs offline.
+- **D5's signed-in checks, D6's remaining verification, and SI-1 remain open**
+  as last reported.
+- **No Phase 1 percentage replaces the withdrawn estimates.** Both are
+  withdrawn, not revised, and nothing here computes a new one.
+- **Nothing is pushed or deployed.** Credential rotation still gates pushing.

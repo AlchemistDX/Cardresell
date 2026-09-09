@@ -2008,17 +2008,62 @@ try {
     // after the first create, so every later wait would return immediately and
     // the assertions would read the PREVIOUS body. The wait is on the request
     // this side captured, per case.
-    const waitPost = async () => {
+    //
+    // 2026-09-08, after a 336/2 intermittent failure in case 3: `posted = null`
+    // plus "wait for ANY post" cannot tell a late create from the intended one.
+    // A body arriving after the reset satisfied the wait regardless of which
+    // click produced it, and case 3's two assertions read a body with no
+    // basisMeta -- which is the CORRECT content for case 2's create. That was a
+    // hypothesis with no evidence either way, because nothing retained what
+    // arrived or when.
+    //
+    // Every POST is now retained with its sequence and arrival time, each case
+    // declares the create it expects, and the wait matches on the OPERATION'S
+    // OWN IDENTITY within that case's window. The predicate deliberately does
+    // not mention basisMeta: that is the thing under test, and waiting for it
+    // would convert a product defect into a timeout instead of a failed
+    // assertion. A create that does not belong to the open case is skipped,
+    // stays in the log, and is reported by the correlation check at the end.
+    const t0 = Date.now();
+    const postLog = [];          // { seq, tMs, caseTag, body }
+    let caseTag = 'pre-case';
+    let caseFrom = 0;            // index into postLog where the open case began
+    const newCase = (tag) => { posted = null; caseTag = tag; caseFrom = postLog.length; };
+    const postLogDump = () => (postLog.length === 0 ? '(no creates captured)'
+      : postLog.map((e) => `#${e.seq} +${e.tMs}ms during[${e.caseTag}] `
+          + `id=${JSON.stringify(e.body && e.body.instanceId)} `
+          + `card=${JSON.stringify(e.body && e.body.card && e.body.card.name)} `
+          + `basis=${JSON.stringify(e.body && e.body.pricingContext
+              && e.body.pricingContext.basisMeta)}`).join(' | '));
+    const waitPost = async (pred) => {
       for (let i = 0; i < 150; i++) {
-        if (posted !== null) return true;
+        for (let k = caseFrom; k < postLog.length; k++) {
+          if (!pred || pred(postLog[k].body)) { posted = postLog[k].body; return true; }
+        }
         await new Promise((r) => setTimeout(r, 100));
       }
+      // Timed out: keep whatever DID arrive in this window so the failure
+      // carries a payload instead of a null.
+      posted = postLog.length > caseFrom ? postLog[postLog.length - 1].body : null;
       return false;
     };
+    // The create each case is waiting for, by identity alone.
+    // The panel create carries the scan instance id, NOT no id: a first
+    // predicate of `!b.instanceId` timed out three waits at 15s each and
+    // reported the product as absent when the create had in fact arrived.
+    // Cases 1, 3 and 4 all click the same panel button and so share this
+    // identity -- what separates them is the case window (`caseFrom`), which is
+    // why both halves of the match exist.
+    const isPanelCreateA = (b) => !!(b && b.card && b.card.name === 'Card A'
+      && /^inst_scan_/.test(String(b.instanceId || '')));
+    const isCollectionCreateA = (b) => !!(b && b.instanceId === 'inst_col_row_a');
     await page.route('**/api/drafts*', async (route) => {
       const req = route.request();
       if (req.method() === 'POST') {
-        posted = JSON.parse(req.postData() || '{}');
+        // Record only. `posted` is set by waitPost from the matching entry, so
+        // an arrival can no longer silently become another case's evidence.
+        postLog.push({ seq: postLog.length + 1, tMs: Date.now() - t0, caseTag,
+          body: JSON.parse(req.postData() || '{}') });
         await route.fulfill({ status: 201, contentType: 'application/json',
           body: JSON.stringify({ draftId: 'drf_created' }) });
         return;
@@ -2040,6 +2085,25 @@ try {
     // global after the click races the success handler that clears it, and
     // reading it from the route handler stalls the paused request. This wraps
     // fetch in the TEST page only -- no production global, no production hook.
+    // Trap every clear of the basis global, in the TEST page only, and keep
+    // the stack that did it. Only two sites in the bundle write null --
+    // loadCardUI and _onPrintingChange -- so a clear names its own cause, and
+    // "basisAtPost=null" stops being a dead end. No production hook.
+    await page.evaluate(() => {
+      let held = window._crBasis;
+      window.__basisClears = [];
+      Object.defineProperty(window, '_crBasis', {
+        configurable: true,
+        get() { return held; },
+        set(nv) {
+          if (nv === null && held !== null) {
+            window.__basisClears.push(String((new Error('cleared here')).stack || '')
+              .split('\n').slice(1, 5).join(' <- '));
+          }
+          held = nv;
+        },
+      });
+    });
     await page.evaluate(() => {
       const real = window.fetch;
       window.__basisAtPost = null;
@@ -2070,14 +2134,15 @@ try {
     T.check('loading a card discards the previous card\u2019s basis',
       switched === 'cleared', String(switched));
 
-    posted = null;
+    newCase('1-panel');
     await page.evaluate((A) => {
       window._crSellApproved = A;                    // what applySellGate leaves behind
       const row = document.getElementById('crSellRow');
       if (row) row.style.display = '';               // the gate's own show, without the round trip
     }, CARD_A);
     await page.click('#crSellBtn');
-    T.check('setup: the panel button issued a create', await waitPost() === true);
+    T.check('setup: the panel button issued a create',
+      await waitPost(isPanelCreateA) === true, postLogDump());
     T.check('setup: the panel button really did create a draft',
       posted !== null && posted.card && posted.card.name === 'Card A',
       JSON.stringify(posted && posted.card));
@@ -2089,7 +2154,7 @@ try {
 
     // ── 2. The Collection path: card B priced in the panel, row A listed. This
     // is the case that leaked, and it never goes near loadCardUI.
-    posted = null;
+    newCase('2-collection');
     await priceCardB(FOREIGN);
     await page.evaluate(() => {
       localStorage.setItem(getUserKey('portfolio'), JSON.stringify([
@@ -2112,7 +2177,8 @@ try {
       await page.evaluate((u) => (window._crBasis || {}).sourceUrl === u, FOREIGN) === true);
 
     await page.click('#crSellCell_row_a button');
-    T.check('setup: the Collection button issued a create', await waitPost() === true);
+    T.check('setup: the Collection button issued a create',
+      await waitPost(isCollectionCreateA) === true, postLogDump());
     T.check('setup: the Collection button created a draft for row A',
       posted !== null && posted.instanceId === 'inst_col_row_a', JSON.stringify(posted && posted.instanceId));
     T.check('\ud83d\udd34 REGRESSION: a Collection create sends no unbound basis',
@@ -2128,42 +2194,69 @@ try {
     // the evidence sampled an instant the claim is not about. It is now
     // captured in the page as the create leaves, which is exactly when the
     // create body existed.
+    // Same signature as case 3's intermittent failure: when this fails,
+    // __basisAtPost is null -- the global was already cleared before the body
+    // was built. Report the trapped clear alongside it, so the two failures
+    // can be compared rather than treated as separate mysteries.
     T.check('the global was populated when the create body was built, so the '
       + 'absence is a refusal, not an empty read',
       await page.evaluate(() => window.__basisAtPost) === FOREIGN,
       'a populated global that does not reach the wire is the whole point of '
         + 'the check; captured as the request left: '
-        + String(await page.evaluate(() => window.__basisAtPost)));
+        + String(await page.evaluate(() => window.__basisAtPost))
+        + ' clearedBy=[' + await page.evaluate(() => (window.__basisClears || []).join(' ;; ')) + ']');
 
     // ── 3. The legitimate case must still work, or the binding has just
     // deleted comp provenance from every packet.
-    posted = null;
+    newCase('3-legitimate');
     await page.evaluate((A) => {
       window._crBasis = _crBindBasis({ value: 400, label: 'TCGplayer market',
         sourceUrl: 'https://www.tcgplayer.com/CARD-A', low: 380, mid: 400, high: 430,
         retrievedAt: '2026-09-08T20:30:00.000Z' }, A);
       window._crSellApproved = A;
+      // Re-arm the in-page capture so what follows is THIS create's instant,
+      // not case 2's leftover value.
+      window.__basisAtPost = null;
+      window.__basisClears = [];
     }, CARD_A);
     await page.click('#crSellBtn');
-    T.check('setup: the legitimate create went out', await waitPost() === true);
+    T.check('setup: the legitimate create went out',
+      await waitPost(isPanelCreateA) === true, postLogDump());
+    // The discriminating read. `__basisAtPost` is captured inside the page as
+    // the request leaves, so:
+    //   CARD-A url -> the basis WAS bound when the body was built, and a
+    //                 serialization path dropped it  (product defect on the wire)
+    //   null       -> the basis was already gone before the body was built
+    //                 (something cleared the global first)
+    // Without this, "basisMeta is undefined" cannot choose between the two.
+    const basisAtPost3 = await page.evaluate(() => window.__basisAtPost);
+    const clears3 = await page.evaluate(() => (window.__basisClears || []).join(' ;; '));
     const meta = posted && posted.pricingContext && posted.pricingContext.basisMeta;
+    // Detail is the retained log, not JSON.stringify(meta): when these two
+    // failed intermittently, meta was `undefined`, so the detail printed
+    // nothing at all and the run said only that something was absent.
     T.check('\ud83d\udd34 a basis read FOR this card is still sent',
-      !!(meta && meta.sourceUrl === 'https://www.tcgplayer.com/CARD-A'), JSON.stringify(meta));
+      !!(meta && meta.sourceUrl === 'https://www.tcgplayer.com/CARD-A'),
+      'basisMeta=' + JSON.stringify(meta) + ' basisAtPost=' + JSON.stringify(basisAtPost3)
+        + ' clearedBy=[' + clears3 + '] creates: ' + postLogDump());
     T.check('with its tiers and its own retrieval time intact',
       !!(meta && meta.low === 380 && meta.mid === 400 && meta.high === 430
-         && meta.retrievedAt === '2026-09-08T20:30:00.000Z'), JSON.stringify(meta));
+         && meta.retrievedAt === '2026-09-08T20:30:00.000Z'),
+      'basisMeta=' + JSON.stringify(meta) + ' basisAtPost=' + JSON.stringify(basisAtPost3)
+        + ' clearedBy=[' + clears3 + '] creates: ' + postLogDump());
 
     // ── 4. An unstamped basis is not usable. This is the standing guard for a
     // read path added later that forgets to bind: it loses provenance rather
     // than attaching someone else's.
-    posted = null;
+    newCase('4-unbound');
     await page.evaluate((A) => {
       window._crBasis = { value: 400, label: 'unbound read', sourceUrl: 'https://x.test/UNBOUND',
         retrievedAt: '2026-09-08T20:45:00.000Z' };
       window._crSellApproved = A;
     }, CARD_A);
     await page.click('#crSellBtn');
-    T.check('setup: the unbound-basis create went out', await waitPost() === true);
+    T.check('setup: the unbound-basis create went out',
+      await waitPost(isPanelCreateA) === true, postLogDump());
     T.check('\ud83d\udd34 a basis carrying no card identity is dropped',
       posted && posted.pricingContext && !posted.pricingContext.basisMeta,
       JSON.stringify(posted && posted.pricingContext));
@@ -2172,6 +2265,20 @@ try {
     T.check('the fee revision still goes out, so dropping the basis is not dropping the context',
       posted && posted.pricingContext.feeModelRevision === 1,
       JSON.stringify(posted && posted.pricingContext));
+
+    // The correlation check. Four clicks, four creates, each arriving inside
+    // the case that issued it. If this fails, a create landed in a window it
+    // does not belong to -- which is the capture race the earlier intermittent
+    // failure could not distinguish from a product defect. It names the
+    // condition instead of leaving a rerun to bury it.
+    const stray = postLog.filter((e) => !(
+      (e.caseTag === '1-panel' && isPanelCreateA(e.body))
+      || (e.caseTag === '2-collection' && isCollectionCreateA(e.body))
+      || (e.caseTag === '3-legitimate' && isPanelCreateA(e.body))
+      || (e.caseTag === '4-unbound' && isPanelCreateA(e.body))));
+    T.check('each create arrived inside the case that issued it, and there were four',
+      postLog.length === 4 && stray.length === 0,
+      `${postLog.length} create(s), ${stray.length} outside their case: ` + postLogDump());
 
     await ctx.close();
   });
