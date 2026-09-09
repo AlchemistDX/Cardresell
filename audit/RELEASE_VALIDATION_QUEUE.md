@@ -242,3 +242,28 @@ preserve prefill (D5 verification §7.2).
 | Date | Account / browser | Search + category displayed? | Match comparable? | Final URL | Result |
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-08 | Owner, **iOS Safari mobile web** (not the eBay app); **signed in — owner-attested**, *"yes I was signed into safari"* | Yes, verbatim search and `caty=183454` category | Yes — `Charizard VMAX (Secret) 074/073 Champions Path Holo` | Not readable (Safari shows `ebay.com` only); evidence only, not a criterion | **Pass for that tested case.** Screenshot: `audit/d5/evidence/2026-09-08-signed-in-ios-safari.jpeg` |
+
+---
+
+## RV-8 — Preview and Development read production KV
+
+**Established 2026-09-08** (`audit/ROTATION_GATE_ANSWERED.md` §2.2): every
+KV/Redis variable on the `cardresell` project is a single row targeting
+`production,preview,development`. One row carries one value, so preview and
+development deployments read and write the **production** store. No key on the
+project has more than one row, so there is no per-environment store.
+
+**Exposure.** A preview deployment of a branch with an unfinished migration, a
+bad key prefix, or a destructive fixture writes into the store serving
+`www.cardresell.org`. The outgoing draft-persistence work writes by design, so
+this is not hypothetical.
+
+**Mitigation, real but partial.** `ssoProtection.deploymentType =
+all_except_custom_domains` — previews sit behind Vercel SSO and are not publicly
+reachable, which caps this at accidental self-inflicted damage rather than an
+outside path in. It does not stop our own preview deploys from writing.
+
+**Decision deferred, not dropped.** Splitting Preview onto its own store is an
+infrastructure change with its own cost, and the D7/draft work has been built
+and tested against one store. Decide after the push gate clears (Q-ROT-3).
+**Not a rotation item** — the rotation neither causes nor fixes it.

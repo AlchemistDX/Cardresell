@@ -11,11 +11,19 @@ step 5 passes.
 
 ## 0. Why the owner has to do this
 
-Re-verified today, not carried forward: `api.vercel.com` returns **HTTP 000**
-from this sandbox (no route), and the CLI cannot be installed — the npm registry
-returns **403** for the `vercel` package. So both instruments are gone, and no
-repository inspection can substitute: every question below is dashboard state,
-not a file. Two AI reviewers cannot answer them either.
+**SUPERSEDED 2026-09-08 — §1's questions 1 and 2 are ANSWERED. See
+`audit/ROTATION_GATE_ANSWERED.md`.** The premise of this section was wrong: the
+`HTTP 000` I recorded as "no route" was a TLS trust failure (`curl` exit 60) at
+the sandbox egress proxy. Trusting `/etc/ssl/certs/agent-proxy-ca-2.pem`
+explicitly returns `200`, and the questions were answerable from here all along.
+The CLI half stands — npm still refuses the `vercel` tarball with `403`.
+
+*Original text, kept because the correction is the point:* Re-verified today,
+not carried forward: `api.vercel.com` returns **HTTP 000** from this sandbox (no
+route), and the CLI cannot be installed — the npm registry returns **403** for
+the `vercel` package. So both instruments are gone, and no repository inspection
+can substitute: every question below is dashboard state, not a file. Two AI
+reviewers cannot answer them either.
 
 Count correction: the corpus says "five". `audit/CARDRESELL_PLAN_AND_ROADMAP.md`
 §8.3 lists **seven**. Seven is right; five was a miscount that propagated. Only
@@ -29,13 +37,13 @@ Vercel → the CardResell project.
 
 | # | Question | Where | Gating? |
 |---|---|---|---|
-| 1 | **Does Preview receive live eBay secrets?** | Settings → Environment Variables → check the environment checkboxes on the eBay Cert ID row. Record which of Production / Preview / Development are ticked. **Record the tick boxes, never the value.** | **GATING** |
-| 2 | **Does Preview read production KV?** | Storage → the KV/Redis store → Connected Projects and the environments it is linked to | **GATING** |
-| 3 | Which Git branch is Production? | Settings → Git → Production Branch | no |
-| 4 | Active production deployment SHA | Deployments → the one badged Production | no |
+| 1 | **ANSWERED — NO.** `EBAY_CERT_ID` targets `production` only, as do `EBAY_APP_ID` and `EBAY_VERIFICATION_TOKEN`. Rotate Production only; do **not** add to Preview. Originally: **Does Preview receive live eBay secrets?** | Settings → Environment Variables → check the environment checkboxes on the eBay Cert ID row. Record which of Production / Preview / Development are ticked. **Record the tick boxes, never the value.** | **GATING** |
+| 2 | **ANSWERED — YES.** Every KV/Redis variable is one row targeting `production,preview,development`, so one value serves all three. Does not gate rotation; filed as a release-validation item. Originally: **Does Preview read production KV?** | Storage → the KV/Redis store → Connected Projects and the environments it is linked to | **GATING** |
+| 3 | **ANSWERED — `main`.** Which Git branch is Production? | Settings → Git → Production Branch | no |
+| 4 | **ANSWERED — `9aaf326e7`, READY, branch `main`** — equal to `origin/main`, so no outgoing work is live. Active production deployment SHA | Deployments → the one badged Production | no |
 | 5 | Does a feature-branch push produce a Preview, and at what URL? | Settings → Git → "Deploy Previews" / branch settings | no |
-| 6 | Current domain routing | Settings → Domains — which domain points at Production, and whether `www` and apex both resolve there | no |
-| 7 | Installed integrations and webhooks | Settings → Integrations, and Settings → Webhooks | no |
+| 6 | **ANSWERED — `www.cardresell.org` canonical, apex redirects to it.** Current domain routing | Settings → Domains — which domain points at Production, and whether `www` and apex both resolve there | no |
+| 7 | **STILL OPEN — 403, token scope.** Installed integrations and webhooks | Settings → Integrations, and Settings → Webhooks | no |
 
 **Why 1 and 2 are the ones that gate.** If Preview holds the same live eBay
 credential *and* reads production KV, then rotating Production alone leaves
@@ -46,6 +54,11 @@ Preview has its own credential or no eBay credential at all, Production-only is
 correct and simpler. **The decision between those two cannot be made without
 answer 1.** This is the single most important question in the set
 (`audit/D2_0_ASSET_FINGERPRINT_RETURN_PACKET.md:326-335`).
+
+**Resolved 2026-09-08: Preview holds NO eBay credential**, so the feared case
+does not exist — Preview cannot authenticate to eBay before or after the
+rotation. Production-only is correct, and adding the Cert ID to Preview would
+create a live credential where none exists (§5's warning, now literal).
 
 Everything in §1 is read-only. Nothing is changed by looking.
 
@@ -101,21 +114,32 @@ than to wait.
 *Corrected 2026-09-08.* The first version of this section said no owner decision
 had been recorded, and cited the decision record while doing it. See §5.
 
-## 4. While you are signed in anyway — the eBay check
+## 4. The eBay check — DONE, do not re-run from this file
 
-Four questions, one page load, unrelated to the dashboard but the same sitting.
-See `audit/d5/D5_ENTRY_GATE.md` §8.3 for why each matters. Signed in to eBay,
-open:
+*Superseded 2026-09-08 (this section previously listed four questions to answer
+in the same sitting).*
 
-`https://www.ebay.com/sl/prelist/identify?title=Charizard%20VMAX%20074%2F073%20Champions%20Path&caty=183454`
+**That check is closed.** The signed-in observation was made on 2026-09-08 on
+iOS Safari, it passed, and the sign-in is owner-attested —
+`audit/d5/D5_SIGNED_IN_VERIFICATION.md` §9. Closure covers that tested case
+only; the recurring pre-deploy version lives in
+`audit/RELEASE_VALIDATION_QUEUE.md`, on mobile **and** desktop, and is not part
+of the rotation sitting.
 
-1. Does the identify/match screen appear at all?
-2. Does it show **that search**, rather than an empty box or a restored draft?
-3. Is the collector number on the offered match `074/073`?
-4. **Is the query still in the address bar after landing?** If eBay strips or
-   rewrites `title`/`caty` on a signed-in redirect, that is the same failure mode
-   that killed the old scan-miss link, and it is the one failure D5's shipped
-   instruction cannot survive.
+**Two reasons this section had to go rather than be ticked off.** Its question 4
+asked whether the query was *still in the address bar after landing*, and
+treated a missing query as the failure D5 could not survive. **That criterion was
+wrong in both directions** and was corrected in
+`D5_SIGNED_IN_VERIFICATION.md` §7.0: eBay can consume the parameters and
+redirect to a clean URL, and an ignored query survives untouched. The criterion
+is the displayed search and category plus a match whose collector number the
+seller can compare. Had the owner worked this file during the rotation sitting,
+he would have been applying a superseded standard to a closed question — and the
+actual observation, taken on a phone where Safari shows only `ebay.com`, would
+have been graded a failure by question 4.
+
+The pattern is the one §5 already records: a derived instruction stamped into
+prose in one file, aging quietly while the thing it describes moves on.
 
 ---
 
