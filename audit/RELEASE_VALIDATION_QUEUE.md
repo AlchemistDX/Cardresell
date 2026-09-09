@@ -537,3 +537,80 @@ with the constant imported by `_tier.js` rather than duplicated.
 
 **Q-RV11-1 (owner):** which fix, and is either authorized to deploy? Until one
 ships, **annual is being sold into a tier gap.**
+
+## RV-11 — RETRACTED AS STATED. Corrected below.
+
+**My claim was wrong.** I wrote that an annual subscriber "pays $89.99 and the
+tier lookup returns nothing", and the reviewer, reasonably relying on that,
+called it the most serious defect of the session and the only one where a seller
+loses money to CardResell. **Neither is true.** I stopped tracing at
+`api/_tier.js:58` \u2014 the line that returns `null` \u2014 and reported the null as the
+outcome. It is not the outcome. Every consumer catches it.
+
+**Four independent fallbacks, all landing on the correct tier.**
+
+| Consumer | Line | What happens to the unmapped annual price |
+| --- | --- | --- |
+| `api/_tier.js` | `:113` | `priceIdToTier(priceId) \|\| 'pro'` |
+| `api/pro-status.js` | `:114` | `metaTier \|\| priceMap[priceId] \|\| 'pro'` |
+| `api/stripe-webhook.js` | `:111` | `\|\| undefined`, then \u2026 |
+| `api/stripe-webhook.js` `storeProUser` | `:194` | `tier \|\| existing.tier \|\| 'pro'` |
+
+An annual **Pro** subscriber therefore resolves to **`'pro'`**, which is the
+**right** tier for the $89.99/yr plan. **No entitlement is lost, no customer is
+owed a comp, and nobody needs contacting.** The read paths do have a fallback;
+I asserted they did not without reading them.
+
+**The rule the reviewer drew still holds \u2014 it just did not fire here.** "A
+fallback on the write path without a matching fallback on the read path
+manufactures unrecognized state" is a sound check. Applied honestly, the read
+paths **each** carry a fallback, so the pair is not mismatched. The general check
+is worth keeping; this instance is not an example of it.
+
+### What is actually defective, at reduced severity
+
+**1. The lenient fallback fails open, which is the inverse of what I claimed.**
+`api/_tier.js:113` carries its own comment: *"any active sub with unknown price
+\u2192 assume Pro"*. So an active subscription at **any** unrecognized price \u2014 a
+retired plan, a discounted one, a mistake \u2014 is **granted Pro**. The system errs
+toward granting entitlement, which is precisely **why** no one loses money, and
+is a real risk pointing the other way. **Severity: worth a decision, not a
+blocker.**
+
+**2. `"undefined"` as a computed key \u2014 real, and masked.** `api/pro-status.js:108`
+does create a literal `"undefined"` key mapped to `'pro'`, so a subscription with
+a **missing** price ID collides with it and resolves to Pro. Its effect is
+currently invisible because `:114`'s `|| 'pro'` would return `'pro'` anyway. The
+reviewer's instinct to trace it before a fix ships was right; the trace shows it
+**writes nothing on its own** \u2014 it is a lookup map, rebuilt per request, never
+persisted. **No record cleanup is implied by this key.**
+
+**3. The one durable-record concern that survives \u2014 and it is about reporting.**
+`storeProUser:193` persists `plan: plan || existing.plan || 'pro_monthly'`, and
+the `subscription.created` branch at `:116` passes `plan` as **`undefined`**. So
+an annual subscription can be written to KV as **`'pro_monthly'`**. That matters
+because `api/admin.js:135` counts annual subscribers as
+`if (data.plan === 'pro_annual') proAnnual++` \u2014 so **the admin annual count can
+undercount**, showing fewer annual subscribers than exist.
+
+**Unverified, and order-dependent:** `api/stripe-annual-checkout.js` does set
+`pro_annual` in metadata, and `api/stripe-webhook.js:78` reads
+`obj.metadata?.plan || 'pro_monthly'`. Whether the final persisted value is
+correct depends on **webhook delivery order** between `checkout.session.completed`
+and `customer.subscription.created`, which **cannot be established from the code
+alone**. So: the undercount is **possible, not demonstrated**.
+
+**Corrected severity: RV-11 is a fail-open entitlement default plus a possible
+admin-reporting undercount. It is not a revenue-loss defect and not the most
+serious finding of the session.** It should not be sequenced ahead of the
+rotation on the strength of my original claim.
+
+**What Stripe would still settle** \u2014 read-only, and now for a different reason
+than comping anyone: whether any annual subscriber exists, and whether their KV
+`plan` reads `pro_annual` or `pro_monthly`. That converts item 3 from possible to
+measured. Worth doing before any fix, since the fix differs if records are
+already wrong.
+
+**The fix recommendation stands but is no longer urgent:** map the constant in
+code so one behaviour has one implementation. It now also wants a decision on
+whether `|| 'pro'` should keep failing open.
