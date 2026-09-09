@@ -1377,3 +1377,58 @@ difference between the plan and the code that had not been noticed.
 against a mocked upstream, drive one representative seller session
 (search a card, select it, view graded), and record the actual call count. That
 count sets `TPL_PER_IP_MAX`.
+
+### Sweep result — the documented-but-unset pattern, and its true scope
+
+The reviewer asked whether `TPL_PER_IP_MAX` was the only limit that exists in
+prose but not in configuration. It was not. Method: enumerate every
+`process.env.X` read under `api/`, enumerate the Vercel project's variable
+**names only** (40), and difference them. **9 of 36** code-read variables are
+absent from the project.
+
+| Absent from Vercel | Read at | Consequence |
+| --- | --- | --- |
+| `TPL_BUDGET_MAX` | `api/_tplBudget.js` | doc says **100**, default **1000** |
+| `TPL_PER_IP_MAX` | `api/_tplBudget.js` | doc says **15**, default **60** |
+| `TPL_BUDGET_WINDOW_SEC` | `api/_tplBudget.js` | doc **3600** = default, agrees |
+| `TPL_CACHE_TTL_SEC` | `api/_tplBudget.js` | default 6 h |
+| `TPL_STALE_TTL_SEC` | `api/_tplBudget.js` | default 24 h |
+| `TPL_BUDGET_ENFORCE` | `api/tpl-proxy.js:69` | **unset \u21d2 budget DISABLED** |
+| `STRIPE_PRICE_ANNUAL_ID` | `api/_tier.js`, `api/pro-status.js`, `api/stripe-annual-checkout.js` | **RV-11 \u2014 live revenue defect** |
+| `STATS_INCR_SECRET` | `api/stats.js` | unswept |
+| `SIGNUP_BONUS_IP_MAX_PER_DAY` | `api/verify-claim-firebase.js` | unswept |
+
+**Correcting my own framing from the previous entry.** I wrote that these
+defaults are "in force in production". For the six `TPL_*` variables that is
+**false**: `api/_tplBudget.js` is **absent at `9aaf326`**
+(`git cat-file -e` fails), so production has **no budget code at all** and no
+default is in force. The accurate statement is that these defaults **will** take
+effect the moment R2/R3/R4 ship, and none of them was ever configured.
+
+**The sharpest item is `TPL_BUDGET_ENFORCE`.** `api/tpl-proxy.js:69` reads
+`env.TPL_BUDGET_ENFORCE === '1' || === 'true'`, and `:43` documents unset as
+**"DISABLED. Unmetered, by choice."** So shipping R4 with today's configuration
+changes **nothing at runtime** \u2014 every limit stays inert until that one variable
+is set. The 100/hour and 15/IP debate is **downstream of a switch that is off**.
+Neither number can be validated by deploying R4 alone.
+
+**Two items are genuinely unswept**, not benign: `STATS_INCR_SECRET` and
+`SIGNUP_BONUS_IP_MAX_PER_DAY`. A missing signup-bonus IP cap is an abuse
+surface, and I have not read either path. Added to the queue rather than
+guessed at.
+
+### Instrumentation, respecified per the reviewer
+
+- **Measure per card handled, not per session.** Sessions vary with how much a
+  seller does; the cap is per hour, so the figure that decides it is the **rate
+  an ordinary working session consumes budget**. The sizing case is a seller
+  **listing twenty cards in an evening**, and the reported unit is
+  **lookups per card**, with the twenty-card hour derived from it.
+- **The debounce is a separate defect from the cap.** 180 ms
+  (`js/core.73a71fac.js:1043`) is shorter than a mid-word typing pause, so every
+  card name spends several lookups **whatever the cap is**. That is waste at the
+  source. A client-side cache in front of the three call sites cuts both the
+  spend and the pressure on the cap. **Raising the cap without cutting the
+  multiplier just moves the ceiling** \u2014 so the two are tracked as separate
+  items, and the multiplier is fixed first so the cap is sized against
+  post-fix behaviour rather than against the waste.

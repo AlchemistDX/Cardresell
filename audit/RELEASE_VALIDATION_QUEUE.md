@@ -474,3 +474,66 @@ from local development** — `KV_*`, `KV_URL` and `REDIS_URL` target
 `development` from the same single rows. Keep both out of write-capable testing
 until a separate store exists, and **do not run the deferred preview-surface
 checks against production instead.**
+
+## RV-11 — Annual subscribers are charged and resolve to no tier
+
+Found by the sweep the reviewer asked for. **This is a live production path**, not
+branch work: `git diff 9aaf326 HEAD` is **empty** for all three files below, so
+the code described here is what `www.cardresell.org` runs today.
+
+**The chain, each link at `file:line`.**
+
+1. `STRIPE_PRICE_ANNUAL_ID` is **absent from the Vercel project** (40 vars
+   enumerated, name-only read). Nothing sets it.
+2. `api/stripe-annual-checkout.js:20` therefore sells the annual plan at a
+   hardcoded constant: `const priceId = process.env.STRIPE_PRICE_ANNUAL_ID || ANNUAL_PRICE_FALLBACK`,
+   where `ANNUAL_PRICE_FALLBACK` is defined at `api/stripe-annual-checkout.js:10`
+   as the **$89.99/yr** price. **Checkout succeeds** \u2014 the `503 'Payments not
+   configured'` guard at `:21` is satisfied by the fallback.
+3. `api/_tier.js:53` maps the annual price via
+   `add(process.env.STRIPE_PRICE_ANNUAL_ID, 'pro')`, and `add` at `:51` is
+   guarded `if (id)`. Unset \u21d2 **no entry is added**.
+4. The fallback constant is mapped **nowhere**: a search for
+   `ANNUAL_PRICE_FALLBACK` in `api/_tier.js` and `api/pro-status.js` returns
+   **0 hits**. The price the customer actually bought at is not in the tier map.
+5. `api/_tier.js:58` returns `map[priceId] || null`. So
+   `priceIdToTier('<the annual price>')` \u2192 **`null`**.
+6. `api/pro-status.js:108` has the same hole in a worse form: as a **computed
+   object key**, `undefined` becomes the literal string `"undefined"`, so the map
+   gains a `"undefined"` entry that can never match a real price ID.
+
+**So a customer pays $89.99 for a year and the tier lookup for their
+subscription returns nothing.** Sold successfully, entitlement not granted \u2014 the
+purchase path and the recognition path disagree because only one of them has a
+fallback.
+
+**Exactly the shape already named twice.** `hasPacket` permanently false,
+`buildListingPacket` with no caller, and now a price ID that only checkout knows
+about. **Rule 2 \u2014 a silent null is the bug** \u2014 and this one is on the revenue path.
+
+**What is established and what is not.**
+
+- **Established:** steps 1\u20136 above, all at `file:line`, in production code.
+- **Unverified:** what the downstream consumers do with `null`. `getUserTier`
+  (`api/_tier.js:66`) has a KV fast path and a Stripe-by-email fallback; whether
+  `null` degrades to `'free'` or is handled some other way is **not yet traced**.
+- **Unverified:** whether any annual subscriber exists. With no revenue data I
+  cannot say whether this has already cost a real customer their entitlement, or
+  is latent. **It is not safe to assume latent.**
+
+**Severity: blocking for the release, and it does not wait for the rotation.**
+Independent of TPL, eBay and the KV gate.
+
+**Two candidate fixes, both needing a redeploy, neither authorized.**
+
+1. **Set `STRIPE_PRICE_ANNUAL_ID` in Vercel** to the same price the fallback
+   already sells at. No code change; makes the map and checkout agree.
+2. **Map the fallback in code**, so the constant is the single source for both
+   paths.
+
+Option 1 is smaller, but leaves two places stating the same price. Option 2
+matches **Rule 1 \u2014 one business behaviour, one implementation**. **Recommend 2**,
+with the constant imported by `_tier.js` rather than duplicated.
+
+**Q-RV11-1 (owner):** which fix, and is either authorized to deploy? Until one
+ships, **annual is being sold into a tier gap.**
