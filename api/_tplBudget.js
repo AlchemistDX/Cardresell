@@ -41,14 +41,32 @@ export function budgetConfig(env = process.env) {
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : d;
   };
+  // A value that was SET but is unusable is a different thing from one that was
+  // never set, and both are different from a good value. Garbage must never
+  // silently fall through to a placeholder that then authorises spending.
+  const bad = (v) => {
+    if (v === undefined || v === null || v === '') return false;
+    const n = Number(v);
+    return !(Number.isFinite(n) && n > 0);
+  };
+  const invalid = ['TPL_BUDGET_MAX', 'TPL_BUDGET_WINDOW_SEC', 'TPL_PER_IP_MAX',
+                   'TPL_CACHE_TTL_SEC', 'TPL_STALE_TTL_SEC'].filter((k) => bad(env[k]));
+
+  const configured = env.TPL_BUDGET_MAX !== undefined
+                     && env.TPL_BUDGET_WINDOW_SEC !== undefined;
+
   return {
     max:         num(env.TPL_BUDGET_MAX,        BUDGET_DEFAULTS.max),
     windowSec:   num(env.TPL_BUDGET_WINDOW_SEC, BUDGET_DEFAULTS.windowSec),
     perIpMax:    num(env.TPL_PER_IP_MAX,        BUDGET_DEFAULTS.perIpMax),
     cacheTtlSec: num(env.TPL_CACHE_TTL_SEC,     BUDGET_DEFAULTS.cacheTtlSec),
     staleTtlSec: num(env.TPL_STALE_TTL_SEC,     BUDGET_DEFAULTS.staleTtlSec),
-    // Explicit: is a real budget configured, or are we on placeholders?
-    configured: env.TPL_BUDGET_MAX !== undefined,
+    // Is a real budget configured, or are we on placeholders?
+    configured,
+    invalid,
+    // The single flag the calling path enforces. `configured: false` is only
+    // useful if something acts on it, so this is what reserveUpstream reads.
+    usable: configured && invalid.length === 0,
   };
 }
 
@@ -72,6 +90,10 @@ export const OUTCOME = {
   PER_IP: 'per_ip',
   STORE_DOWN_STALE: 'store_down_stale',
   STORE_DOWN: 'store_down',
+  // Missing or unusable configuration. Treated exactly like an exhausted
+  // budget: never a paid call. An unset limit is not an unlimited one.
+  NOT_CONFIGURED_STALE: 'not_configured_stale',
+  NOT_CONFIGURED: 'not_configured',
 };
 
 /**
@@ -102,6 +124,16 @@ export async function reserveUpstream({ store, path, upstreamQuery, ip, now = Da
   }
   if (entry && !entry.expired) {
     return { outcome: OUTCOME.CACHE_HIT, cached: entry.value, key, config };
+  }
+
+  // 1b. GATE: no usable configuration, no paid call.
+  // A cached hit above is already served — reading what we have costs nothing.
+  // But an unset or garbage budget must not authorise a NEW purchase against a
+  // placeholder. This is what makes `configured` more than a label.
+  if (!config.usable) {
+    return entry
+      ? { outcome: OUTCOME.NOT_CONFIGURED_STALE, cached: entry.value, stale: true, key, config }
+      : { outcome: OUTCOME.NOT_CONFIGURED, key, config };
   }
 
   const windowId = Math.floor(now / 1000 / config.windowSec);
@@ -153,14 +185,50 @@ export async function reserveUpstream({ store, path, upstreamQuery, ip, now = Da
       : { outcome: OUTCOME.EXHAUSTED, key, config };
   }
 
+  // The reservation is bound to the window it was taken in. A refund that
+  // arrives after the window rolls must not be applied to the NEXT window's
+  // counter — that would hand the new window free allowance paid for by the
+  // old one.
   return { outcome: OUTCOME.RESERVED, key, config,
-           reservation: { key: budgetKey, count } };
+           reservation: { key: budgetKey, count, windowId, windowSec: config.windowSec } };
 }
 
-/** Release a reservation whose provider call never happened. Best effort. */
-export async function releaseReservation(store, reservation) {
-  if (!reservation) return;
-  try { await store.decr(reservation.key); } catch { /* best effort */ }
+/**
+ * Refund a reservation for a call that DEFINITELY never started.
+ *
+ * Two rules, both of them about not under-counting real spending:
+ *
+ *   1. Only a call that never reached the provider may be refunded. A timeout
+ *      or an upstream 5xx may still have consumed provider quota — the request
+ *      left, and we cannot see what it cost. Refunding those would let a
+ *      failing upstream silently reset our own accounting. So the caller must
+ *      say so explicitly via `{ started: false }`; anything else is kept.
+ *   2. The refund only applies inside the reservation's own window. Once the
+ *      window has rolled, `reservation.key` names a counter that is no longer
+ *      the live one, and decrementing it would either be a no-op or, worse,
+ *      credit a later window with allowance the earlier one spent.
+ *
+ * @returns {{refunded: boolean, reason?: string}} — reported, not silent, so a
+ *          caller (and a test) can tell a kept reservation from a refunded one.
+ */
+export async function releaseReservation(store, reservation, { started = true, now = Date.now() } = {}) {
+  if (!reservation) return { refunded: false, reason: 'no_reservation' };
+
+  if (started) return { refunded: false, reason: 'call_may_have_consumed_quota' };
+
+  if (reservation.windowSec) {
+    const nowWindow = Math.floor(now / 1000 / reservation.windowSec);
+    if (nowWindow !== reservation.windowId) {
+      return { refunded: false, reason: 'window_rolled' };
+    }
+  }
+
+  try {
+    await store.decr(reservation.key);
+    return { refunded: true };
+  } catch {
+    return { refunded: false, reason: 'store_error' };
+  }
 }
 
 /** Store a successful upstream body under the canonical key. */

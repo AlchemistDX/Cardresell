@@ -19,6 +19,7 @@ import {
   reserveUpstream, releaseReservation, storeResult,
   budgetConfig, cacheKey, OUTCOME, BUDGET_DEFAULTS,
 } from '../api/_tplBudget.js';
+import handler, { setBudgetStore, budgetStoreActive } from '../api/tpl-proxy.js';
 
 let passed = 0, failed = 0;
 function check(name, cond, hint = '') {
@@ -61,6 +62,7 @@ function mockStore(opts = {}) {
 
 const Q = (obj) => new URLSearchParams(obj);
 const ENV = { TPL_BUDGET_MAX: '3', TPL_BUDGET_WINDOW_SEC: '60', TPL_PER_IP_MAX: '2' };
+const REQUIRE_USABLE = 'if this fails, check config.usable — an unusable config must block, not fall back';
 const base = { path: '/v1/cards/search', upstreamQuery: Q({ q: 'Pikachu' }), now: 1_000_000_000_000 };
 
 console.log('\nTPL budget + cache [CH-3 / R4]');
@@ -238,16 +240,46 @@ console.log('\n8. configuration');
   check('a configured budget is flagged configured', c.configured === true);
 
   const d = budgetConfig({});
-  check('with nothing set, the config reports itself UNCONFIGURED',
-        d.configured === false,
-        'the defaults are placeholders, not a production spending limit');
-  check('placeholder defaults are used rather than guessed from a plan',
-        d.max === BUDGET_DEFAULTS.max && d.windowSec === BUDGET_DEFAULTS.windowSec);
+  check('with nothing set, the config reports itself UNCONFIGURED', d.configured === false);
+  check('unconfigured is also UNUSABLE', d.usable === false);
+  check('placeholder defaults still populate the numbers',
+        d.max === BUDGET_DEFAULTS.max && d.windowSec === BUDGET_DEFAULTS.windowSec,
+        'the values exist for reporting; usable=false is what stops spending');
 
   const bad = budgetConfig({ TPL_BUDGET_MAX: 'lots', TPL_BUDGET_WINDOW_SEC: '-5' });
-  check('garbage configuration falls back to defaults rather than 0 or NaN',
-        bad.max === BUDGET_DEFAULTS.max && bad.windowSec === BUDGET_DEFAULTS.windowSec,
-        'a NaN budget must never read as "no budget"');
+  check('garbage configuration is reported as invalid, naming the keys',
+        bad.invalid.includes('TPL_BUDGET_MAX') && bad.invalid.includes('TPL_BUDGET_WINDOW_SEC'));
+  check('garbage configuration is UNUSABLE, not silently placeheld',
+        bad.usable === false,
+        'garbage must not activate a placeholder spending limit');
+  check('a NaN budget never reads as "no budget" (numbers stay sane)',
+        bad.max === BUDGET_DEFAULTS.max && bad.windowSec === BUDGET_DEFAULTS.windowSec);
+
+  const half = budgetConfig({ TPL_BUDGET_MAX: '100' });
+  check('a budget with no window is incomplete, so UNUSABLE', half.usable === false);
+
+  // 8b. The gate is ENFORCED, not merely reported.
+  const s1 = mockStore();
+  const unconf = await reserveUpstream({ store: s1, ...base, env: {} });
+  check('unusable config → NOT_CONFIGURED, never RESERVED',
+        unconf.outcome === OUTCOME.NOT_CONFIGURED, REQUIRE_USABLE);
+  check('unusable config spent nothing at all',
+        !s1.calls.some(([op]) => op === 'incr'));
+
+  const s2 = mockStore();
+  const g = await reserveUpstream({ store: s2, ...base, env: { TPL_BUDGET_MAX: 'lots', TPL_BUDGET_WINDOW_SEC: '60' } });
+  check('garbage config → no paid call', g.outcome === OUTCOME.NOT_CONFIGURED);
+
+  const s3 = mockStore();
+  s3.entries[cacheKey(base.path, base.upstreamQuery)] = { value: { cards: [7] }, expired: true };
+  const gs = await reserveUpstream({ store: s3, ...base, env: {} });
+  check('unusable config with an expired entry → stale, explicitly flagged',
+        gs.outcome === OUTCOME.NOT_CONFIGURED_STALE && gs.stale === true);
+  const s4 = mockStore();
+  s4.entries[cacheKey(base.path, base.upstreamQuery)] = { value: { cards: [8] }, expired: false };
+  const gh = await reserveUpstream({ store: s4, ...base, env: {} });
+  check('a FRESH cached value is still served with no config — reading is not spending',
+        gh.outcome === OUTCOME.CACHE_HIT);
 }
 
 // ── 9. Release and store round-trip ──────────────────────────────────────────
@@ -257,13 +289,40 @@ console.log('\n9. reservation release and result storage');
   const r = await reserveUpstream({ store, ...base, env: ENV });
   const key = `tpl:budget:${Math.floor(base.now / 1000 / 60)}`;
   check('a reservation was taken', store.counters[key] === 1);
-  await releaseReservation(store, r.reservation);
-  check('releasing an unused reservation refunds it', store.counters[key] === 0);
+  check('the reservation is bound to its window',
+        r.reservation.windowId === Math.floor(base.now / 1000 / 60)
+        && r.reservation.windowSec === 60);
+
+  // A call that STARTED is never refunded — it may have consumed quota.
+  const kept = await releaseReservation(store, r.reservation, { started: true, now: base.now });
+  check('a started call is NOT refunded, even if it failed',
+        kept.refunded === false && kept.reason === 'call_may_have_consumed_quota',
+        'a timeout or 5xx may still have cost provider quota');
+  check('…and the counter is untouched by that attempt', store.counters[key] === 1);
+
+  // Only a call that definitely never started.
+  const back = await releaseReservation(store, r.reservation, { started: false, now: base.now });
+  check('a call that definitely never started IS refunded', back.refunded === true);
+  check('…and the counter reflects it', store.counters[key] === 0);
+
+  // A late refund must not credit a later window.
+  const store5 = mockStore();
+  const late = await reserveUpstream({ store: store5, ...base, env: ENV });
+  const nextWindowNow = base.now + 61_000;
+  const lateKey = `tpl:budget:${Math.floor(nextWindowNow / 1000 / 60)}`;
+  await reserveUpstream({ store: store5, path: '/v1/cards/search', upstreamQuery: Q({ q: 'later' }), now: nextWindowNow, env: ENV });
+  check('the next window has its own counter at 1', store5.counters[lateKey] === 1);
+  const rolled = await releaseReservation(store5, late.reservation, { started: false, now: nextWindowNow });
+  check('a refund arriving after the window rolled is REFUSED',
+        rolled.refunded === false && rolled.reason === 'window_rolled');
+  check('…so the later window keeps its full allowance spent',
+        store5.counters[lateKey] === 1,
+        'a delayed refund must never hand a new window allowance the old one paid for');
 
   await storeResult(store, r.key, { cards: ['x'] }, r.config);
-  const back = await store.get(r.key);
+  const stored = await store.get(r.key);
   check('a stored result is retrievable under the canonical key',
-        back && back.value.cards[0] === 'x');
+        stored && stored.value.cards[0] === 'x');
 
   // Failures in the optional paths must not throw into the caller.
   const brittle = mockStore();
@@ -272,9 +331,114 @@ console.log('\n9. reservation release and result storage');
   let threw = false;
   try {
     await storeResult(brittle, 'k', {}, r.config);
-    await releaseReservation(brittle, { key: 'k' });
+    const res = await releaseReservation(brittle, { key: 'k' }, { started: false });
+    check('a refund that hits a broken store reports it rather than claiming success',
+          res.refunded === false && res.reason === 'store_error');
   } catch { threw = true; }
   check('cache-write and refund failures never throw into the request path', !threw);
+}
+
+// ── 10. The proxy calling path, exercised against the injected mock ─────────
+// Production KV isolation blocks LIVE integration. It does not block preparing
+// and exercising the path that will use it, so this covers the wiring itself.
+console.log('\n10. proxy calling path (injected mock store, no provider, no KV)');
+{
+  const mkRes = () => {
+    const r = { headers: {}, code: null, body: null, sent: null };
+    r.setHeader = (k, v) => { r.headers[k.toLowerCase()] = v; };
+    r.status = (c) => { r.code = c; return r; };
+    r.json = (b) => { r.body = b; return r; };
+    r.send = (b) => { r.sent = b; return r; };
+    r.end = () => r;
+    return r;
+  };
+  const mkReq = (q) => ({ method: 'GET', query: q, headers: { 'x-forwarded-for': '5.5.5.5' } });
+  const query = { path: '/v1/cards/search', q: 'Pikachu', game: 'pokemon', limit: '20' };
+
+  check('the control is INACTIVE with no store injected', budgetStoreActive() === false);
+
+  const realFetch = globalThis.fetch;
+  let upstreamCalls = 0;
+  globalThis.fetch = async () => {
+    upstreamCalls++;
+    return { status: 200, headers: { get: () => 'application/json' },
+             text: async () => JSON.stringify({ cards: ['from upstream'] }) };
+  };
+  process.env.CARDSELL_TPL_KEY = 'test-key-not-real';
+
+  try {
+    // (a) A miss under a usable budget calls upstream once and caches it.
+    process.env.TPL_BUDGET_MAX = '2';
+    process.env.TPL_BUDGET_WINDOW_SEC = '3600';
+    const store = mockStore();
+    setBudgetStore(store);
+    check('the control is ACTIVE once a store is injected', budgetStoreActive() === true);
+
+    const res1 = mkRes();
+    await handler(mkReq(query), res1);
+    check('a miss reaches the provider once', upstreamCalls === 1);
+    check('the miss returns 200', res1.code === 200);
+
+    // (b) The same query again is a cache hit that spends nothing.
+    const res2 = mkRes();
+    await handler(mkReq({ ...query, limit: '20' }), res2);
+    check('the second identical request does NOT reach the provider', upstreamCalls === 1);
+    check('it is served from cache', res2.headers['x-tpl-cache'] === 'hit');
+
+    // (c) Param order is the same entry — the reuse the edge cache cannot do.
+    const res3 = mkRes();
+    await handler(mkReq({ limit: '20', game: 'pokemon', q: 'Pikachu', path: '/v1/cards/search' }), res3);
+    check('reordered parameters hit the SAME cache entry', upstreamCalls === 1,
+          'the edge keys on the incoming URL; we key on meaning');
+
+    // (d) Exhaustion is a clear unavailable response, not an empty success.
+    const before = upstreamCalls;
+    let last = null;
+    for (let i = 0; i < 6; i++) {
+      last = mkRes();
+      await handler(mkReq({ ...query, q: `distinct${i}` }), last);
+    }
+    check('a budget of 2 permits at most 2 further provider calls',
+          upstreamCalls - before <= 2, `got ${upstreamCalls - before}`);
+    check('exhaustion returns 503, not an empty 200', last.code === 503);
+    check('…and names the reason rather than looking like "no such card"',
+          last.body && last.body.reason === 'budget_exhausted');
+
+    // (e) No usable configuration → no paid call through the route either.
+    delete process.env.TPL_BUDGET_MAX;
+    delete process.env.TPL_BUDGET_WINDOW_SEC;
+    const store2 = mockStore();
+    setBudgetStore(store2);
+    const atCall = upstreamCalls;
+    const res5 = mkRes();
+    await handler(mkReq({ ...query, q: 'Charizard' }), res5);
+    check('unconfigured budget → the route makes NO provider call',
+          upstreamCalls === atCall);
+    check('…and says why', res5.code === 503 && res5.body.reason === 'budget_not_configured');
+
+    // (f) An upstream failure does NOT refund — the call may have cost quota.
+    process.env.TPL_BUDGET_MAX = '5';
+    process.env.TPL_BUDGET_WINDOW_SEC = '3600';
+    const store3 = mockStore();
+    setBudgetStore(store3);
+    globalThis.fetch = async () => { throw new Error('upstream timeout'); };
+    const res6 = mkRes();
+    await handler(mkReq({ ...query, q: 'Blastoise' }), res6);
+    check('an upstream timeout returns 502', res6.code === 502);
+    const counter = Object.entries(store3.counters).find(([k]) => k.startsWith('tpl:budget:'));
+    check('the failed call is still COUNTED against the budget',
+          counter && counter[1] === 1,
+          'a provider that times out may still have charged us');
+    check('no refund was attempted for a call that had already left',
+          !store3.calls.some(([op]) => op === 'decr'));
+  } finally {
+    globalThis.fetch = realFetch;
+    setBudgetStore(null);
+    delete process.env.CARDSELL_TPL_KEY;
+    delete process.env.TPL_BUDGET_MAX;
+    delete process.env.TPL_BUDGET_WINDOW_SEC;
+  }
+  check('the store is released again after the suite', budgetStoreActive() === false);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
