@@ -426,13 +426,18 @@ returning to it re-establishes the exposure this window exists to end.
 | --- | --- |
 | 6b reports a corruption shape | Re-enter the value in Vercel without the stray character, **redeploy `9aaf326e7` again**, re-run 6b. Fix forward; no rollback. |
 | 6b reports the endpoint hashes something unrecognised | Verify which deployment serves the domain and its commit **before** touching anything else. Likely the redeploy did not take effect, not a wrong value. |
-| eBay's portal challenge fails at step 7 | Operator and eBay hold different values. Re-save the portal value. The endpoint is already correct — proven by 6b — so **do not** change Vercel. |
-| A required check in step 9 fails on **authentication** | The new Cert ID is wrong or not yet active at eBay. Re-check the portal, then re-enter in Vercel and redeploy the same commit. |
+| eBay's portal challenge fails at step 7 | **Diagnose before editing either value.** A passing 6b does not prove the failure is a token mismatch — it proves only that the endpoint hashed correctly for the value 6b was given, at that moment, over the path 6b used. Inspect the portal's error text, the endpoint URL eBay has configured, and whether the request arrived at all. Change a value only once the evidence names which one is wrong. |
+| A required check in step 9 fails on **authentication** | **Read the error before assuming the Cert ID.** An auth failure can be a wrong or whitespace-damaged value, a credential not yet active at eBay, the wrong App ID pairing, or an eBay-side fault. Capture eBay's error code and body, confirm which credential the failing call used, then correct the one the evidence names and redeploy the same commit. |
 | A required check fails on **pre-existing behaviour** | Not a rotation failure. Adjudicate per §1 and record it; the credentials stand. |
-| The endpoint is unreachable entirely | Redeploy `9aaf326e7`. **Never** promote a pre-rotation deployment: it carries the revoked Cert ID and the published token. |
+| The endpoint is unreachable entirely | **Diagnose first; unreachable does not mean redeploy.** Check DNS and routing, general connectivity, whether other paths on the domain respond, and the deployment's health and state. A redeploy is the answer only if the diagnosis points at the deployment. **Never** promote a pre-rotation deployment: it carries the revoked Cert ID and the published token. |
 
-**Every path recovers by re-deploying the same commit with corrected
-configuration.** Recovery must retain the valid replacement credentials. If the
+**Recovery preserves valid replacement credentials and follows the diagnosed
+failure.** The earlier blanket "every path recovers by re-deploying" is
+withdrawn: it prescribed a remedy before a diagnosis, which is how an unrelated
+routing or portal problem gets answered with a needless deployment. What holds
+unconditionally is the credential rule, not the deployment reflex — **never
+restore an exposed or revoked credential**, and never treat one as a rollback
+target. If the
 window has to be abandoned, the correct terminal state is `9aaf326e7` deployed
 with the **new** credentials — not a return to the old ones.
 

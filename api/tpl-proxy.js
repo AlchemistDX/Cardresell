@@ -8,6 +8,8 @@
 // We call:       GET https://api.tcgpricelookup.com<path>?<forwarded query>
 // with header:   X-API-Key: process.env.CARDSELL_TPL_KEY
 
+import { validateTplRequest } from './_tplContract.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -18,25 +20,23 @@ export default async function handler(req, res) {
   const key = process.env.CARDSELL_TPL_KEY;
   if (!key) return res.status(500).json({ error: 'TPL not configured' });
 
-  const path = req.query.path || '';
-  // Path allow-list — only exact TPL v1 endpoints we use in the client
-  const ALLOW = [
-    /^\/v1\/cards\/search$/,
-    /^\/v1\/cards\/lookup$/,
-    /^\/v1\/cards\/[A-Za-z0-9_-]+$/,
-  ];
-  if (!ALLOW.some(re => re.test(path))) {
-    return res.status(400).json({ error: 'path not allowed' });
+  // 2026-09-09 [CH-3/R2]: validate against the client contract BEFORE spending
+  // anything upstream. Replaces a forward-everything loop that sent any query
+  // parameter it received to a PAID provider. See api/_tplContract.js for the
+  // contract and for what this fix does NOT achieve: it closes the
+  // unknown-parameter path; it does not eliminate cache bypass (Vercel keys on
+  // the INCOMING url) and it does not bound spending (distinct valid requests
+  // still reach the provider).
+  const v = validateTplRequest(req.query);
+  if (!v.ok) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(v.status).json(
+      v.detail ? { error: v.error, detail: v.detail } : { error: v.error });
   }
+  const { path, upstreamQuery } = v;
+  const qs = upstreamQuery.toString();
 
-  // Forward all query params except `path`
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(req.query)) {
-    if (k === 'path') continue;
-    params.append(k, Array.isArray(v) ? v[0] : v);
-  }
-
-  const url = `https://api.tcgpricelookup.com${path}${params.toString() ? '?' + params.toString() : ''}`;
+  const url = `https://api.tcgpricelookup.com${path}${qs ? '?' + qs : ''}`;
 
   try {
     const ctrl = new AbortController();
@@ -46,10 +46,20 @@ export default async function handler(req, res) {
     const body = await r.text();
     res.status(r.status);
     res.setHeader('Content-Type', r.headers.get('content-type') || 'application/json');
-    // Cache TPL responses at the edge for 5 min — big cost saver
-    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
+    // 2026-09-09 [CH-3/R3]: cache SUCCESSES only. The previous unconditional
+    // header asked the edge to cache failures too. Note the withdrawn claim:
+    // this does NOT mean a dead key was previously served for five minutes —
+    // Vercel's cacheable statuses exclude 401, 429 and 5xx, so most failures
+    // were never cached whatever we asked for. no-store makes the intent
+    // explicit and removes the dependency on that platform behaviour.
+    if (r.status >= 200 && r.status < 300) {
+      res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
+    } else {
+      res.setHeader('Cache-Control', 'no-store');
+    }
     res.send(body);
   } catch (e) {
+    res.setHeader('Cache-Control', 'no-store');
     res.status(502).json({ error: 'TPL upstream failed', detail: String(e?.message || e) });
   }
 }

@@ -67,10 +67,16 @@ bundle) — with **no cache-buster**. So the cache works for legitimate traffic.
 This is **abuse potential, not active bleeding.** Whether it has been abused is
 **Unverified** and answerable only from usage records (§5).
 
-**Secondary correctness issue:** `Cache-Control` is set unconditionally at `:47-50`,
-after `res.status(r.status)`. A `401`, `429` or `5xx` from TPL is therefore
-cached as `public, s-maxage=300` — so a transient upstream failure, or the
-**dead key after rotation**, is served from the edge for five minutes.
+**Secondary issue, with its evidence corrected.** I claimed an unconditional
+`Cache-Control` meant a `401`, `429` or `5xx` — including the **dead key after
+rotation** — was served from the edge for five minutes. **Withdrawn.** Vercel's
+documented cacheable statuses exclude 401, 429 and 5xx
+([Vercel caching criteria](https://vercel.com/docs/edge-network/caching)), so
+asking for the header does not establish that the platform honoured it. What
+remains true is only that the code asked to cache responses it should not have.
+The **guaranteed dead-key window is removed from the rotation rationale**; R3
+still lands, on the narrower ground that intent should be explicit rather than
+dependent on platform behaviour we do not control.
 
 ---
 
@@ -85,9 +91,13 @@ third-party key**:
 **`pricecharting.js` is the better-built one, and it is the model.** It is also
 anonymous, but it reads a **named list of query params** (`:446-462`) and builds
 its own cache key from those named fields, backed by a **6-hour server-side KV
-cache** (`:18`, `:35`). An attacker cannot cache-bust it with arbitrary params,
-and repeat lookups do not reach the provider. Its residual exposure is
-first-time lookups only.
+cache** (`:18`, `:35`). An attacker cannot cache-bust it with arbitrary params.
+
+**Correction:** I wrote that "repeat lookups never reach the provider." That
+overstates it. The cache protects **hits** only — after **expiry**, after
+**eviction**, and on **concurrent misses** for the same uncached key, requests
+do reach the provider. Its residual exposure is larger than "first-time lookups
+only", and sizing it is part of the separate review (Q-CH3-4).
 
 **And the house pattern for a paid upstream already exists in this codebase:**
 `api/scan.js` gates the paid Ximilar call behind `verifyTokenFlexible` (`:1`)
@@ -125,70 +135,127 @@ Issue a new key at the provider, revoke the old one, and set it in Vercel as an
 delete the row, re-add it as encrypted. Same rotation hygiene as the eBay
 window — no whitespace, and nothing pasted into a shell.
 
-**Consumer update is a single row**: `api/tpl-proxy.js:18` is the only reader in
-the repo. No client change, since the client never held the value.
+**Correction — one code reader is not one running consumer.** I wrote that the
+update was "a single row" because `api/tpl-proxy.js:18` is the only reader in
+the repo. That conflates source with runtime. Updating a stored environment
+variable **affects new deployments**
+([Vercel environment variables](https://vercel.com/docs/environment-variables)),
+so the private rotation procedure must also cover:
 
-**Sequencing note:** because error responses are cached (§3), the five minutes
-after revocation may serve cached failures. Do R3 first if that matters, or
-accept a 5-minute window.
+- **Activation** — the new value does not reach the running function until a
+  deployment is created with it. Saving it and stopping leaves production on the
+  revoked key.
+- **Existing deployments** — anything already running, including any deployment
+  that could be promoted, still resolves the old value.
+- **Local and non-production environments** — any `.env` copy or developer
+  machine holding the old key is a separate consumer to update privately, and a
+  separate place the old key survives.
 
-### R2 — Named query-param allow-list (zero behaviour change, provable)
+**Sequencing note:** the earlier claim that revocation would serve cached
+failures for five minutes is withdrawn (§3). Order R1 and R3 as convenient.
 
-Replace the forward-everything loop at `:32-37` with a per-path allow-list of
-named params, mirroring `pricecharting.js:446-462`:
+### R2 — Reject unknown and duplicate parameters (BUILT, corrected)
 
-- `/v1/cards/search` → `q`, `game`, `limit`
-- `/v1/cards/lookup` → `name`, `game`
-- `/v1/cards/<id>` → none
+**The first version of R2 was wrong and is withdrawn.** It proposed stripping
+unknown params from the *upstream* request and claimed that closed the cache
+bypass. It does not: Vercel keys dynamic responses by the **incoming** request
+URL ([Vercel cache key](https://vercel.com/docs/edge-network/caching#cache-keys)),
+so `?q=Pikachu&_=1` and `?q=Pikachu&_=2` stay two cache entries and each miss
+can still reach TPL, no matter what we forward.
 
-**This is provably behaviour-preserving for the live client**, whose four call
-sites send exactly `path`, `q`, `game`, `limit` and nothing else. It closes the
-cache bypass and stops unknown params reaching the provider.
+**What is built instead:** reject unknown and duplicate parameters **before**
+the upstream call, with `400` and `no-store`, and validate supported values
+against the client contract. `api/_tplContract.js` holds the contract;
+`api/tpl-proxy.js` now calls it before constructing any request.
 
-### R3 — Do not cache failures
+**Described accurately: this closes the unknown-parameter path.** It does not
+eliminate cache bypass and it does not bound spending — distinct *valid*
+queries still each reach the provider. Both limits are pinned as tests so the
+overstatement cannot creep back.
 
-Set `Cache-Control` only when `r.status` is 2xx; use `no-store` otherwise.
-Removes the five-minute dead-key window and stops caching upstream `429`s.
+**The client contract, derived from BOTH clients** — another correction. I
+checked `js/core.66c39922.js`, which is the **outgoing** bundle; the recorded
+production commit `9aaf326e7` ships **`js/core.569ff536.js`**. Checked properly,
+both bundles call three sites with the same parameters:
 
-### R4 — Server-side cache and cap (needs a decision, see §7)
+- `/v1/cards/search` → `q`, `game`, `limit` (100 and 20)
+- `/v1/cards/<id>` → no parameters
 
-Add a KV-backed cache keyed on the named params, as `pricecharting.js` does, and
-a per-IP ceiling. **Blocked on the production-KV isolation constraint** — this
-route would be a new KV writer, and write-capable work is currently held pending
-a separate store. R2 and R3 need no KV and are not blocked.
+`/v1/cards/lookup` was allow-listed but is called by **neither** client, so it
+was a billable path reachable by anyone for no product reason. Its
+parameterised form is gone. **Stated limitation:** TPL ids are opaque, so the
+bare string `/v1/cards/lookup` still matches the id pattern — an id named
+"lookup" is indistinguishable from the retired endpoint. Only the useful,
+parameterised form is closed.
+
+**Tests:** `tests/tpl-proxy-offline.mjs`, registered as slot 49 of 50.
+**65 passed, 0 failed.** The upstream is mocked, so the suite spends no quota —
+and the central assertion is exactly that: thirteen rejection shapes each make
+**zero** upstream calls.
+
+### R3 — Do not cache failures (BUILT)
+
+`Cache-Control` is now set only for 2xx; everything else, including the thrown
+502 path, gets `no-store`. **The rationale is narrower than I first wrote:** not
+"removes the five-minute dead-key window" — see §3 — but "makes the intent
+explicit instead of relying on platform status filtering".
+
+### R4 — Server-side cache and AGGREGATE cap (design; implementable now)
+
+A KV-backed cache keyed on the named params, as `pricecharting.js` does, plus a
+ceiling. **A per-IP cap alone does not bound distributed usage** — it caps one
+address while any number of addresses spend in parallel. The design therefore
+needs an **aggregate safeguard**: a global counter per window that fails closed
+(serve stale or 503) when the period's budget is spent, with the per-IP cap as a
+secondary control against a single noisy source.
+
+**Implementation and mocked tests can proceed without production KV**; only live
+integration is blocked on store isolation.
 
 ---
 
+## 6a. Reviewer rulings on the four questions — recorded
+
+| | Ruling | Effect |
+| --- | --- | --- |
+| Q-CH3-1 | **Preserve anonymous search** for this bounded change; add cost controls without a login requirement | No auth gate. R2/R3 built, R4 designed |
+| Q-CH3-2 | **Keep lookups outside scan-credit charging** | Closed, not built |
+| Q-CH3-3 | **Prepare corrected R2 and R3 together with mocked upstream tests.** Local implementation is distinct from authorization to deploy | Built locally. **Not deployed, not authorized** |
+| Q-CH3-4 | **Focused read-only PriceCharting review, separately.** Keep permission questions separate from cost controls | Queued as its own item |
+
+Also adopted: "repeats never reach the provider" **overstated** `pricecharting.js`'s
+protection — its cache protects hits, but expiry, eviction and concurrent misses
+all reach the provider. §4 is corrected accordingly.
+
 ## 7. Questions for the owner — business/feature calls I should not make alone
 
-**Q-CH3-1 — Should `/api/tpl-proxy` require a signed-in caller?**
-It would make the exposure structurally similar to `api/scan.js`. But it is
-reached from card search, and if anonymous visitors can search today, gating it
-changes the product's front door. **My recommendation: no auth gate.** Do R2 +
-R3 + R4 instead; they cut the abuse surface without touching the funnel. Confirm
-before I build either way.
+All four are answered above. What remains for **Will**:
 
-**Q-CH3-2 — Should TPL lookups debit scan credits?**
-Consistent with the house pattern, but it prices a lookup the user currently
-gets free. Probably not, but it is your call, not mine.
+**Q-CH3-5 — Rotate `CARDSELL_TPL_KEY` at TCGPriceLookup (R1).** Provider-side
+and yours. Nothing in this review authorizes it.
 
-**Q-CH3-3 — Is R2 acceptable as an immediate, isolated change?**
-It touches deployed code, so it needs authorization. It is ~10 lines, provably
-behaviour-preserving for the live client, and needs no KV. It could ride with
-the outgoing Phase 1 work or ship on its own.
+**Q-CH3-6 — Deployment of the built R2 + R3.** They exist locally and are
+tested; they are **not** deployed and no authorization is implied. They can ride
+with the outgoing Phase 1 work or ship alone.
 
-**Q-CH3-4 — Should the same review be run on `api/pricecharting.js`?**
-It is the stronger of the two but shares the anonymous posture, and the terms
-dimension in §4 is not a cost question. Recommend yes, separately.
+**Q-CH3-7 — Should R4 be built now against mocks?** The reviewer confirms it
+can proceed without production KV, with live integration still blocked on store
+isolation. Say the word and I will build it with the aggregate safeguard.
 
 ---
 
 ## 8. Status
 
-Assessment complete and read-only. **Nothing changed, nothing rotated, no
-request made to a paid API.** R1 is yours at the provider. R2–R3 are specified
-and await authorization. R4 stays blocked behind KV isolation. Q-CH3-1 to
-Q-CH3-4 await your answers.
+Assessment read-only; **no request was made to a paid API and no quota was
+spent.** R2 and R3 are now **built and tested locally** — 65 assertions, mocked
+upstream, registered as suite 49 of 50. **Local implementation is not
+authorization to deploy**, and nothing here is deployed.
+
+R1 is yours at the provider, and its procedure now covers activation, existing
+deployments and local environments — not just the one code reader. R4 is
+designed with an aggregate safeguard and can be built against mocks on your
+word.
 
 The eBay maintenance window is unaffected and still awaiting explicit
-authorization.
+authorization. **This review does not authorize credential changes or
+deployment.**
