@@ -305,6 +305,14 @@ discourages the action the screen exists to encourage.
 > history, and eBay can also hold funds on high-priced or unusual sales. Your
 > selling limits and any funds on hold are shown in your eBay Seller Hub.
 
+**AMENDED 2026-09-08 on review — read §7 of `audit/d6/D6_RETURN_PACKET.md`
+before trusting §5.5(a) or §5.7 above.** Two corrections: the holds page is
+conditional in its governing sentence and §5.5(a) quoted only its stronger
+bullet, so the shipped verb is **"can face"**, not "will have"; and §5.7's claim
+that eBay never says "increase" is **withdrawn** — the selling-limits page does
+discuss increases. "Limits are reviewed monthly" survives on the narrower
+ground that we promise this seller no direction.
+
 **CLOSED 2026-09-08.** Implemented as `_reviewSellLimitsHtml`, the wording read
 on the rendered screen in both themes, and the presence test built (10
 assertions). The rendered pass changed spacing only — `margin-top:14px` scoped to

@@ -18,11 +18,14 @@ the gate's decisions carried through unchanged.
 muted note, last, with `data-sell-start-limits`:
 
 > eBay can hold your payout and cap how much you list, and limits are reviewed
-> monthly. New sellers will have transaction holds while they build selling
+> monthly. New sellers can face transaction holds while they build selling
 > history, and eBay can also hold funds on high-priced or unusual sales. Your
 > selling limits and any funds on hold are shown in your eBay Seller Hub.
+> [eBay selling limits](https://www.ebay.com/help/selling/listings/selling-limits?id=4107) ·
+> [Payment holds](https://www.ebay.com/help/selling/getting-paid/getting-paid-items-youve-sold/payments-hold?id=4816)
 
-Exactly the copy the entry gate settled at §5.8. Nothing was reopened.
+The gate's §5.8 substance, with the two closeout amendments in §7 below: the
+verb weakened to **"can face"**, and the two source links added.
 
 **Unconditional.** No trigger, because Phase 1 owns no signal that
 discriminates "when applicable": the seller profile's defaults are
@@ -144,7 +147,80 @@ Seller Hub as the destination enough?
 `audit/PRICECHARTING_PERMISSION.md`**, of which Q1 (making three source labels
 clickable) is a yes/no.
 
-## 7. Status
+## 7. Closeout amendments (2026-09-08, after review)
+
+### 7.1 "will have" → "can face", and my §5.5(a) reasoning was half right
+
+The gate argued for the definite verb because eBay's source was unhedged. It is
+not. Re-read today, the holds page is conditional in its **governing sentence**
+— "We **may** place a transaction hold on funds **depending on** your seller
+status, changes to your account status, or other factors" — and it distinguishes
+circumstances (new or infrequent, previously restricted, high-priced or unusual,
+authentication). Its new-seller bullet then reads "New or infrequent sellers
+**will experience** transaction holds while learning best selling practices".
+
+So the page carries **both** readings, and §5.5(a) quoted only the stronger one.
+Where a source does that, the copy takes the weaker: overstating a restriction
+discourages the action this screen exists to enable, which is the same cost §5.7
+weighed when it refused to leave the cap sounding permanent. Now: **"New sellers
+can face transaction holds while they build selling history."**
+
+The assertion changed with it, and this is the point worth keeping. It used to
+require the exact phrase `new sellers will have transaction holds`, which made
+the test the **guardian of a claim stronger than its source**. It now requires
+that new sellers and transaction holds are connected — the disclosure — and
+separately forbids stating the hold as a certainty. An assertion protects the
+disclosure; it does not freeze one draft's wording.
+
+### 7.2 Withdrawn: "eBay never says increase"
+
+§5.7 said "adjusted, not raised — eBay guarantees a review cadence, not a
+direction". Too broad, and withdrawn. The selling-limits page **does** discuss
+increases: "As you get more comfortable meeting buyer demand, we'll increase
+your limit", "you may be able to have your limits increased", and a request
+path ([eBay, "Selling
+limits"](https://www.ebay.com/help/selling/listings/selling-limits?id=4107)).
+
+What survives is narrower and still holds: the monthly review "adjust[s] the
+limits automatically based on your sales volume and the feedback you've
+received", which can move either way, so **we do not promise this seller a
+direction**. Cadence is a fact about eBay's process; direction would be a
+prediction about this account. "Limits are reviewed monthly" stays.
+
+The test changed to match the correction rather than keep enforcing it: it no
+longer bans the words "raise"/"increase" as unsupported, since they are
+supported. It now forbids **printing a duration or amount** — the source offers
+"up to 30 days" and a figure we print becomes a promise about this seller's
+timeline — and forbids promising the reader a directional outcome
+("we'll increase your limit", "your limit will go up").
+
+### 7.3 Two sources on screen
+
+Added inside the note, understated and descriptive, no citation numbers and no
+second block: **eBay selling limits** and **Payment holds**, linking the two
+pages the note's claims come from. `color:inherit` with an underline, so they
+stay at muted weight and do not pull attention from the identity check.
+
+The division of labour is deliberate and now visible in one sentence: **Seller
+Hub is where the seller inspects their own account; the help pages explain the
+general rule.** Asserted by destination rather than link text, required to be
+inside the note, `_blank` + `noopener`, and carrying no affiliate parameters —
+a seller opening a help page is not a qualifying purchase, so tracking it would
+be the same unverified revenue claim the sell-start link already refuses.
+
+### 7.4 Placement, decided
+
+The note accompanies a **direct listing hand-off to eBay**. Internal Sell
+buttons that lead to this review screen need no duplicate, and ordinary outbound
+comp/source links need none either. The manual-continuation branch (no deeplink
+built) stays covered as implemented. Recorded so a future surface inherits the
+rule rather than re-deciding it.
+
+`draft-review-screen`: **363 passed, 0 failed** after these amendments (was
+355). Re-rendered in both themes; the links sit at muted weight at the end of
+the note.
+
+## 8. Status
 
 - D7: closed. Basis loss: resolved test-setup race; same-card retention tracked
   in `audit/RELEASE_VALIDATION_QUEUE.md`; production clearing unchanged.

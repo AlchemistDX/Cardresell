@@ -1631,8 +1631,22 @@ try {
     T.check('\ud83d\udd34 it names the cap AND that limits are reviewed monthly, so the cap does not read as permanent',
       !!d6 && /cap how much you list/i.test(d6.text) && /limits are reviewed monthly/i.test(d6.text),
       d6 && d6.text);
-    T.check('\ud83d\udd34 it carries eBay\u2019s definite verb about a CLASS of sellers',
-      !!d6 && /new sellers will have transaction holds/i.test(d6.text), d6 && d6.text);
+    /* CHANGED 2026-09-08. This previously required the exact phrase "new sellers
+     * WILL have transaction holds", on the reading that eBay's source was
+     * unhedged. The source carries both readings -- its governing sentence is
+     * "we MAY place a transaction hold ... DEPENDING ON your seller status" and
+     * it distinguishes circumstances, while its new-seller bullet says "will
+     * experience". An assertion should protect the DISCLOSURE, not freeze a
+     * claim stronger than the source supports, so it now requires that new
+     * sellers and transaction holds are connected, and separately forbids the
+     * two failure modes: dropping the class subject, or asserting the hold as
+     * certain for whoever is reading. */
+    T.check('\ud83d\udd34 it connects new sellers to transaction holds, about a CLASS',
+      !!d6 && /new sellers[^.]*transaction holds/i.test(d6.text), d6 && d6.text);
+    T.check('and it does not state the hold as a certainty',
+      !!d6 && !/(will|shall) (have|face|experience|get) (transaction )?holds/i.test(d6.text)
+           && !/holds are (applied|placed) (to|on) (all|every)/i.test(d6.text),
+      d6 && d6.text);
     T.check('and it covers the high-priced / unusual case too, which is not new-seller-only',
       !!d6 && /high-priced or unusual/i.test(d6.text), d6 && d6.text);
     T.check('and it names where to look, rather than describing the restriction only',
@@ -1642,13 +1656,55 @@ try {
     T.check('\ud83d\udd34 it makes no claim about THIS seller\u2019s standing',
       !!d6 && !/you (are|will be|may be) (a )?new|your account is new|as a new seller/i.test(d6.text),
       d6 && d6.text);
-    // No invented figures: the source promises a cadence, not a direction, and
-    // names no duration or amount for holds.
-    T.check('\ud83d\udd34 and it invents no duration, amount, or direction of change',
+    /* No invented figures. The source DOES offer durations ("up to 30 days")
+     * and DOES say "we'll increase your limit" -- an earlier note here claimed
+     * eBay never says increase, which was too broad and is withdrawn. So this
+     * no longer forbids the word: it forbids printing a duration or amount at
+     * all, since a figure we print becomes a promise about this seller's
+     * timeline, and it forbids promising the reader a directional OUTCOME,
+     * which the monthly review does not guarantee either way. */
+    T.check('\ud83d\udd34 and it prints no duration or amount',
       !!d6 && !/\b\d+\s*(day|days|week|weeks|month|months)\b/i.test(d6.text)
-           && !/[$\u00a3\u20ac]\s*\d/.test(d6.text)
-           && !/\braise[sd]?\b|\bincrease[sd]?\b|\bgoes up\b/i.test(d6.text),
+           && !/[$\u00a3\u20ac]\s*\d/.test(d6.text),
       d6 && d6.text);
+    T.check('\ud83d\udd34 and it promises this seller no directional outcome',
+      !!d6 && !/(we|ebay)('ll| will)? ?(raise|increase)s? your/i.test(d6.text)
+           && !/your limits? will (go up|rise|increase|be raised)/i.test(d6.text),
+      d6 && d6.text);
+
+    /* The two sources, on screen. Seller Hub is where the seller inspects their
+     * own account; these explain the rule the note states. Asserted by
+     * DESTINATION, not by link text, and required to be inside the note rather
+     * than promoted to a block of their own. */
+    const d6src = await page.evaluate(() => {
+      const el = document.querySelector('[data-sell-start-limits]');
+      if (!el) return null;
+      return [...el.querySelectorAll('a[data-limits-source]')].map((a) => ({
+        kind: a.getAttribute('data-limits-source'), href: a.getAttribute('href'),
+        text: a.innerText, target: a.getAttribute('target'), rel: a.getAttribute('rel'),
+      }));
+    });
+    T.check('\ud83d\udd34 the note carries its two sources as links, inside the note itself',
+      Array.isArray(d6src) && d6src.length === 2, JSON.stringify(d6src));
+    T.check('\ud83d\udd34 the selling-limit claim links eBay\u2019s own selling-limits page',
+      !!d6src && d6src.some((a) => a.kind === 'selling-limits'
+        && /^https:\/\/www\.ebay\.com\/help\/selling\/listings\/selling-limits\?id=4107$/.test(a.href)),
+      JSON.stringify(d6src));
+    T.check('\ud83d\udd34 and the holds claim links eBay\u2019s own payments-hold page',
+      !!d6src && d6src.some((a) => a.kind === 'payment-holds'
+        && /^https:\/\/www\.ebay\.com\/help\/selling\/getting-paid\/getting-paid-items-youve-sold\/payments-hold\?id=4816$/.test(a.href)),
+      JSON.stringify(d6src));
+    T.check('the link text is descriptive, not a citation number',
+      !!d6src && d6src.every((a) => a.text.trim().length > 4 && !/^\[?\d+\]?$/.test(a.text.trim())),
+      JSON.stringify(d6src));
+    T.check('and they open in a new tab without handing eBay our window',
+      !!d6src && d6src.every((a) => a.target === '_blank' && /noopener/.test(a.rel || '')),
+      JSON.stringify(d6src));
+    // Same rule as the sell-start link: a seller opening a help page is not a
+    // qualifying purchase, so tracking it would be an unverified revenue claim.
+    T.check('and they carry no affiliate tracking',
+      !!d6src && d6src.every((a) => !/campid|mkcid|mkevt|mkrid|toolid|customid/.test(a.href)),
+      JSON.stringify(d6src));
     T.check('it is quieter than the identity check, not a second WARNING',
       !!d6 && d6.severity === null, d6 && String(d6.severity));
     T.check('and it sits last, furthest from the click',
