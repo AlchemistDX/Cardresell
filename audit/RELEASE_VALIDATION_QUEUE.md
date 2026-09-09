@@ -241,4 +241,4 @@ preserve prefill (D5 verification §7.2).
 
 | Date | Account / browser | Search + category displayed? | Match comparable? | Final URL | Result |
 | --- | --- | --- | --- | --- | --- |
-| 2026-09-08 | Owner, **iOS Safari mobile web** (not the eBay app); signed-in state owner-reported, not independently evidenced — Q-D5-4 | Yes, verbatim search and `caty=183454` category | Yes — `Charizard VMAX (Secret) 074/073 Champions Path Holo` | Not readable (Safari shows `ebay.com` only); evidence only, not a criterion | **Pass for that tested case.** Screenshot: `audit/d5/evidence/2026-09-08-signed-in-ios-safari.jpeg` |
+| 2026-09-08 | Owner, **iOS Safari mobile web** (not the eBay app); **signed in — owner-attested**, *"yes I was signed into safari"* | Yes, verbatim search and `caty=183454` category | Yes — `Charizard VMAX (Secret) 074/073 Champions Path Holo` | Not readable (Safari shows `ebay.com` only); evidence only, not a criterion | **Pass for that tested case.** Screenshot: `audit/d5/evidence/2026-09-08-signed-in-ios-safari.jpeg` |

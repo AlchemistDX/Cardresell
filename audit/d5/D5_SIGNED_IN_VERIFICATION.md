@@ -2,9 +2,11 @@
 
 **Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **Live bundle:** `js/core.66c39922.js` (`index.html:3834`)
 **Suite:** `draft-review-screen` **370 passed, 0 failed**
-**Status: mobile-web run OBSERVED 2026-09-08 on iOS Safari and it PASSES the
-criterion (§9). Signed-in closure waits on one sentence of owner attestation —
-see §9.3, where the standard for it has been corrected.
+**Status: CLOSED for the tested case. Signed-in mobile-web run observed
+2026-09-08 on iOS Safari; it passes the criterion (§9) and the sign-in is
+owner-attested (§9.3). Closure covers that case only — this card, this account,
+that browser, that date — and the recurring pre-deploy check stays in the
+queue.
 Nothing pushed, nothing deployed.**
 
 D5 §8.3 reclassified signed-in continuation from a footnote to the critical path,
@@ -297,28 +299,22 @@ than necessary and it is the wrong instrument anyway, since eBay's simplified
 prelist view carries no account chrome at all — the bar could never have been
 met on that screen.
 
-**As of this writing that attestation has not been given in words.** The link
-was opened on request and the screenshot returned, and the request did say
-"while signed in" — but I am not converting a compliance-shaped inference into
-an owner attestation and filing it as the owner's word. That is the same
-substitution I refused when I declined to report a logged-out run as the
-signed-in answer, and it is worse here, because the record would attribute it to
-him rather than to me.
+**ATTESTED 2026-09-08, 23:41 ET.** Asked whether he was signed in to eBay in
+that Safari session, the owner answered, verbatim: *"yes I was signed into
+safari"*. Recorded as **owner-attested** — his word is the instrument, which is
+the corrected standard, and the quote is kept verbatim so the record shows what
+was said rather than my paraphrase of it.
 
-So §8.3 turns on one sentence, and there are two routes to it:
+That closes §8.3 **for the tested case**: this card, this account, iOS Safari,
+2026-09-08. It is deliberately not a compatibility guarantee — the parameters
+remain undocumented internals (§2), which is why the recurring pre-deploy check
+stays in `audit/RELEASE_VALIDATION_QUEUE.md` on both surfaces rather than being
+struck off.
 
-1. **"Yes, I was signed in."** → recorded as **owner-attested**, and §8.3
-   closes for that tested case (this card, this account, iOS Safari,
-   2026-09-08).
-2. **Uncertain** → don't reconstruct the earlier session. Confirm Seller Hub
-   loads in that same Safari without a fresh sign-in, then reopen the test link.
-   That produces a **fresh** signed-in observation, which is cleaner than
-   reasoning backwards about a session that has since moved on.
-
-Until one of those arrives, what is established is a **mobile-web run that
-passes the criterion**. That is not nothing: §3's baseline was desktop and
-logged out, so this is the first observation on the surface a scanning seller
-actually uses, and the first to rule out an iOS app hand-off.
+Route 2 (Seller Hub, then reopen for a fresh observation) is therefore not
+needed, and is left recorded only as the method to use if a future run's
+sign-in state is ever uncertain — reconstructing a session after the fact is
+worse than taking a new observation.
 
 ### 9.4 What this establishes
 
@@ -329,10 +325,8 @@ internals (§2), which is why the recurring pre-deploy check stays in
 
 ### 9.5 Questions
 
-- **Q-D5-4 — standard corrected, one sentence outstanding.** Were you signed in
-  to eBay in that Safari session? A plain yes is enough and closes §8.3 for that
-  tested case. If you are not sure, take route 2 in §9.3 rather than
-  reconstructing it.
+- **Q-D5-4 — answered and closed.** *"yes I was signed into safari"* (owner,
+  2026-09-08). §8.3 closed for that tested case.
 - **Q-D5-5 — answered, applied.** Both surfaces, mobile prioritised for the scan
   workflow, desktop retained for saved-collection sellers. Recorded in
   `audit/RELEASE_VALIDATION_QUEUE.md`.
