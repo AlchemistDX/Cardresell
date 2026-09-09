@@ -675,3 +675,73 @@ lookup must be taken through the **cloud browser**, which reached the site at
   from the dashboard's `Copy` button regardless. The accepted blast radius is
   **provider quota only**.
 - **G12** does **not** close here \u2014 it still needs G1 plus real-store evidence.
+
+## Step 11 done \u2014 rotation complete, proven without inference
+
+**#518 revoked by Will. `cardresell production replacement` active and serving.**
+
+Post-revocation lookups through `www.cardresell.org`, all novel terms on fresh
+cache keys, so none could be served from the edge:
+
+| Term | Status | Cache | Bytes | First record |
+| --- | --- | --- | --- | --- |
+| `sylveon ex` | **200** | `MISS`, `age 0` | 28,489 | `Sylveon EX` |
+| `gardevoir ex` | **200** | `MISS`, `age 0` | 25,661 | `Gardevoir EX` |
+| `lugia legend` | **200** | `MISS`, `age 0` | 32,217 | `Lugia Legend (Top)` |
+
+Payloads carry provider-side detail no cache could fabricate \u2014 `tcgplayer_id`,
+`cdn.tcgpricelookup.com` image URLs, `last_price_update` of `2026-09-08`. With
+#518 revoked there is **no other credential** that could produce these, so this
+is the observation that needed no inference. **G11 closes. CH-3 closes \u2014 worded
+"the public and plain-storage exposures are closed."**
+
+## But the run surfaced a production defect. Reporting it rather than closing over it.
+
+One lookup in the first pair returned **`429`** \u2014 `blastoise base set`, 31-byte
+error body, 384 ms.
+
+**Attribution is established, not guessed.** `api/tpl-proxy.js:47` at `9aaf326`
+is `res.status(r.status)` \u2014 the **upstream status verbatim**. Vercel did not
+generate it and the key did not fail. **TCGPriceLookup rate-limited us**, and the
+app passed that straight to the browser.
+
+**What triggered it, and what did not.** The `429` followed a burst: the page's
+own auto-search on load, then two explicit lookups, inside roughly two seconds.
+A deliberate retry of **two** adjacent lookups after a 12-second pause returned
+**`200` and `200`**. So the limit is a **short-window burst limit, not a daily
+quota** \u2014 the daily counter is nowhere near 10,000. **The exact threshold is
+Unverified**, and I did not hunt for it, because probing it means deliberately
+consuming paid quota to demonstrate a limit.
+
+### Why this matters more than one failed request
+
+It lands squarely on work already open:
+
+- **The 180 ms debounce at `:1043`.** Shorter than a mid-word pause, so ordinary
+  typing generates exactly the burst shape that produced this `429`.
+- **The graded path fires two adjacent calls** (`:5223`, `:5232`). That is two of
+  the three-ish calls needed to trigger it, from a single user action.
+- **R4 per-IP sizing.** The budget debate assumed the ceiling was ours to choose.
+  **The provider imposes its own, at a far shorter window**, and ours is behind a
+  switch that is off. Sizing 15/hr against a provider limit measured in seconds
+  is sizing the wrong dimension.
+
+**A seller listing twenty cards in an evening is the case that decides this** \u2014
+and this run suggests they meet the provider's limit long before they meet ours.
+
+### And a second defect in the same file
+
+`api/tpl-proxy.js:50` sets `Cache-Control: public, s-maxage=300,
+stale-while-revalidate=60` **unconditionally \u2014 after `:47` has already applied
+the upstream status.** So a `429`, a `500`, any upstream failure is labelled
+edge-cacheable for five minutes exactly like real card data. The code draws **no
+distinction between a payload and an error**.
+
+**Unverified:** whether Vercel's edge actually caches a `429`. Its cache is
+documented for a specific set of status codes, and `429` is not obviously among
+them, so the live blast radius may be nil. **The code defect stands regardless of
+whether the platform currently saves us from it** \u2014 filed as **RV-12**.
+
+**Note on the client-visible header:** live responses show `cache-control:
+public` with `s-maxage` absent. That is Vercel consuming the directive at the
+edge, not a discrepancy with `:50`.
