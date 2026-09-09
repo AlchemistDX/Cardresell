@@ -113,10 +113,14 @@ dependent on platform behaviour we do not control.
 2. **Overlap is available**, so rotation needs **no outage**: generate the new
    key alongside the old, deploy, verify a genuine provider hit, then revoke.
 
-**Open, and a rights question rather than a quota one:** the Pro tier bundles a
-**commercial-use licence**. Whether commercial use is permitted on Starter at
-all is **Unverified** and not determinable from the repo. If it is not, the
-upgrade is a compliance requirement, not a performance choice.
+**Settled, and it is a rights question rather than a quota one.** The supplied
+pricing screen states Starter is **non-commercial use**. CardResell is a
+commercial product, and there is no separate permission. So the Pro upgrade is
+a **compliance requirement, not a performance choice** — and the 10,000/day
+allowance is a side effect of buying the licence, not the reason for it.
+
+This is **not** an open question for the owner and should not be re-asked. The
+only thing outstanding is **confirmation that Pro is active**.
 
 ## 4. This is a class of two, not one route
 
@@ -193,7 +197,7 @@ that closes the exposure:
 | a | Generate the new key, old one still live | **No outage required** — confirmed by the five-slot allowance |
 | b | Delete `CARDSELL_TPL_KEY`, re-add **encrypted** | The only path; Vercel cannot convert in place |
 | c | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` (commit `9aaf326`)** — not a branch deploy | An env change reaches **no running deployment**. `phase1-block-d` is ~237 commits ahead and must not ship as a side effect of a rotation. |
-| d | Verify a lookup that **reaches the provider**: `200` with **no `X-TPL-Cache` header**, for a card not requested in the previous 5 minutes | `X-TPL-Cache: hit`/`stale` proves nothing about the key. `s-maxage=300` means a repeat query can be answered by the edge with the function never running. |
+| d | Verify per §6b. **`x-vercel-cache: MISS`/`BYPASS` is necessary but not sufficient**; the confirming evidence is the **provider-side usage delta**. | My earlier `X-TPL-Cache`-absent test was invalid — see §6b. |
 | e | **Revoke the old key** | **The step that actually closes CH-3.** Everything before it adds a good key; only this removes the exposed one. |
 | f | Then R4 activation | A mitigation, not the remedy. Must not delay (e). |
 
@@ -313,6 +317,82 @@ Also adopted: "repeats never reach the provider" **overstated** `pricecharting.j
 protection — its cache protects hits, but expiry, eviction and concurrent misses
 all reach the provider. §4 is corrected accordingly.
 
+## 6b. Verification method — my previous test was invalid
+
+**Withdrawn: "`200` with no `X-TPL-Cache` header proves the provider was
+called."** It fails twice over, and the second failure is the serious one.
+
+**Failure 1 — an absent header is not an absent cache.** A CDN can replay a
+response that never carried the header in the first place. The header is copied
+from origin into the cached entry; its absence is preserved on replay. So
+"absent" is consistent with both "the function ran" and "the edge replayed a
+response from five minutes ago", which is exactly the distinction the check
+existed to draw.
+
+**Failure 2 — the header does not exist at the deployment target.** This is
+decisive and I should have checked it before proposing the test. The rebuild
+target is commit `9aaf326`, which **predates R4 entirely**:
+
+| Fact at `9aaf326` | Evidence |
+| --- | --- |
+| `api/tpl-proxy.js` is **55 lines** | `git show 9aaf326:api/tpl-proxy.js` (206 lines on this branch) |
+| It sets **no `X-TPL-Cache` header at all**, on any path | Only cache-related line is `Cache-Control: public, s-maxage=300, stale-while-revalidate=60` at `:50` |
+| `api/_tplBudget.js` **does not exist** | `git cat-file -e 9aaf326:api/_tplBudget.js` → absent |
+
+So the header would have been **absent on every response** — cached or fresh,
+new key or dead key. **The check could not fail.** I would have redeployed,
+seen the "verifying outcome" unconditionally, declared the replacement key
+working, and revoked the only key that was actually serving traffic. That is a
+self-confirming test in front of an irreversible step, which is the worst place
+to put one.
+
+### The corrected method
+
+**Signal 1 — `x-vercel-cache`, to exclude the CDN.** Vercel documents the
+values as `HIT`, `MISS`, `STALE`, `PRERENDER`, `REVALIDATED`, `BYPASS`
+([Vercel response headers](https://vercel.com/docs/headers/response-headers)).
+`HIT` or `STALE` means the answer never reached a function and says nothing
+about the key. **`MISS` or `BYPASS` is necessary but not sufficient** — the
+same documentation warns that `MISS` "does not necessarily mean that a function
+ran", because runtime-cached `fetch` results can present as `MISS`, and directs
+you to custom headers or runtime logs instead.
+
+**Signal 2 — the handler's own behaviour at `9aaf326`.** Once the CDN is
+excluded, the 55-line handler has **no application cache to fall back on**: no
+KV, no `_tplBudget`, no store of any kind. Every allowed path runs
+`fetch(url, { headers: { 'X-API-Key': key } })` at `:44` and returns the
+provider's status verbatim at `:46`. This inference is **specific to this
+commit** and is not a general claim that a CDN `MISS` excludes an application
+cache — on this branch's 206-line handler it would not hold at all.
+
+**Signal 3 — the provider-side usage delta. This is the confirming evidence.**
+Read the TCGPriceLookup usage counter before and after. It must rise by exactly
+the number of verification requests. This is the provider stating that it
+received and authenticated a request bearing the new key — the only signal that
+comes from the party actually validating it. Everything upstream of it is
+inference about our own infrastructure. The counter stood at **1 of 2,500**, so
+a delta is legible rather than lost in noise.
+
+**Signal 4 — runtime logs**, corroborating an invocation of `/api/tpl-proxy` at
+the verification timestamp, per the documentation's own advice.
+
+**Two properties the check now has that it lacked.** It can **fail** — a dead
+key surfaces as the provider's `401`/`403` passed through at `:46`. And it
+includes a **discriminating control**: repeat the identical request and expect
+`x-vercel-cache: HIT`, which demonstrates the signal distinguishes states at
+all rather than reading one constant.
+
+**Cache-key note.** All params except `path` are forwarded verbatim (`:32-36`),
+so a novel query value both varies the edge cache key and reaches the provider
+as a legitimate query. Use a card genuinely not requested in the previous five
+minutes rather than an invented parameter, which the provider may reject.
+
+**Ordering is unchanged and matters more now:** revocation is last, and a
+failed verification rolls forward to a newly generated key — never back to the
+exposed one.
+
+---
+
 ## 7. Questions for the owner — business/feature calls I should not make alone
 
 All four are answered above. What remains for **Will**:
@@ -327,6 +407,12 @@ with the outgoing Phase 1 work or ship alone.
 **Q-CH3-7 — Should R4 be built now against mocks?** The reviewer confirms it
 can proceed without production KV, with live integration still blocked on store
 isolation. Say the word and I will build it with the aggregate safeguard.
+
+**Q-CH3-8 — Is the Pro plan active yet?** This is the **only** outstanding TPL
+question, and it is a confirmation rather than a decision. The licensing part
+is already settled by the supplied pricing screen (§3a): Starter is stated
+non-commercial, CardResell is commercial, so Pro is required on rights grounds.
+No further judgement is being asked of you.
 
 ---
 

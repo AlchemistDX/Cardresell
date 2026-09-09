@@ -382,7 +382,7 @@ two windows.** This one needs Step 1's answers first and nothing else; it does
 | --- | --- | --- |
 | 2a | **Generate the new key** at TCGPriceLookup, old one still live | **Confirmed available** — five key slots, one in use. No outage is required, and the no-overlap contingency is withdrawn. |
 | 2b | **Delete** `CARDSELL_TPL_KEY` and **re-add it encrypted** with the new value | Vercel **cannot convert a variable in place.** Re-adding is the only path, and it is why this cannot be a quiet edit. |
-| 2c | **Redeploy a named target, then confirm a lookup that actually reaches the provider** — exact target and check below | "Redeploy" alone is ambiguous and dangerous here, and a cached 200 proves nothing. Both are specified below rather than left to the moment. |
+| 2c | **Redeploy a named target, then verify with `x-vercel-cache` plus the provider-side usage delta** — exact target and check below | "Redeploy" alone could ship 237 outgoing commits, and my earlier header check **could not fail**. Both corrected below rather than left to the moment. |
 | 2d | **Revoke the old key at the provider** | **The step that actually closes CH-3.** Everything before it adds a good key; only this removes the exposed one. If the window ends here, the exposure is closed even if 2e never happens. |
 | 2e | **Then** R4 activation (G12) — with Step 4's real numbers and Step 3's recorded real-store evidence | Enforcement is worth having, but it is a *mitigation*. It must not be mistaken for the remedy, and it must not delay 2d. |
 
@@ -413,29 +413,108 @@ commit **already live**, redeployed only to pick up the new variable:
 This is the same target as the exact-commit maintenance rebuild, and it is a
 deployment — so it needs your authorization, and it is **not** gated by RV-10.
 
-**Hazard 2 — an edge-cached 200 proving nothing.** The proxy sets
-`Cache-Control: public, s-maxage=300` on successes, so for five minutes after any
-lookup the edge can answer without the function running at all. A green result
-under those conditions would be evidence about the cache, not about the key.
+**Hazard 2 — a verification that could not fail. My earlier check was invalid,
+and this is the correction.** I proposed: `200` with **no `X-TPL-Cache`
+header** proves the provider was reached. It is wrong twice.
 
-The proxy distinguishes the paths itself, and this is the signal to use:
+**It does not distinguish cache from function.** A CDN can replay a response
+that never carried that header; absence is preserved on replay. So "absent" is
+consistent with both "the function ran" and "the edge answered from five minutes
+ago" — the exact distinction the check existed to draw.
+
+**And the header does not exist at the target.** Decisive, and I should have
+checked the deployed handler instead of reading the outgoing one:
+
+| Fact at `9aaf326` | Evidence |
+| --- | --- |
+| `api/tpl-proxy.js` is **55 lines** | `git show 9aaf326:api/tpl-proxy.js` — 206 lines on this branch |
+| **No `X-TPL-Cache` header on any path** | Its only cache line is `Cache-Control: public, s-maxage=300, stale-while-revalidate=60` at `:50` |
+| `api/_tplBudget.js` **absent** | `git cat-file -e 9aaf326:api/_tplBudget.js` fails — R4 postdates this commit |
+
+**The header would have been absent on every response — cached or fresh, good
+key or dead key. The check could not fail.** Followed literally, it returns
+"verified" unconditionally, and then 2d revokes the only key serving live
+traffic. A self-confirming test immediately before an irreversible step.
+
+##### The corrected check
+
+**Signal 1 — `x-vercel-cache`, to exclude the CDN.** Documented values are
+`HIT`, `MISS`, `STALE`, `PRERENDER`, `REVALIDATED`, `BYPASS`
+([Vercel response headers](https://vercel.com/docs/headers/response-headers)).
 
 | Response | Means |
 | --- | --- |
-| **`X-TPL-Cache` header absent** | The request **reached the provider with the new key.** This is the only outcome that verifies 2c. |
-| `X-TPL-Cache: hit` | Served from the KV result cache. **Proves nothing about the key.** |
-| `X-TPL-Cache: stale` | Served stale, with `X-TPL-Stale-Reason`. **Proves nothing about the key.** |
-| `401` / `403` from the provider | The new key is wrong or not yet active. **Do not revoke the old key** — stop and fix. |
+| `x-vercel-cache: HIT` / `STALE` | Served by the CDN. **Proves nothing about the key.** |
+| `x-vercel-cache: MISS` / `BYPASS` | Not a CDN replay. **Necessary, not sufficient** — the same docs note `MISS` "does not necessarily mean that a function ran", since runtime-cached `fetch` results can also present as `MISS`, and point to runtime logs instead. |
+| `401` / `403` from the provider | New key wrong or not yet active. **Do not revoke the old key** — stop and fix. |
 
-So the check is: **a lookup for a card not requested in the previous five
-minutes, against the redeployed target, returning `200` with no `X-TPL-Cache`
-header.** Verify the deployment's own URL first (it proves the key without
-depending on promotion), then `www.cardresell.org` after promotion to prove the
-alias moved. One request each — two of a 2,500/day allowance, which is
-verification, not quota abuse.
+**Signal 2 — the deployed handler's own behaviour.** Once the CDN is excluded,
+the 55-line handler at `9aaf326` has **no application cache to fall back on**:
+no KV, no `_tplBudget`, no store. Every allowed path runs
+`fetch(url, { headers: { 'X-API-Key': key } })` at `:44` and returns the
+provider's status verbatim at `:46`. **This inference is specific to this
+commit** — it would not hold on this branch's 206-line handler, and it is not a
+general claim that a CDN `MISS` excludes an application cache.
 
-**Only after that green does 2d revoke the old key.** Revoking on the strength
-of a cached 200 would be exactly the mistake this section exists to prevent.
+**Signal 3 — the provider-side usage delta. This is the confirming evidence.**
+Read the TCGPriceLookup usage counter immediately before and after. It must rise
+by exactly the number of verification requests. That is the provider stating it
+received and authenticated a request bearing the new key — the only signal from
+the party actually validating it; everything else is inference about our own
+infrastructure. The counter stood at **1 of 2,500**, so a delta of 1–2 is
+unambiguous.
+
+**Signal 4 — runtime logs**, confirming an invocation of `/api/tpl-proxy` at the
+verification timestamp, as the documentation itself advises.
+
+**The check now has two properties it lacked.** It can **fail** — a dead key
+surfaces as a passed-through `401`/`403`. And it carries a **discriminating
+control**: repeat the identical request and expect `x-vercel-cache: HIT`,
+demonstrating the signal distinguishes states rather than reading one constant.
+
+**Request hygiene.** All params except `path` are forwarded verbatim
+(`9aaf326:api/tpl-proxy.js:32-36`), so a novel query value varies the CDN cache
+key *and* reaches the provider legitimately. Use a card not requested in the
+previous five minutes rather than an invented parameter, which the provider may
+reject. Note these verification calls **spend the shared daily allowance** and
+bypass R4 — two or three requests of 2,500, which is verification, not abuse.
+
+**Only after Signals 1–3 agree does 2d revoke the old key.** Revoking on a
+cached `200`, or on an absent header that never existed, is precisely the
+mistake this section exists to prevent.
+
+---
+
+#### TPL rotation — the short procedure
+
+Ten steps, no branching. **Nothing here is authorized by the current review**;
+this is the sequence to run when you say so.
+
+| # | Step | Stop condition |
+| --- | --- | --- |
+| 1 | Record the TCGPriceLookup usage counter **and its timestamp** | — |
+| 2 | Generate a new key; leave the old one live | Five slots exist, so no outage |
+| 3 | In Vercel, **delete** `CARDSELL_TPL_KEY` and **re-add encrypted** with the new value | Cannot be converted in place |
+| 4 | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`** (commit `9aaf326`) from that deployment's own entry | **Not** a branch deploy, **not** a push, **not** `--prod` from this tree |
+| 5 | On the **deployment's own URL**, request a card not looked up in the last 5 min; capture full response headers | Expect `200` and `x-vercel-cache: MISS`/`BYPASS`. `HIT`/`STALE` → change the card and retry |
+| 6 | Repeat the **identical** request | Expect `x-vercel-cache: HIT`. If it is still `MISS`, the signal is not discriminating — **stop** |
+| 7 | Re-read the provider usage counter | Must have risen by **exactly** the number of requests from step 5. **No rise → the provider was never reached → stop, do not revoke** |
+| 8 | Check Vercel runtime logs for `/api/tpl-proxy` invocations at those timestamps | Corroboration for steps 5 and 7 |
+| 9 | After the alias points at the redeployed target, repeat step 5 against **`www.cardresell.org`** | Proves the alias moved, not just the deployment |
+| 10 | **Revoke the old key** | **This is the step that closes CH-3** |
+
+**Failure handling.** A `401`/`403` at step 5, or no counter movement at step 7,
+means **stop and leave the old key active**. The rollback is a **newly
+generated** key — never the old one, which is the exposed value.
+
+**Cost.** Two to four provider requests out of 2,500. These bypass R4 and spend
+the shared allowance, which is the accounting, not an objection.
+
+**Explicitly not in this procedure:** R4 activation (G12, needs Step 3's
+real-store evidence and Step 4's numbers), the CH-2 change (G13), any
+`phase1-block-d` commit, and any push.
+
+---
 
 ### Step 3 — Isolate the store, then let me verify the binding on it
 
@@ -454,11 +533,10 @@ consumers that already hold the production values. Three of them:
 | **The production store credential itself** | It has been readable from non-production for the whole life of the project. | It is the only thing whose rotation makes every stale copy above simultaneously useless. |
 
 **This is no longer hypothetical — I found one, in this sandbox.**
-`cardresell/.env.production` exists here, 2,257 bytes, 43 variables. It is
-`.gitignore`d at `.gitignore:5` (`.env.*`), so it was never committed — that
-part is fine. But it is a live local copy holding production credentials, and it
-is precisely the consumer that retargeting the dashboard variables does not
-touch. **By name only, never values**, it carries:
+`cardresell/.env.production` exists here, 2,257 bytes, 43 variables. It is a
+live local copy holding production credentials, and it is precisely the consumer
+that retargeting the dashboard variables does not touch. **By name only, never
+values**, it carries:
 
 | Group | Variables present |
 | --- | --- |
@@ -468,7 +546,29 @@ touch. **By name only, never values**, it carries:
 | **Payments** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, + 8 price IDs |
 | **Other** | `OPENAI_API_KEY`, `CARDGRADER_API_KEY`, `BLOB_*` |
 
-Three things follow:
+**On "never committed" — I inferred that from `.gitignore` and should not
+have.** A `.gitignore` entry is not history; it stops *future* accidental adds
+and says nothing about a file added before the rule existed, added with
+`git add -f`, or present on a branch that predates it. This repository's history
+has also been **rewritten** (a `refs/original/` filter-branch backup and
+`refs/recovery/pre-scrub-c2366b2` both exist), which is exactly the situation
+where "it's ignored, so it's fine" is worth nothing.
+
+**Checked properly, and it does hold — by evidence now, not by inference:**
+
+| Sweep | Result |
+| --- | --- |
+| `git log --all -- .env.production` and `-- '.env*'` | No commit in reachable history touches either path |
+| Commits searched | **880**, across every ref including `refs/original/refs/heads/phase1-block-d` and `refs/recovery/pre-scrub-c2366b2` |
+| Unreachable commits (`git fsck --unreachable`) | **9**, trees searched, no `.env*` entry in any |
+| Unreachable blobs | **8**, none matching an env-file shape (`CARDSELL_TPL_KEY=`, `KV_REST_API_TOKEN=`, `STRIPE_SECRET_KEY=`, `EBAY_CERT_ID=`) |
+
+**Bounded, as it should be:** this establishes it was never committed *in this
+clone*. It cannot speak to a copy pushed from another machine, a fork, or a
+provider-side secret-scanning event. Those would be visible on GitHub, not here.
+
+**And local possession is not disclosure.** Three things follow, and I need to
+separate them more carefully than I did:
 
 1. **This file is why `ebay-live` reported "creds present: true / true"** when I
    invoked it. The suite would have run against production eBay with the
@@ -479,14 +579,35 @@ Three things follow:
    exists to close, and it is open right now regardless of what the dashboard
    variables target.
 3. **Retargeting `KV_*` to a new store will not change this file.** It must be
-   deleted or repointed as its own action, and until the **store credential
-   itself is rotated**, every value in it stays exposed — deleting the file
-   removes the copy, not the validity of what it contained.
+   deleted or repointed as its own action; deleting the file removes the copy,
+   not the validity of what it contained.
 
-I have not deleted it: it is the only local record of which variables exist, it
-is needed to reason about the rotation, and removing your credential file
-unasked is not my call. **Recommend deleting it after Step 2 and Step 3 close,
-and rotating the KV store credential as part of Step 3 rather than only
+**Correcting my own overreach: I wrote "every value in it stays exposed". That
+does not follow, and it would license indiscriminate rotation.** Local
+possession of a credential file is not evidence that its contents were
+disclosed. The two must stay separate:
+
+| | Evidence | Treatment |
+| --- | --- | --- |
+| **`CARDSELL_TPL_KEY`** | **Known disclosure**, independent of this file: stored `type: plain` and readable where it should not have been. That is CH-3. | **Rotate — evidenced.** |
+| **Production KV / Redis tokens** | Readable from non-production for the project's life. **No disclosure evidence**, but the blast radius is a write-capable production datastore and rotation is the only thing that invalidates stale copies in old builds. | **Rotate — justified on blast radius and on G1's own requirement, and stated as that rather than as a breach.** |
+| **eBay Cert ID and verification token** | Already scheduled for rotation as G2/G3, for reasons predating this file. | Rotate — **for the existing reason**, not because of this file. |
+| **Stripe, OpenAI, CardGrader, Blob** | **Present in a local file. No disclosure evidence at all.** | **Do not rotate on this basis.** Handle the file; leave the credentials alone absent evidence. |
+
+Rotating everything a credential file happens to contain would be expensive,
+would churn live payment configuration, and would substitute activity for
+analysis. The file needs **handling**; only the first two rows need rotation,
+and only the first is a known exposure.
+
+**Keep production credentials out of the isolated-store tests.** The real-store
+verification must run against the **new** store's own credentials, supplied to
+that test alone. It must not read `.env.production`, and the isolation work must
+not become another consumer of the values it is supposed to retire.
+
+I have not deleted the file: it is the only local record of which variables
+exist, it is needed to reason about the rotation, and removing your credential
+file unasked is not my call. **Recommend deleting it after Step 2 and Step 3
+close, and rotating the KV store credential as part of Step 3 rather than only
 provisioning a second store.** Say the word and I will remove it.
 
 So G1 reads: **isolated, and the previous consumers demonstrably stopped using
@@ -510,12 +631,37 @@ configuration checked; it does not need the results re-earned.
 Step 1 closed the input, so this stops being a placeholder. **2,500 requests per
 day, resetting at midnight UTC, refused at the ceiling.**
 
-**The shape mismatch, first, because it drives the recommendation.** R4 enforces
-a **rolling window** (`TPL_BUDGET_MAX` per `TPL_BUDGET_WINDOW_SEC`); the plan
-enforces a **daily quota with a fixed reset**. These do not compose exactly, and
-I am not going to pretend they do. But an hourly cap can be chosen so that
-**daily exhaustion becomes arithmetically impossible**, which is the property
-worth having:
+**First, two corrections to how I described this.**
+
+**It is not a rolling window.** `api/_tplBudget.js:139` computes
+`windowId = Math.floor(now / 1000 / config.windowSec)` and keys the counter
+`tpl:budget:${windowId}`. That is a **fixed (tumbling) window aligned to the
+Unix epoch** — with `windowSec: 3600` it resets on the hour, and it carries the
+standard fixed-window burst behaviour: 100 calls at 10:59 and 100 at 11:00 is
+200 inside two minutes. Calling it rolling was wrong and I have not verified any
+claim that depended on the word.
+
+**And "daily exhaustion is arithmetically impossible" is withdrawn.** The
+multiplication is right and the conclusion does not follow from it. A guarantee
+of that kind needs three things, and only one of them holds:
+
+| Requirement | State |
+| --- | --- |
+| Compatible window boundaries | **Holds.** `86400 % 3600 == 0`, so epoch-aligned hourly windows nest exactly inside the midnight-UTC plan day — no straddle. This is the one part I can assert. |
+| Durable counters | **Partly.** A store *outage* fails closed — `store.incr` throwing returns `STORE_DOWN`/`STORE_DOWN_STALE` and **no paid call** (`:148-152`, `:165-170`). But a store that is *available and empty* — evicted, flushed, or newly provisioned mid-window — restarts the counter at 1 and re-grants the hour's allowance. |
+| **Every relevant request through the same limiter** | **Fails, and this is the one that breaks the claim.** |
+
+**What shares the provider allowance while bypassing R4 entirely:**
+
+- **Other keys on the account.** The allowance is per plan, not per key; five slots exist.
+- **Old deployments.** Every previously deployed Vercel deployment stays invocable at its own URL, and `9aaf326` — the live one — has **no R4 in it at all** (§6b). Provider calls from there are uncounted by construction.
+- **Local and non-production callers.** `.env.production` in this sandbox carries `CARDSELL_TPL_KEY`; any local run spends the same daily allowance.
+- **The verification requests themselves,** including the ones in the rotation procedure below.
+
+**So the honest framing:** 100/hour is a **proposed traffic limit that bounds
+what the production function contributes**. It is not a guarantee against daily
+exhaustion, because it does not sit in front of everything that can spend. With
+that said, here is the arithmetic it rests on:
 
 | Hourly cap | Saturated for 24 h | Headroom under 2,500 |
 | --- | --- | --- |
@@ -527,9 +673,26 @@ worth having:
 
 | Variable | Value | Reasoning |
 | --- | --- | --- |
-| `TPL_BUDGET_MAX` | **100** | 2,400/day even if every hour saturates — under the allowance with ~4% reserve for the reset boundary. |
-| `TPL_BUDGET_WINDOW_SEC` | **3600** | Matches the cap above. A daily window would let one burst consume the whole allowance by mid-morning. |
-| `TPL_PER_IP_MAX` | **15** | **This one is a judgement, not arithmetic.** Per-IP is an abuse control, not a plan constraint — the plan says nothing about it. 15/hr is 15% of the hourly cap, so no single caller can starve the rest, while still allowing a seller to price a decent run of cards. Raise it if you hit it in normal use; it is the number I am least confident in. |
+| `TPL_BUDGET_MAX` | **100** | Caps the production function's contribution at 2,400/day if every hour saturates. **A traffic limit, not a guarantee** — see the three requirements above. |
+| `TPL_BUDGET_WINDOW_SEC` | **3600** | Fixed hourly window, epoch-aligned, nesting cleanly in the UTC plan day. A daily window would let one burst consume the whole allowance by mid-morning; the tradeoff is the hour-boundary burst noted above. |
+| `TPL_PER_IP_MAX` | **15** | **Unvalidated, and I have not measured a seller session.** See the sizing note below. |
+
+**Why 15 per IP is not yet a defensible number.** The unit is **provider calls,
+not seller actions**, and the live bundle spends more than one per action. There
+are three distinct call sites: a search at `js/core.73a71fac.js:301`
+(`/v1/cards/search`, `limit=100`), a by-id fetch at `:515` (`/v1/cards/<id>`),
+and a second name search at `:533` (`limit=20`). A search-then-select flow
+therefore costs **at least two** calls, so 15 is on the order of **seven seller
+actions per hour** — not fifteen. And several users can share one IP behind
+NAT/CGNAT or an office or campus network, in which case they share the 15
+between them. A phone switching towers can also change IP mid-session.
+
+**What would settle it:** instrument one normal seller session and count actual
+provider calls per action, then size per-IP from the measured figure. Until
+that exists, 15 is a placeholder with a slightly better argument than 60 behind
+it — not a validated limit. The 6 h result cache reduces the real cost of
+repeat lookups but does not change the sizing question for a first pass through
+new cards.
 
 Note the real variable name is **`TPL_PER_IP_MAX`** — an earlier draft of this
 section said `TPL_BUDGET_PER_IP_MAX`, which does not exist
@@ -540,25 +703,46 @@ placeholder 60 in force, which is the class of defect Rule 2 is about.
 stale window, so repeat lookups of the same card do not spend allowance. The
 100/hr ceiling applies to *provider* calls, not user actions.
 
-**The dollar-cap question is now definitively closed.** You confirmed requests
-are **blocked at the limit**, not billed beyond it. So there is no per-request
-overage rate, and therefore **no conversion to a dollar figure exists.** Hitting
-the cap is an **availability** event, not a cost event. Any earlier phrasing of
-this budget as a spending cap is withdrawn — not softened.
+**The dollar-cap question is closed, and only that question.** You confirmed
+requests are **blocked at the limit**, not billed beyond it. So there is no
+per-request overage rate for TPL and **no conversion to a dollar figure
+exists.** Any earlier phrasing of this budget as a spending cap is withdrawn,
+not softened.
+
+**Scoping that correctly, because I overstated it last time.** The hard cutoff
+resolves **TPL overage billing**. It does not resolve:
+
+- **Other operating costs.** Vercel function invocations, KV/Redis operations
+  and bandwidth are still consumed by traffic that TPL refuses to serve — a
+  blocked provider call still ran a function.
+- **Availability risk.** Exhaustion means card lookups stop working until
+  midnight UTC. On a paid product that is a user-facing outage, and the fixed
+  reset means it cannot be cleared early.
+- **The other paid keys** on this route class — `OPENAI_API_KEY` and
+  `CARDGRADER_API_KEY` — whose billing behaviour is **not** established by
+  anything TPL does (§4).
+
+So "hitting the cap is an availability event, not a cost event" is true **of
+TPL's provider bill** and should not be read as a general statement about
+running the service.
 
 **On Pro.** 10,000/day supports **400/hr** on the same arithmetic (9,600/day
 saturated, 4% reserve). If the upgrade completes, tell me and I will restate
 these three numbers; nothing else in the sequence changes.
 
-> **Question for you — a rights question, not a quota one.** The Pro listing
-> includes a **commercial-use licence**. CardResell is a commercial product that
-> charges for scans, so it is worth establishing whether commercial use is
-> *permitted* on Starter at all, or whether that licence is the term that makes
-> our current usage compliant. If it is the latter, the upgrade is a
-> **compliance requirement rather than a performance choice**, and it should be
-> sequenced accordingly. I cannot read the licence terms from here, and I am not
-> going to assume either answer. This sits alongside the PriceCharting
-> permission questions as the second open licensing item.
+**The licensing question is answered — withdrawn as a question.** I asked
+whether commercial use is permitted on Starter; the supplied pricing screen
+already says it, explicitly: **Starter is non-commercial use.** CardResell
+charges for scans, so it is commercial, and there is no separate permission.
+
+**So Pro is a compliance requirement, not a performance choice.** The
+10,000/day allowance is a side effect of buying the licence rather than the
+reason to buy it, and the sequencing follows: the upgrade is not something to
+defer until traffic justifies it.
+
+**This should not be re-asked.** The only outstanding item is **confirmation
+that Pro is active** — and unlike the licence question, that one genuinely
+cannot be read from here.
 
 ### Step 5 — The bounded eBay maintenance window, when you authorize it
 
@@ -910,6 +1094,69 @@ headline rounded it off in the flattering direction. That is the same defect as
 the test failures in §D-1 — a claim resting on a convenient shape rather than
 on what it names — and it argues for the same remedy: derive the summary from
 the record instead of writing it from memory.
+
+---
+
+## H-12. Corrections made 2026-09-09 (third pass) — an unfailable test
+
+**The serious one first: my verification check could not fail.** I proposed that
+a `200` with **no `X-TPL-Cache` header** proved the provider had been reached
+with the replacement key. The rebuild target is `9aaf326`, whose 55-line
+handler **never sets that header at all** and predates `_tplBudget.js`
+entirely. The header is absent on every response from it — cached or fresh,
+good key or dead. Followed literally, the procedure returns "verified"
+unconditionally and the next step revokes the only key serving live traffic.
+
+Two process failures produced it. I read the **outgoing** handler and reasoned
+about the **deployed** one, having myself named the target as a commit ~237
+behind. And I never asked the question that catches this class of defect: *what
+observation would make this check fail?* An unfailable check placed immediately
+before an irreversible action is worse than no check, because it manufactures
+confidence.
+
+The replacement rests on `x-vercel-cache` to exclude the CDN — necessary but
+not sufficient, per Vercel's own documentation — corroborated by the
+**provider-side usage delta**, which is the only signal originating from the
+party that actually validates the key.
+
+**Second: "daily exhaustion is arithmetically impossible" is withdrawn.** The
+multiplication was right; the conclusion did not follow. A limiter guarantee
+needs every relevant request to pass through it, and other keys, old
+deployments (including the live one, which has no R4), local callers, and the
+verification requests themselves all spend the same allowance while bypassing
+R4. 100/hour is a **proposed traffic limit** on what the production function
+contributes.
+
+**Third: I called the window rolling; it is fixed.** `_tplBudget.js:139` floors
+epoch seconds into a window id — a tumbling window with the standard
+hour-boundary burst behaviour. Of the three requirements, only boundary
+compatibility actually holds (`86400 % 3600 == 0`).
+
+**Fourth: overage scope.** The provider's hard cutoff resolves **TPL overage
+billing** — not other operating costs (functions and KV still run for refused
+lookups), not availability risk, and not the other paid keys on this route
+class.
+
+**Fifth: "gitignored, so never committed" was an inference, not a check** —
+especially poor in a repository whose history has been rewritten. Checked
+properly it does hold: 880 commits across all refs including the filter-branch
+backup and the pre-scrub recovery ref, plus 9 unreachable commits and 8
+unreachable blobs, none containing `.env*`. Bounded to this clone.
+
+**Sixth: "every value in it stays exposed" overreached.** Local possession is
+not disclosure. The known TPL exposure is now kept distinct from the KV tokens
+(rotate on blast radius and G1's requirement, not on a breach claim) and from
+Stripe/OpenAI/CardGrader/Blob (**do not rotate** absent evidence). Production
+credentials stay out of the isolated-store tests.
+
+**Seventh: one usage reading is not an abuse finding.** 1 of 2,500 at that
+timestamp establishes **low recorded usage at that moment** — not the absence
+of abuse, on that day or any earlier one.
+
+**Withdrawn as a question, because it was already answered:** whether
+commercial use is permitted on Starter. The supplied pricing screen states
+Starter is non-commercial. Pro is therefore a **compliance requirement**, and
+the only outstanding item is confirmation that it is active.
 
 ---
 
