@@ -40,6 +40,46 @@ import { canonicalGrader, canonicalGrade, canonicalCert, isSlab } from './_cardI
  */
 export const SEVERITY = { ERROR: 'ERROR', WARNING: 'WARNING', INFO: 'INFO' };
 
+/**
+ * Seller-facing condition guidance.
+ *
+ * The interface promises a SAVED DRAFT and a manual handoff: the seller types
+ * the condition into the marketplace's own form. So guidance here helps them
+ * DECIDE and CONFIRM; it never states a condition on their behalf and never
+ * travels as a value.
+ *
+ * The boundary that matters most is the last line of the raw set. This app can
+ * show an "Est. PSA 9" chip on the card panel, which is a scan heuristic. A
+ * seller who carries that number into a marketplace's grade field has, in
+ * effect, published a grade nobody assigned. Structurally that cannot reach
+ * this packet -- `estGrade` is not in IDENTITY_WIRE_FIELDS, so it never leaves
+ * the browser, and `isSlab` requires a real grader AND grade -- but the seller
+ * is the surface the structure does not cover, so it is said in words too.
+ *
+ * These are prompts to look, never findings. Nothing here asserts that a card
+ * HAS a defect: this module has not seen the card.
+ */
+export const CONDITION_GUIDANCE = Object.freeze({
+  raw: Object.freeze({
+    headline: 'You set the condition',
+    points: Object.freeze([
+      'Look at corners and edges under good light, front and back \u2014 whitening shows there first.',
+      'Check centring against the border, and hold the card at an angle to catch surface scratches or print lines.',
+      'Pick the condition the marketplace offers that matches the worst thing you found, not the average.',
+      'Photograph anything you would want disclosed if you were buying it.',
+      'Any estimated grade this app shows is a scan estimate, not a grade. Do not enter it as one, and do not describe the card as graded.',
+    ]),
+  }),
+  graded: Object.freeze({
+    headline: 'Confirm the slab matches',
+    points: Object.freeze([
+      'Check the grader, grade and certificate number here against the label on the slab itself.',
+      'If any of the three differ, correct the saved card before listing \u2014 they identify the slab to a buyer.',
+      'These came from what you saved, not from an inspection of the slab. This app does not verify the grade or the slab.',
+    ]),
+  }),
+});
+
 export const CONDITION_CODES = {
   UNRESOLVED_CONDITION_DESCRIPTOR: 'UNRESOLVED_CONDITION_DESCRIPTOR',
   UNSUPPORTED_GRADER:              'UNSUPPORTED_GRADER',
@@ -67,7 +107,10 @@ export function buildConditionBlock(row = {}) {
     notes.push({
       code: CONDITION_CODES.RAW_CONDITION_SELLER_CHOICE,
       severity: SEVERITY.INFO,
-      message: 'Pick the card condition in the listing form. We do not guess condition on raw cards.',
+      // WHERE the condition is set is said once, by the guidance block. This
+      // note says the thing the guidance does not: that the omission is
+      // deliberate, so a seller does not read the blank as a failed scan.
+      message: 'We do not guess condition on raw cards.',
       descriptorNameId: CONDITION_DESCRIPTOR.UNGRADED_CONDITION,
     });
 
@@ -75,6 +118,7 @@ export function buildConditionBlock(row = {}) {
       graded: false,
       conditionId: CONDITION.UNGRADED,
       conditionLabel: 'Ungraded',
+      guidance: CONDITION_GUIDANCE.raw,
       descriptors: [
         {
           nameId: CONDITION_DESCRIPTOR.UNGRADED_CONDITION,
@@ -160,6 +204,7 @@ export function buildConditionBlock(row = {}) {
     graded: true,
     conditionId: CONDITION.GRADED,
     conditionLabel: 'Graded',
+    guidance: CONDITION_GUIDANCE.graded,
     grader,
     grade,
     cert: cert || null,

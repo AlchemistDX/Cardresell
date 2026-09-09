@@ -25,7 +25,8 @@ import {
   readStoredPacket, PACKET_COMPAT, PACKET_MIGRATIONS, normalizeShippingAssumptions,
 } from '../api/_listingPacket.js';
 import { CONDITION, CONDITION_DESCRIPTOR, DESCRIPTOR_VALUES_RESOLVED } from '../api/_ebayTaxonomy.js';
-import { cardIdentity, skuFor } from '../api/_cardIdentity.js';
+import { DESCRIPTION_CODES } from '../api/_listingDescription.js';
+import { cardIdentity, skuFor, IDENTITY_WIRE_FIELDS } from '../api/_cardIdentity.js';
 import { readCoreBundle } from './_assetRefs.mjs';
 import crypto from 'node:crypto';
 
@@ -1675,13 +1676,24 @@ console.log('\nRC-2.1 — shipping assumptions');
   // The bump exists because a v1 packet has no shipping key at all, and an
   // undefined at the consumer is indistinguishable from "the seller declared
   // nothing". These two are not the same event and must not read the same.
-  check('the schema is at 2 and the 1→2 hop is registered',
-        PACKET_SCHEMA_VERSION === 2 && typeof PACKET_MIGRATIONS[1] === 'function');
+  check('the schema is at 3 and every hop below it is registered',
+        PACKET_SCHEMA_VERSION === 3
+        && [1, 2].every((v) => typeof PACKET_MIGRATIONS[v] === 'function'));
+  // A hop missing anywhere in the chain makes every older packet unusable,
+  // not just the ones at that version, so the gap is what gets asserted.
+  {
+    const gaps = [];
+    for (let v = 1; v < PACKET_SCHEMA_VERSION; v += 1) {
+      if (typeof PACKET_MIGRATIONS[v] !== 'function') gaps.push(v);
+    }
+    check('🔴 no version in the chain is missing its migration',
+          gaps.length === 0, `missing hops from: ${gaps.join(',')}`);
+  }
   const v1 = { sku: 'x', title: { text: 'T' }, metadata: { packetSchemaVersion: 1, generatedAt: 'G' } };
   const read = readStoredPacket(v1);
   check('a v1 packet migrates rather than reading as current',
         read.status === PACKET_COMPAT.MIGRATED && read.usable === true
-        && read.migrationsApplied.join(',') === '1->2');
+        && read.migrationsApplied.join(',') === '1->2,2->3');
   check('and lands an explicit null shipping block',
         read.packet.shipping === null);
   check('🔴 the migration does not invent findings the original build never made',
@@ -1693,6 +1705,36 @@ console.log('\nRC-2.1 — shipping assumptions');
   check('🔴 and the stored object is not mutated in place',
         v1.shipping === undefined && v1.metadata.packetSchemaVersion === 1,
         'migrating a caller\u2019s object under them corrupts whatever else holds a reference');
+
+  // ── v2 → v3 migration ────────────────────────────────────────────────────
+  // Same shape of argument as v1 -> v2. A v2 packet was built by code that
+  // could not write a description; that is not the same event as a v3 build
+  // finding nothing to describe, and the two must not read alike.
+  {
+    const v2 = {
+      sku: 'y',
+      title: { text: 'T2' },
+      condition: { value: 'Ungraded', source: 'seller' },
+      metadata: { packetSchemaVersion: 2, generatedAt: 'G2' },
+    };
+    const r = readStoredPacket(v2);
+    check('a v2 packet migrates rather than reading as current',
+          r.status === PACKET_COMPAT.MIGRATED && r.usable === true
+          && r.migrationsApplied.join(',') === '2->3');
+    check('and lands an explicit null description',
+          r.packet.description === null);
+    check('🔴 the migration does not rebuild the description from stored aspects',
+          r.packet.description === null,
+          'the text a seller copies must be the text their own build produced, not one inferred later');
+    check('guidance is nulled on the condition block that already existed',
+          r.packet.condition.guidance === null && r.packet.condition.value === 'Ungraded');
+    check('🔴 and no condition block is fabricated where there was none',
+          readStoredPacket({ sku: 'z', metadata: { packetSchemaVersion: 2 } }).packet.condition === undefined,
+          'inventing a condition block would claim an assessment the build never made');
+    check('🔴 the stored object is not mutated in place',
+          v2.description === undefined && v2.condition.guidance === undefined
+          && v2.metadata.packetSchemaVersion === 2);
+  }
 
   // ── The fingerprint deliberately does NOT cover shipping ─────────────────
   // Same treatment as priceBasis and pricing: those arrive as CONTEXT, not as
@@ -1771,6 +1813,175 @@ console.log('\nNote copy is seller-facing');
          'SHIPPING_PARTIAL','SHIPPING_ZERO_UNCONFIRMED','SHIPPING_NOT_IN_NET']
           .every((c) => seen.has(c)),
         [...seen].join(','));
+}
+
+// ── RC-2 item 2: condition guidance ────────────────────────────────────────
+//
+// The guidance exists to help a seller ASSESS and CONFIRM condition. The line
+// it must not cross is turning an estimate into a grade. Two of these checks
+// are about the structure that makes that impossible and would survive any
+// rewording; the rest are about the words, which would not.
+console.log('\nCondition guidance');
+{
+  const raw    = buildConditionBlock({ card: 'Pikachu', set: 'Base Set', number: '58/102' });
+  const graded = buildConditionBlock({ card: 'Pikachu', grader: 'PSA', grade: '10', cert: '12345678' });
+
+  check('a raw card gets raw guidance', !!raw.guidance && /you set the condition/i.test(raw.guidance.headline),
+        JSON.stringify(raw.guidance && raw.guidance.headline));
+  check('a graded card gets slab-confirmation guidance',
+        !!graded.guidance && /confirm the slab/i.test(graded.guidance.headline),
+        JSON.stringify(graded.guidance && graded.guidance.headline));
+
+  // THE BOUNDARY. An estimate must not become a grade.
+  check('raw guidance says in words that an estimated grade is not a grade',
+        raw.guidance.points.some((p) => /estimate/i.test(p) && /not a grade/i.test(p)),
+        JSON.stringify(raw.guidance.points));
+  // Structural, and the reason the words are a backstop rather than the
+  // mechanism: the estimate never leaves the browser.
+  check('estGrade is not on the identity wire, so an estimate cannot reach the packet',
+        !IDENTITY_WIRE_FIELDS.includes('estGrade'), IDENTITY_WIRE_FIELDS.join(','));
+  // A row carrying only an estimate is raw. If this ever flipped, the estimate
+  // would render as a Graded condition with a grade beside it.
+  check('a row with an estimate but no grader/grade is still Ungraded',
+        buildConditionBlock({ card: 'Pikachu', estGrade: 9 }).conditionLabel === 'Ungraded',
+        JSON.stringify(buildConditionBlock({ card: 'Pikachu', estGrade: 9 }).conditionLabel));
+  check('and it still carries no condition value of ours',
+        buildConditionBlock({ card: 'Pikachu', estGrade: 9 })
+          .descriptors.every((d) => d.intendedValue === null),
+        'a suggested condition would be the claim the packet refuses to make');
+
+  // No invented findings: this module has not seen the card, so nothing may
+  // assert that the card HAS a flaw.
+  const ALL = [...raw.guidance.points, ...graded.guidance.points];
+  const ASSERTS_DEFECT = /(your card (has|is)|we found|we detected|appears to (have|be)|shows (whitening|wear|scratches))/i;
+  for (const pt of ALL) {
+    check(`guidance prompts a check rather than asserting a finding: "${pt.slice(0, 46)}\u2026"`,
+          !ASSERTS_DEFECT.test(pt), pt);
+  }
+  // No claim this app certifies, authenticates or guarantees anything.
+  const CLAIMS = /\b(certified|authenticated|guaranteed|verified by us|we guarantee|we certify)\b/i;
+  for (const pt of ALL) {
+    check(`guidance makes no certification claim: "${pt.slice(0, 46)}\u2026"`, !CLAIMS.test(pt), pt);
+  }
+  check('graded guidance states this app does not verify the grade',
+        graded.guidance.points.some((p) => /does not verify/i.test(p)),
+        JSON.stringify(graded.guidance.points));
+  // Same rule the note-copy guard enforces: no internal identifiers in prose.
+  for (const pt of ALL) {
+    check(`guidance names no internal field: "${pt.slice(0, 46)}\u2026"`,
+          !/\b(estGrade|conditionId|intendedValue|nameId|valueId|apiReady)\b/.test(pt), pt);
+  }
+}
+
+// ── RC-2 item 3: the listing description ───────────────────────────────────
+//
+// This is the only packet text a BUYER reads, so the guards are about what may
+// NOT be in it. Every line must trace to a recorded field; the four forbidden
+// families -- invented defects, authenticity, packaging, shipping -- are
+// checked by vocabulary AND by the stronger structural rule underneath them:
+// no line may contain a string that is not in the row.
+console.log('\nListing description');
+{
+  const DCTX = {
+    slot: 'ebay:fixed-price', price: 250, priceSource: 'comp',
+    feeModelRevision: 7, feeScheduleVerified: '2026-09-01', maxTitleLength: 80,
+    now: Date.parse('2026-09-09T13:00:00.000Z'),
+  };
+  const rawRow = { card: 'Charizard', set: 'Base Set', number: '4/102', rarity: 'Holo Rare', game: 'pokemon' };
+  const slabRow = { ...rawRow, grader: 'PSA', grade: '10', cert: '12345678' };
+  const dRaw  = buildListingPacket(rawRow,  DCTX).description;
+  const dSlab = buildListingPacket(slabRow, DCTX).description;
+
+  check('a raw card gets a description built from its recorded fields',
+        /Card: Charizard/.test(dRaw.text) && /Set: Base Set/.test(dRaw.text)
+        && /Card Number: 4\/102/.test(dRaw.text), JSON.stringify(dRaw.text));
+  check('a graded card states the recorded slab facts',
+        /Professional Grader: PSA/.test(dSlab.text) && /Grade: 10/.test(dSlab.text)
+        && /Certification Number: 12345678/.test(dSlab.text), JSON.stringify(dSlab.text));
+
+  // Raw condition is the seller's call and this app does not hold it.
+  check('a raw description states no condition',
+        !/^Condition:/m.test(dRaw.text), JSON.stringify(dRaw.text));
+  check('and reports the omission rather than dropping it silently',
+        dRaw.omitted.includes('condition'), JSON.stringify(dRaw.omitted));
+  check('with a note telling the seller where that call is made',
+        buildListingPacket(rawRow, DCTX).notes
+          .some((n) => n.code === DESCRIPTION_CODES.DESCRIPTION_RAW_CONDITION_OMITTED),
+        'seller must not be left to notice the gap');
+
+  // THE FOUR FORBIDDEN FAMILIES.
+  const FORBIDDEN = [
+    ['invented condition claims', /\b(mint|near mint|pack ?fresh|flawless|pristine|excellent condition|no flaws|gem|sharp corners|centred well|well[- ]centred)\b/i],
+    ['authenticity claims',       /\b(authentic|genuine|guaranteed real|not a (fake|proxy)|verified authentic|100% real)\b/i],
+    ['packaging promises',        /\b(toploader|penny sleeve|bubble ?mailer|team bag|card ?saver|securely packaged|packed with care)\b/i],
+    ['shipping promises',         /\b(ships?|shipping|shipped|dispatch|same[- ]day|next[- ]day|tracked|free postage|posted)\b/i],
+  ];
+  for (const [family, re] of FORBIDDEN) {
+    check(`a raw description makes no ${family}`,  !re.test(dRaw.text),  dRaw.text);
+    check(`a graded description makes no ${family}`, !re.test(dSlab.text), dSlab.text);
+  }
+
+  // The structural rule the vocabulary lists only approximate: a description
+  // may not contain a VALUE that is not in the row. This catches an invented
+  // claim nobody thought to add to a regex.
+  {
+    const KNOWN = new Set([
+      'Card', 'Set', 'Card Number', 'Rarity', 'Language', 'Game', 'Condition',
+      'Professional Grader', 'Grade', 'Certification Number',
+    ]);
+    for (const [label, d] of [['raw', dRaw], ['graded', dSlab]]) {
+      const bad = d.lines.filter((l) => !KNOWN.has(String(l).split(':')[0]));
+      check(`every ${label} description line is a known recorded field`, bad.length === 0,
+            bad.join(' | '));
+    }
+    // Values, not just labels: each must appear in the row or be a normalized
+    // rendering of something that does.
+    const NORMALIZED = new Set(['Pokémon TCG', 'English']);
+    const rowVals = new Set(Object.values(slabRow).map((v) => String(v)));
+    const badVals = dSlab.lines
+      .map((l) => String(l).slice(String(l).indexOf(':') + 1).trim())
+      .filter((v) => v && v !== 'Graded' && !NORMALIZED.has(v) && !rowVals.has(v));
+    check('every graded description value traces to the row or a known normalization',
+          badVals.length === 0, badVals.join(' | '));
+  }
+
+  // A card with nothing recorded must not be padded into a plausible listing.
+  {
+    const thin = buildListingPacket({ card: 'Unknown' }, DCTX);
+    check('a card with almost nothing recorded produces a thin description, not an invented one',
+          !thin.description.lines.some((l) => /^(Set|Card Number|Rarity): /.test(l)),
+          JSON.stringify(thin.description.lines));
+    // The trap this criterion exists for: app-supplied defaults must not make
+    // an unidentified card look described.
+    check('app-supplied defaults do not count as identifying the card',
+          thin.description.lines.some((l) => l.startsWith('Language: ')),
+          'Language is present, and must not have suppressed the warning');
+    check('and the seller is warned it is thin',
+          thin.notes.some((n) => n.code === DESCRIPTION_CODES.DESCRIPTION_SPARSE),
+          JSON.stringify(thin.notes.map((n) => n.code)));
+  }
+
+  // One instruction, one place. Before this was consolidated, three separate
+  // strings told a raw-card seller to set condition in the marketplace's own
+  // form -- the condition note, the guidance, and the description note. Each
+  // was reasonable alone; together they read as the app not trusting the
+  // seller to have read the previous sentence.
+  {
+    const raw = buildListingPacket(rawRow, DCTX);
+    const prose = [
+      ...raw.notes.map((n) => n.message),
+      ...raw.condition.guidance.points,
+      raw.condition.guidance.headline,
+    ].filter(Boolean);
+    const saysWhere = prose.filter((t) => /\b(listing form|marketplace('|\u2019)?s own condition field|condition field)\b/i.test(t));
+    check('exactly one place tells the seller where the condition is set',
+          saysWhere.length === 1, saysWhere.join(' || '));
+  }
+
+  // Same seller-facing-prose rule as the notes.
+  check('the description names no internal field',
+        !/\b(conditionId|intendedValue|nameId|valueId|apiReady|priceSource|sku)\b/.test(dSlab.text),
+        dSlab.text);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

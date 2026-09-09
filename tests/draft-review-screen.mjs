@@ -1482,6 +1482,104 @@ try {
     await ctx.close();
   });
 
+  // ── RC-2 items 2 and 3, at the surface the seller actually uses ──────────
+  //
+  // The offline suite proves the packet's guidance and description text obeys
+  // its boundaries. That is not the same as proving the seller SEES that text
+  // and PASTES that text: a renderer that summarised the description, or a
+  // copy button that rebuilt it from the field rows, would leave every offline
+  // check green while handing the seller something else. So this runs through
+  // the review screen and the copy button, and compares against the packet the
+  // server actually produced.
+  await T.section('condition guidance and the description reach the seller intact', async () => {
+    const { ctx, page } = await boot(serveRead(F.packetCurrent));
+    await openReview(page, F.ids.packetCurrent);
+    const pk = F.packetCurrent.body.packet;
+
+    // ── Condition guidance ────────────────────────────────────────────────
+    const g = await page.evaluate(() => {
+      const el = document.querySelector('[data-condition-guidance]');
+      if (!el) return null;
+      const vis = !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+      return {
+        kind: el.getAttribute('data-condition-guidance'), vis,
+        headline: (el.querySelector('.review-field-label') || {}).innerText || '',
+        points: [...el.querySelectorAll('.review-condition-point')].map((li) => li.innerText),
+      };
+    });
+    T.check('\ud83d\udd34 the condition guidance is on screen', !!g && g.vis, JSON.stringify(g));
+    T.check('and it is the raw guidance, for a raw card',
+      g && g.kind === 'raw' && pk.condition.graded === false, g && g.kind);
+    T.check('rendered from the packet verbatim, every point, in order',
+      g && JSON.stringify(g.points) === JSON.stringify(pk.condition.guidance.points),
+      `${JSON.stringify(g && g.points)}\n!==\n${JSON.stringify(pk.condition.guidance.points)}`);
+
+    // THE BOUNDARY, at the surface. An estimate must not read as a grade.
+    T.check('\ud83d\udd34 the seller is told, on screen, that an estimated grade is not a grade',
+      g && g.points.some((p) => /estimate/i.test(p) && /not a grade/i.test(p)),
+      JSON.stringify(g && g.points));
+    // And the screen states no condition of its own for a raw card.
+    T.check('no condition value is suggested anywhere in the guidance',
+      g && !g.points.some((p) => /\b(near mint|lightly played|mint|damaged)\b/i.test(p)),
+      JSON.stringify(g && g.points));
+
+    // ── The description ───────────────────────────────────────────────────
+    const shown = await page.evaluate(() => {
+      const el = document.querySelector('[data-description-text]');
+      if (!el) return null;
+      return { vis: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length), text: el.textContent };
+    });
+    T.check('\ud83d\udd34 the description is shown in full before it can be copied',
+      !!shown && shown.vis, JSON.stringify(shown));
+    T.check('and it is the packet\u2019s description, character for character',
+      shown && shown.text === pk.description.text,
+      `${JSON.stringify(shown && shown.text)}\n!==\n${JSON.stringify(pk.description.text)}`);
+
+    // ── The copy action ───────────────────────────────────────────────────
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: page.url().replace(/\/[^/]*$/, '') });
+    await page.click('[data-packet-copy="description"]');
+    const pasted = await page.evaluate(() => navigator.clipboard.readText());
+    T.check('\ud83d\udd34 Copy description puts exactly that text on the clipboard',
+      pasted === pk.description.text,
+      `${JSON.stringify(pasted)}\n!==\n${JSON.stringify(pk.description.text)}`);
+    T.check('what is pasted is what was read \u2014 the two cannot diverge',
+      shown && pasted === shown.text);
+
+    // The four forbidden families, re-checked on the string that actually
+    // leaves the app. The offline suite checks the producer; this checks the
+    // bytes on the clipboard, which is what the buyer ends up reading.
+    for (const [family, re] of [
+      ['a condition claim',    /\b(mint|pack ?fresh|flawless|pristine|no flaws|gem)\b/i],
+      ['an authenticity claim', /\b(authentic|genuine|guaranteed real|100% real)\b/i],
+      ['a packaging promise',   /\b(toploader|penny sleeve|bubble ?mailer|securely packaged)\b/i],
+      ['a shipping promise',    /\b(ships?|shipping|dispatch|same[- ]day|tracked)\b/i],
+    ]) {
+      T.check(`the pasted description makes no ${family}`, !re.test(pasted), pasted);
+    }
+
+    // Raw condition is the seller's own call, and the screen says where it is
+    // made rather than leaving a silent gap.
+    T.check('the pasted description states no condition for a raw card',
+      !/^Condition:/m.test(pasted), pasted);
+    T.check('and the seller is told where that call is made',
+      await page.evaluate(() => !!document.querySelector('[data-packet-note="DESCRIPTION_RAW_CONDITION_OMITTED"]')));
+
+    // The interface promises a SAVED DRAFT and a MANUAL handoff, not a
+    // listing. Both halves are asserted: a screen that only avoided the false
+    // claim, without making the true one, would leave a seller to infer that
+    // pressing the eBay button had listed the card.
+    const promise = await page.evaluate(() => document.body.innerText);
+    T.check('nothing on the review screen claims the card has been listed',
+      !/\b(listed on ebay|your listing is live|published to ebay|we listed)\b/i.test(promise));
+    T.check('\ud83d\udd34 the screen says the seller completes the listing themselves',
+      /\bnothing is listed or published until you do it there yourself\b/i.test(promise),
+      promise.slice(0, 400));
+    T.check('and the thing on screen is named as a draft',
+      /\bdrafts?\b/i.test(promise));
+
+    await ctx.close();
+  });
+
   await T.section('an unpriced draft still shows the table, with nothing invented', async () => {
     const { ctx, page } = await boot(serveRead(F.blockedPrice));
     await openReview(page, F.ids.blockedPrice);
@@ -1720,7 +1818,7 @@ try {
     T.check('and the listing details are back on screen',
       restored === F.packetCurrent.body.packet.title.text, restored);
     T.check('with the copy buttons back',
-      await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 3);
+      await page.evaluate(() => document.querySelectorAll('[data-packet-copy]').length) === 4);
     await ctx.close();
   });
 
@@ -2130,7 +2228,7 @@ try {
       sell: document.querySelectorAll('[data-sell-start]').length,
     }));
     T.check('and a usable packet has both \u2014 the gate is shared, not merely absent',
-      counts.copy === 3 && counts.sell === 1, JSON.stringify(counts));
+      counts.copy === 4 && counts.sell === 1, JSON.stringify(counts));
     await ctx.close();
   });
 
@@ -2159,7 +2257,7 @@ try {
     T.check('\ud83d\udd34 and the seller is told why, rather than the control vanishing',
       !!st.note && /eBay/i.test(st.note), st.note);
     T.check('the rest of the packet is untouched \u2014 this withholds one control, not the screen',
-      st.copy === 3, JSON.stringify(st));
+      st.copy === 4, JSON.stringify(st));
     /* D6 in the no-deeplink branch. This branch still sends the seller to eBay,
      * by hand, so withholding the account note here would condition a
      * disclosure on whether OUR builder produced a URL -- not on any difference
@@ -2329,7 +2427,7 @@ try {
 
     await openReview(page, F.ids.packetStale);
     await page.click('[data-packet-refresh]');
-    await page.waitForFunction(() => document.querySelectorAll('[data-packet-copy]').length === 3, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelectorAll('[data-packet-copy]').length > 0, { timeout: 15000 });
 
     T.check('setup: the refresh did go out',
       patched !== null && patched.pricingContext && Number.isInteger(patched.pricingContext.feeModelRevision),
@@ -2387,7 +2485,7 @@ try {
     // reporting on its own remaining claims -- so the timeout becomes a value
     // the assertions can read instead of an exception.
     const recovered = await page
-      .waitForFunction(() => document.querySelectorAll('[data-packet-copy]').length === 3, { timeout: 15000 })
+      .waitForFunction(() => document.querySelectorAll('[data-packet-copy]').length > 0, { timeout: 15000 })
       .then(() => true).catch(() => false);
 
     T.check('setup: the refresh was refused as a revision conflict', patches === 1, `PATCHes=${patches}`);

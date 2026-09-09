@@ -22774,6 +22774,14 @@ function _reviewCopyPayload(kind) {
     const a = rows.filter((r) => r.key.startsWith('aspect:'));
     return a.length ? a.map((r) => r.label + ': ' + r.value).join('\n') : null;
   }
+  // The description is the packet's own text, copied verbatim. It is NOT
+  // reassembled from the rows: the rows are a field list for the seller to
+  // check, the description is prose a buyer reads, and rebuilding one from the
+  // other here would be the second implementation that drifts.
+  if (kind === 'description') {
+    const d = _reviewState.packet.description;
+    return (d && typeof d.text === 'string' && d.text) ? d.text : null;
+  }
   if (kind === 'all') {
     return rows.map((r) => r.label + ': ' + r.value).join('\n');
   }
@@ -22832,6 +22840,55 @@ function _reviewPacketDisclosuresHtml() {
       </div>`;
 }
 
+/* The listing description.
+ *
+ * Shown in full before it can be copied. A seller pasting text into their own
+ * listing is putting their name to it, so the screen shows exactly the string
+ * the copy button produces -- not a summary of it, and not a shorter preview
+ * with the real text hidden behind the button.
+ */
+function _reviewDescriptionHtml() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  const d  = pk && pk.description;
+  if (!d || typeof d.text !== 'string' || !d.text) return '';
+  const omitted = Array.isArray(d.omitted) ? d.omitted : [];
+  return `
+      <div class="review-description" data-review-description=""${omitted.length ? ` data-description-omitted="${_reviewEsc(omitted.join(','))}"` : ''}>
+        <div class="review-field-label">Description</div>
+        <pre class="review-description-text" data-description-text="">${_reviewEsc(d.text)}</pre>
+      </div>`;
+}
+
+/* Condition guidance.
+ *
+ * Rendered from `packet.condition.guidance` and nowhere else. The client
+ * authors none of this text -- same rule as the disclosure notes -- so the
+ * wording a seller reads about condition has exactly one source, and a change
+ * to it is a change to the packet contract rather than to a template.
+ *
+ * It sits directly under the listing fields, next to the Condition row it is
+ * about, because guidance a seller has to go looking for is guidance that
+ * arrives after the decision it was meant to inform.
+ *
+ * This block never states a condition. For a raw card the packet deliberately
+ * carries no condition value (`intendedValue: null`), and rendering a suggested
+ * one here would reintroduce, in the UI, the claim the packet refuses to make.
+ */
+function _reviewConditionGuidanceHtml() {
+  const pk = _reviewState.packetUsable ? _reviewState.packet : null;
+  const g  = pk && pk.condition && pk.condition.guidance;
+  if (!g || typeof g.headline !== 'string' || !Array.isArray(g.points) || !g.points.length) return '';
+  const pts = g.points
+    .filter((x) => typeof x === 'string' && x)
+    .map((x) => `<li class="review-condition-point">${_reviewEsc(x)}</li>`).join('');
+  if (!pts) return '';
+  return `
+      <div class="review-condition-guidance" data-condition-guidance="${pk.condition.graded ? 'graded' : 'raw'}">
+        <div class="review-field-label">${_reviewEsc(g.headline)}</div>
+        <ul class="review-condition-points">${pts}</ul>
+      </div>`;
+}
+
 /** The refresh control, plus any error the last refresh produced. */
 function _reviewPacketRefreshHtml() {
   const d = _reviewState.draft;
@@ -22882,11 +22939,16 @@ function _reviewPacketHtml() {
   }
 
   const rows = _reviewPacketRows();
+  // Guidance is emitted immediately after the Condition row rather than after
+  // the field list. The field list continues past Condition -- game, card
+  // name, number, set -- so guidance appended at the end would sit four rows
+  // below the thing it is about, which is where a seller stops reading.
+  const guidanceHtml = _reviewConditionGuidanceHtml();
   const rowHtml = rows.map((r) => `
         <div class="review-field" data-packet-field="${_reviewEsc(r.key)}"${r.required ? ' data-packet-required=""' : ''}>
           <div class="review-field-label">${_reviewEsc(r.label)}</div>
           <div class="review-field-value">${_reviewEsc(r.value)}</div>
-        </div>`).join('');
+        </div>${r.key === 'condition' ? guidanceHtml : ''}`).join('');
 
   const t = _reviewState.packet.title || {};
   const dropped = Array.isArray(t.dropped) ? t.dropped : [];
@@ -22904,6 +22966,7 @@ function _reviewPacketHtml() {
         <div class="review-packet-copy">
           <button type="button" class="draft-more-btn" data-packet-copy="title">Copy title</button>
           <button type="button" class="draft-more-btn" data-packet-copy="aspects">Copy card details</button>
+          <button type="button" class="draft-more-btn" data-packet-copy="description">Copy description</button>
           <button type="button" class="draft-more-btn" data-packet-copy="all">Copy everything</button>
         </div>`;
 
@@ -22912,6 +22975,7 @@ function _reviewPacketHtml() {
            data-packet-status="${_reviewEsc(String(_reviewState.packetStatus || ''))}">
         <div class="review-packet-h">Listing details</div>
         <div class="review-packet-fields">${rowHtml}</div>
+        ${_reviewDescriptionHtml()}
         ${dropped.length ? `<div class="review-packet-p" data-packet-dropped="">The title was too long for this venue, so we left out: ${_reviewEsc(dropped.join(', '))}.</div>` : ''}
         ${blockingHtml}
         ${_reviewBasisHtml()}

@@ -22,13 +22,14 @@
 import { cardIdentity, hasSufficientIdentity } from './_cardIdentity.js';
 import { buildListingTitle } from './_listingTitle.js';
 import { buildConditionBlock, SEVERITY } from './_conditionDescriptors.js';
+import { buildListingDescription, DESCRIPTION_CODES } from './_listingDescription.js';
 import {
   categoryForCard, buildRequiredAspects, CARD_CATEGORIES, VERIFIED_TREE_VERSION,
   ASPECT_SOURCE,
 } from './_ebayTaxonomy.js';
 
 /** Ours. Bump when the packet's own shape changes. */
-export const PACKET_SCHEMA_VERSION = 2;
+export const PACKET_SCHEMA_VERSION = 3;
 
 /**
  * Any of these keys inside a persisted packet is a bug: they encode "how long
@@ -312,6 +313,35 @@ export const PACKET_MIGRATIONS = {
     ...packet,
     shipping: null,
     metadata: { ...(packet && packet.metadata ? packet.metadata : {}), packetSchemaVersion: 2 },
+  }),
+
+  // ── v2 → v3: `description` and `condition.guidance` (RC-2, items 2 and 3) ─
+  //
+  // Same reasoning as v1 -> v2, and the same reason this is a bump rather than
+  // two optional fields. A v2 packet has no `description`. Read by v3 code
+  // without a bump it reports CURRENT, and `packet.description` is
+  // `undefined` -- indistinguishable at the review screen from "the builder
+  // ran and produced no description", which is the silent null. It is neither:
+  // a v2 packet was built by code that could not write a description at all.
+  //
+  // Both fields are set to `null`, not synthesised. The description could in
+  // principle be rebuilt here from the stored aspects, and that is exactly
+  // what this must not do: the text a seller copies has to be the text their
+  // draft's own build produced, not a reconstruction this reader inferred
+  // later from a subset of the inputs. `null` is the same value a v3 build
+  // yields when there was nothing to describe, and the refresh control already
+  // on the review screen is how a seller gets a real one.
+  //
+  // `guidance` hangs off `condition`, so it is only written when a condition
+  // block exists. Creating one here would fabricate a condition assessment on
+  // a packet that never had it.
+  2: (packet) => ({
+    ...packet,
+    description: null,
+    ...(packet && packet.condition && typeof packet.condition === 'object'
+      ? { condition: { ...packet.condition, guidance: null } }
+      : {}),
+    metadata: { ...(packet && packet.metadata ? packet.metadata : {}), packetSchemaVersion: 3 },
   }),
 };
 
@@ -1078,6 +1108,16 @@ export function buildListingPacket(row = {}, ctx = {}) {
 
   notes.push(...cond.notes);
 
+  // The description is assembled from parts already built above -- the title,
+  // the normalized aspects and the condition block -- so it cannot describe a
+  // card the rest of the packet does not.
+  const desc = buildListingDescription({
+    title: { text: title.title }, aspects: {
+      required: req.aspects, optional: buildOptionalAspects(row, ident, cat.id),
+    }, condition: cond, row,
+  });
+  notes.push(...desc.notes);
+
   const blocking = notes.filter((n) => n.severity === SEVERITY.ERROR);
 
   return {
@@ -1099,6 +1139,7 @@ export function buildListingPacket(row = {}, ctx = {}) {
       submissionReady: false,
     },
     condition: cond,
+    description: { text: desc.text, lines: desc.lines, omitted: desc.omitted },
     pricing: pricing
       ? {
           listPrice:   pricing.listPrice,

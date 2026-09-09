@@ -342,15 +342,22 @@ for (const junk of [null, undefined, [], 'packet', 7]) {
   check(`non-object ${JSON.stringify(junk)} is refused`,
         r.status === PACKET_COMPAT.INCOMPATIBLE && r.usable === false);
 }
-// Uses 2 -> 3, NOT 1 -> 2. When this was written the migration table was
-// empty, so v1 was a convenient "no hop registered" fixture. RC-2 registered a
-// real 1 -> 2 migration for the shipping block, which made this assertion
-// vacuous-then-failing: it started exercising a hop that now exists. The
-// BEHAVIOUR under test is unchanged and still worth pinning -- a version with
-// no registered hop must be refused rather than assumed current -- so the
-// fixture moves to a version that genuinely has none, rather than the check
-// being relaxed.
-const older = readStoredPacket({ metadata: { packetSchemaVersion: 2 }, sku: 'x' }, { currentVersion: 3 });
+// The BEHAVIOUR under test: a version with no registered hop must be refused
+// rather than assumed current.
+//
+// The fixture is DERIVED, not written down. It was 1 -> 2 when the migration
+// table was empty; RC-2 registered a real 1 -> 2 hop for shipping and the
+// check began exercising a hop that existed, so it was moved to 2 -> 3; the
+// v3 description bump then broke it the same way. Twice is a pattern, and the
+// pattern is that any literal version here becomes a real hop at the next
+// bump. So it hangs off the current schema version instead: the top version
+// is by definition the one with no migration above it, and this fixture now
+// moves itself every time the schema moves.
+const noHopFrom = PACKET_SCHEMA_VERSION;
+const older = readStoredPacket(
+  { metadata: { packetSchemaVersion: noHopFrom }, sku: 'x' },
+  { currentVersion: noHopFrom + 1 },
+);
 check('an older version with no registered migration is incompatible, not assumed',
       older.status === PACKET_COMPAT.INCOMPATIBLE
       && older.reason === 'PACKET_NO_MIGRATION_PATH',
