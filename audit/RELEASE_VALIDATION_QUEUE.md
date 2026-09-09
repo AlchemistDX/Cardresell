@@ -28,9 +28,9 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-5 flip completeness | **PASSED** — re-run 2026-09-09, 22 / 0 |
 | RV-6 rendered ranking | **PASSED, narrowed** — re-run 2026-09-09, identical in 4 / 4 cases, two default-tier rows only |
 | RV-7 D7 listing photos | **PASSED** — re-run 2026-09-09, 92 / 0; Safari/iOS limitation retained |
-| RV-8 preview reads production KV | **BLOCKING** — decide before the first push (G1) |
+| RV-8 preview reads production KV | **BLOCKING** — confirmed by configuration shape, not inference; 32 `api/` files read `KV_REST_API_URL`. Decide before the first push (G1) |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
-| RV-10 containment mechanism | **BLOCKING** — control and scope not established |
+| RV-10 containment mechanism | **BLOCKING, mechanism now established** (15:48) — cause is five single-row store vars targeting all three environments; remedy is per-environment overrides pointing Preview/Development at a second store. The preview-scoped deployment toggle I proposed **does not exist** and is disproved. Execution outstanding. |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
 | CH-2 code fallback to that token | **CLOSED IN CODE at `6c610e2`** — the literal is gone, the token is read at call time, and an absent token fails closed with `503 verification_token_unset`. Reaches production when the release deploys. *(An earlier row here said "prepared, not applied" — wrong, and corrected 15:12.)* |
 | CH-3 unencrypted TPL key | **CLOSED at `c4ea5e4`** — #518 revoked, replacement verified by post-revocation lookups, storage type now `sensitive` (`3570d97`). Public and plain-storage exposures both closed. **Do not re-open; the TPL rotation is done.** Only G12 / R4 activation remains, tracked under release preparation. |
@@ -105,11 +105,47 @@ the new token.
 
 ### 2. Deployment containment and non-production KV isolation
 
-**Blocking, mechanism not yet established** (RV-8, RV-10). Non-production
-deployments currently reach the same KV as production, so verification against
-that store is both contaminating and unpersuasive. Isolation first; **the
-verification then runs against the isolated store.** This gates the first push.
-It does not gate item 1.
+**Still blocking, but the mechanism is now ESTABLISHED** (RV-8, RV-10) — as of
+2026-09-09 15:48, from the owner's dashboard readings. Both halves are settled
+and neither is an inference.
+
+**Cause.** Five store variables each exist as a **single row targeting
+`production,preview,development`**: `KV_REST_API_URL`, `KV_REST_API_TOKEN`,
+`KV_REST_API_READ_ONLY_TOKEN`, `KV_URL`, `REDIS_URL`
+(`audit/ROTATION_GATE_ANSWERED.md:82-86`). One row carries one value to every
+environment in its target list, so Preview and Development read **the same store
+as Production**. Established from the configuration's shape — no secret
+decrypted. All five share `createdAt 1783172908043`, the signature of one
+integration writing one store's credentials, and `GET /v1/storage/stores`
+returns `{"stores": []}`, so this is a marketplace Redis integration rather than
+a first-party Vercel store. The blast radius is wide: **32 files under `api/`
+read `KV_REST_API_URL`**, so this is not only R4's problem.
+
+**Remedy.** Not a deployment gate. The project's Environments page exposes
+**Production / Preview / Development** as first-class environments, and
+environment variables are per-environment, so isolation is achieved by
+**overriding those five variables for Preview and Development with a second
+store's credentials**, leaving Production's rows untouched. The second store is
+created in the marketplace Redis provider, not in Vercel.
+
+**What was ruled out, and why the earlier plan was wrong.** I had proposed a
+preview-scoped deployment toggle (`gitProviderOptions.createDeployments`). The
+Git settings page carries **no such control**: its toggles are Pull Request
+Comments, Commit Comments, `deployment_status` Events, `repository_dispatch`
+Events, Commit Status, Consolidated Commit Status, Require Verified Commits
+(Inherit from Team, Disabled) and Git LFS (Disabled) — every one a notification
+or status control, none gating whether a deployment is *created*. The only
+all-or-nothing control is **Disconnect** on the repository. **No Ignored Build
+Step section exists on that page**, consistent with its absence from the API
+response. So the inference marked Unverified in the rotation checklist is now
+**disproved, not merely unconfirmed**.
+
+Isolating the store is also the better remedy on the merits: blocking
+non-production deployments would have removed the very environment R4 has to be
+verified in, whereas a separate store both contains the leak and *creates* the
+isolated store that item 3's verification requires.
+
+This gates the first push. It does not gate item 1.
 
 ### 3. R4 activation — the activated deployment must carry both halves
 
