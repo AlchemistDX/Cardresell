@@ -353,6 +353,29 @@ The two `BLOB_*` rows are store identifiers, not secrets, and can stay.
 
 Not part of the rotation window, which is already changing two credentials.
 
+**Assessed read-only 2026-09-09 — `audit/CH3_TPL_KEY_ASSESSMENT.md`.** The key
+is the paid TCGPriceLookup key (`api/tpl-proxy.js:18,:44`). The route is
+**anonymous and unmetered**: no caller verification, no usage limit, and every
+query param forwarded verbatim (`:32-37`), so the `s-maxage=300` edge cache
+(`:50`) is bypassable with any junk param. Calibrated: the deployed client sends
+only `path`, `q`, `game`, `limit` with no cache-buster, so this is abuse
+potential, not active bleeding. Whether it has been abused is **Unverified** —
+provider dashboard and Vercel invocation records, owner-side.
+
+**CORS is not the boundary** — origin and `Referer` are client-asserted and do
+not constrain direct requests. Withdrawn as a proposed control.
+
+**Class of two, not one:** `api/pricecharting.js` also holds a paid key while
+anonymous, but reads named params and caches 6h in KV (`:18,:35,:446-462`), so
+its exposure is first-time lookups only. It is the model for the remedy, and
+`api/scan.js:1,:785-797` (verify + atomic credit debit) is the stronger house
+pattern. Also a **terms** question given the open PriceCharting negotiation, not
+just a cost one.
+
+**Remedy R1 rotate at provider (owner) · R2 named param allow-list, provably
+behaviour-preserving · R3 stop caching failures · R4 KV cache + cap, blocked on
+KV isolation.** Q-CH3-1..4 await owner answers; R2–R3 await authorization.
+
 ---
 
 ## RV-10 — containment mechanism unverified
