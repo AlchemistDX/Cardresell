@@ -341,6 +341,50 @@ release registry 49, RV-1…RV-9, CH-1…CH-3, 4 duplicate `codes` helpers,
 T2.1–T2.8, SI-1, A-2, net is item-price-only, two reachability sweeps unrun, no
 Safari or iOS in CI, no per-suite assertion-count floor.
 
+## 8a. Step 0 reordered — the containment dependency can be removed
+
+Owner decision 2026-09-09: **verify containment before deciding.** Holding.
+While specifying what to read, a simplification surfaced that is worth taking
+first, because it makes the gate smaller.
+
+**The only thing that creates an automatic deployment is a push. Steps 0–11
+contain no push.** The credential replacement and the redeploy of `9aaf326e7`
+are dashboard and portal actions. So containment is a **prerequisite for step
+13 (the push)**, not for the credential rotation — and sequencing it before
+step 4 buys nothing while introducing the exact risk the reviewer named: that
+disabling Git deployments also blocks the **manual redeploy** in step 5.
+
+**Proposed reorder:** leave containment unapplied during the window; apply and
+verify it immediately before step 13. Steps 0–1 move to sit between step 11 and
+step 12. Nothing else changes, and the window no longer depends on an
+unestablished capability.
+
+**This does not dissolve the Q-ROT-7 findings**, which stand unchanged:
+production-KV remains reachable from existing deployments and local development,
+both stay out of write-capable testing, and the deferred preview-surface checks
+wait for a separate store rather than being run against production.
+
+### What to read, and the one question that decides it
+
+In **Project → Settings → Git**, report back **verbatim**:
+
+1. The **exact labels** of every deployment control present, plus any help text.
+   I am deliberately not naming the toggle: the API field is
+   `gitProviderOptions.createDeployments`, and I do not know what the dashboard
+   currently calls it. Naming a label I have not seen is how the last error
+   happened.
+2. Whether any control is **scoped to Preview only**, or whether the wording is
+   all-or-nothing for Git deployments.
+3. **The deciding question: does the wording indicate whether disabling it
+   affects a manual redeploy of an existing deployment?** My inference is that a
+   dashboard redeploy is not a Git-triggered deployment and so would be
+   unaffected — **that is an inference, marked Unverified.** If the reorder above
+   is accepted, this question stops blocking the window either way.
+4. Whether an **Ignored Build Step** field exists. It was **absent** from the
+   API response, so I cannot claim it is available.
+
+---
+
 ## 9. Stop conditions
 
 Written down so they are decided in advance rather than in the moment.
