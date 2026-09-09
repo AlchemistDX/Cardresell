@@ -305,8 +305,12 @@ discourages the action the screen exists to encourage.
 > history, and eBay can also hold funds on high-priced or unusual sales. Your
 > selling limits and any funds on hold are shown in your eBay Seller Hub.
 
-**Still open:** wording review against the rendered screen, and the presence
-test.
+**CLOSED 2026-09-08.** Implemented as `_reviewSellLimitsHtml`, the wording read
+on the rendered screen in both themes, and the presence test built (10
+assertions). The rendered pass changed spacing only — `margin-top:14px` scoped to
+`[data-sell-start-limits]` — because the note read as a continuation of the seed
+paragraph. See `audit/d6/D6_RETURN_PACKET.md`. Three questions are open there;
+the copy is otherwise as decided below.
 Naming specific holds or selling limits requires sourcing them from eBay's own
 published pages — no invented day-ranges, no invented amounts, per the standing
 rule. That is D6 step 1's research, and until it is sourced the copy stays

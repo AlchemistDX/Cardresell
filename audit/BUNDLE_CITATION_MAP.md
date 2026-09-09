@@ -333,6 +333,22 @@ Two independent implementations were used deliberately: Python `difflib` opcodes
 tool, unique-line anchoring with outward run extension. They produce identical intervals for
 both tabulated generations.
 
+## `core.3f83abec.js` (23,261 lines) → `core.d5fcdced.js` (retired 2026-09-08)
+
+Retired by the D6 note: `_reviewSellLimitsHtml` and its two call sites were added
+inside `_reviewSellStartHtml`, around line 22646. Everything **above** that point
+is unshifted, which covers every bundle citation written during the basis-loss
+investigation — `loadCardUI` (`:3556`), the startup restore timer (`:20252`),
+`_crPricingContext` (`:20687`), `_crBindBasis` (`:20658`), `_reviewBasisHtml`
+(`:22262`). Verified: `:20252` still reads the 400ms `setTimeout` on
+`_restoreLastLoadedCard` in the live file.
+
+Citations at or below ~22646 shift by the inserted block and must be re-grepped
+rather than carried over. Documents written against `3f83abec` keep that name;
+this row is the mapping. `audit/d7/basis-loss-trace.json` records
+`3f83abec` because that is the bundle the trace was captured from — a captured
+artifact is not renamed to match a later generation.
+
 ## Not claimed
 
 - **This does not verify that a citation is still *apt*.** It proves the cited line's bytes are

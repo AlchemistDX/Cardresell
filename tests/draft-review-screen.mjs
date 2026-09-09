@@ -1610,6 +1610,50 @@ try {
     T.check('and it is not rendered as muted secondary text',
       !!check1 && check1.severity === 'WARNING', check1 && check1.severity);
 
+    /* ── D6: the payout-hold and selling-limit note ──────────────────────
+     *
+     * Asserted as BEHAVIOUR, not as an element: it is present without any
+     * seller state having been declared (this fixture declares none), it is
+     * quieter than the identity check, it is last, and it does not carry the
+     * two shapes the gate refused -- a claim about THIS seller's standing, and
+     * a softened verb where eBay's source is unhedged. The wording is
+     * audit/d6/D6_ENTRY_GATE.md §5.8; a rewrite that drops a clause should
+     * fail here rather than pass quietly.
+     */
+    const d6 = await page.evaluate(() => {
+      const els = [...document.querySelectorAll('.review-packet-sell .review-packet-note')];
+      const el = document.querySelector('[data-sell-start-limits]');
+      return el ? { text: el.innerText, severity: el.getAttribute('data-packet-note-severity'),
+                    last: els.indexOf(el) === els.length - 1, n: els.length } : null;
+    });
+    T.check('\ud83d\udd34 the payout-hold and selling-limit note is shown with no seller state declared',
+      !!d6 && d6.text.length > 0, JSON.stringify(d6));
+    T.check('\ud83d\udd34 it names the cap AND that limits are reviewed monthly, so the cap does not read as permanent',
+      !!d6 && /cap how much you list/i.test(d6.text) && /limits are reviewed monthly/i.test(d6.text),
+      d6 && d6.text);
+    T.check('\ud83d\udd34 it carries eBay\u2019s definite verb about a CLASS of sellers',
+      !!d6 && /new sellers will have transaction holds/i.test(d6.text), d6 && d6.text);
+    T.check('and it covers the high-priced / unusual case too, which is not new-seller-only',
+      !!d6 && /high-priced or unusual/i.test(d6.text), d6 && d6.text);
+    T.check('and it names where to look, rather than describing the restriction only',
+      !!d6 && /seller hub/i.test(d6.text), d6 && d6.text);
+    // The gate refused a second-person standing claim: we cannot establish that
+    // this reader is new, so the sentence must not tell them they are.
+    T.check('\ud83d\udd34 it makes no claim about THIS seller\u2019s standing',
+      !!d6 && !/you (are|will be|may be) (a )?new|your account is new|as a new seller/i.test(d6.text),
+      d6 && d6.text);
+    // No invented figures: the source promises a cadence, not a direction, and
+    // names no duration or amount for holds.
+    T.check('\ud83d\udd34 and it invents no duration, amount, or direction of change',
+      !!d6 && !/\b\d+\s*(day|days|week|weeks|month|months)\b/i.test(d6.text)
+           && !/[$\u00a3\u20ac]\s*\d/.test(d6.text)
+           && !/\braise[sd]?\b|\bincrease[sd]?\b|\bgoes up\b/i.test(d6.text),
+      d6 && d6.text);
+    T.check('it is quieter than the identity check, not a second WARNING',
+      !!d6 && d6.severity === null, d6 && String(d6.severity));
+    T.check('and it sits last, furthest from the click',
+      !!d6 && d6.last === true, JSON.stringify(d6));
+
     const before = apiCalls.length;
     const [popup] = await Promise.all([
       ctx.waitForEvent('page'),
@@ -1693,6 +1737,7 @@ try {
       link: document.querySelectorAll('[data-sell-start]').length,
       copy: document.querySelectorAll('[data-packet-copy]').length,
       note: (document.querySelector('[data-sell-start-absent]') || {}).innerText || null,
+      limits: (document.querySelector('[data-sell-start-limits]') || {}).innerText || null,
     }));
     T.check('\ud83d\udd34 no link is offered when there is nothing to search for',
       st.link === 0, JSON.stringify(st));
@@ -1700,6 +1745,12 @@ try {
       !!st.note && /eBay/i.test(st.note), st.note);
     T.check('the rest of the packet is untouched \u2014 this withholds one control, not the screen',
       st.copy === 3, JSON.stringify(st));
+    /* D6 in the no-deeplink branch. This branch still sends the seller to eBay,
+     * by hand, so withholding the account note here would condition a
+     * disclosure on whether OUR builder produced a URL -- not on any difference
+     * in the seller's situation. */
+    T.check('\ud83d\udd34 the payout-hold note is still shown when no deeplink could be built',
+      !!st.limits && /selling limits/i.test(st.limits), st.limits);
     await ctx.close();
   });
 
@@ -1945,7 +1996,7 @@ try {
      retained trace (audit/d7/basis-loss-trace.json): a basis bound for card A
      was cleared 14ms later by `loadCardUI`, reached from `doHydrate` inside
      `_restoreLastLoadedCard`, which the bundle schedules on a 400ms startup
-     timer (js/core.3f83abec.js:20252). The card active at the clear was card A
+     timer (js/core.d5fcdced.js:20252). The card active at the clear was card A
      itself, so a same-card reload dropped that card's own basis.
 
      Neutralising the timer above makes that section deterministic, but on its
@@ -2196,7 +2247,7 @@ try {
     // the intermittent failure: at t=289ms this section binds a basis for card
     // A; at t=303ms `loadCardUI` clears it, called from `doHydrate` inside
     // `_restoreLastLoadedCard`, which the bundle schedules on a 400ms timer at
-    // startup (js/core.3f83abec.js:20252) and which re-hydrates itself once
+    // startup (js/core.d5fcdced.js:20252) and which re-hydrates itself once
     // more "after a beat". The card active at the clear is card A itself --
     // 4e2c6b7b, the same key the basis was stamped to -- so the clear is a
     // same-card reload dropping that card's own basis.
@@ -2283,7 +2334,7 @@ try {
         const f = '/home/user/workspace/cardresell/audit/d7/basis-loss-trace.json';
         if (!fs.existsSync(f)) {
           fs.writeFileSync(f, JSON.stringify({ why, capturedAt: new Date().toISOString(),
-            bundle: 'js/core.3f83abec.js', payload: JSON.parse(payload) }, null, 2));
+            bundle: 'js/core.d5fcdced.js', payload: JSON.parse(payload) }, null, 2));
         }
       } catch (e) { console.log('  [trace retain failed] ' + e.message); }
     };
