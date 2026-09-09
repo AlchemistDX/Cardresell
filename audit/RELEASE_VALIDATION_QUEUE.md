@@ -30,7 +30,7 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-7 D7 listing photos | **PASSED** — re-run 2026-09-09, 92 / 0; Safari/iOS limitation retained |
 | RV-8 preview reads production KV | **BLOCKING** — confirmed by configuration shape, not inference; 32 `api/` files read `KV_REST_API_URL`. Decide before the first push (G1) |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
-| RV-10 containment mechanism | **BLOCKING, mechanism now established** (15:48) — cause is five single-row store vars targeting all three environments; remedy is per-environment overrides pointing Preview/Development at a second store. The preview-scoped deployment toggle I proposed **does not exist** and is disproved. Execution outstanding. |
+| RV-10 containment mechanism | **BLOCKING, design established** (15:48, corrected 15:57) — cause is five single-row store vars targeting all three environments; remedy is a second Redis database with **disjoint** targeting (existing values → Production only, new values → Preview/Development only), not an override alongside the existing rows. Provider not yet identified. The preview-scoped deployment toggle I proposed **does not exist** and is disproved. **Designed, not executed.** |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
 | CH-2 code fallback to that token | **CLOSED IN CODE at `6c610e2`** — the literal is gone, the token is read at call time, and an absent token fails closed with `503 verification_token_unset`. Reaches production when the release deploys. *(An earlier row here said "prepared, not applied" — wrong, and corrected 15:12.)* |
 | CH-3 unencrypted TPL key | **CLOSED at `c4ea5e4`** — #518 revoked, replacement verified by post-revocation lookups, storage type now `sensitive` (`3570d97`). Public and plain-storage exposures both closed. **Do not re-open; the TPL rotation is done.** Only G12 / R4 activation remains, tracked under release preparation. |
@@ -117,16 +117,59 @@ environment in its target list, so Preview and Development read **the same store
 as Production**. Established from the configuration's shape — no secret
 decrypted. All five share `createdAt 1783172908043`, the signature of one
 integration writing one store's credentials, and `GET /v1/storage/stores`
-returns `{"stores": []}`, so this is a marketplace Redis integration rather than
-a first-party Vercel store. The blast radius is wide: **32 files under `api/`
+returns `{"stores": []}`, which together indicate **an integration rather than a
+first-party Vercel store** — without identifying which provider. The blast radius is wide: **32 files under `api/`
 read `KV_REST_API_URL`**, so this is not only R4's problem.
 
 **Remedy.** Not a deployment gate. The project's Environments page exposes
-**Production / Preview / Development** as first-class environments, and
-environment variables are per-environment, so isolation is achieved by
-**overriding those five variables for Preview and Development with a second
-store's credentials**, leaving Production's rows untouched. The second store is
-created in the marketplace Redis provider, not in Vercel.
+**Production / Preview / Development** as first-class environments, and Vercel
+supports **different values for the same key per environment**, so isolation is
+achieved with a second Redis database and a **disjoint** final assignment.
+
+**Correction to my own instruction (15:57): "override" was wrong.** I said to
+add Preview/Development rows and leave Production's rows untouched. That cannot
+work, and the reason is the same fact that caused the leak: **each existing row
+already targets `production,preview,development`.** A new row cannot claim
+Preview while an existing row still claims it — the assignments must be made
+**disjoint**, which means *editing* the existing rows, not merely adding to them.
+Left as I first wrote it, the change would have been rejected as a conflict or
+left Preview still pointed at production data. The target state is:
+
+| Value | Environments |
+| --- | --- |
+| Existing production database credentials | **Production only** |
+| New non-production database credentials | **Preview and Development only** |
+
+For all five names: `KV_REST_API_URL`, `KV_REST_API_TOKEN`,
+`KV_REST_API_READ_ONLY_TOKEN`, `KV_URL`, `REDIS_URL`.
+
+**Changes apply only to new deployments**, consistent with what the key rotation
+already demonstrated — an environment change needs a fresh deployment to carry
+it, and reading a value at call time does not alter that.
+
+**The provider is not yet identified.** The shared `createdAt` and the empty
+`GET /v1/storage/stores` response together indicate *an integration rather than
+a first-party Vercel store*, and that is all they establish — **they do not name
+which provider.** Identifying it from the integration or variable metadata is
+step 1 below, before any database is created. I previously wrote "marketplace
+Redis provider" as though the vendor were settled; it is not.
+
+**The included custom environment is not needed.** Standard Preview and
+Development scopes already provide what Phase 1 requires, so the plan uses no
+custom environment and incurs no additional cost.
+
+### Execution order — owner, and none of it executed
+
+1. **Identify the actual Redis provider** from the integration or variable
+   metadata.
+2. **Create the second database** there.
+3. **Save its credentials directly into Vercel.** Never into this session, never
+   into a local file, never into a commit message.
+4. **Retarget each existing row to Production only**, and assign the
+   corresponding new value to **Preview and Development**.
+5. **Verify all five names show the correct separation before pushing.**
+6. **Create a Preview deployment and prove writes land only in the new
+   database** — the step that converts the design into evidence.
 
 **What was ruled out, and why the earlier plan was wrong.** I had proposed a
 preview-scoped deployment toggle (`gitProviderOptions.createDeployments`). The
@@ -282,10 +325,11 @@ production. Nothing here should be read as asking for it.
 
 ### Where Phase 1 stands
 
-**Roughly 90% complete — a judgment, not a computed figure**, recorded as one so
-it is not later quoted as a measurement. What remains is **release
+**Roughly 90–92% complete — a judgment, not a computed figure**, recorded as one
+so it is not later quoted as a measurement. What remains is **release
 configuration and verification against what is actually deployed**, which no
-passing local suite can substitute for.
+passing local suite can substitute for. **Containment is designed but not
+executed**, and design is not progress against that remainder.
 
 ---
 
