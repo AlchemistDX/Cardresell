@@ -32,107 +32,173 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
 | RV-10 containment mechanism | **BLOCKING** — control and scope not established |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
-| CH-2 code fallback to that token | **PREPARED, not applied** — the one-line change is specified (`api/ebay-notifications.js:17`) and the harness no longer compares against the literal; the edit itself is deliberately not made unasked |
-| CH-3 unencrypted TPL key | **PREPARED, remedy bounded** — assessed read-only (`audit/CH3_TPL_KEY_ASSESSMENT.md`), no TPL question open; what remains is R1 rotation at the provider (G11) and R4 activation (G12), both authorization, not analysis |
+| CH-2 code fallback to that token | **CLOSED IN CODE at `6c610e2`** — the literal is gone, the token is read at call time, and an absent token fails closed with `503 verification_token_unset`. Reaches production when the release deploys. *(An earlier row here said "prepared, not applied" — wrong, and corrected 15:12.)* |
+| CH-3 unencrypted TPL key | **CLOSED at `c4ea5e4`** — #518 revoked, replacement verified by post-revocation lookups, storage type now `sensitive` (`3570d97`). Public and plain-storage exposures both closed. **Do not re-open; the TPL rotation is done.** Only G12 / R4 activation remains, tracked under release preparation. |
 | Same-card basis retention | **DEFERRED** — product decision; consequence is disclosed, not silent |
 | D5 §8.3 signed-in continuation | **PASSED for one tested case**; stays in the queue. Q-D5-5 desktop never exercised |
 
-**4 passed · 7 blocking · 2 prepared · 3 deferred.** Every blocking item is
+**4 passed · 7 blocking · 2 closed · 3 deferred.** Every blocking item is
 credential-, configuration-, or deployment-gated. None is blocked on writing
-more code. **Prepared** means the remedy is specified and its evidence gathered,
-and the only remaining input is your authorization to apply it — CH-2 is a
-one-line edit awaiting the word, CH-3 is a provider-side rotation plus an
-activation that additionally needs the real-store evidence named under G12.
+more code. **Closed** means done and evidenced — CH-2 in code at `6c610e2`,
+CH-3 by the completed rotation at `c4ea5e4`. Neither is owner work any more;
+CH-2 reaches production with the release, and the only TPL item left is R4
+activation (G12).
 
-*Counts and verdicts in this table are current as of 2026-09-09 15:00 EDT.*
+*Counts and verdicts in this table are current as of 2026-09-09 15:12 EDT.*
 *Anything in the History and withdrawn sections below is dated evidence, not*
 *live status — see the banner above those sections before treating an entry*
 *there as a blocker.*
 
-## RELEASE PREPARATION — the four remaining items (opened 2026-09-09)
+## RELEASE PREPARATION — the remaining items (opened 2026-09-09, corrected 15:12)
+
+> **CORRECTION, and it is mine.** The first version of this section, written at
+> 15:00, told the owner to perform a TPL rotation **that was already complete**,
+> described CH-2 as an unwritten one-line edit **when the code change is
+> committed**, and claimed the proxy is "metered but unenforced" **when
+> enforcement off means not metered at all**. It also proposed budget numbers
+> without accounting for the provider's own burst limit, which this session had
+> already observed. Each error came from rewriting a summary against older
+> prose instead of against the branch. The corrected text follows; the errors
+> are named rather than quietly patched, because a release checklist that
+> re-opens finished work is worse than no checklist.
 
 RV-13's local implementation is complete and adjudicated; it is no longer the
-head of this queue. What follows is, and none of it is code.
+head of this queue. What follows is, and **none of it is code**.
 
-**Read the boundary first:** items 1 and 2 change credentials and
-infrastructure, item 3 changes production configuration, item 4 ends in a
-deployment. **Every one of them waits on your explicit authorization**, and
-nothing below has been executed. Local implementation is not authorization.
+**Every item waits on your explicit authorization.** Nothing below has been
+executed. Local implementation is not authorization.
 
-### 1. eBay credential rotation and verification
+### Already closed — do not re-open
 
-State: the procedure is written and self-contained
-(`audit/ROTATION_EXECUTION_CHECKLIST.md`, `audit/TPL_ROTATION_RUNBOOK.md`), the
-pre-flight configuration has been read, and the harness has been corrected so it
-no longer compares production against the committed literal — it was agreeing
-with itself. Steps are yours to perform at eBay and in Vercel; the verification
-token is **replaced with a fresh random value**, never the repo literal or that
-literal with the newline stripped, because whitespace-cleaning a published value
-leaves a published value in production.
+| Item | Closed by | Evidence |
+| --- | --- | --- |
+| **G11 / R1 — TPL key rotation** | `c4ea5e4` | **Key #518 revoked.** Three post-revocation lookups through www on novel terms with fresh cache keys returned 200, `x-vercel-cache MISS`, age 0 — with #518 dead, no other credential could have produced them. This is the one observation in the sequence that needs no inference. |
+| **CH-3 — TPL key exposure** | `c4ea5e4`, storage at `3570d97` | Closed as worded: the **public** exposure and the **plain-storage** exposure are both closed. Storage type is now **`sensitive`** — write-only, not merely `encrypted`, because `encrypted` is readable back via `decrypt=true` and would have left the read-back path open. |
+| **CH-2 — published token fallback** | `6c610e2` | **The change is written and committed.** `api/ebay-notifications.js` now reads `cleanCredential(process.env.EBAY_VERIFICATION_TOKEN) \|\| ''` at call time; there is no literal. An absent token fails closed with `503 verification_token_unset` and no `challengeResponse` field. It reaches production when the release deploys — that is deployment, not authorship. |
 
-Attached to this item, not separate from it:
+**TPL rotation needs no further action.** The only TPL item still open is
+**G12 / R4 activation**, which is item 3 below.
 
-- **CH-1** closes when production stops serving the repo default and eBay's
-  challenge completes against the new token.
-- **CH-2** is the one-line removal of the usable fallback at
-  `api/ebay-notifications.js:17`. **Prepared, not applied** — an environment
-  change does not remove a code fallback, so an unset variable would silently
-  return to the published value. Say the word and it is a single edit.
+### 1. eBay credential rotation and verification — the next owner task
+
+The one credential task left. The procedure is written and self-contained
+(`audit/ROTATION_EXECUTION_CHECKLIST.md`); the pre-flight configuration has been
+read; the harness has been corrected so it no longer compares production against
+the committed literal it was serving — it was agreeing with itself.
+
+The verification token is **replaced with a fresh random value**, never the repo
+literal nor that literal with the newline stripped: whitespace-cleaning a
+published value leaves a published value in production. **CH-1** closes when
+production stops serving the repo default and eBay's challenge completes against
+the new token.
 
 ### 2. Deployment containment and non-production KV isolation
 
-State: **blocking, and the mechanism is not yet established** (RV-8, RV-10). The
-open question is unchanged and is not a preference — non-production
-deployments currently reach the same KV as production, so any verification run
-against that store is both contaminating and unpersuasive. Isolation comes
-first; **the verification then runs against the isolated store**, because
-verifying against production's store proves the wrong thing.
+**Blocking, mechanism not yet established** (RV-8, RV-10). Non-production
+deployments currently reach the same KV as production, so verification against
+that store is both contaminating and unpersuasive. Isolation first; **the
+verification then runs against the isolated store.** This gates the first push.
+It does not gate item 1.
 
-This gates the first push. It does not gate item 1.
+### 3. R4 activation — deploy first, then configure, then enforce
 
-### 3. The six TPL settings — prepared for approval, provisional by construction
+**The correction that matters most here: setting the six variables against the
+current production deployment does nothing at all.** `9aaf326` is what
+production runs, and `api/_tplBudget.js` **does not exist at that commit** —
+`git show 9aaf326:api/_tplBudget.js` fails. There is no budget code there to
+configure. **The release sequence must therefore include deploying the
+implementation**; configuration is a step *after* that deploy, not an
+alternative to it.
 
-Absent from Vercel today, which means **none of these defaults are in force in
-production**. `budgetConfig` treats `TPL_BUDGET_MAX` and `TPL_BUDGET_WINDOW_SEC`
-as the configured-ness test (`api/_tplBudget.js:55-56`), so until both are set,
-`usable` is false whatever the others say.
+**And "metered but unenforced" was false — withdrawn.** With
+`TPL_BUDGET_ENFORCE` unset or `'0'`, `budgetMode` returns `DISABLED` and the
+entire reservation block at `api/tpl-proxy.js:131+` is skipped: no reservation,
+no counting, no KV cache read or write. Enforcement off is **R4 bypassed**, not
+R4 observing quietly. The counters in the measurement section came from a test
+fixture, not from a disabled production path.
 
-| Variable | Proposed | Where the number comes from |
+Sequence, each step depending on the one before:
+
+1. **Deploy the implementation** — until R4 exists in the deployed function,
+   steps 2 and 3 are inert.
+2. **Isolated store verified**, and confirmation that the intended deployment
+   **binds the correct store** — not inferred from configuration.
+3. **Set the five numeric variables.** `budgetConfig` treats `TPL_BUDGET_MAX`
+   and `TPL_BUDGET_WINDOW_SEC` as the configured-ness test
+   (`api/_tplBudget.js:55-56`); until both are set, `usable` is false whatever
+   the others say.
+4. **Only then `TPL_BUDGET_ENFORCE='1'`.** It is **fail-closed by design**: on
+   with no bound store, `budgetMode` returns `ENABLED_UNBOUND` and every
+   uncached lookup 503s (`api/tpl-proxy.js:44-56,:123`). Correct behaviour, and
+   a total outage if flipped before step 2.
+
+#### The six settings — policy choices for your approval, not derived limits
+
+| Variable | Proposed | Standing |
 | --- | --- | --- |
-| `TPL_BUDGET_MAX` | `400` | Provider plan is **Pro, 10,000 requests/day** (dashboard, 2026-09-09). At an hourly window, 400 × 24 = 9,600 — under the daily cap even if every hour saturates. Derived from the plan, not from traffic. |
-| `TPL_BUDGET_WINDOW_SEC` | `3600` | One hour. Keeps the arithmetic above legible and matches the code default. |
-| `TPL_PER_IP_MAX` | `60` | **Provisional.** The one scripted session charged 5 calls for 4 cards; 60/hour is roughly twelve times that shape. It is a starting point with headroom, not a percentile — see the measurement section for why this run does not bound production demand in either direction. |
-| `TPL_CACHE_TTL_SEC` | `21600` | 6 hours, mirroring `api/pricecharting.js:18`, the existing house precedent for the same class of paid lookup. |
-| `TPL_STALE_TTL_SEC` | `86400` | 24 hours an expired entry stays servable as stale — degraded prices beat a dead lookup. |
-| `TPL_BUDGET_ENFORCE` | **not yet** | See below. |
+| `TPL_BUDGET_MAX` | `400` | **Policy choice.** See the three caveats below. |
+| `TPL_BUDGET_WINDOW_SEC` | `3600` | One hour. Matches the code default and keeps the arithmetic legible. |
+| `TPL_PER_IP_MAX` | `60` | **Policy choice**, provisional. The one scripted session charged 5 calls for 4 cards; 60/hour is roughly twelve times that shape. A starting point with headroom, not a percentile. |
+| `TPL_CACHE_TTL_SEC` | `21600` | 6 hours, mirroring `api/pricecharting.js:18` — the house precedent for the same class of paid lookup. |
+| `TPL_STALE_TTL_SEC` | `86400` | 24 hours an expired entry stays servable as stale. Degraded prices beat a dead lookup. |
+| `TPL_BUDGET_ENFORCE` | **last** | After steps 1–3 above. |
 
-All five numbers are **explicitly provisional** and labelled as such wherever
-they are stated. Refining them from a real-traffic percentile is a post-launch
-improvement, not a launch prerequisite: collecting the traffic cannot be a
-precondition for the release that generates it.
+**Three things the 400 does not do**, stated because the first version of this
+table implied otherwise:
 
-**Enforcement is a separate switch, and it is deliberately last.**
-`TPL_BUDGET_ENFORCE='1'` is **fail-closed by design** — with enforcement on and
-no bound store, `budgetMode` returns `ENABLED_UNBOUND` and every uncached lookup
-**503s** (`api/tpl-proxy.js:44-56,:123`). That is correct behaviour and a total
-outage if flipped early. Its prerequisites, in order:
+1. **It leaves only 400 calls of daily headroom.** 400 × 24 = 9,600 against a
+   10,000/day plan. That is a thin margin, and it is thin by construction rather
+   than by evidence.
+2. **It is one shared hourly limiter, and it does not cap account-wide usage.**
+   The 9,600 figure holds only if that limiter is intact and is the sole path to
+   the key. Another deployment, a direct caller, or any request that does not
+   pass through this proxy spends from the same daily account total without
+   touching the counter.
+3. **It does not protect against the provider's own burst limit** — the sharper
+   constraint, and it is already observed. During the rotation run one lookup
+   returned **429 after roughly three calls inside two seconds**, with the daily
+   counter nowhere near 10,000 (`c4ea5e4`). A twelve-second pause then returned
+   200/200, so this is a short-window burst limit, not a quota. **An hourly cap
+   cannot see a two-second window.** The 180 ms debounce produces that burst
+   shape from ordinary typing, and the graded path fires two adjacent calls from
+   one user action. The exact threshold is **Unverified** and was not probed,
+   because probing it means deliberately spending paid quota to demonstrate a
+   limit.
 
-1. the five numeric variables set and valid (`usable: true`);
-2. a KV store that the deployed function actually binds — which is item 2, and
-   which must be **verified against the isolated store**, not assumed from
-   configuration;
-3. only then `TPL_BUDGET_ENFORCE='1'`.
+All five numbers are **explicitly provisional** wherever stated. Refining them
+from real traffic is a post-launch improvement, not a launch prerequisite:
+collecting the traffic cannot be a precondition for the release that generates
+it.
 
-Until step 3, the proxy is metered but unenforced: the counters are honest and
-nothing is refused.
+### 4. RV-11 — has local work available, and stays non-blocking
 
-### 4. Outstanding release checks, then deployment authorization
+**Corrected: this was listed under "needs a deployed function or a live
+credential." It does not, and its agreed severity stands.**
 
-The blocking entries in the verdict table are the list: RV-1, RV-3, RV-4, RV-8,
-RV-9, RV-10 and CH-1, plus the live suites never run (`tests/ebay-live.mjs`,
-`tests/test-scan.mjs`) and RV-11's annual-tier work. They share one shape —
-each needs a deployed function, a live credential, or a real store, which is why
-none of them moved while the work stayed local.
+RV-11 is a **fail-open entitlement default plus a possible admin-reporting
+undercount** — not a revenue-loss defect, and **non-blocking**. That severity was
+already adjudicated and is not re-opened here.
+
+The available local work needs no credentials and no account access: drive
+`api/stripe-webhook.js` with **synthetic events and a mocked KV** in both
+delivery orders — `checkout.session.completed` → `customer.subscription.created`
+and the reverse — recording the final persisted `plan`. That establishes whether
+a wrong label is possible at all and which order produces it. **If neither order
+yields `pro_monthly` for an annual subscription, the Stripe/KV comparison is
+unnecessary.**
+
+The sequencing constraint is unchanged and load-bearing: **map the annual price
+in code before touching the `|| 'pro'` fallback** at `api/_tier.js:113`. That
+fallback is currently the only thing granting Pro to the annual price, because
+the map has no entry for it. Tightening it first revokes access from every
+legitimate annual subscriber the moment it ships.
+
+### 5. Remaining release checks, then deployment authorization
+
+The blocking entries in the verdict table: RV-1, RV-3, RV-4, RV-8, RV-9, RV-10
+and CH-1, plus the live suites never run (`tests/ebay-live.mjs`,
+`tests/test-scan.mjs`). They share one shape — each needs a deployed function, a
+live credential, or a real store.
 
 **Deployment is yours alone and must be explicit.** A push to `main`
 auto-deploys, so there is no rehearsal step between authorization and
@@ -140,13 +206,10 @@ production. Nothing here should be read as asking for it.
 
 ### Where Phase 1 stands
 
-**Roughly 90% complete — a judgment, not a computed figure**, and recorded as
-one so it is not later quoted as a measurement. Local implementation has
-advanced; what determines completion now is configuration and **verification
-against what is actually deployed**, neither of which a passing local suite can
-substitute for. The previous figure in this file was 85–90%; the movement is
-RV-13 closing locally, CH-2 and CH-3 reaching prepared, and the two re-run
-suites confirming against the current bundle.
+**Roughly 90% complete — a judgment, not a computed figure**, recorded as one so
+it is not later quoted as a measurement. What remains is **release
+configuration and verification against what is actually deployed**, which no
+passing local suite can substitute for.
 
 ---
 
