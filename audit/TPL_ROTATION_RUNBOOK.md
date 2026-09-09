@@ -114,6 +114,49 @@ is the point of choosing it.
 
 ---
 
+## Step B — COMPLETE, verified by API at 2026-09-09 15:24 UTC
+
+Performed by the owner. **I did not see, request, or store the value.**
+Verified read-only with `decrypt=false`:
+
+| Check | Result |
+| --- | --- |
+| Rows named `CARDSELL_TPL_KEY` | **Exactly 1** — no duplicate, no leftover |
+| Old row `GyudMHKTCEfdLo3T` | **Gone** |
+| New row id | **`aVniyIhp7PBaZpHq`** — a different id, so this was a genuine delete-and-add, not an in-place edit |
+| Type | **`sensitive`** — Q-CH3-9 taken as recommended |
+| Targets | **`production`, `preview`** — `development` dropped, Q-CH3-10 taken as recommended |
+| Created / updated | 15:22 / 15:24 UTC |
+| Secrets still stored `plain` | **None.** The only `plain` vars left are `BLOB_STORE_ID` and `BLOB_WEBHOOK_PUBLIC_KEY` — an identifier and a public key |
+| `development`-targeted vars | 12 → **11** |
+
+**The read-back path is closed, and here is the evidence rather than the
+claim.** On the same endpoint and the same request:
+
+| Variable | Type | `value` returned |
+| --- | --- | --- |
+| `CARDSELL_TPL_KEY` | `sensitive` | **empty string, length 0** |
+| `TURNSTILE_SECRET_KEY` | `sensitive` | **empty string, length 0** |
+| `EBAY_CERT_ID` | `encrypted` | a **1,080-character** blob |
+
+I probed those values with booleans and a length only — never printing or
+storing content. **Bound on this claim:** it establishes that this endpoint
+returns nothing for a `sensitive` variable, alongside Vercel's own dialog copy
+("You can't reveal this value after saving"). I did **not** attempt
+`decrypt=true` against it, because attempting to read the credential is both
+forbidden here and beside the point.
+
+**Consequence worth recording for the already-planned eBay rotation (G2/G3):**
+`EBAY_CERT_ID` and `EBAY_VERIFICATION_TOKEN` are `encrypted`, i.e.
+readable-after-saving. When those are rotated for their existing reason, they
+should be re-added as **Secret** for the same reason this one was. That is a
+change of *form* to work already scheduled, not new scope.
+
+**CH-3 is not closed by this.** The exposed value is still live at the
+provider. Storage is fixed; the credential is not yet replaced in service.
+
+---
+
 ## Step C — HARD STOP
 
 **I stop here and wait for you.**
@@ -136,11 +179,46 @@ For clarity about what that authorization would cover when you give it:
 **Not authorized by anything here:** the redeploy, any push, R4 activation, and
 any revocation.
 
+### Do not use the toast's Redeploy button
+
+Vercel's success toast offers **Redeploy**, and it is the wrong instrument. It
+gives no control over *which* deployment is rebuilt and no opportunity to
+capture the returned deployment id before the fact. The procedure needs a
+named source (`dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`, commit `9aaf326`) and the new
+deployment's own id and URL recorded as they come back. **Dismiss the toast.**
+
+### Still outstanding before verification can run
+
+1. **The Key # and `Last used` baseline** from step A item 4. Not yet supplied.
+   Without a recorded pre-request baseline the decisive signal has nothing to
+   compare against, and the rotation becomes unverifiable in exactly the way
+   this whole procedure exists to prevent. **This must be captured before any
+   lookup is made.**
+2. **Your authorization for the redeploy.**
+
 ---
 
 ## Questions for you — in the file, as you asked
 
-**Q-CH3-9 — `Sensitive` or `Encrypted` for the replacement?**
+**Q-CH3-9 — ANSWERED: Sensitive.** Taken as recommended and verified in place
+(type `sensitive`, value returns empty). Original question retained below for
+the record.
+
+**Q-CH3-10 — ANSWERED: development target dropped.** Taken as recommended and
+verified (targets are production and preview only). The `env pull` path that
+put a production key into a local file is closed at the source.
+
+**Q-CH3-12 — NEW, and the only thing blocking verification besides your
+deployment authorization.** I still need the replacement key's **Key #** and
+its **`Last used`** state as it reads **now, before any lookup**. A baseline
+captured after the fact cannot distinguish "the new key authenticated" from
+"the field already had a timestamp", which would leave me asserting a verified
+rotation on no evidence — the exact failure this procedure was rewritten twice
+to remove.
+
+---
+
+**Q-CH3-9 (original) — `Sensitive` or `Encrypted` for the replacement?**
 My recommendation is **Sensitive**, because `encrypted` demonstrably does not
 prevent the read-back that produced the plaintext copy still on this machine,
 and because your own `TURNSTILE_SECRET_KEY` already sets that precedent. The
