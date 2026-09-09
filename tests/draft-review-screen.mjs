@@ -29,6 +29,9 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 import { generateReadFixtures } from './_draftListFixtures.mjs';
 import { readCoreBundle } from './_assetRefs.mjs';
+// The real endpoint and store, so one case can run the browser's OWN create
+// body through the production handler instead of a pre-built fixture.
+import { K, reset, EP, fakeReq, fakeRes } from './_draftHarness.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PW = '/home/user/node_modules/playwright/index.js';
@@ -1300,6 +1303,182 @@ try {
     T.check('the readable side is still shown',
       f.rows.some((r) => /Your postage/i.test(r.label) && amt(r.amount) === 4.50),
       JSON.stringify(f.rows.map((r) => `${r.label} ${r.amount}`)));
+    await ctx.close();
+  });
+
+  /* ── The sender, through the button a seller actually presses ──────────
+   *
+   * The three fixture sections above prove POST -> storage -> GET -> display.
+   * They do NOT prove the sender: they hand `pricingContext.shipping` to the
+   * POST handler directly, which is precisely the half that was broken --
+   * `_crPricingContext` had no shipping key at all, so a real Sell press would
+   * have sent nothing and every draft would have recorded SHIPPING_ABSENT
+   * while those fixtures stayed green. A fixture that supplies the value
+   * cannot detect a sender that never produces it.
+   *
+   * So this case starts at `#crSellBtn` and ends at the rendered review
+   * screen, with the REAL endpoint and store in between: the POST route hands
+   * the browser's own body to the production handler, and the GET route reads
+   * it back through the same handler. Nothing about the shipping figures is
+   * authored by this test after the two inputs are typed.
+   *
+   * Then it does the thing the card-identity boundary exists for: it CHANGES
+   * THE CARD IN HAND and edits the shipping inputs to different values before
+   * reopening the draft. The draft must still show what was recorded at
+   * create. If the review screen ever falls back to the live inputs, this is
+   * the assertion that fails.
+   */
+  await T.section('a draft created by the Sell button keeps its own shipping after the card changes', async () => {
+    const CARD_A = { id: 'shipA', name: 'Ship Card A', game: 'pokemon', set: 'Base Set', number: '4/102' };
+    const CARD_B = { id: 'shipB', name: 'Ship Card B', game: 'pokemon', set: 'Jungle', number: '9/64' };
+
+    await reset();
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
+
+    // Every request is served by the real handler. `sentBodies` records what
+    // the BROWSER produced, so the sender can be asserted on its own terms as
+    // well as through what comes back.
+    const sentBodies = [];
+    const serverReplies = [];
+    await page.route('**/api/drafts*', async (route) => {
+      const req = route.request();
+      const method = req.method();
+      const url = new URL(req.url());
+      const body = method === 'GET' ? undefined : JSON.parse(req.postData() || '{}');
+      if (body) sentBodies.push(body);
+      const res = fakeRes();
+      await EP.default(fakeReq({
+        method,
+        body,
+        query: Object.fromEntries(url.searchParams),
+        headers: {
+          authorization: 'Bearer ' + 'x'.repeat(40),
+          'idempotency-key': K('sell-btn-ship'),
+        },
+      }), res);
+      if (method === 'POST') serverReplies.push({ status: res.statusCode, body: res.body });
+      await route.fulfill({
+        status: res.statusCode,
+        contentType: 'application/json',
+        body: JSON.stringify(res.body),
+      });
+    });
+
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.startListingDraft === 'function', { timeout: 15000 });
+    // Let the bundle's own 400ms restore timer settle first, so the card this
+    // case selects is not replaced underneath it.
+    await new Promise((r) => setTimeout(r, 1200));
+
+    // The eligibility gate is the only thing that reveals the button, so it is
+    // driven rather than bypassed: `_crSellApproved` and the row's visibility
+    // are set by the REAL gate off this response, not assigned by the test.
+    await page.route('**/api/sell-eligibility*', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ ok: true, stamps: [{ eligible: true }] }),
+      });
+    });
+
+    // Card A in hand, with the seller's shipping typed into the real inputs --
+    // not injected into a context object.
+    const setup = await page.evaluate(async (A) => {
+      // A signed-in account: creating a draft requires one, and the gate
+      // returns SIGNED_OUT without it.
+      window._googleIdToken = 'x'.repeat(40);
+      // Render the card through the real card-panel path, so the Sell row has
+      // a visible ancestor for the same reason it does in production rather
+      // than because the test forced a style.
+      window.setSelectedCard(A);
+      try { window.loadCardUI(A); } catch (_) {}
+      await window.applySellGate(A);
+      document.getElementById('shipCharge').value = '7.25';
+      document.getElementById('shipCost').value   = '3.10';
+      document.getElementById('priceOverride').value = '120';
+      window._ovAutoFilled = false;
+      return {
+        approved: !!window._crSellApproved,
+        rowShown: document.getElementById('crSellRow').style.display,
+        // Actually on screen, not merely display:block on one node with a
+        // hidden ancestor. This screen has shipped that failure before.
+        btnVisible: (() => {
+          const b = document.getElementById('crSellBtn');
+          return !!(b && (b.offsetWidth || b.offsetHeight || b.getClientRects().length));
+        })(),
+        // The gate compares the card being drafted with the card in hand. The
+        // Sell path drafts `_crSellApproved` while the gate reads
+        // `selectedCard`, so this case also establishes that those two agree
+        // on the normal path -- if they did not, shipping would be dropped on
+        // every legitimate press.
+        sameCard: window._crIntentToken(window._crSellApproved) === window._crIntentToken(window.selectedCard || A),
+        charge: document.getElementById('shipCharge').value,
+      };
+    }, CARD_A);
+    T.check('setup: the real gate approved card A and revealed the Sell row',
+      setup.approved === true && setup.rowShown === 'block', JSON.stringify(setup));
+    T.check('setup: the Sell button is genuinely on screen, not just display:block',
+      setup.btnVisible === true, JSON.stringify(setup));
+    T.check('setup: the seller\u2019s shipping is typed into the real inputs',
+      setup.charge === '7.25', JSON.stringify(setup));
+    T.check('\ud83d\udd34 the sell path and the identity gate agree on which card is in hand',
+      setup.sameCard === true,
+      'if these disagree, _crPricingContext drops shipping on every real Sell press');
+
+    // The actual button. Not startListingDraft() called directly.
+    await page.click('#crSellBtn');
+    // Wait on the create request itself, not on a guess about what the UI
+    // does next.
+    await page.waitForFunction(() => true, { timeout: 1000 }).catch(() => {});
+    for (let i = 0; i < 60 && !sentBodies.some((b) => b && b.card); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    const post = sentBodies.find((b) => b && b.card);
+    T.check('the Sell button produced a create request', !!post, JSON.stringify(sentBodies.slice(0, 2)));
+    // The sender, asserted directly. This is the assertion the fixtures could
+    // not make.
+    T.check('\ud83d\udd34 and its pricingContext actually carries the seller\u2019s shipping',
+      !!post && !!post.pricingContext && !!post.pricingContext.shipping,
+      JSON.stringify(post && post.pricingContext));
+    const sentShip = (post && post.pricingContext && post.pricingContext.shipping) || null;
+    T.check('with the values the seller typed, unparsed and uncoerced',
+      !!sentShip && sentShip.buyerPays === '7.25' && sentShip.sellerCost === '3.10',
+      JSON.stringify(sentShip));
+
+    // The id comes from what the real handler returned to the browser, so the
+    // reopen below reads back the very record the button created.
+    const reply = serverReplies[0];
+    const created = reply && reply.body
+      && (reply.body.draftId || (reply.body.draft && reply.body.draft.id));
+    T.check('the real handler accepted the create and returned a draft id',
+      reply && reply.status >= 200 && reply.status < 300 && !!created,
+      JSON.stringify(reply && { status: reply.status, keys: Object.keys(reply.body || {}) }));
+
+    // ── Now change the card in hand, and the inputs with it ────────────────
+    await page.evaluate((B) => {
+      window.setSelectedCard(B);
+      window._crSellApproved = B;
+      document.getElementById('shipCharge').value = '99.99';
+      document.getElementById('shipCost').value   = '88.88';
+    }, CARD_B);
+
+    await openReview(page, created);
+    const f = await feesOf(page);
+
+    const buyer  = f.rows.find((r) => /Buyer-paid shipping/i.test(r.label));
+    const seller = f.rows.find((r) => /Your postage/i.test(r.label));
+
+    T.check('\ud83d\udd34 the draft still shows the shipping it was created with',
+      !!buyer && amt(buyer.amount) === 7.25 && !!seller && amt(seller.amount) === 3.10,
+      JSON.stringify([buyer && buyer.amount, seller && seller.amount]));
+    // The specific misattribution the standing decision refuses: card B's
+    // postage appearing on card A's draft.
+    T.check('\ud83d\udd34 and not the shipping now sitting in the inputs for another card',
+      !!buyer && amt(buyer.amount) !== 99.99 && !!seller && amt(seller.amount) !== 88.88,
+      JSON.stringify([buyer && buyer.amount, seller && seller.amount]));
+
     await ctx.close();
   });
 
