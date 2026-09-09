@@ -564,3 +564,63 @@ while the Vercel API itself kept answering. An independent cloud browser loaded
 the site at `200`, fully rendered, on the `9aaf326` bundle. **Lesson for this
 runbook: an egress failure in the harness must not be read as a production
 outage, and the absence of `x-vercel-id` is the tell.**
+
+## Corrections — three, all conceded
+
+### 1. A zero counter is NOT a stop condition. Withdrawn.
+
+I wrote that a counter reading of exactly `0` "would mean the rebuild is not
+serving `www`, and would be a stop condition." **That contradicts a finding
+already on this record.** The account counter was established as unreliable for
+this check, and the standing instruction is to keep the total **as corroboration,
+not the decisive stop condition**. I re-promoted it to decisive in the same
+document that records it as corroboration — a Rule 1 style contradiction in the
+audit trail itself. **Withdrawn: no counter reading, zero or otherwise, proves or
+disproves routing.** The `Last used` field, not the counter, is the provider-side
+observation that carries weight.
+
+### 2. The invocation log stays required. It does not become optional.
+
+I recorded step 7 as "unobtainable by me" and then set out a completion path that
+did not contain it. **That is the failure mode the standard exists to prevent:** a
+required item quietly demoted to optional because the tool I reached for could not
+produce it. The standard is the uncached lookup, the matching invocation evidence,
+and the replacement key's updated `Last used` **together**. **Unobtainable via the
+REST API ≠ not required.** It moves to the dashboard, and revocation waits for it.
+
+### 3. The site rollback expires at revocation. My note was wrong.
+
+I wrote that the old deployment gives the site a rollback that "costs nothing."
+**True only while #518 is active.** `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` carries
+#518's value in its build-time env snapshot, so once #518 is revoked, promoting
+it yields a `READY` deployment whose TPL lookups **fail** — the worst kind of
+rollback, one that looks available and is not. **Corrected: the site rollback is
+real now and gone the moment #518 is revoked.** After revocation the only
+recovery for a bad key is another key plus another rebuild.
+
+## Step 7 — the dashboard path, and the exact window to match
+
+**Deployment:** `dpl_BJuH3okrHAsHpM7vUhCZv85or225`
+**Its URL:** `cardresell-bx1egjeuk-willsep200-9430s-projects.vercel.app`
+
+1. Vercel → project **cardresell** → **Deployments**
+2. Open the deployment whose URL contains **`bx1egjeuk`** — match on that, not on
+   "most recent", since both deployments show commit `9aaf326` and neither the
+   commit nor the sha distinguishes them
+3. **Logs** tab (runtime logs, not Build Logs)
+4. Filter or search **`tpl-proxy`**
+
+**Two invocations to look for, both from the verification:**
+
+| What | Time |
+| --- | --- |
+| Page load, auto-search on open | **17:05:07Z / 1:05:07 PM EDT** |
+| The explicit uncached lookup | **17:05:19Z / 1:05:19 PM EDT** |
+
+**Match criteria:** path `/api/tpl-proxy`, status **`200`**, on **this**
+deployment. The second one is the decisive record — it is the request that
+returned `x-vercel-cache: MISS` and 33,299 bytes.
+
+**If the Logs tab shows nothing for `/api/tpl-proxy`:** do **not** revoke. That
+would mean the request was served by something other than this rebuild, and the
+`200` would then be evidence about **#518**, not about the replacement.
