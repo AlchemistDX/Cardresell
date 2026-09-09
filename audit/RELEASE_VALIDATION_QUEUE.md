@@ -179,11 +179,53 @@ custom environment and incurs no additional cost.
    write-only sensitive, so they are readable back — the same weakness the TPL
    key had before it was moved to `sensitive`. Note it; it is not part of this
    step.
+
+   **CLOSED 2026-09-09 17:06 — provider identified, and Safeguard 1's stop
+   condition both triggered and resolved.**
+
+   **Provider: Upstash for Redis**, store **`upstash-kv-bistre-arrow`**, plan
+   shown as **Free**, created **Jun 30** (Storage page). Read from the label, not
+   inferred from the badge.
+
+   **The rows cannot be edited — Safeguard 1 triggered as written.** The `···`
+   menu on `KV_REST_API_URL` offers **Manage Connection · Rotate Integration
+   Secrets · Copy to Clipboard · View History · Delete**. There is **no Edit**.
+   So step 4 as I wrote it — "retarget each existing row" — is **not performable
+   on the variable rows**, and the instruction to stop was correct.
+
+   **The supported method is the connection's scope, one level up.** The Storage
+   page shows the store with an environment-scope control reading **"All
+   Environments"**, with a selector. Environment assignment for
+   integration-managed variables is a property of the **connection**, not of the
+   individual rows. Revised step 4: **narrow the existing connection to
+   Production, then connect a second Upstash database scoped to Preview and
+   Development.** Same disjoint target state, reached through the surface that
+   owns it.
+
+   **What that control does to the five rows is expected, not established.**
+   Narrowing the connection should rewrite their targets to Production; that it
+   does so, and cleanly, must be **read back from the Environment Variables page
+   after the change** rather than assumed. Step 5 already requires that check.
+
+   **Cost remains unconfirmed.** The current database is on Upstash's **Free**
+   plan, which establishes nothing about whether a **second** free database is
+   permitted on this account, or what its limits are. Confirm with Upstash
+   before creating it, per the standing caveat.
+
+   **NEW FINDING — a second shared store, outside RV-8's scope.** The same
+   Storage page lists **`cardresell-blob` (Blob Store, Private, created Jun 30)**
+   scoped **"Production, Preview"**. Preview therefore shares **production blob
+   storage** as well. This is the same class of defect as RV-8 and is **not**
+   addressed by any Redis work. Recorded here so it is not mistaken for covered;
+   it needs its own decision before isolation can be called complete.
 2. **Create the second database** there.
 3. **Save its credentials directly into Vercel.** Never into this session, never
    into a local file, never into a commit message.
-4. **Retarget each existing row to Production only**, and assign the
-   corresponding new value to **Preview and Development**.
+4. **Superseded 17:06 — the variable rows have no Edit.** Do it at the
+   connection instead: **narrow the existing `upstash-kv-bistre-arrow`
+   connection from All Environments to Production**, then **connect the second
+   database scoped to Preview and Development**. The target state is unchanged;
+   only the surface is.
 5. **Verify all five names show the correct separation before pushing.**
 6. **Create a Preview deployment and prove writes land only in the new
    database** — the step that converts the design into evidence.
