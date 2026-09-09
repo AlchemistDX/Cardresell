@@ -655,7 +655,72 @@ ships, **annual is being sold into a tier gap.**
 
 </details>
 
-## RV-12 — the proxy labels upstream errors as edge-cacheable card data
+## RV-12 — WITHDRAWN. Duplicates R3, which is already built and mock-tested.
+
+**Not a new defect. Not a queue item. Filed in error.**
+
+The success-only fix **already exists on this branch**, and has since R3:
+
+| Branch `api/tpl-proxy.js` | Behaviour |
+| --- | --- |
+| `:185` | `if (r.status >= 200 && r.status < 300)` → sets `s-maxage=300` |
+| `:194` | `else` → `Cache-Control: no-store` |
+| `:99, :124, :146, :155, :203` | `no-store` on validation failure, unbound budget, stale serve, exhausted/per-IP, and upstream throw |
+
+So the production observation at `9aaf326` is **the symptom R3 was written to
+fix**, and it belongs to R3's release, not to a new queue entry. **Correct
+linkage: the rotation run produced the first live confirmation that the
+unconditional header is real in production — evidence for shipping R3, not a
+finding of its own.**
+
+### The part that is worse than a duplicate
+
+`api/tpl-proxy.js:183` on this branch already carries this comment, which I
+wrote:
+
+> *"Note the withdrawn claim: this does NOT mean a dead key was previously
+> served for five minutes — Vercel's cacheable statuses exclude 401, 429 and
+> 5xx, so most failures were never cached whatever we asked for."*
+
+**I then re-made that exact claim in RV-12**, writing that one rate-limited
+request "poisons that query for five minutes for every user" — against a
+retraction already committed, in the file I was reading. Marking it "Unverified"
+did not help: **the answer was not unknown, it was recorded, in my own code
+comment.** The reviewer had to withdraw the same claim twice.
+
+**Withdrawn: the poisoning consequence.** Vercel's cacheable statuses exclude
+`429`, `500` and `502`, so the documented platform behaviour prevents it
+([Vercel caching criteria](https://vercel.com/docs/edge-network/caching)). The
+unconditional header is still worth correcting — because relying on an external
+list of eligible statuses is fragile, which is what `no-store` at `:194` makes
+explicit — but **there is no user-facing harm to claim**, and I should not have
+described one.
+
+### Two more corrections to the same run
+
+**The burst-limit explanation is plausible, not established. Downgraded.** One
+`429` followed by successful retries establishes **neither window, scope nor
+threshold**. I wrote "short-window burst limit, not a daily quota" as though
+observed; **one observation cannot separate those**, and it does not show that a
+twenty-card session meets any limit. Hourly allowance and short-term pacing are
+**different constraints**, and R4 sizing is not rewritten by this. **Recorded as:
+one `429` occurred under concurrent lookups; cause Unverified.**
+
+**And my freshness evidence was invalid.** I argued the payloads proved a live
+provider call because they carried `tcgplayer_id`, `cdn.tcgpricelookup.com`
+image URLs and a `last_price_update`. **A cache replays exactly those fields** —
+they are payload contents, and payload contents cannot establish freshness. What
+actually carried the rotation proof: **`x-vercel-cache: MISS` with `age: 0` on
+terms never queried in the session**, so no edge entry could exist, plus **#518
+already revoked**, leaving no other credential able to produce a `200`. **The
+conclusion stands; that particular argument for it does not.**
+
+---
+
+<details>
+<summary>RV-12 as originally filed (withdrawn — retained for the correction to point at)</summary>
+
+### (withdrawn) RV-12 original text
 
 **Production defect at `9aaf326`. Found during the TPL rotation verification, not
 by review.**
@@ -713,3 +778,5 @@ The judgement call: the existing comment calls the 5-minute cache a "big cost
 saver", and it is \u2014 it is what keeps the daily counter far from 10,000. **The fix
 must not weaken caching of real payloads while excluding errors.** Narrow the
 condition to the status, not to the caching.
+
+</details>
