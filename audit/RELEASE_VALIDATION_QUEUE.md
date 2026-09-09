@@ -49,15 +49,18 @@ activation (G12).
 *live status — see the banner above those sections before treating an entry*
 *there as a blocker.*
 
-## RELEASE PREPARATION — the remaining items (opened 2026-09-09, corrected 15:12)
+## RELEASE PREPARATION — the remaining items (opened 2026-09-09, corrected 15:12 and 15:25)
 
 > **CORRECTION, and it is mine.** The first version of this section, written at
 > 15:00, told the owner to perform a TPL rotation **that was already complete**,
 > described CH-2 as an unwritten one-line edit **when the code change is
 > committed**, and claimed the proxy is "metered but unenforced" **when
 > enforcement off means not metered at all**. It also proposed budget numbers
-> without accounting for the provider's own burst limit, which this session had
-> already observed. Each error came from rewriting a summary against older
+> without accounting for the clustering in our own request shape, or for the
+> provider-side 429 this session had already seen. A later revision then
+> overstated that 429 as an established two-second window — corrected again at
+> 15:25, and the standing description is that the provider's precise limit is
+> **unknown**. Each error came from rewriting a summary against older
 > prose instead of against the branch. The corrected text follows; the errors
 > are named rather than quietly patched, because a release checklist that
 > re-opens finished work is worse than no checklist.
@@ -100,15 +103,27 @@ that store is both contaminating and unpersuasive. Isolation first; **the
 verification then runs against the isolated store.** This gates the first push.
 It does not gate item 1.
 
-### 3. R4 activation — deploy first, then configure, then enforce
+### 3. R4 activation — the activated deployment must carry both halves
 
-**The correction that matters most here: setting the six variables against the
-current production deployment does nothing at all.** `9aaf326` is what
-production runs, and `api/_tplBudget.js` **does not exist at that commit** —
-`git show 9aaf326:api/_tplBudget.js` fails. There is no budget code there to
-configure. **The release sequence must therefore include deploying the
-implementation**; configuration is a step *after* that deploy, not an
-alternative to it.
+**The requirement, stated properly: the deployment being activated must contain
+both R4's implementation and its intended configuration.** Not "deploy first,
+then configure" — that was too rigid, and it was mine. **Settings can be
+prepared beforehand**, and preparing them early is the better order, because it
+means the activating deployment is built with them already in place.
+
+Two facts fix the shape of this:
+
+- **The implementation is not in production.** `9aaf326` is what production
+  runs, and `api/_tplBudget.js` **does not exist at that commit** —
+  `git show 9aaf326:api/_tplBudget.js` fails. Variables set against it configure
+  nothing, because there is no budget code there to configure.
+- **Changing environment variables after a deployment requires a new deployment
+  to carry them**, as the rotation already demonstrated: the replacement TPL key
+  took effect only once a fresh deployment was built with it. **Reading a value
+  at call time does not change this.** Call-time reads stop a warm instance
+  freezing a value it read at module load; they do not pull a variable into a
+  build made before the variable existed. I have conflated those two things
+  before, so it is worth stating plainly.
 
 **And "metered but unenforced" was false — withdrawn.** With
 `TPL_BUDGET_ENFORCE` unset or `'0'`, `budgetMode` returns `DISABLED` and the
@@ -117,20 +132,28 @@ no counting, no KV cache read or write. Enforcement off is **R4 bypassed**, not
 R4 observing quietly. The counters in the measurement section came from a test
 fixture, not from a disabled production path.
 
-Sequence, each step depending on the one before:
+So the order is:
 
-1. **Deploy the implementation** — until R4 exists in the deployed function,
-   steps 2 and 3 are inert.
-2. **Isolated store verified**, and confirmation that the intended deployment
-   **binds the correct store** — not inferred from configuration.
-3. **Set the five numeric variables.** `budgetConfig` treats `TPL_BUDGET_MAX`
-   and `TPL_BUDGET_WINDOW_SEC` as the configured-ness test
-   (`api/_tplBudget.js:55-56`); until both are set, `usable` is false whatever
+1. **Containment and KV isolation** — ahead of the first Phase 1 push, per item
+   2. Unchanged.
+2. **Approve the values** (below). They may be set at any point from here on;
+   what matters is that they are in place when the activating deployment is
+   built.
+3. **Verify R4 with enforcement enabled, against the isolated store.** This is
+   where activation is actually proven: enforcement on, a real store, and
+   non-production. `budgetConfig` treats `TPL_BUDGET_MAX` and
+   `TPL_BUDGET_WINDOW_SEC` as the configured-ness test
+   (`api/_tplBudget.js:55-56`), so until both are set `usable` is false whatever
    the others say.
-4. **Only then `TPL_BUDGET_ENFORCE='1'`.** It is **fail-closed by design**: on
-   with no bound store, `budgetMode` returns `ENABLED_UNBOUND` and every
-   uncached lookup 503s (`api/tpl-proxy.js:44-56,:123`). Correct behaviour, and
-   a total outage if flipped before step 2.
+4. **Prepare the production deployment with the approved values and the correct
+   binding**, then activate it — both halves present in the same deployment,
+   binding confirmed rather than inferred from configuration.
+
+**Enforcement stays last, and is fail-closed by design.** With
+`TPL_BUDGET_ENFORCE='1'` and no bound store, `budgetMode` returns
+`ENABLED_UNBOUND` and every uncached lookup 503s
+(`api/tpl-proxy.js:44-56,:123`). Correct behaviour, and a total outage if it
+reaches production ahead of a confirmed binding.
 
 #### The six settings — policy choices for your approval, not derived limits
 
@@ -141,7 +164,7 @@ Sequence, each step depending on the one before:
 | `TPL_PER_IP_MAX` | `60` | **Policy choice**, provisional. The one scripted session charged 5 calls for 4 cards; 60/hour is roughly twelve times that shape. A starting point with headroom, not a percentile. |
 | `TPL_CACHE_TTL_SEC` | `21600` | 6 hours, mirroring `api/pricecharting.js:18` — the house precedent for the same class of paid lookup. |
 | `TPL_STALE_TTL_SEC` | `86400` | 24 hours an expired entry stays servable as stale. Degraded prices beat a dead lookup. |
-| `TPL_BUDGET_ENFORCE` | **last** | After steps 1–3 above. |
+| `TPL_BUDGET_ENFORCE` | **last** | Enabled for the isolated-store verification at step 3; reaches production only in the deployment prepared at step 4. |
 
 **Three things the 400 does not do**, stated because the first version of this
 table implied otherwise:
@@ -154,16 +177,25 @@ table implied otherwise:
    the key. Another deployment, a direct caller, or any request that does not
    pass through this proxy spends from the same daily account total without
    touching the counter.
-3. **It does not protect against the provider's own burst limit** — the sharper
-   constraint, and it is already observed. During the rotation run one lookup
-   returned **429 after roughly three calls inside two seconds**, with the daily
-   counter nowhere near 10,000 (`c4ea5e4`). A twelve-second pause then returned
-   200/200, so this is a short-window burst limit, not a quota. **An hourly cap
-   cannot see a two-second window.** The 180 ms debounce produces that burst
-   shape from ordinary typing, and the graded path fires two adjacent calls from
-   one user action. The exact threshold is **Unverified** and was not probed,
-   because probing it means deliberately spending paid quota to demonstrate a
-   limit.
+3. **An hourly cap does not control short bursts.** This holds on the
+   arithmetic alone: a 3,600-second window cannot constrain what happens inside
+   any few seconds of it, whatever the provider's rules turn out to be.
+
+   **The provider's precise limit is unknown**, and my earlier phrasing here
+   overstated it a second time after it had already been downgraded elsewhere in
+   this file. What was observed during the rotation run is one 429 with the
+   daily counter nowhere near 10,000, followed by successful retries
+   (`c4ea5e4`). **One 429 plus later successes does not establish a two-second
+   window, a call count, or any threshold** — a burst rule, a transient
+   provider-side condition, and several other explanations all fit that single
+   observation equally well. No further probing is warranted; establishing the
+   rule would mean deliberately spending paid quota to demonstrate a limit.
+
+   What survives, and is enough to matter for sizing: **our request shape can
+   cluster.** The 180 ms debounce is shorter than a mid-word pause, and the
+   graded path fires two adjacent calls from one user action. So clustering is
+   real and an hourly cap is the wrong instrument for it, while the provider's
+   response to clustering is **Unverified**.
 
 All five numbers are **explicitly provisional** wherever stated. Refining them
 from real traffic is a post-launch improvement, not a launch prerequisite:
