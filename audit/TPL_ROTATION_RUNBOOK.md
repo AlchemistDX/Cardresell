@@ -492,3 +492,75 @@ place only because deleting evidence unasked is not my call.
 - If verification fails, **Key #518 stays active** while we diagnose. That is
   containment, not a rollback — there is nothing to restore, and the old key is
   never the thing we return to, because it is the exposed value.
+
+## Live execution — 2026-09-09, authorized by Will
+
+**Steps 1\u20136 and 10 done. Step 7 unobtainable by me. Step 8 needs Will. Step 11
+NOT DONE \u2014 key #518 remains active.**
+
+| # | Step | Result |
+| --- | --- | --- |
+| 1 | Replacement key exists | Yes, `cardresell production replacement` |
+| 2 | Baseline recorded | `Last used: Never`, counter `0 / 10,000` |
+| 3 | Vercel row replaced | Row `aVniyIhp7PBaZpHq`, type `sensitive`, prod+preview |
+| 4 | Rebuild from `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` | Done via REST API, **not** the toast button |
+| 5 | **Rebuild's own new id** | **`dpl_BJuH3okrHAsHpM7vUhCZv85or225`**, url `cardresell-bx1egjeuk-willsep200-9430s-projects.vercel.app`, `READY`, commit **`9aaf326`** \u2014 the exact live commit |
+| 6 | Uncached lookup | **`200`**, `x-vercel-cache: MISS`, `age: 0`, **33,299 bytes**, payload `data,total,limit,offset` with `data len 20` |
+| 7 | Vercel invocation log | **Unobtainable.** See below. |
+| 8 | Key's `Last used` advanced | **Needs Will's dashboard reading.** |
+| 9 | Account total | Corroboration only, not consulted |
+| 10 | `www.cardresell.org` serves the rebuild | `200`, renders, bundle `js/core.569ff536.js`; new deployment `aliasAssigned: true` and is the newest READY production deployment |
+| 11 | Revoke #518 | **NOT DONE.** Gated on step 8. |
+
+### Step 7 \u2014 why it is unobtainable, stated plainly
+
+`/v3/events?types=lambda` returns **0 events**;
+`/v1/deployments/{id}/runtime-logs` returns **`not_found`**;
+`/v2/deployments/{id}/events` returns **build events only**. Vercel has moved
+runtime function logs off the REST surface I hold. **I cannot produce the
+matching invocation evidence.** Will can read it in the dashboard under the new
+deployment \u2192 Logs, filtered to `/api/tpl-proxy`.
+
+### The discriminator, and why step 8 is decisive rather than ceremonial
+
+A `200` alone does **not** prove the new key was used, because **key #518 is
+still active at the provider** and the **old** deployment's env snapshot still
+carries its value. So a successful lookup is consistent with either deployment
+serving it. What separates them:
+
+- Vercel bakes env into a deployment at build time. The rebuild
+  (`dpl_BJuH3okr\u2026`) was built **after** the row was swapped, so it carries the
+  **replacement** value and nothing else.
+- Therefore **served by the rebuild \u21d2 the replacement key was used.**
+
+The alias evidence says the rebuild is what `www` routes to, which makes that the
+strong reading \u2014 but it is inference from routing metadata, not observation of
+the key. **The replacement key's own `Last used` moving off `Never` observes it
+directly, at the provider, with no inference.** That is why the standard requires
+the readings together, and why I am not treating the `200` as sufficient.
+
+### Two lookups should have registered, not one
+
+The live page auto-ran a Charizard search on load **before** my explicit request,
+and the graded path fires two calls where it runs. So the counter is expected to
+read **at least 1, plausibly several** \u2014 a reading of exactly `0` would mean the
+rebuild is **not** serving `www`, and would be a stop condition.
+
+### Rollback position \u2014 improved, and worth recording
+
+The no-rollback warning I gave applied to the **key**, and still does: #518's
+value is gone from Vercel and unrecorded. But the **site** now has a rollback
+that costs nothing: `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` is still `READY` with its
+own working env snapshot, so promoting it restores the previous state exactly.
+**Site rollback: available. Key rollback: still none.**
+
+### Incident note \u2014 a 403 I reported was mine, not production's
+
+Mid-verification `www.cardresell.org` returned `403` and then `http=000` from the
+sandbox, on apex, `www` and `/index.html` alike. **This was not an outage.** The
+`403` carried **no `x-vercel-id`**, so it never reached Vercel \u2014 it came from the
+sandbox's own egress, which was also failing to `api.vercel.com`\u2011adjacent hosts
+while the Vercel API itself kept answering. An independent cloud browser loaded
+the site at `200`, fully rendered, on the `9aaf326` bundle. **Lesson for this
+runbook: an egress failure in the harness must not be read as a production
+outage, and the absence of `x-vercel-id` is the tell.**
