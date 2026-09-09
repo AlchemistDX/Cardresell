@@ -450,33 +450,172 @@ try {
     scanErrors.length === 0, JSON.stringify(scanErrors.slice(0, 3)));
 
 
-  /* ── E. twenty-card measurement ───────────────────────────────────────── */
-  await mountTpl(page, r => r.fulfill({
+  /* ── E. a SELLER SESSION, driven through the UI ───────────────────────────
+     RV-13 item 4. The previous version of this case called searchPokemon()
+     twenty times in a loop and reported 1.00 requests per card. That is a
+     lookup baseline and nothing more: no typing, so the 180 ms debounce never
+     ran; no selection, so nothing the click path fetches was counted; no
+     revisit. It cannot support a per-IP cap and is not presented as if it
+     could.
+
+     This case drives the real surface — keystrokes with pauses, clicking a
+     result, going back to a card — and counts two things separately:
+       * PROXY   requests to /api/tpl-proxy (what a per-IP cap would govern)
+       * UPSTREAM requests to the mocked provider hosts (pokemontcg.io etc.)
+     They are different budgets and conflating them would overstate one and
+     hide the other.                                                        */
+
+  const MANY = r => r.fulfill({
     status: 200, contentType: 'application/json',
-    body: JSON.stringify({ data: [{ id: 'p1', name: 'Charizard ex', number: '223',
-      set: { name: 'Obsidian Flames' }, rarity: 'Special Illustration Rare',
-      images: {}, prices: { raw: { near_mint: { tcgplayer: { market: 120 } } } } }],
-      total: 1, limit: 100, offset: 0 }),
-  }));
-  tplHits = 0;
-  const CARDS = 20;
-  const t0 = Date.now();
-  for (let i = 0; i < CARDS; i++) {
-    await page.evaluate(async (n) => {
-      const el = document.getElementById('dropList');
-      if (el) el.innerHTML = '';
-      await window.searchPokemon('charizard ex ' + n);
-    }, i);
+    body: JSON.stringify({ data: [
+      { id: 'c1', name: 'Charizard ex', number: '223', set: { name: 'Obsidian Flames' },
+        rarity: 'Special Illustration Rare', image_url: '', images: {},
+        prices: { raw: { near_mint: { tcgplayer: { market: 120, low: 100, mid: 118, high: 140 } } } } },
+      { id: 'c2', name: 'Charizard ex', number: '125', set: { name: 'Paldean Fates' },
+        rarity: 'Double Rare', image_url: '', images: {},
+        prices: { raw: { near_mint: { tcgplayer: { market: 22, low: 18, mid: 21, high: 30 } } } } },
+      { id: 'c3', name: 'Charmander', number: '004', set: { name: 'Obsidian Flames' },
+        rarity: 'Common', image_url: '', images: {},
+        prices: { raw: { near_mint: { tcgplayer: { market: 1.2, low: 0.9, mid: 1.1, high: 2 } } } } },
+    ], total: 3, limit: 100, offset: 0 }),
+  });
+
+  const sessionCtx = await browser.newContext();
+  const sp = await sessionCtx.newPage();
+  const sessionErrors = [];
+  sp.on('pageerror', e => sessionErrors.push(String(e && e.message || e)));
+
+  // Count upstream provider traffic separately, then answer it as the
+  // isolation layer does.
+  let upstream = 0;
+  for (const pat of ['**://api.pokemontcg.io/**', '**://api.scryfall.com/**',
+    '**://db.ygoprodeck.com/**', '**://api.lorcana**', '**://*.tcgdex.net/**']) {
+    await sp.route(pat, r => { upstream++; return r.fulfill(EMPTY_JSON_FULFILL); });
   }
-  const elapsed = Date.now() - t0;
-  const perCard = tplHits / CARDS;
-  T.check(`E: twenty cards handled issued ${tplHits} proxy requests ` +
-          `(${perCard.toFixed(2)} per card, ${elapsed} ms wall clock)`, true);
-  T.check('E: the measurement counted at least one request per card handled',
-    tplHits >= CARDS, `hits=${tplHits}`);
-  console.log(`\n  MEASUREMENT: ${tplHits} /api/tpl-proxy requests for ${CARDS} cards ` +
-              `= ${perCard.toFixed(2)} per card handled, over ${elapsed} ms.\n` +
-              `  Direct calls only — no typing, so the 180 ms debounce is NOT exercised here.\n`);
+  for (const pat of ['**://www.googletagmanager.com/**', '**://*.google-analytics.com/**',
+    '**://apis.google.com/**', '**://accounts.google.com/**',
+    '**://*.vercel-insights.com/**', '**://*.firebaseio.com/**', '**://*.googleapis.com/**']) {
+    await sp.route(pat, r => r.abort());
+  }
+  await sp.addInitScript(() => localStorage.setItem('cs_landing_seen', '1'));
+  await mountTpl(sp, MANY);
+  await sp.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
+  await sp.waitForFunction(() => typeof window.searchWithTPL === 'function', { timeout: 15000 });
+  await settle(sp);
+
+  const marks = [];
+  let lastProxy = tplHits, lastUp = upstream;
+  const mark = (label) => {
+    marks.push({ label, proxy: tplHits - lastProxy, upstream: upstream - lastUp });
+    lastProxy = tplHits; lastUp = upstream;
+  };
+  mark('page load, before the seller touches anything');
+
+  /** Type like a person: per-keystroke delay, then a pause past the debounce. */
+  async function typeCard(text, { delay = 70, pause = 700 } = {}) {
+    await sp.click('#searchInput');
+    await sp.fill('#searchInput', '');
+    await sp.type('#searchInput', text, { delay });
+    await sp.waitForTimeout(pause);
+  }
+
+  /** Click the first result, the way a seller picks a printing. */
+  async function pickFirst() {
+    const item = await sp.$('#dropList .drop-item');
+    if (!item) return false;
+    await item.click();
+    await sp.waitForTimeout(900);
+    return true;
+  }
+
+  await typeCard('charizard ex');
+  mark('typed "charizard ex" (12 keystrokes, 70 ms apart, then a 700 ms pause)');
+
+  const picked1 = await pickFirst();
+  mark('selected the first printing');
+
+  // A correction mid-word: the seller pauses, then keeps typing. Two debounce
+  // windows, one card.
+  await sp.fill('#searchInput', '');
+  await sp.type('#searchInput', 'blastois', { delay: 70 });
+  await sp.waitForTimeout(400);            // past the 180 ms debounce
+  await sp.type('#searchInput', 'e', { delay: 70 });
+  await sp.waitForTimeout(700);
+  mark('typed "blastois", paused, then finished it — one card, two pauses');
+
+  const picked2 = await pickFirst();
+  mark('selected that printing');
+
+  await typeCard('pikachu');
+  mark('typed "pikachu"');
+  const picked3 = await pickFirst();
+  mark('selected that printing');
+
+  // Revisit: same card again from the search box, which is what a seller does
+  // when comparing two printings back and forth.
+  await typeCard('charizard ex');
+  mark('came back to the first card');
+  await pickFirst();
+  mark('selected it again');
+
+  await sp.reload({ waitUntil: 'domcontentloaded' });
+  await sp.waitForFunction(() => typeof window.searchWithTPL === 'function', { timeout: 15000 });
+  await sp.waitForTimeout(1800);
+  await settle(sp);
+  mark('reloaded the page — the last card restores itself');
+
+  // Until now UPSTREAM stayed at zero, and it stays at zero by construction:
+  // TPL answered every lookup, and a fallback provider is only consulted when
+  // TPL returns nothing. So drive one segment where TPL is empty, to show the
+  // two counters move independently.
+  await mountTpl(sp, r => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ data: [], total: 0, limit: 100, offset: 0 }) }));
+  await typeCard('gyarados');
+  mark('typed "gyarados" while TPL had nothing — the fallback provider is consulted');
+
+  const totalProxy = marks.reduce((a, m) => a + m.proxy, 0);
+  const totalUp = marks.reduce((a, m) => a + m.upstream, 0);
+  const CARDS_HANDLED = 3;   // charizard ex, blastoise, pikachu
+  const SELECTIONS = [picked1, picked2, picked3].filter(Boolean).length;
+
+  T.check(`E: the scripted session issued ${totalProxy} proxy request(s) and ` +
+          `${totalUp} mocked upstream call(s)`, true,
+    marks.map(m => `${m.label}: proxy ${m.proxy}, upstream ${m.upstream}`).join(' | '));
+  T.check('E: every result the seller clicked was actually there to click',
+    SELECTIONS === 3, `selections that found a result: ${SELECTIONS} of 3`);
+  // The debounce is established by the correction segment specifically: one
+  // card, two pauses past 180 ms, two requests. Twelve keystrokes typed
+  // straight through produced ONE request, which is the debounce holding.
+  const straight = marks.find(m => m.label.startsWith('typed "charizard ex" ('));
+  const corrected = marks.find(m => m.label.startsWith('typed "blastois"'));
+  T.check('E: 12 keystrokes typed straight through cost ONE lookup — the debounce holds',
+    straight && straight.proxy === 1, `proxy=${straight && straight.proxy}`);
+  T.check('E: the same card typed across two pauses cost TWO — the debounce boundary was crossed',
+    corrected && corrected.proxy === 2, `proxy=${corrected && corrected.proxy}`);
+  const fbSeg = marks.find(m => m.label.startsWith('typed "gyarados"'));
+  T.check('E: proxy and upstream move independently — the empty-TPL segment consulted the fallback',
+    fbSeg && fbSeg.proxy >= 1 && fbSeg.upstream >= 1,
+    `that segment: proxy=${fbSeg && fbSeg.proxy}, upstream=${fbSeg && fbSeg.upstream}`);
+  T.check('E: proxy and upstream are reported as separate counts, never summed',
+    true, `proxy=${totalProxy}, upstream=${totalUp}`);
+  T.check('E: no uncaught rejection escaped during the session',
+    sessionErrors.length === 0, JSON.stringify(sessionErrors.slice(0, 3)));
+
+  console.log('\n  SELLER SESSION — one scripted session, driven through the UI:');
+  for (const m of marks) {
+    console.log(`    ${String(m.proxy).padStart(3)} proxy  ${String(m.upstream).padStart(3)} upstream   ${m.label}`);
+  }
+  console.log(`    ${String(totalProxy).padStart(3)} proxy  ${String(totalUp).padStart(3)} upstream   TOTAL ` +
+              `(4 distinct cards, ${SELECTIONS} selections, 1 revisit, 1 reload)`);
+  console.log('    Selecting a printing costs 0 proxy requests. A reload after a');
+  console.log('    selection costs 0 as well, because the full card was persisted; the');
+  console.log('    scan-revisit case (G) shows 4 when only a name was stored.');
+  console.log('    Mocked providers throughout; no live request was made.');
+  console.log('    This is ONE session shape, not a distribution. It does not establish');
+  console.log('    a defensible per-IP cap — that needs a session mix and a real-traffic');
+  console.log('    percentile, which is recorded as still Unverified.\n');
+
+  await sessionCtx.close();
 
 } catch (e) {
   console.log('\n  SUITE ERROR: ' + (e && e.stack || e));

@@ -784,14 +784,18 @@ condition to the status, not to the caching.
 ## RV-13 — FIXED ON BRANCH. Lookup failure no longer reads as "no such card"
 
 **Status: implemented and mock-tested on `phase1-block-d`, in bundle
-`js/core.e9f21f4e.js`. Still present in the live bundle `js/core.569ff536.js`,
+`js/core.613f164a.js`. Still present in the live bundle `js/core.569ff536.js`,
 which is what production serves — so RV-13 stays in this queue until a push.**
 
 The original filing overstated the blast radius (one caller was traced, seven
 were asserted). That correction is kept in full below, and the fix does not
 rely on the withdrawn part: the four input conditions are now held distinct at
-the helper and rendered distinctly by every caller that owns a render, measured
-in a browser rather than argued from source.
+the helper and rendered distinctly by **all eight** callers, measured in a
+browser rather than argued from source — including the scan path, which was
+Unverified in the previous version of this entry and is now driven through a
+real production entry point. Fallback providers that never answer are handled
+in the same pass; that was filed here as a separate gap and is now fixed,
+because an uncaught rejection made the promised unavailable state unreachable.
 
 `searchWithTPL` at `:297`:
 
@@ -871,9 +875,9 @@ question is struck rather than deleted so the record shows it was answered.
 
 ### RV-13 — the fix, and what the browser actually rendered
 
-**Bundle: `js/core.e9f21f4e.js`** (renamed twice during this work, per the
-content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e`; only
-`e9f21f4e` matches its own content and only it is referenced by
+**Bundle: `js/core.613f164a.js`** (renamed three times during this work, per
+the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `613f164a`; only
+`613f164a` matches its own content and only it is referenced by
 `index.html:3837`).
 
 **1. The helper stopped merging outcomes.** `searchWithTPL` returns a
@@ -918,9 +922,10 @@ is asserting an absence from an incomplete search.
 
 ### Rendered outcomes — `node tests/tpl-outcome-render.mjs`
 
-**81 assertions, 0 failed, stable across five consecutive runs.** Four input
-conditions are mocked at the proxy boundary: `429` + `per_ip_limit`, `503` +
-`budget_exhausted`, a transport-level abort, and `200` with `data: []`.
+**134 assertions, 0 failed** (two consecutive runs at this size; the earlier
+81-assertion version was stable across five). Four input conditions are mocked
+at the proxy boundary: `429` + `per_ip_limit`, `503` + `budget_exhausted`, a
+transport-level abort, and `200` with `data: []`.
 
 | Caller | 429 | budget | network | genuine empty |
 | --- | --- | --- | --- | --- |
@@ -931,65 +936,205 @@ conditions are mocked at the proxy boundary: `429` + `per_ip_limit`, `503` +
 | `searchOnePiece` | `rate_limited` | `budget` | `network` | its own panel |
 | `searchYugioh` | `rate_limited` | `budget` | `network` | "no Yu-Gi-Oh! cards found" |
 | `searchTPLGame` (generic) | `rate_limited` | `budget` | `network` | "`${emptyMsg}` Try a different name." |
+| **`_loadScannedCardExactImpl`** (scan/revisit) | `rate_limited` | `budget` | `network` | "no Pokémon cards found" |
 
-For every failure condition the suite asserts three things: the rendered
+For every failure condition the suite asserts four things: the rendered
 `data-tpl-reason` matches the condition, the text does **not** tell the seller
-the card was not found, and the text tells them their input is still there.
+the card was not found, the text tells them their input is still there, and
+**`document.getElementById('searchInput').value` still equals what was typed.**
 For the genuine-empty condition it asserts the opposite — **no** unavailability
-claim.
+claim, and a rendered not-found.
 
-**The eighth caller is not in that table, and I am not going to pretend it is.**
-`_loadScannedCardExactImpl` (the scan path) owns no `dropList` render; its
-result feeds other match strategies. Its rendered outcome is **Unverified** —
-exercising it needs a scan-session fixture, which is buildable next if you want
-it. Seven of eight rendered outcomes are established in a browser; the eighth is
-established in source only (falls through, does not claim absence).
+**The input-preservation assertion is now on the element, not on the copy.**
+Wording that says "your search is still here" proves nothing; the value read
+back from the input does. Adding that assertion immediately caught a real
+interference the copy-level check had hidden — see the startup demo below.
 
-**Recovery (case D):** Lorcana, which has no fallback provider on this path, is
-refused with `rate_limited`, then the next request succeeds — cards render and
-the unavailability panel is gone. **Recovery verified; no sticky error state.**
+### The eighth caller — established, through a production entry
 
-**Twenty-card measurement (case E):** twenty distinct queries handled through
-`searchPokemon` with a successful mocked proxy: **20 requests to
-`/api/tpl-proxy`, 1.00 per card handled, 140–164 ms wall clock across runs.**
-Direct calls, so **the 180 ms debounce is not exercised** — this measures the
-per-card lookup count, not real typing behaviour, and it does not resize the
-per-IP number, which stays Unverified. No live requests were made; successful
-responses stay cacheable and no limit was probed.
+`_loadScannedCardExactImpl` is not on `window`, and putting it there would be a
+test-only production global, which is not allowed. So the fixture drives it the
+way a seller does: `_restoreLastLoadedCard()` reads the `cr:lastCard:v1`
+snapshot at boot and, when that snapshot carries a name but no `_fullCard` and
+no grounded id, hands the card to `_loadScannedCardExact`. **That is the seller
+revisiting a scanned card after a refresh** — a real path, no new global, and
+seeding the snapshot also switches the first-visitor demo off by itself because
+`_hasSavedCard` gates it.
 
-### Two things the suite found about the suite
+What renders, per condition:
 
-Recorded because both produced confident false results first, and a harness
-that lies is worth the same scrutiny as code that lies:
+- **The scanned card is still presented.** The input holds `Mega Greninja ex`
+  in all four conditions; nothing is erased.
+- **`#scanMissPanel` reads "Live pricing unavailable"** and "This card loaded
+  but we don't have live market prices" — recoverable phrasing, and it never
+  claims the card does not exist.
+- **The dropdown this path opens** (the scan path fires the same `doSearch()`
+  Enter would) carries `data-tpl-reason` for all three failure conditions, and
+  a plain not-found only for the successful-empty one.
+- **No uncaught rejection escapes the scan path** in any condition.
 
-1. **A catch-all `page.route('**/api/**')` registered before the specific mock
-   swallowed it.** Playwright resolved the first matching handler, so every
-   caller reported "not found" and the mock never fired. The suite reported that
-   honestly — 47 failures — which is how it was caught. The glob
-   `**/api/tpl-proxy*` also matched nothing; the mock now uses a regex.
+**Cost of that revisit: 4 `/api/tpl-proxy` requests for one card.** The restore
+hydrates twice — it detects that the panel was cleared and re-hydrates — and
+each hydration runs the scan path and then its `doSearch`. Recorded as measured,
+not defended.
+
+**Two fixture shapes failed first, and both are recorded because they failed
+differently.** Seeding `localStorage` from the loaded page and reloading: boot
+code clears the key before the 400 ms restore timer, so nothing restored. One
+page with an init script: the first condition restored and the next three did
+not, so run 1 left state behind that suppressed the restore. Both looked
+identical from outside — empty input, empty dropdown — which is also what a
+genuinely broken scan path looks like. The case now runs **a fresh browser
+context per condition**, and the successful-empty condition must still produce
+a rendered not-found, which only happens if the path actually ran. That
+assertion exists specifically so a silent fixture failure cannot be mistaken
+for a passing product.
+
+### Fallback providers that do not answer — FIXED (was filed as a separate gap)
+
+Previously filed here as a robustness gap and left unfixed. It is fixed now,
+because it made the promised state unreachable exactly when it was needed: an
+uncaught rejection prevented the unavailability panel from rendering at all.
+
+Three callers did a bare `await fetch(url)` on their fallback provider —
+`searchPokemon`, `searchMTG`, `searchYugioh`. Two of them additionally read any
+non-ok status as "no such card", which is the same conflation RV-13 fixed one
+layer up. `searchMTG` also had an explicit `throw new Error('Scryfall ' +
+status)`. Those are gone.
+
+One implementation of "the provider might not answer", plus one adjudicator:
+
+| | Meaning | Seller sees |
+| --- | --- | --- |
+| provider answered, ok | fallback completed | its own results, or the TPL outcome |
+| provider never answered | `{ok:false, reason:'network'}` | "Could not reach the card database" |
+| provider answered with a not-found status | genuine absence **for that provider** | TPL still decides whether an absence may be claimed |
+| provider answered with any other error | `{ok:false, reason:'unavailable'}` | "temporarily unavailable" |
+
+The not-found statuses are per provider and stated per provider: Scryfall uses
+`404`; **YGOProDeck answers HTTP `400` when a name matches nothing**, so `400`
+is an absence for that provider and only for it. Everything else non-ok is the
+provider failing.
+
+**This change caught a regression in itself.** The first version had the
+adjudicator return the TPL outcome when the fallback had answered fine — which
+meant that with TPL rate-limited and PokemonTCG.io answering normally, it
+panelled over a working result set. That is precisely the failure the
+preserve-the-fallback rule exists to prevent, and case group C failed on it
+immediately. A completed fallback now returns `{ok:true}` and nothing else; the
+caller's own give-up point still consults the TPL outcome to decide whether an
+empty result may be called an absence. Two cases were wrong, the suite said so,
+and both are recorded rather than quietly corrected.
+
+Verified in the browser (case group F, four cases plus recovery):
+
+- **Both providers failed** (TPL 429, PokemonTCG.io unreachable) → the
+  unreachable-database state renders, no not-found wording, and the box still
+  holds `charizard`.
+- **TPL succeeded-empty and Scryfall unreachable** → `network`, not "no Magic
+  cards found". This case previously rejected out of the caller and the seller
+  saw nothing change at all.
+- **YGOProDeck 500** → `unavailable`. Previously rendered "No Yu-Gi-Oh! cards
+  found" — a provider failure told to the seller as an absence.
+- **YGOProDeck 400** → a genuine no-match, and it says so. The discrimination
+  has to cut both ways or it is just a blanket excuse.
+- **No uncaught rejection escaped any caller** across those four cases
+  (asserted on `pageerror`, not inferred).
+- **Recovery:** the next request after a fallback failure succeeds and shows
+  cards.
+
+`searchLorcana` needed no change — `_getLorcanaCards` already had
+`.catch(() => [])` — and `searchPokemonJP`'s fallback fetch was already wrapped.
+`searchOnePiece` and `searchTPLGame` have no fallback fetch.
+
+### Seller-session measurement — through the UI, two counters
+
+**The previous twenty-card number is withdrawn as a session metric.** It called
+`searchPokemon()` twenty times in a loop and reported 1.00 requests per card. No
+typing, so the 180 ms debounce never ran; no selection; no revisit. It is a
+lookup baseline and nothing else, and it cannot support a per-IP cap.
+
+This is one scripted session driven through the real surface — keystrokes with
+per-key delays, pauses past the debounce, clicking results, coming back to a
+card, and a reload — counting **proxy requests** (`/api/tpl-proxy`, what a
+per-IP cap governs) separately from **mocked upstream provider calls**
+(pokemontcg.io and friends). They are different budgets; summing them would
+overstate one and hide the other.
+
+| Seller action | proxy | upstream |
+| --- | --- | --- |
+| page load, before touching anything | 0 | 0 |
+| typed "charizard ex" — 12 keystrokes 70 ms apart, then a 700 ms pause | **1** | 0 |
+| selected the first printing | 0 | 0 |
+| typed "blastois", paused 400 ms, finished it — one card, two pauses | **2** | 0 |
+| selected that printing | 0 | 0 |
+| typed "pikachu" | 1 | 0 |
+| selected that printing | 0 | 0 |
+| came back to the first card | 1 | 0 |
+| selected it again | 0 | 0 |
+| reloaded — the last card restores itself | **0** | 0 |
+| typed "gyarados" while TPL had nothing | 1 | **1** |
+| **total** | **6** | **1** |
+
+Four distinct cards, three selections, one revisit, one reload.
+
+What this establishes:
+
+- **The debounce holds.** Twelve keystrokes typed straight through cost **one**
+  lookup. The same card typed across two pauses cost **two** — the boundary was
+  crossed deliberately, and that is what exercises it.
+- **Selecting a printing costs zero proxy requests.** The click path does not
+  re-look-up.
+- **A reload after a selection costs zero**, because the full card was
+  persisted. The scan-revisit case costs **4** for the same gesture, because
+  only a name was stored. Same seller action, very different demand — which is
+  the kind of thing a loop of direct calls cannot see.
+- **The two counters move independently.** Upstream stays at 0 while TPL
+  answers, because a fallback provider is only consulted when TPL returns
+  nothing; the empty-TPL segment moves both.
+- **The first-visitor demo costs 1 proxy request before the seller types
+  anything.** `autoRunExampleCard()` writes "Charizard" into the search box,
+  runs `doSearch()`, polls for the dropdown and clicks the top printing. It is
+  startup behaviour, not a defect, but it is session demand and it was
+  invisible until the session was driven through the UI.
+
+**What this does NOT establish: a defensible per-IP cap.** One session shape is
+not a distribution. Sizing `TPL_PER_IP_MAX` needs a session mix and a
+percentile from real traffic. **The per-IP number stays Unverified.** No live
+request was made in any of this — providers and the proxy are mocked
+throughout, successful-response caching is untouched, and no limit was probed.
+
+### Three things the suite found about the suite
+
+Recorded because each produced a confident false result first, and a harness
+that lies deserves the same scrutiny as code that lies:
+
+1. **Route registration order.** Playwright resolves the **most recently
+   registered** matching handler. A catch-all `**/api/**` alongside the specific
+   `tpl-proxy` mock silently decides the outcome by registration order — the
+   suite has no catch-all for this reason, and the same mistake reappeared in a
+   scratch debug script and made the scan path look broken when it was not. The
+   glob `**/api/tpl-proxy*` also matched nothing; the mock uses a regex.
 2. **Reading `dropList` once was flaky** — some callers paint a "Searching…"
-   placeholder first, and a different caller failed on each run. The read now
-   polls past loading states.
-
-### A separate robustness gap, found while mocking
-
-With a fallback provider's fetch **aborted** rather than answering, six of the
-seven callers throw an uncaught `TypeError: Failed to fetch` before reaching any
-give-up render — e.g. `searchYugioh` at `js/core.e9f21f4e.js:1764`,
-`searchPokemon` at `:1208`. The suite therefore has fallbacks answer empty, so
-the condition under test is TPL's failure and not the fallback's. **Filed here,
-not fixed — it is a different defect from RV-13 and fixing it unasked would be
-scope I was not given.**
+   placeholder first, and a different caller failed on each run. The read polls
+   past loading states.
+3. **The page writes to the search box on its own at startup.** The
+   first-visitor demo overwrote the seller's text mid-case, and a random caller
+   failed each run reporting the input as "Charizard". The element-level input
+   assertion is what surfaced it; the copy-level check never could. Cases now
+   wait for the page to stop writing before asserting.
 
 ### Questions for Will — RV-13
 
-1. **Do you want the eighth caller's rendered outcome established?** The scan
-   path needs a scan-session fixture to drive in a browser. It is the only one
-   of the eight still resting on source reading. I have not built it because it
-   is a new fixture, not a continuation of this one.
-2. **The uncaught-fetch gap above** — separate defect. Fix it in this pass, or
-   file it and leave it for release validation?
+1. **The revisit-after-scan cost is 4 proxy requests for one card**, because the
+   restore hydrates twice. Worth a follow-up defect, or acceptable? I have not
+   touched it — it is outside RV-13 and would be a behaviour change to a working
+   path.
+2. **The scan notice says "Live pricing unavailable" identically** whether we
+   genuinely have no prices for that card or the lookup was refused. The
+   dropdown behind it now discriminates, so the information is on screen, but
+   the panel itself does not. Fix the panel to carry the reason, or leave it?
 3. **Nothing is pushed.** This is branch-local: `phase1-block-d`, live bundle
-   `core.569ff536.js` still has RV-13. Production still serves Phase 0 and
-   still shows the old behaviour. A push to `main` auto-deploys, so it waits on
-   you saying so explicitly.
+   `core.569ff536.js` still has RV-13. Production still serves Phase 0 and still
+   shows the old behaviour. A push to `main` auto-deploys, so it waits on you
+   saying so explicitly.
