@@ -31,22 +31,139 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-8 preview reads production KV | **BLOCKING** — decide before the first push (G1) |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
 | RV-10 containment mechanism | **BLOCKING** — control and scope not established |
-| CH-1 published verification token | **BLOCKING** — G3 |
-| CH-2 code fallback to that token | **BLOCKING** — code change, deliberately not made unasked |
-| CH-3 unencrypted TPL key | **BLOCKING** — G11 rotation, G12 activation |
+| CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
+| CH-2 code fallback to that token | **PREPARED, not applied** — the one-line change is specified (`api/ebay-notifications.js:17`) and the harness no longer compares against the literal; the edit itself is deliberately not made unasked |
+| CH-3 unencrypted TPL key | **PREPARED, remedy bounded** — assessed read-only (`audit/CH3_TPL_KEY_ASSESSMENT.md`), no TPL question open; what remains is R1 rotation at the provider (G11) and R4 activation (G12), both authorization, not analysis |
 | Same-card basis retention | **DEFERRED** — product decision; consequence is disclosed, not silent |
 | D5 §8.3 signed-in continuation | **PASSED for one tested case**; stays in the queue. Q-D5-5 desktop never exercised |
 
-**4 passed · 9 blocking · 3 deferred.** Every blocking item is credential-,
-configuration-, or deployment-gated. None is blocked on writing more code.
+**4 passed · 7 blocking · 2 prepared · 3 deferred.** Every blocking item is
+credential-, configuration-, or deployment-gated. None is blocked on writing
+more code. **Prepared** means the remedy is specified and its evidence gathered,
+and the only remaining input is your authorization to apply it — CH-2 is a
+one-line edit awaiting the word, CH-3 is a provider-side rotation plus an
+activation that additionally needs the real-store evidence named under G12.
+
+*Counts and verdicts in this table are current as of 2026-09-09 15:00 EDT.*
+*Anything in the History and withdrawn sections below is dated evidence, not*
+*live status — see the banner above those sections before treating an entry*
+*there as a blocker.*
+
+## RELEASE PREPARATION — the four remaining items (opened 2026-09-09)
+
+RV-13's local implementation is complete and adjudicated; it is no longer the
+head of this queue. What follows is, and none of it is code.
+
+**Read the boundary first:** items 1 and 2 change credentials and
+infrastructure, item 3 changes production configuration, item 4 ends in a
+deployment. **Every one of them waits on your explicit authorization**, and
+nothing below has been executed. Local implementation is not authorization.
+
+### 1. eBay credential rotation and verification
+
+State: the procedure is written and self-contained
+(`audit/ROTATION_EXECUTION_CHECKLIST.md`, `audit/TPL_ROTATION_RUNBOOK.md`), the
+pre-flight configuration has been read, and the harness has been corrected so it
+no longer compares production against the committed literal — it was agreeing
+with itself. Steps are yours to perform at eBay and in Vercel; the verification
+token is **replaced with a fresh random value**, never the repo literal or that
+literal with the newline stripped, because whitespace-cleaning a published value
+leaves a published value in production.
+
+Attached to this item, not separate from it:
+
+- **CH-1** closes when production stops serving the repo default and eBay's
+  challenge completes against the new token.
+- **CH-2** is the one-line removal of the usable fallback at
+  `api/ebay-notifications.js:17`. **Prepared, not applied** — an environment
+  change does not remove a code fallback, so an unset variable would silently
+  return to the published value. Say the word and it is a single edit.
+
+### 2. Deployment containment and non-production KV isolation
+
+State: **blocking, and the mechanism is not yet established** (RV-8, RV-10). The
+open question is unchanged and is not a preference — non-production
+deployments currently reach the same KV as production, so any verification run
+against that store is both contaminating and unpersuasive. Isolation comes
+first; **the verification then runs against the isolated store**, because
+verifying against production's store proves the wrong thing.
+
+This gates the first push. It does not gate item 1.
+
+### 3. The six TPL settings — prepared for approval, provisional by construction
+
+Absent from Vercel today, which means **none of these defaults are in force in
+production**. `budgetConfig` treats `TPL_BUDGET_MAX` and `TPL_BUDGET_WINDOW_SEC`
+as the configured-ness test (`api/_tplBudget.js:55-56`), so until both are set,
+`usable` is false whatever the others say.
+
+| Variable | Proposed | Where the number comes from |
+| --- | --- | --- |
+| `TPL_BUDGET_MAX` | `400` | Provider plan is **Pro, 10,000 requests/day** (dashboard, 2026-09-09). At an hourly window, 400 × 24 = 9,600 — under the daily cap even if every hour saturates. Derived from the plan, not from traffic. |
+| `TPL_BUDGET_WINDOW_SEC` | `3600` | One hour. Keeps the arithmetic above legible and matches the code default. |
+| `TPL_PER_IP_MAX` | `60` | **Provisional.** The one scripted session charged 5 calls for 4 cards; 60/hour is roughly twelve times that shape. It is a starting point with headroom, not a percentile — see the measurement section for why this run does not bound production demand in either direction. |
+| `TPL_CACHE_TTL_SEC` | `21600` | 6 hours, mirroring `api/pricecharting.js:18`, the existing house precedent for the same class of paid lookup. |
+| `TPL_STALE_TTL_SEC` | `86400` | 24 hours an expired entry stays servable as stale — degraded prices beat a dead lookup. |
+| `TPL_BUDGET_ENFORCE` | **not yet** | See below. |
+
+All five numbers are **explicitly provisional** and labelled as such wherever
+they are stated. Refining them from a real-traffic percentile is a post-launch
+improvement, not a launch prerequisite: collecting the traffic cannot be a
+precondition for the release that generates it.
+
+**Enforcement is a separate switch, and it is deliberately last.**
+`TPL_BUDGET_ENFORCE='1'` is **fail-closed by design** — with enforcement on and
+no bound store, `budgetMode` returns `ENABLED_UNBOUND` and every uncached lookup
+**503s** (`api/tpl-proxy.js:44-56,:123`). That is correct behaviour and a total
+outage if flipped early. Its prerequisites, in order:
+
+1. the five numeric variables set and valid (`usable: true`);
+2. a KV store that the deployed function actually binds — which is item 2, and
+   which must be **verified against the isolated store**, not assumed from
+   configuration;
+3. only then `TPL_BUDGET_ENFORCE='1'`.
+
+Until step 3, the proxy is metered but unenforced: the counters are honest and
+nothing is refused.
+
+### 4. Outstanding release checks, then deployment authorization
+
+The blocking entries in the verdict table are the list: RV-1, RV-3, RV-4, RV-8,
+RV-9, RV-10 and CH-1, plus the live suites never run (`tests/ebay-live.mjs`,
+`tests/test-scan.mjs`) and RV-11's annual-tier work. They share one shape —
+each needs a deployed function, a live credential, or a real store, which is why
+none of them moved while the work stayed local.
+
+**Deployment is yours alone and must be explicit.** A push to `main`
+auto-deploys, so there is no rehearsal step between authorization and
+production. Nothing here should be read as asking for it.
+
+### Where Phase 1 stands
+
+**Roughly 90% complete — a judgment, not a computed figure**, and recorded as
+one so it is not later quoted as a measurement. Local implementation has
+advanced; what determines completion now is configuration and **verification
+against what is actually deployed**, neither of which a passing local suite can
+substitute for. The previous figure in this file was 85–90%; the movement is
+RV-13 closing locally, CH-2 and CH-3 reaching prepared, and the two re-run
+suites confirming against the current bundle.
+
+---
 
 ### 2026-09-09 run records
 
-- **RV-5** — `CR_E2E_URL=http://127.0.0.1:<port>/index.html node tests/flip-completeness-e2e.mjs`
-  against the current bundle `js/core.73a71fac.js`: **22 passed, 0 failed.**
-- **RV-7** — `node tests/listing-photos.mjs` against `js/core.73a71fac.js`:
-  **92 passed, 0 failed.** Limitation unchanged: headless Chromium only, and no
-  storage-ceiling experiment.
+- **RV-5** — `CR_E2E_URL=http://127.0.0.1:<port>/index.html node tests/flip-completeness-e2e.mjs`:
+  **22 passed, 0 failed.** First run 2026-09-09 against `js/core.73a71fac.js`;
+  **re-run 2026-09-09 15:00 against the current bundle `js/core.2cb1e377.js`,
+  same result.** The bundle has been renamed four times since the first run, so
+  the earlier citation is kept only as history.
+- **RV-7** — `node tests/listing-photos.mjs`: **92 passed, 0 failed.** Same two
+  runs, same result, current bundle `js/core.2cb1e377.js`. Limitation unchanged:
+  headless Chromium only, and no storage-ceiling experiment.
+- **RV-13 rendered outcomes** — `node tests/tpl-outcome-render.mjs` against
+  `js/core.2cb1e377.js`: **150 passed, 0 failed** (was 136 at the previous
+  packet; groups G and H and the panel-discrimination assertions were added
+  since). Stable across two consecutive runs.
 - **RV-6** — compared `HEAD~1` against `HEAD`, which is the right pair: the RC-1
   blank-shipping note is inserted immediately above the ranking. Rendered
   `.payout-rank-row` name/amount pairs **identical in all four cases**
@@ -142,7 +259,7 @@ suite in `tests/run-all.sh` that cannot be run here.
 
 **Run:** serve the repo on a local port, then
 `CR_E2E_URL=http://127.0.0.1:<port>/index.html node tests/flip-completeness-e2e.mjs`.
-**Must be true:** 22/22. **Last run 2026-09-08: 22 passed, 0 failed.**
+**Must be true:** 22/22. **Last run 2026-09-09 15:00 against `js/core.2cb1e377.js`: 22 passed, 0 failed.** (First run 2026-09-08, same result, against a bundle four renames older.)
 
 **Why it exists.** `tests/payout-honesty.mjs` lifts the completeness helpers out
 of the bundle and asserts their return values. That is a unit test and cannot
@@ -581,6 +698,14 @@ whether `|| 'pro'` should keep failing open.
 
 ## History — RV-11 as originally filed (RETRACTED 2026-09-09, superseded)
 
+> **HISTORICAL EVIDENCE — NOT LIVE STATUS.** Everything from here to the end of
+> this section is a dated record of what was believed at the time, kept because
+> the reasoning that retracted it is worth as much as the finding. **Do not
+> re-open anything below as a blocker.** Live status is the verdict table at the
+> top of this file, which is dated. If a statement here and a statement there
+> disagree, the table wins, and the disagreement is the point of keeping both.
+
+
 **Not a blocker. Not current. Retained only so the correction has something to
 point at.** Every factual claim in this block was disproved by the trace in the
 current RV-11 entry above: the read paths each carry a fallback, so annual
@@ -656,6 +781,14 @@ ships, **annual is being sold into a tier gap.**
 </details>
 
 ## RV-12 — WITHDRAWN. Duplicates R3, which is already built and mock-tested.
+
+> **HISTORICAL EVIDENCE — NOT LIVE STATUS.** Everything from here to the end of
+> this section is a dated record of what was believed at the time, kept because
+> the reasoning that retracted it is worth as much as the finding. **Do not
+> re-open anything below as a blocker.** Live status is the verdict table at the
+> top of this file, which is dated. If a statement here and a statement there
+> disagree, the table wins, and the disagreement is the point of keeping both.
+
 
 **Not a new defect. Not a queue item. Filed in error.**
 
@@ -876,8 +1009,8 @@ question is struck rather than deleted so the record shows it was answered.
 ### RV-13 — the fix, and what the browser actually rendered
 
 **Bundle: `js/core.2cb1e377.js`** (renamed four times during this work, per
-the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `2cb1e377`; only
-`613f164a` matches its own content and only it is referenced by
+the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `613f164a` → `2cb1e377`; only
+`2cb1e377` matches its own content and only it is referenced by
 `index.html:3837`).
 
 **1. The helper stopped merging outcomes.** `searchWithTPL` returns a
@@ -1107,12 +1240,22 @@ What this establishes:
 - **Fallback-provider traffic moves independently.** It stays at 0 while TPL
   answers, because a fallback is only consulted when TPL returns nothing.
 
-**What it still does not establish, and what that does *not* block.** One
-session shape is not a distribution, and the fixture's cache is per-session
-while production shares one cache across every seller — so **5 charged calls
-for 4 cards is a ceiling, not a prediction.** That is enough to set the six
-`TPL_*` values as **explicitly provisional**, justified by scenarios like this
-one and by the ceiling property. It is not enough to call them measured.
+**What it still does not establish.** One session shape is not a distribution.
+**5 chargeable calls for 4 cards is the result of this scripted scenario and
+nothing more — it is not a production ceiling.** Corrected 2026-09-09: an
+earlier version of this section called it a ceiling on the grounds that
+production shares one cache across sellers while the fixture's cache is
+per-session. Shared caching does pull in that direction, but it is only one of
+the forces. Different queries do not share entries, a retried or re-typed search
+after `cacheTtlSec` expires is a fresh miss, and a seller who searches more
+widely than this script charges more per card. Production demand can land above
+this figure as easily as below it, and this run does not bound it in either
+direction.
+
+That is still enough to set the six `TPL_*` values as **explicitly
+provisional** — a scenario-justified starting point that is honest about being
+one. It is not enough to call them measured, and no wording here should imply
+that it is.
 Refining them from a real-traffic percentile is a post-launch improvement and
 **is not a launch prerequisite** — collecting traffic cannot be a precondition
 for the release that generates the traffic. What remains genuinely blocking is
@@ -1189,9 +1332,12 @@ would catch the two surfaces drifting apart again.
 
 ### Follow-up — the four-request scan revisit (not a release blocker)
 
-Adjudicated as a follow-up optimization: request count alone does not make it
-one, and after the change above those four requests are also mostly cache hits
-in production, where the cache is shared.
+Adjudicated as a follow-up optimization: request count alone does not make it a
+release blocker. **How many of those four requests are charged in production is
+unmeasured** — an earlier version of this section asserted they would be "mostly
+cache hits in production, where the cache is shared." That was an inference from
+the cache's existence, not a measurement, and it is withdrawn. What is measured
+is the request count below.
 
 Revisiting a scanned card costs **4 `/api/tpl-proxy` requests** because the
 restore hydrates twice — it detects the panel was cleared and re-hydrates — and
