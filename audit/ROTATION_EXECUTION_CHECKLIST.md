@@ -19,9 +19,10 @@ Three rulings changed the plan, and one of my own findings changed it again.
    success. §1.
 2. **The verification token is replaced, not repaired.** Stripping whitespace
    from a published value leaves a published value in production. §2.
-3. **Containment first, and its mechanism must be verified before it is relied
-   on.** I have now observed what the project actually exposes, and it is *not*
-   the preview-only toggle I proposed. §4.
+3. **Containment gates the push, not this window.** Superseded — an earlier
+   draft said "containment first". It does not block steps 2–11; it gates
+   11a–13. Its mechanism must still be verified before it is relied on, and
+   what the project exposes is *not* the preview-only toggle I proposed. §4, §8a.
 4. **The harness has been changed** (`tests/ebay-live.mjs`) to stop comparing
    against the committed default. This was self-confirming: production was
    serving that literal, so the harness was comparing two copies of a published
@@ -103,8 +104,12 @@ portal save immediately after the redeploy reports READY.
 | Harness check `deployed challenge hash matches the CLEAN token` | The endpoint hashes **the value the operator supplied to the harness** | Nothing about what eBay has stored |
 | eBay portal's own challenge on save | **eBay's** stored value matches the endpoint | Nothing about the harness's expectation |
 
-Both are required. A green harness with a failed portal save means the operator
-and eBay hold different values.
+Both are required, and they answer different questions. A green harness with a
+failed portal save does **not** prove the operator and eBay hold different
+values — an earlier draft said it did. It narrows the fault to eBay's side of
+the exchange, which includes the configured endpoint URL, whether the request
+arrived, and eBay-side faults. Diagnose per the recovery table before editing
+either value.
 
 ---
 
@@ -414,8 +419,18 @@ Written down so they are decided in advance rather than in the moment.
 Correcting the earlier "rolling back is the expected response", which was wrong
 in a way that matters here: **once the old Cert ID is revoked at eBay, an
 earlier deployment is not a safe rollback target.** Vercel resolves environment
-variables per deployment, so promoting or redeploying a pre-rotation deployment
-restores *configuration that references the revoked value* — trading a
+variables per deployment, and the two things this could mean are **not** the
+same:
+
+- **Promoting an existing pre-rotation deployment** reuses the environment
+  captured for that build — the revoked Cert ID and the published token. This is
+  the unsafe one, and it is never a recovery step.
+- **Rebuilding the same commit with the corrected configuration** produces a new
+  deployment that resolves the *new* values. This is what steps 5 and the
+  recovery rows mean by "redeploy", and it is the mechanism the whole procedure
+  depends on.
+
+Promotion restores *configuration that references the revoked value* — trading a
 misconfigured endpoint for a definitively broken one. And the pre-rotation
 verification token is not merely old: it is **published in the repository**, so
 returning to it re-establishes the exposure this window exists to end.

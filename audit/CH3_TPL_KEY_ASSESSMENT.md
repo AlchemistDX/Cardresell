@@ -7,6 +7,10 @@ abuse was demonstrated, no quota consumed. Every claim below is bound to
 **Separate from the eBay maintenance window**, which remains unauthorized and
 untouched.
 
+**Reading order.** §2 and §3 record the posture **as assessed**, before any
+change. §6's R2 and R3 are **built** and supersede the rows they close; where
+the two differ, §6 is current.
+
 ---
 
 ## 1. What the key is and how it was exposed
@@ -38,7 +42,7 @@ closing.
 | Caller authentication | **None** | No `_verifyToken` import; whole file is `api/tpl-proxy.js:11-55` |
 | Server-side usage limit | **None** | No counter, no KV, no per-IP or per-user accounting anywhere in the file |
 | Path restriction | **Present** | Allow-list of 3 exact patterns, `:23-30` |
-| Query-param restriction | **None** | Every param except `path` forwarded verbatim, `:32-37` |
+| Query-param restriction | **None as assessed; CLOSED by R2** | Was: every param except `path` forwarded verbatim, `:32-37`. Now: unknown and duplicate params rejected before any upstream call, `api/_tplContract.js` |
 | Response caching | **Present but bypassable** | `s-maxage=300`, `:50` — see §3 |
 | Upstream timeout | **Present** | 8s abort, `:42-45` |
 | Method restriction | **Present** | GET/OPTIONS only, `:15-16` |
@@ -61,9 +65,11 @@ forwarding at `:32-37` defeats it: the cache key varies with the full query
 string, so **any junk parameter produces a unique URL and a fresh billable
 upstream call.** No provider-side or app-side limit stands behind it (§2).
 
-**But calibrating rather than alarming:** the live client sends only named
-params — `path`, `q`, `game`, `limit` (`js/core.66c39922.js`, the deployed
-bundle) — with **no cache-buster**. So the cache works for legitimate traffic.
+**But calibrating rather than alarming:** both client generations send only
+named params — `path`, `q`, `game`, `limit` — with **no cache-buster**, so the
+cache works for legitimate traffic. (Deployed is `js/core.569ff536.js` at commit
+`9aaf326e7`; `js/core.66c39922.js` is outgoing. An earlier draft of this section
+called 66c39922 deployed — see R2 for the correction.)
 This is **abuse potential, not active bleeding.** Whether it has been abused is
 **Unverified** and answerable only from usage records (§5).
 
@@ -209,8 +215,29 @@ needs an **aggregate safeguard**: a global counter per window that fails closed
 (serve stale or 503) when the period's budget is spent, with the per-IP cap as a
 secondary control against a single noisy source.
 
-**Implementation and mocked tests can proceed without production KV**; only live
-integration is blocked on store isolation.
+**BUILT against mocks** — `api/_tplBudget.js`, `tests/tpl-budget-offline.mjs`,
+**38 passed, 0 failed**, registered as suite 50 of 51. No KV, no provider call,
+no quota.
+
+| Acceptance case | How it is met |
+| --- | --- |
+| Cache hits consume no allowance | A hit returns before any counter touch; 51 consecutive hits increment nothing |
+| Concurrent misses cannot exceed the allowance | `INCR`-then-compare **reserves before** the call; 25 concurrent misses against a budget of 3 yield exactly 3 |
+| …and the test isn't vacuous | A deliberately non-atomic check-then-set store is asserted to **overspend**, so the assertion has teeth |
+| Storage failure permits no new paid call | Counter unreachable, or answering non-numerically, never returns `RESERVED`. A failing cache **read** still permits a call — reading is not spending |
+| Exhaustion → stale or clear unavailability | `EXHAUSTED_STALE` with the value flagged stale when an expired entry exists; `EXHAUSTED` otherwise. Over-budget attempts refund their reservation so the counter counts permitted calls, not attempts |
+| Configurable, no invented limit | `TPL_BUDGET_MAX` / `TPL_BUDGET_WINDOW_SEC` / `TPL_PER_IP_MAX`. With nothing set, the config reports itself **`configured: false`** — the defaults are placeholders, and garbage input falls back to them rather than reading as "no budget" |
+
+Also pinned: 30 distinct IPs, each inside the per-IP cap, are still bounded by
+the aggregate — the case a per-IP cap alone cannot handle. And a canonical cache
+key, so `?q=a&game=b` and `?game=b&q=a` are one entry; that reuse is what the
+edge cache cannot give us, since it keys on the incoming URL and we key on
+meaning.
+
+**Deliberately NOT wired into `api/tpl-proxy.js`.** The module takes an injected
+store and has no KV binding. Wiring it is the live-integration step, still
+blocked on store isolation, and it needs the owner's budget numbers — which are
+not mine to invent.
 
 ---
 

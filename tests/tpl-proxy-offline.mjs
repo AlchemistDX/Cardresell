@@ -210,17 +210,20 @@ console.log('\nthe fix\'s limits, pinned');
   check('lookup WITH parameters is rejected',
         validateTplRequest({ path: '/v1/cards/lookup', name: 'Pikachu' }).ok === false);
 
-  // Two DIFFERENT valid queries are two upstream calls. Distinct valid requests
-  // still reach the paid provider: this fix closes the unknown-parameter path,
-  // it does not bound spending and does not eliminate cache bypass (Vercel
-  // keys dynamic responses on the INCOMING request URL, which we do not
-  // control from here). Bounding spend is R4.
+  // DOCUMENTS CURRENT BEHAVIOUR — this is not a requirement to preserve.
+  // Today two different valid queries are two upstream calls, because R2
+  // closes the unknown-parameter path without bounding spending and cannot
+  // eliminate cache bypass (Vercel keys dynamic responses on the INCOMING
+  // request URL). When R4 is wired in, the correct assertions become canonical
+  // cache REUSE and budget ENFORCEMENT — see tests/tpl-budget-offline.mjs,
+  // which already covers both — and this check should be replaced, not
+  // defended.
   installMock();
   await handler({ method: 'GET', query: { path: '/v1/cards/search', q: 'Pikachu' } }, mockRes());
   await handler({ method: 'GET', query: { path: '/v1/cards/search', q: 'Charizard' } }, mockRes());
-  check('distinct VALID queries still each reach the provider (spending is NOT bounded here)',
+  check('today, distinct VALID queries each reach the provider (R2 does not bound spending)',
         upstreamCalls.length === 2,
-        'if this ever reads 1, something is caching and the R4 claim needs revisiting');
+        'if this reads 1, caching arrived — replace this check with R4 reuse/enforcement assertions rather than restoring it');
   restoreFetch();
 }
 
