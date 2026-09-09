@@ -196,3 +196,20 @@ Everything else registered in `tests/run-all.sh` runs offline and was run at the
 2026-09-08 checkpoint — 41 of 42 suites, all green. Anything reported as "not
 rerun" must name which of these six entries it falls under, or it was simply
 not run.
+
+## Signed-in eBay continuation (D5 §8.3) — open, owner-run
+
+The four checks in `audit/d5/D5_SIGNED_IN_VERIFICATION.md` §6 need a real
+signed-in eBay seller account. No instrument exists in the build environment:
+the cloud browser has no logins and this project does not collect marketplace
+passwords. A logged-out baseline was re-taken 2026-09-08 and passes all four
+questions, including the query surviving in the address bar; it is a comparison
+point, not the answer.
+
+Pre-committed consequences for each outcome are in §7 of that document, written
+before the observation. Two of the five rows are blockers.
+
+Proposed as a recurring pre-deploy item under Q-D5-3, not yet accepted: the
+`title`/`caty` parameters we depend on are undocumented eBay internals with no
+compatibility promise, so a silent change on their side would surface as seller
+confusion rather than as a failed check.

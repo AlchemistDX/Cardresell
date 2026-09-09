@@ -375,7 +375,9 @@ browser. That is a five-minute check and it is the highest-value one left in D5:
    survive: a seller told to compare against a number we sent, on a screen that
    never received it, has been given a task they cannot perform.
 
-**Status: Unverified.** No claim in this document or in the shipped copy asserts
+**Status: Unverified — see `audit/d5/D5_SIGNED_IN_VERIFICATION.md` (2026-09-08)
+for the logged-out baseline, the failed attempt to run this in the owner's
+browser, and the pre-committed consequence for each outcome.** No claim in this document or in the shipped copy asserts
 signed-in behaviour, and the shipped copy is written to survive being wrong about
 it — it says what we send and tells the seller to check what arrives, neither of
 which depends on which screen eBay chooses. That is the distinction worth

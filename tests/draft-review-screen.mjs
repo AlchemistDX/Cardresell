@@ -1684,6 +1684,26 @@ try {
         text: a.innerText, target: a.getAttribute('target'), rel: a.getAttribute('rel'),
       }));
     });
+    /* THE UNVERIFIED-BOUNDARY INVARIANT (D5 §8.3). Signed-in continuation is
+     * unverified: every probe of eBay's identify screen has been logged out,
+     * and every real seller is signed in. The whole block is safe against that
+     * only because each sentence is keyed to OUR behaviour -- what we send,
+     * what we have not done -- and none to eBay's screen. This asserts the
+     * property rather than trusting the current wording: no sentence in the
+     * hand-off block may predict what eBay will display or which screen the
+     * seller will land on. If someone later writes "you'll see a match screen",
+     * that is a claim we cannot maintain, and it fails here. */
+    const d5block = await page.evaluate(() => {
+      const el = document.querySelector('.review-packet-sell');
+      return el ? el.innerText : null;
+    });
+    T.check('\ud83d\udd34 no sentence in the hand-off block predicts eBay\u2019s screen',
+      typeof d5block === 'string'
+        && !/you(\u2019|')?ll see|you will see|you(\u2019|')?ll land|ebay will (show|display|open|take you)/i.test(d5block),
+      d5block);
+    T.check('and the block still says what WE send, keyed to our own behaviour',
+      typeof d5block === 'string' && /we send ebay this search/i.test(d5block), d5block);
+
     T.check('\ud83d\udd34 the note carries its two sources as links, inside the note itself',
       Array.isArray(d6src) && d6src.length === 2, JSON.stringify(d6src));
     T.check('\ud83d\udd34 the selling-limit claim links eBay\u2019s own selling-limits page',
