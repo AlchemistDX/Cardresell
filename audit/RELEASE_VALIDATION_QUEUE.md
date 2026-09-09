@@ -321,3 +321,56 @@ here. Only check 19 (`deployed challenge hash matches the CLEAN token`) has been
 established, and only because that one needs no credential. The rotation run
 establishes the baseline for the remaining eighteen as much as it confirms the
 new credential.
+
+---
+
+## CH-2 — the production code fallback to a published token
+
+`api/ebay-notifications.js:17` still reads
+`cleanCredential(process.env.EBAY_VERIFICATION_TOKEN) || '<repo literal>'`. The
+literal is a value committed to the repository, and CH-1 established production
+was serving it. **The environment change in the rotation window does not remove
+this**, so an unset or cleared production variable silently falls back to a
+published value.
+
+Code change, tracked separately from the rotation. After the harness edit of
+2026-09-09 the literal appears in exactly one place in the tree — this line.
+
+---
+
+## CH-3 — `CARDSELL_TPL_KEY` is stored unencrypted
+
+Observed 2026-09-09: three project variables are `type: plain` rather than
+`encrypted` — `BLOB_STORE_ID`, `BLOB_WEBHOOK_PUBLIC_KEY`, and
+`CARDSELL_TPL_KEY` (targets `production,preview,development`). Plain rows have
+their values returned in cleartext by the project detail endpoint, and one such
+value was displayed in agent working output while reading Git deployment
+settings. It was not written to any file, but treat it as exposed.
+
+If `CARDSELL_TPL_KEY` is a live API key: re-create it as an **encrypted**
+variable (Vercel cannot convert in place — delete and re-add) and **rotate** it.
+The two `BLOB_*` rows are store identifiers, not secrets, and can stay.
+
+Not part of the rotation window, which is already changing two credentials.
+
+---
+
+## RV-10 — containment mechanism unverified
+
+`audit/ROTATION_EXECUTION_CHECKLIST.md` §4. The "disable automatic Preview
+deployment" toggle named in the earlier plan was **not established to exist with
+that scope**. What the project exposes is
+`gitProviderOptions.createDeployments: "enabled"`, which appears to govern
+Git-triggered deployments **as a whole, production included** — broader than a
+preview-only switch. `link.deploymentEnabled` is unset, and reading that as
+"default enabled" is an inference, not an observation.
+
+Verify the exact control and scope in the dashboard before relying on it. If it
+suppresses production deployments too, that must be understood before the
+maintenance window, which needs to deploy.
+
+**Containment does not revoke production-KV access from existing deployments or
+from local development** — `KV_*`, `KV_URL` and `REDIS_URL` target
+`development` from the same single rows. Keep both out of write-capable testing
+until a separate store exists, and **do not run the deferred preview-surface
+checks against production instead.**

@@ -230,9 +230,21 @@ try {
 // This is the check that caught the production bug on 2026-09-05.
 console.log('\naccount-deletion endpoint');
 const ENDPOINT = 'https://www.cardresell.org/api/ebay-notifications';
-const vToken = cleanCredential(process.env.EBAY_VERIFICATION_TOKEN)
-  || 'CardResell-eBay-Notify-2026-secure-token-v1';
+// The committed default fallback was REMOVED 2026-09-09. It made this check
+// silently self-confirming: on 2026-09-08 an unauthenticated probe showed
+// production was serving that very literal (plus a trailing newline), so a
+// harness comparing against the same literal would have reported agreement
+// between two copies of a published value. The expected token must come from
+// the environment, and its absence is a FAILURE, not a fallback.
+const rawVToken = process.env.EBAY_VERIFICATION_TOKEN;
+const vToken = cleanCredential(rawVToken || '');
 const CHAL = 'harness-' + Date.now();
+
+if (!rawVToken) {
+  check('EBAY_VERIFICATION_TOKEN supplied to the harness', false,
+        'export the value configured in eBay\'s portal for this run. There is no ' +
+        'default: comparing against a repo literal proves nothing about the deployed token.');
+}
 
 function expectedHash(tok) {
   const h = createHash('sha256');
@@ -247,6 +259,7 @@ if (process.env.EBAY_VERIFICATION_TOKEN &&
 }
 
 try {
+  if (!rawVToken) throw new Error('no expected token supplied — see the failure above');
   const r = await fetch(`${ENDPOINT}?challenge_code=${encodeURIComponent(CHAL)}`,
     { headers: { Accept: 'application/json' } });
   const j = await r.json();
