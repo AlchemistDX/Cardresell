@@ -654,3 +654,62 @@ with the constant imported by `_tier.js` rather than duplicated.
 ships, **annual is being sold into a tier gap.**
 
 </details>
+
+## RV-12 — the proxy labels upstream errors as edge-cacheable card data
+
+**Production defect at `9aaf326`. Found during the TPL rotation verification, not
+by review.**
+
+`api/tpl-proxy.js` at `9aaf326`, lines 47\u201351:
+
+```
+res.status(r.status);                                    // upstream status, verbatim
+res.setHeader('Content-Type', ...);
+// Cache TPL responses at the edge for 5 min — big cost saver
+res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
+res.send(body);
+```
+
+**The header is set unconditionally, after the upstream status has been
+applied.** A `429`, a `500`, a provider outage body \u2014 each is stamped
+"cacheable for five minutes, serve stale for sixty seconds beyond that",
+identically to a real 28 KB card payload. **The code draws no distinction
+between a payload and an error.** The comment says "Cache TPL responses",
+and the implementation caches TPL *responses* rather than TPL *data*.
+
+**How it was found:** a live lookup returned `429` from the provider (a
+short-window burst limit; `:47` passes the status through verbatim, which is how
+the attribution was established). That surfaced the header being applied to it.
+
+**Rule 2 applies:** the failure is not that an error occurred \u2014 it is that the
+error is dressed as a cacheable success. If honoured, one rate-limited request
+poisons that query for five minutes for **every** user, and `stale-while-
+revalidate` extends it: the first user's `429` becomes everyone's answer, and
+nothing on the read side knows the cached body is an error rather than a card.
+
+**This is the reviewer's write/read asymmetry rule, and here it does fire.** The
+write path labels an error as durable, and no read path distinguishes it. Unlike
+RV-11, there is no lenient default catching it downstream.
+
+### What is Unverified, stated plainly
+
+**Whether Vercel's edge actually caches a `429`.** Its CDN honours caching
+directives for a specific set of status codes, and `429` is not obviously among
+them, so **the live blast radius may currently be nil**. I have not tested it,
+and testing it means deliberately provoking repeated provider rate limits \u2014
+consuming paid quota to demonstrate an abuse case.
+
+**The code defect does not depend on that answer.** It relies on an undocumented
+platform behaviour to be harmless, and a `500` or a `502`-shaped upstream body
+may sit inside the cacheable set where `429` does not. **Severity: real, bounded,
+and not release-blocking on current evidence.**
+
+### Fix, and the one judgement call in it
+
+Set the caching header **only for a successful upstream status**, and send an
+explicit non-cacheable header otherwise. One behaviour, one implementation.
+
+The judgement call: the existing comment calls the 5-minute cache a "big cost
+saver", and it is \u2014 it is what keeps the daily counter far from 10,000. **The fix
+must not weaken caching of real payloads while excluding errors.** Narrow the
+condition to the status, not to the caching.
