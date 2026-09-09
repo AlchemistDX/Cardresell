@@ -68,8 +68,16 @@ activation (G12).
 RV-13's local implementation is complete and adjudicated; it is no longer the
 head of this queue. What follows is, and **none of it is code**.
 
-**Every item waits on your explicit authorization.** Nothing below has been
-executed. Local implementation is not authorization.
+**Authorization recorded 2026-09-09 15:31 EDT:** Will granted permission to
+push what Phase 1 needs. Recorded, and deliberately **not acted on yet** —
+authorization was never the constraint here. The first Phase 1 push is gated by
+containment (steps 11a/11b of the rotation checklist), whose control has not
+been read yet, and that gate exists to stop a push from deploying into a shared
+store. A standing permission does not remove a technical prerequisite, so the
+push waits on containment rather than on consent.
+
+Nothing below has been executed. Local implementation is not authorization, and
+authorization is not readiness.
 
 ### Already closed — do not re-open
 
