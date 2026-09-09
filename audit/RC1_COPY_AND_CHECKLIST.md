@@ -524,17 +524,32 @@ this is the sequence to run when you say so.
 | 2 | Record the **new key's identifier (its Key #) and its initial `Last used` state** — empty, or its creation time. **Never the secret.** Note the account total as background. | This is the baseline the decisive check compares against |
 | 3 | In Vercel, **delete** `CARDSELL_TPL_KEY` and **re-add encrypted** with the new value | Cannot be converted in place |
 | 4 | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`** (commit `9aaf326`) from that deployment's own entry | **Not** a branch deploy, **not** a push, **not** `--prod` from this tree |
-| 5 | **One** request to the **deployment's own URL** for a card not looked up in the last 5 min; capture full response headers | Expect **`200`** and **`x-vercel-cache: MISS`/`BYPASS`**. `HIT`/`STALE` → change the card and retry |
-| 6 | **Re-read the new key's own `Last used`. It must have advanced.** | **THE DECISIVE CHECK.** Not advanced → wait briefly and refresh; still not advanced → **stop, leave the old key active** |
-| 7 | Confirm **Vercel invocation logs** show `/api/tpl-proxy` at that timestamp | Corroboration for step 5 |
-| 8 | Read the account-wide total | **Corroboration only.** A flat total does **not** fail the rotation if step 6 passed |
-| 9 | After the alias points at the redeployed target, repeat step 5 against **`www.cardresell.org`** | Proves the alias moved, not just the deployment |
-| 10 | **Revoke the old key** | **This is the step that closes CH-3** |
+| 5 | **Capture the rebuild's own returned deployment ID and URL**, and confirm its commit is **`9aaf326`** | The redeploy produces a **new deployment**. `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` is the **source** to rebuild from, **not** the thing to test. Wrong commit → **stop** |
+| 6 | **One** request to the **new deployment's URL from step 5** for a card not looked up in the last 5 min; capture full response headers | Expect **`200`** and **`x-vercel-cache: MISS`/`BYPASS`**. `HIT`/`STALE` → change the card and retry |
+| 7 | Confirm **Vercel invocation logs** show `/api/tpl-proxy` on **that deployment** at that timestamp | Part of the pass criteria, not decoration |
+| 8 | **Re-read the new key's own `Last used`. It must have advanced.** | Not advanced → wait briefly and refresh; still not advanced → **stop, leave the old key active** |
+| 9 | Read the account-wide total | **Corroboration only.** A flat total does **not** fail the rotation |
+| 10 | Confirm **`www.cardresell.org` resolves to the step-5 deployment**, then repeat step 6 against the live host | Alias unmoved → **stop.** Revoking now would strand production on the old key |
+| 11 | **Revoke the old key** | **This is the step that closes CH-3** |
 
-**Optional diagnostic, not a gate.** Repeating the step-5 request should return
-`x-vercel-cache: HIT`, which confirms the cache signal discriminates. If it
-stays `MISS`, **investigate caching separately** — a verified key is not
-un-verified by it.
+**The pass criterion is conjunctive — steps 6, 7 and 8 together.** No single
+one of them is sufficient, and demoting the account total did not promote the
+timestamp into a lone decisive signal:
+
+| Signal | Alone it establishes | Alone it misses |
+| --- | --- | --- |
+| `200` + `MISS`/`BYPASS` (6) | The CDN did not answer from cache | Whether a function ran, per Vercel's own docs |
+| Invocation log (7) | Our function executed | Whether the upstream call authenticated |
+| Key's `Last used` advanced (8) | **That key** authenticated at the provider | Whether it was *this* request or concurrent traffic |
+
+Read together they close each other's gap: the log ties execution to the
+timestamp, and the timestamp ties authentication to the specific key.
+**Any one of the three failing stops the procedure.**
+
+**Optional diagnostic, not a gate.** Repeating the step-6 request should return
+`x-vercel-cache: HIT`, confirming the cache signal discriminates. If it stays
+`MISS`, **investigate caching separately** — a verified key is not un-verified
+by it.
 
 **Failure handling — and this is containment, not rollback.** A `401`/`403` at
 step 5, or no timestamp movement at step 6, means **stop and leave the old key
@@ -1267,6 +1282,33 @@ was withdrawn: other keys, the still-live no-R4 deployment, local callers,
 verification requests, the hour-boundary burst. Raise it against measured
 demand, not against a ceiling. **Per-IP 15 still blocks activation** until a
 seller session is measured; plan size has no bearing on whether 15 is right.
+
+---
+
+## H-14. Two execution details corrected, and the one task that needs no authorization
+
+**The rebuild's own deployment is the verification target.** My procedure said
+to test "the deployment's own URL", which reads as the **source** deployment.
+Redeploying `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` **creates a new deployment with
+its own ID and URL**; the old one keeps serving the old bundle and old env. Had
+I verified against the source URL I would have measured the deployment that
+does **not** carry the replacement key — a third variant of the same failure
+mode: a check pointed at the wrong object. The procedure now captures the
+returned ID and URL, confirms the commit is `9aaf326`, and **confirms
+`www.cardresell.org` resolves to it before revocation** — revoking while the
+alias still points elsewhere would strand production on a revoked key.
+
+**The pass criterion is conjunctive.** Demoting the account total corrected an
+attribution error; it did not promote the timestamp into a lone decisive
+signal. A timestamp advancing cannot distinguish this request from concurrent
+traffic. Pass now requires the uncached `200`, the matching invocation
+evidence, and the key's own `Last used` **together** — any one failing stops.
+
+**Available with no authorization: the per-IP seller-session measurement.**
+This needs mocked upstream calls and the live bundle's three call sites, not
+your key and not rotation. It is the thing blocking a defensible
+`TPL_PER_IP_MAX`, so it can be done while the rotation waits. **100/hour stays
+provisional until those results are reviewed.**
 
 ---
 

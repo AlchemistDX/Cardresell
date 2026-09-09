@@ -228,7 +228,7 @@ that closes the exposure:
 | --- | --- | --- |
 | a | Generate the new key, old one still live | **No outage required** — confirmed by the five-slot allowance |
 | b | Delete `CARDSELL_TPL_KEY`, re-add **encrypted** | The only path; Vercel cannot convert in place |
-| c | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` (commit `9aaf326`)** — not a branch deploy | An env change reaches **no running deployment**. `phase1-block-d` is ~237 commits ahead and must not ship as a side effect of a rotation. |
+| c | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` (commit `9aaf326`)** — not a branch deploy. **This is the source to rebuild from; the rebuild returns a new deployment with its own ID and URL, and that is what gets verified.** Confirm its commit, and confirm `www.cardresell.org` resolves to it before any revocation | An env change reaches **no running deployment**. `phase1-block-d` is ~237 commits ahead and must not ship as a side effect of a rotation. |
 | d | Verify per §6b. **`x-vercel-cache: MISS`/`BYPASS` is necessary but not sufficient**; the confirming evidence is the **provider-side usage delta**. | My earlier `X-TPL-Cache`-absent test was invalid — see §6b. |
 | e | **Revoke the old key** | **The step that actually closes CH-3.** Everything before it adds a good key; only this removes the exposed one. |
 | f | Then R4 activation | A mitigation, not the remedy. Must not delay (e). |
@@ -404,9 +404,16 @@ identifier (its **Key #**, never the secret) and its initial `Last used` state
 — for a freshly created key that is empty or its creation time. After the
 verification request, that key's own timestamp must **advance**.
 
-This is stronger than the account total for three reasons, and the total's
-weakness is not hypothetical — see §3a, where the day's total read **0** while
-an active key reported a use four hours earlier:
+**It does not become a lone decisive signal, though.** Demoting the account
+total corrected an attribution error; it did not make the timestamp sufficient
+by itself, because a timestamp advancing cannot distinguish *this* request from
+concurrent traffic. **The pass criterion is Signals 1, 3 and 4 together** —
+uncached response, matching invocation evidence, and the key's own timestamp.
+Any one failing stops the procedure.
+
+Against the account total specifically, the per-key field is stronger for three
+reasons, and the total's weakness is not hypothetical — see §3a, where the
+day's total read **0** while an active key reported a use four hours earlier:
 
 | | Account-wide total | Per-key `Last used` |
 | --- | --- | --- |
