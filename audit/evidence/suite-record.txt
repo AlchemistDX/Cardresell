@@ -1,0 +1,65 @@
+# Per-suite record — 2026-09-09T13:27:46Z · 7c4fc6b+dirty
+# Run individually, one process each. run-all.sh NOT used (standing instruction).
+#
+# 47 registered suite files / 52 runner slots -- slots exceed files because some
+# suites occupy a slot with a SKIPPED branch as well as a run branch.
+#
+# 47 recorded, 47 exit 0, of which ONE is an explicit skip:
+#   draft-kv-live -- SKIPPED, needs DRAFT_KV_LIVE=1 and a live store (RV-4).
+#   A skip is recorded as a skip, not counted as a pass.
+#
+# Two entries required a repair before they could be recorded, and both were
+# ALREADY RED AT HEAD before today's work:
+#   majors-flip-and-pack -- lifted _flipNetOf without its _flipCompleteness
+#     callee, and pinned the deleted `hasCosts` field plus an inline clamp that
+#     had been consolidated into _flipNetOf. Evidence shape, not behaviour.
+#   condition-applicability -- passes run alone; it crashed once when run back
+#     to back with another server-starting suite in the same shell. Recorded
+#     from the isolated run, and the batch crash is noted rather than hidden.
+asset-fingerprints.mjs                        rc=0   asset-fingerprints: 72 passed, 0 failed
+copy-truth-offline.mjs                        rc=0   ALL CHECKS PASSED
+fee-truth-offline.mjs                         rc=0   All fee-truth checks passed.
+webhook-p0-offline.mjs                        rc=0   All 4 webhook P0 cases passed.
+launch-audit-regressions.mjs                  rc=0   438 passed, 0 failed
+variant-selection.mjs                         rc=0   16 passed, 0 failed
+sports-price-guard.mjs                        rc=0   [sports-price-guard] 60 passed, 0 failed
+quick-pricing.mjs                             rc=0   219 passed, 0 failed
+sports-parallel.mjs                           rc=0   sports-parallel: 11 passed, 0 failed
+scanner-fastpath.mjs                          rc=0     16 passed, 0 failed
+ebay-auth-offline.mjs                         rc=0   57 passed, 0 failed
+sku-identity.mjs                              rc=0   85 passed, 0 failed
+sell-eligibility.mjs                          rc=0   sell-eligibility: 113 passed, 0 failed
+sell-gate-ordering.mjs                        rc=0   sell-gate-ordering: 38 passed, 0 failed
+listing-packet-offline.mjs                    rc=0   232 passed, 0 failed
+draft-index-recovery.mjs                      rc=0   258 passed, 0 failed
+draft-store.mjs                               rc=0   draft-store: 147 passed, 0 failed
+draft-crud-e2e.mjs                            rc=0   draft-crud-e2e: 192 passed, 0 failed
+draft-list-cap.mjs                            rc=0   draft-list-cap: 130 passed, 0 failed
+draft-kv-live.mjs                             rc=0   draft-kv-live: SKIPPED (set DRAFT_KV_LIVE=1 to run against the real store)
+draft-readiness.mjs                           rc=0   RESULT: PASS
+draft-focus.mjs                               rc=0   draft-focus: 56 passed, 0 failed
+draft-list-screen.mjs                         rc=0   draft-list-screen: 101 passed, 0 failed
+draft-review-screen.mjs                       rc=0   draft-review-screen: 370 passed, 0 failed
+trs-listing-scope.mjs                         rc=0   trs-listing-scope: 60 passed, 0 failed
+contrast-tokens.mjs                           rc=0   contrast-tokens: 12 passed, 0 failed
+accuracy-fee-parity.mjs                       rc=0   accuracy-fee-parity: 41 passed, 0 failed
+review-fee-dl.mjs                             rc=0   review-fee-dl: 21 passed, 0 failed
+asset-extraction-2026-09-05.mjs               rc=0     34 passed, 0 failed
+sol-remediation-2026-09-04.mjs                rc=0   [sol-remediation] 58 passed, 0 failed
+durability-tombstones-2026-09-04.mjs          rc=0   130 passed, 0 failed
+scan-hygiene-2026-09-04.mjs                   rc=0   182 passed, 0 failed
+entitlements-2026-09-04.mjs                   rc=0   68 passed, 0 failed
+a11y-mobile-2026-09-04.mjs                    rc=0   174 passed, 0 failed
+minors-011-012-013-2026-09-04.mjs             rc=0   [minors-011-012-013] 106/106 assertions passed
+bulk-scan-misfire.mjs                         rc=0   all bulk-scan misfire regressions pass
+bulk-bulbasaur-qualifier-2026-09-04.mjs       rc=0   72 passed, 0 failed
+bulk-minun-misfire-2026-09-04.mjs             rc=0   85 passed, 0 failed
+grading-upside-fees.mjs                       rc=0   grading-upside-fees: 103 passed, 0 failed
+payout-honesty.mjs                            rc=0   payout-honesty: 32 passed, 0 failed
+decision-restatements.mjs                     rc=0   decision-restatements: 34 passed, 0 failed
+tpl-proxy-offline.mjs                         rc=0   65 passed, 0 failed
+tpl-budget-offline.mjs                        rc=0   101 passed, 0 failed
+ebay-notify-token.mjs                         rc=0   ebay-notify-token: 22 passed, 0 failed
+test-registry.mjs                             rc=0   test-registry: 12 passed, 0 failed
+condition-applicability.mjs                   rc=0   condition-applicability: 17 passed, 0 failed
+majors-flip-and-pack-2026-09-04.mjs           rc=0     majors-flip-and-pack-2026-09-04: 107 passed, 0 failed

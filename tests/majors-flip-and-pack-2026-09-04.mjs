@@ -68,8 +68,22 @@ function grabFn(name) {
    MAJOR #3 — flip P&L: fees, shipping, grading
    ══════════════════════════════════════════════════════════════ */
 
-const flipNetSrc = grabFn('_flipNetOf');
-const _flipNetOf = new Function(`${flipNetSrc}; return _flipNetOf;`)();
+// REPAIR 2026-09-09. This lift was red at HEAD before today's work, and it
+// failed on EVIDENCE, not behaviour: `_flipNetOf` was refactored to call
+// `_flipCompleteness`, and lifting one function out of the bundle without its
+// callee produced a ReferenceError at first use. The behaviour it asserts never
+// changed -- the same defect shape as fee-truth-offline, where a passing
+// assertion depended on an incidental textual arrangement rather than on the
+// behaviour it names.
+//
+// The fix is to lift the dependency too, and to say out loud that it IS a
+// dependency, so the next refactor breaks loudly here instead of silently.
+const flipCompletenessSrc = grabFn('_flipCompleteness');
+const flipNetSrc          = grabFn('_flipNetOf');
+ok('_flipNetOf calls _flipCompleteness, so both must be lifted together',
+   /_flipCompleteness\s*\(/.test(flipNetSrc));
+const _flipNetOf = new Function(
+  `${flipCompletenessSrc}; ${flipNetSrc}; return _flipNetOf;`)();
 
 // The audit's exact reproduction case. This is the whole point of the fix.
 {
@@ -79,7 +93,17 @@ const _flipNetOf = new Function(`${flipNetSrc}; return _flipNetOf;`)();
   ok('audit case: net is NOT the old gross spread of +$50', Math.abs(r.net - 50) > 0.005);
   ok('audit case: ROI is NOT the old +50.0%', Math.abs(r.roiPct - 50) > 0.005);
   near('audit case: basis is total cash deployed ($150)', r.basis, 150);
-  ok('audit case: hasCosts is true', r.hasCosts === true);
+  // REPAIR 2026-09-09. This asserted `hasCosts`, a field DELETED from
+  // `_flipNetOf` when completeness moved into `_flipCompleteness`. Reading a
+  // removed field yields `undefined`, so the assertion was failing rather than
+  // silently passing -- but it was pinning a retired API, not a behaviour.
+  // Replaced with the distinction the field existed to carry, expressed
+  // against the surface that carries it now. NOT deleted to reach green: the
+  // arithmetic it guarded is asserted immediately above.
+  ok('audit case: costs are deducted, so the net is not the gross spread',
+     Math.abs(r.net - 50) > 0.005);
+  ok('audit case: with no costMeta the flip reports untracked, not complete',
+     r.provisional === true && Array.isArray(r.missingCosts));
 }
 
 // Back-compat: a legacy flip with no cost fields must be byte-identical to the
@@ -89,7 +113,13 @@ const _flipNetOf = new Function(`${flipNetSrc}; return _flipNetOf;`)();
   near('legacy flip (no cost fields) still nets the gross spread', _flipNetOf(legacy).net, 50);
   near('legacy flip ROI still divides by buyPrice alone', _flipNetOf(legacy).roiPct, 50);
   near('legacy flip basis collapses to buyPrice', _flipNetOf(legacy).basis, 100);
-  ok('legacy flip reports hasCosts false', _flipNetOf(legacy).hasCosts === false);
+  // Same repair. A legacy row is UNTRACKED, which is a different claim from
+  // "tracked and complete" and from "tracked and incomplete" -- and keeping
+  // those three distinguishable is the whole point of the completeness work.
+  ok('legacy flip is untracked rather than reported complete',
+     _flipNetOf(legacy).provisional === true);
+  ok('legacy flip invents no missing-field list',
+     (_flipNetOf(legacy).missingCosts || []).length === 0);
 }
 
 // The three original audit arithmetic cases must be unchanged when no costs
@@ -151,6 +181,16 @@ const _flipNetOf = new Function(`${flipNetSrc}; return _flipNetOf;`)();
     base - _flipNetOf({ buyPrice: 100, sellPrice: 150, gradingCost: 7 }).net, 7);
 }
 
+/* The clamp itself, asserted once against the function that now owns it. */
+{
+  const neg = _flipNetOf({ buyPrice: 100, sellPrice: 150,
+                           fees: -20, shippingCost: -5, gradingCost: -25 });
+  near('a negative fee is clamped to zero, not credited back', neg.fees, 0);
+  near('a negative shipping cost is clamped to zero', neg.shippingCost, 0);
+  near('a negative grading cost is clamped to zero', neg.gradingCost, 0);
+  near('so negative costs cannot inflate the net above the gross spread', neg.net, 50);
+}
+
 /* --- write paths must persist the components, not just the net --- */
 for (const [label, fn] of [['confirmMarkSold', 'confirmMarkSold'], ['saveFlipEntry', 'saveFlipEntry']]) {
   const src = stripComments(grabFn(fn));
@@ -160,7 +200,17 @@ for (const [label, fn] of [['confirmMarkSold', 'confirmMarkSold'], ['saveFlipEnt
   ok(`${label} persists fees`, /\bfees\b/.test(src));
   ok(`${label} persists shippingCost`, /shippingCost/.test(src));
   ok(`${label} persists gradingCost`, /gradingCost/.test(src));
-  ok(`${label} clamps costs at zero on read`, /Math\.max\(0,\s*parseFloat/.test(src));
+  // REPAIR 2026-09-09. This grepped each write path for an inline
+  // `Math.max(0, parseFloat(...))`. The clamp was CONSOLIDATED into
+  // `_flipNetOf` (`pos = v => Math.max(0, n(v))`) -- which is Rule 1 working
+  // as intended, one behaviour in one place -- so the per-caller text vanished
+  // while the guarantee got stronger. Asserting the text would now argue for
+  // duplicating the clamp back into both callers.
+  //
+  // Pinned as behaviour instead: the path routes through `_flipNetOf` (checked
+  // above), and `_flipNetOf` clamps.
+  ok(`${label} routes costs through the single clamp in _flipNetOf`,
+     /_flipNetOf\(/.test(src) && !/Math\.max\(0,\s*parseFloat/.test(src));
 }
 
 // The UI must actually offer the inputs, or the fields can never be populated.
