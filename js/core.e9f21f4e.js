@@ -294,20 +294,64 @@ function _rankTplBySetHint(rows, q) {
     .map(x => x.c);
 }
 
+/* ── TPL lookup outcome ─────────────────────────────────────────────────────
+   Returns a discriminated result, never a bare null. A search that succeeded
+   and found nothing is not the same event as a lookup we could not perform,
+   and the old `return null` merged the two — plus rate limits, 5xx and thrown
+   timeouts — into the single value the UI already used for "no such card".
+   RV-13. The distinction is what R4's refusals need in order to be visible to
+   the person being refused.
+     { ok:true,  cards:[...] }  search ran, cards found
+     { ok:true,  cards:[]    }  search ran, genuinely nothing
+     { ok:false, reason }       lookup did not happen: rate_limited | budget |
+                                unavailable | network | not_configured        */
 async function searchWithTPL(q, gameSlug) {
-  if (!window.tplApiKey) return null;
+  if (!window.tplApiKey) return { ok:false, cards:null, reason:'not_configured' };
   try {
     // Proxied server-side so the paid TPL key never ships to the browser.
     const url = `/api/tpl-proxy?path=/v1/cards/search&q=${encodeURIComponent(q)}&game=${encodeURIComponent(gameSlug)}&limit=100`;
     const r = await fetch(url);
-    if (!r.ok) return null;
+    if (!r.ok) {
+      // The proxy names its own refusals (api/tpl-proxy.js per_ip_limit /
+      // budget_exhausted). Prefer that name over the bare status.
+      let reason = r.status === 429 ? 'rate_limited' : 'unavailable';
+      try {
+        const j = await r.json();
+        if (j && j.reason === 'per_ip_limit')      reason = 'rate_limited';
+        else if (j && j.reason === 'budget_exhausted') reason = 'budget';
+      } catch { /* an unreadable error body leaves the status-derived reason */ }
+      return { ok:false, cards:null, reason };
+    }
     const json = await r.json();
-    if (!(json.data && json.data.length)) return null;
-    return _rankTplBySetHint(json.data, q);
+    if (!(json.data && json.data.length)) return { ok:true, cards:[], reason:null };
+    return { ok:true, cards:_rankTplBySetHint(json.data, q), reason:null };
   } catch(e) {
     console.warn('TPL search error:', e);
-    return null;
+    return { ok:false, cards:null, reason:'network' };
   }
+}
+
+/* ── What the seller is told when nothing was found ─────────────────────────
+   ONE implementation, called only from a give-up point — i.e. after every
+   provider that path knows about has already failed to produce a card. A
+   successful fallback result is therefore never replaced by an error screen.
+   Only a search that actually ran and found nothing keeps the "no matches"
+   wording; a lookup that could not happen says so, and says the input is
+   still there. RV-13.                                                        */
+const TPL_UNAVAILABLE_MSG = {
+  rate_limited:   'Too many lookups just now. Your search is still here — wait a few seconds and try again.',
+  budget:         'Card lookup has reached its limit for now. Your search is still here — try again later.',
+  unavailable:    'Card lookup is temporarily unavailable. Your search is still here — try again in a moment.',
+  network:        'Could not reach the card database. Check your connection — your search is still here.',
+  not_configured: 'Card lookup is not configured, so prices could not be checked.',
+};
+function tplOutcomeHtml(res, emptyHtml) {
+  if (res && res.ok === false) {
+    const reason = res.reason || 'unavailable';
+    const msg = TPL_UNAVAILABLE_MSG[reason] || TPL_UNAVAILABLE_MSG.unavailable;
+    return `<div class="drop-empty" data-tpl-state="unavailable" data-tpl-reason="${reason}">${msg}</div>`;
+  }
+  return emptyHtml;
 }
 
 /* The TPL raw-price contract, named and checked in one place.
@@ -1122,7 +1166,8 @@ async function doSearch(q) {
 async function searchPokemon(q) {
   const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4] stale-write guard
   // Try TCGPriceLookup first if key is set
-  const tplData = await searchWithTPL(q, 'pokemon');
+  const _tplRes = await searchWithTPL(q, 'pokemon');
+  const tplData = (_tplRes.cards && _tplRes.cards.length) ? _tplRes.cards : null;
   if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData) {
     // Sort by name relevance: exact → starts-with → word-starts-with → contains
@@ -1203,7 +1248,7 @@ async function searchPokemon(q) {
     return db.localeCompare(da);
   });
 
-  if (!cards.length) { dropList.innerHTML = '<div class="drop-empty">No Pokémon cards found. Try a different name.</div>'; return; }
+  if (!cards.length) { dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Pokémon cards found. Try a different name.</div>'); return; }
 
   window._searchCards = {};
   dropList.innerHTML = cards.map((c, i) => {
@@ -1258,7 +1303,8 @@ async function searchPokemon(q) {
 async function searchPokemonJP(q) {
   const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4] stale-write guard
   // Strategy 0: Try TCGPriceLookup (pokemon-jp) if key is set
-  const tplData = await searchWithTPL(q, 'pokemon-jp');
+  const _tplRes = await searchWithTPL(q, 'pokemon-jp');
+  const tplData = (_tplRes.cards && _tplRes.cards.length) ? _tplRes.cards : null;
   if (!_searchReqStillCurrent(_reqSnap)) return;
 
   // Strategy 1: Try TCGdex for JP cards (has some JP sets)
@@ -1351,13 +1397,18 @@ async function searchPokemonJP(q) {
     // things we simply don't cover (foreign, sports, custom).
     window.trackEvent?.('search_zero_results', { game: activeGame || 'pokemon', q: (q || '').slice(0, 60) });
     if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
-    dropList.innerHTML = '<div class="drop-empty">No results found. Try clicking the JP COMPS button above.</div>';
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No results found. Try clicking the JP COMPS button above.</div>');
     return;
   }
 
   window.trackEvent?.('search_results', { game: activeGame || 'pokemon', count: items.length });
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
-  dropList.innerHTML = items.join('');
+  // The JP path always synthesizes a usable eBay JP comps entry, so it has a
+  // successful fallback result even when TPL refused. That result is kept —
+  // an error screen must not replace it — but the seller is still told that
+  // live price lookup did not run, otherwise the missing prices look like the
+  // card simply has none. RV-13.
+  dropList.innerHTML = tplOutcomeHtml(_tplRes, '') + items.join('');
 
   attachDropHandlers(i => {
     const entry = window._searchCards[i];
@@ -1420,7 +1471,8 @@ async function searchPokemonJP(q) {
 async function searchMTG(q) {
   const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TCGPriceLookup first if key is set
-  const tplData = await searchWithTPL(q, 'mtg');
+  const _tplRes = await searchWithTPL(q, 'mtg');
+  const tplData = (_tplRes.cards && _tplRes.cards.length) ? _tplRes.cards : null;
   if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData) {
     window._searchCards = {};
@@ -1448,14 +1500,14 @@ async function searchMTG(q) {
   const r = await fetch(url);
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   if (!r.ok) {
-    if (r.status === 404) { dropList.innerHTML = '<div class="drop-empty">No Magic cards found. Try a different name.</div>'; return; }
+    if (r.status === 404) { dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Magic cards found. Try a different name.</div>'); return; }
     throw new Error(`Scryfall ${r.status}`);
   }
   const data = await r.json();
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   const cards = (data.data || []).slice(0, 20);
 
-  if (!cards.length) { dropList.innerHTML = '<div class="drop-empty">No Magic cards found. Try a different name.</div>'; return; }
+  if (!cards.length) { dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Magic cards found. Try a different name.</div>'); return; }
 
   window._searchCards = {};
   dropList.innerHTML = cards.map((c, i) => {
@@ -1520,7 +1572,8 @@ async function _getLorcanaCards() {
 async function searchLorcana(q) {
   const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TPL first if key available
-  const tplData = await searchWithTPL(q, 'lorcana');
+  const _tplRes = await searchWithTPL(q, 'lorcana');
+  const tplData = (_tplRes.cards && _tplRes.cards.length) ? _tplRes.cards : null;
   if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData && tplData.length) {
     window._searchCards = {};
@@ -1547,7 +1600,7 @@ async function searchLorcana(q) {
   const allCards = await _getLorcanaCards();
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   if (!allCards.length) {
-    dropList.innerHTML = '<div class="drop-empty">Lorcana card database unavailable. Try again later.</div>';
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">Lorcana card database unavailable. Try again later.</div>');
     return;
   }
 
@@ -1566,7 +1619,7 @@ async function searchLorcana(q) {
     .slice(0, 30);
 
   if (!filtered.length) {
-    dropList.innerHTML = '<div class="drop-empty">No Lorcana cards found. Try a different name.</div>';
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Lorcana cards found. Try a different name.</div>');
     return;
   }
 
@@ -1604,7 +1657,8 @@ async function searchLorcana(q) {
 async function searchOnePiece(q) {
   const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TPL if key available
-  const tplData = await searchWithTPL(q, 'onepiece');
+  const _tplRes = await searchWithTPL(q, 'onepiece');
+  const tplData = (_tplRes.cards && _tplRes.cards.length) ? _tplRes.cards : null;
   if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData && tplData.length) {
     window._searchCards = {};
@@ -1625,6 +1679,11 @@ async function searchOnePiece(q) {
   }
   // No free API available — guide user to manual entry
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
+  if (_tplRes.ok === false) {
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, '');
+    dropList.classList.add('open');
+    return;
+  }
   dropList.innerHTML = `<div style="padding:.9rem 1rem">
     <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:.35rem">⚓ One Piece TCG</div>
     <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:.6rem">No free card database is available yet. Enter your card name above, then use the <strong>Override price</strong> field to set the market value manually.</div>
@@ -1643,9 +1702,10 @@ async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
     return;
   }
 
-  const data = await searchWithTPL(q, gameSlug);
+  const _tplRes = await searchWithTPL(q, gameSlug);
+  const data = _tplRes.cards;
   if (!data || !data.length) {
-    dropList.innerHTML = `<div class="drop-empty">${emptyMsg} Try a different name.</div>`;
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, `<div class="drop-empty">${emptyMsg} Try a different name.</div>`);
     return;
   }
 
@@ -1673,7 +1733,8 @@ async function searchTPLGame(q, gameSlug, emoji, emptyMsg) {
 async function searchYugioh(q) {
   const _reqSnap = _snapSearchReq(); // 2026-08-22 [F4]
   // Try TCGPriceLookup first if key is set
-  const tplData = await searchWithTPL(q, 'yugioh');
+  const _tplRes = await searchWithTPL(q, 'yugioh');
+  const tplData = (_tplRes.cards && _tplRes.cards.length) ? _tplRes.cards : null;
   if (!_searchReqStillCurrent(_reqSnap)) return;
   if (tplData) {
     window._searchCards = {};
@@ -1708,14 +1769,14 @@ async function searchYugioh(q) {
   const r = await fetch(url);
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   if (!r.ok) {
-    dropList.innerHTML = '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>';
+    dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>');
     return;
   }
   const data = await r.json();
   if (!_searchReqStillCurrent(_reqSnap)) return; // 2026-08-25 [P1-2]
   const cards = (data.data || []).slice(0, 20);
 
-  if (!cards.length) { dropList.innerHTML = '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>'; return; }
+  if (!cards.length) { dropList.innerHTML = tplOutcomeHtml(_tplRes, '<div class="drop-empty">No Yu-Gi-Oh! cards found. Try a different name.</div>'); return; }
 
   window._searchCards = {};
   dropList.innerHTML = cards.map((c, i) => {
@@ -14566,7 +14627,8 @@ async function _loadScannedCardExactImpl(pending) {
     // didn't produce a confident match.
     if (window.tplApiKey) {
       try {
-        const tplHits = await searchWithTPL(cleanName, 'pokemon');
+        const _tplScanRes = await searchWithTPL(cleanName, 'pokemon');
+        const tplHits = _tplScanRes.cards;
         if (tplHits && tplHits.length) {
           // Same match strategy: exact number → partial number → rarity+set
           const normalizeNum = n => (n || '').replace(/\s/g,'').split('/')[0].replace(/^0+/, '') || n;

@@ -1,7 +1,7 @@
 # Bundle citation map
 
 **2026-09-09:** `js/core.66c39922.js` is **retired** (retained on disk; audit
-documents cite its line numbers). Live bundle is **`js/core.73a71fac.js`**.
+documents cite its line numbers). Live bundle on branch is **`js/core.e9f21f4e.js`** (was `js/core.73a71fac.js`, then `core.176e4a56.js`, both retired 2026-09-09 by the RV-13 fix).
 Forced by the RC-1 review copy and the blank-shipping note.
  — retired generations → live
 
