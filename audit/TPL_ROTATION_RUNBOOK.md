@@ -624,3 +624,54 @@ returned `x-vercel-cache: MISS` and 33,299 bytes.
 **If the Logs tab shows nothing for `/api/tpl-proxy`:** do **not** revoke. That
 would mean the request was served by something other than this rebuild, and the
 `200` would then be evidence about **#518**, not about the replacement.
+
+## Verification complete \u2014 all three readings, together
+
+| Required reading | Status |
+| --- | --- |
+| Successful uncached lookup | `200`, `x-vercel-cache: MISS`, `age: 0`, 33,299 bytes, 20 records |
+| Matching invocation evidence | Dashboard log on the deployment whose id matches `dpl_BJuH3okr\u2026`: **Production**, an **external TCGPriceLookup call**, **`200`** |
+| Replacement key's `Last used` | Advanced from **`Never`** to **today** |
+
+The three were required **together** precisely because no one of them is
+conclusive alone, and that is what has now been satisfied. The account counter
+played **no** part in this determination, per the correction above.
+
+**Step 11 authorized:** revoke **#518 only**. `cardresell production
+replacement` stays active.
+
+## The post-revocation lookup is the strongest evidence of the whole rotation
+
+Worth naming rather than treating as a formality. Every reading so far had to
+work around one ambiguity: **#518 was still active**, so a successful lookup was
+always consistent with the old key being the one that worked. The build-time env
+argument and the invocation log closed that gap by **inference about routing**.
+
+**Revocation removes the ambiguity entirely.** Once #518 is dead at the provider,
+a successful live lookup can only be the replacement key \u2014 there is no other
+credential left that could produce it. So the check after revocation is not a
+victory lap; it is the **only** observation in this sequence that needs no
+inference at all.
+
+**And it is the moment of maximum exposure**, because it is also the first point
+at which the site has **no working rollback**: #518's value is gone from Vercel
+and now revoked at the provider, and the old deployment's env snapshot points at
+a dead key. **If that lookup fails, the remedy is forward only** \u2014 a new key,
+re-add, rebuild \u2014 with TPL lookups down in the interim.
+
+**Harness note:** the sandbox's direct egress to `cardresell.org` was failing
+during this session while the Vercel API kept answering, so the post-revocation
+lookup must be taken through the **cloud browser**, which reached the site at
+`200` when `curl` could not. A `curl` failure at that step would be
+**uninterpretable**, not a finding.
+
+## What revocation closes \u2014 and the wording that must not drift
+
+- **G11** closes at revocation.
+- **CH-3** closes \u2014 worded **"the public and plain-storage exposures are
+  closed."** **NEVER** "the TPL credential is unexposed." The replacement key's
+  value sits in a retained transcript, Will chose to keep it rather than cut a
+  third, and per Q-CH3-15 anyone with account access can read every key value
+  from the dashboard's `Copy` button regardless. The accepted blast radius is
+  **provider quota only**.
+- **G12** does **not** close here \u2014 it still needs G1 plus real-store evidence.
