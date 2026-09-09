@@ -238,6 +238,49 @@ HEIC guidance, but the scan QC gates were tuned to reject photos that break
 job. Each gate gets checked before it becomes a listing-photo rejection rule; any
 that is scan-specific is not inherited.
 
+### 6.5 What D7 verifies — BUILT, store layer green (2026-09-08)
+
+Implemented in `js/core.ea2f03c4.js` (generation 11) and verified by
+`tests/listing-photos.mjs`, **41 checks, 0 failures**, in real Chromium against
+the real bundle. Not a fake: the property under test is a transaction property,
+so a stub would be testing the stub.
+
+| # | Owner-specified case | Check | Result |
+|---|---|---|---|
+| 1 | reload / order / removal | §1, 9 checks | green |
+| 2 | transaction failure leaves no partial state | §2, 7 checks | green |
+| 3 | manifest entry with missing bytes | §4, 4 checks | green |
+| 4 | complete local absence | §5, 6 checks | green |
+| 5 | no image upload | §6, 4 checks | green |
+| + | two tabs adding to one draft | §3, 4 checks | green |
+| + | failure copy names only what is established | §7, 7 checks | green |
+
+**The abort case is built the way it was asked for**: the fault fires *after*
+every blob `put` has reported `success` and *before* the manifest write and
+commit. It asserts the caller sees a rejection, no ghost blob survives, the
+manifest is byte-identical to before, and the store still works afterwards. If
+request-success had been treated as storage, that call would resolve and two
+orphan blobs would remain.
+
+**First run found a bug in the check, not the store.** "No POST during the page
+lifetime" failed on a page-load beacon to `/api/events` with an empty body.
+Probed directly before touching anything: the beacon fires twice *before* any
+photo call, and the add issues zero requests. Fixed in the check — the window
+is now scoped to the add, plus a second assertion that holds independently of
+any window (no request carries a non-empty body while photos are in play) and a
+third (no request goes to an upload-shaped URL). The store was never relaxed.
+
+**Limit stated plainly.** This suite covers the store, not a screen. There is no
+photo UI yet, so nothing here proves a seller ever sees the unavailable state or
+the browser-local line — only that the store reports them and the strings say
+what §6.1 requires. Rendering is the next step and is unverified.
+
+**Not registered** in `audit/RELEASE_VALIDATION_QUEUE.md` or
+`audit/SUITE_COVERAGE_INTERRUPTIONS.md`. Registration happens at D7 closeout;
+recorded here so the gap is written down rather than discovered.
+
+### 6.6 Original list
+
 ### 6.5 What D7 verifies
 
 Owner-specified, all in the existing browser workflow, none needing an account:

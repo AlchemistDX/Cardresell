@@ -1,6 +1,16 @@
 # Bundle citation map — retired generations → live
 
-**Live bundle: `js/core.a7e7422d.js` (22,744 lines).** New work cites that hash.
+**Live bundle: `js/core.ea2f03c4.js` (22,969 lines).** New work cites that hash.
+
+> ### Generation 11 — local listing photos
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 11 | `a7e7422d` → `ea2f03c4` | *(this commit)* | D7: an IndexedDB listing-photo store. Manifest and blobs are separate object stores in one database, written in one transaction; success is the transaction's `complete` event, never a request's `success`; the manifest is read and rewritten inside the write transaction so two tabs cannot overwrite each other; a manifest entry with missing bytes renders an explicit unavailable state; failure copy names only a cause the error establishes. See `audit/d7/D7_ENTRY_GATE.md` §6. |
+>
+> **`a7e7422d` is retained on disk** with bytes matching its own name — copied
+> back after a `git mv`, which is the generation-8 mistake and was caught here
+> by `tests/asset-fingerprints.mjs` rather than by review.
 
 > ### Generation 10 — the instruction to look
 >
