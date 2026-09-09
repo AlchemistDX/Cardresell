@@ -76,7 +76,9 @@ photos elsewhere" is unanswerable, exactly as D6's "is this seller new" was
 (`audit/d6/D6_ENTRY_GATE.md` §1-2).
 
 So the copy is unconditional and states the rule rather than this draft's state:
-photos stay on the device that added them and do not travel with the draft.
+photos stay in **the browser** that added them and do not travel with the draft.
+(Corrected 2026-09-08 from "device" — see §6.1. Another browser on the same
+device has separate storage, so "device" overstates the reach.)
 Same resolution, and reached the same way — by finding no signal we own rather
 than by preference.
 
@@ -108,110 +110,148 @@ Open before code:
 3. **Validation reuse** — confirm the scan QC gates are the right gates, or
    record why listing photos differ.
 
-### 5.1 Question 2 sharpened — three states, not two
+### 5.1 SUPERSEDED 2026-09-08 by §6 — three states, on a false premise
 
-Added on review. The read-time absence case is not "no photos", and it must not
-render as "no photos". There are **three** states and the middle one is the
-whole point of asking:
+**This section is retained, not deleted, because §6 corrects it and a correction
+needs the thing it corrects.** Its state table is still right. Its premise —
+that a small ordering record survives when image bytes do not — is **wrong**,
+and every consequence drawn from it in §5.1-5.3 (separate storage to buy
+survival, bytes-first write order, orphan deletion as a truth requirement)
+followed from that error. Read §6 instead. Prior text preserved below.
 
-| State | What we know | What the screen owes |
-|---|---|---|
-| Never added | no record of any photo for this draft | the ordinary empty prompt |
-| Added, present | records and bytes both here | the photos |
-| **Added, gone** | **a record says photos existed; the bytes are absent** | **say so** |
+The read-time absence case is not "no photos", and it must not render as "no
+photos". Three states, and the middle one is the whole point of asking: never
+added; added and present; added and gone. This is the withheld-versus-never-had
+rule — two different facts must not render identically. **[The claim that the
+ordering record "survives when the image bytes do not" is the superseded
+premise. See §6.1.]**
 
-This is the withheld-versus-never-had rule. Two different facts must not render
-identically, and the difference is cheap to keep: the ordering record is small
-and survives when the image bytes do not, so *"photos were here and are not
-now"* is knowable **even though why is not.** We can state the absence honestly
-without claiming a cause — we were not told, and guessing between eviction,
-private mode, and a user clearing storage would be inventing a reason.
+With eBay the seller stands in front of the other party's screen and can compare
+our claim against it. With eviction there is nothing to compare against, and if
+the screen renders a lost photo as "never added", the seller's own memory is the
+only contradicting evidence. **That part survives the correction** — it is why
+§6 keeps an explicit unavailable state wherever the evidence for one exists.
 
-Worth naming why this is a harder version of the eBay case rather than a
-milder one: with eBay the seller is standing in front of the other party's
-screen and can compare our claim against it. **With eviction there is nothing to
-compare against.** The photo is simply not there, and the only party who could
-have said so did not. If the screen renders it as "never added", the seller's
-own memory is the only contradicting evidence, and they will assume they are
-wrong.
+### 5.2 SUPERSEDED IN PART — the medium argument
 
-Design consequence: the ordering record must be stored **separately from the
-image bytes**, so it can survive them. If order and bytes live in one blob,
-losing the bytes loses the evidence that anything was lost, and the third state
-becomes unrepresentable.
+The cross-feature degradation argument stands and decides the medium: photos in
+`localStorage` would consume quota that existing working behaviour depends on,
+and the first casualty of a full quota is the next portfolio save, not the
+photo. A portfolio defect with a photo cause, across a boundary neither
+feature's code mentions. **IndexedDB it is.**
 
-### 5.2 The medium argument, restated — and what the measurement is now for
+**Corrected:** this section proposed a quota-exhaustion measurement to size the
+harm. Dropped — one device's ceiling does not establish a portable limit, and
+the medium was never waiting on it. See §6.4.
 
-The strongest case against `localStorage` is not size. It is that **photos would
-consume a quota that existing working behaviour depends on, and the failure would
-land somewhere unrelated to the feature that caused it.** The first casualty of
-a full quota is the next portfolio save, not the photo. Nothing on the screen
-would connect a photo added on Tuesday to a card that would not save on Friday,
-and the seller would experience it as the portfolio breaking.
+### 5.3 SUPERSEDED 2026-09-08 by §6.2 and §6.3
 
-That is not a photo defect with a storage cause. It is **a portfolio defect with
-a photo cause** — a new feature quietly degrading an old one, across a boundary
-neither feature's code mentions. The existing `_lsWrite` machinery would report
-it accurately and still misattribute it, because it reports the write that
-failed, not the feature that consumed the room.
+Decided here that the order record is the index of truth, that bytes without a
+record must be **deleted**, and that bytes are written before the record. The
+authority half is kept (§6.2). The deletion-as-truth-requirement and the
+bytes-first protocol are **withdrawn** — both were workarounds for the §5.1
+premise, and an atomic transaction removes the problem they addressed (§6.3).
 
-So IndexedDB's async contract and its Rule 1 question are real work weighed
-against the wrong alternative. The alternative is not "a smaller budget."
+## 6. Corrected storage design (2026-09-08, supersedes §5.1-5.3)
 
-**This changes what the measurement is for.** It no longer decides the medium —
-the cross-feature degradation argument does that on its own, at any quota. The
-measurement now sizes the harm and sets urgency: how many photos it takes before
-an existing feature starts failing. Recorded because a later reader will
-otherwise see a pending measurement and assume the decision is waiting on it.
+Five corrections came back on review. Two invalidate premises, three simplify
+the build. All five verified against the specs before adoption rather than taken
+on assertion.
 
-### 5.3 The fourth state, and the rule that removes it
+### 6.1 Separate records do not buy separate survival
 
-Splitting the order record from the bytes buys the third state and creates a
-fourth: the two are now **independently evictable**, so either can survive
-alone.
+The §5.1 design assumed a small ordering record could outlive the blobs, making
+"added and gone" reliably detectable. **The Storage Standard says otherwise:**
+"Whenever a storage bucket is cleared by the user agent, **it must be cleared in
+its entirety**" ([Storage Standard](https://storage.spec.whatwg.org/)). Eviction
+under pressure clears best-effort buckets wholesale; it does not pick records.
+Separateness is a schema property, not a durability guarantee.
 
-| Survives | State | Renders |
-|---|---|---|
-| record + bytes | added, present | the photos |
-| record only | **added, gone** | the §5.1 absence line |
-| **bytes only** | **orphan bytes, no order** | — undecided until now |
-| neither | indistinguishable from never added | the empty prompt |
+Consequences:
 
-Record-only is the case §5.1 was designed for and it works. Bytes-only is new,
-and left undecided it renders as "never added" — which is the exact
-misrepresentation §5.1 exists to prevent, reintroduced by the fix for it.
+- **Detect "manifest present, bytes missing" where that evidence happens to
+  survive** — partial loss is real (a failed write, a bug, a targeted clear) and
+  the explicit unavailable state is still owed. It is no longer the *expected*
+  shape of eviction.
+- **Complete local loss is indistinguishable from first use, and the copy must
+  not pretend otherwise.** Absence of a record does not establish that nothing
+  was added. So the empty wording is **"No listing photos are available in this
+  browser"** — never "nothing was added". That is a statement about what this
+  browser holds, which is all we can see.
+- **"This browser", not "this device"** — another browser on the same device has
+  its own storage. The cross-device limitation copy (§3) takes the same
+  correction: photos stay in **the browser** that added them.
 
-**Decision: the order record is the index of truth. Bytes without a record are
-unreachable and treated as gone.**
+### 6.2 The manifest is authoritative for order — and that is all it is
 
-Reasons, in order of weight:
+Kept from §5.3: an ordered manifest is the authority on sequence, and bytes not
+named by it do not appear in the ordered listing. Orphan bytes carry no
+sequence, so any order recovered from storage keys or timestamps would be
+invented.
 
-1. **It keeps the states honest.** Bytes-only collapses into the *neither* row —
-   we have no record, so we say nothing was added, and that is now a true
-   statement about what we know rather than a guess. Recovery would mean
-   claiming an order we do not have.
-2. **Any recovered order would be invented.** Orphan bytes carry no sequence.
-   Presenting them in storage-key order, or capture order if a timestamp
-   survives, is a fabricated answer to "which photo is first" — a directional
-   claim from a cadence, the §5.7 defect from D6 in another costume.
-3. **It is the simpler invariant to hold and to test.** One read path, one
-   authority, and the fourth row is unreachable by construction rather than
-   handled.
+**Withdrawn:** that deleting them is *the only honest choice*. Excluding them
+from the ordered listing is a bounded policy and is honest on its own. An
+explicitly unordered recovery view — "these images are on this browser but we no
+longer know their order; pick again" — would also be honest, and would not
+destroy recoverable images. **D7 does not build it. That is a scope decision,
+recorded as scope and not dressed as a truth requirement.** Reopening it costs
+nothing later; deleting the bytes would have made it impossible.
 
-**Cost, stated rather than hidden:** in the bytes-only case the seller loses
-photos that physically still exist on the device. That is real, and it is the
-right trade — the alternative is showing them photos in an order we made up and
-calling it theirs.
+Cleanup is likewise narrowed: no sweep that deletes blobs merely for being
+unreferenced, because that races another tab mid-addition. Blob deletion happens
+only in the same transaction as its manifest removal.
 
-**Consequence for cleanup:** orphan bytes are now garbage by definition, so
-whatever writes the record must be able to delete bytes it has no record of.
-Otherwise "unreachable" quietly means "occupying quota forever", which is §5.2's
-cross-feature degradation arriving by the back door.
+### 6.3 One atomic transaction, not a hand-rolled ordering protocol
 
-**Consequence for write order:** the record is written **after** the bytes.
-Record-first risks the honest-but-wrong third state on a failed byte write —
-claiming a photo was lost that was never stored. Bytes-first risks only orphans,
-which rule 1 above already sweeps.
+Manifest and blobs go in **separate object stores in one IndexedDB database**,
+and every addition or removal commits both in **one `readwrite` transaction**
+spanning both stores. Atomicity is the store's job, not ours — the bytes-first
+write order in §5.3 was rebuilding by hand a guarantee IndexedDB already gives,
+and rebuilding it badly, since a crash between the two writes still left an
+inconsistent pair.
+
+**Success is the transaction's `complete` event, never an individual request's
+`success`.** MDN is explicit that request success "does not mean the item has
+been stored successfully in the DB"
+([MDN, IDBTransaction](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)).
+Reporting saved on request success would be the 2026-09-04 portfolio defect
+rebuilt in a new store: UI closing over a write that never landed.
+
+### 6.4 Two simplifications
+
+**Rule 1 does not require refactoring `_lsWrite`.** A dedicated asynchronous
+photo store is a *different* business behaviour from synchronous settings
+persistence, so a second write path is not the duplication Rule 1 forbids. What
+must be shared is the **error classification and the user-facing copy** — quota
+versus blocked versus private mode — so a storage failure reads the same
+wherever it happens. Nine existing call sites stay as they are.
+
+**Stable IDs, and renumbering is normal.** Each photo keeps a stable id for its
+lifetime; the manifest holds the order. After a removal, survivors keep their
+relative order and their visible positions renumber — that is expected
+behaviour, not the silent-renumbering defect §4 warned about. The defect is
+losing *relative* order, not closing a gap in display numbering.
+
+**Validation reuse is conditional on checking it.** Reuse image decoding and the
+HEIC guidance, but the scan QC gates were tuned to reject photos that break
+*recognition* (`js/core.a7e7422d.js:15330`). A listing photo has no recognition
+job. Each gate gets checked before it becomes a listing-photo rejection rule; any
+that is scan-specific is not inherited.
+
+### 6.5 What D7 verifies
+
+Owner-specified, all in the existing browser workflow, none needing an account:
+
+1. reload, order, and removal survive round-trip
+2. transaction failure leaves no partial state and reports honestly
+3. a manifest entry whose bytes are missing renders the explicit unavailable
+   state
+4. complete local absence renders "no listing photos in this browser" — and not
+   a claim about history
+5. no request carries image bytes
+
+**No quota-exhaustion experiment.** It cannot choose the medium (§5.2 already
+did, at any quota) and one device's ceiling is not a portable limit.
 
 None of the three needs an account or a signed-in browser. (1) needs a device,
 (2) and (3) need the rendered screen. That makes D7 the block's cleanest
