@@ -780,3 +780,53 @@ must not weaken caching of real payloads while excluding errors.** Narrow the
 condition to the status, not to the caching.
 
 </details>
+
+## RV-13 — the client renders every lookup failure as "no such card"
+
+**Established from code, offline, no live probing. Present in BOTH the live
+bundle `js/core.569ff536.js` and the branch bundle `js/core.73a71fac.js`.**
+
+`searchWithTPL` at `:297`:
+
+```
+if (!window.tplApiKey) return null;
+...
+if (!r.ok) return null;
+const json = await r.json();
+if (!(json.data && json.data.length)) return null;
+```
+
+**Every non-2xx becomes `null`.** A `429`, a `500`, a `502`, an aborted timeout
+\u2014 all collapse into the **same value** the code uses for "this card does not
+exist." Grepping `429` across both bundles returns **2 hits, both `429,#d`**,
+an SVG path/colour fragment. **There is no rate-limit handling anywhere in the
+client.**
+
+**Rule 2, exactly as stated: the silent null IS the bug.** The seller who gets
+rate-limited is not told to wait \u2014 they are told, in effect, that their card
+isn't in the database. The rational response to that message is to **retype the
+query**, which issues more lookups into the condition that caused it.
+
+### This is the write/read asymmetry rule firing properly
+
+Unlike RV-11, there is no lenient default catching it, and unlike RV-12 the
+consequence needs no platform assumption:
+
+- **R4 already produces distinguishable refusals** \u2014 `api/tpl-proxy.js:155`
+  returns `'Too many lookups from this address'` with `reason: 'per_ip_limit'`,
+  and `'Lookup temporarily unavailable'` with `budget_exhausted`.
+- **The client discards all of it at `:303`.** `!r.ok \u2192 null`. The reason string,
+  the status, the distinction between "slow down" and "not found" \u2014 none reaches
+  the interface.
+
+**So shipping R4 as built would add a spending control whose refusals are
+invisible to the person they are refusing.** That is a defect in the pair, not in
+either half, and it is the correct target of the burst observation \u2014 **not** the
+per-IP number, which remains unresized and Unverified.
+
+**Severity: user-facing, and it makes the failure mode actively
+counterproductive.** Not yet fixed anywhere.
+
+**Open question, not a finding:** `:297` reads `window.tplApiKey`. Whether that
+is a boolean gate or a value is **unestablished** and worth establishing before
+anyone assumes either.
