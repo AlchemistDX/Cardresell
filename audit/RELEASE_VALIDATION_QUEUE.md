@@ -232,9 +232,33 @@ custom environment and incurs no additional cost.
    database. Both connections inject the *same five key names*; while
    `upstash-kv-bistre-arrow` still claims All Environments, a second store
    scoped to Preview/Development would be claiming key names already held there.
-   Expect that to be refused as a conflict, or — worse — to resolve silently in
-   an order nobody chose. Narrowing first vacates Preview and Development so the
+   **Confirmed live at 17:18**, no longer a prediction: attempting to connect
+   `upstash-kv-bistre-arrow` to Production while it already holds All
+   Environments returns **"This project is already connected to the target store
+   in one of the chosen environments"** with **Connect Project disabled**.
+   Vercel refuses an overlapping claim outright — so the second store cannot be
+   connected to Preview/Development until the first connection stops claiming
+   them. Narrowing first vacates Preview and Development so the
    second connection lands on unclaimed names.
+
+   **Two settings in that dialog decide whether the second connection works.**
+
+   *Custom Environment Variable Prefix — leave it at the default.* The dialog
+   offers a prefix (shown as `STORAGE` → `..._URL`). A prefixed connection would
+   inject `STORAGE_KV_REST_API_URL` and similar, and **no code reads those
+   names** — all 32 files under `api/` read `KV_REST_API_URL` and
+   `KV_REST_API_TOKEN` verbatim. A prefix would produce a Preview deployment
+   that is isolated only because it is bound to nothing, which would pass a
+   careless isolation check for entirely the wrong reason. The second connection
+   must inject **the same five names**, differing only in environment.
+
+   *Sensitive toggle — recommended on for the new connection.* It makes the
+   values write-only, the same hardening applied to the TPL key at `3570d97`.
+   It does not impede step 5: separation is verified from **names and
+   environment scopes**, which stay visible, not from values. The one cost is
+   that `vercel env pull` can no longer retrieve them for local development —
+   acceptable for a non-production store, and worth stating rather than
+   discovering.
 
    Between the two operations, **Preview and Development have no Redis
    binding.** That is acceptable and expected: nothing currently depends on
