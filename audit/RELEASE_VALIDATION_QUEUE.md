@@ -223,6 +223,8 @@ Each run records:
 | Account + browser context | The result belongs to a case, not to the product. |
 | Landing screen — is our search and category displayed? | **The criterion.** |
 | Offered match — can the seller compare a collector number? | **The criterion.** |
+| Surface: mobile web **and** desktop | Both in scope (Q-D5-5). **Mobile is the priority** — it is the scan workflow, where a seller who just photographed a card is standing. **Desktop is retained** for saved-collection sellers working a list later. |
+| Did it route into the eBay app? | **Recorded, not scored.** Opening the app is not a failure by itself; the destination and whether usable card details are in front of the seller decide the result, exactly as in a browser. An app run is a rendering surface we have never observed, so note it when it happens. |
 | Final URL, verbatim | Evidence only. A missing query does not prove the inputs were discarded (eBay may consume them and redirect to a clean URL), and a surviving query does not prove they were used. |
 
 **A pass establishes that tested case, not a continuing compatibility

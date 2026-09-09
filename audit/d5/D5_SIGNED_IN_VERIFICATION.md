@@ -2,8 +2,9 @@
 
 **Date:** 2026-09-08 · **Branch:** `phase1-block-d` · **Live bundle:** `js/core.66c39922.js` (`index.html:3834`)
 **Suite:** `draft-review-screen` **370 passed, 0 failed**
-**Status: OBSERVED 2026-09-08 on iOS Safari (§9). Pass row of the pre-committed
-table, for that tested case only. One caveat is open — see §9.3.
+**Status: mobile-web run OBSERVED 2026-09-08 on iOS Safari and it PASSES the
+criterion (§9). Signed-in closure waits on one sentence of owner attestation —
+see §9.3, where the standard for it has been corrected.
 Nothing pushed, nothing deployed.**
 
 D5 §8.3 reclassified signed-in continuation from a footnote to the critical path,
@@ -266,7 +267,7 @@ retained at `audit/d5/evidence/2026-09-08-signed-in-ios-safari.jpeg`.
 | --- | --- |
 | Date | 2026-09-08, 22:40 ET |
 | Browser | **iOS Safari, mobile web** — Safari toolbar and `ebay.com` address chip visible in the screenshot |
-| Opened in the eBay app instead? | **No.** It stayed in the browser. Worth recording: an app hand-off was a live possibility on mobile and would have taken the seller somewhere our URL cannot reach. |
+| Opened in the eBay app instead? | **No.** It stayed in the browser. Recorded because app routing is a real mobile branch — **but see §9.6: an app hand-off is not automatically a failure.** My earlier note implied it was, which was wrong. |
 | Account | Owner's, reported as signed in — see §9.3 |
 | Card | Fixture: Charizard VMAX 074/073 Champions Path, `caty=183454` |
 
@@ -288,20 +289,36 @@ eBay also pre-filled its own facet chips (`Card Name: Charizard VMAX`,
 is not visible in this screenshot — the chip row is cut off. Nothing here
 confirms or contradicts it.
 
-### 9.3 The open caveat, stated rather than buried
+### 9.3 The one open item — and the standard for closing it, corrected
 
-**The screenshot does not independently evidence that the session was signed
-in.** eBay's simplified prelist view carries no account chrome, and my
-logged-out desktop baseline produced a screen with the same structure — so this
-observation cannot, by itself, distinguish signed-in from signed-out.
+**Owner attestation is sufficient. Account chrome in the screenshot is not
+required.** I had set the bar at visible account evidence; that was stricter
+than necessary and it is the wrong instrument anyway, since eBay's simplified
+prelist view carries no account chrome at all — the bar could never have been
+met on that screen.
 
-That matters because §8.3's entire question was whether a **signed-in** seller
-is routed differently. If the session was in fact logged out, the run reproduces
-§3's baseline on a phone — valuable, but not the answer.
+**As of this writing that attestation has not been given in words.** The link
+was opened on request and the screenshot returned, and the request did say
+"while signed in" — but I am not converting a compliance-shaped inference into
+an owner attestation and filing it as the owner's word. That is the same
+substitution I refused when I declined to report a logged-out run as the
+signed-in answer, and it is worse here, because the record would attribute it to
+him rather than to me.
 
-What would settle it, at negligible cost: the same session showing an account
-indicator, or confirmation that eBay's Seller Hub was reachable in that browser
-without a fresh sign-in. Recorded as **Q-D5-4** rather than treated as closed.
+So §8.3 turns on one sentence, and there are two routes to it:
+
+1. **"Yes, I was signed in."** → recorded as **owner-attested**, and §8.3
+   closes for that tested case (this card, this account, iOS Safari,
+   2026-09-08).
+2. **Uncertain** → don't reconstruct the earlier session. Confirm Seller Hub
+   loads in that same Safari without a fresh sign-in, then reopen the test link.
+   That produces a **fresh** signed-in observation, which is cleaner than
+   reasoning backwards about a session that has since moved on.
+
+Until one of those arrives, what is established is a **mobile-web run that
+passes the criterion**. That is not nothing: §3's baseline was desktop and
+logged out, so this is the first observation on the surface a scanning seller
+actually uses, and the first to rule out an iOS app hand-off.
 
 ### 9.4 What this establishes
 
@@ -312,12 +329,28 @@ internals (§2), which is why the recurring pre-deploy check stays in
 
 ### 9.5 Questions
 
-- **Q-D5-4.** Were you signed in to eBay in that Safari session — and if you are
-  not sure, can you open Seller Hub in the same browser and say whether it
-  loaded without asking you to sign in? On the answer: **yes** closes §8.3 on
-  the pass row; **no or unsure** leaves §8.3 open with a mobile baseline
-  recorded, and the observation still stands as the first mobile-web run.
-- **Q-D5-5.** The mobile surface was not in the entry gate's scope, and it is
-  where scanning sellers are. Should the recurring pre-deploy check be run on
-  **both** mobile web and desktop, or is mobile alone the right default given
-  the app-hand-off risk this run just ruled out once?
+- **Q-D5-4 — standard corrected, one sentence outstanding.** Were you signed in
+  to eBay in that Safari session? A plain yes is enough and closes §8.3 for that
+  tested case. If you are not sure, take route 2 in §9.3 rather than
+  reconstructing it.
+- **Q-D5-5 — answered, applied.** Both surfaces, mobile prioritised for the scan
+  workflow, desktop retained for saved-collection sellers. Recorded in
+  `audit/RELEASE_VALIDATION_QUEUE.md`.
+
+### 9.6 Correction: app routing is not automatically a failure
+
+§9.1 recorded that the link stayed in the browser and framed an app hand-off as
+a loss — "somewhere our URL cannot reach". **That framing was wrong**, and wrong
+in a familiar way: it judged the *route* instead of the *outcome*, the same
+error the §7.0 correction fixed for the address bar.
+
+The criterion is unchanged and does not care which application renders the
+screen: **does the destination show our search and category, and are usable card
+details in front of the seller to compare against?** An app that does that
+worked. An app that opens to a home screen or a generic search with our details
+gone failed — and so would a browser tab that did the same.
+
+So app routing is **recorded, not scored**. It changes scope, not verdict: an
+app path is a rendering surface we have never observed, so when it occurs the
+run log notes it, and its destination and card details decide the result exactly
+as a browser's would.
