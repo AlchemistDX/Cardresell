@@ -157,6 +157,57 @@ provider. Storage is fixed; the credential is not yet replaced in service.
 
 ---
 
+## Scratch-file cleanup, and a correction to my own claim
+
+`/tmp/vpd.json` is deleted (`shred -u`), on the reasoning given: the evidence
+was **superseded**, not inconvenient. The `sensitive` length-0 versus
+`encrypted` 1,080-character comparison proves the same point with no
+credential in it.
+
+**The sweep then falsified something I wrote, and the correction matters more
+than the cleanup.** I had described my first Vercel read as "metadata only, no
+value retrieved". That was wrong as stated. With `decrypt=false`, a
+**`plain`-typed variable returns its value anyway** — the `decrypt` flag governs
+`encrypted` vars. So `/tmp/envmeta.json` held the live TPL key in plaintext
+from the moment I ran that read. It was never printed, quoted, or transmitted,
+and every probe I ran emitted only booleans, names and lengths — but it was on
+disk, and my sentence claimed otherwise.
+
+Both files are now shredded, along with `/tmp/envmeta2.json`. Nothing remains
+under `/tmp`.
+
+This is also a **third independent demonstration** of why `plain` was the
+finding: the value was retrievable by a token holder without even asking to
+decrypt anything. Post-change, the same read returns length 0.
+
+## A tracked file carries a key prefix (Q-CH3-13, new, low severity)
+
+A pattern sweep of the whole working tree — not just `.env*` files, which is the
+gap in my earlier methodology — found `tcg_`-shaped text in
+`qa/QA_PASS_2026-08-15.md:19`, which **is tracked** and **is present in
+`origin/main` at `9aaf326`**.
+
+Measured before concluding anything: the token is **10 characters** (`tcg_` +
+6 hex) followed by a **literal `...`**. It is a deliberately truncated
+**prefix**, not the credential. Its context is a QA note recording the original
+exposure — that the key was hard-coded into `index.html` and served to every
+anonymous visitor — which is CH-3's origin, already established.
+
+What this does and does not change:
+
+- It does **not** weaken the earlier finding that no `.env*` file was ever
+  committed. That sweep's conclusion stands; its **scope** was narrower than I
+  implied, and this is the correction.
+- It is **not** a credential disclosure. Six hex characters of prefix do not
+  authenticate.
+- After step 11 the prefix refers to a **revoked** key and is inert.
+
+**Q-CH3-13:** leave it, or mask it in a later commit? My recommendation is
+**leave it.** It is already in `origin/main`, so masking removes it from the
+tip but not from history, and rewriting history to redact six characters of a
+key that is about to be revoked is disproportionate and cuts against preserving
+completed work. Worth your explicit call rather than my silent one.
+
 ## Step C — HARD STOP
 
 **I stop here and wait for you.**
@@ -187,6 +238,58 @@ capture the returned deployment id before the fact. The procedure needs a
 named source (`dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`, commit `9aaf326`) and the new
 deployment's own id and URL recorded as they come back. **Dismiss the toast.**
 
+### The baseline needs two fields, and the timestamp is the weaker one
+
+`Last used` renders as `Sep 9, 2026, 06:23 AM` for Key #518, which **looks**
+minute-resolution. What the field *stores* versus what the dashboard *renders*
+is **Unverified**, and I cannot establish it from a rendered string. So it is
+not relied upon alone.
+
+**Capture the usage counter in the same baseline.** A counter moving **0 -> 1**
+is cleaner than a timestamp advancing and carries no granularity question.
+
+**The two provider-side signals are not symmetric, and both earlier rulings
+survive.** The account-wide total was demoted because it read **0** while an
+active key reported same-day use — so a **flat** total cannot fail a rotation.
+That ruling is about absence. A total **moving** is positive evidence. Absence
+of movement stays non-decisive; presence of movement counts.
+
+**The granularity question may resolve itself.** If the new key's baseline
+`Last used` is **empty or a dash**, then any non-empty value afterwards is
+unambiguous at any granularity, and the concern disappears. It only bites if the
+new key already displays a timestamp — in which case the counter carries the
+verification and the timestamp is corroboration.
+
+Restated pass criterion: uncached `200` **and** an invocation logged on that
+deployment **and at least one affirmative provider-side signal** — counter
+increment or timestamp advance — with both captured. Neither present: stop and
+diagnose, on containment, old key still active.
+
+### Before you authorize: the failure mode is an outage, not a revert
+
+Key #518 is still live at the provider, but its **value is gone from Vercel and
+was never recorded anywhere** — which is the intended property of `sensitive`
+storage, working as designed.
+
+So if the step-B paste was mistyped or truncated, **#518 cannot be restored.**
+There is nothing to revert to. Recovery is: create another key, re-add, redeploy
+again — with production TPL lookups failing in the interval.
+
+Three things bound that:
+
+- The interval is minutes, and the fix is the same procedure you just ran.
+- It is detected immediately by the step-6 request, before anything depends on it.
+- It costs no credential safety. A mistyped value authenticates as nothing.
+
+**A safer sequencing was considered and is not available.** The variable now
+targets preview as well, so a preview deployment would carry the new key and
+could be verified without touching production. Building one requires pushing a
+branch, and pushing is out of scope here. Recording it as considered and
+declined for that reason, rather than leaving it unexamined.
+
+This is stated **before** authorization, not after: authorize knowing the
+downside is outage-until-repeat.
+
 ### Still outstanding before verification can run
 
 1. **The Key # and `Last used` baseline** from step A item 4. Not yet supplied.
@@ -210,7 +313,8 @@ put a production key into a local file is closed at the source.
 
 **Q-CH3-12 — NEW, and the only thing blocking verification besides your
 deployment authorization.** I still need the replacement key's **Key #** and
-its **`Last used`** state as it reads **now, before any lookup**. A baseline
+its **`Last used`** state **and the usage counter** (`N of 10,000 used`) as
+they read **now, before any lookup**. A baseline
 captured after the fact cannot distinguish "the new key authenticated" from
 "the field already had a timestamp", which would leave me asserting a verified
 rotation on no evidence — the exact failure this procedure was rewritten twice
