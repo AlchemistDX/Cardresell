@@ -1807,3 +1807,128 @@ is not a question about the work:
    demo that can overwrite early input, and the lookup failure that reads as
    "no such card". A push to `main` auto-deploys, so it waits on you saying so
    explicitly.
+
+---
+
+## RC-2 item 1 — shipping assumptions in the listing packet (`552df07`, local)
+
+**Status: implemented, local only.** Nothing pushed; `origin/main` is still
+`9aaf326` and production still serves Phase 0.
+
+### What this is, and what it deliberately is not
+
+The scope agreed for RC-2 framed this as *carrying the seller's existing
+shipping assumptions into the draft* — not building a shipping model. That
+distinction did all the design work here.
+
+The venue comparison already computes shipping into the payout it ranks on:
+`netPayout = price + effectiveShipCharge − totalFees − sellerShip`. That is one
+business behaviour, and it already has one implementation. So the packet records
+what the seller declared and states plainly that its own net figure excludes it.
+It computes nothing. There is a test that builds the same packet with and
+without shipping and asserts the pricing block is byte-identical — if a later
+change makes shipping move a number in this file, that test fails, which is the
+point of it.
+
+### The blank-versus-zero problem
+
+Both client inputs (`index.html:2512` for what the buyer pays, `:2518` for what
+shipping costs you) are declared with `value="0"`. A zero in those fields is the
+default, not a statement. The packet therefore cannot tell "I ship free" from "I
+never touched that field", and rather than pick one it says so: a declared zero
+is recorded as declared, with a note that it is unconfirmed. This is the same
+position RC-1 took — zero is a fallback assumption, not an established cost.
+
+Related, and deliberate: a negative cost is recorded as supplied rather than
+clamped to zero. Clamping would make a sign error indistinguishable from free
+shipping.
+
+### Two defects found while writing the tests
+
+Both were in code I had just written, and both were the same class of bug —
+two representations of one fact:
+
+1. **Absent had two shapes.** A missing shipping object returned `null`; an
+   empty object returned a block whose every field was false/null. Same fact,
+   two answers for anything branching on `shipping === null`. It now collapses
+   to `null` — but only when the seller said nothing at all. If a value was
+   supplied and rejected as unreadable, the block survives, because that
+   rejected text is the one thing the seller needs in order to correct it.
+2. **An unreadable value reported as absent.** The absent/partial split was
+   keyed on whether a value *parsed*, so an unreadable entry produced
+   `SHIPPING_ABSENT` next to `SHIPPING_UNPARSEABLE` — one finding saying the
+   field was empty, the other quoting its contents. The split now turns on
+   whether the seller *said* anything; an attempt counts as an attempt.
+
+### Schema bump, 1 → 2
+
+This one needs your eye because it touches stored data rather than only new
+writes.
+
+Adding a field to the packet is not free. A v1 packet has no `shipping` key, so
+read by the new code it would have reported CURRENT with `shipping` undefined —
+which at the consumer is indistinguishable from "the seller declared nothing".
+Those are different events. A v1 packet was built by code that could not observe
+shipping at all.
+
+Packets are persisted on draft create (`api/drafts.js:757`) and the review screen
+reads them, so any drafts you or anyone else created before this carry v1
+packets. This is live data. The schema is now 2 with a registered 1 → 2 hop that
+lands an explicit `shipping: null`.
+
+The hop does **not** synthesise a `SHIPPING_ABSENT` finding. It would have been
+easy to add and it would have been a small lie: it would claim a build looked
+for shipping and found none, when that build could not look. Anything that needs
+to distinguish observed absence from inherited absence reads `migrationsApplied`.
+
+### One judgement call, stated rather than buried
+
+Shipping is **not** covered by the packet's input fingerprint. The fingerprint's
+job is to detect a packet that no longer describes the draft it is attached to,
+and it projects *persisted draft fields*. Shipping arrives as context, the same
+way the price basis does, and that is not fingerprinted either. Covering it would
+invalidate packets on a change the draft has no way to record.
+
+I am reasonably confident this is right, but it is the kind of call that is
+cheap now and expensive later, so it is written down and asserted in a test
+rather than left as an accident of what I happened not to add.
+
+### Questions for you
+
+- **Q-RC2-1 (business).** When a seller has declared shipping and the packet's
+  net excludes it, should the review screen show the two figures side by side —
+  net excluding shipping, and net including their declared shipping — or keep
+  showing one figure with the boundary stated in words? Showing both is more
+  useful and is also a new number on a release-completion task, which is why I
+  have not done it. The wiring is separate work either way.
+- **Q-RC2-2.** The zero-unconfirmed note is currently informational. If you would
+  rather a seller be actively stopped and asked to confirm free shipping before
+  a draft is considered ready, that is a readiness change, not a packet change —
+  say so and I will scope it as its own item.
+
+### Verification
+
+| Suite | Result |
+| --- | --- |
+| `tests/listing-packet-offline.mjs` | 270 passed, 0 failed |
+| `tests/draft-index-recovery.mjs` | 259 passed, 0 failed |
+| `tests/draft-store.mjs` | 147 passed, 0 failed |
+| `tests/draft-review-screen.mjs` | 370 passed, 0 failed |
+| `tests/draft-crud-e2e.mjs` | 192 passed, 0 failed |
+| `tests/draft-readiness.mjs` | PASS |
+
+Three fixture repairs were needed and none of them relaxed a check. Fixtures
+that meant "a current packet" had hardcoded the literal `1` and broke on the
+bump for reasons unrelated to what they test — they now import the constant, so
+the next bump does not repeat this. The "an older version with no registered
+migration is refused" fixture used v1 as its example of an unregistered hop;
+since v1 now has a real migration, it moved to 2 → 3, which genuinely has none.
+And `draft-index-recovery.mjs` overrode `PACKET_MIGRATIONS[1]` for a test and
+ended with `delete` — harmless when the table was empty, but it would now strip
+a real production migration for every later assertion in that process. It saves
+and restores, and asserts the restore.
+
+`tests/run-all.sh` was not run.
+
+**Next in RC-2:** item 2, condition guidance; item 3, listing description text.
+Target-net entry stays deferred.
