@@ -9,6 +9,13 @@ the evidence, what each answer decides, and what is still owner-only.
 
 ---
 
+> **Superseded in three places by `audit/ROTATION_PLAN_BOUNDED.md` (2026-09-08):**
+> the 18/19 bar in §5.4 is **withdrawn** (the gate is 19/19); the §4 SSO
+> mitigation is **overstated** (SSO is access control, not data isolation, and
+> "self-inflicted only" is struck); and §5 lacked the **redeployment step** —
+> environment changes apply to new deployments, so the live deployment keeps its
+> captured values until `9aaf326e7` is redeployed. The two answers in §0 stand.
+
 ## 0. The headline
 
 Both gating questions are answered, and they answer in the *safe* direction.
@@ -137,19 +144,24 @@ not done any of it.**
 
 1. **eBay developer portal — generate a replacement Cert ID.** No API path from
    here, and none should exist.
-2. **Update `EBAY_CERT_ID` in Vercel, Production only.** I *could* issue this
+2. **Update `EBAY_CERT_ID` in Vercel, Production only** — and note this alone
+   changes nothing that is running; see the redeployment step in
+   `audit/ROTATION_PLAN_BOUNDED.md` §4.5.** I *could* issue this
    `PATCH` with the access I just demonstrated. **I am not going to.** It writes
    a credential, it needs a redeploy to take effect, and a redeploy is a
    deployment. Read-only access is not authorization, and the gate is on the
    action, not on the difficulty.
 3. **Confirm the old Cert ID is retired**, and check issued-token implications
    rather than assuming secret rotation invalidates live tokens.
-4. **Then** `EBAY_LIVE=1 node tests/ebay-live.mjs`. **The bar is 18/19, not
-   19/19** — the nineteenth failure predates the rotation. 18/19 confirms the
-   credential and nothing else; it does not clear the Phase 2 gate, which needs
-   a genuine 19/19. Note the 18/19 figure is itself carried-forward and has
-   never been re-run, so that run establishes the baseline as much as it
-   confirms the change.
+4. **CORRECTED 2026-09-08 — see `audit/ROTATION_PLAN_BOUNDED.md`.** This step
+   read "the bar is 18/19, not 19/19". **That was wrong and is withdrawn.** It
+   turned an unverified carried-forward figure into an acceptance criterion —
+   the same failure mode as the `HTTP 000` blocker in §1. The bar is **19/19**,
+   unchanged. The nineteenth check is now identified as `deployed challenge hash
+   matches the CLEAN token`, measured failing against live production, and it
+   has an **in-sitting remedy** (strip the trailing newline from the stored
+   verification token), so no exception is needed. Judge individual checks, never
+   the total.
 5. **Then** delete `refs/recovery/pre-scrub-c2366b2`.
 6. **Never** the unblock URL, at any point.
 7. Record status, checker, and time. **Never a credential value, fragment, or

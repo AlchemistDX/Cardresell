@@ -68,7 +68,15 @@ supplied low exceeds the comparison reference.
 ## RV-3 — eBay live suite (pre-existing, restated here)
 
 **Run:** `EBAY_LIVE=1 node tests/ebay-live.mjs`.
-**Must be true:** 19/19. Currently 18/19.
+**Must be true:** 19/19 — **unchanged and not substituted.** The "currently
+18/19" figure previously recorded here has **no run behind it**
+(`audit/CARDRESELL_PLAN_AND_ROADMAP.md:657`: "reportedly at 18/19; this was not
+re-run") and is withdrawn as a bar. The harness prints
+`X passed, Y failed, Z warnings` and never a fraction, and at least four of its
+nineteen happy-path checks exist only in one branch — so a clean run with a
+moved category-tree version prints 18 passed / 0 failed, indistinguishable from
+one real failure by that fraction. Judge individual checks, never the total. See
+`audit/ROTATION_PLAN_BOUNDED.md` §1.
 **Blocked by:** the Cert ID rotation gate. This is a release gate, not a
 checkpoint gate.
 
@@ -258,12 +266,58 @@ bad key prefix, or a destructive fixture writes into the store serving
 `www.cardresell.org`. The outgoing draft-persistence work writes by design, so
 this is not hypothetical.
 
-**Mitigation, real but partial.** `ssoProtection.deploymentType =
-all_except_custom_domains` — previews sit behind Vercel SSO and are not publicly
-reachable, which caps this at accidental self-inflicted damage rather than an
-outside path in. It does not stop our own preview deploys from writing.
+**Mitigation, weaker than first recorded.** `ssoProtection.deploymentType =
+all_except_custom_domains` means previews are not publicly *reachable*. That is
+access control, **not data isolation** — it constrains who can request a URL and
+says nothing about what deployed code writes once running. A preview build with
+a bad key prefix or an unfinished migration writes to the production store
+whether or not a human opens it, and scheduled or webhook-triggered paths need
+no browser at all. **The earlier "self-inflicted damage only" framing was too
+strong and is struck.**
 
-**Decision deferred, not dropped.** Splitting Preview onto its own store is an
-infrastructure change with its own cost, and the D7/draft work has been built
-and tested against one store. Decide after the push gate clears (Q-ROT-3).
-**Not a rotation item** — the rotation neither causes nor fixes it.
+**Also struck:** the claim that separating environments would invalidate the
+completed functional tests. It would not. Those tests assert behaviour against a
+KV interface, not against a particular store; a new store requires **checking
+the new configuration**, not re-earning the results. That was an invented cost
+for the fix.
+
+**DECISION REQUIRED BEFORE THE FIRST PUSH** — not after. A push automatically
+creates a Preview, and the Preview is the exposure, so this cannot be resolved
+afterwards. Chosen order (`audit/ROTATION_PLAN_BOUNDED.md` §3): **(1)** disable
+automatic Preview deployment — one reversible project setting that removes the
+trigger outright; **(2)** provision a separate non-production store, which is
+the durable answer; **(3)** re-enable Previews. Step 1's cost is real: it removes
+the only pre-production verification surface for as long as it lasts. Each step
+needs its own concrete authorized action.
+
+**Not a rotation item** — the rotation neither causes nor fixes it, and
+redeploying the live commit does not create a Preview, so the rotation sitting
+may precede this decision provided nothing is pushed.
+
+---
+
+## CH-1 — production eBay verification token is the repo's committed default
+
+**Measured 2026-09-08** by an unauthenticated `GET` to our own public endpoint
+(`audit/ROTATION_PLAN_BOUNDED.md` §0): production's challenge response matches
+the repository's committed default token **plus one trailing newline**. Because
+the deployed code is `process.env.EBAY_VERIFICATION_TOKEN || '<repo literal>'`
+and the literal carries no newline, the environment variable **is set**, and its
+stored value is the published default with stray whitespace.
+
+Two defects in one variable: a **value published in the repository** is serving
+production, and a **stray character** breaks eBay's endpoint validation against
+a clean portal value. Replace with a generated value in eBay's portal and in
+Vercel, and stop the code literal being a usable fallback. No value, fragment,
+or hash recorded.
+
+---
+
+## RV-9 — the other eighteen live-harness checks are unverified
+
+`tests/ebay-live.mjs` has never been run in this workspace: it requires
+`EBAY_APP_ID` and `EBAY_CERT_ID`, which are Production-only in Vercel and absent
+here. Only check 19 (`deployed challenge hash matches the CLEAN token`) has been
+established, and only because that one needs no credential. The rotation run
+establishes the baseline for the remaining eighteen as much as it confirms the
+new credential.
