@@ -26,7 +26,7 @@
 //
 // THE CONTRACT IS DERIVED FROM BOTH CLIENTS, not from one bundle:
 //   production commit 9aaf326e7 ships js/core.569ff536.js
-//   HEAD (outgoing)              ships js/core.66c39922.js
+//   HEAD (outgoing)              ships js/core.73a71fac.js
 // Both call exactly three sites, with the same parameters:
 //   /v1/cards/search  q, game, limit=100
 //   /v1/cards/search  q, game, limit=20
@@ -63,7 +63,7 @@ export const TPL_CONTRACT = [
   //
   // /v1/cards/lookup is deliberately ABSENT. It was allow-listed at
   // tpl-proxy.js:25 but is called by NEITHER client (0 occurrences in
-  // core.569ff536.js and core.66c39922.js), so it was a billable path reachable
+  // core.569ff536.js and core.73a71fac.js), so it was a billable path reachable
   // by anyone for no product reason. Removing it is behaviour-preserving for
   // the app. If a future client needs it, add it here WITH a named parameter
   // list rather than restoring an unparameterised entry.

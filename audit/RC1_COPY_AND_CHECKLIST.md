@@ -14,7 +14,7 @@ that shipping could therefore reorder the recommendation. **I checked the
 client, and that claim is wrong in both halves.** I had grepped `api/` only and
 generalised from an empty result.
 
-**The ranking surface already models shipping in full.** `js/core.66c39922.js:8549`
+**The ranking surface already models shipping in full.** `js/core.73a71fac.js:8549`
 computes `netPayout = price + effectiveShipCharge − totalFees − p.sellerShip`,
 where `effectiveShipCharge` is zeroed per venue when the venue keeps buyer
 shipping (`:8547`, driven by `buyerShippingRevenue: false` on the venues that
@@ -23,8 +23,14 @@ do), and `sellerShip` is set per venue — `shipCost`, `0` for TCGplayer Direct
 come from seller-entered fields (`:8323`). Its total row is labelled **"Net
 after all deductions"** (`:9015`), and that label is accurate.
 
-**So shipping cannot reorder the recommendation, because the recommendation
-already includes it.** Applying your "Estimated payout before shipping" label to
+**Corrected wording (2026-09-09, review).** I wrote that shipping "cannot
+reorder the recommendation." That is wrong as stated: shipping *can* affect
+venue ordering — it plainly does, since venues differ in whether they keep buyer
+shipping and in what postage costs. The accurate claim is narrower: **the
+ranking already accounts for shipping, so the ordering it shows is not missing
+that effect.** And the formula establishes the *shipping treatment*, not the
+broader claim that every deduction is covered — tax remains unmodelled by
+design, and two venues still lack a declared `feeBase`. Applying your "Estimated payout before shipping" label to
 that surface would make a true number read as a qualified one. I have not
 applied it there.
 
@@ -162,9 +168,18 @@ implementation state rather than a prohibition, so no prohibition is preserved.
 | G7 | `bash tools/run-ebay-live.sh` recorded and adjudicated | **Open** |
 | G8 | Containment control verified (gates steps 11a–13) | **Open** |
 | G9 | Release validation queue RV-1…RV-10 adjudicated, warnings and skips explicit | **Open** |
-| G10 | §1 copy approved and implemented | **Open** |
+| G10 | §1 copy approved and implemented | **Closed** — implemented, pinned (§7) |
+| G11 | **TPL paid key rotated** at the provider and stored non-plain | **Open** — owner action |
+| G12 | **R4 activated**: `TPL_BUDGET_ENFORCE=1`, KV store bound, budget numbers set by Will | **Open** |
 
-R4 is **not** a gate. It is inactive in this release and marked so.
+**G11 and G12 are corrections, and the reason matters.** My previous version
+said "R4 is not a gate" and listed ten gates. That was wrong in effect: with R4
+inactive and no rotation item, the exposed paid key vanished from the visible
+gate list entirely, so a reader working the checklist would have shipped without
+ever confronting it. **Disabling R4 is a scope choice; it does not resolve CH-3's
+cost exposure.** The key is still exposed and still paid for. R4 is not a gate on
+*functioning*, but rotation and activation are gates on *the exposure*, and they
+are now named where they cannot be missed.
 
 ---
 
@@ -203,4 +218,127 @@ Built, corrected against your two points, and wired to the proxy — but shippin
    packet shipping still the top follow-on, or do condition guidance and
    description move ahead of it?
 
-Nothing pushed, nothing deployed, no credential rotated.
+---
+
+## 7. Implemented since the last packet
+
+**Review-screen copy — your wording, verbatim** (`js/core.73a71fac.js:7652`,
+rendered at `:22073`). Added to `FEE_DISCLOSURE` rather than typed inline, so it
+cannot drift the way the tax copy did. Pinned by five assertions in
+`tests/copy-truth-offline.mjs`: that it says what the estimate covers, that it
+names the comparison as the shipping-inclusive surface, that it says **"may
+differ"**, that it **never** says "will differ", and that it does not attribute
+the discrepancy to shipping. All read comment-stripped source, so a comment
+cannot satisfy them.
+
+**Shipping-field defaults — checked, and one was invisible.** Established:
+
+| State | Value used | Visible to the seller? |
+| --- | --- | --- |
+| Default on load | `0` | **Yes** — the field renders `value="0"` (`index.html:2509`, `:2515`) |
+| Seller types `0` | `0` | **Yes** — they made the assumption by making it |
+| Seller **clears** the field | `0` | **No** — field looks empty, ranking uses `0` |
+| Saved value | **none exists** | n/a |
+
+There is no persistence: nothing writes `shipCharge` or `shipCost` to
+`localStorage`, so there is no saved state and every session starts at the
+rendered `0`. "Blank" therefore only ever means the seller cleared it.
+
+`parseFloat(v) || 0` collapsed all three states into one number. The arithmetic
+was right — zero *is* the correct assumption absent an input — but the cleared
+field made it silently. Blankness is now tracked separately from the value
+(`:8350-8355`, read at `:8357-8358`) and stated beside the comparison it feeds (`:8720`): "Shipping: what the
+buyer pays is blank, so this ranking assumes $0. Venues differ in how shipping
+is treated, so entering it can change the order." An intentionally entered `0`
+is **not** flagged. New style uses declared tokens only.
+
+**R4 modes pinned separately** (`api/tpl-proxy.js`). Enablement is now explicit
+and independent of binding:
+
+| `TPL_BUDGET_ENFORCE` | Store | Mode | Behaviour |
+| --- | --- | --- | --- |
+| unset / `0` | none | `DISABLED` | Unmetered, by choice — pre-R4 behaviour |
+| `1` | none | `ENABLED_UNBOUND` | **503 `budget_store_unbound`, no paid call** |
+| `1` | bound | `ENFORCING` | Metered |
+
+Eleven assertions, section 11 of `tests/tpl-budget-offline.mjs`. The one that
+matters: with enforcement on and no store, the provider `fetch` counter does not
+move. An operator who turned the control on is entitled to assume it is on, so a
+missing binding fails closed instead of restoring the unmetered path — the worst
+possible response to a misconfigured control, because nothing would look wrong.
+`budget_store_unbound` is distinct from `budget_exhausted` so a
+misconfiguration cannot read as a spent budget.
+
+---
+
+## 8. Release validation — results
+
+Fourteen suites, run individually (never `run-all.sh`).
+
+| Suite | Result |
+| --- | --- |
+| `tpl-budget-offline` | **82 passed, 0 failed** (was 71; +11 mode cases) |
+| `tpl-proxy-offline` | 65 passed, 0 failed |
+| `draft-review-screen` | 370 passed, 0 failed |
+| `listing-packet-offline` | 232 passed, 0 failed |
+| `review-fee-dl` | 21 passed, 0 failed |
+| `copy-truth-offline` | all passed (+12 new) |
+| `payout-honesty` | 32 passed, 0 failed |
+| `accuracy-fee-parity` | 41 passed, 0 failed |
+| `fee-truth-offline` | **was FAILING before this work** — see below |
+| `contrast-tokens` | 12 passed, 0 failed |
+| `decision-restatements` | 34 passed, 0 failed |
+| `asset-fingerprints` | **70 passed, 0 failed** after two forced repairs |
+| `test-registry` | 12 passed, 0 failed |
+
+### Two findings, neither caused by the RC-1 edits
+
+**1. `fee-truth-offline` was already red.** I confirmed by stashing my changes
+and re-running: it failed identically at `HEAD`. So it has been failing for at
+least one commit and was reported as green somewhere it should not have been.
+
+It failed on its **evidence, not its behaviour**. The assertion pinned the two
+vocabulary reads as adjacent template interpolations within 120 characters. The
+disclosure was later refactored into `venueTaxNote(pid)` (`:6873`), which reads
+the same fields and returns a `{label, qualifier}` pair for every surface — a
+*stronger* version of what the assertion wanted, and it broke the assertion.
+Rewritten per the standing pattern: the helper reads the shared vocabulary, the
+ranking path takes its note from the helper (`:8605`), and each literal string
+occurs exactly once, so a surface that starts restating the copy fails. Now
+green on behaviour rather than on shape.
+
+**2. Bundle rename forced, twice.** Editing the bundle invalidated its
+content-addressed name. `js/core.66c39922.js` → **`js/core.73a71fac.js`**, with
+references updated in `index.html`, `api/_tplContract.js`,
+`tests/tpl-proxy-offline.mjs`, `tests/draft-review-screen.mjs`. My first attempt
+used `git mv`, which *removed* the retired bundle — the suite caught it and I
+restored the retired bytes from `HEAD`. Retired bundles stay on disk because
+audit documents cite line numbers in them.
+
+**Not run and still outstanding:** `draft-kv-live` and `ebay-live` (both need
+live credentials and the closed gates), and RV-1…RV-10 remain unadjudicated as a
+set. The headless-Chromium-only coverage limit is unchanged, so Q-D5-5 is still
+unexercised on desktop.
+
+---
+
+## 9. Outstanding owner actions — only you can do these
+
+1. **Rotate the TPL paid key** at the provider; store it non-`plain`. Exposed now (G11).
+2. **Rotate the eBay Cert ID** and **regenerate the verification token**, production-only (G2, G3).
+3. **Isolate production KV** from nonproduction (G1) — also unblocks R4.
+4. **Set the R4 budget numbers.** `BUDGET_DEFAULTS` (1000/hr, 60/IP) are placeholders I invented as shape, not policy. I will not guess your spend ceiling.
+5. **Authorize the deployment.** ~235 commits outgoing; pushing `main` auto-deploys.
+6. **Decide RC-2 order.** Recorded as: packet shipping carrying the seller's existing assumptions into the draft, then condition guidance, then description text. Target-net entry stays deferred.
+
+## 10. Decisions taken this round — recorded, not reopened
+
+- Ranking relabel **withdrawn** at your instruction; ranking and packet
+  calculations stay distinct until they share inputs.
+- Review copy: your shorter wording, adopted verbatim.
+- Shipping defaults: bounded implementation check, done — the blank case was the
+  live one.
+- RC-2 order: packet shipping → condition guidance → description text.
+
+Nothing pushed, nothing deployed, no credential rotated. Nothing here was taken
+as authorization for either.

@@ -94,7 +94,7 @@ console.log('\nrejected requests make zero upstream calls');
 
 // ── 2. The real client contract still works, unchanged ───────────────────────
 // Derived from BOTH clients: production 9aaf326e7 ships js/core.569ff536.js,
-// HEAD ships js/core.66c39922.js. Checking one bundle was an earlier error —
+// HEAD ships js/core.73a71fac.js. Checking one bundle was an earlier error —
 // 66c39922 is outgoing, not deployed.
 console.log('\nboth clients\' real call shapes still pass');
 {

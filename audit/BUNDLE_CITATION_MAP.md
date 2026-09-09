@@ -1,4 +1,9 @@
-# Bundle citation map — retired generations → live
+# Bundle citation map
+
+**2026-09-09:** `js/core.66c39922.js` is **retired** (retained on disk; audit
+documents cite its line numbers). Live bundle is **`js/core.73a71fac.js`**.
+Forced by the RC-1 review copy and the blank-shipping note.
+ — retired generations → live
 
 **Live bundle: `js/core.3f83abec.js` (23,261 lines).** New work cites that hash.
 

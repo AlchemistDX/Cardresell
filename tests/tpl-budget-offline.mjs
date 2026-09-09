@@ -19,7 +19,7 @@ import {
   reserveUpstream, releaseReservation, storeResult,
   budgetConfig, cacheKey, OUTCOME, BUDGET_DEFAULTS,
 } from '../api/_tplBudget.js';
-import handler, { setBudgetStore, budgetStoreActive } from '../api/tpl-proxy.js';
+import handler, { setBudgetStore, budgetStoreActive, budgetMode, BUDGET_MODE } from '../api/tpl-proxy.js';
 
 let passed = 0, failed = 0;
 function check(name, cond, hint = '') {
@@ -368,6 +368,7 @@ console.log('\n10. proxy calling path (injected mock store, no provider, no KV)'
 
   try {
     // (a) A miss under a usable budget calls upstream once and caches it.
+    process.env.TPL_BUDGET_ENFORCE = '1';
     process.env.TPL_BUDGET_MAX = '2';
     process.env.TPL_BUDGET_WINDOW_SEC = '3600';
     const store = mockStore();
@@ -437,8 +438,91 @@ console.log('\n10. proxy calling path (injected mock store, no provider, no KV)'
     delete process.env.CARDSELL_TPL_KEY;
     delete process.env.TPL_BUDGET_MAX;
     delete process.env.TPL_BUDGET_WINDOW_SEC;
+    delete process.env.TPL_BUDGET_ENFORCE;
   }
   check('the store is released again after the suite', budgetStoreActive() === false);
+}
+
+// ── 11. The two inactive modes are not the same thing ───────────────────────
+// "No store" was doing double duty: deliberately off, and on-but-broken. The
+// second must never fall back to the unmetered path, because that silently
+// restores the exposure R4 exists to close and nothing looks wrong.
+console.log('\n11. disabled vs enabled-but-unbound');
+{
+  const mkRes = () => {
+    const r = { headers: {}, code: null, body: null, sent: null };
+    r.setHeader = (k, v) => { r.headers[k.toLowerCase()] = v; };
+    r.status = (c) => { r.code = c; return r; };
+    r.json = (b) => { r.body = b; return r; };
+    r.send = (b) => { r.sent = b; return r; };
+    r.end = () => r;
+    return r;
+  };
+  const req = { method: 'GET', headers: {},
+                query: { path: '/v1/cards/search', q: 'Pikachu', game: 'pokemon', limit: '20' } };
+
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return { status: 200, headers: { get: () => 'application/json' },
+             text: async () => JSON.stringify({ cards: [] }) };
+  };
+  process.env.CARDSELL_TPL_KEY = 'test-key-not-real';
+
+  try {
+    // CASE A — DISABLED. Off by choice: the pre-R4 unmetered path, documented.
+    setBudgetStore(null);
+    delete process.env.TPL_BUDGET_ENFORCE;
+    check('unset enforcement with no store → DISABLED', budgetMode() === BUDGET_MODE.DISABLED);
+    const before = calls;
+    const resA = mkRes();
+    await handler(req, resA);
+    check('DISABLED passes the call through, exactly as before R4',
+          calls === before + 1 && resA.code === 200,
+          'this is the accepted scope choice, not a defect');
+
+    // Explicit '0' is the same choice, said out loud.
+    process.env.TPL_BUDGET_ENFORCE = '0';
+    check("an explicit '0' is also DISABLED", budgetMode() === BUDGET_MODE.DISABLED);
+
+    // CASE B — ENABLED BUT UNBOUND. On, with no store. Must block.
+    process.env.TPL_BUDGET_ENFORCE = '1';
+    setBudgetStore(null);
+    check('enforcement on with no store → ENABLED_UNBOUND',
+          budgetMode() === BUDGET_MODE.ENABLED_UNBOUND);
+    const before2 = calls;
+    const resB = mkRes();
+    await handler(req, resB);
+    check('ENABLED_UNBOUND makes NO paid call', calls === before2,
+          'a missing binding must never silently restore the unmetered path');
+    check('…and returns 503 rather than a result', resB.code === 503);
+    check('…naming the unbound store specifically, not a generic outage',
+          resB.body && resB.body.reason === 'budget_store_unbound',
+          'the operator must be able to tell a misconfiguration from an exhausted budget');
+    check('…and is never cached', resB.headers['cache-control'] === 'no-store');
+
+    // The two absences must be DISTINGUISHABLE, which is the whole point.
+    check('disabled and unbound are different reasons, not one shrug',
+          BUDGET_MODE.DISABLED !== BUDGET_MODE.ENABLED_UNBOUND);
+
+    // CASE C — bound and enforcing.
+    process.env.TPL_BUDGET_MAX = '5';
+    process.env.TPL_BUDGET_WINDOW_SEC = '3600';
+    setBudgetStore(mockStore());
+    check('enforcement on with a store → ENFORCING', budgetMode() === BUDGET_MODE.ENFORCING);
+    const before3 = calls;
+    const resC = mkRes();
+    await handler(req, resC);
+    check('ENFORCING permits a metered call', calls === before3 + 1 && resC.code === 200);
+  } finally {
+    globalThis.fetch = realFetch;
+    setBudgetStore(null);
+    delete process.env.CARDSELL_TPL_KEY;
+    delete process.env.TPL_BUDGET_ENFORCE;
+    delete process.env.TPL_BUDGET_MAX;
+    delete process.env.TPL_BUDGET_WINDOW_SEC;
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

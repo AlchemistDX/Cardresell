@@ -29,6 +29,31 @@ let _budgetStore = null;
 export function setBudgetStore(store) { _budgetStore = store; }
 export function budgetStoreActive() { return _budgetStore !== null; }
 
+// ── Two different absences, and they must not behave the same ───────────────
+// "No store injected" was doing double duty: it meant both "R4 is deliberately
+// off for this release" and "R4 is supposed to be on but its binding is
+// missing". Those are opposite situations. The first is a scope choice and the
+// unmetered path is the accepted, documented behaviour. The second is a
+// FAILURE, and falling back to the unmetered path there would silently restore
+// exactly the exposure R4 exists to close -- the worst possible response to a
+// misconfigured control, because nothing would look wrong.
+//
+// So enablement is explicit and separate from binding:
+//   TPL_BUDGET_ENFORCE unset/'0' → DISABLED. Unmetered, by choice.
+//   TPL_BUDGET_ENFORCE='1'       → ENABLED. A missing store is now fatal to the
+//                                  paid call, never a fallback.
+export const BUDGET_MODE = {
+  DISABLED: 'disabled',                 // off on purpose; pre-R4 behaviour
+  ENABLED_UNBOUND: 'enabled_unbound',   // on, but no store — must block
+  ENFORCING: 'enforcing',               // on and bound
+};
+
+export function budgetMode(env = process.env) {
+  const enforce = env.TPL_BUDGET_ENFORCE === '1' || env.TPL_BUDGET_ENFORCE === 'true';
+  if (!enforce) return BUDGET_MODE.DISABLED;
+  return _budgetStore ? BUDGET_MODE.ENFORCING : BUDGET_MODE.ENABLED_UNBOUND;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -63,7 +88,21 @@ export default async function handler(req, res) {
   let reservation = null;
   let budgetKeyForResult = null;
   let budgetConfigForResult = null;
-  if (_budgetStore) {
+
+  const mode = budgetMode();
+
+  // Enabled but unbound: fail closed. An operator who turned the control on is
+  // entitled to assume it is on, so a missing binding blocks the paid call and
+  // says which of the two absences it is.
+  if (mode === BUDGET_MODE.ENABLED_UNBOUND) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(503).json({
+      error: 'Lookup temporarily unavailable',
+      reason: 'budget_store_unbound',
+    });
+  }
+
+  if (mode === BUDGET_MODE.ENFORCING) {
     const ip = (req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || null;
     const r4 = await reserveUpstream({ store: _budgetStore, path, upstreamQuery, ip });
 

@@ -290,8 +290,27 @@ assert('feeFormula is derived from the fee line items',
 assert('the tax disclosure copy is defined once, in the shared vocabulary',
   /taxLabel:\s*'Buyer sales tax'/.test(src) &&
   /taxQualifier:\s*'not estimated'/.test(src));
-assert('the ranking tile reads the shared tax vocabulary, not its own copy',
-  /\$\{FEE_DISCLOSURE\.taxLabel\}[\s\S]{0,120}\$\{FEE_DISCLOSURE\.taxQualifier\}/.test(src));
+// 2026-09-09, release validation. THIS ASSERTION WAS ALREADY FAILING before
+// the RC-1 work, and it was failing on its evidence, not its behaviour. It
+// pinned the two vocabulary reads as ADJACENT TEMPLATE INTERPOLATIONS within
+// 120 characters of each other. The disclosure was later refactored into
+// `venueTaxNote(pid)`, which reads the same two fields and returns them as a
+// `{label, qualifier}` pair for every surface to render -- which is a STRONGER
+// version of exactly what this assertion wanted, and it broke the assertion.
+//
+// Per the standing pattern: name the behaviour, evidence the surface. The
+// behaviour is that the ranking tile does not hand-type this copy. So: the
+// helper reads the shared vocabulary, the ranking path obtains its note from
+// the helper, and the literal strings appear nowhere but the vocabulary.
+assert('the tax disclosure helper reads the shared vocabulary',
+  /function venueTaxNote\(pid\)[\s\S]{0,400}FEE_DISCLOSURE\.taxLabel[\s\S]{0,200}FEE_DISCLOSURE\.taxQualifier/.test(src));
+assert('the ranking tile takes its tax note from that helper, not its own copy',
+  /taxNote:\s*venueTaxNote\(/.test(src));
+// The copy exists ONCE. Two occurrences of the literal would mean a surface
+// had started restating it again -- the drift this assertion exists to catch.
+assert('the tax copy is not hand-typed on any surface',
+  (src.match(/'Buyer sales tax'/g) || []).length === 1 &&
+  (src.match(/'not estimated'/g) || []).length === 1);
 assert('Expand shows a fee base row', /Fee base'/.test(src) || /baseLabel:\s*'Fee base'/.test(src));
 // The amount is an em dash, not a zero. eBay's fee base includes buyer-paid
 // shipping and sales tax, so the tax we are not modelling is an unknown

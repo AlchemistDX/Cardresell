@@ -493,5 +493,42 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'the sub-line names Stripe as the cancel surface');
 }
 
+// ── RC-1: the two estimates say they answer different questions ────────────
+// Both surfaces already labelled themselves honestly and neither said they
+// were not comparable. These pin the copy that closes that, and pin the two
+// words the review turned on.
+{
+  // `code` (comment-stripped, defined above) so a comment cannot satisfy these.
+  ok(/covers the item price only and excludes shipping charges and costs/.test(code),
+     'the review screen states what its estimate covers');
+  ok(/The venue comparison includes shipping using its current inputs/.test(code),
+     'and names the comparison as the surface that includes shipping');
+  ok(/so the estimates may differ/.test(code),
+     'the estimates "may" differ');
+  // "will differ" would be false: the two coincide whenever shipping is zero
+  // on both sides, which is the DEFAULT state of the fields.
+  ok(!/estimates will differ/.test(code),
+     'and never claims they WILL differ');
+  // The note must not pin the discrepancy on shipping alone -- price, venue and
+  // fee assumptions can differ too. It says what each covers and stops.
+  ok(!/differ(ence)? (is|because of|due to) (the )?shipping/i.test(code),
+     'and does not attribute every discrepancy to shipping');
+  ok(/data-fee-crosssurface/.test(code),
+     'the note is addressable, so a suite can find it without matching prose');
+
+  // The blank-vs-zero distinction beside the comparison.
+  ok(/_crShipAssumed/.test(code),
+     'blankness is tracked separately from the value');
+  ok(/String\(_shipChargeRaw\)\.trim\(\) === ''/.test(code),
+     'blank is detected as an empty string, not as a falsy number');
+  ok(/this ranking assumes \$0/.test(code),
+     'a blank shipping field states the $0 assumption beside the ranking');
+  ok(/data-ship-assumed/.test(code),
+     'and that note is addressable too');
+  // An intentional 0 is a real input and must not be flagged as an omission.
+  ok(/parseFloat\(_shipChargeRaw\) \|\| 0/.test(code),
+     'an intentionally entered zero remains a valid input');
+}
+
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
 process.exit(fail?1:0);
