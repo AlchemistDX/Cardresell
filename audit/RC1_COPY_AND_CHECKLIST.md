@@ -1325,3 +1325,55 @@ Nothing pushed, nothing deployed, no credential rotated. Nothing here was taken
 as authorization for either.
 
 ---
+
+## R4 per-IP sizing — mechanism established, `15` is very likely wrong
+
+Done without a key, without rotation approval, and without spending a lookup,
+per the reviewer's note that this work is unblocked. Evidence is the live branch
+bundle `js/core.73a71fac.js` and `api/_tplBudget.js`.
+
+**Call-site census, corrected.** A loose search found **4** occurrences of
+`tpl-proxy`, one more than the three previously recorded. Line **410** is a
+**comment** describing the pass-through proxy, not a call. So the earlier count
+of **three real call sites stands, now verified rather than assumed**:
+
+| Site | Function | Path |
+| --- | --- | --- |
+| `js/core.73a71fac.js:301` | `searchWithTPL` | `/v1/cards/search` |
+| `js/core.73a71fac.js:515` | `fetchTPLCardById` | `/v1/cards/{id}` |
+| `js/core.73a71fac.js:533` | `fetchTPLGradedByNameNumber` | `/v1/cards/search` |
+
+**Three findings that drive the number up, each with its own evidence.**
+
+1. **`searchWithTPL` is invoked from 8 places** — `:1125`, `:1261`, `:1423`,
+   `:1523`, `:1607`, `:1646`, `:1676`, `:14569`. It is not one screen's helper.
+2. **Search is debounced at 180 ms** (`js/core.73a71fac.js:1043`,
+   `setTimeout(() => doSearch(q), 180)`). 180 ms is shorter than an ordinary
+   mid-word typing pause, so one card name can emit **several** searches rather
+   than one.
+3. **No client-side cache sits in front of any of the three.** A sweep for
+   cache/memo structures found none, so re-searching or revisiting a card
+   re-spends. The only caching is the CDN's `s-maxage=300` on identical URLs.
+4. **The graded path fires two calls, not one.** `fetchTPLCardById:5223` and
+   `fetchTPLGradedByNameNumber:5232` are adjacent in the same path.
+
+**Consequence.** `TPL_PER_IP_MAX = 15` per hour plausibly buys a seller only
+**three to five cards**, not fifteen, once debounce fan-out and the two-call
+graded path are counted. On a shared or NAT'd address it is worse. Shipping 15
+would throttle ordinary sellers and read to them as the app being broken.
+
+**Bounds, stated honestly.** This is **mechanism-derived, not measured**. The
+mechanism is established at `file:line`; the calls-per-card **count is
+Unverified** until a session is instrumented. I am not replacing 15 with another
+invented number \u2014 that is the same error in the other direction.
+
+**Also corrected: where `15` comes from.** It is a **proposed value in this
+document**, not a configured one. `api/_tplBudget.js:34` defaults `perIpMax` to
+**60**, and `TPL_PER_IP_MAX` is set in no env file or script in the tree. So
+today's effective per-IP cap is the **60** default, not 15 \u2014 a four-fold
+difference between the plan and the code that had not been noticed.
+
+**Next step, needing nothing from the owner:** instrument the three call sites
+against a mocked upstream, drive one representative seller session
+(search a card, select it, view graded), and record the actual call count. That
+count sets `TPL_PER_IP_MAX`.
