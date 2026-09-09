@@ -88,9 +88,14 @@ guide value."** The number may well be right; the attribution is not. Eight
 lines below that map sits a comment recording the same defect being fixed on
 2026-09-03 for TCGplayer — "The number was right and the attribution was wrong,
 which is the one combination a pricing tool cannot ship: it tells the user to
-go verify $161.25 on TCGplayer, where it does not exist." A user checking a
-Jordan rookie against pricecharting.com is being sent to the wrong site by our
-own caption.
+go verify $161.25 on TCGplayer, where it does not exist." **Correction to my own first pass:** I wrote that this sends the user to the
+wrong site. It does not, and I should have checked before saying so. Every
+display link is `pricecharting.com/game/<id>`
+(`api/pricecharting.js:433`, `:870`, `:891`), and the comment at `:486-487`
+records that this path 301-redirects to the correct public page for sports ids
+too. The user's verification link lands where it should. What is wrong is
+narrower and purely attributional: the caption names the dataset the bytes did
+not come from.
 
 **Not established:** whether the two sites publish identical values for the
 same item. If they do, the caption is still wrong but harmless to verify
@@ -132,6 +137,17 @@ gates pushing regardless.
 
 ## 5. Questions — I need answers before I change any of this
 
+**Q0 — The citation condition is not optional, and his silence is not approval.**
+You read the reply as not mentioning our citations. He did mention citation — it
+is the one condition attached to the permission: *"provided you cite us in your
+product (either an icon or text with a linkback to our product page)."* What he
+did not do is inspect our surfaces and pronounce them sufficient. Those are
+different things, and the second one is the one we would be relying on. He has
+never seen where our labels sit or which of them link. Absence of a complaint
+about a thing he could not see is not compliance with the term he wrote down.
+The gap in §2 is small and cheap to close; I would rather close it than treat
+it as pre-forgiven.
+
 **Q1 — Where does the linkback go, and how many of them?**
 Options: (a) one persistent credit in the footer or an About/Sources panel,
 linked, plus the existing unlinked labels left as-is; (b) every source label
@@ -148,7 +164,14 @@ literally a product page. Do you want me to ask Brady to confirm the search URL
 counts, or should the credit link go to a canonical page and the search link
 stay separate as a user convenience?
 
-**Q3 — SportsCardsPro: fix the caption, or verify the values first?**
+**Q3 — SportsCardsPro: fix the caption, or leave one brand shown?**
+Note the wrinkle from the correction above: display links deliberately stay on
+`pricecharting.com` because `sportscardspro.com` 403s bots
+(`api/pricecharting.js:486-487`). So captioning sports values
+"SportsCardsPro" while linking to pricecharting.com would trade one mismatch
+for another, and linking to sportscardspro.com directly may be blocked. The
+honest form may be naming both — "PriceCharting / SportsCardsPro guide value" —
+which is also the form their own email uses.
 Fixing the caption is a small, safe change: sports values say "SportsCardsPro
 guide value" and link to sportscardspro.com. But if the two sites do publish
 the same numbers, you may prefer one brand shown consistently — in which case
