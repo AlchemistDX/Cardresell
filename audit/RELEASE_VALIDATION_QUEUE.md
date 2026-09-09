@@ -171,6 +171,28 @@ custom environment and incurs no additional cost.
 6. **Create a Preview deployment and prove writes land only in the new
    database** — the step that converts the design into evidence.
 
+**Safeguard 1 — preserve the production values.** Step 4 removes the
+Preview/Development targets from the existing rows; it must **not** discard the
+production values themselves. If the rows are integration-managed and cannot be
+edited, **stop** and establish the provider's supported method for
+per-environment assignment rather than deleting and recreating them from
+whatever is at hand. A production credential that cannot be restored is not a
+safe thing to improvise around.
+
+**Safeguard 2 — new assignments do not revoke old access.** Environment
+variables bind at build time, so **already-built deployments keep the
+credentials they were built with**, and any credential already downloaded
+locally keeps working. Retargeting closes no existing path. Consequently:
+**keep existing deployments and local credential copies out of the isolation
+testing**, and account for both before declaring isolation complete. Isolation
+is a property of what the *new* deployments reach, not a revocation.
+
+**Cost is not established.** Dropping the custom environment from the plan
+removes Vercel's `$50 / 5 environments` charge; it says nothing about what the
+**second database** costs. Confirm its price and limits with the provider before
+creating it — an unmetered free tier that silently caps connections would be its
+own incident.
+
 **What was ruled out, and why the earlier plan was wrong.** I had proposed a
 preview-scoped deployment toggle (`gitProviderOptions.createDeployments`). The
 Git settings page carries **no such control**: its toggles are Pull Request
