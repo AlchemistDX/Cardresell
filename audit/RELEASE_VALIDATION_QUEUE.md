@@ -212,6 +212,22 @@ custom environment and incurs no additional cost.
    permitted on this account, or what its limits are. Confirm with Upstash
    before creating it, per the standing caveat.
 
+   **NEW FINDING 2 (17:20) — `CARDSELL_TPL_KEY` targets Production AND
+   Preview.** Visible on the same page, padlocked, "Updated". This is the paid
+   PriceCharting credential — the replacement issued after #518 was revoked at
+   `c4ea5e4`. A Preview deployment can therefore **spend production TPL quota**,
+   against a provider plan of 10,000/day that R4 exists to protect. Isolating KV
+   does not touch it: KV governs the budget *counter*, while this variable
+   governs *access to the paid API itself*. Two consequences worth stating
+   plainly. First, it is a live exposure now, independent of Phase 1. Second, it
+   would corrupt item 3's verification — testing R4 in Preview against the
+   isolated store would still issue **real, chargeable** calls, which collides
+   with the standing rule not to demonstrate abuse by consuming paid quota. The
+   remedy is the same shape as the eBay credentials, which are already
+   `production` only: **retarget `CARDSELL_TPL_KEY` to Production only**, and
+   decide separately whether Preview gets its own low-value key or none. Not yet
+   done, not yet decided.
+
    **NEW FINDING — a second shared store, outside RV-8's scope.** The same
    Storage page lists **`cardresell-blob` (Blob Store, Private, created Jun 30)**
    scoped **"Production, Preview"**. Preview therefore shares **production blob
@@ -267,6 +283,21 @@ custom environment and incurs no additional cost.
    rather than failing open. Do not treat a 503 from a Preview deployment during
    that interval as a defect.
 5. **Verify all five names show the correct separation before pushing.**
+   **PASSED for the Production half, 2026-09-09 17:20.** All five read
+   **Production**, and all five are present — `REDIS_URL`, `KV_URL`,
+   `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`, `KV_REST_API_URL`. The
+   "gone would look like narrowed" failure did not occur. **This verifies only
+   that Production was vacated of the other two environments; Preview and
+   Development are currently bound to nothing, which is the intended midpoint,
+   not the finished state.**
+
+   **Unplanned gain: the five are now write-only.** Each row now shows a
+   **padlock**, where before it showed `<>` with a reveal control. Narrowing the
+   connection appears to have re-created them as **sensitive**. That removes the
+   read-back weakness noted at 17:03 without a separate task. It also means
+   their values can no longer be retrieved from the dashboard — irrelevant to
+   verification, which reads names and scopes, but relevant if anything
+   downstream expected to pull them.
 6. **Create a Preview deployment and prove writes land only in the new
    database** — the step that converts the design into evidence.
 
