@@ -14,6 +14,7 @@
 // the real code path rather than a re-implementation of it.
 
 import { harness } from './_assert.mjs';
+import { evalScript } from './_kvScripts.mjs';
 const { check, checkAsync, done } = harness('draft-list-cap');
 
 process.env.KV_REST_API_URL   = 'https://kv.test';
@@ -85,17 +86,35 @@ function shouldFail(cmd, args) {
 }
 
 /**
- * Put a seller at `n` active drafts without writing n records.
+ * Put a seller at `n` active drafts without going through n creates.
  *
- * Writes the index set AND the quota gate, because a seller who really has n
- * drafts has both. Stuffing only the set would build a world the API cannot
- * produce, and a test that passes only in an impossible world is not evidence.
- * Real drift between the two is exercised separately and on purpose.
+ * Writes the index set, a RECORD for every member, AND the quota gate, because
+ * a seller who really has n drafts has all three. Stuffing only the set would
+ * build a world the API cannot produce, and a test that passes only in an
+ * impossible world is not evidence. Real drift between the two is exercised
+ * separately and on purpose.
+ *
+ * The records are not decoration. The create path now runs a consistency sweep
+ * over the index (`draftindex_ck` → smembers → one GET per member) and prunes
+ * members whose record is absent. Against a set of 500 phantom ids that sweep
+ * correctly emptied the index mid-request, the gate re-derived to 0, and the
+ * create at the cap returned 201. The cap was fine; the fixture was describing
+ * a seller who cannot exist.
  */
 function stuffIndex(n) {
   if (!sets.has(`drafts:${SUB}`)) sets.set(`drafts:${SUB}`, new Set());
   const set = sets.get(`drafts:${SUB}`);
-  while (set.size < n) set.add(`drf_${String(set.size).padStart(32, '0')}`);
+  while (set.size < n) {
+    const id = `drf_${String(set.size).padStart(32, '0')}`;
+    set.add(id);
+    store.set(`draft:${SUB}:${id}`, JSON.stringify({
+      schemaVersion: 1, draftId: id, instanceId: `inst_stuffed_${id}`,
+      sku: `v2-SKUSTUFF${set.size}-592a391e7b472559`, slot: 'ebay:fixed-price',
+      status: 'draft', rev: 1, title: `Stuffed card ${set.size}`, price: 10,
+      quantity: 1, createdAt: 1789000000000, updatedAt: 1789000000000,
+      createdByOperation: null, packet: {}, packetInputs: '',
+    }));
+  }
   store.set(`draftquota:${SUB}`, String(set.size));
   store.set(`draftquotafresh:${SUB}`, '1');
   return set;
@@ -146,6 +165,29 @@ function run(cmd, a) {
       const match = mi >= 0 ? a[mi + 1] : null;
       const re = match ? new RegExp('^' + match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*') + '$') : null;
       return ['0', re ? keys.filter((k) => re.test(k)) : keys];
+    }
+    // ── EVAL ────────────────────────────────────────────────────────────
+    //
+    // The lifecycle lock became a Lua script, and this fake did not implement
+    // EVAL. The `default` below then threw inside the service, every create
+    // came back DRAFT_LIFECYCLE_UNRESOLVED 'lock-unavailable', and the suite
+    // died in its FIRST seeding call -- before a single assertion, printing a
+    // stack and no summary. It stayed dead until the harness started reporting
+    // completion explicitly. The `default` clause was right: the damage was
+    // that nobody was reading for a missing summary.
+    //
+    // Delegated to tests/_kvScripts.mjs, the same implementation every other
+    // suite and the dev server use, so a fix to the scripts cannot land in one
+    // double and miss another. Still a re-implementation, not Redis: verifying
+    // the real scripts against an isolated Redis is a separate check.
+    case 'eval': {
+      const io = {
+        get: (k) => (store.has(k) ? store.get(k) : null),
+        set: (k, v) => { store.set(k, v); },
+        del: (k) => { store.delete(k); },
+        setEx: (k, v) => { store.set(k, v); },   // TTL is not modelled here
+      };
+      return evalScript(io, a);
     }
     // ── Unknown commands are a FAILURE, not a null ──────────────────────
     //
@@ -565,8 +607,10 @@ reset();
 
 reset();
 {
-  const set = sets.get(`drafts:${SUB}`) || (sets.set(`drafts:${SUB}`, new Set()), sets.get(`drafts:${SUB}`));
-  for (let i = 0; i < SVC.DRAFT_CAP; i++) set.add(`drf_${String(i).padStart(32, '0')}`);
+  // Via stuffIndex, so this seller has records and a gate too: an index of
+  // phantom ids is pruned by the create path's consistency sweep, and the
+  // create then lands at a cap that is no longer reached.
+  stuffIndex(SVC.DRAFT_CAP);
   const res = fakeRes();
   await EP.default(fakeReq({
     method: 'POST', body: httpInput(),

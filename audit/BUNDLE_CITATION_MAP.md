@@ -1,8 +1,9 @@
 # Bundle citation map
 
-**Live bundle on branch: `js/core.69fb43dd.js`.** New work
-cites that hash. Renamed from `8e7fee75` at the close of the D8 client batch
-(generation 16 below). Renamed from `49b84d4b` at the close of the idempotency-key
+**Live bundle on branch: `js/core.a995c941.js`.** New work
+cites that hash. Renamed from `69fb43dd` at the close of the create-key batch
+(generation 17 below). `69fb43dd` was itself renamed from `8e7fee75` at the
+close of the D8 client batch (generation 16 below). Renamed from `49b84d4b` at the close of the idempotency-key
 batch (generation 15 below); `49b84d4b` itself was renamed from `53a0674d` at
 the close of the collection / provenance batch (generation 14). Renamed at the close of RC-2 from the working name
 `core.2cb1e377.js`; `tests/asset-fingerprints.mjs` is green at 74/0 and every
@@ -14,6 +15,33 @@ was live by then. Both are corrected here rather than annotated below, because
 a citation map whose header has to be read sceptically is not doing its job.
 For the record: `66c39922`, `73a71fac`, `e9f21f4e` and `176e4a56` are retired,
 and the per-generation history below is unchanged and remains accurate.
+
+> ### Generation 17 — the create key carries the lifecycle generation
+
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 17 | `69fb43dd` → `a995c941` | *(this commit)* | `_crCreateIdemKey` added after `_crIdemKey`, and the two create call sites (scan path in `startListingDraft`, collection path in `startListingDraftForEntry`) routed through it. A create key was permanently stable per row, so after a deletion the replay gate refused every later create for that row with 410 `DRAFT_GENERATION_STALE` and the seller could never start another draft there. A known generation now suffixes the key `-g<N>`; an unknown generation keeps the unsuffixed legacy-adoption key. |
+
+**Measured shifts, retired `69fb43dd` → live `a995c941`** (both counted, not
+inferred; old bytes from `git show HEAD:js/core.69fb43dd.js`):
+
+| anchor | retired | live | shift |
+|---|---|---|---|
+| `loadCardUI` | 3670 | 3670 | 0 |
+| `fetchSellStamps` | 20928 | 20928 | 0 |
+| `_crIdemKey` | 21140 | 21140 | 0 |
+| `_crCreateIdemKey` | — | 21176 | new |
+| `startListingDraft` | 21146 | 21184 | +38 |
+| `_crCreateDraft` | 21399 | 21437 | +38 |
+| `startListingDraftForEntry` | 21623 | 21661 | +38 |
+| `_crGoneCopy` | 22380 | 22418 | +38 |
+| `_reviewBindOnce` | 24465 | 24503 | +38 |
+| `openDraftReview` | 24525 | 24563 | +38 |
+| file length | 24543 | 24581 | +38 |
+
+This batch inserted at exactly one point, so the shift IS uniform for once:
+every citation at or below `:21140` is unchanged, and everything above it moves
+`+38`.
 
 > ### Generation 16 — D8 client: delete, reconcile, adoption
 
@@ -39,7 +67,7 @@ Every citation **below `:20908` is unshifted** — the first edit in this batch 
 inside `fetchSellStamps`. Above it the shift is not uniform, because this batch
 inserted at four separate points rather than one; use the nearest anchor above
 the cited line, not the file-length delta. Re-verified: `:3670` still reads
-`function loadCardUI(card)` in `core.69fb43dd.js`.
+`function loadCardUI(card)` in `core.a995c941.js`.
 
 > ### Generation 15 — idempotency key accepted end to end
 >

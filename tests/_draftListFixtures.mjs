@@ -120,23 +120,38 @@ export async function generateReadFixtures() {
   // demonstrated: packetShipDeclared, packetShipZero and packetShipUnreadable
   // were the same drf_ id, so the zero-shipping case rendered the $5.99 draft.
   //
-  // These fixtures are meant to be DIFFERENT drafts, so each one gets its own
-  // row. The instanceId is derived from the idempotency key, which is already
-  // unique per fixture, rather than added by hand at seventeen call sites --
-  // one of which would eventually be forgotten and silently adopt its
-  // predecessor again. A body that names its own instanceId keeps it: the
-  // create/replay pair at the end of this file shares a row on purpose.
+  // These fixtures are meant to be DIFFERENT drafts, so each one needs its own
+  // row. TWO helpers rather than one with a rule, because the rule is exactly
+  // the thing that must not be applied by guesswork:
+  //
+  //   post(body, key)        sends the body VERBATIM. Whatever instanceId it
+  //                          carries is the row it lands on. This is what a
+  //                          retry, an adoption or a recreate needs -- the same
+  //                          row across different requests and different keys --
+  //                          and no scoping is inferred for it.
+  //   postOwnRow(body, key)  overrides instanceId with one derived from the
+  //                          idempotency key, which is already unique per
+  //                          fixture. For independent fixtures only.
+  //
+  // A single helper that scoped "unless the caller looks like it meant
+  // otherwise" would have to recognise a deliberate shared row by its VALUE,
+  // and `httpInput()`'s default is indistinguishable from a call that means it.
+  // Splitting a row that a test needs shared is the same class of silent defect
+  // as the collision this replaced, so the choice is made at the call site.
   const post = async (body, key) => {
     const res = fakeRes();
-    const ownRow = body && body.instanceId !== undefined && body.instanceId !== 'inst_abc123';
-    const scoped = ownRow || !key
-      ? body
-      : { ...body, instanceId: `inst_${String(key).replace(/[^A-Za-z0-9]+/g, '_')}` };
     await EP.default(fakeReq({
-      method: 'POST', body: scoped,
+      method: 'POST', body,
       headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(key) },
     }), res);
     return { status: res.statusCode, body: res.body };
+  };
+  const postOwnRow = async (body, key) => {
+    if (!key) throw new Error('postOwnRow needs an idempotency key to derive a row from');
+    return post(
+      { ...body, instanceId: `inst_${String(key).replace(/[^A-Za-z0-9]+/g, '_')}` },
+      key,
+    );
   };
   const patch = async (id, body, key) => {
     const res = fakeRes();
@@ -160,7 +175,7 @@ export async function generateReadFixtures() {
     },
   };
 
-  const madeCurrent = await post({ ...httpInput(), pricingContext: PRICING_CONTEXT }, 'pkt-current');
+  const madeCurrent = await postOwnRow({ ...httpInput(), pricingContext: PRICING_CONTEXT }, 'pkt-current');
   const currentId   = madeCurrent.body.draftId;
   const packetCurrent = await call({ id: currentId });
 
@@ -184,7 +199,7 @@ export async function generateReadFixtures() {
   // readiness.publishable true, zero readiness blockers -- which is exactly why
   // the screen needed a fourth verdict rather than being able to infer this
   // from the three facts it already had.
-  const madeBlocked  = await post({ ...httpInput(), pricingContext: {} }, 'pkt-blocked');
+  const madeBlocked  = await postOwnRow({ ...httpInput(), pricingContext: {} }, 'pkt-blocked');
   const blockedPktId = madeBlocked.body.draftId;
   const packetBlocked = await call({ id: blockedPktId });
 
@@ -203,11 +218,11 @@ export async function generateReadFixtures() {
     ...(basisMeta === undefined ? {} : { basisMeta }),
   });
 
-  const madeSeller = await post({ ...httpInput(), priceSource: 'seller', pricingContext: PRICING_CONTEXT }, 'pkt-seller');
+  const madeSeller = await postOwnRow({ ...httpInput(), priceSource: 'seller', pricingContext: PRICING_CONTEXT }, 'pkt-seller');
   const sellerId = madeSeller.body.draftId;
   const packetSellerPriced = await call({ id: sellerId });
 
-  const madeComp = await post({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-comp');
+  const madeComp = await postOwnRow({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-comp');
   const compId = madeComp.body.draftId;
   const packetCompPriced = await call({ id: compId });
 
@@ -226,7 +241,7 @@ export async function generateReadFixtures() {
   // record (api/drafts.js does that, not the client), so the fixture exercises
   // the whole chain: attribution flips to seller, the basis survives as
   // context, and the packet documents the NEW price.
-  const madeEdited = await post({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-edit');
+  const madeEdited = await postOwnRow({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-edit');
   const editedId = madeEdited.body.draftId;
   const beforeEdit = await call({ id: editedId });
   await patch(editedId, {
@@ -237,7 +252,7 @@ export async function generateReadFixtures() {
   // The control: a NOTES-only edit on the same shape. Attribution must not
   // move, because nothing about the price did. Without this the fix could be
   // "any edit means the seller set the price", which is a different lie.
-  const madeNotes = await post({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-notes');
+  const madeNotes = await postOwnRow({ ...httpInput(), priceSource: 'comp', pricingContext: PRICING_CONTEXT }, 'pkt-notes');
   const notesId = madeNotes.body.draftId;
   const beforeNotes = await call({ id: notesId });
   await patch(notesId, {
@@ -248,28 +263,28 @@ export async function generateReadFixtures() {
   // A feed that CLAIMS to date its own data, with no instant recorded for that
   // claim -- the shape that used to caption our retrieval time as the source's
   // published date.
-  const madeDated = await post({
+  const madeDated = await postOwnRow({
     ...httpInput(), priceSource: 'comp',
     pricingContext: ctx({ ...PRICING_CONTEXT.basisMeta, datedBySource: true }),
   }, 'pkt-dated');
   const packetDatedBySource = await call({ id: madeDated.body.draftId });
 
   // A stored link that must never become an href.
-  const madeHostile = await post({
+  const madeHostile = await postOwnRow({
     ...httpInput(), priceSource: 'comp',
     pricingContext: ctx({ ...PRICING_CONTEXT.basisMeta, sourceUrl: 'javascript:alert(document.domain)' }),
   }, 'pkt-hostile');
   const packetHostileUrl = await call({ id: madeHostile.body.draftId });
 
   // Label only -- the real SportsCardsPro shape. No URL, no retrieval time.
-  const madePartial = await post({
+  const madePartial = await postOwnRow({
     ...httpInput(), priceSource: 'comp',
     pricingContext: ctx({ label: 'SportsCardsPro loose' }),
   }, 'pkt-partial');
   const packetPartialBasis = await call({ id: madePartial.body.draftId });
 
   // A 'comp'-derived price with no basis at all: the claim with no evidence.
-  const madeNoBasis = await post({ ...httpInput(), priceSource: 'comp', pricingContext: ctx() }, 'pkt-nobasis');
+  const madeNoBasis = await postOwnRow({ ...httpInput(), priceSource: 'comp', pricingContext: ctx() }, 'pkt-nobasis');
   const packetNoBasis = await call({ id: madeNoBasis.body.draftId });
 
   // Absent: created through the service, which stores no packet at all.
@@ -292,17 +307,17 @@ export async function generateReadFixtures() {
   //   packetShipUnreadable — an entry that did not parse, handed back verbatim
   const shipCtx = (shipping) => ({ ...PRICING_CONTEXT, shipping });
 
-  const madeShipDeclared = await post(
+  const madeShipDeclared = await postOwnRow(
     { ...httpInput(), pricingContext: shipCtx({ buyerPays: '5.99', sellerCost: '4.50' }) }, 'pkt-ship-declared');
   const shipDeclaredId = madeShipDeclared.body.draftId;
   const packetShipDeclared = await call({ id: shipDeclaredId });
 
-  const madeShipZero = await post(
+  const madeShipZero = await postOwnRow(
     { ...httpInput(), pricingContext: shipCtx({ buyerPays: '0', sellerCost: '0' }) }, 'pkt-ship-zero');
   const shipZeroId = madeShipZero.body.draftId;
   const packetShipZero = await call({ id: shipZeroId });
 
-  const madeShipUnreadable = await post(
+  const madeShipUnreadable = await postOwnRow(
     { ...httpInput(), pricingContext: shipCtx({ buyerPays: 'four dollars', sellerCost: '4.50' }) }, 'pkt-ship-unreadable');
   const shipUnreadableId = madeShipUnreadable.body.draftId;
   const packetShipUnreadable = await call({ id: shipUnreadableId });

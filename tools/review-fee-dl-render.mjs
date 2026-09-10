@@ -81,10 +81,26 @@ const helperSrc = [
   fnSource('_reviewTaxRow'),
   fnSource('venueEstimateNote'),
   fnSource('venueTrsNote'),
+  /* 2026-09-10. The priced template gained `${_reviewShippingRows()}` when
+     shipping capture landed, and this harness did not pass it -- so every run
+     since threw ReferenceError before the first assertion, printed a stack,
+     and produced no summary. It went unread until the harness began reporting
+     completion explicitly.
+
+     The function is pulled verbatim like everything else. Its one dependency
+     is the live `_reviewState`, which is screen state rather than a helper, so
+     the harness owns a MINIMAL stand-in: no usable packet, therefore no
+     shipping rows. That is the shape of a draft with no shipping recorded, and
+     it is the only shipping state this suite claims anything about. Rendering
+     of actual shipping rows is covered in tests/draft-review-screen.mjs and
+     tests/fee-truth-offline.mjs, not here. */
+  'const _reviewState = { packetUsable: false, packet: null };',
+  fnSource('_reviewShippingRows'),
+  fnSource('_reviewShippingZeroNote'),
 ].join('\n');
 
 const helpers = new Function(
-  helperSrc + '; return { _reviewEsc, _reviewMoney, _reviewFeeRow, _reviewBasisRow, feeEbay, FEE_DISCLOSURE, FEE_UNKNOWN, PLATFORMS, venueTaxNote, _reviewTaxRow, venueEstimateNote, venueTrsNote };'
+  helperSrc + '; return { _reviewEsc, _reviewMoney, _reviewFeeRow, _reviewBasisRow, feeEbay, FEE_DISCLOSURE, FEE_UNKNOWN, PLATFORMS, venueTaxNote, _reviewTaxRow, venueEstimateNote, venueTrsNote, _reviewShippingRows, _reviewShippingZeroNote };'
 )();
 
 /* The two template literals, sliced from the bundle as text. Anchored on the
@@ -140,9 +156,11 @@ export function renderFeeBlock(price, profile, pid) {
   return new Function(
     'c', 'pill', 'feeRows', '_reviewFeeRow', '_reviewBasisRow', '_reviewEsc', '_reviewMoney',
     'FEE_DISCLOSURE', 'FEE_UNKNOWN', '_reviewTaxRow', 'venueEstimateNote', 'venueTrsNote', 'pid',
+    '_reviewShippingRows', '_reviewShippingZeroNote',
     'return `' + TEMPLATES.priced + '`'
   )(c, '', feeRows, H._reviewFeeRow, H._reviewBasisRow, H._reviewEsc, H._reviewMoney,
-    H.FEE_DISCLOSURE, H.FEE_UNKNOWN, H._reviewTaxRow, H.venueEstimateNote, H.venueTrsNote, venue);
+    H.FEE_DISCLOSURE, H.FEE_UNKNOWN, H._reviewTaxRow, H.venueEstimateNote, H.venueTrsNote, venue,
+    H._reviewShippingRows, H._reviewShippingZeroNote);
 }
 
 export const DISCLOSURE = helpers.FEE_DISCLOSURE;

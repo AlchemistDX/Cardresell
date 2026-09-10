@@ -84,10 +84,36 @@ export function harness(label) {
     }
   };
 
+  // COMPLETION IS REPORTED, NOT INFERRED FROM THE TOTALS.
+  //
+  // A suite that dies during fixture seeding prints no summary at all, and for
+  // three commits that is exactly what happened here: two client suites were
+  // crashing before their first assertion, and the failure looked -- to anyone
+  // scanning output -- like a suite that had simply not been run. Totals cannot
+  // carry this distinction: "0 passed, 0 failed" and "the process died at
+  // import" are the same two numbers.
+  //
+  // So completion says so explicitly, and the ABSENCE of completion says so
+  // too. The exit hook fires on a throw, on an unhandled rejection, and on any
+  // exit that did not come through `done()`, so the last line of a run always
+  // names which of the three happened -- without the reader having to know how
+  // many checks the suite was supposed to contain.
+  let finished = false;
+  process.on('exit', (code) => {
+    if (finished) return;
+    console.log(`\n${label ? label + ': ' : ''}SUITE DID NOT COMPLETE`
+      + ` -- no summary was produced (exit=${code}).`
+      + ` Totals at the point of failure: ${passed} passed, ${failed} failed.`
+      + ' Everything after that point is UNTESTED, not passing.');
+  });
+
   const done = () => {
+    finished = true;
+    const code = failed ? 1 : 0;
     console.log(`\n${label ? label + ': ' : ''}${passed} passed, ${failed} failed`
-      + (skipped ? ` -- INCOMPLETE RUN: ${skipped} section(s) skipped by CR_ONLY=${only}` : ''));
-    process.exit(failed ? 1 : 0);
+      + (skipped ? ` -- INCOMPLETE RUN: ${skipped} section(s) skipped by CR_ONLY=${only}` : '')
+      + ` -- SUITE COMPLETE, exit=${code}`);
+    process.exit(code);
   };
   return { check, checkAsync, section, done, counts: () => ({ passed, failed, skipped }) };
 }

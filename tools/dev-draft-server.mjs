@@ -59,11 +59,50 @@ globalThis.fetch = async (input, init) => {
     const [cmd, key, ...rest] = parts;
     kvLog.push(parts.slice(0, 2).join(' '));
     let result = null;
-    if (cmd === 'get') result = store.has(key) ? store.get(key) : null;
-    else if (cmd === 'set') { store.set(key, rest[0]); result = 'OK'; }
+    // EVAL. The lifecycle lock, its fence allocation and every fenced write go
+    // through a script, so a store double without `eval` cannot create a draft
+    // at all -- it refuses with 'lock-unavailable', which reads like a broken
+    // screen rather than a missing command. Same implementation the suites use
+    // (tests/_kvScripts.mjs), so the dev server and the suites cannot drift
+    // into agreeing with two different script semantics.
+    //
+    // NOT CLAIMED: `setEx` here ignores its TTL, exactly as the suite double
+    // does, and `expire` below returns 1 without recording anything. A lock
+    // therefore never lapses on its own in this server. Lock EXPIRY is not
+    // testable here and is not tested here.
+    if (cmd === 'eval') {
+      result = evalScript({
+        get: (k) => (store.has(k) ? store.get(k) : null),
+        set: (k, v) => { store.set(k, v); },
+        del: (k) => { store.delete(k); },
+        setEx: (k, v) => { store.set(k, v); },
+      }, [key, ...rest]);
+    }
+    else if (cmd === 'get') result = store.has(key) ? store.get(key) : null;
+    else if (cmd === 'set') {
+      // NX has to be honoured, not ignored. The quota seed is a SET .. NX and
+      // an unconditional write turns "seed once" into "reseed on every
+      // create", which would hide a cap that had stopped counting.
+      const flags = rest.slice(1).map((f) => String(f).toUpperCase());
+      if (flags.includes('NX') && store.has(key)) result = null;
+      else if (flags.includes('XX') && !store.has(key)) result = null;
+      else { store.set(key, rest[0]); result = 'OK'; }
+    }
     else if (cmd === 'del') { result = store.delete(key) ? 1 : 0; }
     else if (cmd === 'expire') result = 1;
     else if (cmd === 'incr') { const n = Number(store.get(key) || 0) + 1; store.set(key, String(n)); result = n; }
+    // DECR and SCARD were missing, and their absence was not loud: this shim
+    // answers 200 with result:null for a command it does not know, so
+    // `releaseDraftSlot` "succeeded" every time without decrementing anything
+    // and the quota counter only ever climbed. A quota assertion written
+    // against that would have been measuring the double, not the product.
+    else if (cmd === 'decr') { const n = Number(store.get(key) || 0) - 1; store.set(key, String(n)); result = n; }
+    else if (cmd === 'exists') result = store.has(key) ? 1 : 0;
+    else if (cmd === 'scard') { const s = store.get(key); result = s instanceof Set ? s.size : 0; }
+    else if (cmd === 'sismember') { const s = store.get(key); result = s instanceof Set && s.has(rest[0]) ? 1 : 0; }
+    else if (cmd === 'lpush') { const l = Array.isArray(store.get(key)) ? store.get(key) : []; store.set(key, l); l.unshift(...rest); result = l.length; }
+    else if (cmd === 'ltrim') { const l = Array.isArray(store.get(key)) ? store.get(key) : []; store.set(key, l.slice(Number(rest[0]), Number(rest[1]) + 1 || undefined)); result = 'OK'; }
+    else if (cmd === 'scan') { result = ['0', [...store.keys()]]; }
     else if (cmd === 'sadd' || cmd === 'srem' || cmd === 'smembers') {
       const s = store.get(key) instanceof Set ? store.get(key) : new Set();
       store.set(key, s);
@@ -71,11 +110,19 @@ globalThis.fetch = async (input, init) => {
       else if (cmd === 'srem') { rest.forEach(v => s.delete(v)); result = rest.length; }
       else result = [...s];
     }
+    else {
+      // Anything still unknown must FAIL rather than answer null. A silent
+      // null is the bug: it is indistinguishable from a missing key, and every
+      // caller that separates "absent" from "unreadable" rests on kv throwing.
+      return new Response(JSON.stringify({ error: 'dev-kv: unimplemented command ' + cmd }),
+        { status: 501, headers: { 'content-type': 'application/json' } });
+    }
     return new Response(JSON.stringify({ result }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   return realFetch(input, init);
 };
 
+const { evalScript } = await import('../tests/_kvScripts.mjs');
 const draftsHandler = (await import('../api/drafts.js')).default;
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
