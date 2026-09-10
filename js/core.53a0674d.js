@@ -9647,9 +9647,72 @@ function _updateFlipsSignInWall() {
   }
 }
 
+// Which Collection section is showing. Remembered across tab visits so a user
+// who works in Drafts does not land back on Cards every time.
+let _crCollectionSection = 'cards';
+
+/**
+ * Show one of Collection's two sections. This is the ONLY place either panel's
+ * display is set for the collection tab -- switchView() delegates here for both
+ * 'collection' and 'drafts' rather than keeping a second copy of the same rules.
+ */
+function switchCollectionSection(section) {
+  const which = (section === 'drafts') ? 'drafts' : 'cards';
+  _crCollectionSection = which;
+
+  const collection = document.getElementById('collectionView');
+  const drafts     = document.getElementById('draftsView');
+  const bar        = document.getElementById('collectionTabsBar');
+
+  if (bar) bar.style.display = 'flex';
+  const btnCards  = document.getElementById('colSubCards');
+  const btnDrafts = document.getElementById('colSubDrafts');
+  if (btnCards)  { btnCards.classList.toggle('active', which === 'cards');
+                   btnCards.setAttribute('aria-pressed', String(which === 'cards')); }
+  if (btnDrafts) { btnDrafts.classList.toggle('active', which === 'drafts');
+                   btnDrafts.setAttribute('aria-pressed', String(which === 'drafts')); }
+
+  if (which === 'drafts') {
+    if (collection) collection.style.display = 'none';
+    if (drafts)     drafts.style.display = 'block';
+    renderDraftsView();
+  } else {
+    // MUST use display:block (not '') -- CSS rule `.flips-view{display:none}`
+    // would otherwise re-hide the view. That single rule caused the Collection
+    // tab to render as a completely blank area.
+    if (drafts)     drafts.style.display = 'none';
+    if (collection) collection.style.display = 'block';
+    renderCollectionView();
+  }
+  try { _crUpdateSectionCounts(); } catch (_) {}
+}
+
+/** Counts on the two section buttons. Cards is local and synchronous; the draft
+ *  count is whatever the drafts renderer last resolved, so it stays blank until
+ *  that has happened rather than showing a confident 0 we have not established. */
+function _crUpdateSectionCounts() {
+  const cardsEl = document.getElementById('colSubCardsCount');
+  if (cardsEl) {
+    let n = 0;
+    try { n = (loadPortData() || []).length; } catch (_) { n = 0; }
+    cardsEl.textContent = n ? String(n) : '';
+  }
+  const draftsEl = document.getElementById('colSubDraftsCount');
+  if (draftsEl) {
+    const n = window._crDraftCount;
+    draftsEl.textContent = (typeof n === 'number' && n > 0) ? String(n) : '';
+  }
+}
+
 function switchView(view) {
-  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  try { document.body.setAttribute('data-view', view); } catch(_) {}
+  // 2026-09-09: Drafts stopped being a top-level tab and became a section of
+  // Collection. switchView('drafts') is still a valid entry point -- four call
+  // sites use it, including the back-out from the review screen -- so it now
+  // routes to Collection with the Drafts section selected. The tab strip lights
+  // Collection for both, because that is the tab the user is on.
+  const _tabFor = (view === 'drafts') ? 'collection' : view;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === _tabFor));
+  try { document.body.setAttribute('data-view', _tabFor); } catch(_) {}
   const lookup     = document.getElementById('lookupView');
   const flips      = document.getElementById('flipsView');
   const collection = document.getElementById('collectionView');
@@ -9662,6 +9725,8 @@ function switchView(view) {
   if (collection) collection.style.display = 'none';
   if (drafts)     drafts.style.display = 'none';
   if (review)     review.style.display = 'none';
+  const _colBar = document.getElementById('collectionTabsBar');
+  if (_colBar)    _colBar.style.display = 'none';
   const adminViewEl = document.getElementById('adminView');
   if (adminViewEl) adminViewEl.style.display = 'none';
 
@@ -9670,21 +9735,11 @@ function switchView(view) {
     if (flips)  flips.classList.add('active');
     _updateFlipsSignInWall();
     renderFlipsView();
-  } else if (view === 'collection') {
-    if (lookup)     lookup.classList.add('hidden');
-    // MUST use display:block (not '') — CSS rule `.flips-view{display:none}` would
-    // otherwise re-hide the view. That single rule caused the Collection tab to
-    // render as a completely blank area (wall hidden, content hidden by CSS default).
-    if (collection) collection.style.display = 'block';
-    renderCollectionView();
-  } else if (view === 'drafts') {
+  } else if (view === 'collection' || view === 'drafts') {
     if (lookup) lookup.classList.add('hidden');
-    // #draftsView is deliberately NOT in .flips-view, so '' would work here.
-    // It is still set explicitly: the class is the only thing standing between
-    // this line and the blank-tab bug documented above, and "works because of a
-    // class someone might add later" is not a property worth depending on.
-    if (drafts) drafts.style.display = 'block';
-    renderDraftsView();
+    // Entering by the Collection tab restores whichever section the user was
+    // last in; entering by switchView('drafts') names the section explicitly.
+    switchCollectionSection(view === 'drafts' ? 'drafts' : _crCollectionSection);
   } else if (view === 'review') {
     // No .view-tab has data-view="review", so the tab strip correctly shows no
     // active tab -- the review screen is a destination, not a section.
@@ -10632,7 +10687,7 @@ function renderCollectionView() {
 
   wrap.innerHTML = `
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <table class="flip-table" style="min-width:620px">
+      <table class="flip-table col-table" style="min-width:620px">
         <thead><tr>
           <th style="width:56px"></th><th>Card</th><th>Set</th><th>Cost</th><th>Current Value</th><th>P/L</th><th>P/L %</th><th></th><th></th>
         </tr></thead>
@@ -10690,15 +10745,15 @@ function renderCollectionView() {
           // to the card saved in your collection". Buttons inside the row
           // stopPropagation so refresh/remove don't also fire the modal.
           return `<tr class="col-row" onclick="openCollectionCardDetail(${p.id})" style="cursor:pointer">
-            <td>${thumbCell}</td>
-            <td><div class="ft-card" title="${esc2(p.card)}${_hasGrade ? ' — ' + esc2(_gradeLabel) : ''}">${cardNameHtml}</div></td>
-            <td class="ft-set">${esc2(p.set||'—')}</td>
-            <td class="ft-mono">$${(p.buyPrice||0).toFixed(2)}</td>
-            <td class="ft-mono" style="color:var(--gold-text)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
-            <td class="ft-mono" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
-            <td style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
-            <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center;flex-wrap:nowrap">${crSellSlot}${sellCell}</div></td>
-            <td onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">
+            <td class="col-thumb">${thumbCell}</td>
+            <td data-label="Card"><div class="ft-card" title="${esc2(p.card)}${_hasGrade ? ' — ' + esc2(_gradeLabel) : ''}">${cardNameHtml}</div></td>
+            <td class="ft-set" data-label="Set">${esc2(p.set||'—')}</td>
+            <td class="ft-mono" data-label="Cost">$${(p.buyPrice||0).toFixed(2)}</td>
+            <td class="ft-mono" data-label="Current value" style="color:var(--gold-text)" id="colVal_${p.id}">$${cur.toFixed(2)}${refreshedAgo ? `<span style="display:block;font-size:.62rem;color:var(--text-faint);font-weight:400">${refreshedAgo}</span>` : ''}</td>
+            <td class="ft-mono" data-label="P/L" style="color:${color};font-weight:700">${gain>=0?'+':''}$${Math.abs(gain).toFixed(2)}</td>
+            <td data-label="P/L %" style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
+            <td class="col-actions" onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center;flex-wrap:nowrap">${crSellSlot}${sellCell}</div></td>
+            <td class="col-actions col-actions-end" onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">
               <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="event.stopPropagation();refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
               <button class="ft-delete" onclick="event.stopPropagation();deletePortEntry(${p.id})" title="Remove">✕</button>
             </div></td>
@@ -11059,6 +11114,208 @@ function openCollectionCardDetail(entryId) {
   }
 
   document.getElementById('collectionCardModal').classList.add('open');
+  // Ask the server whether this card can be listed, then dress the draft
+  // button accordingly. Fired after the modal is open so the panel never waits
+  // on a round trip to appear -- same ordering the scan panel uses.
+  try { _ccmApplySellGate(p); } catch (_) {}
+}
+
+/* ── Draft action on the collection card popup ───────────────────────────────
+   The Collection row's List button lives in the ninth column of a nine-column
+   table. This is the same action on the surface a user actually reaches by
+   tapping a card, and it is the discoverable one on a phone.
+
+   It is NOT a marketplace link and NOT "mark as sold":
+     • Create listing draft -> saves a CardResell draft, submits nothing
+     • List on eBay / TCGplayer -> opens that marketplace in a new tab
+     • Sold -> logs a completed sale and moves the card to Flips
+   The three are separated in the markup so the promise each makes is legible.
+
+   Eligibility is the server's answer, never re-derived here: the button reads
+   the same stamp the row reads, through the same fetchSellStamps() call. */
+
+// Last stamp the server returned for the open card, so the click handler acts
+// on a decision rather than re-asking.
+window._ccmSellStamp = null;
+
+async function _ccmApplySellGate(entry) {
+  const btn   = document.getElementById('ccmDraftBtn');
+  const label = document.getElementById('ccmDraftBtnLabel');
+  const note  = document.getElementById('ccmDraftNote');
+  if (!btn || !label || !note) return;
+
+  const openedFor = window._ccmCurrentId;
+  window._ccmSellStamp = null;
+  label.textContent = 'Checking…';
+  btn.disabled = true;
+  btn.style.opacity = '.6';
+  note.style.display = 'none';
+  note.innerHTML = '';
+
+  const res = await fetchSellStamps([entry]);
+  // The user may have closed the popup or opened a different card while the
+  // request was in flight; a late answer must not decorate the wrong card.
+  if (window._ccmCurrentId !== openedFor) return;
+
+  btn.disabled = false;
+  btn.style.opacity = '';
+
+  if (!res.ok) {
+    // A failed check is not evidence the card cannot be listed, so the button
+    // stays live and retries rather than presenting itself as a refusal.
+    label.textContent = (res.reason === 'SIGNED_OUT') ? 'Sign in to create a draft' : 'Try again';
+    note.style.display = '';
+    note.textContent = _crSellUnavailableMsg(res.reason);
+    return;
+  }
+
+  const stamp = res.stamps[0] || null;
+  window._ccmSellStamp = stamp;
+
+  if (stamp && stamp.eligible === true) {
+    label.textContent = 'Create listing draft';
+    note.style.display = 'none';
+    return;
+  }
+
+  // Ineligible. Say what is missing AND offer the fields that supply it --
+  // a refusal with no route forward is the defect, not the gate.
+  label.textContent = 'Add missing details';
+  note.style.display = '';
+  note.innerHTML = _ccmIdentityFormHtml(entry, stamp);
+}
+
+/** The inline remedy. Only the axes the server actually named are offered, so
+ *  the form never asks for something that is already on the record. */
+function _ccmIdentityFormHtml(entry, stamp) {
+  const missing = (stamp && Array.isArray(stamp.missing)) ? stamp.missing : [];
+  const why = (stamp && stamp.message) || 'This card needs more detail before it can be listed.';
+
+  // A conflict is not a blank to fill in -- two recorded values disagree, and
+  // guessing between them here would be inventing an identity.
+  if (missing.indexOf('SELL_IDENTITY_CONFLICT') !== -1) {
+    return '<div>' + esc(why) + '</div>'
+      + '<div style="margin-top:.35rem;opacity:.8">Open <strong>View full card</strong> and correct the name, set and number so they agree.</div>';
+  }
+
+  const needGame   = missing.indexOf('SELL_NEEDS_GAME') !== -1;
+  const needNumber = missing.indexOf('SELL_NEEDS_NUMBER') !== -1;
+  const needSet    = missing.indexOf('SELL_NEEDS_SET') !== -1;
+
+  // Anything else (a missing name, an unusable row) has no safe inline remedy.
+  if (!needGame && !needNumber && !needSet) {
+    return '<div>' + esc(why) + '</div>';
+  }
+
+  const games = [
+    ['pokemon',  'Pokémon'],
+    ['pokemonjp','Pokémon (Japanese)'],
+    ['mtg',      'Magic: The Gathering'],
+    ['yugioh',   'Yu-Gi-Oh!'],
+    ['lorcana',  'Lorcana'],
+    ['onepiece', 'One Piece'],
+    ['sports',   'Sports'],
+    ['other',    'Other'],
+  ];
+  const cur = String(entry.game || entry.cardType || '').toLowerCase();
+  const opts = ['<option value="">Select a game…</option>']
+    .concat(games.map(g => '<option value="' + g[0] + '"' + (cur === g[0] ? ' selected' : '') + '>' + g[1] + '</option>'))
+    .join('');
+
+  const fieldCss = 'width:100%;padding:.5rem .6rem;margin-top:.25rem;background:var(--surface-2);'
+    + 'color:var(--text);border:1px solid var(--border);border-radius:8px;font:inherit;font-size:.78rem';
+  const lblCss = 'display:block;margin-top:.5rem;font-size:.66rem;font-weight:800;letter-spacing:.03em;'
+    + 'text-transform:uppercase;color:var(--text-muted)';
+
+  let html = '<div style="color:var(--text)">' + esc(why) + '</div>';
+  if (needGame) {
+    html += '<label style="' + lblCss + '" for="ccmFixGame">Game</label>'
+         +  '<select id="ccmFixGame" style="' + fieldCss + '">' + opts + '</select>';
+  }
+  if (needSet) {
+    html += '<label style="' + lblCss + '" for="ccmFixSet">Set</label>'
+         +  '<input id="ccmFixSet" type="text" placeholder="e.g. Base Set" value="' + esc(entry.set || '') + '" style="' + fieldCss + '">';
+  }
+  if (needNumber) {
+    html += '<label style="' + lblCss + '" for="ccmFixNumber">Card number</label>'
+         +  '<input id="ccmFixNumber" type="text" inputmode="text" placeholder="e.g. 4/102" value="' + esc(entry.number || '') + '" style="' + fieldCss + '">'
+         +  '<div style="margin-top:.25rem;font-size:.62rem;color:var(--text-faint)">The number printed on the card, exactly as it appears.</div>';
+  }
+  html += '<button type="button" onclick="_ccmSaveIdentity()" style="width:100%;margin-top:.6rem;padding:.55rem;'
+       +  'background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;'
+       +  'font:inherit;font-size:.75rem;font-weight:800;cursor:pointer">Save details</button>'
+       +  '<div id="ccmFixErr" style="display:none;margin-top:.35rem;font-size:.66rem;color:#f87171"></div>';
+  return html;
+}
+
+/** Write the supplied axes back to the collection entry, then re-ask the
+ *  server. The gate is never bypassed -- the record is completed and rechecked. */
+function _ccmSaveIdentity() {
+  const id = window._ccmCurrentId;
+  if (!id) return;
+  const err = document.getElementById('ccmFixErr');
+  const show = (m) => { if (err) { err.style.display = ''; err.textContent = m; } };
+  if (err) err.style.display = 'none';
+
+  const gameEl = document.getElementById('ccmFixGame');
+  const setEl  = document.getElementById('ccmFixSet');
+  const numEl  = document.getElementById('ccmFixNumber');
+
+  const game = gameEl ? String(gameEl.value || '').trim() : null;
+  const setV = setEl  ? String(setEl.value  || '').trim() : null;
+  const num  = numEl  ? String(numEl.value  || '').trim() : null;
+
+  if (gameEl && !game) { show('Choose which game this card is from.'); gameEl.focus(); return; }
+  if (setEl  && !setV) { show('Enter the set this card is from.');     setEl.focus();  return; }
+  if (numEl  && !num)  { show('Enter the card number.');               numEl.focus();  return; }
+
+  const port = loadPortData();
+  const p = port.find(x => x.id === id);
+  if (!p) { show('That card is no longer in your collection.'); return; }
+
+  if (gameEl) {
+    p.game = game;
+    // cardType mirrors game with the one documented exception the save path
+    // already applies: the Japanese Pokemon catalogue is still cardType pokemon.
+    p.cardType = (game === 'pokemonjp') ? 'pokemon' : game;
+    p.isJapanese = (game === 'pokemonjp');
+  }
+  if (setEl) p.set = setV;
+  if (numEl) p.number = num;
+  p.updatedAt = Date.now();
+
+  if (!savePortData(port)) { _reportStorageFailure(); return; }
+
+  // Repaint the row behind the modal so the table and the popup agree, then
+  // re-run the gate against the completed record.
+  try { renderCollectionView(); } catch (_) {}
+  try { openCollectionCardDetail(id); } catch (_) {}
+}
+
+/** Click handler. Acts on the stamp already in hand. */
+function _ccmCreateDraft() {
+  const id = window._ccmCurrentId;
+  if (!id) return;
+  const stamp = window._ccmSellStamp;
+
+  if (stamp && stamp.eligible === true) {
+    startListingDraftForEntry(id);
+    return;
+  }
+  if (stamp) {
+    // Ineligible: the remedy form is already rendered underneath. Put the
+    // cursor in it rather than repeating the refusal as a toast.
+    const first = document.getElementById('ccmFixGame')
+               || document.getElementById('ccmFixSet')
+               || document.getElementById('ccmFixNumber');
+    if (first) { first.focus(); return; }
+    showToast(stamp.message || 'This card needs more detail before it can be listed.');
+    return;
+  }
+  // No stamp: the check failed or has not answered. Ask again.
+  const port = loadPortData();
+  const p = port.find(x => x.id === id);
+  if (p) _ccmApplySellGate(p);
 }
 
 // Open the full Card Lookup view for the collection entry.
@@ -21429,7 +21686,8 @@ function _draftsBodyHtml() {
       <div class="empty-flips">
         <div class="empty-flips-icon">🗂️</div>
         <div class="empty-flips-h">No drafts yet</div>
-        <div class="empty-flips-p">Scan a card and choose “List now” to save your first draft.</div>
+        <div class="empty-flips-p">Two ways to start one: scan a card and choose “List now”, or open a card already in your Collection and choose “Create listing draft”.</div>
+        <button type="button" onclick="switchCollectionSection('cards')" style="margin-top:.85rem;padding:.6rem 1rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:10px;font:inherit;font-size:.78rem;font-weight:800;cursor:pointer">📦 Choose a card from my Collection</button>
       </div>`;
   }
 
@@ -21447,10 +21705,14 @@ function _draftsPaint() {
     ${_draftsBodyHtml()}`;
 
   const count = document.getElementById('draftsCount');
+  const t = _draftsState.total;
   if (count) {
-    const t = _draftsState.total;
     count.textContent = (t === null || t === undefined) ? '' : (t === 1 ? '1 draft' : t + ' drafts');
   }
+  // Feed the same resolved total to the Cards|Drafts switch. Read from
+  // _draftsState so the badge cannot disagree with the heading beside it.
+  window._crDraftCount = (typeof t === 'number') ? t : null;
+  try { _crUpdateSectionCounts(); } catch (_) {}
 }
 
 /**

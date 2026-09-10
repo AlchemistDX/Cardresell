@@ -1015,6 +1015,55 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .view-tab:hover{color:var(--text)}
 .view-tab.active{background:var(--gold);color:#fff}
 
+/* Collection ▸ Cards | Drafts sub-switch. Deliberately a lighter weight than
+   .view-tab: it is a section switch inside a tab, not a peer of the tabs. */
+.col-subtab{display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .85rem;min-height:44px;
+  border:1px solid var(--border);background:var(--surface);border-radius:var(--radius-md);
+  font:inherit;font-size:.76rem;font-weight:700;color:var(--text-muted);cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s}
+.col-subtab:hover{color:var(--text)}
+.col-subtab.active{background:var(--gold);border-color:var(--gold);color:#000}
+.col-subtab-count{font-size:.68rem;font-weight:800;opacity:.7}
+.col-subtab-count:empty{display:none}
+
+/* ── Collection on a phone ────────────────────────────────────────────────
+   The Collection table is nine columns held open at min-width:620px inside a
+   sideways scroller. At 390pt the last two columns -- the listing action and
+   the refresh/remove pair -- sit roughly 230px past the right edge, so the
+   List / "Needs info" control renders and is unreachable without discovering
+   that the table scrolls. Below 640px the same markup reflows into one block
+   per card with the actions on their own full-width row. One renderer, two
+   layouts: there is no second row-building code path to keep in step. */
+@media (max-width:640px){
+  .col-table{min-width:0 !important;width:100%;border-collapse:separate;border-spacing:0}
+  .col-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .col-table tbody,.col-table tr,.col-table td{display:block;width:100%}
+  .col-table tr.col-row{
+    position:relative;padding:.7rem .8rem .7rem 4.1rem;margin-bottom:.6rem;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg)}
+  .col-table tr.col-row>td{border:0;padding:.16rem 0}
+  /* Thumbnail out of the flow and into the gutter the padding reserved. */
+  .col-table td.col-thumb{position:absolute;left:.8rem;top:.7rem;width:40px;padding:0}
+  /* Value rows read "Label ......... value". */
+  .col-table td[data-label]{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem}
+  .col-table td[data-label]::before{
+    content:attr(data-label);flex:0 0 auto;font-size:.62rem;font-weight:800;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--text-muted)}
+  .col-table td[data-label]>*{text-align:right}
+  /* Card name is the heading of the block, not a labelled field. */
+  .col-table td[data-label="Card"]{display:block;padding-bottom:.3rem}
+  .col-table td[data-label="Card"]::before{display:none}
+  .col-table td[data-label="Card"] .ft-card{font-size:.9rem;font-weight:800;white-space:normal;text-align:left}
+  /* Both action cells become one bar under the numbers. */
+  .col-table td.col-actions{padding-top:.55rem}
+  .col-table td.col-actions>div{flex-wrap:wrap}
+  .col-table td.col-actions>div>*{flex:0 0 auto}
+  .col-table td.col-actions-end{padding-top:.3rem}
+  /* The section switch goes full width so both halves are comfortable taps. */
+  #collectionTabsBar{width:100%}
+  #collectionTabsBar .col-subtab{flex:1 1 0;justify-content:center}
+}
+
 /* ─── VIEW SWITCHING ─── */
 .flips-view{display:none}
 .flips-view.active{display:block}
@@ -1900,7 +1949,6 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <button type="button" class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</button>
   <button type="button" class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</button>
   <button type="button" class="view-tab" data-view="collection" onclick="switchView('collection')">📦 Collection</button>
-  <button type="button" class="view-tab" data-view="drafts" onclick="switchView('drafts')">🛠️ Drafts</button>
   <button type="button" class="view-tab" data-view="admin" id="adminTab" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
 </div>
 <!-- SEARCH -->
@@ -2826,10 +2874,27 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   Not Recent, Latest, My Drafts, or Saved -- see Part 3.5 of
   audit/DRAFT_LIST_API_CONTRACT.md. Nothing in the codebase polices wording.
 -->
+<!-- COLLECTION / DRAFTS SWITCH — 2026-09-09.
+     Drafts used to be a fifth top-level tab. On a phone the five tabs
+     overflowed the strip and the Drafts tab sat off the right edge. Drafts are
+     a stage of a card you already own, so they belong under Collection. One
+     control, rendered once, sits above both panels; switchView() drives it. -->
+<div id="collectionTabsBar" style="display:none;gap:.4rem;margin-bottom:.85rem">
+  <button type="button" id="colSubCards" class="col-subtab active"
+          onclick="switchCollectionSection('cards')">📦 Cards<span id="colSubCardsCount" class="col-subtab-count"></span></button>
+  <button type="button" id="colSubDrafts" class="col-subtab"
+          onclick="switchCollectionSection('drafts')">🛠️ Drafts<span id="colSubDraftsCount" class="col-subtab-count"></span></button>
+</div>
+
 <div id="draftsView" style="display:none">
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.4rem">
     <div style="font-size:.95rem;font-weight:800;color:var(--text);letter-spacing:-.01em">All drafts</div>
-    <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
+    <div style="display:flex;align-items:center;gap:.6rem">
+      <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
+      <!-- A draft always starts from a card, so "new draft" routes to the card
+           list rather than opening a blank form there is no way to complete. -->
+      <button type="button" onclick="switchCollectionSection('cards')" style="padding:.45rem .75rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:9px;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap">＋ New draft</button>
+    </div>
   </div>
   <div id="draftsWrap"></div>
 </div>
@@ -3668,6 +3733,25 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </div>
     </div>
 
+    <!-- 2026-09-09: the in-app draft action, above the outbound links and
+         visually separated from them. The two buttons below open a marketplace
+         in a new tab and list nothing; this one saves a draft in CardResell.
+         Those are different promises, so they do not sit in the same group.
+         Disabled state and refusal copy come from the same server stamp the
+         Collection row uses -- see _ccmApplySellGate(). -->
+    <div id="ccmDraftWrap" style="margin-bottom:.6rem">
+      <button id="ccmDraftBtn" type="button" onclick="_ccmCreateDraft()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.78rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:10px;font-size:.84rem;font-weight:800;cursor:pointer">
+        <span>🛠️</span><span id="ccmDraftBtnLabel">Create listing draft</span>
+      </button>
+      <div style="margin-top:.4rem;font-size:.64rem;color:var(--text-faint);text-align:center;line-height:1.35">
+        Saves a draft in CardResell. It is not submitted to any marketplace.
+      </div>
+      <div id="ccmDraftNote" style="display:none;margin-top:.4rem;font-size:.68rem;line-height:1.4;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:.5rem .6rem"></div>
+    </div>
+
+    <div style="font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.35rem">
+      Or research it on a marketplace
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.35rem">
       <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 List on eBay</a>
       <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">💰 List on TCGplayer</a>
