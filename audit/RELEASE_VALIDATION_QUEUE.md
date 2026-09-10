@@ -43,7 +43,7 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-5 flip completeness | **PASSED** — re-run 2026-09-09, 22 / 0 |
 | RV-6 rendered ranking | **PASSED, narrowed** — re-run 2026-09-09, identical in 4 / 4 cases, two default-tier rows only |
 | RV-7 D7 listing photos | **PASSED** — re-run 2026-09-09, 92 / 0; Safari/iOS limitation retained |
-| RV-8 preview reads production KV | **CONFIGURATION CLOSED, deployed proof pending** — verified 2026-09-10 00:20 from the Vercel CLI: the five KV names now exist as **two disjoint groups**, Production and Preview+Development, so Preview no longer resolves to the production store. Preview writes remain unproven because **no Preview deployment exists** (see §Redis reconciliation) |
+| RV-8 preview reads production KV | **CONFIGURATION CLOSED, deployed proof pending** — verified 2026-09-10 00:20 from the Vercel CLI: the five KV names now exist as **two disjoint groups**, Production and Preview+Development, so Preview no longer resolves to the production store. Preview writes remain unproven — the 21 existing Preview deployments all predate the split and were built against the production store, so a **fresh** Preview is what proves it (see §Redis reconciliation) |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
 | RV-10 containment mechanism | **EXECUTED for KV, verified by listing** — the second Redis database was created and the targeting is disjoint (Production vs Preview+Development), confirmed 2026-09-10 00:20. The earlier row read "designed, not executed" and is corrected. Cause and rejected alternatives retained in §4. **Three non-KV production resources are still reachable from Preview** — see §Redis reconciliation. |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
@@ -2468,7 +2468,7 @@ passed, and is struck through in place rather than deleted.
 
 All ten rows report `Encrypted`, consistent with the padlock observed at 17:20.
 
-### 2. The live deployment predates the current configuration
+### 2. Row ages, and what they do not prove — **narrowed 2026-09-10 00:24**
 
 | | |
 | --- | --- |
@@ -2478,25 +2478,65 @@ All ten rows report `Encrypted`, consistent with the padlock observed at 17:20.
 | bundle served | `js/core.569ff536.js` — **Phase 0**, confirmed in the cloud browser |
 | KV rows | **3h** before the check |
 
-The KV rows are four hours *newer* than the deployment carrying them. On the
-recorded rule — changing environment variables after deployment requires a new
-deployment to carry those settings; reading them at call time does not change
-that — **the currently-aliased production deployment cannot be assumed to hold
-the Production-scoped KV values.** This is not a fault in the separation; it is
-the ordinary consequence of configuring after deploying, and it is exactly the
-condition R4 verification exists to catch. It also means the *production* half
-of the separation is unproven in the same way the Preview half is.
+The KV rows are four hours newer than the deployment carrying them. **An earlier
+version of this section inferred a current fault from that and called for an
+extra production deployment. Both went too far, and the reasoning is corrected
+here rather than softened.**
 
-There is no read-only way to settle it from outside: `api/health.js` reports
-`{ok, service, time}` and nothing about store binding, and the endpoints that
-would reveal a binding are the ones that consume paid quota. **Not probed.**
+A new row timestamp records that the row's **scope** was rewritten. It does not
+record that the production **database or its credentials** changed — and under
+Safeguard 1 the production values were specifically meant to survive the scope
+change. The likeliest state is therefore that the running deployment still holds
+the same working credentials it was built with, pointing at the same production
+store. Nothing observed contradicts that.
 
-### 3. No Preview deployment exists
+So:
 
-All twenty deployments returned by `vercel ls` have `Environment: Production`.
-"Verify the fresh Preview" has no subject yet — §4 step 6 is genuinely
-outstanding, and creating that deployment is a deploy action, so it waits for
-authorization.
+- **No current fault is asserted.** Production is not presumed misbound.
+- **No deployment is required on this evidence.** Row age alone does not justify
+  a rebuild.
+- **What remains true** is narrower: the *binding* of a production build made
+  after the scope change has not yet been observed. That is a verification gap,
+  not a defect, and it is satisfied by checking the binding of **the next
+  production build that happens anyway** — folded into the eBay rotation
+  rebuild (decision 5 below).
+
+There is still no read-only way to observe a binding from outside:
+`api/health.js` returns `{ok, service, time}` and nothing about store binding,
+and the endpoints that would reveal one consume paid quota. **Not probed.**
+
+### 3. Preview deployments — **corrected: twenty-one exist**
+
+**The earlier claim that no Preview deployment exists was wrong, and the way it
+was wrong is worth recording.** It rested on an unfiltered `vercel ls`, whose
+first page returned twenty rows that all happened to be Production — because
+Production deployments are the recent ones. The listing was read as a census
+when it was a page.
+
+Re-checked with an explicit filter and pagination:
+
+| | |
+| --- | --- |
+| `vercel ls --environment preview` | **21 deployments**, across 2 pages |
+| age | all **~70 days**, i.e. all predate the KV split by months |
+| status | 19 Ready, 2 Error |
+
+Two consequences, pulling in opposite directions.
+
+**It sharpens Safeguard 2.** These 21 were built when the five KV names targeted
+all three environments, so each was baked with credentials for the **production**
+store — and Safeguard 1 deliberately preserved those values, so those
+credentials are still valid. This is no longer a hypothetical about "existing
+deployments retaining old access"; it is 21 named deployments that retain it.
+
+**It is bounded by deployment protection.** Old Preview URLs are not openly
+callable. `GET /api/health` on two of them returns **302** to
+`https://vercel.com/sso-api?url=…`, setting a `_vercel_sso_nonce` cookie —
+Vercel Authentication is on. Reaching the production store through one of these
+requires an authenticated team session, not merely the URL. Exposure is
+therefore internal, not public.
+
+Nothing was invoked past the redirect, and no store was written.
 
 ### 4. Three production resources remain reachable from Preview
 
@@ -2542,32 +2582,78 @@ distinction the dashboard draws. **Flagged as contradicted, not corrected** —
 writing replacements as Sensitive stays the instruction either way, since it is
 correct under both readings.
 
-### Questions
+### Decisions — recorded 2026-09-10 00:24
 
-**Q-RV-1. Creating the Preview deployment.** Step 6 needs one, and none exists.
-Pushing branch `phase1-block-d` to `origin` would produce a Preview from a
-known commit; `vercel deploy` from this sandbox would upload the working tree
-instead, which I do not recommend — it deploys something no commit describes.
-Push the branch, or create it another way? This is a deploy action and is not
-started.
+**D-RV-1. Preview deployment: the committed `phase1-block-d` branch.**
+Confirmed to target Preview — the production branch is `main`, evidenced by the
+`cardresell-git-main-…` alias sitting on the production deployment, so a
+non-`main` branch builds as Preview. The recorded Phase 1 push authorization
+already covers this; **technical readiness is the remaining gate**, not
+permission. My objection to CLI deployment is withdrawn as stated: a clean
+checkout does represent an exact commit, so CLI deployment is not inherently
+untraceable. The branch is preferred here for the ordinary reason that the
+commit is already pushed and attributable, not because the alternative is
+untraceable.
 
-**Q-RV-2. PriceCharting before any Preview exists.** As configured, a Preview
-deployment can spend the production PriceCharting quota. Remove
-`PRICECHARTING_API_TOKEN` from Preview and Development first — accepting that
-Preview's PriceCharting path then fails closed — or leave it and confine
-verification to paths that never call it? I recommend removing it: a Preview
-that cannot reach a paid provider is the safer default, and R4 does not need it.
+**D-RV-2. PriceCharting: scope the production token to Production before any
+Preview is created.** Ordering is load-bearing — a Preview built while the token
+still targets Preview is baked with it. This is **separate from the completed
+TCGPriceLookup rotation** and is not a repeat of it.
 
-**Q-RV-3. Turnstile in Preview.** Same shape, lower stakes. Narrow
-`TURNSTILE_SECRET_KEY` to Production, or leave it so Preview can exercise claim
-verification?
+**Method — this one must be done in the dashboard, not by me.** `vercel env`
+offers `add`, `remove name [environment]` and `update name [environment]`, and
+`update` changes a **value**, not a target. There is no target-editing
+operation. `PRICECHARTING_API_TOKEN` is a **single row covering Production,
+Preview and Development**, so `vercel env remove PRICECHARTING_API_TOKEN
+preview` has no partial-edit to perform — it acts on the record, and the record
+is the one holding the production value. That value cannot be read here (and
+must not be), so it could not be restored afterwards. Deleting it is precisely
+the loss Safeguard 1 exists to prevent, so **the CLI route is rejected and
+nothing was run.**
 
-**Q-RV-4. The dead Blob rows.** Delete both, narrow them to Production, or
-leave them? I recommend deleting them — nothing reads them, and configuration
-that looks live but is not has already cost this project time.
+The safe route is the same one used for the KV rows: **edit the row's
+environment checkboxes in the dashboard**, unchecking Preview and Development
+while leaving the Production value in place. Owner action.
 
-**Q-RV-5. Re-deploying production to carry the KV configuration.** The live
-deployment predates the Production KV rows, so the production half of the
-separation is unverified. Confirming it requires a production deployment built
-after the change. Does that fold into the eBay rotation window, which already
-plans a redeploy of the exact live commit, or stay separate?
+The same constraint applies to any other row in §4 whose targets need
+narrowing.
+
+**D-RV-3. Turnstile: give Preview a test configuration that cannot reach
+production claim data.** Not a narrowing to Production-only. Recorded reasoning:
+sharing a verification secret is not equivalent to sharing a writable database,
+so the remedy is a distinct test credential rather than removal, and Preview
+keeps the ability to exercise claim verification.
+
+**D-RV-4. Blob: the demonstrated photo-path concern is closed.** Nothing reads
+either Blob variable, and the photo path is IndexedDB, so there is no production
+photo storage for Preview to reach. Cleanup of the unused identifier and public
+key is **non-blocking** — not a release gate. My recommendation to delete them
+is downgraded accordingly.
+
+**D-RV-5. Production rebuild: fold binding verification into the already-planned
+eBay rotation rebuild**, provided that rebuild's configuration is ready. **No
+separate rebuild on row ages alone.** See §2 as corrected.
+
+**Milestone:** a Preview with verified isolated writes, then R4 verification.
+Credential scope changes still need the owner's authorization wherever it has
+not already been granted — D-RV-2 and D-RV-3 both change credential scope.
+
+### Open question — how a protected Preview gets verified
+
+One technical-readiness item that D-RV-1 surfaces, and I do not think it has
+been decided. The existing Previews sit behind Vercel Authentication, and a
+fresh one will too, so an unauthenticated request to it returns a 302 to
+`sso-api` rather than reaching `api/drafts.js`. Proving that a Preview's writes
+land in the isolated store means getting an authenticated request to it. Three
+ways, in my order of preference:
+
+1. **Protection Bypass for Automation** — a project-level secret sent as
+   `x-vercel-protection-bypass`. Scoped to this purpose, revocable, and it
+   leaves production protection untouched. Requires the owner to generate it.
+2. **Will drives it in his own logged-in browser.** No new secret, but the
+   verification steps are manual.
+3. **Disabling Preview protection.** Not recommended — it would expose all 21
+   old Previews, which is precisely the Safeguard 2 access being contained.
+
+Which route? Until one is chosen, the Preview can be *created* but its writes
+cannot be *observed*, and the milestone needs the second half.
