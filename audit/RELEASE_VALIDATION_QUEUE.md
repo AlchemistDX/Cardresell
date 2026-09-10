@@ -4357,6 +4357,14 @@ The completion-marker work paid for itself immediately.
   the cap returned 201. The cap was fine; the fixture described a seller who
   cannot exist. `stuffIndex` now writes a record per member. **130/0**, and
   disabling the cap check in the service still fails the suite.
+
+  **Wording correction (2026-09-10, yours).** "A seller who cannot exist" was
+  too strong and is withdrawn. Index members without records *can* exist — an
+  interrupted write or a corrupted set leaves exactly that shape, which is why
+  the consistency sweep is there to prune them. What they were unsuitable for
+  was representing **a seller with 500 active drafts**, which is what that
+  fixture claimed to be. They remain useful fixtures for recovery: see
+  `tests/draft-index-recovery.mjs` (265/0), which uses that shape deliberately.
 - **`tests/review-fee-dl.mjs`** threw `ReferenceError` before its first
   assertion once the priced template gained `${_reviewShippingRows()}` — the
   harness never passed it. Both that helper and `_reviewShippingZeroNote` are
@@ -4397,3 +4405,193 @@ run.
    only the ones in the Phase 1 release path, or leave them?
 3. Isolated-Redis script verification and the deployed $2 case remain the two
    outstanding checks I have not started. Which first?
+
+---
+
+## The server residual is closed (2026-09-10)
+
+**Your counterexample, restated so the fix can be checked against it.** Create
+without a generation → delete → let both idempotency records expire → resend the
+original request without a generation. While the handler skipped the comparison
+for a request that carried no generation, nothing measured that old intent
+against anything, and it entered the current generation as a fresh create. The
+protection was resting on a record with a TTL, which is the dependence the
+lifecycle generation exists to remove.
+
+**The rule now implemented,** as you specified it: an omitted generation is
+treated as **legacy generation 0**, and then goes through the *same*
+authoritative resolution and the *same* comparison as an explicit value. No
+special case, no early return.
+
+| behaviour | where | evidence |
+|---|---|---|
+| `LEGACY_GENERATION = 0` exported | `api/_draftService.js` (above `SERVICE_ERR`) | — |
+| omission → 0, then the ordinary comparison | `api/_draftService.js`, `if (sentGen !== resolved.gen)` — the guard that excused omission is gone | mutation below |
+| invalid value rejected, **not** read as omission | strict parse: a non-negative safe integer, or a `/^\d+$/` string; anything else throws `DRAFT_FIELD_INVALID:generation:non-negative-integer` → 400 at `api/drafts.js:87` | 10 values asserted |
+| the 410 does not invent a claim | detail carries `sentGeneration: null`, `generationOmitted: true`, `evidence: 'omitted-generation-not-legacy'`, `retryable: false`; surfaced in the body at `api/drafts.js` | HTTP case asserted |
+| generation 0 still does its three legitimate jobs | first create on an unrecorded row · adoption of a draft predating the record · recovery of an interrupted create | 3 cases |
+| once the row advanced, omission cannot create | after a deletion, whether or not the tombstone survives | 2 cases |
+| incomplete legacy discovery stays fail-closed | an unreadable index refuses (`LIFECYCLE_UNRESOLVED`, retryable) rather than reading "no draft here" as an empty generation 0 | 1 case |
+
+**`tests/draft-generation-omission.mjs`, new — 52 passed, 0 failed.** It covers
+both sequences you named: **after idempotency expiry**, and **after tombstone
+expiry with the lifecycle record retained**. In each, the assertions are that the
+resent request is refused, **no new draft exists**, **no quota was consumed**
+(checked against `draftquota:<sub>` directly, because a refusal that still spends
+a slot would leak the cap one delete at a time), and that an **explicit Create at
+the current generation still succeeds** immediately afterwards. The
+unknown-generation lost-response recovery is retained as its own case — a
+byte-identical retry replays, and a new key with no generation opens the existing
+draft — so compatibility is not a dead end.
+
+**Mutation-checked, not merely green.** Restoring the old guard
+(`if (!genOmitted && sentGen !== resolved.gen)`) turns the suite red at exactly
+the three refusal cases: 36 passed, 8 failed, and nothing else moves. Restoring
+the fix returns 52/0.
+
+Re-run after the change: `draft-lifecycle` 83/0 · `draft-crud-e2e` 239/0 ·
+`sell-eligibility` 113/0 · `draft-list-cap` 130/0 · `draft-store` 147/0 ·
+`draft-focus` 56/0 · `draft-delete-browser` 113/0 · `sell-gate-ordering` 39/0.
+Commit `205bc8f` on `phase1-block-d`, **local only**.
+
+**What this is not.** The pinned Preview
+(`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, commit `499ef1c`) predates this fix. Nothing
+below about the deployed $2 case is evidence for the generation path, and the fix
+has not run against real Redis.
+
+---
+
+## Completion reporting: all 34 converted, and the runner now judges silence
+
+`tests/_complete.mjs` (new) gives a suite that keeps its own counters the same
+guarantee the shared harness has: `completionGuard(label)` returns
+`finish(passed, failed)` and `skipAll(reason)`, and installs an exit hook that
+prints **SUITE DID NOT COMPLETE** and forces a non-zero exit when the marker was
+never emitted — including when the process exited 0. Completion is emitted only
+after the awaited work finishes; `webhook-p0-offline` now reports from its
+resolved `main()` rather than from a path that runs on the way out either way.
+An unhandled rejection is recorded as a failure.
+
+**Bounded, as you asked.** No assertion and no fixture changed. Four suites
+counted only failures and gained a pass counter inside their existing helper so
+a total could be reported at all (`bulk-scan-misfire`, `copy-truth-offline`,
+`draft-readiness`, `fee-truth-offline`). No framework rewrite.
+
+**The runner.** Every invocation in `tests/run-all.sh` now goes through a
+`suite()` helper that:
+
+- runs under `timeout` (`SUITE_TIMEOUT`, default 900s) — a hung suite used to
+  hang the run indefinitely with no verdict at all, and is now a failure;
+- fails any `.mjs` that ends without `SUITE COMPLETE`, whatever its exit status;
+- reports `SUITE SKIPPED` distinctly — not a pass, not a failure;
+- tees output rather than capturing it, so the run still streams.
+
+Verified against four fixtures — normal completion, a crash that exits 0, a
+throw before the first assertion, an infinite hang — with **identical verdicts
+when the runner's output is piped** (`pipefail` is what makes the pipeline carry
+node's status rather than `tee`'s). The older `.js` checks predate the marker and
+are still judged on exit status alone; that limitation is stated rather than
+papered over.
+
+**Four suites were on disk and never invoked** — `draft-lifecycle`,
+`draft-generation-omission`, `draft-delete-browser`, `tpl-outcome-render`.
+Registered as slots 52–55; `test-registry` moves to 56 and is 12/0.
+
+### Three suites are red, all pre-existing
+
+Each was verified by running the **pre-conversion file from `HEAD`** and getting
+the same totals, so none is caused by the reporting change. They were invisible
+because nothing reported them.
+
+| suite | totals | failing assertion |
+|---|---|---|
+| `a11y-mobile-2026-09-04` | 167 / **7** | the `.ft-card` rules — break-inside, line-height, rem cap, cap width, weight/colour, the set cell using the class not an inline style, the set value still escaped |
+| `launch-audit-regressions` | 437 / **1** | "the set-hint ranker exists and is applied to TPL search results" |
+| `test-scan` | 2 / **29** | every request answered **401**; this suite needs a live authenticated environment it did not have here |
+
+Not fixed in a reporting commit. `test-scan` looks environmental; the other two
+each assert against shipped code and need to be established as stale fixture or
+live defect before anything is changed — I have not done that.
+
+Wording correction applied above, in the `draft-list-cap` note. Commit `d66c9e3`,
+local only.
+
+---
+
+## The $2 deployed case — runbook (owner-run, ~10 minutes)
+
+I cannot run this: the Preview needs a signed-in Vercel and Google session on
+your device, and the Upstash read-back is behind your dashboard. Everything
+needed is below; nothing else has to be open.
+
+**What it proves.** The only draft ever created on a deployed build
+(`drf_3471a1a85ccddb2cca04958fa66ed58a`) recorded `priceSource: "comp"`. The
+decision of record is **a manually entered price is always `seller`**, and that
+has only ever been shown locally. This run shows it on the deployed build.
+
+**Before you start**
+
+| | |
+|---|---|
+| Preview URL | `https://cardresell-git-phase1-block-d-willsep200-9430s-projects.vercel.app` |
+| pinned deployment | `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` (commit `499ef1c`) |
+| store to read | Upstash `upstash-kv-aureolin-door` (Pay-as-you-go — Preview + Development) |
+| the card | **`Charizard ISO-CHECK-20260910-K7M2Q9`**, already in the collection, not deleted |
+| production | untouched; still Phase 0 on `js/core.569ff536.js` |
+
+**Do not push anything while this runs.** A push to `phase1-block-d` builds a new
+deployment and moves the alias off the pinned one mid-check. Record the
+deployment ID with the result.
+
+**Steps**
+
+1. Open the Preview URL, sign in with Google, and confirm the footer/bundle
+   matches the pinned build before doing anything else.
+2. Open the collection and find **`Charizard ISO-CHECK-20260910-K7M2Q9`**.
+   Use this entry, not the Lost Origin TG03 card — the marked entry is the one
+   with no comp behind it.
+3. Start the sell flow on it. When the price step appears, **type `2`** as the
+   price. Do not accept a suggested or comp price, and do not let a Quick
+   Pricing value populate the field.
+4. Complete the create with **one tap**. If nothing appears to happen, wait —
+   do not tap again; repeat-tap dedupe on the deployed build is a separate
+   unverified item and a second tap would confound this one.
+5. Screenshot the review screen showing the **$2** figure and whatever
+   provenance line it displays.
+6. In Upstash, open `upstash-kv-aureolin-door` → Data Browser, and search the
+   key prefix **`draft:`**. There will now be two records. Open the new one
+   (not `drf_3471a1a85ccddb2cca04958fa66ed58a`).
+
+**What to capture — from the record itself, not from the UI**
+
+| field | expected | why it matters |
+|---|---|---|
+| `draftId` | a new `drf_…` | it is not the old draft |
+| `price` | `2` | the value you typed survived the round trip |
+| `priceSource` | **`"seller"`** | the whole point of the run |
+| `priceProvenance` / any comp fields | absent, or explicitly naming manual entry | a manual price must not carry comp provenance |
+| `rev` | `1` | one create, not a create plus an edit |
+| `createdAt` | today | it is this run's record |
+
+Paste the record (or a screenshot of it) back and I will reconcile it against
+the decision of record and close the item. **If `priceSource` reads anything
+other than `"seller"`, stop there** — that is a release blocker and I should look
+at it before you do anything else with the Preview.
+
+**Leave in place afterwards:** the new draft, the old draft, and the alias
+pinning. The isolated-Redis Lua verification runs after this, and I have kept
+everything local until it finishes.
+
+---
+
+### Where Phase 1 stands after today
+
+Closed today: the server precondition hole (with a mutation-checked suite), the
+completion-reporting gap across every remaining suite, and the runner's
+blindness to hangs and silence.
+
+Still open and unchanged: **RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2**, the
+deployed $2 case above, isolated-Redis verification of the three real Lua
+scripts (`ACQUIRE_SCRIPT`, `FENCED_SET_SCRIPT`, and the ownership release — `EVAL`
+is still exercised only against in-memory doubles), the eBay credential rotation
+and challenge (yours), and the three red suites above.
