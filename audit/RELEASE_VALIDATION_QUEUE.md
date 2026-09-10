@@ -3272,3 +3272,106 @@ resource pointer.
 
 **Committed locally, not pushed.** The alias stays pinned to
 `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` until the isolation check reports.
+
+---
+
+## Isolation check — deployed run on dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw
+
+Run by Will on iPhone against the branch alias. Deployment
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, commit `499ef1c`, bundle
+`js/core.8e7fee75.js`. **Conditional pass — one detail open.**
+
+### What the deployed run establishes
+
+The draft flow works end to end on the deployed build against real Redis: one
+draft created from a single tap, and it reopened. That is the first successful
+deployed draft creation in this phase, and it retires the D8 blocker as a
+deployed fact rather than a local one.
+
+The card was **Charizard Lost Origin Trainer Gallery · TG03**, not the marked
+`ISO-CHECK-20260910-K7M2Q9` manual entry. Reported: price `32.84`,
+`priceSource: "comp"`, `rev 1`.
+
+### Read back from `upstash-kv-aureolin-door` (Pay-as-you-go = Preview + Development)
+
+Confirmed from the screenshot, not from report:
+
+| field | value |
+|---|---|
+| key | `draft:fzUpcr…` (STRING, 5.9 KB) |
+| `draftId` | `drf_3471a1a85ccddb2cca04958fa66ed58a` |
+| `instanceId` | `inst_col_1789014701564` |
+| `sku` | `v2-…ORIG…NER-280ab926` |
+
+`inst_col_` is the prefix minted by `startListingDraftForEntry`, so this draft
+came through the Collection row path — the same path the local three-tap proof
+exercised.
+
+**Not visible in the screenshot:** the title, `32.84`, `priceSource: "comp"`
+and `rev 1` were below the fold in the JSON pane. Those four are recorded here
+as Will's report, not as read-back evidence.
+
+### `upstash-kv-bistre-arrow` (Free Tier = Production) — empty, with one gap
+
+The store identity is confirmed on screen: `upstash-kv-bistre-arrow`, Free
+Tier, us-east-1. The searched key was
+`draft:fzUpcrXKDdQzGORl0bLQ6mTwML73:drf_3471a1a` — **visibly cut off at
+`drf_3471a1a`**, 11 of the draft id's 32 hex characters. The result panel read
+"Data on a break".
+
+Two things make that empty result meaningful but not yet conclusive:
+
+- **Supporting:** the same screenshot shows the unfiltered key list in this
+  store returning `collection:111…` and `collection:fzU…`. The store is
+  populated and its search does return rows, so "Data on a break" is a real
+  empty result rather than a dead panel.
+- **The gap:** whether the field was merely display-clipped or the pasted key
+  was actually truncated is unknown, and Upstash's match semantics here are not
+  established. Under exact-match semantics a truncated key returning empty
+  proves nothing.
+
+**Not recording an unconditional isolation pass on that basis.**
+
+### The one check that closes it
+
+Search `bistre-arrow` for **`draft:`** — nothing else. Four characters and a
+colon, fully visible in the field, so the screenshot is self-verifying, and it
+is the actual key prefix, so it holds under either prefix or substring
+matching.
+
+- Empty ⇒ **production holds no draft records at all**, which subsumes exact
+  full-key equality and closes the check unconditionally.
+- Non-empty ⇒ open the rows and compare ids directly; the isolation claim
+  narrows to per-key and needs the full id matched.
+
+Searching the bare draft id (`drf_…`) is **not** a substitute: if the console
+matches on prefix, a key named `draft:<sub>:drf_…` will not match `drf_` and an
+empty result would be a false pass.
+
+### State held for that check
+
+- Deployment unchanged and alias still pinned to
+  `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`. Nothing pushed. Commits `2647edd`
+  (`instanceDraftsKey` removal) and this entry are local only.
+- The draft `drf_3471a1a85ccddb2cca04958fa66ed58a` is **not deleted**, per
+  instruction.
+- Generation counter still not started.
+
+### Still not demonstrated by this deployed run
+
+- **The manual $2 seller-provenance case.** This draft was a comp-priced feed
+  card, so the deployed path has exercised `priceSource: "comp"` only. The
+  `seller` branch — the one the whole provenance chain was rewritten for — has
+  local proof (`price 2`, `priceSource 'seller'`, survived reload and reopen)
+  and no deployed proof. The marked manual entry is still in the collection and
+  is the obvious second run once the alias is free.
+- Repeat-tap dedupe on the deployed build. One tap was pressed, correctly per
+  instruction; the three-tap result is local only.
+
+### Screenshot accounting
+
+Attached: `IMG_4207` (aureolin-door record), `IMG_4208` (bistre-arrow search
+field and unfiltered keys), `IMG_4209` (bistre-arrow empty result).
+`IMG_4203`–`IMG_4205` were named but did not arrive, so the in-app side of the
+run — the draft appearing, and reopening with its title — rests on Will's
+report and on the Redis record, not on screenshots seen here.
