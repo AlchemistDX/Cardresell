@@ -5409,3 +5409,67 @@ CR_REDIS_PORT=6399 node tests/draft-lifecycle-real-redis.mjs
   `draft-lifecycle.mjs`'s resurrection and duplicate coverage.
 
 Phase 1 remains approximately **95%**.
+
+---
+
+## Push, new Preview, and what the protection boundary still blocks (2026-09-10 19:55)
+
+### Authorized and done
+
+**Pushed** `phase1-block-d` on your explicit instruction: `499ef1c..880c09d`,
+36 commits. **`main` was not touched** and production remains Phase 0 on
+`js/core.569ff536.js`.
+
+**The old pin is released.** The branch alias
+`https://cardresell-git-phase1-block-d-willsep200-9430s-projects.vercel.app`
+now resolves to **`dpl_9mauYTp35md3qtk9fPV1MvkmHnGA`** (target `preview`, state
+READY, created 23:55:22 UTC), not to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`. That
+was the necessary consequence of "create an updated Preview" and is recorded
+rather than assumed. **Deployment protection stays enabled.**
+
+**Commit-to-deployment binding is inferred, not read.** `vercel inspect --json`
+returned an empty `meta` object for this deployment, so the git SHA is not
+available from the platform. The binding rests on the push landing at 23:54:5x
+and a `preview` deployment appearing 33 seconds later on the branch alias. I
+have **not** read the served bundle back to confirm it, for the reason below.
+
+### Blocked: the deployed lifecycle and Upstash REST checks
+
+Both requested verifications are blocked, and by the constraint you set rather
+than by a defect. With protection enabled, an unauthenticated request from this
+sandbox is bounced:
+
+```
+GET /            → 302, sets _vercel_sso_nonce
+GET /api/drafts  → 302, sets _vercel_sso_nonce
+```
+
+That is protection working. It also means I cannot exercise a deployed
+lifecycle path from here.
+
+**Three ways past it, none of which I have taken:**
+
+1. **Protection Bypass for Automation** — a project-level secret header. It is
+   a change to a security setting and it creates a standing bypass, so it is
+   yours to authorize, not mine to enable mid-check.
+2. **Your signed-in browser** — same path the $2 run used. No local browser is
+   reachable from this session.
+3. **Pull the Preview `KV_REST_API_*` credentials locally** to drive Upstash's
+   REST `EVAL` directly. I will not do this unasked: it writes a copy of live
+   credentials to disk, which is exactly the exposure **Safeguard 2** is open
+   about, and it is the kind of thing that should be a deliberate decision
+   rather than a side effect of a test.
+
+**What the Upstash REST check actually needs.** Not a deployed page — a real
+Upstash REST endpoint to run the three scripts against, because the open
+question is whether `EVAL` over Upstash's HTTP transport (`api/_kv.js:19-27`,
+args percent-encoded into the path, result read from `j.result`) returns what
+the RESP path returned. A throwaway Upstash database would answer it without
+touching `upstash-kv-aureolin-door`, but provisioning one is a resource and
+cost decision.
+
+### This document is committed but NOT pushed
+
+Deliberately. The deployed tip stays **`880c09d`** so the Preview does not move
+under RV-16 while you are using it. Nothing further will be pushed without you
+saying so.
