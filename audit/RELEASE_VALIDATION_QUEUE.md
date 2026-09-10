@@ -3656,3 +3656,124 @@ removed.
   run only.
 - Nothing pushed. Alias pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`. Draft
   `drf_3471a1a85ccddb2cca04958fa66ed58a` retained.
+
+---
+
+## Retraction — Safeguard 2 is NOT closed by the isolation pass
+
+The pass entry above claimed "Safeguard 2 and the Preview-write proof (Step 6)
+are satisfied for the draft keyspace by this pair." **Withdrawn.** Safeguard 2
+is about older deployments and downloaded local credentials retaining access
+with old secrets. A keyspace query against two databases says nothing about
+what credentials a previously built deployment still holds. Safeguard 2 stays
+open and separately tracked. The Step 6 Preview-write proof is satisfied; that
+half of the sentence stands.
+
+---
+
+## Delete + recreate — design changed on an established constraint
+
+Direction accepted: deletion and recreate ship together, delete is unfinished
+Phase 1 scope rather than expansion, and the implementation may change as long
+as the required behaviour holds.
+
+### The server half is already built
+
+`handleDelete` (`api/drafts.js:440-467`) and `deleteDraftOp`
+(`api/_draftService.js:413-507`) are complete and careful:
+
+- soft deletion via tombstone, with a 90-day retention TTL;
+- `410 Gone` for a tombstoned draft, chosen explicitly over 409 because 409
+  "would invite the client to re-read and retry at a higher revision, which is
+  precisely the resurrection the store refuses" (`api/drafts.js:483`);
+- an `UNREADABLE`/`NOT_FOUND` fallback so a row that cannot be hydrated can
+  still be removed, gated so an id the index never advertised stays a 404;
+- **quota released exactly once**, gated on `alreadyDeleted` rather than on
+  `ok`, precisely so a double delete cannot hand back two slots
+  (`_draftService.js:496-499`).
+
+So acceptance items 2 and 5 — quota released once, failed deletion preserves
+the draft — are already server-side behaviour. What is missing is the client:
+the action, the confirmation, and the recreate path.
+
+### The constraint that breaks the agreed design
+
+**The collection is not on the server.** It renders from `loadPortData()`,
+localStorage key `cardsell_<uid>_portfolio` (`js/core.8e7fee75.js:19352`,
+`:18925`), and the shipped bundle **never calls `/api/collection`** — zero
+matches for `api/collection` in `core.8e7fee75.js`. The `collection:<sub>` keys
+visible in Redis belong to an endpoint the client does not use. The entry id is
+local too: `instanceId: 'inst_col_' + entryId` (`:21515`), where `entryId`
+indexes a browser-held array.
+
+This cuts both ways against the original plan:
+
+- A generation **stored on the collection entry** is browser-only — the
+  objection Will raised.
+- But a generation **stored server-side and keyed by `entryId`** is no better:
+  it would be a durable counter keyed by an identifier only one browser knows.
+  A second device has its own localStorage and its own entry ids, so
+  "coordinate across devices" is not achievable through the entry at all.
+
+### Proposed design — key the generation to the SKU
+
+The server already owns a stable, cross-device identifier for "this card for
+this seller": the **sku**, derived from card identity (`api/_cardIdentity.js`),
+`v2-PKMLOSTORIGINTRAINER-280ab9265ca3153f` on the subject draft.
+
+1. **`draftgen:<sub>:<sku>`** — an integer in Redis, owned by the drafts
+   module. `INCR` inside `deleteDraftOp`, which already reads the deleted
+   draft and therefore already knows its sku.
+2. **`/api/sell-eligibility` returns the current generation** alongside each
+   stamp. That endpoint is already the gate that runs before the Create button
+   is enabled, it is already card-identity keyed, and it is already called by
+   both Sell entry points through one transport (`api/sell-eligibility.js`
+   header). No extra round trip, and any device learns the current generation
+   on load.
+3. **The client folds it into the key** — `_crIdemKey('sell-col', entryId,
+   'g' + gen, CR_D1_SLOT)`. The client never computes a sku; it echoes an
+   integer.
+4. **The delete response carries the new generation**, so the device that
+   deleted does not need to re-fetch eligibility before pressing Create again.
+
+Behaviour against the five acceptance checks:
+
+| check | how it is met |
+|---|---|
+| visible Delete with confirmation | new client action — to build |
+| survives reload, releases quota once | tombstone + `alreadyDeleted` gate, already server-side |
+| create again → new draft | generation advanced ⇒ different idempotency key ⇒ no replay |
+| retries stay deduplicated | a retry of the *same* press carries the *same* generation ⇒ same key ⇒ replay |
+| delayed request cannot resurrect | the old key's record is never cleared, so a delayed retry replays to the tombstone and gets `410` |
+
+**Stale-generation path, which needs a decision.** A device holding an old
+generation that presses Create will replay to the tombstone and receive `410`
+rather than a new draft. That is correct — it is exactly the delayed-retry
+protection — but for a human who just pressed a button it reads as a failure.
+The remedy is a single automatic refresh: on `410` from create, re-fetch
+eligibility, and retry once with the new generation. Bounded to one retry so it
+cannot loop.
+
+### Open question for Will
+
+**Q-D8-5.** Confirm sku-keyed rather than entry-keyed generation. The
+consequence worth naming: the generation is per *card identity*, so two
+separate collection rows of the same card share one counter. Deleting a draft
+for one row advances the generation for both. The effect is benign — the other
+row's next Create makes a new draft instead of replaying — but it does mean the
+counter is not strictly per-row, and per-row is not achievable while rows live
+only in localStorage.
+
+**Q-D8-6.** Does "another device" belong in the acceptance checks for this
+release? Collection rows are browser-local, so a second device does not see the
+same rows at all. The generation would coordinate correctly across devices, but
+there is no cross-device collection entry to exercise it from. Suggest the
+check be worded against the *draft list*, which is server-backed, rather than
+the collection.
+
+### Status
+
+Design recorded, **not yet implemented**. Nothing pushed. Alias still pinned to
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, draft
+`drf_3471a1a85ccddb2cca04958fa66ed58a` retained for the $2 seller-provenance
+run.
