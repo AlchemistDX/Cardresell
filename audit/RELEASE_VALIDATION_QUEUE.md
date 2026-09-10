@@ -2666,49 +2666,51 @@ Decided order:
    hostname**, and the secret is **handled as a credential** (never printed, not
    committed, revocable).
 
-### Turnstile — no new provider credential needed
+### Turnstile — **out of this milestone's scope** (dependency resolved)
 
-Correct, and it changes D-RV-3's method. Cloudflare publishes dummy sitekeys and
-matching test secrets ([Cloudflare Turnstile testing](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)):
+**My server-only workaround was wrong and is withdrawn.** Cloudflare's test
+secrets accept **dummy** tokens and **reject real** ones, so keeping the
+production sitekey while swapping only the secret makes a mismatched pair that
+fails closed — the opposite of "always passes"
+([Cloudflare Turnstile testing](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)).
+I read "always passes validation" as unconditional when it is conditional on a
+dummy token from the paired dummy sitekey.
 
-| Value | Kind | Behaviour |
-| --- | --- | --- |
-| `1x00000000000000000000AA` | sitekey | always passes |
-| `2x00000000000000000000AB` | sitekey | always fails |
-| `3x00000000000000000000FF` | sitekey | forces interactive challenge |
-| `1x0000000000000000000000000000000AA` | secret | always passes validation |
-| `2x0000000000000000000000000000000AA` | secret | always fails validation |
+**A second claim of mine is withdrawn with it.** I wrote that a Turnstile test
+secret would mean the Preview "never reaches production claim data." A bot-check
+secret cannot establish that. **Only the application's storage binding
+determines what data a deployment can reach**, which is exactly what the
+isolation check below exists to prove.
 
-**One wrinkle in "configure both sides," found in the code.** The sitekey is not
-an environment variable — it is hardcoded in the served HTML:
+**Dependency resolved by reading the code: the draft flow does not use
+Turnstile.** Evidence at commit `b648c2c`:
 
-```
-index.html:1565  <meta name="turnstile-site-key" content="0x4AAAAAAEQHZV40dJAH0unZ" />
-```
+| Surface | Result |
+| --- | --- |
+| `TURNSTILE_SECRET_KEY` readers in `api/` | **1 file only** — `api/verify-claim-firebase.js:68` |
+| `siteverify` callers | `api/verify-claim-firebase.js:76` |
+| `turnstile` mentions in `api/drafts.js`, `api/_draftStore.js`, `api/_draftService.js` | **0, 0, 0** |
+| widget call sites in the live bundle `js/core.53a0674d.js` | **2** — `_tsRenderInto('verifyTurnstile')` at `:12365`, `_tsGetToken('verifyTurnstile')` at `:12521` |
+| where that token is posted | `/api/verify-claim-firebase` only (`:12523`) |
 
-read by `window.turnstile.render(el, { sitekey: key, … })` at `index.html:1591`.
-So swapping the **client** side means editing committed HTML on the branch — a
-change that must never merge to `main`, on a branch intended to merge. That is a
-poor trade for a database-isolation check.
+`api/drafts.js` gates a request on three things and no others: KV env present
+(`:50-51`), a valid bearer token (`:53-62`), and a non-synthetic `sub`
+(`:69-71`). There is no Turnstile gate and no claim-verification prerequisite.
 
-**Recommended instead: swap only the server side.** Give Preview
-`TURNSTILE_SECRET_KEY = 1x0000000000000000000000000000000AA` (always passes).
-Verification then succeeds without consulting the real sitekey pairing, so the
-Preview **never reaches production Turnstile validation or production claim
-data** — which is the stated requirement — with **no code change and no risk of
-a test sitekey shipping**. Stated plainly: the client keeps rendering with the
-production sitekey, which is a **public identifier, not a credential**. Database
-isolation remains a separate requirement, proven by the steps below and not by
-this.
+**Therefore:**
 
-**Row mechanics, same shape as PriceCharting.** `TURNSTILE_SECRET_KEY` is one
-row covering **Production, Preview** (26d old). A Preview-specific value cannot
-be added while that row still covers Preview. Order: **uncheck Preview in the
-dashboard** (owner), then I can `vercel env add TURNSTILE_SECRET_KEY preview`
-with the dummy value — that one is a published test string, not a secret, so I
-can set it without handling a real credential.
+- **Turnstile is removed from this milestone's prerequisites**, and tested
+  separately as **RV-15**.
+- **No second dashboard row change is needed now.** The `TURNSTILE_SECRET_KEY`
+  row (Production, Preview) can stay as it is for this milestone. **The only
+  dashboard task is PriceCharting.**
+- If Turnstile is ever exercised on a Preview, the fix is matching test keys via
+  an **environment-aware mechanism** with production retaining its real pair —
+  not a hardcoded swap on a branch that merges. The sitekey is currently
+  hardcoded at `index.html:1565`, so that mechanism does not exist yet. Recorded
+  in RV-15, not built here.
 
-### A prerequisite neither of us has listed — Firebase authorized domains
+### Firebase authorized domains — confirm the alias, then authorize it
 
 Step 3 needs a signed-in session **on the Preview host**, and sign-in is
 origin-checked:
@@ -2720,80 +2722,87 @@ js/auth.5cf1cd22.js   authDomain: "cardresell-e0329.firebaseapp.com"
 
 Firebase rejects `signInWithPopup` from a hostname absent from the project's
 **Authorized domains** with `auth/unauthorized-domain`. A default Preview URL
-(`cardresell-<hash>-willsep200-9430s-projects.vercel.app`) is not on that list,
-and its hash **changes every deployment**, so adding one buys nothing.
+(`cardresell-<hash>-…vercel.app`) carries a fresh hash every deployment, so
+adding one buys nothing. The stable branch alias is the right target.
 
-**Remedy: use the branch alias, which is stable.** Vercel gives each branch a
-deterministic alias — evidenced by `cardresell-git-main-…` on the production
-deployment — so the branch Preview will also answer on:
+**Predicted, and to be confirmed before anything is authorized:**
 
 ```
 cardresell-git-phase1-block-d-willsep200-9430s-projects.vercel.app
 ```
 
-(55 characters, inside the 63-character DNS label limit). Add **that one
-hostname** to Firebase Authorized domains and it stays valid across every
-redeploy of the branch. **Unverified until the Preview exists** — the alias is
-predicted from the documented pattern and the observed `-git-main-` alias, not
-yet observed. Confirm it in the deployment output before adding it.
+55 characters, inside the 63-character DNS label limit. This is **Unverified** —
+inferred from the documented pattern and the observed `cardresell-git-main-…`
+alias on the production deployment. **Read the actual alias from the deployment
+output** (or `vercel inspect`) and authorize **that exact string**. Vercel
+truncates or slugifies some branch names, so the prediction is a starting point,
+not a value to paste into Firebase.
 
-This shares the **auth** project with production, not the database. By the
-distinction already drawn in D-RV-3, that is acceptable: identity is shared,
-writes are what must not be.
+This shares the **auth** project with production, not the database — acceptable
+by the distinction already drawn: identity is shared, writes are what must not be.
 
-### Isolation check — exact steps for a signed-in browser
+### Isolation check — walkthrough for iPhone (no DevTools)
+
+The earlier version required desktop DevTools to read `draft.draftId` from a
+response body. **On an iPhone that is not available**, and the draft id is not
+in the URL either — the `#draft*` strings in the bundle are element selectors
+(`#draftsWrap`, `#draftsMoreBtn` at `js/core.53a0674d.js:21608-21612`), not
+routes. So the id is identified from the **store side** instead.
 
 **Preconditions** (all must hold, else the result proves nothing):
 
 - PriceCharting narrowed to Production, **scopes re-listed and confirmed**.
-- Turnstile Preview secret set to the dummy always-passes value.
-- Preview created from committed `phase1-block-d`; note its deployment id and
-  confirm the branch alias.
-- Branch alias added to Firebase Authorized domains.
+- Preview created from committed `phase1-block-d`; deployment id noted.
+- **Actual** branch alias read from the deployment and added to Firebase
+  Authorized domains.
+- Turnstile: **nothing required** — see above.
 
 **Why a synthetic owner id is not used.** `SYNTHETIC_TEST_PREFIX = 'ktest-'`
-exists (`api/_draftStore.js:38`) but `api/drafts.js` **refuses it at the door**
-by design, so the check runs under a real sign-in and a real `sub`.
+exists (`api/_draftStore.js:38`) but `api/drafts.js:69-71` refuses it at the
+door by design, so the check runs under a real sign-in and a real `sub`.
 
-**Contingency, stated before starting.** If the Preview is *misbound*, this
-writes one real draft under Will's own `sub` into the **production** store. That
-is recoverable — delete it — and it is precisely the signal being sought. Worth
-knowing in advance rather than discovering it.
+**Contingency, stated before starting.** If the Preview is misbound, this writes
+one real draft under Will's own `sub` into the **production** store. Recoverable
+— delete it — and it is precisely the signal being sought.
 
 **Steps.**
 
-1. Open the branch alias in the signed-in browser. Sign in. If
-   `auth/unauthorized-domain` appears, the Firebase domain step was missed —
-   stop.
-2. Open **DevTools → Network** before creating anything.
-3. Create one draft whose title carries a unique marker, e.g.
-   `ISO-CHECK-20260910-<six random chars>`. A marker makes the record
-   identifiable by content as well as by key.
-4. In the Network panel, find the `POST /api/drafts` response and copy
-   **`draft.draftId`** — format `drf_` + 32 hex characters
-   (`api/_draftStore.js:106`, `:517`).
-5. **Reopen the draft** in the app and confirm the marker renders. This proves a
-   real round-trip through the store, not just an accepted write.
-6. Assemble the exact key. The authoritative record is
-   `draft:<sub>:<draftId>` (`api/_draftStore.js:12`, `:98`). Get `<sub>` from the
-   same response or the request's bearer identity.
-7. **Nonproduction store** (`upstash-kv-aureolin-door`, the Preview/Development
-   target): in the Upstash data browser, look up that exact key. **Expect: it
-   exists**, and its `title` contains the marker. Also expect the derived index
-   `drafts:<sub>` to contain the draftId (`:15`) — derived, so treat it as
-   corroboration, never as the proof on its own.
-8. **Production store** (`upstash-kv-bistre-arrow`): using **read-only access**,
-   look up the **same exact key**. **Expect: absent.** Then `SCAN` for the
-   marker string to confirm no record carries it.
-9. Record, for each store: the store name, the exact key queried, and
+1. On the iPhone, open the branch alias and sign in. Two known failure modes:
+   `auth/unauthorized-domain` means the Firebase step was missed; a blocked
+   popup means Safari's popup blocker needs allowing for that host. Either way,
+   **stop** rather than working around it.
+2. Create **one** draft whose title carries a unique marker, e.g.
+   `ISO-CHECK-20260910-<six random chars>`. Type the marker into the title so it
+   is stored in the record.
+3. **Reopen the draft** in the app and confirm the marker renders. This proves a
+   real round-trip through the store, not merely an accepted write.
+4. In the **nonproduction** store `upstash-kv-aureolin-door` (the
+   Preview/Development target), open the Upstash data browser and **list keys
+   matching `draft:*`**. This is a key-name match, which is what Redis `SCAN`
+   does. The new record is the key that was not there before.
+5. Open that key's **value** and confirm the `title` contains the marker. This
+   is a read of one exact key, not a search over values — the distinction
+   matters, and the earlier "marker SCAN" step has been **removed** because
+   `SCAN` matches key names and cannot match stored titles.
+6. Write down the **exact full key**, of the form `draft:<sub>:<draftId>` where
+   `draftId` is `drf_` + 32 hex characters (`api/_draftStore.js:12`, `:98`,
+   `:106`, `:517`). This string is the subject of the next step.
+7. In the **production** store `upstash-kv-bistre-arrow`, using **read-only
+   access**, look up **that same exact key**. **Expect: absent / nil.**
+8. Record, for each store: store name, the exact key queried, and
    present/absent. **Both halves are required** — presence in nonproduction
    alone does not establish isolation without absence in production.
-10. Delete the synthetic draft through the app afterwards, and note that the
-    tombstone (`:400`) is expected to remain in the nonproduction store.
+9. Optional corroboration only: `drafts:<sub>` in the nonproduction store should
+   contain the `draftId` (`api/_draftStore.js:15`). It is a derived index, so it
+   never counts as the proof on its own.
+10. Delete the synthetic draft through the app afterwards. A tombstone
+    (`api/_draftStore.js:400`) is expected to remain in the nonproduction store.
 
-**Pass condition:** present in `upstash-kv-aureolin-door`, absent in
-`upstash-kv-bistre-arrow`, marker found in neither production key nor scan. Any
-other combination fails and stops the milestone.
+**Pass condition:** the exact key present in `upstash-kv-aureolin-door` with the
+marker in its value, and **absent** in `upstash-kv-bistre-arrow`. **Scope:** this
+establishes the binding **for this draft on this deployment** — which is the
+intended result — and is not a general claim about every write path. Any other
+combination fails and stops the milestone.
 
 ### RV-14 — old Preview retirement (tracked, not blocking)
 
@@ -2803,3 +2812,12 @@ store credentials (Safeguard 1 preserved the values). Protection **stays
 enabled**. Runtime access has been tested on **2 of 21** and is not established
 for the other 19. Retirement — deleting them, or confirming protection across
 all 21 — is tracked here and is **not** a gate on the Preview milestone.
+
+### RV-15 — Turnstile on nonproduction (tracked, not blocking)
+
+Separated from the Preview milestone because the draft flow does not call it
+(evidence above). Two things to settle when it is taken up: matching Cloudflare
+test keys need an **environment-aware mechanism** — the sitekey is hardcoded at
+`index.html:1565`, so there is currently no way to vary it per environment
+without editing committed HTML — and production must retain its real pair. Test
+secrets reject real tokens, so a partial swap on either side fails closed.
