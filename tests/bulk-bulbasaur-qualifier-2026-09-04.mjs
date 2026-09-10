@@ -14,6 +14,9 @@
 //     two sides never compared equal, so /api/tcg-price answered
 //     `set_mismatch` for a product it had matched exactly. "Mew" -> "w" was
 //     broken the same way.
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('bulk-bulbasaur-qualifier-2026-09-04');
+
 import { readFileSync } from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
@@ -200,4 +203,6 @@ ok('the qualified spelling is never discarded',
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);
-if (fails.length) { console.log('\nFAILURES:'); fails.forEach(f => console.log('  ✗ ' + f)); process.exit(1); }
+if (fails.length) { console.log('\nFAILURES:'); fails.forEach(f => console.log('  ✗ ' + f)); _finish(pass, fails.length); }
+
+_finish(pass, fails.length);

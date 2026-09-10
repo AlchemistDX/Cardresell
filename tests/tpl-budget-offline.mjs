@@ -15,6 +15,9 @@
 //   5. Budget and window are configurable, and no production spending limit is
 //      invented.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('tpl-budget-offline');
+
 import {
   reserveUpstream, releaseReservation, storeResult,
   budgetConfig, cacheKey, OUTCOME, BUDGET_DEFAULTS,
@@ -663,4 +666,6 @@ console.log('\n12. production binding: the function resolves its own store');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

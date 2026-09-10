@@ -11,6 +11,9 @@
 // command surface as the Upstash caller in api/drafts.js (makeKv), so a test
 // cannot pass against a re-implementation of the logic it is checking.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('draft-lifecycle');
+
 import {
   lifecycleKey, lifecycleLockKey, lifecycleFenceKey,
   LIFECYCLE_STATE, LIFECYCLE_ERR, RESERVATION_RETIRE_MS,
@@ -692,4 +695,6 @@ console.log('\n── slots are independent too ──');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

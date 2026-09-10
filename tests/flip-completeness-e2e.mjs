@@ -29,6 +29,9 @@
 // RUN:  node tests/flip-completeness-e2e.mjs            (expects a server on 8097)
 //       CR_E2E_URL=http://127.0.0.1:PORT/index.html node tests/flip-completeness-e2e.mjs
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('flip-completeness-e2e');
+
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/home/user/node_modules/playwright');
@@ -208,4 +211,6 @@ check('no uncaught page errors during the run',
 
 await browser.close();
 console.log(`\nflip-completeness-e2e: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

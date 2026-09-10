@@ -14,6 +14,9 @@
 // the bug they cover is expensive: it overstates, so a seller lists high,
 // nothing sells, and they conclude the app lies.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('variant-selection');
+
 import { bestPriceForProduct, normalizeSetName } from '../api/_tcgcsv.js';
 import { readFileSync } from 'node:fs';
 
@@ -163,4 +166,6 @@ console.log('\n[PriceCharting variant detection — structural, not enumerated]'
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

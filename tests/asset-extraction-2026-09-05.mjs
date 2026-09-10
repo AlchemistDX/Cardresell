@@ -15,6 +15,9 @@
  *      always deferred, so today auth runs LAST. Hoisting it reverses the
  *      execution order against ~22 globals the app expects it to set.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('asset-extraction-2026-09-05');
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -114,4 +117,6 @@ check('index.html is still no-cache',
       'hashed assets are only safe if the HTML that names them is fresh');
 
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+_finish(pass, fail);
+
+_finish(pass, fail);

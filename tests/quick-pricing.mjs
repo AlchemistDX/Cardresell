@@ -13,6 +13,9 @@
 //    audit/SELL_VELOCITY_RESEARCH.md). So every tier is named for where the
 //    price sits in the ask book, and there is no day-count anywhere near it.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('quick-pricing');
+
 import { readFileSync } from 'node:fs';
 
 import { readAppSource } from './_appsource.mjs';
@@ -1642,4 +1645,6 @@ console.log('\n[Quick Pricing — wiring]');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

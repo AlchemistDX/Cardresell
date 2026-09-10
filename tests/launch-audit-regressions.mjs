@@ -1,3 +1,6 @@
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('launch-audit-regressions');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -2011,4 +2014,6 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-if (failed) process.exit(1);
+if (failed) _finish(passed, failed);
+
+_finish(passed, failed);

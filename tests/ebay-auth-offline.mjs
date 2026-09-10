@@ -9,6 +9,9 @@
 // days, a support-ticket draft, and a needless Cert ID rotation. If anyone
 // removes cleanCredential(), these tests fail loudly.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('ebay-auth-offline');
+
 import {
   cleanCredential, describeCredential, getEbayCredentials,
   getEbayAppToken, fetchEbayAppToken, _resetTokenMemo, ebayHeaders,
@@ -266,4 +269,6 @@ check('Pokémon is inferred when game is absent',
       inferred.aspects.Game?.[0] === 'Pokémon TCG' && inferred.missing.length === 0);
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

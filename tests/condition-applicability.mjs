@@ -3,6 +3,9 @@
 // price, and that the sports path and the graded path no longer fight over it.
 // Playwright lives outside the repo (this project intentionally has no
 // package.json), so the path is overridable for other machines.
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('condition-applicability');
+
 const PW = process.env.PLAYWRIGHT_PATH || '/home/user/node_modules/playwright/index.js';
 const _pw = (await import(PW)).default;
 const { chromium } = _pw;
@@ -116,4 +119,6 @@ if (errs.length) console.log('       errors: ' + errs.join(' | '));
 
 console.log(`\ncondition-applicability: ${pass} passed, ${fail} failed`);
 await browser.close();
-process.exit(fail ? 1 : 0);
+_finish(pass, fail);
+
+_finish(pass, fail);

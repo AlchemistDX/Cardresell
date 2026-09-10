@@ -1,5 +1,8 @@
 // Unit test for filterSportsParallel / pcParallelOf in api/pricecharting.js.
 // These are module-private, so we extract them by source and eval.
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('sports-parallel');
+
 import fs from 'node:fs';
 const src = fs.readFileSync(new URL('../api/pricecharting.js', import.meta.url), 'utf8');
 
@@ -69,4 +72,6 @@ const t = (msg, cond) => { if (cond) { pass++; } else { fail++; console.error('F
 }
 
 console.log(`sports-parallel: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+_finish(pass, fail);
+
+_finish(pass, fail);

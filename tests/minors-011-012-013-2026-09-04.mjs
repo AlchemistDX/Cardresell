@@ -8,6 +8,9 @@
  * These assert measured contrast and storage behaviour, not just that a string
  * is present, so a future colour tweak that quietly drops below 4.5:1 fails.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('minors-011-012-013-2026-09-04');
+
 import { readFileSync } from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
@@ -236,6 +239,8 @@ for (const h of ['Strict-Transport-Security', 'X-Content-Type-Options', 'Referre
 if (fails.length) {
   console.error(`\n[minors-011-012-013] ${fails.length} FAILED of ${pass + fails.length}`);
   for (const f of fails) console.error('  ✗ ' + f);
-  process.exit(1);
+  _finish(pass, fails.length);
 }
 console.log(`[minors-011-012-013] ${pass}/${pass} assertions passed`);
+
+_finish(pass, fails.length);

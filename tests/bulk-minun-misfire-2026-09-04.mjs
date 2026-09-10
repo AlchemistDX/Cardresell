@@ -7,6 +7,9 @@
 // (wrong number, wrong set, wrong rarity), the sort was stable, and the first
 // arbitrary printing -- POP Series 3 #4 at $50.00 -- was rendered as the
 // user's card.
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('bulk-minun-misfire-2026-09-04');
+
 import { readFileSync } from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
@@ -264,4 +267,6 @@ eq('a candidate with no number and no set is rejected',
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);
-if (fails.length) { console.log('\nFAILURES:'); fails.forEach(f => console.log('  ✗ ' + f)); process.exit(1); }
+if (fails.length) { console.log('\nFAILURES:'); fails.forEach(f => console.log('  ✗ ' + f)); _finish(pass, fails.length); }
+
+_finish(pass, fails.length);

@@ -6,6 +6,9 @@
 // extracted from source and run, or reimplemented against the shipped source
 // text so a semantic change breaks the test.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('sol-remediation-2026-09-04');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -262,4 +265,6 @@ console.log('\n[Sol remediation 2026-09-04]');
 }
 
 console.log(`\n[sol-remediation] ${passed} passed, ${failed} failed`);
-if (failed) process.exit(1);
+if (failed) _finish(passed, failed);
+
+_finish(passed, failed);

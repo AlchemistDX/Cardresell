@@ -9,6 +9,9 @@
 // paid provider, with no caller authentication and no usage limit. These tests
 // pin the narrow fix and, just as importantly, pin what the fix does NOT claim.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('tpl-proxy-offline');
+
 import { validateTplRequest, TPL_CONTRACT } from '../api/_tplContract.js';
 import handler from '../api/tpl-proxy.js';
 
@@ -254,4 +257,6 @@ console.log('\nvalidator units');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

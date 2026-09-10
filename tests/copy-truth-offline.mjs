@@ -1,7 +1,10 @@
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('copy-truth-offline');
+
 import fs from 'fs';
 import { readAppSource } from './_appsource.mjs';
-let fail=0;
-const ok=(c,m)=>{ if(!c){console.log('FAIL: '+m); fail++;} else console.log('ok: '+m); };
+let fail=0, pass=0;
+const ok=(c,m)=>{ if(!c){console.log('FAIL: '+m); fail++;} else {pass++; console.log('ok: '+m);} };
 for (const f of ['index.html','accuracy.html','pricing.html']) {
   const src=fs.readFileSync(f,'utf8');
   // script syntax
@@ -531,4 +534,6 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 }
 
 console.log(fail? `\n${fail} FAILURE(S)` : '\nALL CHECKS PASSED');
-process.exit(fail?1:0);
+_finish(pass, fail);
+
+_finish(pass, fail);

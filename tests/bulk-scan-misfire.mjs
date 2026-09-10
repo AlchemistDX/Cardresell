@@ -6,12 +6,15 @@
 //     Minun #194 $44.78, Cresselia #071 $26.49, Ivysaur #134 $19.64,
 //     Bulbasaur #133 $20.87.
 //   * api/tcg-price.js emits `imageUrl`; it has never emitted `image`.
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('bulk-scan-misfire');
+
 import { readFileSync } from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 const h = readAppSource();
 const api = readFileSync(new URL('../api/tcg-price.js', import.meta.url), 'utf8');
-let fail = 0;
-const ok = (name, cond) => { if (!cond) { console.error('FAIL: ' + name); fail++; } else console.log('pass: ' + name); };
+let fail = 0, pass = 0;
+const ok = (name, cond) => { if (!cond) { console.error('FAIL: ' + name); fail++; } else { pass++; console.log('pass: ' + name); } };
 
 function slice(startRe, endRe, label) {
   const s = h.search(startRe);
@@ -79,4 +82,6 @@ ok('no maintenance marker wording paired with the tools glyph',
 ok('no "under maintenance" copy in the UI', !/under maintenance/i.test(h));
 
 console.log(fail ? `\n${fail} FAILED` : '\nall bulk-scan misfire regressions pass');
-process.exit(fail ? 1 : 0);
+_finish(pass, fail);
+
+_finish(pass, fail);

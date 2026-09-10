@@ -10,6 +10,9 @@
  * EXECUTE it. Text-presence assertions survive neutering the enclosing `if`,
  * so anything that can be executed is executed.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('majors-flip-and-pack-2026-09-04');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -369,5 +372,7 @@ console.log(`\n  majors-flip-and-pack-2026-09-04: ${pass} passed, ${fails.length
 if (fails.length) {
   console.log('\n  FAILURES:');
   for (const f of fails) console.log(`   ✗ ${f}`);
-  process.exit(1);
+  _finish(pass, fails.length);
 }
+
+_finish(pass, fails.length);

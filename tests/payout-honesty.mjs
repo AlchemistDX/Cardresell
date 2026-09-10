@@ -34,6 +34,9 @@
 //    wired up. What replaced it is a four-state per-field record, and the
 //    four states are what this suite pins.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('payout-honesty');
+
 import { readCoreBundle } from './_assetRefs.mjs';
 
 const bundle = readCoreBundle();
@@ -219,4 +222,6 @@ check('all four states are distinguishable from one another',
 }
 
 console.log(`\npayout-honesty: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

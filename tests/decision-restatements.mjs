@@ -18,6 +18,9 @@
  * that needs a reader. It catches the specific drift that actually happened:
  * a decided question restated as undecided.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('decision-restatements');
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -80,4 +83,6 @@ for (const doc of docs) {
 }
 
 console.log(`\ndecision-restatements: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+_finish(pass, fail);
+
+_finish(pass, fail);

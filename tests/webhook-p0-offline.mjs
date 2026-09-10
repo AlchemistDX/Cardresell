@@ -6,6 +6,9 @@
 //
 // We stub network fetch to capture what would be written to KV.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('webhook-p0-offline');
+
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -188,9 +191,14 @@ async function main() {
   if (failures.length) {
     console.error('FAIL:');
     failures.forEach(f => console.error(' - ' + f));
-    process.exit(1);
   }
-  console.log('All 4 webhook P0 cases passed.');
+  return failures.length;
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+// Completion is emitted only after the awaited run RESOLVES. A marker printed
+// from the catch, or unconditionally on the way out, would certify exactly the
+// crash it exists to catch — so the rejection path reports a failure instead.
+main().then((failed) => {
+  if (!failed) console.log('All 4 webhook P0 cases passed.');
+  _finish(4 - failed, failed);
+}).catch((e) => { console.error(e); process.exit(1); });

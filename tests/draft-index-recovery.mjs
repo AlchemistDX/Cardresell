@@ -18,6 +18,9 @@
 // with an in-memory Redis that can be told to fail specific commands. That
 // exercises the real code path rather than a re-implementation of it.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('draft-index-recovery');
+
 import assert from 'node:assert';
 
 let passed = 0, failed = 0;
@@ -1063,4 +1066,6 @@ check('the MATCHING request still recovers from the pointer without republishing
       honest.replayed === true && sideEffects === 1);
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

@@ -11,6 +11,9 @@
  * Discipline: extract the real functions and EXECUTE them. A presence check
  * survives neutering the enclosing `if` and survives being commented out.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('scan-hygiene-2026-09-04');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -387,5 +390,7 @@ console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   console.log('\nFAILURES:');
   for (const x of fails) console.log('  ✗ ' + x);
-  process.exit(1);
+  _finish(pass, fails.length);
 }
+
+_finish(pass, fails.length);

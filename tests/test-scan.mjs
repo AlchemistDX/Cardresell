@@ -2,6 +2,9 @@
 // Integration tests for /api/scan — Deep Grade + credit math + refunds + regressions.
 // Mocks global fetch to intercept OpenAI + Upstash KV traffic, then calls the handler directly.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('test-scan');
+
 import handler from '../api/scan.js';
 
 // ── Mock KV store ──────────────────────────────────────────────────────────
@@ -718,5 +721,7 @@ console.log(`  ${passed} passed, ${failed} failed`);
 if (failed > 0) {
   console.log('\nFailures:');
   for (const f of failures) console.log(`  ✗ ${f.name}\n     ${f.err}`);
-  process.exit(1);
+  _finish(passed, failed);
 }
+
+_finish(passed, failed);

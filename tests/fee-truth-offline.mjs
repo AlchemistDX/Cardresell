@@ -18,6 +18,9 @@
 //
 // Run: node tests/fee-truth-offline.mjs
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('fee-truth-offline');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -64,14 +67,14 @@ const feeFanatics  = extractFn('feeFanatics');
 const sum = items => items.reduce((s, f) => s + f.a, 0);
 const round = n => Math.round(n * 1e6) / 1e6;
 
-let failures = 0;
+let failures = 0, passes = 0;
 function eq(label, actual, expected) {
   const ok = round(actual) === round(expected);
-  if (!ok) failures++;
+  if (!ok) failures++; else passes++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}  actual=${round(actual)} expected=${round(expected)}`);
 }
 function assert(label, cond) {
-  if (!cond) failures++;
+  if (!cond) failures++; else passes++;
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`);
 }
 
@@ -539,4 +542,6 @@ eq('buyer-paid shipping is inside the discounted base',
    fvf(_feeEbayB(400, 10, 'none', 0, true)), 410 * 0.1325 * 0.9);
 
 console.log(failures === 0 ? '\nAll fee-truth checks passed.' : `\n${failures} check(s) FAILED.`);
-process.exit(failures === 0 ? 0 : 1);
+_finish(passes, failures);
+
+_finish(passes, failures);

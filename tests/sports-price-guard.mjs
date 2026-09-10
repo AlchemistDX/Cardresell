@@ -11,6 +11,9 @@
 // Every "reject" case below is a real match production actually returned.
 // Run: node tests/sports-price-guard.mjs
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('sports-price-guard');
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -318,4 +321,6 @@ for (const [label, fn] of idCases) {
 try { fs.unlinkSync(generated); } catch (_) {}
 
 console.log(`\n[sports-price-guard] ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+_finish(pass, fail);
+
+_finish(pass, fail);

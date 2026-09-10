@@ -12,6 +12,9 @@
 // Credentials are read from .env.production and passed through
 // cleanCredential(), the same path the serverless functions use.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish, skipAll: _skipAll } = completionGuard('ebay-live');
+
 import { readFileSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
@@ -48,7 +51,7 @@ if (process.env.EBAY_LIVE !== '1') {
   console.log('ebay-live: SKIPPED (set EBAY_LIVE=1 to run against production eBay)');
   console.log(`           loaded ${loaded} vars; creds present: ` +
     `${!!cleanCredential(process.env.EBAY_APP_ID)} / ${!!cleanCredential(process.env.EBAY_CERT_ID)}`);
-  process.exit(0);
+  _skipAll('EBAY_LIVE is not set, so nothing ran against production eBay');
 }
 
 let passed = 0, failed = 0, warned = 0;
@@ -117,7 +120,7 @@ try {
 
 if (!token) {
   console.log(`\n${passed} passed, ${failed} failed, ${warned} warnings — aborting, no token`);
-  process.exit(1);
+  _finish(passed, failed || 1);
 }
 
 // ── 3. Caching ────────────────────────────────────────────────────────────
@@ -293,4 +296,4 @@ try {
 }
 
 console.log(`\n${passed} passed, ${failed} failed, ${warned} warnings`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);

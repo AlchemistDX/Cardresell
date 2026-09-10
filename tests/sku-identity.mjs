@@ -13,6 +13,9 @@
 // Getting the first wrong duplicates a user's collection. Getting the second
 // wrong merges two cards they own into one and loses a sale.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('sku-identity');
+
 import {
   IDENTITY_NAMESPACE, GAME_CODES, KNOWN_GRADERS,
   normalizeText, normalizeNumber,
@@ -353,4 +356,6 @@ check('ordinary subs and skus are unaffected',
 
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

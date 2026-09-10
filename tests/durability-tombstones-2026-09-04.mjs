@@ -10,6 +10,9 @@
  * EXECUTE them. Presence assertions survive both neutering the enclosing `if`
  * and being commented out, so anything executable is executed.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('durability-tombstones-2026-09-04');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -519,5 +522,7 @@ console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   console.log('\nFAILURES:');
   for (const f of fails) console.log('  ✗ ' + f);
-  process.exit(1);
+  _finish(pass, fails.length);
 }
+
+_finish(pass, fails.length);

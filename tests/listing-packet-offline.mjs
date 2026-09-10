@@ -9,6 +9,9 @@
 // copy of the fee math would prove nothing: the whole point of inverting by
 // bisection is that it calls the one real forward function.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('listing-packet-offline');
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1985,4 +1988,6 @@ console.log('\nListing description');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+_finish(passed, failed);
+
+_finish(passed, failed);

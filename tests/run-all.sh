@@ -22,189 +22,240 @@ done
 
 FAIL=0
 
+# ── How a suite is judged ───────────────────────────────────────────────────
+#
+# A PASS REQUIRES THREE THINGS: the suite completed normally, it reported zero
+# failures, and the process exited 0. Exit status alone is not enough, and this
+# runner learned that the hard way twice: two suites crashed before their first
+# assertion and printed a stack with no summary, and for several commits that
+# read as "not run" rather than "dead".
+#
+#   * TIMEOUT    -- a hung suite never returns, so the whole run used to hang
+#                   with no verdict. `timeout` converts that into a failure.
+#   * NO MARKER  -- an .mjs suite that ends without printing SUITE COMPLETE
+#                   ended early. Recorded as a failure regardless of its exit
+#                   status, because a crash that happens to exit 0 is the case
+#                   the marker exists for.
+#   * SKIPPED    -- a suite that says so explicitly (a live suite without its
+#                   opt-in variable). Not a pass and not a failure.
+#
+# Output is teed, not swallowed, so the run still streams. `set -o pipefail` is
+# what makes the pipeline carry node's status rather than tee's -- without it
+# every suite in this file would report success.
+SUITE_TIMEOUT="${SUITE_TIMEOUT:-900}"
+
+suite() {
+  local path="$1"; shift
+  local name; name="$(basename "$path")"
+  local out; out="$(mktemp)"
+  local rc=0
+  timeout -k 10 "$SUITE_TIMEOUT" node "$path" "$@" 2>&1 | tee "$out" || rc=$?
+
+  if [[ "$rc" == "124" || "$rc" == "137" ]]; then
+    echo "  ❌ TIMEOUT after ${SUITE_TIMEOUT}s — $name never finished. A hung suite is a failed suite."
+    rm -f "$out"; return 1
+  fi
+
+  if grep -q 'SUITE SKIPPED' "$out"; then
+    echo "  ⏭ $name skipped by its own gate — no assertions ran, this is not a pass"
+    rm -f "$out"; return 0
+  fi
+
+  # Only .mjs suites report completion. The older .js checks predate the marker
+  # and are judged on exit status alone; that limitation is stated rather than
+  # papered over.
+  if [[ "$path" == *.mjs ]] && ! grep -q 'SUITE COMPLETE' "$out"; then
+    echo "  ❌ NO COMPLETION MARKER — $name ended before its end (exit=$rc). Everything after the failure point is UNTESTED, not passing."
+    rm -f "$out"; return 1
+  fi
+
+  rm -f "$out"
+  [[ "$rc" == "0" ]]
+}
+
 echo "════════════════════════════════════════════════════"
 echo "  CardResell regression suite"
 echo "════════════════════════════════════════════════════"
 
 echo ""
-echo "▶ [1/52] Asset fingerprints (referenced bundles named after their bytes)"
-if node "$ROOT/tests/asset-fingerprints.mjs"; then
+echo "▶ [1/56] Asset fingerprints (referenced bundles named after their bytes)"
+if suite "$ROOT/tests/asset-fingerprints.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [2/52] Syntax check (all inline <script> blocks)"
-if node "$ROOT/tests/syntax-check.js"; then
-  echo "  passed"
-else
-  echo "  FAILED"; FAIL=1
-fi
-
-echo ""
-echo "▶ [3/52] Auth stack integrity"
-if node "$ROOT/tests/auth-integrity.js"; then
+echo "▶ [2/56] Syntax check (all inline <script> blocks)"
+if suite "$ROOT/tests/syntax-check.js"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [4/52] Scan-miss regression checks"
-if node "$ROOT/tests/scan-miss.js"; then
+echo "▶ [3/56] Auth stack integrity"
+if suite "$ROOT/tests/auth-integrity.js"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [5/52] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
-if node "$ROOT/tests/deeplink-companions.js"; then
+echo "▶ [4/56] Scan-miss regression checks"
+if suite "$ROOT/tests/scan-miss.js"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [6/52] Copy truth checks"
-if node "$ROOT/tests/copy-truth-offline.mjs"; then
+echo "▶ [5/56] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
+if suite "$ROOT/tests/deeplink-companions.js"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [7/52] Fee truth checks"
-if node "$ROOT/tests/fee-truth-offline.mjs"; then
+echo "▶ [6/56] Copy truth checks"
+if suite "$ROOT/tests/copy-truth-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [8/52] Stripe webhook P0 checks"
-if node "$ROOT/tests/webhook-p0-offline.mjs"; then
+echo "▶ [7/56] Fee truth checks"
+if suite "$ROOT/tests/fee-truth-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [9/52] Launch-audit regressions"
-if node "$ROOT/tests/launch-audit-regressions.mjs"; then
+echo "▶ [8/56] Stripe webhook P0 checks"
+if suite "$ROOT/tests/webhook-p0-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [10/52] Variant selection (premium-printing bias)"
-if node "$ROOT/tests/variant-selection.mjs"; then
+echo "▶ [9/56] Launch-audit regressions"
+if suite "$ROOT/tests/launch-audit-regressions.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [11/52] Sports price guard (host + parallel discipline)"
-if node "$ROOT/tests/sports-price-guard.mjs"; then
+echo "▶ [10/56] Variant selection (premium-printing bias)"
+if suite "$ROOT/tests/variant-selection.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [12/52] Quick Pricing + headline price"
-if node "$ROOT/tests/quick-pricing.mjs"; then
+echo "▶ [11/56] Sports price guard (host + parallel discipline)"
+if suite "$ROOT/tests/sports-price-guard.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [13/52] Sports parallel matching"
-if node "$ROOT/tests/sports-parallel.mjs"; then
+echo "▶ [12/56] Quick Pricing + headline price"
+if suite "$ROOT/tests/quick-pricing.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [14/52] Scanner fastpath + miss-logging"
-if node "$ROOT/tests/scanner-fastpath.mjs"; then
+echo "▶ [13/56] Sports parallel matching"
+if suite "$ROOT/tests/sports-parallel.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [15/52] eBay auth + taxonomy (offline)"
-if node "$ROOT/tests/ebay-auth-offline.mjs"; then
+echo "▶ [14/56] Scanner fastpath + miss-logging"
+if suite "$ROOT/tests/scanner-fastpath.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [16/52] Card identity + SKU golden tests"
-if node "$ROOT/tests/sku-identity.mjs"; then
+echo "▶ [15/56] eBay auth + taxonomy (offline)"
+if suite "$ROOT/tests/ebay-auth-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [17/52] Sell entry point eligibility (D1 gate, offline)"
-if node "$ROOT/tests/sell-eligibility.mjs"; then
+echo "▶ [16/56] Card identity + SKU golden tests"
+if suite "$ROOT/tests/sku-identity.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [18/52] Sell gate: out-of-order responses + wire size (D1, offline)"
-if node "$ROOT/tests/sell-gate-ordering.mjs"; then
+echo "▶ [17/56] Sell entry point eligibility (D1 gate, offline)"
+if suite "$ROOT/tests/sell-eligibility.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [19/52] Listing packet: title + condition + target-net + metadata (offline)"
-if node "$ROOT/tests/listing-packet-offline.mjs"; then
+echo "▶ [18/56] Sell gate: out-of-order responses + wire size (D1, offline)"
+if suite "$ROOT/tests/sell-gate-ordering.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [20/52] Draft index recovery + packet schema version (offline)"
-if node "$ROOT/tests/draft-index-recovery.mjs"; then
+echo "▶ [19/56] Listing packet: title + condition + target-net + metadata (offline)"
+if suite "$ROOT/tests/listing-packet-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [21/52] C1 draft store — revisions, tombstones, schema safety (offline)"
-if node "$ROOT/tests/draft-store.mjs"; then
+echo "▶ [20/56] Draft index recovery + packet schema version (offline)"
+if suite "$ROOT/tests/draft-index-recovery.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [22/52] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
-if node "$ROOT/tests/draft-crud-e2e.mjs"; then
+echo "▶ [21/56] C1 draft store — revisions, tombstones, schema safety (offline)"
+if suite "$ROOT/tests/draft-store.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [23/52] C2/C3 draft list + cap — hydration, paging, severity (offline)"
-if node "$ROOT/tests/draft-list-cap.mjs"; then
+echo "▶ [22/56] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
+if suite "$ROOT/tests/draft-crud-e2e.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [23/56] C2/C3 draft list + cap — hydration, paging, severity (offline)"
+if suite "$ROOT/tests/draft-list-cap.mjs"; then
   :
 else
   FAIL=1
@@ -212,60 +263,60 @@ fi
 
 echo ""
 if [[ "${DRAFT_KV_LIVE:-0}" == "1" ]]; then
-  echo "▶ [24/52] C1 draft persistence against the REAL store"
-  if node "$ROOT/tests/draft-kv-live.mjs"; then
+  echo "▶ [24/56] C1 draft persistence against the REAL store"
+  if suite "$ROOT/tests/draft-kv-live.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [24/52] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
+  echo "▶ [24/56] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
 fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [25/52] Prod endpoint smoke ($BASE)"
-  if node "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
+  echo "▶ [25/56] Prod endpoint smoke ($BASE)"
+  if suite "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else
     FAIL=1
   fi
 else
   echo ""
-  echo "▶ [25/52] Prod endpoint smoke — SKIPPED (--local)"
+  echo "▶ [25/56] Prod endpoint smoke — SKIPPED (--local)"
 fi
 
 echo ""
 if [[ "${COND_PILLS_BROWSER:-0}" == "1" ]]; then
-  echo "▶ [26/52] Condition-applicability interaction (real browser)"
-  if node "$ROOT/tests/condition-applicability.mjs"; then
+  echo "▶ [26/56] Condition-applicability interaction (real browser)"
+  if suite "$ROOT/tests/condition-applicability.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [26/52] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
+  echo "▶ [26/56] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
 fi
 
 echo ""
-echo "▶ [27/52] D2.1 draft-list readiness (derivation + copy ownership)"
-if node "$ROOT/tests/draft-readiness.mjs"; then
+echo "▶ [27/56] D2.1 draft-list readiness (derivation + copy ownership)"
+if suite "$ROOT/tests/draft-readiness.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [28/52] D2.1 draft-list focus parameter (offset resolution + refusal)"
-if node "$ROOT/tests/draft-focus.mjs"; then
+echo "▶ [28/56] D2.1 draft-list focus parameter (offset resolution + refusal)"
+if suite "$ROOT/tests/draft-focus.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [29/52] D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)"
-if node "$ROOT/tests/draft-list-screen.mjs"; then
+echo "▶ [29/56] D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)"
+if suite "$ROOT/tests/draft-list-screen.mjs"; then
   :
 else
   FAIL=1
@@ -276,8 +327,8 @@ echo ""
 # from step 2 onward but was only ever run by hand, so nothing here would have
 # noticed it going red -- an unregistered suite is a suite that protects
 # whichever branch the author last remembered to run it on.
-echo "▶ [30/52] D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)"
-if node "$ROOT/tests/draft-review-screen.mjs"; then
+echo "▶ [30/56] D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)"
+if suite "$ROOT/tests/draft-review-screen.mjs"; then
   :
 else
   FAIL=1
@@ -289,8 +340,8 @@ echo ""
 # scope: the rule suite tests pure functions, and the screen suites test one
 # render at a time. A confirmation leaking from one card to the next only shows
 # up when a document survives across two listings and a reload.
-echo "▶ [31/52] Top Rated Plus confirmation is scoped to one listing (4 acceptance states)"
-if node "$ROOT/tests/trs-listing-scope.mjs"; then
+echo "▶ [31/56] Top Rated Plus confirmation is scoped to one listing (4 acceptance states)"
+if suite "$ROOT/tests/trs-listing-scope.mjs"; then
   :
 else
   FAIL=1
@@ -300,8 +351,8 @@ fi
 # session record claimed contrast-tokens was "registered" when only its pass
 # count had ever been observed by hand. A suite that is never invoked by the
 # runner is not a guard, it is a file. Registering both, and renumbering to 33.
-echo "▶ [32/52] Theme token contrast meets AA in both themes (runtime-resolved)"
-if node "$ROOT/tests/contrast-tokens.mjs"; then
+echo "▶ [32/56] Theme token contrast meets AA in both themes (runtime-resolved)"
+if suite "$ROOT/tests/contrast-tokens.mjs"; then
   :
 else
   FAIL=1
@@ -309,8 +360,8 @@ fi
 
 # Bidirectional: a venue missing from either side, or a date that disagrees
 # across the two surfaces, is a published claim the code no longer backs.
-echo "▶ [33/52] accuracy.html and the fee model agree on venues and audit dates"
-if node "$ROOT/tests/accuracy-fee-parity.mjs"; then
+echo "▶ [33/56] accuracy.html and the fee model agree on venues and audit dates"
+if suite "$ROOT/tests/accuracy-fee-parity.mjs"; then
   :
 else
   FAIL=1
@@ -323,8 +374,8 @@ fi
 # reordering or deleting a row fails here. Registered in the same commit that
 # wrote it, rather than run by hand and wired in later -- the drift this
 # runner's own comments document three separate times.
-echo "▶ [34/52] Review-screen fee rows are a dt/dd list with the withheld pair intact"
-if node "$ROOT/tests/review-fee-dl.mjs"; then
+echo "▶ [34/56] Review-screen fee rows are a dt/dd list with the withheld pair intact"
+if suite "$ROOT/tests/review-fee-dl.mjs"; then
   :
 else
   FAIL=1
@@ -340,144 +391,180 @@ fi
 # suite sits on disk without either an invocation here or a declared reason.
 
 echo ""
-echo "▶ [35/52] SOL-PLAT-007 asset extraction — inline JS/CSS stays split and hashed"
-if node "$ROOT/tests/asset-extraction-2026-09-05.mjs"; then
+echo "▶ [35/56] SOL-PLAT-007 asset extraction — inline JS/CSS stays split and hashed"
+if suite "$ROOT/tests/asset-extraction-2026-09-05.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [36/52] Sol-audit blockers — executes the shipped logic, not its text"
-if node "$ROOT/tests/sol-remediation-2026-09-04.mjs"; then
+echo "▶ [36/56] Sol-audit blockers — executes the shipped logic, not its text"
+if suite "$ROOT/tests/sol-remediation-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [37/52] Sol majors — flip and pack"
-if node "$ROOT/tests/majors-flip-and-pack-2026-09-04.mjs"; then
+echo "▶ [37/56] Sol majors — flip and pack"
+if suite "$ROOT/tests/majors-flip-and-pack-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [38/52] Sol majors — data durability and tombstones"
-if node "$ROOT/tests/durability-tombstones-2026-09-04.mjs"; then
+echo "▶ [38/56] Sol majors — data durability and tombstones"
+if suite "$ROOT/tests/durability-tombstones-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [39/52] Sol majors — scan hygiene"
-if node "$ROOT/tests/scan-hygiene-2026-09-04.mjs"; then
+echo "▶ [39/56] Sol majors — scan hygiene"
+if suite "$ROOT/tests/scan-hygiene-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [40/52] Sol majors — entitlements and session integrity"
-if node "$ROOT/tests/entitlements-2026-09-04.mjs"; then
+echo "▶ [40/56] Sol majors — entitlements and session integrity"
+if suite "$ROOT/tests/entitlements-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [41/52] Sol majors — accessibility, mobile targets, honest copy"
-if node "$ROOT/tests/a11y-mobile-2026-09-04.mjs"; then
+echo "▶ [41/56] Sol majors — accessibility, mobile targets, honest copy"
+if suite "$ROOT/tests/a11y-mobile-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [42/52] SOL-PLAT-011/012/013 — gold text AA, social meta, absolute og:url"
-if node "$ROOT/tests/minors-011-012-013-2026-09-04.mjs"; then
+echo "▶ [42/56] SOL-PLAT-011/012/013 — gold text AA, social meta, absolute og:url"
+if suite "$ROOT/tests/minors-011-012-013-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [43/52] Bulk-scan misfire — two bugs, four fixes"
-if node "$ROOT/tests/bulk-scan-misfire.mjs"; then
+echo "▶ [43/56] Bulk-scan misfire — two bugs, four fixes"
+if suite "$ROOT/tests/bulk-scan-misfire.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [44/52] Bulk row regression — Bulbasaur qualifier"
-if node "$ROOT/tests/bulk-bulbasaur-qualifier-2026-09-04.mjs"; then
+echo "▶ [44/56] Bulk row regression — Bulbasaur qualifier"
+if suite "$ROOT/tests/bulk-bulbasaur-qualifier-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [45/52] Bulk row regression — Minun set/variant misfire"
-if node "$ROOT/tests/bulk-minun-misfire-2026-09-04.mjs"; then
+echo "▶ [45/56] Bulk row regression — Minun set/variant misfire"
+if suite "$ROOT/tests/bulk-minun-misfire-2026-09-04.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [46/52] Grading upside: net comes from the shared fee model (BIAS-1)"
-if node "$ROOT/tests/grading-upside-fees.mjs"; then
+echo "▶ [46/56] Grading upside: net comes from the shared fee model (BIAS-1)"
+if suite "$ROOT/tests/grading-upside-fees.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [47/52] Payout honesty: signed payout bars + four-state cost records (BIAS-6)"
-if node "$ROOT/tests/payout-honesty.mjs"; then
+echo "▶ [47/56] Payout honesty: signed payout bars + four-state cost records (BIAS-6)"
+if suite "$ROOT/tests/payout-honesty.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [48/52] Decision restatements — shipped copy still matches the decisions of record"
-if node "$ROOT/tests/decision-restatements.mjs"; then
+echo "▶ [48/56] Decision restatements — shipped copy still matches the decisions of record"
+if suite "$ROOT/tests/decision-restatements.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [49/52] TPL proxy contract (offline, mocked upstream) [CH-3]"
-if node "$ROOT/tests/tpl-proxy-offline.mjs"; then
+echo "▶ [49/56] TPL proxy contract (offline, mocked upstream) [CH-3]"
+if suite "$ROOT/tests/tpl-proxy-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [50/52] TPL cache + aggregate spending allowance (offline, mocked store) [CH-3/R4]"
-if node "$ROOT/tests/tpl-budget-offline.mjs"; then
+echo "▶ [50/56] TPL cache + aggregate spending allowance (offline, mocked store) [CH-3/R4]"
+if suite "$ROOT/tests/tpl-budget-offline.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [51/52] eBay notification verification token fails closed [CH-2]"
-if node "$ROOT/tests/ebay-notify-token.mjs"; then
+echo "▶ [51/56] eBay notification verification token fails closed [CH-2]"
+if suite "$ROOT/tests/ebay-notify-token.mjs"; then
   :
 else
   FAIL=1
 fi
 
 echo ""
-echo "▶ [52/52] Every suite on disk is invoked or declared; slot numbering is derived"
-if node "$ROOT/tests/test-registry.mjs"; then
+# 2026-09-10: four suites sat on disk unregistered. draft-lifecycle guards the
+# generation pointer every draft create is now compared against, and had been
+# run by hand only. Registering all four; the registry suite stays last so it
+# reports on the file it just checked.
+echo "▶ [52/56] Draft lifecycle pointer — generations, reservations, fencing (offline)"
+if suite "$ROOT/tests/draft-lifecycle.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [53/56] An omitted generation is legacy generation 0, then compared like any other"
+if suite "$ROOT/tests/draft-generation-omission.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [54/56] Draft delete in a real browser — 410 shows the deleted state, no auto-retry"
+if suite "$ROOT/tests/draft-delete-browser.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [55/56] TPL outcome rendering"
+if suite "$ROOT/tests/tpl-outcome-render.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [56/56] Every suite on disk is invoked or declared; slot numbering is derived"
+if suite "$ROOT/tests/test-registry.mjs"; then
   :
 else
   FAIL=1

@@ -3,14 +3,17 @@
    Contract: audit/DRAFT_LIST_API_CONTRACT.md §1.2, Part 4 cases 10, 12, 13
    ═══════════════════════════════════════════════════════════ */
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('draft-readiness');
+
 import { readinessOf } from '../api/_draftService.js';
 import { validateDraftForSlot, SLOT_RULES, VIOLATION, PRICE_SOURCES } from '../api/_draftStore.js';
 import { packetInputFingerprint } from '../api/_listingPacket.js';
 
-let FAIL = 0;
+let FAIL = 0, PASSCOUNT = 0;
 const ok = (name, cond, detail) => {
-  if (cond) { console.log(`  PASS  ${name}`); }
-  else { console.log(`  FAIL  ${name}${detail ? ` — ${detail}` : ''}`); FAIL = 1; }
+  if (cond) { PASSCOUNT++; console.log(`  PASS  ${name}`); }
+  else { console.log(`  FAIL  ${name}${detail ? ` — ${detail}` : ''}`); FAIL++; }
 };
 
 /* `packetInputs` is computed from the finished row with the production
@@ -316,4 +319,6 @@ console.log('\nCase 15 — the fixtures reach the states they are named for');
 }
 
 console.log(FAIL ? '\nRESULT: FAIL\n' : '\nRESULT: PASS\n');
-process.exit(FAIL);
+_finish(PASSCOUNT, FAIL);
+
+_finish(PASSCOUNT, FAIL);

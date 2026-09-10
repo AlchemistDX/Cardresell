@@ -11,6 +11,9 @@
  *   SOL-SCAN-G-1  Bulk Grade revoked front/back object URLs but never the four
  *                 deep-grade edge photos, nor over-cap or replaced queues.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('entitlements-2026-09-04');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -284,5 +287,7 @@ console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   console.log('\nFAILURES:');
   for (const x of fails) console.log('  ✗ ' + x);
-  process.exit(1);
+  _finish(pass, fails.length);
 }
+
+_finish(pass, fails.length);

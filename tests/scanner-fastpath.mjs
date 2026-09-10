@@ -15,6 +15,9 @@
 // Measured after the fix (n=30 reference images, tools/fastpath_calibration.mjs):
 //   accepted 26/30, wrong-accepted 0, mean pHash self-distance 2.5 bits.
 
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('scanner-fastpath');
+
 import { readFileSync } from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
@@ -126,4 +129,6 @@ console.log('\u2500'.repeat(60));
 
 console.log('\u2500'.repeat(60));
 console.log(`  ${pass} passed, ${fail} failed\n`);
-process.exit(fail === 0 ? 0 : 1);
+_finish(pass, fail);
+
+_finish(pass, fail);

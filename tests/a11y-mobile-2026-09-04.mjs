@@ -14,6 +14,9 @@
  *   SOL-PLAT-009  Mobile controls measured below 44x44 px.
  *   SOL-PLAT-010  "3 months free" overstated the annual discount by 8 cents.
  */
+import { completionGuard } from './_complete.mjs';
+const { finish: _finish } = completionGuard('a11y-mobile-2026-09-04');
+
 import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
@@ -413,5 +416,7 @@ console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   console.log('\nFAILURES:');
   for (const x of fails) console.log('  ✗ ' + x);
-  process.exit(1);
+  _finish(pass, fails.length);
 }
+
+_finish(pass, fails.length);
