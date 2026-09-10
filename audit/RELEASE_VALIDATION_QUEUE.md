@@ -3126,3 +3126,111 @@ the blocker.
   record carries its own provenance; the reopened draft has
   `createdByOperation: null`. Recovery after a lost result record leans on
   `reconcile` instead. Worth closing before release, or accept for Phase 1?
+
+---
+
+## D8 addendum — corrections, deployment, and the Q-D8-3 trace
+
+### Two corrections to the D8 entry above
+
+1. **Namespacing.** The entry said per-user namespacing makes key collision
+   "impossible". It does not. `idempotencyKeyFor` scopes by `googleSub`, which
+   prevents collisions *between users*; it does nothing about two clients
+   signed into the *same* account — a phone and a laptop, or two tabs. That is
+   the case a client-supplied key has to handle, and the derived key handles it
+   correctly: both clients acting on the same entry and slot produce the same
+   key, which is deduplication, which is the intent. The old uuid rule was
+   still wrong, but not for the reason given.
+2. **The rebuild key.** The entry implied all three call sites carried the
+   colon. `pkt-<draftId>-r<rev>` never did. It was rejected by the uuid
+   restriction alone — one defect, not two. Its 200/rev-2 result above stands;
+   the attribution was wrong.
+3. Minor: the result record is `idem:<sub>:<scope>:<key>`; `idemresource:…` is
+   the resource *pointer*. The entry used the pointer name for both.
+
+### Deployment
+
+Pushed `c3dd619..499ef1c` on `phase1-block-d` under standing Phase 1
+authorization. Protection left enabled.
+
+| | |
+|---|---|
+| deployment | **`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`** |
+| target / status | preview / **Ready** |
+| created | 2026-09-10 04:33:46 UTC |
+| URL | `https://cardresell-ne53bve70-willsep200-9430s-projects.vercel.app` |
+| alias | `https://cardresell-git-phase1-block-d-willsep200-9430s-projects.vercel.app` |
+| **commit, from the build log** | `Cloning github.com/AlchemistDX/Cardresell (Branch: phase1-block-d, Commit: 499ef1c)` |
+
+Commit verified from the build log, not from the branch head. Bundle
+`8e7fee75` is not confirmed *served* — protection is on, so the sandbox cannot
+fetch it, and that is the correct trade.
+
+**This addendum is committed but NOT pushed**, deliberately: another branch push
+would build a new deployment and move the alias off `dpl_AK2G5czm…` while it is
+the deployment under isolation test.
+
+### Q-D8-3 — `createdByOperation: null`, traced
+
+Answer: **it is not load-bearing, and it can be a documented follow-up.** The
+recovery path never reads it. `_draftService.js:287` reconciles from the
+**resource pointer**, which carries the `resourceId`; the op key alone cannot
+name the draft, because the `draftId` is minted inside the protected
+operation. The field is provenance-on-the-record only.
+
+Measured, not reasoned — `tools/dev-crash-recovery-probe.mjs`, real handlers,
+rows deleted from the store mid-operation:
+
+| scenario | retry result | drafts after | quota |
+|---|---|---|---|
+| **A. result record lost, pointer survives** — the case you named | **200, same `drf_71770d57…`** (reconciled from the pointer) | **1** | **1** |
+| B. pointer lost, result record survives | 200, same `drf_a51a7e2d…` (replayed) | 1 | 1 |
+| C. both lost | **201, a NEW `drf_178778e8…`** | **2** | 2 |
+
+A is the scenario you asked for and it holds: one draft, quota accurate, no
+duplicate. So the null field does not weaken recovery.
+
+**C is honest exposure and is worth recording.** Both rows are written in the
+same `recordDone` under the same 24 h `KEY_TTL_SEC`, so losing both means
+either a store flush or a retry arriving more than 24 h later. A retry that
+late is not a client retry — it is a person tapping Create again, which under
+your Q-D8-2 answer *should* make a fresh draft. So C is not wrong for the
+human case. It is wrong as a backstop: if the store is flushed, nothing else
+stops duplication. Note that quota was accurate in C too — it read 2 because
+two drafts genuinely existed. The duplicate is the defect; the accounting
+followed it correctly.
+
+### Q-D8-2 — new create after delete: the mechanism, and a gap it exposed
+
+Recorded as decided: an explicit new Create makes a fresh draft; retries of the
+original operation stay deduplicated; **the old idempotency record is not
+cleared**, so a delayed retry cannot resurrect a deleted draft. Tracked
+separately from the isolation check.
+
+Implementing that needs a discriminator in the key that changes only on an
+explicit new Create — a generation counter on the collection entry, bumped when
+a draft for it is deleted, folded in as `_crIdemKey('sell-col', entryId, gen,
+CR_D1_SLOT)`. Deterministic within a generation, so retry dedupe is unchanged.
+
+Tracing it surfaced a related gap. `_inventoryInstance.js:77` defines
+`instanceDraftsKey` → `instancedrafts:<sub>:<instanceId>`, and
+`_draftStore.js:14` documents it as the set of draftIds per instance. **No
+production code writes or reads it.** `tests/draft-index-recovery.mjs:473,540`
+assert only its key *shape*, so "uniqueness moves to the instance" is asserted
+at the helper and enforced nowhere — which is why C could put two drafts on one
+`instanceId`. Same shape as the D8 defect: an assertion evidencing a surface
+the product does not exercise.
+
+**Open for you:** should the generation counter land before release, or is the
+current behaviour (a second Create replays the first draft) acceptable for
+Phase 1 with the counter as a follow-up? Not changed without an answer — it is
+a behaviour decision. The `instancedrafts` gap is a separate call: wire it, or
+delete the unused helper and its shape assertions so nothing claims a guarantee
+that does not exist.
+
+### Still unproven
+
+The in-memory KV proves the application path. It says nothing about deployed
+Redis. The next milestone is unchanged: one marked draft saved and reopened on
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, present in `aureolin-door` and absent from
+`bistre-arrow`.

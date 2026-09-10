@@ -113,6 +113,23 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ keys: [...store.keys()], commands: kvLog.length }));
   }
+  // Simulate the crash window: drop specific KV rows (e.g. the idempotency
+  // RESULT record while leaving the RESOURCE pointer intact) so a retry has to
+  // recover rather than replay. Prefix match, dev harness only.
+  if (u.pathname === '/__kvdel') {
+    const pre = u.searchParams.get('prefix') || '';
+    const hit = [...store.keys()].filter((k) => k.startsWith(pre));
+    hit.forEach((k) => store.delete(k));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ deleted: hit }));
+  }
+  if (u.pathname === '/__kvget') {
+    const pre = u.searchParams.get('prefix') || '';
+    const out = {};
+    for (const [k, v] of store) if (k.startsWith(pre)) out[k] = String(v).slice(0, 300);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify(out));
+  }
   if (u.pathname === '/api/drafts' || u.pathname.startsWith('/api/drafts/')) {
     let raw = '';
     for await (const c of req) raw += c;
