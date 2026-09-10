@@ -4673,31 +4673,71 @@ state the requirement — the rows the caller receives went through the ranker �
 plus a new assertion that **no** success path returns the upstream order, which
 is the thing that would bring the Base Set 2 pick back.
 
-### `test-scan` — the 401 layer, established
+### `test-scan` — repaired; the earlier 401 diagnosis is WITHDRAWN
 
-You were right that the 401s only establish the cases were not exercised.
-Identified, not assumed: every case builds an **unsigned** JWT and calls the
-handler directly, which worked until the **2026-08-25 hardening**
-(`api/scan.js:646`) made identity come only from a verified token and made
-body-supplied identity ignored. The refusal is **`api/scan.js:664`**, the catch
-around `verifyTokenFlexible(idToken)`, message `Session expired. Sign in again
-to use the scanner.` Reproduced directly: Firebase JWK verification rejects the
-unsigned token, the flexible verifier then falls back to
-`https://oauth2.googleapis.com/tokeninfo`, and the suite's own fetch mock
-refuses that host.
+**Correction, 2026-09-10.** The passage that stood here named the **unsigned
+JWT** as the established cause of the 29 401s. That explanation no longer
+stands. Signing the fixture tokens correctly did **not** clear them — the same
+29 cases still returned the same 401 with the same message.
 
-So all 29 cases were refused **before any scan logic ran**. The credit math,
-the refund path and the Deep Grade photo rules are **untested, not failing**.
-My earlier "needs a live authenticated environment" was right in conclusion and
-wrong in detail — it is not a live-server suite; it calls the handler directly,
-and no fixture edit can produce a token Google would sign.
+The cause this run actually established, by removing it and watching the 401s
+disappear, is that the suite's `MockKV` **did not implement `SETEX`**. The real
+verifier caches an email→uid mapping with `SETEX`
+(`api/_verifyToken.js:137`); the unhandled verb threw *inside* the
+`verifyTokenFlexible` call, and **`api/scan.js:664`** — the catch around it —
+reported the throw as `Session expired. Sign in again to use the scanner.`
 
-The suite now reports an **explicit prerequisite skip** naming the refusing
-layer unless `SCAN_ID_TOKEN`, `SCAN_ID_SUB` and `SCAN_ID_EMAIL` are set with
-network egress to Google. It is not a pass and does not read as one.
-**Rekeying the 29 fixtures onto a real token's uid/email is not done** — the KV
-keys are hardcoded to `user123` / `test@example.com`. The live scan check stays
-open, and the failed run stays recorded above.
+Two independently sufficient refusal conditions were present at the same time.
+Which one produced any particular original 401 **cannot be separated** from the
+evidence gathered, because the mock defect was never eliminated while the
+unsigned token was still in place. What is established:
+
+- the missing `SETEX` alone refuses a **correctly signed** token — observed
+  directly, and the diagnostic that found it printed
+  `Token verification failed: Unhandled KV url: .../setex/uid_by_email%3A...`;
+- an unsigned token alone is refused with 401 once the mock is complete —
+  Group 7 of the repaired suite, passing;
+- the mock defect is the one this run fixed.
+
+The earlier claim also said "no fixture edit can produce a token Google would
+sign," and concluded a live authenticated environment was required. That was
+wrong. The draft harness already had the answer: mint a test RSA key, sign the
+fixtures with it, and serve the matching public key where the verifier looks
+for Google's. `tests/_signedToken.mjs` does exactly that. The real verifier
+runs — real RS256 check, real issuer, audience and expiry checks — and only
+the key authority is substituted. There is no test-only bypass in the endpoint
+and `api/scan.js` is unchanged.
+
+**Result: `test-scan` 36 passed, 0 failed** (commit `47f0d28`). The explicit
+prerequisite skip is removed; `SCAN_ID_TOKEN` / `SCAN_ID_SUB` /
+`SCAN_ID_EMAIL` are no longer read.
+
+Once execution reached the endpoint for the first time, five fixture defects
+surfaced. Each was established against the code before anything was changed,
+and in every case the fixture was wrong and the product right:
+
+| Symptom | Established cause | `file:line` |
+|---|---|---|
+| every case 401 | `MockKV` lacked `setex`, `decrby`, `decr`, `del`, `expire` | `api/_verifyToken.js:137` |
+| `PHOTOS_TOO_SMALL`, then `DUPLICATE_PHOTOS` | fixture photos were 4 identical chars; ≥8000 required, and the dupe signature is a middle slice | `api/scan.js:767`, `:749` |
+| centering subgrade 10, not 9 | centering is **derived** from the measured ratio and deliberately overrides the model | `api/scan.js:1969`, `:1982` |
+| identify 503 `IDENTIFY_PROVIDER_UNAVAILABLE` | Ximilar is the sole identity authority, no GPT fallback — failing OpenAI proved nothing | `api/scan.js:983`, `:1032` |
+| empty `card_name` → 200 not 422 | grade mode grounds the name, so an empty model name is fatal only when identification also fails | `api/scan.js:1629` |
+| Pro free bucket debited | fixture hardcoded a monthly grant of 10; it is 15 — now read from the product | `api/_tier.js:26` |
+
+The centering case is worth naming separately: the old assertion checked that
+the model's own number came back, so it would have passed with the whole
+server-side derivation deleted. It now asserts the derived value **and** the
+override.
+
+**Mutation check.** Accepting an unsigned token inside `verifyTokenFlexible`
+turns **five of the seven** auth cases red — unsigned, tampered signature,
+wrong audience, expired, and rogue key. Reverted; `git diff` against HEAD for
+`api/_verifyToken.js` and `api/scan.js` is empty.
+
+**Still open, unchanged by this repair:** deployed authentication and **RV-1**.
+This restores *local* coverage only. A suite that verifies a token it signed
+itself does not establish that the deployed endpoint verifies Google's.
 
 ### Every repair mutation-checked
 

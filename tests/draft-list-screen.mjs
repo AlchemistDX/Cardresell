@@ -292,9 +292,18 @@ try {
       const copies = new Set(stubs.map((r) => r.text.trim()));
       T.check('each stub kind has its own copy, not one shared line', copies.size === 4);
 
-      const shown = await page.evaluate(() => document.getElementById('draftsWrap').innerText);
+      // REACH: stub-row copy, not the whole container. This used to read
+      // #draftsWrap.innerText, the same over-reach corrected two assertions
+      // below: on 2026-09-10 the Delete ACTION on a healthy card (Block D9)
+      // failed it, and the thing it names -- what a stub row tells the seller
+      // -- was never in question. A word elsewhere in the list is not this
+      // row's copy.
+      const stubText = stubs.map((r) => r.text).join(' \n ');
+      T.check('the stub-row copy scanned here is non-empty',
+        stubText.trim().length > 0,
+        'an empty scan target would report health from a broken read');
       T.check('no stub row says the draft was "deleted"',
-        !/\bdelet/i.test(shown),
+        !/\bdelet/i.test(stubText),
         'a vanished record is not a deletion the seller performed; saying so blames them for it');
     });
 

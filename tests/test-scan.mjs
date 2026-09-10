@@ -9,11 +9,27 @@ const { finish: _finish, skipAll: _skipAll } = completionGuard('test-scan');
  *
  * api/scan.js was hardened on 2026-08-25 (see api/scan.js:646): identity comes
  * only from a cryptographically verified token, and body-supplied identity is
- * ignored. This suite used to hand it an UNSIGNED JWT. Established
- * empirically on 2026-09-10: the refusal was api/scan.js:664 -- the catch
- * around verifyTokenFlexible -- and all 29 cases were answered 401 before any
- * scan logic ran. Credit math, refunds and Deep Grade were untested while the
- * suite reported green.
+ * ignored. This suite used to hand it an UNSIGNED JWT, and all 29 cases were
+ * answered 401 at api/scan.js:664 -- the catch around verifyTokenFlexible --
+ * before any scan logic ran. Credit math, refunds and Deep Grade were
+ * untested while the suite reported green.
+ *
+ * CORRECTION, 2026-09-10. An earlier write-up named the unsigned token as the
+ * established cause of those 401s. It is not, and that explanation is
+ * withdrawn. Signing the fixture tokens correctly did NOT clear them: 29 cases
+ * still returned the same 401. The cause this run actually established, by
+ * removing it and watching the 401s go away, is that MockKV did not implement
+ * SETEX. The real verifier caches an email->uid mapping with SETEX
+ * (api/_verifyToken.js:137); the unhandled verb threw inside the verify call
+ * and api/scan.js:664 reported it as an expired session.
+ *
+ * Two independently sufficient refusal conditions were therefore present at
+ * once. Which one produced any particular original 401 cannot be separated
+ * from the evidence gathered, because the mock defect was never eliminated
+ * while the unsigned token was still in place. What is established: the
+ * missing SETEX alone refuses a correctly signed token (observed), and an
+ * unsigned token alone is refused once the mock is complete (Group 7 below,
+ * with a passing mock). The mock defect is the one this run fixed.
  *
  * Repaired 2026-09-10 the way the draft harness already did it: mint a test
  * RSA keypair here, sign the fixture tokens with it, and serve the matching

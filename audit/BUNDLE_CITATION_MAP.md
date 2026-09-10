@@ -1,7 +1,13 @@
 # Bundle citation map
 
-**Live bundle on branch: `js/core.a995c941.js`.** New work
-cites that hash. Renamed from `69fb43dd` at the close of the create-key batch
+**Live bundle on branch: `js/core.2e0427d1.js`.** New work cites that hash.
+Renamed from `baf80c1a` at the close of Block D9, the draft-card action row
+(generation 19 below); `baf80c1a` was renamed from `a995c941` at the close of
+the escaping batch (generation 18 below). This header named `a995c941` as live
+through all of generation 18 — the rename happened and the header did not move,
+which is the failure this document exists to prevent. Read the live name from
+`index.html` (or from `tools/bundle-citation-map.mjs`, which derives it) before
+trusting this line. Renamed from `69fb43dd` at the close of the create-key batch
 (generation 17 below). `69fb43dd` was itself renamed from `8e7fee75` at the
 close of the D8 client batch (generation 16 below). Renamed from `49b84d4b` at the close of the idempotency-key
 batch (generation 15 below); `49b84d4b` itself was renamed from `53a0674d` at
@@ -521,3 +527,36 @@ older name. `asset-fingerprints` agrees: 89/0.
   behaviour checks. Slot 1 already owns half the question.
 - **The tables on this page are a snapshot and can be wrong without warning.** One of them
   already was, within a single commit. Run the tool.
+
+## `core.baf80c1a.js` → `core.2e0427d1.js` (retired 2026-09-10)
+
+Generation 19 — Block D9, the draft-card action row. 887 lines added
+(24578 → 25465), all of them between `_draftsPaint` and `renderDraftsView`, so
+every citation **above `:21960`** is unshifted and every citation **below it**
+shifts by a run-dependent amount. Do not hand-shift: run
+`node tools/bundle-citation-map.mjs core.baf80c1a.js <line>`, which reads the
+live name from `index.html` rather than from this file.
+
+Measured anchors (counted in both files, not inferred):
+
+| anchor | retired `baf80c1a` | live `2e0427d1` | shift |
+|---|---|---|---|
+| `esc(` | `:6498` | `:6498` | 0 |
+| `_crIdemKey` | `:21137` | `:21137` | 0 |
+| `_draftsPaint` | `:21960` | `:22198` | +238 |
+| `_draftsBindOnce` | `:22130` | `:22950` | +820 |
+| `renderDraftsView` | `:22173` | `:23023` | +850 |
+| `_reviewFetch` | `:22428` | `:23278` | +850 |
+
+New in this generation, live line numbers: `_draftThumbHtml :21888`,
+`_draftSummaryRowHtml :21901`, `_draftNoteHtml :21989`, `_draftEditPanelHtml
+:22010`, `_draftDeletePanelHtml :22044`, `_draftPanelsClose :22382`,
+`_draftEditReconcile :22455`, `_draftEditSave :22481`, `_draftEditSaved :22585`,
+`_ebayDraftCsv`, `_draftDownloadPanelHtml`, `_draftDownloadGo` (immediately
+before `_draftsBindOnce :22950`).
+
+The retired `baf80c1a` bytes were restored from `git show HEAD:js/core.baf80c1a.js`
+— not from the working copy, which by then already held the generation-19 bytes.
+That is the same trap recorded one section above, and it fired again here:
+`asset-fingerprints` failed with "restored bytes hash to 2e0427d1, not
+baf80c1a" until the file was taken from the commit that shipped it.
