@@ -356,8 +356,18 @@ console.log('\nthe idempotency key follows the instance, so replays are safe');
         sent[0].idemKey === sent[1].idemKey,
         'two keys would create two drafts for one physical card');
   check('and one instance id', sent[0].instanceId === sent[1].instanceId);
+  // The slot appears CANONICALISED, not raw. The server's key charset is
+  // /^[A-Za-z0-9._~-]+$/ (api/_idempotency.js:364), which excludes the colon
+  // in `ebay:fixed-price`, so _crIdemPart replaces it. This assertion used to
+  // expect the raw slot and was failing before this block was touched: the
+  // sanitizer is correct and the expectation was stale. Asserting the
+  // canonical form here is also what makes the test able to catch the real
+  // regression — a key the server would reject as malformed.
   check('the key is derived from the instance and the slot',
-        sent[0].idemKey === 'sell-' + sent[0].instanceId + '-ebay:fixed-price',
+        sent[0].idemKey === 'sell-' + sent[0].instanceId + '-ebay-fixed-price',
+        sent[0].idemKey);
+  check('and the key it builds is one the server would accept',
+        /^[A-Za-z0-9._~-]+$/.test(sent[0].idemKey) && sent[0].idemKey.length >= 8,
         sent[0].idemKey);
 
   // A retry after a lost response is the same displayed scan, so the same key

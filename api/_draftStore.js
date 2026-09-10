@@ -22,6 +22,7 @@ import { readStoredPacket, PACKET_COMPAT, packetInputFingerprint } from './_list
 // rebuilt from a scan; none of them is ever treated as proof on its own.
 
 import { randomBytes } from 'crypto';
+import { fencedSet, LIFECYCLE_ERR } from './_draftLifecycle.js';
 
 export const DRAFT_SCHEMA_VERSION = 1;
 
@@ -96,6 +97,10 @@ export const ERR = {
   NOT_DISCARDABLE: 'DRAFT_NOT_DISCARDABLE',
   STORE_UNAVAILABLE:'DRAFT_STORE_UNAVAILABLE',
   FIELD_INVALID:    'DRAFT_FIELD_INVALID',
+  // A newer owner of this instance+slot row has superseded this writer. Not
+  // retryable on the same operation: the write is stale, and so is the draft id
+  // it was going to write. The seller has to start a fresh create.
+  FENCED:           'DRAFT_WRITE_FENCED',
 };
 
 export function draftKey(googleSub, draftId) {
@@ -910,8 +915,20 @@ export async function getDraft(kv, googleSub, draftId) {
 /**
  * Persist a draft at its own `rev`, claiming that revision first.
  * `operationId` makes the write retry-safe.
+ *
+ * `fenceCtx` — `{ instanceId, slot, fence }` — routes the authoritative write
+ * through the lifecycle fence instead of a plain SET. It is threaded here, at
+ * the store boundary, rather than checked by the caller beforehand: a caller
+ * that checks its fence and then writes is precisely the race the fence exists
+ * to remove. Every mutation of the draft record passes through the single write
+ * below — creates, edits and TOMBSTONES alike, since deleteDraft routes its
+ * tombstone through putDraft — so fencing this one line fences all of them.
+ *
+ * The revision claim is not fenced. It is a per-(draftId, rev) lock, not the
+ * draft record, and a lapsed owner holding a claim it can never cash in is
+ * harmless; the fence guards the record the seller can actually see.
  */
-export async function putDraft(kv, googleSub, draft, operationId) {
+export async function putDraft(kv, googleSub, draft, operationId, fenceCtx = null) {
   const readRev = async () => {
     const cur = await getDraft(kv, googleSub, draft.draftId);
     if (cur.ok) return cur.draft.rev;
@@ -980,10 +997,25 @@ export async function putDraft(kv, googleSub, draft, operationId) {
     return { ok: false, error: ERR.REV_CONFLICT, current: cur.draft, evidence: `authoritative-rev-${cur.draft.rev}` };
   }
 
-  try {
-    await kv('set', draftKey(googleSub, draft.draftId), JSON.stringify(draft));
-  } catch {
-    return { ok: false, error: ERR.STORE_UNAVAILABLE, retryable: true, claimHeld: true };
+  if (fenceCtx && Number.isFinite(fenceCtx.fence)) {
+    const w = await fencedSet(
+      kv, googleSub, fenceCtx.instanceId, fenceCtx.slot, fenceCtx.fence,
+      draftKey(googleSub, draft.draftId), JSON.stringify(draft),
+    );
+    if (!w.ok) {
+      // FENCED is not retryable: a newer owner has taken this row, and this
+      // writer's whole operation is stale — including the id it minted.
+      if (w.error === LIFECYCLE_ERR.FENCED) {
+        return { ok: false, error: ERR.FENCED, held: w.held, mine: w.mine, retryable: false, claimHeld: true };
+      }
+      return { ok: false, error: ERR.STORE_UNAVAILABLE, retryable: true, claimHeld: true };
+    }
+  } else {
+    try {
+      await kv('set', draftKey(googleSub, draft.draftId), JSON.stringify(draft));
+    } catch {
+      return { ok: false, error: ERR.STORE_UNAVAILABLE, retryable: true, claimHeld: true };
+    }
   }
   return { ok: true, draft, replayedClaim: !!claim.replayedClaim, claimOutcome: claim.outcome };
 }
@@ -992,7 +1024,7 @@ export async function putDraft(kv, googleSub, draft, operationId) {
  * Read → edit → write, with the revision the client actually saw.
  * Returns the conflicting current record on conflict so the UI can show it.
  */
-export async function editDraft(kv, googleSub, draftId, patch, expectedRev, operationId) {
+export async function editDraft(kv, googleSub, draftId, patch, expectedRev, operationId, fenceCtx = null) {
   const read = await getDraft(kv, googleSub, draftId);
   if (!read.ok) return { ok: false, error: read.error, evidence: read.evidence, retryable: read.retryable };
   let next;
@@ -1002,7 +1034,7 @@ export async function editDraft(kv, googleSub, draftId, patch, expectedRev, oper
     const conflict = e.message === ERR.REV_CONFLICT;
     return { ok: false, error: e.message, current: conflict ? read.draft : undefined };
   }
-  const written = await putDraft(kv, googleSub, next, operationId);
+  const written = await putDraft(kv, googleSub, next, operationId, fenceCtx);
   if (!written.ok && written.error === ERR.REV_CONFLICT) {
     // Lost the claim race: another writer took this revision between our read
     // and our claim. Re-read so the caller reports the winning state.
@@ -1013,7 +1045,7 @@ export async function editDraft(kv, googleSub, draftId, patch, expectedRev, oper
 }
 
 /** Soft-delete. The record stays as a tombstone; the indexes are the caller's job. */
-export async function deleteDraft(kv, googleSub, draftId, expectedRev, operationId) {
+export async function deleteDraft(kv, googleSub, draftId, expectedRev, operationId, fenceCtx = null) {
   const read = await getDraft(kv, googleSub, draftId);
   if (!read.ok) {
     // Deleting an already-deleted draft succeeds. Delete is idempotent by
@@ -1030,7 +1062,7 @@ export async function deleteDraft(kv, googleSub, draftId, expectedRev, operation
   // Route the tombstone write through putDraft so it inherits the claim, the
   // orphan rules and the authoritative-predecessor guard. A delete that skipped
   // those would be the one destructive path without them.
-  const written = await putDraft(kv, googleSub, stone, operationId);
+  const written = await putDraft(kv, googleSub, stone, operationId, fenceCtx);
   if (!written.ok) {
     if (written.error === ERR.REV_CONFLICT) {
       const fresh = await getDraft(kv, googleSub, draftId);

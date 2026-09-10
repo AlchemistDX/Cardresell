@@ -37,7 +37,7 @@ let failNextN = 0;
 const seen = [];
 
 function reset() {
-  store.clear(); sets.clear(); failCommands = new Set(); failKeyPrefix = null; failNextN = 0; seen.length = 0;
+  store.clear(); sets.clear(); kvExpiries.clear(); failCommands = new Set(); failKeyPrefix = null; failNextN = 0; seen.length = 0;
   // The endpoint resolves the Firebase uid by email, never the Google sub.
   store.set(`uid_by_email:seller@example.com`, SUB);
 }
@@ -73,16 +73,51 @@ globalThis.fetch = async (url, opts) => {
  * "the authoritative write itself failed", which is what we want to test.
  */
 function shouldFail(cmd, args) {
-  const c = String(cmd).toLowerCase();
+  const { c, key } = effectiveMutation(cmd, args);
   if (failNextN-- > 0) return true;
   if (!failCommands.has(c)) return false;
-  if (failKeyPrefix && !String(args[0] || '').startsWith(failKeyPrefix)) return false;
+  if (failKeyPrefix && !key.startsWith(failKeyPrefix)) return false;
   return true;
 }
 
+/**
+ * What a command actually mutates, for failure injection.
+ *
+ * The authoritative draft write is now a FENCED set: the guard and the write
+ * are one script, because a check followed by a separate write is the race.
+ * The mutation did not change — only the command word carrying it did. So
+ * injection resolves a fenced set back to `set` on its target key, and a test
+ * that says "the authoritative write fails" keeps failing the authoritative
+ * write instead of quietly ceasing to inject anything.
+ */
+function effectiveMutation(cmd, args) {
+  const c = String(cmd).toLowerCase();
+  if (c !== 'eval') return { c, key: String(args[0] || '') };
+  const nk = Number(args[1]);
+  const keys = args.slice(2, 2 + nk).map(String);
+  const target = keys[keys.length - 1] || '';
+  return { c: String(args[0]) === FENCED_SET_SCRIPT ? 'set' : 'eval', key: target };
+}
+
+// Lock TTLs. The lifecycle lock is the only key here with an expiry, and this
+// suite never drives an expiry deliberately — but honouring it is what keeps
+// a lock left behind by an earlier case from blocking a later one.
+const kvExpiries = new Map();
+function liveGet(k) {
+  if (kvExpiries.has(k) && kvExpiries.get(k) <= Date.now()) { store.delete(k); kvExpiries.delete(k); }
+  return store.has(k) ? store.get(k) : null;
+}
+const scriptIo = {
+  get: liveGet,
+  set: (k, v) => { store.set(k, v); kvExpiries.delete(k); },
+  del: (k) => { store.delete(k); kvExpiries.delete(k); },
+  setEx: (k, v, sec) => { store.set(k, v); kvExpiries.set(k, Date.now() + sec * 1000); },
+};
+
 function run(cmd, a) {
   switch (cmd) {
-    case 'get': return store.has(a[0]) ? store.get(a[0]) : null;
+    case 'eval': return evalScript(scriptIo, a);
+    case 'get': return liveGet(a[0]);
     case 'set': {
       const [k, v, ...flags] = a;
       const f = flags.map((x) => String(x).toUpperCase());
@@ -145,6 +180,8 @@ const kv = async (...args) => {
   return run(cmd, args.slice(1).map(String));
 };
 
+const { evalScript } = await import('./_kvScripts.mjs');
+const { FENCED_SET_SCRIPT } = await import('../api/_draftLifecycle.js');
 const SVC = await import('../api/_draftService.js');
 const DS  = await import('../api/_draftStore.js');
 const EP  = await import('../api/drafts.js');
@@ -1423,8 +1460,12 @@ reset();
 
   // 1. What the browser now sends for a card it has no read for: a context
   //    with the fee revision and no basis at all.
+  // Its OWN row. A create for a row that already holds a live draft now
+  // returns that draft instead of making a second one, so a block that means
+  // to observe a FRESH create has to ask on a row of its own — otherwise it
+  // silently starts asserting about an earlier block's draft.
   const clean = await call({ method: 'POST', headers: HDRS('cp-clean'), body: {
-    ...httpInput(),
+    ...httpInput(), instanceId: 'inst_cp_clean',
     pricingContext: { feeModelRevision: 1, feeScheduleVerified: '2026-09-01' },
   } });
   const readClean = await call({ method: 'GET', query: { id: clean.body.draftId } });

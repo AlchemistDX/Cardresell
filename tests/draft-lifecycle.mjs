@@ -19,6 +19,7 @@ import {
   reserveCreate, commitCreate, withLifecycleLock, acquireLifecycleLock,
   releaseLifecycleLock,
 } from '../api/_draftLifecycle.js';
+import { evalScript } from './_kvScripts.mjs';
 
 let passed = 0, failed = 0;
 function check(name, cond, detail) {
@@ -43,51 +44,31 @@ function check(name, cond, detail) {
 function makeKv(opts = {}) {
   const data = new Map();
   const expiries = new Map();
+  const log = [];
   let failOn = opts.failOn || null;
 
   const kv = async (...args) => {
     const [cmd, ...rest] = args.map(String);
     const key = rest[0];
+    log.push({ cmd, args: rest });
     if (cmd === 'eval') {
-      // Scripts are evaluated with Redis semantics: the whole body runs to
-      // completion with nothing interleaved. That atomicity is the property
-      // under test, so it is modelled rather than approximated — there is no
-      // await anywhere inside this branch.
-      const script = rest[0];
+      // The script semantics live in ONE place, shared with draft-crud-e2e.
+      // Two copies would drift, and each suite would pass against its own.
+      // Still no `await` on this path: the indivisibility is the property
+      // under test.
       const nk = Number(rest[1]);
       const KEYS = rest.slice(2, 2 + nk);
-      const ARGV = rest.slice(2 + nk);
+      if (failOn && failOn('eval', KEYS[KEYS.length - 1])) throw new Error('kv_500');
       const live = (k) => {
         if (expiries.has(k) && expiries.get(k) <= Date.now()) { data.delete(k); expiries.delete(k); }
         return data.has(k) ? data.get(k) : null;
       };
-      if (failOn && failOn('eval', KEYS[KEYS.length - 1])) throw new Error('kv_500');
-
-      if (script === ACQUIRE_SCRIPT) {
-        const [lockKey, fenceKey] = KEYS;
-        const [nonce, ttl] = ARGV;
-        if (live(lockKey) !== null) return -1;
-        const f = Number(live(fenceKey) || 0) + 1;
-        data.set(fenceKey, String(f));
-        data.set(lockKey, `${nonce}:${f}`);
-        expiries.set(lockKey, Date.now() + Number(ttl) * 1000);
-        return f;
-      }
-      if (script === FENCED_SET_SCRIPT) {
-        const [fenceKey, key] = KEYS;
-        const [fence, value] = ARGV;
-        const cur = live(fenceKey);
-        if (cur !== null && Number(cur) > Number(fence)) return -1;
-        data.set(key, value);
-        expiries.delete(key);
-        return 1;
-      }
-      if (script.includes("redis.call('del',KEYS[1])")) {
-        const lockKey = KEYS[0], token = ARGV[0];
-        if (live(lockKey) === token) { data.delete(lockKey); expiries.delete(lockKey); return 1; }
-        return 0;
-      }
-      throw new Error('unexpected_script');
+      return evalScript({
+        get: live,
+        set: (k, v) => { data.set(k, v); expiries.delete(k); },
+        del: (k) => { data.delete(k); expiries.delete(k); },
+        setEx: (k, v, sec) => { data.set(k, v); expiries.set(k, Date.now() + sec * 1000); },
+      }, rest);
     }
     if (failOn && failOn(cmd, key)) throw new Error('kv_500');
 
@@ -115,6 +96,7 @@ function makeKv(opts = {}) {
   };
 
   kv._data = data;
+  kv._log = log;
   kv._setFailOn = (f) => { failOn = f; };
   kv._expireKey = (k) => { expiries.set(k, Date.now() - 1); };
   return kv;
@@ -286,6 +268,47 @@ console.log('\n── acquisition and fence allocation are ONE atomic step ─�
   // again would put it behind B in the same order.
   const aAgain = await acquireLifecycleLock(kv, SUB, INST, SLOT);
   check('A cannot re-acquire while B holds the lock', aAgain.ok === false && aAgain.error === LIFECYCLE_ERR.BUSY);
+
+  // ── The structural check ────────────────────────────────────────────────
+  //
+  // The three assertions above are necessary but NOT sufficient: in an ordinary
+  // run with no interleaving, a two-command SET-then-INCR implementation
+  // produces exactly the same observable state. They cannot distinguish the
+  // two, so they cannot prove the gap is absent.
+  //
+  // What distinguishes them is the number of round trips. So this asserts the
+  // implementation directly: acquisition issues ONE command, that command is
+  // the acquire script, and the allocation happens inside it.
+  const kvS = makeKv();
+  const s = await acquireLifecycleLock(kvS, SUB, INST, SLOT);
+  check('acquisition issues exactly ONE store command',
+        kvS._log.length === 1,
+        `issued ${kvS._log.length}: ${kvS._log.map((e) => e.cmd).join(', ')}`);
+  check('and that command is an EVAL of the acquire script',
+        kvS._log[0].cmd === 'eval' && kvS._log[0].args[0] === ACQUIRE_SCRIPT);
+  check('no INCR is ever issued as a separate command',
+        kvS._log.every((e) => e.cmd !== 'incr'),
+        'a separate INCR is the two-command shape that permits the inversion');
+  check('the script itself both takes the lock and allocates the fence',
+        ACQUIRE_SCRIPT.includes("redis.call('incr',KEYS[2])")
+          && ACQUIRE_SCRIPT.includes("redis.call('set',KEYS[1]")
+          && ACQUIRE_SCRIPT.includes("redis.call('exists',KEYS[1])"),
+        'if either half leaves the script, the atomicity claim is void');
+  check('a fence was still allocated', s.ok && s.fence === 1);
+
+  // The same for the write path: guard and mutation must not be separable.
+  const kvW = makeKv();
+  const w = await acquireLifecycleLock(kvW, SUB, INST, SLOT);
+  kvW._log.length = 0;
+  await fencedSet(kvW, SUB, INST, SLOT, w.fence, 'draft:drf_STRUCT', '{}');
+  check('a fenced write issues exactly ONE store command', kvW._log.length === 1,
+        `issued ${kvW._log.length}: ${kvW._log.map((e) => e.cmd).join(', ')}`);
+  check('and it is an EVAL of the fenced-set script',
+        kvW._log[0].cmd === 'eval' && kvW._log[0].args[0] === FENCED_SET_SCRIPT);
+  check('whose guard and write are in the same body',
+        FENCED_SET_SCRIPT.includes("redis.call('get',KEYS[1])")
+          && FENCED_SET_SCRIPT.includes("redis.call('set',KEYS[2],ARGV[2])"),
+        'a guard in one command and a write in another is the race this replaces');
 
   // Concurrent acquirers: exactly one fence per successful acquisition, and no
   // two winners share one.

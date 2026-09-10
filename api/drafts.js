@@ -4,6 +4,7 @@ import {
   listDraftSummaries, LIST_PAGE_DEFAULT, LIST_PAGE_MAX, DRAFT_CAP,
   SERVICE_ERR,
 } from './_draftService.js';
+import { makeKv } from './_kv.js';
 import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub, isDraftId } from './_draftStore.js';
 import { SLOT_RULES } from './_draftStore.js';
 import { skuFor, identityReadiness } from './_cardIdentity.js';
@@ -101,6 +102,48 @@ export default async function handler(req, res) {
         cap: DRAFT_CAP,
         count: d.count === undefined ? null : d.count,
         retryable: false,
+      });
+    }
+    // ── Lifecycle refusals ────────────────────────────────────────────────
+    //
+    // These are the create path refusing to recreate a draft the seller has
+    // deleted, or refusing to answer at all while it cannot establish what
+    // happened to the row. Each one carries `retryable` explicitly, because
+    // the client's next move differs: 410 must NOT be retried automatically —
+    // that would resurrect the deleted draft, which is the whole point — while
+    // 409 and 503 may be.
+    if (msg === SERVICE_ERR.LIFECYCLE_STALE) {
+      const d = (e && e.detail) || {};
+      return res.status(410).json({
+        error: 'That draft was deleted. Create a new one to start again.',
+        code: SERVICE_ERR.LIFECYCLE_STALE,
+        generation: d.generation === undefined ? null : d.generation,
+        sentGeneration: d.sentGeneration === undefined ? null : d.sentGeneration,
+        // Deliberate: no auto-retry hint. An explicit new Create is required.
+        retryable: false,
+      });
+    }
+    if (msg === SERVICE_ERR.LIFECYCLE_BUSY) {
+      return res.status(409).json({
+        error: 'Another change to this card is still finishing. Try again in a moment.',
+        code: SERVICE_ERR.LIFECYCLE_BUSY, retryable: true,
+      });
+    }
+    if (msg === SERVICE_ERR.LIFECYCLE_UNRESOLVED) {
+      const d = (e && e.detail) || {};
+      // 503, not 500, and not "no draft exists". The row's state could not be
+      // established, and an unproven absence is never answered as empty.
+      return res.status(503).json({
+        error: 'Could not confirm this card\u2019s draft state. Nothing was changed \u2014 try again.',
+        code: SERVICE_ERR.LIFECYCLE_UNRESOLVED,
+        evidence: d.evidence || null,
+        retryable: true,
+      });
+    }
+    if (msg === STORE_ERR.FENCED) {
+      return res.status(409).json({
+        error: 'This card was changed elsewhere. Reload to see its current state.',
+        code: STORE_ERR.FENCED, retryable: false,
       });
     }
     return res.status(500).json({ error: 'Draft operation failed', code: msg });
@@ -221,7 +264,7 @@ async function handleCreate(req, res, kv, googleSub) {
   const body = readBody(req);
   const input = normalizeCreateInput(body);
 
-  const out = await createDraft(kv, googleSub, input, key);
+  const out = await createDraft(kv, googleSub, input, key, { generation: readGeneration(body) });
 
   if (out.state === IDEMPOTENCY_STATE.MISMATCH) {
     // Same key, different mutation. 409 rather than 400: the request is
@@ -241,12 +284,24 @@ async function handleCreate(req, res, kv, googleSub) {
   const r = out.result || {};
   // A replay returns 200, a fresh create 201. Same body either way: a client
   // that retried must not have to care which one it got.
-  const code = out.replayed ? 200 : 201;
+  //
+  // A create that found the row already holding a live draft also returns 200,
+  // not 201: nothing was created. The body carries `existing: true` so the
+  // client can tell "here is your draft" from "here is your new draft" — the
+  // difference matters for a seller who tapped twice and would otherwise
+  // believe they now have two.
+  const code = (out.replayed || r.existing) ? 200 : 201;
   return res.status(code).json({
     draft: r.draft || null,
     draftId: r.draftId || (r.draft && r.draft.draftId) || null,
     saved: r.saved !== false,
     replayed: !!out.replayed,
+    existing: !!r.existing,
+    adoptedExisting: !!r.adoptedExisting,
+    // The generation to send with the NEXT create for this row. The client
+    // stores it and returns it, which is what lets the server refuse a retry
+    // of a create the seller has since deleted.
+    generation: r.generation === undefined ? null : r.generation,
     idempotencyState: out.state,
     // Rule 2, surfaced to the client: the draft IS saved. Only finding it in a
     // list may lag.
@@ -494,6 +549,19 @@ export function statusForStoreError(err) {
     // rewriting the request.
     case STORE_ERR.NOT_DISCARDABLE: return 409;
     case STORE_ERR.STORE_UNAVAILABLE: return 503;
+    // 409, not 500 and not a retry. A newer owner of this card's draft row
+    // has already taken over; the write this operation was going to make is
+    // against a draft that is no longer the current one, so retrying it
+    // unchanged would just fail again — or, worse, succeed against something
+    // the seller did not mean to touch.
+    case STORE_ERR.FENCED:         return 409;
+    // 503. The state could not be established, and "not established" is
+    // never reported as "nothing there".
+    case SERVICE_ERR.LIFECYCLE_UNRESOLVED: return 503;
+    case SERVICE_ERR.LIFECYCLE_BUSY: return 409;
+    // 410 Gone, terminal, for the same reason DELETED is: the client must not
+    // re-read and retry, it must ask for a NEW draft explicitly.
+    case SERVICE_ERR.LIFECYCLE_STALE: return 410;
     default:
       if (typeof err === 'string' && err.startsWith(STORE_ERR.FIELD_INVALID)) return 400;
       return 500;
@@ -571,6 +639,30 @@ function normMoney(v, field) {
   // Round to cents HERE, once. Storing 19.999 makes every later fee
   // calculation disagree with the listing by a fraction of a cent.
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * The generation the client believes this card's draft row is on.
+ *
+ * Read SEPARATELY from the mutation, and deliberately so. It is a precondition
+ * on the request — like `expectedRev` on an edit — not part of what is being
+ * created, so it must not reach `selectMutation`: fingerprinting it would turn
+ * a retry that merely refreshed its generation into a key MISMATCH (409),
+ * hiding the 410 that is the honest answer. It is also never stored on the
+ * draft.
+ *
+ * Optional on the wire. An older build that omits it still works; what it does
+ * not get is protection against its own stale retry, which is why the current
+ * client always sends it.
+ */
+export function readGeneration(body) {
+  const raw = body && body.generation;
+  if (raw === undefined || raw === null) return null;
+  const g = Number(raw);
+  if (!Number.isInteger(g) || g < 0) {
+    throw new Error('DRAFT_FIELD_INVALID:generation:non-negative-integer');
+  }
+  return g;
 }
 
 function normText(v, field, max) {
@@ -847,16 +939,11 @@ export function normalizePatch(body) {
   return patch;
 }
 
-// ── Upstash REST, same shape as the rest of api/ ──────────────────────────
-
-function makeKv(url, token) {
-  return async function kv(...args) {
-    const path = args.map((a) => encodeURIComponent(String(a))).join('/');
-    const r = await fetch(`${url}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) throw new Error(`kv_${r.status}`);
-    const j = await r.json();
-    return j.result;
-  };
-}
+// ── Upstash REST ──────────────────────────────────────────────────────────
+//
+// `makeKv` moved to api/_kv.js when api/sell-eligibility.js needed to read the
+// same keys. It is imported, not re-implemented: the `kv_<status>` throw is the
+// signal every "absent vs unreadable" decision in the store rests on, and two
+// transports is how one of them stops throwing it.
 
 export { DRAFT_STATUS };

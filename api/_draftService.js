@@ -61,6 +61,17 @@ import {
 
 import { reserveDraftSlot, releaseDraftSlot, DRAFT_CAP, QUOTA } from './_draftQuota.js';
 
+import {
+  LIFECYCLE_ERR,
+  LIFECYCLE_STATE,
+  withLifecycleLock,
+  resolveLifecycle,
+  recordDeletion,
+  reserveCreate,
+  commitCreate,
+  readLifecycle,
+} from './_draftLifecycle.js';
+
 export const SERVICE_ERR = {
   ...STORE_ERR,
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
@@ -68,7 +79,87 @@ export const SERVICE_ERR = {
   // unused until the ordering fix below gave it its only caller.
   SLOT_INVALID: 'DRAFT_SLOT_INVALID',
   DRAFT_CAP_REACHED: 'DRAFT_CAP_REACHED',
+  // The client sent a generation that is no longer current for this
+  // instance+slot row. Its create is a retry of an operation the seller has
+  // since deleted, and it is refused rather than repaired: an automatic refresh
+  // and retry here would resurrect the deleted draft, which is the whole point
+  // of the generation.
+  LIFECYCLE_STALE: 'DRAFT_GENERATION_STALE',
+  // The row's state could not be established. Never downgraded to "empty":
+  // absence that cannot be proven is not absence.
+  LIFECYCLE_UNRESOLVED: 'DRAFT_LIFECYCLE_UNRESOLVED',
+  LIFECYCLE_BUSY: 'DRAFT_LIFECYCLE_BUSY',
 };
+
+/**
+ * The draft-state probe the lifecycle module reads through. Injected rather
+ * than imported there, so the lifecycle module never depends on the store.
+ *
+ * Unreadable bytes count as PRESENT. They are a record that exists; reporting
+ * them as absent would authorise a create that duplicates a draft which is
+ * sitting right there. A store failure throws, which resolveLifecycle turns
+ * into UNAVAILABLE rather than "no live draft".
+ */
+export function draftProbe(kv, googleSub) {
+  return async (draftId) => {
+    const read = await getDraft(kv, googleSub, draftId);
+    if (read.ok) return { found: true, deleted: false };
+    if (read.error === STORE_ERR.DELETED) return { found: true, deleted: true };
+    if (read.error === STORE_ERR.NOT_FOUND) return { found: false, deleted: false };
+    if (read.error === STORE_ERR.UNREADABLE) return { found: true, deleted: false };
+    throw new Error(read.error || 'probe_failed');
+  };
+}
+
+/**
+ * Adopt a draft that predates the lifecycle record.
+ *
+ * A row with no record reads as generation 0 with nothing live, which is
+ * correct for a genuinely new row and WRONG for a draft created before this
+ * module shipped — it would authorise a second draft for an instance that
+ * already has one. So before a first create on an unrecorded row, the existing
+ * drafts are searched for one that already belongs to it.
+ *
+ * The index supplies candidates; the authoritative records establish their
+ * state. And the lookup fails CLOSED: a degraded index, a failed listing or a
+ * draft whose bytes will not parse all leave "this row is empty" unproven, and
+ * an unproven absence is answered with a retryable refusal rather than a
+ * silent generation 0.
+ *
+ * Cost: one index read plus one get per draft, and only on the first create
+ * for an unrecorded row. Every subsequent create reads the record instead.
+ */
+async function adoptLegacyRow(kv, googleSub, instanceId, slot) {
+  let idx;
+  try {
+    idx = await listDraftIds(googleSub, { detail: true });
+  } catch {
+    return { ok: false, error: SERVICE_ERR.LIFECYCLE_UNRESOLVED, evidence: 'index-read-failed' };
+  }
+  if (!idx || idx.ok === false || idx.degraded === true || idx.repairRequired === true) {
+    // An incomplete index cannot show that this row has no draft.
+    return { ok: false, error: SERVICE_ERR.LIFECYCLE_UNRESOLVED, evidence: 'index-incomplete' };
+  }
+  const ids = idx.draftIds || [];
+  let unreadable = 0;
+  for (const id of ids) {
+    const read = await getDraft(kv, googleSub, id);
+    if (read.ok) {
+      const d = read.draft || {};
+      if (String(d.instanceId) === String(instanceId) && String(d.slot) === String(slot)) {
+        return { ok: true, adopted: id, draft: d };
+      }
+      continue;
+    }
+    if (read.error === STORE_ERR.DELETED || read.error === STORE_ERR.NOT_FOUND) continue;
+    // Unreadable or unavailable: this id might be the row's draft.
+    unreadable += 1;
+  }
+  if (unreadable > 0) {
+    return { ok: false, error: SERVICE_ERR.LIFECYCLE_UNRESOLVED, evidence: `unreadable-${unreadable}` };
+  }
+  return { ok: true, adopted: null };
+}
 
 /**
  * The operation id handed to the store's revision claims.
@@ -169,7 +260,7 @@ async function detachIndexes(googleSub, draft) {
  */
 export { DRAFT_CAP };
 
-export async function createDraft(kv, googleSub, input, idempotencyKey) {
+export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {}) {
   const scope = SCOPES.DRAFT_CREATE;
 
   // ── An unsupported slot is refused BEFORE anything is recorded ──────────
@@ -198,7 +289,157 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
   const operationId = operationIdFor(scope, idempotencyKey);
   const request = selectMutation(scope, input);
 
+  const instanceId = String((input && input.instanceId) || '');
+  const slotName = String((input && input.slot) || '');
+  // The generation the client was told by sell-eligibility. `null` means the
+  // client did not send one — accepted, but then it earns no protection
+  // against its own stale retry, which is why the client always sends it.
+  //
+  // It arrives in `opts`, NOT in `input`, and the distinction is load-bearing.
+  // `input` is the mutation, and every field of it is fingerprinted for
+  // idempotency; a generation folded in there would make a retry that merely
+  // carried a refreshed generation look like a DIFFERENT mutation on the same
+  // key, answering 409 MISMATCH where the truthful answer is 410 Gone. A
+  // precondition belongs beside the request, not inside it.
+  const sentGen = (opts && opts.generation !== undefined && opts.generation !== null)
+    ? Number(opts.generation) : null;
+
+  const lifecycleFail = (code, detail) => {
+    const err = new Error(code);
+    err.detail = { error: code, code, ...detail };
+    return err;
+  };
+
   return runOnce(kv, googleSub, scope, idempotencyKey, async () => {
+    // ── The row's state is resolved HERE, by the create itself ────────────
+    //
+    // Not by eligibility. Eligibility may repair the row for convenience, but
+    // correctness cannot depend on it having run: a client that skips it, or
+    // whose eligibility call raced a delete on another device, still must not
+    // be able to recreate a deleted draft. So the authoritative state is read
+    // under the lock, by the handler that is about to write.
+    const outcome = await withLifecycleLock(kv, googleSub, instanceId, slotName, async ({ fence }) => {
+      const rec0 = await readLifecycle(kv, googleSub, instanceId, slotName);
+      if (!rec0.ok) {
+        throw lifecycleFail(SERVICE_ERR.LIFECYCLE_UNRESOLVED, { evidence: 'record-read-failed', retryable: true });
+      }
+
+      // ── Legacy adoption ────────────────────────────────────────────────
+      // An unrecorded row reads as generation 0 with nothing live. That is
+      // right for a new row and wrong for a draft that predates this record,
+      // so the existing drafts decide which it is. Fails closed.
+      if (!rec0.record.lastDraftId && rec0.record.gen === 0) {
+        const legacy = await adoptLegacyRow(kv, googleSub, instanceId, slotName);
+        if (!legacy.ok) {
+          throw lifecycleFail(legacy.error, { evidence: legacy.evidence, retryable: true });
+        }
+        if (legacy.adopted) {
+          // Seed the record so every later create reads it instead of scanning,
+          // and so a delete of this draft spends generation 0 properly.
+          const seed = await reserveCreate(kv, googleSub, instanceId, slotName, legacy.adopted, 0, fence);
+          if (seed.ok) await commitCreate(kv, googleSub, instanceId, slotName, legacy.adopted, 0, fence);
+          return { existing: legacy.adopted, draft: legacy.draft, generation: 0, adopted: true };
+        }
+      }
+
+      const resolved = await resolveLifecycle(
+        kv, googleSub, instanceId, slotName, draftProbe(kv, googleSub), fence,
+      );
+      if (!resolved.ok) {
+        const code = resolved.error === LIFECYCLE_ERR.UNAVAILABLE
+          ? SERVICE_ERR.LIFECYCLE_UNRESOLVED : resolved.error;
+        throw lifecycleFail(code, { evidence: 'resolve-failed', retryable: true });
+      }
+
+      // Already has a live draft. Returning it is not a second create: two
+      // taps that generate two different idempotency keys must still leave the
+      // seller with one draft for the row.
+      if (resolved.live) {
+        const cur = await getDraft(kv, googleSub, resolved.live);
+        return {
+          existing: resolved.live,
+          draft: cur.ok ? cur.draft : null,
+          generation: resolved.gen,
+          adopted: false,
+        };
+      }
+
+      // The generation the client believed is no longer current: something
+      // terminal happened to this row since it asked. Refused, not repaired.
+      if (sentGen !== null && sentGen !== resolved.gen) {
+        throw lifecycleFail(SERVICE_ERR.LIFECYCLE_STALE, {
+          sentGeneration: sentGen,
+          generation: resolved.gen,
+          lastState: resolved.record.lastState,
+          retryable: false,
+        });
+      }
+
+      return await createUnderFence({
+        kv, googleSub, input, operationId, instanceId, slotName,
+        generation: resolved.gen, fence,
+      });
+    });
+
+    if (outcome && outcome.ok === false && outcome.error === LIFECYCLE_ERR.BUSY) {
+      // Another writer holds this row. Retryable and short-lived; the lock
+      // expires in seconds.
+      throw lifecycleFail(SERVICE_ERR.LIFECYCLE_BUSY, { retryable: true });
+    }
+    if (outcome && outcome.ok === false) {
+      throw lifecycleFail(SERVICE_ERR.LIFECYCLE_UNRESOLVED, { evidence: 'lock-unavailable', retryable: true });
+    }
+    if (outcome && outcome.existing) {
+      return {
+        draftId: outcome.existing,
+        saved: true,
+        draft: outcome.draft,
+        generation: outcome.generation,
+        existing: true,
+        adoptedExisting: !!outcome.adopted,
+        degraded: false,
+        repairRequired: false,
+        index: null,
+        validation: outcome.draft ? validateDraftForSlot(outcome.draft) : null,
+        capRemaining: null,
+      };
+    }
+    return outcome;
+  }, {
+    request,
+    reconcile: async (_opKey, pointer) => {
+      const resourceId = pointer && pointer.resourceId;
+      if (!resourceId) return null;
+      const cur = await getDraft(kv, googleSub, resourceId);
+      if (!cur.ok) return null;
+      return {
+        draftId: cur.draft.draftId,
+        saved: true,
+        draft: cur.draft,
+        reconciled: true,
+        // Indexing state cannot be proven after a crash, so it is asserted as
+        // unknown-and-repairable rather than assumed clean.
+        degraded: true,
+        repairRequired: true,
+        index: { indexed: null, degraded: true, repairRequired: true, recovery: 'reconcileDraftIndex' },
+        validation: validateDraftForSlot(cur.draft),
+      };
+    },
+  });
+}
+
+/**
+ * The create itself, holding the lock and the fence.
+ *
+ * The pointer is written BEFORE the draft, as `reserved`, and promoted after.
+ * That ordering is what makes a crashed create recoverable: a reservation with
+ * no draft is an interrupted attempt, whereas a draft with no pointer is
+ * invisible to every later create and gets duplicated.
+ */
+async function createUnderFence({
+  kv, googleSub, input, operationId, instanceId, slotName, generation, fence,
+}) {
+  {
     // ── The cap is checked HERE, inside the protected operation ───────────
     //
     // Placement is the whole correctness argument. A retry of a create that
@@ -222,9 +463,23 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
     // response replays this result rather than reaching this line again.
     const draft = buildDraft({ ...input, draftId: newDraftId(), rev: 1 });
 
+    // The POINTER first, as `reserved`. A reservation with no draft is a
+    // recoverable interrupted attempt; a draft with no pointer is invisible to
+    // every later create and gets duplicated.
+    const res = await reserveCreate(kv, googleSub, instanceId, slotName, draft.draftId, generation, fence);
+    if (!res.ok) {
+      if (reserved) await releaseDraftSlot(googleSub);
+      const err = new Error(res.error === LIFECYCLE_ERR.FENCED
+        ? STORE_ERR.FENCED : SERVICE_ERR.LIFECYCLE_UNRESOLVED);
+      err.detail = { ...res, error: err.message, code: err.message, retryable: res.error !== LIFECYCLE_ERR.FENCED };
+      throw err;
+    }
+
     let written;
     try {
-      written = await putDraft(kv, googleSub, draft, operationId);
+      // The fence travels to the store, where the guard and the write are one
+      // command. Checking it here and then writing would be the race.
+      written = await putDraft(kv, googleSub, draft, operationId, { instanceId, slot: slotName, fence });
     } catch (e) {
       // A slot held by a create that never persisted is a leak, and leaks
       // accumulate into a seller locked out below their real limit.
@@ -240,6 +495,12 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
       throw err;
     }
 
+    // Promote the pointer to `live`. A failure here leaves it `reserved` over a
+    // real draft, which the next resolve heals forward — the draft is not lost.
+    const promoted = await commitCreate(
+      kv, googleSub, instanceId, slotName, written.draft.draftId, generation, fence,
+    );
+
     const index = await attachIndexes(googleSub, written.draft);
 
     // `draftId` is at the TOP LEVEL deliberately: recordDone reads the resource
@@ -249,6 +510,10 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
       draftId: written.draft.draftId,
       saved: true,
       draft: written.draft,
+      generation,
+      // The generation the client should send with its NEXT create for this
+      // row, which is this one until something terminal happens.
+      lifecyclePromoted: promoted.ok === true,
       // Rule 2: index trouble is reported alongside a successful save.
       degraded: index.degraded,
       repairRequired: index.repairRequired,
@@ -270,39 +535,7 @@ export async function createDraft(kv, googleSub, input, idempotencyKey) {
         ? Math.max(0, DRAFT_CAP - cap.count)
         : null,
     };
-  }, {
-    // The fingerprint is derived by runOnce from `request`, which is the
-    // VALIDATED CANONICAL MUTATION — not the raw body. Order is
-    // parse -> validate -> normalize -> select mutation fields -> fingerprint.
-    request,
-    /**
-     * Crash reconciliation: the pointer survived but the result record did not.
-     * Read the authoritative record back and rebuild the same answer, rather
-     * than reporting a failure for a create that succeeded.
-     *
-     * The pointer is the second argument, and it carries the resourceId. The
-     * op key alone cannot name the draft — the draftId was minted inside the
-     * protected operation, so the pointer is the only surviving link to it.
-     */
-    reconcile: async (_opKey, pointer) => {
-      const resourceId = pointer && pointer.resourceId;
-      if (!resourceId) return null;
-      const cur = await getDraft(kv, googleSub, resourceId);
-      if (!cur.ok) return null;
-      return {
-        draftId: cur.draft.draftId,
-        saved: true,
-        draft: cur.draft,
-        reconciled: true,
-        // Indexing state cannot be proven after a crash, so it is asserted as
-        // unknown-and-repairable rather than assumed clean.
-        degraded: true,
-        repairRequired: true,
-        index: { indexed: null, degraded: true, repairRequired: true, recovery: 'reconcileDraftIndex' },
-        validation: validateDraftForSlot(cur.draft),
-      };
-    },
-  });
+  }
 }
 
 /** READ — authoritative record only. Indexes are never consulted for truth. */
@@ -419,8 +652,57 @@ export async function deleteDraftOp(kv, googleSub, draftId, expectedRev, idempot
   // every tombstone written through the store expired at 90 days. The live
   // store is what showed it: ttl = -1. Two implementations of one rule is the
   // bug, not the missing line.
-  let out = await deleteDraft(kv, googleSub, draftId, expectedRev, operationId);
+  // ── The row identity, read before the tombstone ─────────────────────────
+  //
+  // The lifecycle record is keyed by (instanceId, slot), and only the draft
+  // knows which row it belongs to. So the record is read first — and if the
+  // draft cannot be read at all, there is no row to record against. That case
+  // is handled by the discard path below and by resolveLifecycle's
+  // disappearance rule, not by guessing an instanceId.
+  const pre = await getDraft(kv, googleSub, draftId);
+  const row = pre.ok && pre.draft
+    ? { instanceId: String(pre.draft.instanceId || ''), slot: String(pre.draft.slot || '') }
+    : null;
+
+  if (!row) {
+    return await deleteWithoutRow(kv, googleSub, draftId, expectedRev, operationId);
+  }
+
+  const outcome = await withLifecycleLock(kv, googleSub, row.instanceId, row.slot, async ({ fence }) =>
+    finishDelete(kv, googleSub, draftId, expectedRev, operationId, row, fence));
+  if (outcome && outcome.ok === false && outcome.error === LIFECYCLE_ERR.BUSY) {
+    return { ok: false, error: SERVICE_ERR.LIFECYCLE_BUSY, retryable: true };
+  }
+  return outcome;
+}
+
+/**
+ * Delete for a draft whose record cannot be read, so its row is unknown.
+ *
+ * No lifecycle write happens here — there is no key to write. The row is not
+ * left wrong, though: the record still points at this draft, and the next
+ * resolve finds it missing and refuses that generation under the disappearance
+ * rule. What is NOT claimed is that the seller deleted it; the record says GONE.
+ */
+async function deleteWithoutRow(kv, googleSub, draftId, expectedRev, operationId) {
+  return await finishDelete(kv, googleSub, draftId, expectedRev, operationId, null, null);
+}
+
+async function finishDelete(kv, googleSub, draftId, expectedRev, operationId, row, fence) {
+  const fenceCtx = row && Number.isFinite(fence)
+    ? { instanceId: row.instanceId, slot: row.slot, fence } : null;
+
+  // The TOMBSTONE write is fenced too. It is a mutation of the draft record
+  // like any other, and an unfenced destructive write is the one path where a
+  // lapsed owner could undo a newer owner's work.
+  let out = await deleteDraft(kv, googleSub, draftId, expectedRev, operationId, fenceCtx);
   let discarded = false;
+
+  if (!out.ok && out.error === STORE_ERR.FENCED) {
+    // A newer owner holds this row. The delete is refused rather than retried:
+    // the draft this operation meant to delete is not the draft that is there.
+    return { ok: false, error: STORE_ERR.FENCED, retryable: false, held: out.held, mine: out.mine };
+  }
 
   // ── Delete must also work on rows nothing can read ────────────────────
   //
@@ -498,10 +780,34 @@ export async function deleteDraftOp(kv, googleSub, draftId, expectedRev, idempot
     ? { released: false, count: null, reason: 'already-deleted' }
     : await releaseDraftSlot(googleSub);
 
+  // ── Spend the generation, AFTER the tombstone ─────────────────────────
+  //
+  // Order matters and this is the only correct one. Recording the deletion
+  // first would refuse the seller's own pending retry while the draft was
+  // still live — a draft they can see and cannot recreate. Recording after
+  // means the window is the opposite way round: for a moment the draft is
+  // tombstoned and the old generation is still current, and a retry landing
+  // in that window is caught by the fenced write instead, because it does not
+  // hold this fence.
+  //
+  // A failure here is reported, not swallowed, but it does not fail the
+  // delete: the tombstone is already authoritative, and resolveLifecycle's
+  // "was live, now unreadable" rule refuses the old generation anyway.
+  let lifecycle = { recorded: false, reason: 'no-row' };
+  if (row) {
+    const rec = await recordDeletion(
+      kv, googleSub, row.instanceId, row.slot, draftId, fence,
+    );
+    lifecycle = rec.ok
+      ? { recorded: true, generation: rec.gen }
+      : { recorded: false, reason: rec.error };
+  }
+
   return {
     ...out,
     index,
     quota: slot,
+    lifecycle,
     discarded,
     degraded: index.degraded,
     repairRequired: index.repairRequired,

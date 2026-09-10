@@ -55,11 +55,22 @@
 
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { stampList } from './_sellEligibility.js';
+import { kvFromEnv } from './_kv.js';
+import { readLifecycle, LIFECYCLE_STATE } from './_draftLifecycle.js';
 
 // One request covers a maxed-out Pro collection (500). Chunking is the
 // client's problem above that, and it is told the limit rather than having the
 // tail of its list silently dropped.
 export const MAX_ROWS = 500;
+
+// ── Draft state is OPT-IN and separately capped ─────────────────────────
+//
+// The stamps above are pure: they read client-supplied fields and touch no
+// stored data, which is why 500 of them cost one request. A generation is a
+// stored read PER ROW, so folding it into the default answer would turn a
+// collection page render into 500 round trips to Upstash. The client only
+// needs a generation for the row it is about to sell, so it asks for that row.
+export const MAX_DRAFT_STATE_ROWS = 25;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -118,5 +129,86 @@ export default async function handler(req, res) {
   // button is the one outcome this endpoint exists to make impossible.
   const stamps = stampList(rows);
 
-  return res.status(200).json({ stamps, count: stamps.length });
+  const draftState = await maybeDraftState(body, uid);
+
+  return res.status(200).json({ stamps, count: stamps.length, draftState });
+}
+
+/**
+ * Per-row draft lifecycle state, for the rows the client asked about.
+ *
+ * ── What this is FOR, and what it must never be trusted for ────────────────
+ *
+ * It is a CONVENIENCE. On a fresh page load the client has no memory of this
+ * card's draft history — the Collection is localStorage and a deleted draft is
+ * absent from the drafts list, so nothing else on the client can tell a row
+ * that never had a draft from a row whose draft was deleted. Without this, a
+ * seller who deleted a draft, reloaded, and pressed Sell again would send the
+ * generation they no longer have (or none) and get an answer that does not
+ * match what they see.
+ *
+ * It is NOT the enforcement point, and the split is deliberate and was
+ * required: the create handler resolves the authoritative deletion state
+ * itself before accepting a request. Correctness cannot depend on this having
+ * run. If this endpoint is never called, every guarantee still holds; the
+ * seller just gets a less informed first press.
+ *
+ * ── Unknown is reported as unknown ─────────────────────────────────────────
+ *
+ * A failed or unreadable lifecycle read returns `generation: null` with a
+ * reason. It NEVER returns 0. Zero means "this row has never held a draft",
+ * which is a claim, and a claim derived from a failed read is the exact shape
+ * that would authorize recreating a draft the seller deleted. A client holding
+ * `null` sends no generation, and the create handler then resolves the state
+ * for itself — the slower path, and the safe one.
+ */
+async function maybeDraftState(body, uid) {
+  const req = body && typeof body.draftState === 'object' && body.draftState
+    ? body.draftState : null;
+  if (!req) return null;
+
+  const slot = typeof req.slot === 'string' ? req.slot.trim() : '';
+  const ids = Array.isArray(req.instanceIds) ? req.instanceIds : [];
+  if (!slot || !ids.length) {
+    // Asked for, but not answerable as asked. Reported rather than omitted:
+    // a silent omission would read to the client as "no drafts", which is a
+    // claim this has not established. Rule 2.
+    return { error: 'DRAFT_STATE_REQUEST_INCOMPLETE', slot: slot || null, rows: {} };
+  }
+
+  const kv = kvFromEnv();
+  if (!kv) return { error: 'DRAFT_STATE_UNAVAILABLE', slot, rows: {} };
+
+  const wanted = ids.slice(0, MAX_DRAFT_STATE_ROWS).map((v) => String(v).trim()).filter(Boolean);
+  const rows = {};
+  for (const instanceId of wanted) {
+    try {
+      const rec = await readLifecycle(kv, uid, instanceId, slot);
+      if (!rec.ok) {
+        rows[instanceId] = { generation: null, reason: rec.error || 'unreadable' };
+        continue;
+      }
+      rows[instanceId] = {
+        // The generation to send with the NEXT create for this row.
+        generation: rec.record.gen,
+        // Whether the row currently HOLDS a draft, by the lifecycle record's
+        // own account. The client uses this to choose its wording — "Open
+        // draft" vs "Start listing" — never to decide whether a create is
+        // allowed. That decision is the handler's.
+        live: rec.record.lastState === LIFECYCLE_STATE.LIVE,
+        deleted: rec.record.lastState === LIFECYCLE_STATE.DELETED,
+        draftId: rec.record.lastState === LIFECYCLE_STATE.LIVE ? (rec.record.lastDraftId || null) : null,
+      };
+    } catch (e) {
+      rows[instanceId] = { generation: null, reason: String((e && e.message) || e) };
+    }
+  }
+  return {
+    slot,
+    rows,
+    // Said out loud when the request was longer than the cap, so a client that
+    // over-asks does not read a short answer as "the rest have no drafts".
+    truncated: wanted.length < ids.length,
+    maxRows: MAX_DRAFT_STATE_ROWS,
+  };
 }
