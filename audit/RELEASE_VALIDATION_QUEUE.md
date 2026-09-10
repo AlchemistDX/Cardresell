@@ -3375,3 +3375,91 @@ field and unfiltered keys), `IMG_4209` (bistre-arrow empty result).
 `IMG_4203`–`IMG_4205` were named but did not arrive, so the in-app side of the
 run — the draft appearing, and reopening with its title — rests on Will's
 report and on the Redis record, not on screenshots seen here.
+
+---
+
+## Isolation check — corrected, and the paired control was already taken
+
+### Correction accepted
+
+The earlier recommendation to search `draft:` in `bistre-arrow` alone was
+wrong. An empty result for a bare prefix only proves absence if the console
+matches on prefix or substring, and that had not been established. A negative
+result from an unvalidated method is not evidence. Will's method — run the
+*identical* query in both stores, so the preview store acts as a positive
+control on the search itself — is the correct shape and does not depend on
+knowing the semantics.
+
+### The control is already in the screenshots
+
+Running it again is optional, because `IMG_4206` and `IMG_4208` are that
+experiment:
+
+| | store | plan / role | query in field | result |
+|---|---|---|---|---|
+| `IMG_4206` | `upstash-kv-aureolin-door` | Pay-as-you-go = Preview + Development | `draft:fzUpcrXKDdQzGORl0bLQ6mTwML73:drf_3471a1a` | **finds it** — `draft:fzU…`, STRING, 5.9 KB, Length 5993, TTL No |
+| `IMG_4208` | `upstash-kv-bistre-arrow` | Free Tier = Production | same string, same clip point, same field | **empty** — "Data on a break" (`IMG_4209`) |
+
+Same console, same field width, same visible characters, cut at the same
+character. The query that finds the record in preview returns nothing in
+production. That is the missing evidence, and it makes the clipping harmless:
+whatever the console does with that string, it matched in one store and not the
+other.
+
+**Residual, stated honestly:** both fields are clipped at the same visual
+boundary, so pixels cannot prove the two inputs were byte-identical *beyond*
+the clip. The only false-pass left is a different or malformed suffix hidden in
+the production field. Will's short `draft:` A/B removes even that, costs two
+searches, and is worth doing — but as belt-and-braces, not as the load-bearing
+proof.
+
+**Recording: isolation pass, one residual noted.** Not unconditional until the
+short A/B is run.
+
+### Deployed facts now read back from Redis, not reported
+
+From `IMG_4203`–`IMG_4205`, all in `aureolin-door`:
+
+| field | value |
+|---|---|
+| `draftId` | `drf_3471a1a85ccddb2cca04958fa66ed58a` |
+| `instanceId` | `inst_col_1789014701564` |
+| `sku` | `v2-PKMLOSTORIGINTRAINER-280ab9265ca3153f` |
+| `slot` | `ebay:fixed-price` |
+| `status` | `draft` |
+| `rev` | `1` |
+| `title` | `Charizard Lost Origin Trainer Gallery · TG03 #TG03 Trainer Gallery Rare Holo` |
+| `price` | `32.84` |
+| `quantity` | `1` |
+| `createdAt` / `updatedAt` | `1789041178209` / `1789041178209` |
+| `createdByOperation` | `null` |
+| `priceSource` | `"comp"` |
+| record | STRING, 5993 bytes, **TTL: No** |
+
+Four of these settle open questions rather than merely confirming the report:
+
+- **`createdAt === updatedAt`.** Exactly one write. Single tap, no revision, no
+  second create — corroborated by the record itself rather than by counting
+  taps.
+- **`slot: "ebay:fixed-price"` stored with its colon intact.** The D8 fix
+  sanitized the *idempotency key part* and left the slot value alone, which is
+  the intended split. Had the fix been applied at the wrong layer, this field
+  would read `ebay-fixed-price`.
+- **No `instancedrafts:` key anywhere in the list.** `IMG_4203` shows
+  `draft:fzU…`, `draftindex_ck…`, `draftquota:fz…`, `drafts:fzUpcr…` written by
+  this create. The instance key is absent in deployed Redis — a live
+  confirmation that nothing wrote it, which is the case for removing it
+  (`2647edd`) rather than the case for wiring it.
+- **`TTL: No` on the authoritative record**, while the idempotency records
+  carry the 24 h TTL. The record outlives its recovery metadata, as designed.
+- `createdByOperation: null` is now observed on deployed Redis, not just
+  locally. Consistent with D-D8-3; still a documented follow-up.
+
+### Unchanged and still open
+
+- Nothing pushed. Alias still pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` /
+  `499ef1c`. Draft not deleted. Generation counter not started.
+- **The manual $2 `priceSource: "seller"` case has no deployed proof.** This
+  record reads `"comp"`. Local proof only.
+- Repeat-tap dedupe on the deployed build untested — one tap was pressed, per
+  instruction.
