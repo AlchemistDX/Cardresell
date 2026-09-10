@@ -1,7 +1,8 @@
 # Bundle citation map
 
-**Live bundle on branch: `js/core.53a0674d.js` (23741 lines).** New work
-cites that hash. Renamed at the close of RC-2 from the working name
+**Live bundle on branch: `js/core.49b84d4b.js`.** New work
+cites that hash. Renamed from `53a0674d` at the close of the collection /
+provenance batch (generation 14 below). Renamed at the close of RC-2 from the working name
 `core.2cb1e377.js`; `tests/asset-fingerprints.mjs` is green at 74/0 and every
 `js/core.*.js` on disk hashes to its own name.
 
@@ -11,6 +12,14 @@ was live by then. Both are corrected here rather than annotated below, because
 a citation map whose header has to be read sceptically is not doing its job.
 For the record: `66c39922`, `73a71fac`, `e9f21f4e` and `176e4a56` are retired,
 and the per-generation history below is unchanged and remains accurate.
+
+> ### Generation 14 — collection reflow, popup contrast, price provenance
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 14 | `53a0674d` → `49b84d4b` | *(this commit)* | Collection Cards|Drafts sections and sub-640px row reflow; light-theme contrast tokens for the card popup; the price-provenance chain — `_crValueProvenance` / `_crPriceSourceToLabel`, `valueSource: 'comp'` stamped at the four provider-feed writers, `'seller'` derived in `saveFlipEntry`, and the draft/full-card consumers reading provenance instead of inferring it from a positive `currentValue`. |
+>
+> `53a0674d` is retained on disk and still hashes to its own name.
 
 > ### Generation 13 — condition guidance and the listing description
 >

@@ -87,6 +87,12 @@
   --divider:       #e4e1da;
   --text:          #18160f;
   --text-muted:    #6b6960;
+  /* Popup control colours. Split per theme because the Collection card popup
+     hardcoded dark values (#fff, #93c5fd, #aaa, #333) and was unreadable in
+     the light palette. */
+  --accent-blue-text: #1d4ed8;
+  --danger-text:      #b91c1c;
+  --danger-border:    #e7b4b4;
   /* AA 2026-09-07. Was #b3b1ab = 1.90 on --bg, 2.00 on --surface, 2.14 on
      --surface-2, 1.78 on --surface-off: failing AA-normal AND AA-large on every
      surface it is used on, across 105 references.
@@ -142,6 +148,9 @@
   --divider:       #272521;
   --text:          #d4d2cc;
   --text-muted:    #918f86;  /* AA: 5.88 on --bg, 5.43 on --surface, 5.04 on --surface-2. Was #78766f = 4.19/3.87/3.59, failing all three. */
+  --accent-blue-text: #93c5fd;  /* the value the popup previously hardcoded */
+  --danger-text:      #f87171;
+  --danger-border:    #4a1a1a;
   /* AA 2026-09-07. Was #4a4840 = 2.08 on --bg, 1.92 on --surface, 1.78 on
      --surface-2, 1.96 on --surface-off: failing every surface.
 
@@ -3746,7 +3755,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div style="margin-top:.4rem;font-size:.64rem;color:var(--text-faint);text-align:center;line-height:1.35">
         Saves a draft in CardResell. It is not submitted to any marketplace.
       </div>
-      <div id="ccmDraftNote" style="display:none;margin-top:.4rem;font-size:.68rem;line-height:1.4;color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:.5rem .6rem"></div>
+      <div id="ccmDraftNote" style="display:none;margin-top:.4rem;font-size:.68rem;line-height:1.4;color:var(--text-muted);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:.5rem .6rem"></div>
     </div>
 
     <div style="font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);margin-bottom:.35rem">
@@ -3756,20 +3765,20 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 List on eBay</a>
       <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">💰 List on TCGplayer</a>
     </div>
-    <div style="font-size:.68rem;color:var(--muted);text-align:center;margin-bottom:.5rem;line-height:1.35">
+    <div style="font-size:.68rem;color:var(--text-muted);text-align:center;margin-bottom:.5rem;line-height:1.35">
       💡 Tip: on eBay, click any sold listing → <strong>“Sell one like this”</strong> to auto-fill your listing
     </div>
 
     <!-- View full card: opens the Card Lookup view for this card and, if a grade
          was saved on the entry, auto-applies the grader/grade pill so the user
          lands on their exact configuration (e.g. PSA 10). -->
-    <button id="ccmViewFullBtn" type="button" onclick="_ccmViewFullCard()" style="width:100%;padding:.7rem;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.5);border-radius:10px;color:#93c5fd;font-size:.82rem;font-weight:800;cursor:pointer;margin-bottom:.5rem">🔍 View full card</button>
+    <button id="ccmViewFullBtn" type="button" onclick="_ccmViewFullCard()" style="width:100%;padding:.7rem;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.55);border-radius:10px;color:var(--accent-blue-text);font-size:.82rem;font-weight:800;cursor:pointer;margin-bottom:.5rem">🔍 View full card</button>
 
-    <button id="ccmRefreshBtn" type="button" onclick="_ccmRefreshPrice()" style="width:100%;padding:.65rem;background:transparent;border:1px solid #333;border-radius:10px;color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:.5rem">↻ Refresh current price</button>
+    <button id="ccmRefreshBtn" type="button" onclick="_ccmRefreshPrice()" style="width:100%;padding:.65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:.8rem;font-weight:700;cursor:pointer;margin-bottom:.5rem">↻ Refresh current price</button>
 
     <div style="display:flex;gap:.4rem">
-      <button type="button" onclick="document.getElementById('collectionCardModal').classList.remove('open')" style="flex:1;padding:.6rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.8rem;font-weight:700;cursor:pointer">Close</button>
-      <button id="ccmRemoveBtn" type="button" onclick="_ccmRemoveCard()" style="padding:.6rem 1rem;background:transparent;border:1px solid #4a1a1a;border-radius:10px;color:#f87171;font-size:.8rem;font-weight:700;cursor:pointer">Remove</button>
+      <button type="button" onclick="document.getElementById('collectionCardModal').classList.remove('open')" style="flex:1;padding:.6rem;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text-muted);font-size:.8rem;font-weight:700;cursor:pointer">Close</button>
+      <button id="ccmRemoveBtn" type="button" onclick="_ccmRemoveCard()" style="padding:.6rem 1rem;background:transparent;border:1px solid var(--danger-border);border-radius:10px;color:var(--danger-text);font-size:.8rem;font-weight:700;cursor:pointer">Remove</button>
     </div>
   </div>
 </div>
@@ -3923,7 +3932,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </div><!-- /wrap -->
 
 <script defer src="/js/config.20ebe911.js"></script>
-<script defer src="/js/core.53a0674d.js"></script>
+<script defer src="/js/core.49b84d4b.js"></script>
 <script defer src="/js/ui.6b3a528e.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.5cf1cd22.js"></script>
