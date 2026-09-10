@@ -4642,7 +4642,27 @@ local only.
 
 ---
 
-## The $2 deployed case — runbook (owner-run, ~10 minutes)
+## The $2 deployed case — PASSED 2026-09-10 (owner-run)
+
+> **RESULT — reported by Will, 2026-09-10 19:54.** The deployed draft on
+> `499ef1c` records **`price: 2`**, **`priceSource: "seller"`**, **`rev: 1`**,
+> and **the value survives a reload**. That closes the case the runbook below
+> was written for: a manually entered price is `seller` **on the deployed
+> build**, not only locally.
+>
+> **Provenance of this result.** Will ran it and read Redis; I did not observe
+> it and am recording his report, which is why it is attributed rather than
+> stated flat. The runbook below is kept unedited as the procedure that was
+> followed.
+>
+> **Scope.** Seller-price provenance on commit `499ef1c`. `rev: 1` says the
+> record was written once and not rewritten by a later pass — consistent with
+> the server owning provenance (`api/_draftStore.js:688`) and the client never
+> setting it. It does not speak for any other keyspace, any later commit, or
+> production, which remains Phase 0 and untouched.
+
+### Runbook as written (procedure of record, unedited)
+
 
 I cannot run this: the Preview needs a signed-in Vercel and Google session on
 your device, and the Upstash read-back is behind your dashboard. Everything
@@ -4714,7 +4734,8 @@ provenance defect and should not be read as one.
 If the result differs, **leave the record unchanged** and stop there — that is a
 release blocker to look at before anything else touches the Preview.
 
-**Scope of what this establishes.** Seller-price provenance **on commit
+**Scope of what this establishes.** *(Established 2026-09-10 — see the result
+banner at the head of this runbook.)* Seller-price provenance **on commit
 `499ef1c`**, and nothing more. Today's lifecycle code is not in this build, and
 verification of the three actual Lua scripts against real Redis is a separate
 check — **now done locally, 58/0 on 2026-09-10** (§Real-Redis Lua
