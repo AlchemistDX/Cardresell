@@ -2529,12 +2529,16 @@ store — and Safeguard 1 deliberately preserved those values, so those
 credentials are still valid. This is no longer a hypothetical about "existing
 deployments retaining old access"; it is 21 named deployments that retain it.
 
-**It is bounded by deployment protection.** Old Preview URLs are not openly
-callable. `GET /api/health` on two of them returns **302** to
-`https://vercel.com/sso-api?url=…`, setting a `_vercel_sso_nonce` cookie —
-Vercel Authentication is on. Reaching the production store through one of these
-requires an authenticated team session, not merely the URL. Exposure is
-therefore internal, not public.
+**It is bounded by deployment protection — on the two URLs actually tested.**
+`GET /api/health` on two of the 21 returns **302** to
+`https://vercel.com/sso-api?url=…`, setting a `_vercel_sso_nonce` cookie, so
+Vercel Authentication is on for those two. **Two redirects establish protection
+on two tested URLs. They do not establish every old deployment's runtime
+access**, and this section does not claim otherwise. The remaining 19 are
+untested here.
+
+Protection **stays enabled** on the old Previews. Their retirement is tracked
+separately as **RV-14** below rather than folded into this milestone.
 
 Nothing was invoked past the redirect, and no store was written.
 
@@ -2638,22 +2642,164 @@ separate rebuild on row ages alone.** See §2 as corrected.
 Credential scope changes still need the owner's authorization wherever it has
 not already been granted — D-RV-2 and D-RV-3 both change credential scope.
 
-### Open question — how a protected Preview gets verified
+### Preview access — decided, and a correction to my recommendation
 
-One technical-readiness item that D-RV-1 surfaces, and I do not think it has
-been decided. The existing Previews sit behind Vercel Authentication, and a
-fresh one will too, so an unauthenticated request to it returns a 302 to
-`sso-api` rather than reaching `api/drafts.js`. Proving that a Preview's writes
-land in the isolated store means getting an authenticated request to it. Three
-ways, in my order of preference:
+**My bypass recommendation was materially wrong and is withdrawn as reasoned.**
+I called Protection Bypass for Automation "scoped to this purpose." It is not.
+The secret is **project-wide**: it bypasses protection on **every deployment in
+the project, including all 21 old Previews** — the very access being contained.
+Naming a secret for a purpose does not restrict what it opens. I inferred a
+scope from the feature's name instead of its documented behaviour
+([Vercel deployment protection bypass](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection)).
 
-1. **Protection Bypass for Automation** — a project-level secret sent as
-   `x-vercel-protection-bypass`. Scoped to this purpose, revocable, and it
-   leaves production protection untouched. Requires the owner to generate it.
-2. **Will drives it in his own logged-in browser.** No new secret, but the
-   verification steps are manual.
-3. **Disabling Preview protection.** Not recommended — it would expose all 21
-   old Previews, which is precisely the Safeguard 2 access being contained.
+Decided order:
 
-Which route? Until one is chosen, the Preview can be *created* but its writes
-cannot be *observed*, and the milestone needs the second half.
+1. **Narrow PriceCharting to Production**, preserving its existing value, **then
+   verify the scopes** — dashboard action (see D-RV-2 method note).
+2. **Create the branch Preview** from committed `phase1-block-d` under the
+   standing push authorization.
+3. **First isolation check runs in Will's signed-in browser.** No bypass secret
+   is introduced to reach the first result. Exact steps below.
+4. **Later automation may use a bypass secret**, on three conditions recorded
+   here so they are not lost: its **project-wide scope is understood and
+   accepted**, requests are **restricted to the fresh deployment's exact
+   hostname**, and the secret is **handled as a credential** (never printed, not
+   committed, revocable).
+
+### Turnstile — no new provider credential needed
+
+Correct, and it changes D-RV-3's method. Cloudflare publishes dummy sitekeys and
+matching test secrets ([Cloudflare Turnstile testing](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)):
+
+| Value | Kind | Behaviour |
+| --- | --- | --- |
+| `1x00000000000000000000AA` | sitekey | always passes |
+| `2x00000000000000000000AB` | sitekey | always fails |
+| `3x00000000000000000000FF` | sitekey | forces interactive challenge |
+| `1x0000000000000000000000000000000AA` | secret | always passes validation |
+| `2x0000000000000000000000000000000AA` | secret | always fails validation |
+
+**One wrinkle in "configure both sides," found in the code.** The sitekey is not
+an environment variable — it is hardcoded in the served HTML:
+
+```
+index.html:1565  <meta name="turnstile-site-key" content="0x4AAAAAAEQHZV40dJAH0unZ" />
+```
+
+read by `window.turnstile.render(el, { sitekey: key, … })` at `index.html:1591`.
+So swapping the **client** side means editing committed HTML on the branch — a
+change that must never merge to `main`, on a branch intended to merge. That is a
+poor trade for a database-isolation check.
+
+**Recommended instead: swap only the server side.** Give Preview
+`TURNSTILE_SECRET_KEY = 1x0000000000000000000000000000000AA` (always passes).
+Verification then succeeds without consulting the real sitekey pairing, so the
+Preview **never reaches production Turnstile validation or production claim
+data** — which is the stated requirement — with **no code change and no risk of
+a test sitekey shipping**. Stated plainly: the client keeps rendering with the
+production sitekey, which is a **public identifier, not a credential**. Database
+isolation remains a separate requirement, proven by the steps below and not by
+this.
+
+**Row mechanics, same shape as PriceCharting.** `TURNSTILE_SECRET_KEY` is one
+row covering **Production, Preview** (26d old). A Preview-specific value cannot
+be added while that row still covers Preview. Order: **uncheck Preview in the
+dashboard** (owner), then I can `vercel env add TURNSTILE_SECRET_KEY preview`
+with the dummy value — that one is a published test string, not a secret, so I
+can set it without handling a real credential.
+
+### A prerequisite neither of us has listed — Firebase authorized domains
+
+Step 3 needs a signed-in session **on the Preview host**, and sign-in is
+origin-checked:
+
+```
+js/auth.5cf1cd22.js   authDomain: "cardresell-e0329.firebaseapp.com"
+                      signInWithPopup + GoogleAuthProvider
+```
+
+Firebase rejects `signInWithPopup` from a hostname absent from the project's
+**Authorized domains** with `auth/unauthorized-domain`. A default Preview URL
+(`cardresell-<hash>-willsep200-9430s-projects.vercel.app`) is not on that list,
+and its hash **changes every deployment**, so adding one buys nothing.
+
+**Remedy: use the branch alias, which is stable.** Vercel gives each branch a
+deterministic alias — evidenced by `cardresell-git-main-…` on the production
+deployment — so the branch Preview will also answer on:
+
+```
+cardresell-git-phase1-block-d-willsep200-9430s-projects.vercel.app
+```
+
+(55 characters, inside the 63-character DNS label limit). Add **that one
+hostname** to Firebase Authorized domains and it stays valid across every
+redeploy of the branch. **Unverified until the Preview exists** — the alias is
+predicted from the documented pattern and the observed `-git-main-` alias, not
+yet observed. Confirm it in the deployment output before adding it.
+
+This shares the **auth** project with production, not the database. By the
+distinction already drawn in D-RV-3, that is acceptable: identity is shared,
+writes are what must not be.
+
+### Isolation check — exact steps for a signed-in browser
+
+**Preconditions** (all must hold, else the result proves nothing):
+
+- PriceCharting narrowed to Production, **scopes re-listed and confirmed**.
+- Turnstile Preview secret set to the dummy always-passes value.
+- Preview created from committed `phase1-block-d`; note its deployment id and
+  confirm the branch alias.
+- Branch alias added to Firebase Authorized domains.
+
+**Why a synthetic owner id is not used.** `SYNTHETIC_TEST_PREFIX = 'ktest-'`
+exists (`api/_draftStore.js:38`) but `api/drafts.js` **refuses it at the door**
+by design, so the check runs under a real sign-in and a real `sub`.
+
+**Contingency, stated before starting.** If the Preview is *misbound*, this
+writes one real draft under Will's own `sub` into the **production** store. That
+is recoverable — delete it — and it is precisely the signal being sought. Worth
+knowing in advance rather than discovering it.
+
+**Steps.**
+
+1. Open the branch alias in the signed-in browser. Sign in. If
+   `auth/unauthorized-domain` appears, the Firebase domain step was missed —
+   stop.
+2. Open **DevTools → Network** before creating anything.
+3. Create one draft whose title carries a unique marker, e.g.
+   `ISO-CHECK-20260910-<six random chars>`. A marker makes the record
+   identifiable by content as well as by key.
+4. In the Network panel, find the `POST /api/drafts` response and copy
+   **`draft.draftId`** — format `drf_` + 32 hex characters
+   (`api/_draftStore.js:106`, `:517`).
+5. **Reopen the draft** in the app and confirm the marker renders. This proves a
+   real round-trip through the store, not just an accepted write.
+6. Assemble the exact key. The authoritative record is
+   `draft:<sub>:<draftId>` (`api/_draftStore.js:12`, `:98`). Get `<sub>` from the
+   same response or the request's bearer identity.
+7. **Nonproduction store** (`upstash-kv-aureolin-door`, the Preview/Development
+   target): in the Upstash data browser, look up that exact key. **Expect: it
+   exists**, and its `title` contains the marker. Also expect the derived index
+   `drafts:<sub>` to contain the draftId (`:15`) — derived, so treat it as
+   corroboration, never as the proof on its own.
+8. **Production store** (`upstash-kv-bistre-arrow`): using **read-only access**,
+   look up the **same exact key**. **Expect: absent.** Then `SCAN` for the
+   marker string to confirm no record carries it.
+9. Record, for each store: the store name, the exact key queried, and
+   present/absent. **Both halves are required** — presence in nonproduction
+   alone does not establish isolation without absence in production.
+10. Delete the synthetic draft through the app afterwards, and note that the
+    tombstone (`:400`) is expected to remain in the nonproduction store.
+
+**Pass condition:** present in `upstash-kv-aureolin-door`, absent in
+`upstash-kv-bistre-arrow`, marker found in neither production key nor scan. Any
+other combination fails and stops the milestone.
+
+### RV-14 — old Preview retirement (tracked, not blocking)
+
+21 Preview deployments about 70 days old, each built when the five KV names
+still targeted all three environments, so each carries still-valid production
+store credentials (Safeguard 1 preserved the values). Protection **stays
+enabled**. Runtime access has been tested on **2 of 21** and is not established
+for the other 19. Retirement — deleting them, or confirming protection across
+all 21 — is tracked here and is **not** a gate on the Preview milestone.
