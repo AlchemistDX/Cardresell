@@ -4278,3 +4278,122 @@ a new deployment, precisely so the pinned Preview stays untouched.
 
 The `EVAL` scripts remain exercised only against in-memory doubles. Verifying
 them against isolated Redis is still an open release gate.
+
+---
+
+## D8 browser proof — done, and the client defect it found (2026-09-10)
+
+`tests/draft-delete-browser.mjs`, new, **113 passed, 0 failed, SUITE COMPLETE,
+exit=0**. It drives the shipped bundle in a real chromium against the real
+`api/drafts.js`, the real store, real RS256 verification, and the real
+idempotency, lifecycle and fencing code, on a local dev server. Nothing was
+deployed and the Preview alias is untouched.
+
+### The defect
+
+`startListingDraftForEntry` built a permanently stable create key,
+`sell-col-<entryId>-ebay-fixed-price`. After a delete, the idempotency record
+for that key names a deleted draft, and the replay gate
+(`api/_draftService.js:338`) refuses it with **410 `DRAFT_GENERATION_STALE`**,
+`evidence:'replayed-draft-not-live'`, `lastState:'deleted'` — **whether or not
+the new generation is sent**. So a seller who deleted a draft for a collection
+row could never create another one for that row, while the button invited them
+to do exactly that. Measured on the dev server: only a new key creates.
+
+**Fixed** by `_crCreateIdemKey` (`js/core.a995c941.js:21176`), used at `:21227`
+(scan path) and `:21684` (collection path). A known lifecycle generation
+suffixes the key `-g<N>`; an unknown generation gets no suffix, so the legacy
+adoption path is unchanged. A retry keeps its original generation, key and
+payload. A fresh explicit Create after a deletion runs at N+1 and creates.
+
+**Mutation-checked.** Reverting the collection call site to the old key made
+exactly the four assertions that name this behaviour fail — the new key, the
+new draft, the "started" message, and the create count. A passing suite is not
+evidence that the suite would catch the bug; this is.
+
+### Residual, stated rather than papered over
+
+In the handler, `sentGen === null` skips the staleness comparison entirely
+(`api/_draftService.js:409` refuses only when `sentGen !== null && sentGen !==
+resolved.gen`). **An omitted generation is therefore not a precondition.**
+Protection against a delayed retry rests on the tombstoned idempotency record,
+not on the generation. The generation adds protection only when the client
+knows it.
+
+### What the suite proves, and what it does not
+
+Covered: cancel sends no DELETE; confirm sends exactly one, body exactly
+`{"expectedRev":1}`, tombstone survives reload, the row disappears, quota
+releases exactly once and not twice; three lost-response shapes
+(commit-then-drop reconciles to deleted, fail-before-commit says the draft is
+still here, reconcile-read-fails says only that we could not check — never
+"still here", never an asserted deletion); two contexts, where B deletes A's
+draft, A's retry reuses its original key and byte-identical payload, exactly
+two POSTs are sent and **no automatic replacement**, and only an explicit new
+Create produces a new draft; `existing:true` opens the saved draft with
+"Opened your saved draft", no created event and no count increase, with a rev-2
+seller edit preserved. Generation, key and payload are asserted on the
+browser's actual requests. An unknown generation takes the legacy-resolution
+path and adopts the existing draft rather than creating a second one. The gone
+copy matrix holds: only a recorded deletion may say a draft was deleted, none
+say "you deleted this draft", and none invite refresh or retry.
+
+Not covered, deliberately: **lock TTL is not modelled** (the double's `setEx`
+ignores seconds), and **the Lua scripts are the suites' JS re-implementation**
+(`tests/_kvScripts.mjs`). Verifying the real scripts against an isolated Redis
+is still an open release gate.
+
+### Two suites were dead and are now alive
+
+The completion-marker work paid for itself immediately.
+
+- **`tests/draft-list-cap.mjs`** crashed inside its first seeding call, before
+  a single assertion, once the lifecycle lock became a Lua `EVAL` its in-memory
+  Redis did not implement. It printed a stack and no summary and nobody was
+  reading for a missing one. Now delegates `eval` to `tests/_kvScripts.mjs`.
+  A second fixture problem surfaced behind it: the cap block stuffed 500 index
+  ids with no records, and the create path's consistency sweep correctly pruned
+  every one of them mid-request, so the gate re-derived to 0 and a create at
+  the cap returned 201. The cap was fine; the fixture described a seller who
+  cannot exist. `stuffIndex` now writes a record per member. **130/0**, and
+  disabling the cap check in the service still fails the suite.
+- **`tests/review-fee-dl.mjs`** threw `ReferenceError` before its first
+  assertion once the priced template gained `${_reviewShippingRows()}` — the
+  harness never passed it. Both that helper and `_reviewShippingZeroNote` are
+  now pulled from the bundle verbatim, with a harness-owned minimal
+  `_reviewState` (no usable packet, therefore no shipping rows; actual shipping
+  rendering is covered in `draft-review-screen` and `fee-truth-offline`).
+  **21/0**.
+
+**Residual on reporting: 34 of the 55 suites still use their own counters and
+print totals with no completion marker**, `draft-lifecycle` and `quick-pricing`
+among them. A seeding crash in any of those still looks like silence rather
+than a failure. Converting them is not done.
+
+### Bundle
+
+`js/core.69fb43dd.js` → **`js/core.a995c941.js`** (sha256[:8]), reference at
+`index.html:3951`, generation 17 recorded in `audit/BUNDLE_CITATION_MAP.md`
+with measured shifts (uniform `+38` above `:21140`). The retired generation is
+retained on disk. `tests/asset-fingerprints.mjs` **89/0**.
+
+### Suites after the rename
+
+`draft-delete-browser` 113/0 · `draft-list-cap` 130/0 · `review-fee-dl` 21/0 ·
+`draft-review-screen` 417/0 · `draft-list-screen` 101/0 · `sell-eligibility`
+113/0 · `draft-crud-e2e` 239/0 · `accuracy-fee-parity` 41/0 ·
+`asset-fingerprints` 89/0. Committed as `5537d45` on `phase1-block-d`.
+**Not pushed** — the Preview alias stays pinned for the $2 seller-provenance
+run.
+
+### Questions for you
+
+1. **The residual above** — an omitted generation is not a precondition on the
+   server. Do you want that closed before release (refuse a create whose
+   lifecycle record exists and whose generation is absent), or recorded as
+   accepted for Phase 1 on the grounds that the tombstoned idempotency record
+   already stops the delayed retry?
+2. **The 34 suites without completion reporting.** Convert them now, convert
+   only the ones in the Phase 1 release path, or leave them?
+3. Isolated-Redis script verification and the deployed $2 case remain the two
+   outstanding checks I have not started. Which first?
