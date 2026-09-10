@@ -3463,3 +3463,79 @@ Four of these settle open questions rather than merely confirming the report:
   record reads `"comp"`. Local proof only.
 - Repeat-tap dedupe on the deployed build untested — one tap was pressed, per
   instruction.
+
+---
+
+## Retraction — four claims withdrawn, and the pass is not conditional-optional
+
+Will's review is accepted in full. Four inferences in the previous entry went
+past the evidence, and one framing was internally inconsistent. Corrected here
+so the retraction sits next to the claims.
+
+### 1. `createdAt === updatedAt` — withdrawn as proof of one write
+
+What it establishes: this record has **not been updated since it was created**.
+That is all. It does not exclude an idempotent replay that rewrote the same
+values, and it says nothing about whether a *second, different* draft exists —
+a second draft would be its own key with its own timestamps and would not
+disturb this one. The single-tap claim rests on Will pressing once, not on the
+record. Draft count would have to come from `drafts:<sub>` or the list
+endpoint, neither of which was read.
+
+### 2. `instancedrafts:` absence — withdrawn, and the inference was invalid
+
+`IMG_4203` shows a scrolled window of the key list around the `draft*` region.
+`instancedrafts` begins with `i`; it would not appear in that region of a
+sorted list even if it existed. The screenshot could not have shown it either
+way, so its absence there is not evidence.
+
+The claim is still true, but the support is source-level, not Redis-level:
+after `2647edd`, `rg -n "instancedrafts|instanceDraftsKey"` returns only
+comments and audit prose — `api/_inventoryInstance.js:58` (the removal note),
+`api/_draftStore.js:16` (the layout note), `tests/draft-index-recovery.mjs:472`
+(the assertion note). No writer, no reader. That, not a screenshot, is why it
+was removed.
+
+### 3. `TTL: No` — narrowed
+
+Confirms **this draft key has no expiry**, which is correct for the
+authoritative record. The 24 h TTL on `idem:*` / `idemresource:*` was **not
+shown in deployed Redis**; that figure is from the code and the local run. The
+"record outlives its recovery metadata, as designed" phrasing asserted a
+deployed fact that was not observed. Deployed TTL on the recovery records
+remains unverified.
+
+### 4. The `seller` branch — restated, was already open
+
+This run was the $32.84 comp-priced card. The manual $2 card is untested on the
+deployed build. Unchanged from the previous entry, repeated because it is the
+one that matters for release.
+
+### 5. The framing was inconsistent
+
+Calling the short comparison "optional / belt-and-braces" while simultaneously
+declining to record an unconditional pass cannot both be right. If the hidden
+suffixes are enough of a gap to withhold the pass, the check is **required**.
+It is required.
+
+The matching *visible* portions of the two long queries support isolation. The
+suffixes past the clip point are unconfirmed in both stores, so the A/B on a
+short, fully visible query is the thing that closes it.
+
+**Status: isolation NOT established. Awaiting the short comparison.**
+
+### The comparison, as specified
+
+1. `aureolin-door` — search `draft:`, press Return. Must find the known draft.
+2. If it does, `bistre-arrow` — identical search, identical method.
+3. Both screenshots showing database name and result.
+
+Step 1 is the validity test on the method itself: if it comes back empty in the
+store that provably holds the record, the method cannot prove absence anywhere
+and a different approach is needed.
+
+### Held in place
+
+Deployment `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` / `499ef1c` unchanged, alias
+pinned, nothing pushed. Draft `drf_3471a1a85ccddb2cca04958fa66ed58a` retained.
+Generation counter not started.
