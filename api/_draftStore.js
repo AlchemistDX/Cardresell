@@ -11,8 +11,12 @@ import { readStoredPacket, PACKET_COMPAT, packetInputFingerprint } from './_list
 // ──────────────
 //   draft:<sub>:<draftId>              the authoritative record
 //   draftrev:<sub>:<draftId>:<rev>     revision claim (NX) — concurrency control
-//   instancedrafts:<sub>:<instanceId>  SET of draftIds  (from _inventoryInstance)
 //   drafts:<sub>                       SET of draftIds  (from _draftIndex)
+//
+// This list used to name `instancedrafts:<sub>:<instanceId>` as a set of
+// draftIds per physical copy. No code ever wrote or read it; the layout
+// documented storage that did not exist. Removed 2026-09-10 with the helper
+// that defined it — see api/_inventoryInstance.js.
 //
 // The authoritative record is the record. Every index is derived and may be
 // rebuilt from a scan; none of them is ever treated as proof on its own.

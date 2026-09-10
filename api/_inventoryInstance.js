@@ -54,28 +54,21 @@ export function instancePattern(googleSub) {
 export function skuInstancesKey(googleSub, sku) {
   return `skuinv:${keyPart(googleSub)}:${keyPart(sku)}`;
 }
-/**
- * The uniqueness constraint moves here from the SKU — as a SET, not a pointer.
+/*
+ * REMOVED 2026-09-10: `instanceDraftsKey` / `instancedrafts:<sub>:<instanceId>`.
  *
- * One physical PSA 9 will eventually carry an eBay draft, a Mercari draft and a
- * Whatnot draft at the same time. That is not a hypothetical: cross-venue
- * payout comparison is the product, and eBay is the first integration rather
- * than the destination. A singular pointer would encode "one draft per
- * instance" into the storage shape and have to be unwound later, so the shape
- * is plural now, while it costs nothing.
+ * It defined a key, documented it as the per-instance set of draftIds, and was
+ * asserted by two tests — all of which only checked the string it returned. No
+ * production code ever wrote or read it, so "the uniqueness constraint moves to
+ * the instance" was a guarantee the storage layer advertised and the product
+ * never enforced. That is the same failure shape as the D8 idempotency defect:
+ * an assertion evidencing a surface nothing exercises.
  *
- * The Phase 1 restriction lives ABOVE storage, as a business rule, where it can
- * be relaxed without a migration:
- *
- *     Phase 1 permits at most one active eBay draft per instance.
- *
- * Long term the rule is one active draft per (instance, venue, strategy) —
- * "strategy" because a lot of 11 may eventually split across auction and
- * fixed-price at once.
+ * Deleted rather than wired. A duplicate is reachable today only by losing BOTH
+ * 24-hour idempotency recovery records, and a new index is not the right answer
+ * to that. If "one live draft per instance" becomes a product requirement, it
+ * gets implemented and tested as that requirement, against the create path.
  */
-export function instanceDraftsKey(googleSub, instanceId) {
-  return `instancedrafts:${keyPart(googleSub)}:${keyPart(instanceId)}`;
-}
 
 /**
  * The slot a draft occupies within an instance.

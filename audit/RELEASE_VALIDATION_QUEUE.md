@@ -3234,3 +3234,41 @@ The in-memory KV proves the application path. It says nothing about deployed
 Redis. The next milestone is unchanged: one marked draft saved and reopened on
 `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, present in `aureolin-door` and absent from
 `bistre-arrow`.
+
+---
+
+## D8 decisions taken — 2026-09-10
+
+Three decisions recorded as closed. Do not reopen.
+
+**D-D8-1 — generation counter: implement before release, after the isolation
+check.** Not started, deliberately. Any commit that reaches the branch builds a
+new deployment and moves the alias off `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` while
+it is the subject under test. Work resumes once the check returns.
+
+**D-D8-2 — `instanceDraftsKey` removed, not wired.** Done in this commit:
+
+| removed | was |
+|---|---|
+| `api/_inventoryInstance.js` — `instanceDraftsKey` and its docblock | defined `instancedrafts:<sub>:<instanceId>` and the claim "the uniqueness constraint moves here from the SKU" |
+| `api/_draftStore.js:14` — storage-layout line | documented the key as a live SET of draftIds |
+| `tests/draft-index-recovery.mjs` — 3 assertions | checked only the string the helper returned |
+
+A note stands at each site saying what was removed and why, so the next reader
+does not "restore" it. Explicitly **not** replaced with a real index: the only
+way to reach a duplicate today is losing both 24-hour recovery records, and a
+new index is the wrong remedy for that. If "one live draft per instance"
+becomes a product requirement it will be implemented and tested as that
+requirement, against the create path.
+
+Suites after removal: `draft-index-recovery` **265 passed, 0 failed** (268
+minus the 3 shape-only checks); `draft-crud-e2e` **192 passed, 0 failed**;
+`asset-fingerprints` unaffected — no bundle byte changed, so the live bundle
+remains `js/core.8e7fee75.js` and the alias still serves commit `499ef1c`.
+
+**D-D8-3 — `createdByOperation` stays a documented follow-up.** The measured
+recovery paths establish it is not required for correctness; recovery reads the
+resource pointer.
+
+**Committed locally, not pushed.** The alias stays pinned to
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` until the isolation check reports.

@@ -469,10 +469,10 @@ check('cert lives on the instance, never on a raw copy', rawA.cert === null);
 check('a graded instance takes its condition from the grade', slabA.condition === 'graded');
 
 console.log('\nuniqueness moves to the instance');
-check('the draft-uniqueness key is per instance',
-      INV.instanceDraftsKey('sub1', rawA.instanceId) === `instancedrafts:sub1:${rawA.instanceId}`);
-check('two raw copies get two independent draft slots',
-      INV.instanceDraftsKey('sub1', rawA.instanceId) !== INV.instanceDraftsKey('sub1', rawB.instanceId));
+// The two checks that stood here asserted only the STRING instanceDraftsKey
+// returned. Nothing wrote or read that key, so they proved a naming
+// convention, not a uniqueness constraint. Helper and checks removed together
+// on 2026-09-10; see the note in api/_inventoryInstance.js.
 check('a per-product set still answers "all drafts for this card"',
       INV.skuInstancesKey('sub1', rawA.sku) === `skuinv:sub1:${rawA.sku}`);
 check('key delimiters are refused, not escaped',
@@ -536,8 +536,6 @@ for (const bad of [undefined, null, '1', 1.5, 0]) {
 
 // ── 6. Plural draft index + venue slots (multi-venue readiness) ──────────
 console.log('\n🔴 one instance, many venues');
-check('the draft index is a SET name, not a single pointer',
-      INV.instanceDraftsKey('sub1', 'inv_x') === 'instancedrafts:sub1:inv_x');
 check('slots are per venue and strategy',
       INV.draftSlot('ebay') === 'ebay:fixed-price' &&
       INV.draftSlot('ebay', 'auction') === 'ebay:auction' &&
