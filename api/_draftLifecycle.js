@@ -95,6 +95,23 @@
 //
 // Release is compare-and-delete in one command, so A resuming late cannot
 // release B's lock either.
+//
+// Two boundaries make that fencing real, and the first version of this module
+// got both wrong.
+//
+// FIRST: acquisition and fence allocation must be ONE atomic step. With a
+// `SET NX EX` followed by a separate `INCR`, A wins the lock, pauses before the
+// INCR, its lock expires, B acquires and takes fence 1, and A resumes and takes
+// fence 2 — handing the HIGHER fence to the expired owner and inverting the
+// whole scheme. So acquisition and allocation happen inside one script.
+//
+// SECOND: the fence has to reach the DRAFT write, not just the lifecycle
+// record. Refusing a lapsed owner's promotion is worthless if that owner
+// already wrote its draft after a successor deleted or replaced the
+// reservation: the promotion fails, and the orphan draft is still in the store.
+// So the guard and the mutation are one command at the store boundary
+// (`fencedSet`), and the authoritative fence is the counter itself — monotonic,
+// integer, and readable inside the script without parsing JSON.
 
 const RECORD_VERSION = 1;
 
@@ -102,10 +119,19 @@ const RECORD_VERSION = 1;
 // crashed holder does not wedge the row.
 export const LOCK_TTL_SEC = 15;
 
-// How long absence under 'reserved' is read as an interrupted creation. A
-// creation interruption resolves within one request; this is generous by two
-// orders of magnitude and still nowhere near the tombstone's 90 days.
-export const RESERVED_GRACE_MS = 5 * 60 * 1000;
+// How long an unresolved reservation is honoured before it is RETIRED.
+//
+// The earlier justification here was false: "an interrupted creation is never
+// 90 days old" assumed someone retries it promptly, and nobody may. A
+// reservation can sit unresolved indefinitely. So this is not a claim about how
+// old interrupted creations are — it is a conservative recovery policy:
+// after five minutes an unresolved reservation is retired, its generation is
+// spent, and its delayed writer is fenced out (the retiring caller holds a
+// newer fence, so the counter has already moved past the reserver's).
+//
+// Retirement never touches a reservation whose draft actually exists: a
+// readable live draft is recovered regardless of the reservation's age.
+export const RESERVATION_RETIRE_MS = 5 * 60 * 1000;
 
 export const LIFECYCLE_STATE = {
   RESERVED: 'reserved',
@@ -140,9 +166,34 @@ export function lifecycleKey(sub, instanceId, slot) {
 export function lifecycleLockKey(sub, instanceId, slot) {
   return `draftinstlock:${sub}:${instanceId}:${slot}`;
 }
+// The fence counter. Monotonic, never reset, and authoritative: its current
+// value is the highest fence ever allocated for this row, so "is my fence
+// stale" is a single integer comparison that a Lua guard can make without
+// parsing anything.
 export function lifecycleFenceKey(sub, instanceId, slot) {
   return `draftinstfence:${sub}:${instanceId}:${slot}`;
 }
+
+// Acquire the lock AND allocate the fence in one atomic step. Redis runs the
+// script to completion, so no caller can interleave between the two.
+// Returns the allocated fence, or -1 when the lock is held.
+export const ACQUIRE_SCRIPT =
+  "if redis.call('exists',KEYS[1])==1 then return -1 end " +
+  "local f=redis.call('incr',KEYS[2]) " +
+  "redis.call('set',KEYS[1],ARGV[1]..':'..f,'EX',ARGV[2]) " +
+  "return f";
+
+// Guard and mutation in one command. KEYS[1] is the fence counter, KEYS[2] the
+// key being written. Refuses when a newer fence has been allocated, i.e. when
+// the caller's lock has lapsed and someone else has taken the row.
+//
+// This is the store boundary. A read-then-write in its place is a race no
+// matter how carefully the read is done.
+export const FENCED_SET_SCRIPT =
+  "local cur=redis.call('get',KEYS[1]) " +
+  "if cur and tonumber(cur)>tonumber(ARGV[1]) then return -1 end " +
+  "redis.call('set',KEYS[2],ARGV[2]) " +
+  "return 1";
 
 function emptyRecord() {
   return {
@@ -203,27 +254,47 @@ export async function readLifecycle(kv, sub, instanceId, slot) {
 }
 
 /**
- * Every write goes through here, and every write is fenced. `fence` is the
- * value minted when the caller acquired the lock; a record already stamped with
- * a HIGHER fence belongs to a later owner, so this caller's lock lapsed and its
- * write is stale by definition.
+ * Every write goes through here, and every write is fenced against the COUNTER
+ * — not against the fence stamped on the record, which only reflects the last
+ * successful write and so lags any acquisition that has not written yet.
  */
 async function writeLifecycle(kv, sub, instanceId, slot, rec, fence) {
-  if (!Number.isInteger(fence)) return { ok: false, error: LIFECYCLE_ERR.FENCED, reason: 'no-fence' };
-  const cur = await readLifecycle(kv, sub, instanceId, slot);
-  if (!cur.ok) return cur;
-  if (cur.record.fence > fence) {
-    return { ok: false, error: LIFECYCLE_ERR.FENCED, held: cur.record.fence, mine: fence };
+  const w = await fencedSet(
+    kv, sub, instanceId, slot, fence,
+    lifecycleKey(sub, instanceId, slot),
+    JSON.stringify({ ...rec, v: RECORD_VERSION, fence }),
+  );
+  if (!w.ok) return w;
+  return { ok: true, record: { ...rec, fence } };
+}
+
+/**
+ * Write `value` at `key` only if `fence` is still current for this row.
+ *
+ * Exported because the DRAFT write has to go through it too. That is the whole
+ * point of point 2: a lapsed owner whose draft write lands and whose promotion
+ * is refused has still left a draft in the store. Guard and mutation are one
+ * command, so there is no window between them.
+ */
+export async function fencedSet(kv, sub, instanceId, slot, fence, key, value) {
+  if (!Number.isInteger(fence)) {
+    return { ok: false, error: LIFECYCLE_ERR.FENCED, reason: 'no-fence' };
   }
+  let res;
   try {
-    await kv(
-      'set', lifecycleKey(sub, instanceId, slot),
-      JSON.stringify({ ...rec, v: RECORD_VERSION, fence }),
+    res = await kv(
+      'eval', FENCED_SET_SCRIPT, '2',
+      lifecycleFenceKey(sub, instanceId, slot), key,
+      String(fence), value,
     );
-    return { ok: true, record: { ...rec, fence } };
   } catch {
     return { ok: false, error: LIFECYCLE_ERR.UNAVAILABLE };
   }
+  if (Number(res) === -1) {
+    return { ok: false, error: LIFECYCLE_ERR.FENCED, mine: fence };
+  }
+  if (Number(res) !== 1) return { ok: false, error: LIFECYCLE_ERR.UNAVAILABLE };
+  return { ok: true };
 }
 
 // ── Lock, with a fence ──────────────────────────────────────────────────────
@@ -239,34 +310,30 @@ async function writeLifecycle(kv, sub, instanceId, slot, rec, fence) {
 // the idempotency reservation, which learned this the hard way: a plain SET let
 // three simultaneous creates each believe they were first.
 //
-// The fence is minted AFTER the lock is won, so fences are handed out in
-// acquisition order and a later owner always holds a higher one.
+// The fence is allocated INSIDE the acquisition script, so fences are handed
+// out in acquisition order and a later owner always holds a higher one. Doing
+// it in a second command breaks that: an owner that pauses before allocating,
+// loses its lock, and resumes afterwards ends up with the higher number.
 
 export async function acquireLifecycleLock(kv, sub, instanceId, slot) {
-  const token = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-  let won;
-  try {
-    won = await kv(
-      'set', lifecycleLockKey(sub, instanceId, slot), token,
-      'NX', 'EX', String(LOCK_TTL_SEC),
-    );
-  } catch {
-    return { ok: false, error: LIFECYCLE_ERR.UNAVAILABLE };
-  }
-  if (won !== 'OK') return { ok: false, error: LIFECYCLE_ERR.BUSY, retryable: true };
-
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
   let fence;
   try {
-    fence = Number(await kv('incr', lifecycleFenceKey(sub, instanceId, slot)));
+    fence = Number(await kv(
+      'eval', ACQUIRE_SCRIPT, '2',
+      lifecycleLockKey(sub, instanceId, slot), lifecycleFenceKey(sub, instanceId, slot),
+      nonce, String(LOCK_TTL_SEC),
+    ));
   } catch {
-    await releaseLifecycleLock(kv, sub, instanceId, slot, token);
     return { ok: false, error: LIFECYCLE_ERR.UNAVAILABLE };
   }
-  if (!Number.isInteger(fence)) {
-    await releaseLifecycleLock(kv, sub, instanceId, slot, token);
+  if (fence === -1) return { ok: false, error: LIFECYCLE_ERR.BUSY, retryable: true };
+  if (!Number.isInteger(fence) || fence < 1) {
     return { ok: false, error: LIFECYCLE_ERR.UNAVAILABLE };
   }
-  return { ok: true, token, fence };
+  // The stored lock value carries the fence, so release compares the exact
+  // acquisition rather than just the nonce.
+  return { ok: true, token: `${nonce}:${fence}`, fence };
 }
 
 // Compare-and-delete in ONE command. A separate GET then DEL is a race: the
@@ -378,11 +445,14 @@ export async function resolveLifecycle(kv, sub, instanceId, slot, readDraftRaw, 
   // window decides, and outside it the answer is refusal.
   if (rec.lastState === LIFECYCLE_STATE.RESERVED) {
     const age = rec.reservedAt === null ? Infinity : now - rec.reservedAt;
-    if (age <= RESERVED_GRACE_MS) {
+    if (age <= RESERVATION_RETIRE_MS) {
       return { ok: true, record: rec, gen: rec.gen, live: null, reservedGap: true, repaired: false };
     }
-    // Stale reservation. Not evidence of a seller deletion, so it is recorded
-    // as GONE rather than DELETED, and the generation is spent either way.
+    // The reservation is retired. Not evidence of a seller deletion, so it is
+    // recorded as GONE rather than DELETED, and the generation is spent either
+    // way. Retirement also fences the delayed writer out: this caller acquired
+    // later, so the fence counter has already moved past the reserver's, and
+    // the reserver's draft write will be refused at the store boundary.
     return advance(kv, sub, instanceId, slot, rec, LIFECYCLE_STATE.GONE, fence);
   }
 
@@ -473,13 +543,20 @@ export async function recordDeletion(kv, sub, instanceId, slot, draftId, deleted
 export async function reserveCreate(kv, sub, instanceId, slot, draftId, gen, fence, now = Date.now()) {
   const r = await readLifecycle(kv, sub, instanceId, slot);
   if (!r.ok) return r;
+  // Preserve the ORIGINAL reservedAt when this is a retry of the same
+  // reservation. Restamping it on every retry would let a reservation be kept
+  // alive indefinitely by retries alone, so it could never be retired — which
+  // is the failure the retirement window exists to prevent.
+  const isRetryOfSame = r.record.lastDraftId === draftId
+    && r.record.lastState === LIFECYCLE_STATE.RESERVED
+    && r.record.reservedAt !== null;
   const next = {
     ...r.record,
     gen,
     lastDraftId: draftId,
     lastDraftGen: gen,
     lastState: LIFECYCLE_STATE.RESERVED,
-    reservedAt: now,
+    reservedAt: isRetryOfSame ? r.record.reservedAt : now,
   };
   const w = await writeLifecycle(kv, sub, instanceId, slot, next, fence);
   if (!w.ok) return w;
@@ -489,10 +566,11 @@ export async function reserveCreate(kv, sub, instanceId, slot, draftId, gen, fen
 export async function commitCreate(kv, sub, instanceId, slot, draftId, gen, fence) {
   const r = await readLifecycle(kv, sub, instanceId, slot);
   if (!r.ok) return r;
-  // The fence is a precondition on the whole operation, not merely on the
-  // write. Checking it only at write time let a lapsed owner short-circuit
-  // below and receive ok:true — and a caller reading that as success would
-  // report a promotion that never happened.
+  // Advisory only, and deliberately so: it catches the common case where a
+  // lapsed owner would otherwise short-circuit below and receive ok:true for a
+  // promotion that never happened. It is NOT the protection — that is the
+  // fenced write itself. A check here followed by a write would be a race,
+  // which is why the real guard lives in the same command as the mutation.
   if (r.record.fence > fence) {
     return { ok: false, error: LIFECYCLE_ERR.FENCED, held: r.record.fence, mine: fence };
   }

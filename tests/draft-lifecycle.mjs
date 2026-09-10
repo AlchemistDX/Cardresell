@@ -12,8 +12,10 @@
 // cannot pass against a re-implementation of the logic it is checking.
 
 import {
-  lifecycleKey, lifecycleLockKey, LIFECYCLE_STATE, LIFECYCLE_ERR, RESERVED_GRACE_MS,
-  readLifecycle, resolveLifecycle, recordDeletion,
+  lifecycleKey, lifecycleLockKey, lifecycleFenceKey,
+  LIFECYCLE_STATE, LIFECYCLE_ERR, RESERVATION_RETIRE_MS,
+  ACQUIRE_SCRIPT, FENCED_SET_SCRIPT,
+  readLifecycle, resolveLifecycle, recordDeletion, fencedSet,
   reserveCreate, commitCreate, withLifecycleLock, acquireLifecycleLock,
   releaseLifecycleLock,
 } from '../api/_draftLifecycle.js';
@@ -47,14 +49,45 @@ function makeKv(opts = {}) {
     const [cmd, ...rest] = args.map(String);
     const key = rest[0];
     if (cmd === 'eval') {
-      // The module's unlock script, evaluated with the same semantics Redis
-      // gives it: compare the value, delete only on a match, atomically.
-      const script = rest[0], lockKey = rest[2], token = rest[3];
-      if (failOn && failOn('eval', lockKey)) throw new Error('kv_500');
-      if (!script.includes("redis.call('del',KEYS[1])")) throw new Error('unexpected_script');
-      const cur = data.has(lockKey) ? data.get(lockKey) : null;
-      if (cur === token) { data.delete(lockKey); expiries.delete(lockKey); return 1; }
-      return 0;
+      // Scripts are evaluated with Redis semantics: the whole body runs to
+      // completion with nothing interleaved. That atomicity is the property
+      // under test, so it is modelled rather than approximated — there is no
+      // await anywhere inside this branch.
+      const script = rest[0];
+      const nk = Number(rest[1]);
+      const KEYS = rest.slice(2, 2 + nk);
+      const ARGV = rest.slice(2 + nk);
+      const live = (k) => {
+        if (expiries.has(k) && expiries.get(k) <= Date.now()) { data.delete(k); expiries.delete(k); }
+        return data.has(k) ? data.get(k) : null;
+      };
+      if (failOn && failOn('eval', KEYS[KEYS.length - 1])) throw new Error('kv_500');
+
+      if (script === ACQUIRE_SCRIPT) {
+        const [lockKey, fenceKey] = KEYS;
+        const [nonce, ttl] = ARGV;
+        if (live(lockKey) !== null) return -1;
+        const f = Number(live(fenceKey) || 0) + 1;
+        data.set(fenceKey, String(f));
+        data.set(lockKey, `${nonce}:${f}`);
+        expiries.set(lockKey, Date.now() + Number(ttl) * 1000);
+        return f;
+      }
+      if (script === FENCED_SET_SCRIPT) {
+        const [fenceKey, key] = KEYS;
+        const [fence, value] = ARGV;
+        const cur = live(fenceKey);
+        if (cur !== null && Number(cur) > Number(fence)) return -1;
+        data.set(key, value);
+        expiries.delete(key);
+        return 1;
+      }
+      if (script.includes("redis.call('del',KEYS[1])")) {
+        const lockKey = KEYS[0], token = ARGV[0];
+        if (live(lockKey) === token) { data.delete(lockKey); expiries.delete(lockKey); return 1; }
+        return 0;
+      }
+      throw new Error('unexpected_script');
     }
     if (failOn && failOn(cmd, key)) throw new Error('kv_500');
 
@@ -85,6 +118,32 @@ function makeKv(opts = {}) {
   kv._setFailOn = (f) => { failOn = f; };
   kv._expireKey = (k) => { expiries.set(k, Date.now() - 1); };
   return kv;
+}
+
+// A draft store that actually lives in the kv, so the DRAFT write is governed
+// by the same fence guard as the lifecycle record. The in-memory `drafts()`
+// below is fine for logic tests, but it cannot show whether a lapsed owner's
+// draft landed — and that is the failure point 2 is about.
+function kvDrafts(kv) {
+  const dk = (id) => `draft:${id}`;
+  return {
+    // The write a handler would do, through the store boundary.
+    write: (sub, inst, slot, fence, id, body = {}) =>
+      fencedSet(kv, sub, inst, slot, fence, dk(id), JSON.stringify({ id, deleted: false, ...body })),
+    tombstone: (sub, inst, slot, fence, id) =>
+      fencedSet(kv, sub, inst, slot, fence, dk(id), JSON.stringify({ id, deleted: true })),
+    raw: (id) => {
+      const v = kv._data.get(dk(id));
+      return v === undefined ? null : JSON.parse(v);
+    },
+    count: () => [...kv._data.keys()].filter((k) => k.startsWith('draft:')).length,
+    ids: () => [...kv._data.keys()].filter((k) => k.startsWith('draft:')).map((k) => k.slice(6)),
+    probe: async (id) => {
+      const v = kv._data.get(dk(id));
+      if (v === undefined) return { found: false, deleted: false };
+      return { found: true, deleted: JSON.parse(v).deleted === true };
+    },
+  };
 }
 
 const SUB = 'sub_fzUpcr';
@@ -197,6 +256,150 @@ console.log('\n── lock expiry while the owner is still running ──');
   check('B\'s own release does free it', Number(bFreed) === 1);
 }
 
+console.log('\n── acquisition and fence allocation are ONE atomic step ──');
+{
+  // The interleaving that breaks a two-command version:
+  //   A wins the lock, pauses BEFORE allocating, its lock expires, B acquires
+  //   and takes fence 1, A resumes and takes fence 2 — the expired owner now
+  //   holds the higher fence and the whole scheme inverts.
+  //
+  // It cannot be driven against this module because there is no moment between
+  // winning the lock and holding a fence. So what is asserted is exactly that
+  // absence of a gap, which is what a future split would break.
+  const kv = makeKv();
+  const a = await acquireLifecycleLock(kv, SUB, INST, SLOT);
+  check('acquisition returns a fence', a.ok && a.fence === 1);
+  check('the counter is ALREADY at that fence when acquisition returns',
+        (await kv('get', lifecycleFenceKey(SUB, INST, SLOT))) === '1',
+        'a lagging counter here would mean allocation happens in a later command');
+  check('and the stored lock value carries the fence it was allocated with',
+        String(kv._data.get(lifecycleLockKey(SUB, INST, SLOT))).endsWith(':1'),
+        'lock and fence are written by the same script, so neither can exist without the other');
+
+  kv._expireKey(lifecycleLockKey(SUB, INST, SLOT));
+  const b = await acquireLifecycleLock(kv, SUB, INST, SLOT);
+  check('B, acquiring the lapsed lock, gets the HIGHER fence',
+        b.ok && b.fence === 2 && b.fence > a.fence,
+        'this is the assertion the two-command ordering would have failed');
+
+  // A has no way to obtain a fresh fence without acquiring again, and acquiring
+  // again would put it behind B in the same order.
+  const aAgain = await acquireLifecycleLock(kv, SUB, INST, SLOT);
+  check('A cannot re-acquire while B holds the lock', aAgain.ok === false && aAgain.error === LIFECYCLE_ERR.BUSY);
+
+  // Concurrent acquirers: exactly one fence per successful acquisition, and no
+  // two winners share one.
+  const kv2 = makeKv();
+  const many = await Promise.all(Array.from({ length: 6 }, () => acquireLifecycleLock(kv2, SUB, INST, SLOT)));
+  const wins = many.filter((m) => m.ok);
+  check('only one of six concurrent acquirers wins', wins.length === 1);
+  check('and the counter advanced exactly once',
+        (await kv2('get', lifecycleFenceKey(SUB, INST, SLOT))) === '1',
+        'a losing acquirer must not consume a fence');
+}
+
+console.log('\n── the fence reaches the DRAFT write, not just the record ──');
+{
+  // Point 2, driven as specified: pause A immediately before its actual draft
+  // write, let B supersede it, then resume A. The assertion is on the stored
+  // draft state and count — a FENCED return from commitCreate proves nothing
+  // if the draft is sitting in the store.
+  const kv = makeKv(); const D = kvDrafts(kv);
+
+  const a = await acquireLifecycleLock(kv, SUB, INST, SLOT);
+  await reserveCreate(kv, SUB, INST, SLOT, 'drf_P', 0, a.fence);
+  // ---- A is now paused, immediately before its draft write ----
+
+  kv._expireKey(lifecycleLockKey(SUB, INST, SLOT));
+  const b = await acquireLifecycleLock(kv, SUB, INST, SLOT);
+  check('B acquires and holds a newer fence', b.ok && b.fence > a.fence);
+  // B supersedes the reservation with its own draft.
+  await reserveCreate(kv, SUB, INST, SLOT, 'drf_Q', 0, b.fence);
+  await D.write(SUB, INST, SLOT, b.fence, 'drf_Q');
+  await commitCreate(kv, SUB, INST, SLOT, 'drf_Q', 0, b.fence);
+  check('B\'s draft is stored', D.raw('drf_Q') !== null);
+
+  // ---- A resumes and performs its draft write ----
+  const aWrite = await D.write(SUB, INST, SLOT, a.fence, 'drf_P');
+  check('A\'s DRAFT write is refused at the store boundary',
+        aWrite.ok === false && aWrite.error === LIFECYCLE_ERR.FENCED,
+        'refusing only the promotion would leave this draft in the store');
+  check('A\'s draft is NOT in the store', D.raw('drf_P') === null);
+  check('exactly one draft exists for the row',
+        D.count() === 1 && D.ids()[0] === 'drf_Q',
+        `stored: ${JSON.stringify(D.ids())}`);
+
+  const aCommit = await commitCreate(kv, SUB, INST, SLOT, 'drf_P', 0, a.fence);
+  check('and A\'s promotion is refused too', aCommit.ok === false && aCommit.error === LIFECYCLE_ERR.FENCED);
+  const rec = await readLifecycle(kv, SUB, INST, SLOT);
+  check('the row points at B\'s draft, live',
+        rec.record.lastDraftId === 'drf_Q' && rec.record.lastState === LIFECYCLE_STATE.LIVE);
+
+  // Same interleaving, but B DELETES rather than replaces.
+  const kv3 = makeKv(); const D3 = kvDrafts(kv3);
+  const a3 = await acquireLifecycleLock(kv3, SUB, INST, SLOT);
+  await reserveCreate(kv3, SUB, INST, SLOT, 'drf_R', 0, a3.fence);
+  kv3._expireKey(lifecycleLockKey(SUB, INST, SLOT));
+  const b3 = await acquireLifecycleLock(kv3, SUB, INST, SLOT);
+  await recordDeletion(kv3, SUB, INST, SLOT, 'drf_R', 0, b3.fence);
+  const a3Write = await D3.write(SUB, INST, SLOT, a3.fence, 'drf_R');
+  check('a draft write after its reservation was DELETED is refused',
+        a3Write.ok === false && a3Write.error === LIFECYCLE_ERR.FENCED);
+  check('and no draft exists at all', D3.count() === 0,
+        'this is the resurrection the tombstone alone could not stop');
+}
+
+console.log('\n── reservations: retirement, retries, and recovery ──');
+{
+  const T0 = 1_760_000_000_000;
+
+  // reservedAt survives retries. Restamping it would keep a reservation alive
+  // forever through retries alone, so it could never be retired.
+  const kv = makeKv();
+  await withLifecycleLock(kv, SUB, INST, SLOT, ({ fence }) =>
+    reserveCreate(kv, SUB, INST, SLOT, 'drf_S', 0, fence, T0));
+  for (const t of [T0 + 60_000, T0 + 120_000, T0 + 240_000]) {
+    await withLifecycleLock(kv, SUB, INST, SLOT, ({ fence }) =>
+      reserveCreate(kv, SUB, INST, SLOT, 'drf_S', 0, fence, t));
+  }
+  const held = await readLifecycle(kv, SUB, INST, SLOT);
+  check('three retries do not restamp reservedAt', held.record.reservedAt === T0,
+        `reservedAt = ${held.record.reservedAt}, expected ${T0}`);
+  const retired = await withLifecycleLock(kv, SUB, INST, SLOT, ({ fence }) =>
+    resolveLifecycle(kv, SUB, INST, SLOT, kvDrafts(kv).probe, fence, T0 + RESERVATION_RETIRE_MS + 1));
+  check('so it is still retired on schedule, not extended by the retries',
+        retired.ok && retired.gen === 1 && retired.record.lastState === LIFECYCLE_STATE.GONE);
+
+  // A live draft is recovered regardless of reservation age.
+  const kv2 = makeKv(); const D2 = kvDrafts(kv2);
+  const a2 = await acquireLifecycleLock(kv2, SUB, INST, SLOT);
+  await reserveCreate(kv2, SUB, INST, SLOT, 'drf_T', 0, a2.fence, T0);
+  await D2.write(SUB, INST, SLOT, a2.fence, 'drf_T');       // draft is real
+  await releaseLifecycleLock(kv2, SUB, INST, SLOT, a2.token);
+  const old = await withLifecycleLock(kv2, SUB, INST, SLOT, ({ fence }) =>
+    resolveLifecycle(kv2, SUB, INST, SLOT, D2.probe, fence, T0 + 120 * 24 * 3600 * 1000));
+  check('a readable draft is recovered even under a 120-day-old reservation',
+        old.ok && old.live === 'drf_T' && old.gen === 0,
+        'age retires unresolved reservations; it must never discard a real draft');
+  check('and that reservation is healed to live rather than retired',
+        old.healed === true && old.record.lastState === LIFECYCLE_STATE.LIVE);
+
+  // Retiring a reservation must stop its delayed writer from landing after.
+  const kv4 = makeKv(); const D4 = kvDrafts(kv4);
+  const a4 = await acquireLifecycleLock(kv4, SUB, INST, SLOT);
+  await reserveCreate(kv4, SUB, INST, SLOT, 'drf_U', 0, a4.fence, T0);
+  kv4._expireKey(lifecycleLockKey(SUB, INST, SLOT));
+  const b4 = await acquireLifecycleLock(kv4, SUB, INST, SLOT);
+  const ret = await resolveLifecycle(kv4, SUB, INST, SLOT, D4.probe, b4.fence,
+                                     T0 + RESERVATION_RETIRE_MS + 1);
+  check('the reservation is retired by a later caller', ret.ok && ret.gen === 1);
+  const late = await D4.write(SUB, INST, SLOT, a4.fence, 'drf_U');
+  check('the retired reservation\'s delayed writer cannot land afterwards',
+        late.ok === false && late.error === LIFECYCLE_ERR.FENCED);
+  check('and no draft was written', D4.count() === 0,
+        'retirement that leaves the writer free to land is not retirement');
+}
+
 console.log('\n── reserved + absence is NOT always "creation never landed" ──');
 {
   // Will's combined sequence, exactly:
@@ -208,7 +411,7 @@ console.log('\n── reserved + absence is NOT always "creation never landed" �
   const out = await op(kv, INST, SLOT, async (fence) => {
     await reserveCreate(kv, SUB, INST, SLOT, 'drf_L', 0, fence);
     D.put('drf_L');                                        // draft write SUCCEEDED
-    kv._setFailOn((cmd, key) => cmd === 'set' && String(key).startsWith('draftinst:'));
+    kv._setFailOn((cmd, key) => cmd === 'eval' && String(key).startsWith('draftinst:'));
     const c = await commitCreate(kv, SUB, INST, SLOT, 'drf_L', 0, fence);
     kv._setFailOn(null);
     return c;
@@ -223,7 +426,7 @@ console.log('\n── reserved + absence is NOT always "creation never landed" �
   D.expire('drf_L');                                        // day 91
 
   const res = await op(kv, INST, SLOT, (f) =>
-    resolveLifecycle(kv, SUB, INST, SLOT, D.probe, f, Date.now() + RESERVED_GRACE_MS + 1000));
+    resolveLifecycle(kv, SUB, INST, SLOT, D.probe, f, Date.now() + RESERVATION_RETIRE_MS + 1000));
   check('after the grace window, absence under reserved REFUSES the old generation',
         res.ok && res.gen === 1 && res.live === null,
         'this is the sequence that would otherwise hand back generation 0 on day 91');
@@ -249,7 +452,7 @@ console.log('\n── a delete that RAN closes the ambiguity permanently ──'
   await op(kv, INST, SLOT, async (fence) => {
     await reserveCreate(kv, SUB, INST, SLOT, 'drf_N', 0, fence);
     D.put('drf_N');
-    kv._setFailOn((cmd, key) => cmd === 'set' && String(key).startsWith('draftinst:'));
+    kv._setFailOn((cmd, key) => cmd === 'eval' && String(key).startsWith('draftinst:'));
     await commitCreate(kv, SUB, INST, SLOT, 'drf_N', 0, fence);
     kv._setFailOn(null);
     return { ok: true };
@@ -272,7 +475,7 @@ console.log('\n── heal-forward keeps the ambiguous state short-lived ──'
   await op(kv, INST, SLOT, async (fence) => {
     await reserveCreate(kv, SUB, INST, SLOT, 'drf_O', 0, fence);
     D.put('drf_O');
-    kv._setFailOn((cmd, key) => cmd === 'set' && String(key).startsWith('draftinst:'));
+    kv._setFailOn((cmd, key) => cmd === 'eval' && String(key).startsWith('draftinst:'));
     await commitCreate(kv, SUB, INST, SLOT, 'drf_O', 0, fence);
     kv._setFailOn(null);
     return { ok: true };

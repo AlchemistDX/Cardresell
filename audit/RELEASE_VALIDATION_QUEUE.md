@@ -4057,3 +4057,70 @@ on legitimate recreates. Both now use an explicit null-preserving coercion.
 `tests/draft-lifecycle.mjs`: **52 passed, 0 failed** (was 34).
 Regressions unchanged: `draft-crud-e2e` 192/0, `draft-index-recovery` 265/0.
 Commit `96c42c1`, local, branch `phase1-block-d`. Alias unchanged for the $2 run.
+
+---
+
+## C8 — "Both closed" was overstated; two boundaries were still open
+
+Will: the earlier report claimed closure the tests did not support. Correct on
+both counts, and the first was a straight bug.
+
+### C8a — acquisition and fence allocation were two commands
+
+`SET NX EX` then `INCR` permits: A wins the lock, pauses before the INCR, its
+lock expires, B acquires and takes fence 1, A resumes and takes fence 2. The
+expired owner ends up with the HIGHER fence, inverting the entire scheme.
+
+Fix: one `EVAL` (`ACQUIRE_SCRIPT`) checks the lock, allocates the fence, and
+writes the lock value — which now carries the fence — in a single atomic step.
+There is no moment between winning the lock and holding a fence, so the
+interleaving has no place to occur. What the tests assert is that absence of a
+gap: the counter already equals the returned fence when acquisition returns, the
+stored lock value ends in that fence, and a later acquirer of a lapsed lock gets
+a strictly higher one. Six concurrent acquirers produce one winner and advance
+the counter exactly once.
+
+### C8b — fencing did not reach the draft write
+
+Refusing the lifecycle promotion is insufficient: a lapsed owner whose draft
+write already landed leaves an orphan draft in the store, and the refused
+promotion changes nothing about that.
+
+Fix: `fencedSet` — guard and mutation in one `EVAL` (`FENCED_SET_SCRIPT`),
+comparing against the fence counter (an integer, so no JSON parsing in Lua).
+Exported, because the DRAFT write goes through it too, not only the record.
+
+Tested as specified — A paused immediately before its draft write, B supersedes,
+A resumes — with assertions on stored draft state and count, not on the return
+value: A's draft write is FENCED, `draft:drf_P` is absent, exactly one draft
+exists for the row and it is B's. Repeated with B deleting rather than
+replacing: no draft exists at all.
+
+### C8c — the retirement justification was false
+
+"An interrupted creation is never 90 days old" assumed prompt retry, and nobody
+may retry. Rewritten as what it actually is: an unresolved reservation is
+RETIRED after five minutes as a conservative recovery policy.
+
+Three consequences implemented and tested:
+- `reservedAt` is preserved across retries of the same reservation. Restamping
+  it would let retries keep a reservation alive indefinitely, so it could never
+  be retired. Three retries at +1, +2 and +4 minutes leave the original stamp,
+  and retirement still fires on the original schedule.
+- A readable live draft is recovered regardless of reservation age — tested at
+  120 days. Age retires unresolved reservations; it never discards a real draft.
+- Retirement fences the delayed writer: the retiring caller acquired later, so
+  the counter has moved past the reserver's and its draft write is refused.
+  Asserted on the store — no draft written.
+
+`tests/draft-lifecycle.mjs`: **75 passed, 0 failed** (52 → 75).
+Regressions unchanged: `draft-crud-e2e` 192/0, `draft-index-recovery` 265/0.
+
+### Still open, not closed
+
+`EVAL` is exercised against the in-memory double, which models Redis script
+atomicity by construction. Neither script has run against deployed Upstash.
+Handlers and UI are unwired. Legacy adoption is asserted only as "invisible to
+the module" and belongs in the handler tests, where index discovery must fail
+closed: an incomplete or failed index lookup must not authorize generation 0 as
+empty.
