@@ -2756,6 +2756,46 @@ not a value to paste into Firebase.
 This shares the **auth** project with production, not the database — acceptable
 by the distinction already drawn: identity is shared, writes are what must not be.
 
+### Preview created — observed results (2026-09-10)
+
+| Item | Observed |
+| --- | --- |
+| PriceCharting scope after owner edit | **`Production`** only (was `Production, Preview, Development`) |
+| Row age after edit | still **21d** — edited in place, not recreated |
+| Branch pushed | `phase1-block-d` → `fa76d27` (**new branch on remote**) |
+| `main` after push | **unchanged at `9aaf326`** — production untouched |
+| Deployment id | **`dpl_vcRJkaNxPNymAh3UpnifguonmMiD`** |
+| Target / status | `preview` / **Ready** |
+| Created | Thu 10 Sep 2026 01:31:27 UTC |
+| **Actual branch alias** | **`cardresell-git-phase1-block-d-willsep200-9430s-projects.vercel.app`** |
+| Alias vs prediction | **identical** — the Unverified prediction is now observed |
+| Protection on the new Preview | **enabled** — alias redirects to `vercel.com/login?next=/sso-api…` |
+
+**Scope wording, held to the stated limit.** The listing shows the row now
+targets Production alone. That is a **configuration** observation. It does not
+prove the secret value is unchanged, and no readback was attempted. One
+corroborating detail: the row's age **stayed at 21d** rather than resetting,
+which is consistent with an in-place target edit rather than a delete-and-
+recreate. Corroboration of the record's continuity — still not proof of the
+value.
+
+**Correction to an earlier claim of mine.** I had repeated, from stale notes,
+that the branch commit was "already pushed and attributable." It was not.
+`git ls-remote` before the push returned **only** `refs/heads/main`; the branch
+did not exist remotely. It exists now, created by this push.
+
+**Deployed commit — Unverified.** `vercel inspect` surfaced no commit, branch or
+author metadata for this deployment, and protection blocks reading the served
+HTML from here, so the built commit cannot be confirmed from the sandbox. The
+**inference** is `fa76d27`: it is the branch tip that was pushed, and the build
+was created seconds afterwards targeting preview. That inference is not
+evidence. It becomes evidence at step 0 below, at no extra cost.
+
+**New prerequisite discovered.** The Preview is protection-gated, so the iPhone
+must be signed in to **Vercel** as well as to Google — two sign-ins, not one.
+No bypass secret is used: its scope is project-wide, which is the reason it was
+withdrawn.
+
 ### Isolation check — walkthrough for iPhone (no DevTools)
 
 The earlier version required desktop DevTools to read `draft.draftId` from a
@@ -2782,7 +2822,14 @@ one real draft under Will's own `sub` into the **production** store. Recoverable
 
 **Steps.**
 
-1. On the iPhone, open the branch alias and sign in. Two known failure modes:
+0. **Confirm the deployed commit while you are there.** Open the alias; Vercel
+   will ask you to log in first. Once the app renders, use Safari's **share
+   sheet → Find on Page** and search for `core.`. The branch build serves
+   **`core.53a0674d.js`**; production Phase 0 serves `core.569ff536.js`. Seeing
+   the former converts the deployed-commit inference above into an observation.
+   Seeing the latter means the wrong build is aliased — **stop**.
+1. On the iPhone, open the branch alias and sign in **twice**: first to Vercel
+   (protection gate), then to Google inside the app. Two known failure modes:
    `auth/unauthorized-domain` means the Firebase step was missed; a blocked
    popup means Safari's popup blocker needs allowing for that host. Either way,
    **stop** rather than working around it.
