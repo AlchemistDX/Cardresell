@@ -3777,3 +3777,120 @@ Design recorded, **not yet implemented**. Nothing pushed. Alias still pinned to
 `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, draft
 `drf_3471a1a85ccddb2cca04958fa66ed58a` retained for the $2 seller-provenance
 run.
+
+---
+
+## Delete + recreate — design REVISED. Four corrections accepted.
+
+Both of my proposals traded the retry guarantee for convenience, in the same
+direction. Recorded before the replacement so the pattern is visible.
+
+### C1. SKU-shared generation — withdrawn, it was unsafe
+
+Will's counterexample: rows A and B of the same card, a live draft on each,
+delete A. A shared counter advances for B as well, so B's next create mints an
+unseen key and produces a **second live draft for B while B's first is still
+active**. The mechanism built to prevent duplicates would have manufactured
+one. "Benign" was wrong.
+
+### C2. Auto-refresh-and-retry on 410 — withdrawn, it defeated the protection
+
+A delayed retry would take the 410, collect the new generation, and create a
+draft with **no fresh seller action** — which is the resurrection the 410
+exists to refuse, performed by the client instead of the server. Correct
+behaviour: surface the deleted state and require an explicit new Create.
+
+### C3. Q-D8-5 — generation scoped per instance and slot
+
+My objection conflated two things. The server not *hosting* the collection
+does not mean it lacks the identifier: `instanceId` is required and validated
+on write (`api/_draftStore.js:522`) and is **immutable**, listed among the
+frozen fields with `sku`, `slot` and `createdAt` (`:695`). It is on the
+deployed record — `inst_col_1789014701564`. Browser-local collection storage
+is irrelevant to whether the server can key state by an id the client sends
+and the store persists.
+
+**Scope: `(sub, instanceId, slot)`.** Rows A and B are different instances, so
+C1 cannot arise.
+
+### C4. Atomicity and the TTL bound — both real, and they change the mechanism
+
+Two separate objections, and together they rule out a bare `INCR`:
+
+**Interruption.** Tombstone, quota release and generation advance are three
+writes. Putting them in one function makes them adjacent, not atomic. Ordering
+matters and only one order is safe: **tombstone first**. Advancing the
+generation before the tombstone means a *failed* delete leaves a bumped
+generation, so the next Create makes a second draft while the first still
+lives — C1 again by another route. With tombstone first, an interruption
+leaves the draft deleted and the generation behind, and a new Create replays
+to the tombstone and 410s: the seller is blocked, never duplicated. Blocked is
+the correct failure direction, but it must self-heal.
+
+**Repair, not a second counter.** The store's existing principle applies —
+"the tombstone is authoritative whatever happens next", index cleanup is a
+cache eviction (`_draftService.js:476-481`). The generation is derived state
+under the same rule. Per-instance record `draftinst:<sub>:<instanceId>:<slot>`
+holds `{ gen, lastDraftId }`; on the eligibility read, if `lastDraftId`
+resolves to a tombstone and `gen` has not passed it, advance it then. One
+bounded read, self-healing on the next gate render, and unreachable by a
+delayed retry because retries call create, not eligibility.
+
+**The TTL bound — and the fix.** Will is right that "never cleared" proves
+nothing past 24 h: `idem:*` and `idemresource:*` carry `KEY_TTL_SEC`, so a
+retry delayed beyond the window finds no record and creates. Idempotency
+records cannot provide indefinite protection and should not be asked to.
+
+So the client **sends the generation as a request field**, and the server
+**compares it against the current generation** before doing anything else. A
+create carrying a stale generation is refused with the deleted state,
+regardless of whether any idempotency record survives. That guard is durable
+and monotonic, so protection no longer depends on a TTL:
+
+| window | what protects | against |
+|---|---|---|
+| ≤ 24 h, same generation | idempotency record replay | duplicate from a retry |
+| any time, older generation | generation comparison | resurrection after delete |
+| current generation, explicit press | nothing — creates | intended |
+
+The generation stops being a client-side cache-buster and becomes a
+server-enforced precondition. That is the substantive change from the previous
+draft.
+
+### Q-D8-6 — second-device check adopted as written
+
+1. Device A creates a draft from its collection.
+2. Device B opens the shared draft list and deletes that draft.
+3. Device A's pending retry cannot recreate it.
+4. A fresh, explicit Create on device A produces a new draft.
+
+Step 3 is now covered twice — by the idem record inside 24 h, and by the
+generation comparison outside it. Step 4 requires device A to pick up the new
+generation on its next eligibility read, which is a gate render, not a retry.
+
+### Test list
+
+Beyond the five acceptance checks:
+
+- **Interrupt after tombstone, before generation advance.** Assert: no
+  duplicate; create is refused; the next eligibility read repairs; then an
+  explicit Create succeeds.
+- **Interrupt after tombstone, before quota release.** Assert the reconcile
+  inside the next reservation recovers the slot, and that it is not released
+  twice when the delete is retried.
+- **Stale generation with the idempotency record expired.** The case the TTL
+  objection names. Assert refusal by generation comparison alone.
+- **Two rows of the same card**, C1 directly: draft on A and B, delete A,
+  B's generation unchanged, B's retry still deduplicates.
+
+### Correction on the retained draft
+
+Retaining `drf_3471a1a85ccddb2cca04958fa66ed58a` does **not** serve the $2
+test; I implied it did. That draft is the comp-priced card. The $2
+seller-provenance run is a separate deployed test against the manual entry and
+is unaffected by whether this draft is kept.
+
+### Status
+
+Revised design recorded, **not implemented**. Nothing pushed. Alias pinned to
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`.
