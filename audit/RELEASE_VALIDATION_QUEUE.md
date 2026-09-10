@@ -3894,3 +3894,100 @@ is unaffected by whether this draft is kept.
 
 Revised design recorded, **not implemented**. Nothing pushed. Alias pinned to
 `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`.
+
+---
+
+## Delete + recreate — lifecycle module built. 34/0. Not yet wired.
+
+`api/_draftLifecycle.js` (new, 350 lines) + `tests/draft-lifecycle.mjs` (new,
+**34 passed, 0 failed**). Regression check: `draft-crud-e2e` 192/0,
+`draft-index-recovery` 265/0.
+
+### The hole, and what closes it
+
+The four-step sequence was decisive: with the generation never advanced and the
+idempotency records expired, the comparison passes because there is nothing
+wrong with the generation — the record is simply stale. So the create path
+**resolves authoritative deletion state itself**, from the draft record, and
+repairs as a side effect. Eligibility may call the same function for the
+seller's convenience; nothing depends on it having run.
+
+`tests/draft-lifecycle.mjs` drives that sequence literally, including the
+premise as its own assertion — "the stored generation is still 0, so a bare
+comparison WOULD pass" — so the test would still be meaningful if someone later
+removed the resolve and left the comparison.
+
+### The four requirements
+
+**1. Coordination.** Every state transition for a row runs under
+`draftinstlock:<sub>:<instanceId>:<slot>`, a single `SET NX EX 15` — create,
+delete, **and repair**. Repair is included because it writes, and an unlocked
+repair racing a delete computes its max from a record the delete is part-way
+through replacing. Losing the lock is `BUSY` + retryable, never a fallthrough;
+the precedent is the idempotency reservation, where a plain SET let three
+simultaneous creates each believe they were first. Tested: only one caller
+enters, the two losers get BUSY, and the lock releases even when the body
+throws — otherwise one error wedges the row for the whole TTL.
+
+**2. Repair repeatable, never twice.** The deleted draft's own generation is
+persisted (`lastDraftGen`), and repair sets `gen = max(gen, lastDraftGen + 1)`.
+Idempotent by construction. Tested three ways: three repairs of one deletion all
+land on the same generation ("an INCR here would have produced 4, 5, 6");
+concurrent repairs agree rather than compounding; and a retry of an **older**
+deletion computes a bound a newer lifecycle already exceeds, so it neither
+advances the generation nor overwrites the newer pointer — which would strand a
+live draft with no record of itself.
+
+**3. Partial creation.** The pointer is written **before** the draft, in state
+`reserved`, and promoted to `live` after. If the draft write succeeds and the
+promotion fails, the probe finds that draft LIVE and the retry **recovers it**
+instead of creating another. Tested by failing exactly the `draftinst:` write
+and leaving every other write working.
+
+That state also exists to separate two situations that otherwise look
+identical — a pointer to a draft that cannot be read. Absence under `reserved`
+means the write never landed and the generation is still usable; absence under
+`live` means it landed and is gone. Opposite answers, so they cannot share a
+state.
+
+**4. Retention, honestly.** The tombstone's 90-day TTL is why the record has
+**no TTL**. The durable half is the pointer: `lastDraftId` + `lastState: 'live'`
++ a read that finds nothing is positive evidence of deletion — something was
+there, we recorded it, it is absent. That inference outlives the tombstone.
+Tested on day 91 both with the deletion recorded and with the deletion
+interrupted, which is the case where no tombstone remains AND the generation was
+never advanced.
+
+Also refused explicitly: an unreadable store must not read as an empty one. A
+failed record read is `UNAVAILABLE`, not generation 0, and a draft probe that
+throws does not report "no live draft" — either answer would authorise the exact
+create it should refuse.
+
+### Ordering, restated in the module
+
+Tombstone first, by the caller; `recordDeletion` after. Generation-first means a
+delete that then fails leaves a bumped generation, so the next create mints an
+unseen key and produces a second live draft while the first is still there.
+Tombstone-first fails toward **blocked**, generation-first toward
+**duplicated**. Blocked self-heals through resolve; duplicated does not
+self-heal at all.
+
+### Acceptance correction accepted
+
+"Failed HTTP response" ≠ "deletion failed". After a committed tombstone and a
+lost response the UI must **reconcile** — re-read and report what is actually
+true — not promise the draft remains. That is a client change, recorded against
+the client work below rather than claimed here.
+
+### What is NOT done
+
+- **Not wired.** The module is standalone; `api/drafts.js` create and delete do
+  not call it yet, and `sell-eligibility` does not return a generation.
+- **No client work.** No Delete action, no confirmation, no generation on the
+  create request, no reconcile-on-lost-response, no deleted-state surface.
+  Bundle unchanged.
+- **In-memory store only.** The kv double matches the command surface of
+  `makeKv` in `api/drafts.js`, but nothing here has run against deployed Redis.
+- Two-device check not run; it needs the wiring and the client first.
+
+Nothing pushed. Alias pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`.
