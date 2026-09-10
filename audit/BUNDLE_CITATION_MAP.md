@@ -1,7 +1,8 @@
 # Bundle citation map
 
-**Live bundle on branch: `js/core.8e7fee75.js`.** New work
-cites that hash. Renamed from `49b84d4b` at the close of the idempotency-key
+**Live bundle on branch: `js/core.69fb43dd.js`.** New work
+cites that hash. Renamed from `8e7fee75` at the close of the D8 client batch
+(generation 16 below). Renamed from `49b84d4b` at the close of the idempotency-key
 batch (generation 15 below); `49b84d4b` itself was renamed from `53a0674d` at
 the close of the collection / provenance batch (generation 14). Renamed at the close of RC-2 from the working name
 `core.2cb1e377.js`; `tests/asset-fingerprints.mjs` is green at 74/0 and every
@@ -13,6 +14,32 @@ was live by then. Both are corrected here rather than annotated below, because
 a citation map whose header has to be read sceptically is not doing its job.
 For the record: `66c39922`, `73a71fac`, `e9f21f4e` and `176e4a56` are retired,
 and the per-generation history below is unchanged and remains accurate.
+
+> ### Generation 16 — D8 client: delete, reconcile, adoption
+
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 16 | `8e7fee75` → `69fb43dd` | *(this commit)* | The Delete block (`_reviewInstanceId`, `_reviewDeleteAsk`, `_reviewDeleteDismiss`, `_reviewMarkGone`, `_reviewReconcileDelete`, `_reviewDeleteConfirmed`) inserted immediately before `_reviewBindOnce`, and its three click handlers added inside it; `_crCreateAttempt` payload cache added before `_crCreateDraft`, which now sends `generation` only when it is a known integer, keeps a retry's identity fixed, and on `existing:true` opens the saved draft without emitting a created event; `fetchSellStamps` sends the new `_crStampsBody` `draftState` probe; the three button labels routed through `_crDraftBtnLabel`. |
+
+**Measured shifts, retired `8e7fee75` → live `69fb43dd`** (both counted, not
+inferred; old bytes from `git show HEAD:js/core.8e7fee75.js`):
+
+| anchor | retired | live | shift |
+|---|---|---|---|
+| `loadCardUI` | 3670 | 3670 | 0 |
+| `fetchSellStamps` | 20908 | 20928 | +20 |
+| `_crPricingContext` | 21252 | 21288 | +36 |
+| `_crCreateDraft` | 21349 | 21399 | +50 |
+| `_reviewBasisHtml` | 22961 | 23224 | +263 |
+| `_reviewBindOnce` | 24027 | 24465 | +438 |
+| `openDraftReview` | 24081 | 24525 | +444 |
+| file length | 24099 | 24543 | +444 |
+
+Every citation **below `:20908` is unshifted** — the first edit in this batch is
+inside `fetchSellStamps`. Above it the shift is not uniform, because this batch
+inserted at four separate points rather than one; use the nearest anchor above
+the cited line, not the file-length delta. Re-verified: `:3670` still reads
+`function loadCardUI(card)` in `core.69fb43dd.js`.
 
 > ### Generation 15 — idempotency key accepted end to end
 >

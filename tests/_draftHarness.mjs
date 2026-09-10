@@ -102,8 +102,32 @@ function stuffIndex(n) {
   return set;
 }
 
+/* ── EVAL ───────────────────────────────────────────────────────────────────
+
+   The lifecycle work (D8) moved reservation, promotion, deletion, and the
+   quota acquisition into single Redis scripts, so a harness that does not
+   implement EVAL cannot seed a draft at all -- and the failure arrives as
+   DRAFT_LIFECYCLE_UNRESOLVED / 'lock-unavailable', which reads like a bug in
+   the screen under test rather than a missing command in the double.
+
+   The SAME emulation the lifecycle and CRUD suites use is imported here, not
+   a second copy: a second implementation of these scripts is a second place
+   for their semantics to be wrong, and the one under test would still pass. */
+const { evalScript } = await import('./_kvScripts.mjs');
+
+const scriptIo = {
+  get: (k) => (store.has(k) ? store.get(k) : null),
+  set: (k, v) => { store.set(k, v); },
+  del: (k) => { store.delete(k); },
+  // No expiry tracking in this harness. Named rather than silently dropped: a
+  // TTL these fixtures never observe is exactly the kind of omission that
+  // certifies behaviour the deployed store would not.
+  setEx: (k, v, _sec) => { store.set(k, v); },
+};
+
 function run(cmd, a) {
   switch (cmd) {
+    case 'eval': return evalScript(scriptIo, a);
     case 'get': return store.has(a[0]) ? store.get(a[0]) : null;
     case 'set': {
       const [k, v, ...flags] = a;

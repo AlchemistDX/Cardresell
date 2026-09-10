@@ -112,10 +112,28 @@ export async function generateReadFixtures() {
   //   packetStale    — an edit moved a dependent input; content is WITHDRAWN
   //   packetAbsent   — no packet fields at all; a different message
   await reset();
+  // ONE DRAFT PER (instanceId, slot) IS NOW A SERVER RULE (D8). Every fixture
+  // below used `httpInput()`'s default instanceId, so the second and later
+  // POSTs no longer created anything: the create handler resolved the row,
+  // found the FIRST fixture's draft live on it, and returned that draft with
+  // existing:true. All the packet fixtures collapsed onto one id --
+  // demonstrated: packetShipDeclared, packetShipZero and packetShipUnreadable
+  // were the same drf_ id, so the zero-shipping case rendered the $5.99 draft.
+  //
+  // These fixtures are meant to be DIFFERENT drafts, so each one gets its own
+  // row. The instanceId is derived from the idempotency key, which is already
+  // unique per fixture, rather than added by hand at seventeen call sites --
+  // one of which would eventually be forgotten and silently adopt its
+  // predecessor again. A body that names its own instanceId keeps it: the
+  // create/replay pair at the end of this file shares a row on purpose.
   const post = async (body, key) => {
     const res = fakeRes();
+    const ownRow = body && body.instanceId !== undefined && body.instanceId !== 'inst_abc123';
+    const scoped = ownRow || !key
+      ? body
+      : { ...body, instanceId: `inst_${String(key).replace(/[^A-Za-z0-9]+/g, '_')}` };
     await EP.default(fakeReq({
-      method: 'POST', body,
+      method: 'POST', body: scoped,
       headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(key) },
     }), res);
     return { status: res.statusCode, body: res.body };
