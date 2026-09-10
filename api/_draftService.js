@@ -795,8 +795,18 @@ async function finishDelete(kv, googleSub, draftId, expectedRev, operationId, ro
   // "was live, now unreadable" rule refuses the old generation anyway.
   let lifecycle = { recorded: false, reason: 'no-row' };
   if (row) {
+    // The signature is (kv, sub, instanceId, slot, draftId, deletedDraftGen,
+    // fence). `deletedDraftGen` is passed as null ON PURPOSE: recordDeletion
+    // derives it from the record itself (lastDraftId === draftId ?
+    // lastDraftGen : null), which is the only place that knows which
+    // generation this draft was created at. Passing `fence` here — a number,
+    // so it type-checks — was an argument-position bug that left the fence
+    // undefined, so the fenced write refused with 'no-fence' and the deletion
+    // was never recorded. Nothing failed loudly: resolveLifecycle's
+    // disappearance rule repaired the row on the next read, so the seller saw
+    // correct behaviour while the durable record stayed wrong.
     const rec = await recordDeletion(
-      kv, googleSub, row.instanceId, row.slot, draftId, fence,
+      kv, googleSub, row.instanceId, row.slot, draftId, null, fence,
     );
     lifecycle = rec.ok
       ? { recorded: true, generation: rec.gen }

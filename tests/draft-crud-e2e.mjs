@@ -181,7 +181,7 @@ const kv = async (...args) => {
 };
 
 const { evalScript } = await import('./_kvScripts.mjs');
-const { FENCED_SET_SCRIPT } = await import('../api/_draftLifecycle.js');
+const { FENCED_SET_SCRIPT, lifecycleKey, LIFECYCLE_STATE } = await import('../api/_draftLifecycle.js');
 const SVC = await import('../api/_draftService.js');
 const DS  = await import('../api/_draftStore.js');
 const EP  = await import('../api/drafts.js');
@@ -1500,5 +1500,214 @@ reset();
         'if this ever fails the server has grown its own check and the comment above is out of date');
 }
 
+
+// ══ The complete seller workflow ═════════════════════════════════════════════
+//
+// The six cases review named as the meaningful checkpoint for delete/recreate.
+// They are here rather than in a suite of their own because this file already
+// owns the HTTP-level harness -- a second copy of the in-memory Upstash is how
+// two suites start passing against two different stores.
+//
+// Every case goes through the real endpoint. Nothing calls the lifecycle
+// module directly except to READ state for an assertion, or to plant the
+// legacy row in case 5.
+
+console.log('\nthe complete seller workflow: create, delete, recreate');
+{
+  const HDRS = (k) => ({ authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K(k) });
+  const call = async (req) => { const res = fakeRes(); await EP.default(fakeReq(req), res); return { status: res.statusCode, body: res.body }; };
+  const SLOT = 'ebay:fixed-price';
+  const lcOf = (inst) => {
+    const raw = liveGet(lifecycleKey(SUB, inst, SLOT));
+    return raw === null ? null : JSON.parse(raw);
+  };
+  const listIds = async () => {
+    const r = await call({ method: 'GET', query: { ids: '1' } });
+    return r.body.draftIds || r.body.ids || [];
+  };
+
+  // ── 1. Create, repeat tap, reload: ONE draft ───────────────────────────────
+  reset();
+  const INST1 = 'inst_wf_one';
+  const body1 = { ...httpInput(), instanceId: INST1, generation: 0 };
+  const c1a = await call({ method: 'POST', headers: HDRS('wf1'), body: body1 });
+  check('W1 the first create succeeds', c1a.status === 201 && !!c1a.body.draftId, `${c1a.status}`);
+  // ZERO, not one. A create lands AT the current generation; it does not
+  // advance it. Only a DELETION advances the generation
+  // (api/_draftLifecycle.js recordDeletion, floor = known + 1), because the
+  // generation exists to invalidate requests made before a deletion -- not to
+  // count drafts. So the next create for a row that still holds this draft
+  // sends 0 as well, and gets the same draft back.
+  check('W1 and it reports the generation to send next', c1a.body.generation === 0, String(c1a.body.generation));
+
+  // Repeat tap: the SAME idempotency key, which is what the client's key
+  // derivation guarantees for a second tap on one card.
+  const c1b = await call({ method: 'POST', headers: HDRS('wf1'), body: body1 });
+  check('W1 a repeat tap replays rather than creating',
+        c1b.status === 200 && c1b.body.replayed === true && c1b.body.draftId === c1a.body.draftId,
+        `${c1b.status} replayed=${c1b.body.replayed}`);
+
+  // A repeat tap after the idempotency record is gone -- a later session, a
+  // new key. This is the case the lifecycle record exists for: idempotency
+  // cannot help here, because it is a genuinely different request.
+  const c1c = await call({ method: 'POST', headers: HDRS('wf1-newkey'), body: { ...body1, generation: 0 } });
+  check('W1 🔴 a NEW key on a row that already holds a draft returns that draft',
+        c1c.status === 200 && c1c.body.existing === true && c1c.body.draftId === c1a.body.draftId,
+        `${c1c.status} existing=${c1c.body.existing} id=${c1c.body.draftId}`);
+  check('W1 and it was not counted as a create', c1c.body.replayed === false);
+
+  const after1 = await listIds();
+  check('W1 🔴 a reload shows exactly one draft', after1.length === 1 && after1[0] === c1a.body.draftId,
+        JSON.stringify(after1));
+
+  // ── 2. Delete, LOSE THE RESPONSE, reconcile ───────────────────────────────
+  //
+  // The tombstone commits and the client never sees the answer. Reconciling
+  // must report the accurate DELETED state and a released quota slot -- not
+  // "your draft is still there", which is what a naive retry-and-report would
+  // conclude from a failed HTTP call.
+  const id1 = c1a.body.draftId;
+  // `expectedRev` is REQUIRED on delete (428 DRAFT_REVISION_REQUIRED without
+  // it) and that predates this work: a delete is a mutation, and deleting a
+  // revision you have not seen is the same hazard as editing one.
+  const rev1 = (await call({ method: 'GET', query: { id: id1 } })).body.draft.rev;
+  const d1 = await call({ method: 'DELETE', query: { id: id1 }, headers: HDRS('wf1-del'), body: { expectedRev: rev1 } });
+  check('W2 the delete succeeds', d1.status === 200, `${d1.status} ${JSON.stringify(d1.body)}`);
+  // The DURABLE record, not just the observed behaviour. This assertion is the
+  // one that found the argument-position bug in the recordDeletion call: every
+  // behavioural check below passed while this write was silently refusing,
+  // because resolveLifecycle repaired the row on each later read. A repair
+  // path that hides a lost write is exactly what has to be asserted around.
+  check('W2 \ud83d\udd34 and the delete REPORTS the deletion as recorded',
+        d1.body.lifecycle && d1.body.lifecycle.recorded === true,
+        JSON.stringify(d1.body.lifecycle));
+  check('W2 and it tells the client the generation to send with the next create',
+        d1.body.generation === 1, String(d1.body.generation));
+
+  // The response is now "lost": the client re-reads instead of trusting it.
+  const recon = await call({ method: 'GET', query: { id: id1 } });
+  check('W2 🔴 reconciliation reports the draft GONE, not present',
+        recon.status === 410, `${recon.status}`);
+  check('W2 and the reason is deletion, terminal',
+        recon.body.code === 'DRAFT_DELETED' || recon.body.error === 'DRAFT_DELETED',
+        JSON.stringify(recon.body));
+  const after2 = await listIds();
+  check('W2 the list no longer carries it', after2.indexOf(id1) === -1, JSON.stringify(after2));
+  const lc2 = lcOf(INST1);
+  check('W2 the lifecycle record says DELETED', lc2 && lc2.lastState === LIFECYCLE_STATE.DELETED,
+        JSON.stringify(lc2));
+  check('W2 🔴 and the generation advanced exactly once', lc2 && lc2.gen === 1, String(lc2 && lc2.gen));
+
+  // ── 3. Retry the ORIGINAL create after deletion: REFUSED ──────────────────
+  //
+  // Both the idempotency record and the generation are exercised. The
+  // idempotency record for 'wf1' still exists here, so that key replays --
+  // which is why the meaningful case is a retry whose idempotency record has
+  // expired, carrying the generation it was created with.
+  const stale = await call({ method: 'POST', headers: HDRS('wf1-stale-retry'), body: { ...body1, generation: 0 } });
+  check('W3 🔴 a create carrying the pre-deletion generation is refused',
+        stale.status === 410, `${stale.status} ${JSON.stringify(stale.body)}`);
+  check('W3 and the code names the generation, not a generic error',
+        stale.body.code === 'DRAFT_GENERATION_STALE', JSON.stringify(stale.body));
+  check('W3 🔴 and it is NOT marked retryable -- auto-retry would resurrect it',
+        stale.body.retryable === false, String(stale.body.retryable));
+  check('W3 the refusal tells the client the current generation',
+        stale.body.generation === 1 && stale.body.sentGeneration === 0,
+        `${stale.body.generation}/${stale.body.sentGeneration}`);
+  check('W3 and nothing was recreated', (await listIds()).length === 0);
+
+  // ── 4. A FRESH explicit Create: succeeds, at the new generation ───────────
+  const fresh = await call({ method: 'POST', headers: HDRS('wf1-fresh'), body: { ...body1, generation: 1 } });
+  check('W4 🔴 an explicit new create at the current generation succeeds',
+        fresh.status === 201 && !!fresh.body.draftId, `${fresh.status} ${JSON.stringify(fresh.body)}`);
+  check('W4 and it is a DIFFERENT draft', fresh.body.draftId !== id1,
+        `${fresh.body.draftId} vs ${id1}`);
+  check('W4 and it lands at the generation it asked for', fresh.body.generation === 1, String(fresh.body.generation));
+  const after4 = await listIds();
+  check('W4 the seller now has exactly one draft again',
+        after4.length === 1 && after4[0] === fresh.body.draftId, JSON.stringify(after4));
+
+  // ── 5. An existing draft with NO lifecycle metadata: adopted safely ───────
+  //
+  // Every draft created before this module existed is in this state. The row
+  // must be adopted -- not treated as empty, which would create a second draft
+  // for a card that already has one.
+  reset();
+  const INST5 = 'inst_wf_legacy';
+  const legacy = await call({ method: 'POST', headers: HDRS('wf5-seed'),
+                             body: { ...httpInput(), instanceId: INST5 } });
+  check('W5 setup: a draft exists', legacy.status === 201 && !!legacy.body.draftId, `${legacy.status}`);
+  // Remove its lifecycle record, leaving the draft and its indexes intact.
+  // That is exactly the shape of a pre-D8 draft.
+  store.delete(lifecycleKey(SUB, INST5, SLOT));
+  check('W5 setup: the lifecycle record is gone', lcOf(INST5) === null);
+
+  const adopt = await call({ method: 'POST', headers: HDRS('wf5-adopt'),
+                             body: { ...httpInput(), instanceId: INST5, generation: 0 } });
+  check('W5 🔴 a create on the legacy row returns the EXISTING draft',
+        adopt.status === 200 && adopt.body.existing === true
+          && adopt.body.draftId === legacy.body.draftId,
+        `${adopt.status} existing=${adopt.body.existing} id=${adopt.body.draftId}`);
+  check('W5 and it did not create a second draft for the card',
+        (await listIds()).length === 1, JSON.stringify(await listIds()));
+  const lc5 = lcOf(INST5);
+  check('W5 🔴 and the row now HAS a lifecycle record, seeded as live',
+        lc5 && lc5.lastState === LIFECYCLE_STATE.LIVE && lc5.lastDraftId === legacy.body.draftId,
+        JSON.stringify(lc5));
+
+  // The other half, and the one that matters more: the legacy row can now be
+  // deleted and must not come back.
+  const rev5 = (await call({ method: 'GET', query: { id: legacy.body.draftId } })).body.draft.rev;
+  const d5 = await call({ method: 'DELETE', query: { id: legacy.body.draftId }, headers: HDRS('wf5-del'), body: { expectedRev: rev5 } });
+  check('W5 the adopted draft deletes', d5.status === 200, `${d5.status}`);
+  const revive5 = await call({ method: 'POST', headers: HDRS('wf5-revive'),
+                               body: { ...httpInput(), instanceId: INST5, generation: 0 } });
+  check('W5 🔴 and a create still carrying generation 0 is refused, not adopted again',
+        revive5.status === 410 && revive5.body.code === 'DRAFT_GENERATION_STALE',
+        `${revive5.status} ${JSON.stringify(revive5.body)}`);
+
+  // ── 6. Two browser contexts: B deletes, A's pending retry cannot resurrect ─
+  //
+  // Q-D8-6, as specified. A and B are two contexts on ONE row, so they share
+  // the (sub, instanceId, slot) scope -- they differ only in the idempotency
+  // key they hold and in when their requests land.
+  reset();
+  const INST6 = 'inst_wf_two_ctx';
+  const bodyA = { ...httpInput(), instanceId: INST6, generation: 0 };
+
+  // A creates. A now holds generation 1 and its own idempotency key.
+  const A1 = await call({ method: 'POST', headers: HDRS('wf6-A'), body: bodyA });
+  check('W6 A creates a draft', A1.status === 201 && A1.body.generation === 0, `${A1.status}`);
+
+  // B, a second context, deletes it. B learned the draft id from the list.
+  const revA = (await call({ method: 'GET', query: { id: A1.body.draftId } })).body.draft.rev;
+  const B1 = await call({ method: 'DELETE', query: { id: A1.body.draftId }, headers: HDRS('wf6-B-del'), body: { expectedRev: revA } });
+  check('W6 B deletes it', B1.status === 200, `${B1.status}`);
+
+  // A's PENDING RETRY now lands. A never saw the deletion. It carries the
+  // generation A was told (1) and -- the harder case -- a key whose
+  // idempotency record has since expired, so nothing replays for it.
+  const Aretry = await call({ method: 'POST', headers: HDRS('wf6-A-retry'), body: bodyA });
+  check('W6 🔴 A\u2019s pending retry cannot recreate the draft B deleted',
+        Aretry.status === 410 && Aretry.body.code === 'DRAFT_GENERATION_STALE',
+        `${Aretry.status} ${JSON.stringify(Aretry.body)}`);
+  check('W6 and no draft came back', (await listIds()).length === 0, JSON.stringify(await listIds()));
+
+  // A's retry on its ORIGINAL key is the other half: idempotency replays the
+  // recorded result, which names a draft that no longer exists. The client
+  // reconciles by reading it, and gets 410 -- not a resurrected draft.
+  const AreplayId = (await call({ method: 'POST', headers: HDRS('wf6-A'), body: bodyA })).body.draftId;
+  const AreplayRead = await call({ method: 'GET', query: { id: AreplayId } });
+  check('W6 🔴 an idempotent replay of A\u2019s create returns the id but the draft is GONE',
+        AreplayRead.status === 410, `${AreplayRead.status}`);
+  check('W6 and the store still holds no live draft', (await listIds()).length === 0);
+
+  // Finally: A, having seen the deleted state, presses Create explicitly.
+  const Afresh = await call({ method: 'POST', headers: HDRS('wf6-A-fresh'), body: { ...bodyA, generation: 1 } });
+  check('W6 🔴 a fresh explicit create on A succeeds with a new draft',
+        Afresh.status === 201 && Afresh.body.draftId !== A1.body.draftId,
+        `${Afresh.status} ${Afresh.body.draftId}`);
+  check('W6 and the row holds exactly one draft', (await listIds()).length === 1);
+}
 
 done();

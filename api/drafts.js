@@ -517,6 +517,19 @@ async function handleDelete(req, res, kv, googleSub, draftId) {
       rev: out.draft ? out.draft.rev : null,
       degraded: !!out.degraded,
       repairRequired: !!out.repairRequired,
+      // The lifecycle outcome is REPORTED, not dropped. Two reasons, and the
+      // first is the whole rule: a write that did not happen must not leave
+      // the response looking identical to one that did. The second is that
+      // the client needs `generation` to make the next explicit Create for
+      // this row — without it the client can only guess, and a guessed
+      // generation is how a deleted draft comes back.
+      //
+      // recorded:false does NOT mean the delete failed. The tombstone is
+      // already authoritative; it means the durable record lags and the next
+      // resolve will repair it.
+      lifecycle: out.lifecycle || { recorded: false, reason: 'not-attempted' },
+      generation: out.lifecycle && Number.isInteger(out.lifecycle.generation)
+        ? out.lifecycle.generation : null,
     });
   }
   return res.status(statusForStoreError(out.error)).json(errorBody(out));
