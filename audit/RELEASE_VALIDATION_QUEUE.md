@@ -4609,3 +4609,191 @@ deployed $2 case above, isolated-Redis verification of the three real Lua
 scripts (`ACQUIRE_SCRIPT`, `FENCED_SET_SCRIPT`, and the ownership release — `EVAL`
 is still exercised only against in-memory doubles), the eBay credential rotation
 and challenge (yours), and the three red suites above.
+
+---
+
+## Triage of the eight failures (2026-09-10)
+
+Taken as you framed it: "pre-existing" establishes attribution, not
+acceptability. For each one — current behaviour, then whether the assertion
+still states the requirement, then repair on whichever side was wrong.
+
+### `a11y-mobile-2026-09-04` — seven failures, all fixture. 178/0.
+
+`cssRule()` was `HTML.match('\.ft-card\s*\{([^}]*)\}')`. That matches the
+**first** text in the file ending in the selector, which is
+
+```
+.col-table td[data-label="Card"] .ft-card{font-size:.9rem;font-weight:800;white-space:normal;text-align:left}   index.html:1065
+.ft-card{font-weight:600;color:var(--text);max-width:18rem;white-space:normal;overflow-wrap:anywhere;line-height:1.3}   index.html:1122
+```
+
+— a narrower table-cell override sitting **above** the base rule. Five
+assertions were reading declarations off a rule that was never meant to carry
+them. `overflow-wrap:anywhere`, `line-height:1.3`, `max-width:18rem`,
+`font-weight:600` and `var(--text)` are all present on the base rule, so the
+product satisfied SOL-PLAT-005 the whole time.
+
+Replaced with `cssRules(sel)`: a selector match must be a whole
+comma-separated member of a rule's selector list, and `standalone`
+distinguishes the element's own rule from a descendant-scoped override of it.
+Two attempts at that scan were wrong before the third worked, and both are
+worth recording — a **consuming** `\}` boundary makes the scan skip every
+other rule, and `.ft-set` is preceded by a **CSS comment** rather than a brace,
+so comments are stripped before scanning.
+
+The remaining two were markup regexes that outlived the markup. The cell is now
+`<td class="ft-set" data-label="Set">${esc2(p.set||'—')}</td>`
+(`js/core.a995c941.js:10764`) — it gained `data-label` for the stacked mobile
+table. The requirement was *the class instead of an inline style*, not the
+absence of other attributes; the escaping never went away.
+
+**The escaping assertion, inspected directly** rather than through its regex,
+as you asked. `esc2` in the collection renderer is
+`s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')`
+(`js/core.a995c941.js:10682`). Run against it: `<img src=x onerror=alert(1)>` →
+`&lt;img src=x onerror=alert(1)&gt;`, `Sword & Shield` → `Sword &amp; Shield`.
+Text-content escaping is sound, and **it found a defect next to it** — see
+below.
+
+**Strengthened, because the base rule being correct is not the requirement.**
+Every rule touching `.ft-card` is now checked for a reintroduced
+`white-space:nowrap`, `text-overflow:ellipsis`, `overflow:hidden` or narrow px
+cap, and a new assertion rejects any `.ft-set` cell that interpolates `p.set`
+without `esc2`.
+
+### `launch-audit-regressions` — one failure, stale assertion. 440/0.
+
+It required the literal `return _rankTplBySetHint(json.data, q)`.
+`searchWithTPL` now returns a result object and the ranked rows leave as its
+`cards` field: `js/core.a995c941.js:327`,
+`return { ok:true, cards:_rankTplBySetHint(json.data, q), reason:null };`.
+The ranking was intact; the assertion was matching a call shape. Rewritten to
+state the requirement — the rows the caller receives went through the ranker —
+plus a new assertion that **no** success path returns the upstream order, which
+is the thing that would bring the Base Set 2 pick back.
+
+### `test-scan` — the 401 layer, established
+
+You were right that the 401s only establish the cases were not exercised.
+Identified, not assumed: every case builds an **unsigned** JWT and calls the
+handler directly, which worked until the **2026-08-25 hardening**
+(`api/scan.js:646`) made identity come only from a verified token and made
+body-supplied identity ignored. The refusal is **`api/scan.js:664`**, the catch
+around `verifyTokenFlexible(idToken)`, message `Session expired. Sign in again
+to use the scanner.` Reproduced directly: Firebase JWK verification rejects the
+unsigned token, the flexible verifier then falls back to
+`https://oauth2.googleapis.com/tokeninfo`, and the suite's own fetch mock
+refuses that host.
+
+So all 29 cases were refused **before any scan logic ran**. The credit math,
+the refund path and the Deep Grade photo rules are **untested, not failing**.
+My earlier "needs a live authenticated environment" was right in conclusion and
+wrong in detail — it is not a live-server suite; it calls the handler directly,
+and no fixture edit can produce a token Google would sign.
+
+The suite now reports an **explicit prerequisite skip** naming the refusing
+layer unless `SCAN_ID_TOKEN`, `SCAN_ID_SUB` and `SCAN_ID_EMAIL` are set with
+network egress to Google. It is not a pass and does not read as one.
+**Rekeying the 29 fixtures onto a real token's uid/email is not done** — the KV
+keys are hardcoded to `user123` / `test@example.com`. The live scan check stays
+open, and the failed run stays recorded above.
+
+### Every repair mutation-checked
+
+| mutation | result |
+|---|---|
+| base `.ft-card` loses `overflow-wrap:anywhere` | 177/1 — "can break inside a long token" |
+| the table override gains `text-overflow:ellipsis` | 177/1 — "no .ft-card rule re-clips the identity" |
+| the set cell drops `esc2` | 174/4 — including the new unescaped-interpolation assertion |
+| the ranker's result is discarded (`cards:json.data`) | 437/3 |
+
+Restoring each returns 178/0 and 440/0. One correction on my own method: the
+first ranker mutation looked undetected, and that was **my** filter — I grepped
+the output for `FAIL` and that suite prints `✗` with no such header. Re-run
+plainly, it failed as it should.
+
+Commit `3078158`, local only. **No product code changed in it.**
+
+---
+
+## New finding from that inspection — attribute-position escaping (needs your call)
+
+The live bundle defines `esc2` **three times**, and they do not escape the same
+characters:
+
+| definition | escapes | scope |
+|---|---|---|
+| `js/core.a995c941.js:10180` | `& < > "` | `renderGradingLog()` |
+| `js/core.a995c941.js:10248` | `& <` | `renderGradingReport()` |
+| `js/core.a995c941.js:10682` | `& < >` | `renderCollectionView()` |
+
+`renderCollectionView`'s version does **not** escape `"`, and that scope
+interpolates into **double-quoted attributes**:
+
+```
+:10722   <img src="${esc2(thumb)}" loading="lazy" ...>
+:10763   <td data-label="Card"><div class="ft-card" title="${esc2(p.card)}...">
+```
+
+A `"` in a card name or in a thumbnail URL closes the attribute early and the
+rest is parsed as further attributes — the `onerror=` shape. Card names are
+seller-entered, and **`thumb` comes from third-party card data**, which is the
+part I would not treat as trusted. I have not attempted a working exploit, so
+call this a **plausible injection defect established by inspection, not a
+demonstrated one**.
+
+It is also a Rule 1 problem: one behaviour, three implementations, joining the
+four duplicate `codes` helpers already recorded here.
+
+**The fix is one line per definition** — escape `"` everywhere, which changes
+nothing visible because `&quot;` renders as `"` in text content. **I have not
+made it.** It touches the bundle, and a bundle edit forces a fingerprint rename
+plus a citation-map generation, which I am not doing unannounced in the middle
+of a pinned release check.
+
+**Question.** Fix it now (bundle rename to generation 18, all three definitions
+unified, a suite assertion that every attribute-position interpolation uses a
+quote-escaping helper), or record it and hold until the pinned check and the
+Lua verification are done?
+
+---
+
+## The $2 check — I am blocked on browser access
+
+You assigned this run to me and I could not start it: **no local browser is
+reachable from this session**, so your signed-in Vercel and Google state is not
+available to me. The cloud browser is a separate, logged-out browser — it would
+stop at Vercel's deployment-protection sign-in, and signing in there is not
+something I should be doing on your behalf.
+
+Two ways forward, your choice:
+
+1. **Connect your browser to this session** and I will run all four steps and
+   read the record out myself.
+2. **You run it** — the corrected runbook above is self-contained, and I only
+   need the six captured fields pasted back.
+
+Corrections applied to the runbook before either path, all three yours:
+the bundle/footer confirmation is **withdrawn** (no phone-visible commit
+indicator was ever established, and a bundle hash cannot uniquely identify a
+commit — the deployment metadata is the identifier); the price-entry step is
+**withdrawn** in favour of setting and saving the marked row's own value with
+its actual editing control, with "screenshot and stop" if that control or the
+entry is missing rather than substituting a card; the Upstash search is
+**`draft:*`**, the query the paired-store check already validated, with the
+record found by its marked title and no assumption about how many records
+exist. Reload-and-reopen is now step 5, and the record's card-identification
+metadata is explicitly not treated as a provenance defect.
+
+---
+
+### Phase 1 status
+
+Approximately **95%**, by judgment — your figure, and I have no basis to move it
+today. The eight failures are triaged and closed as fixture defects with the
+product unchanged; `test-scan` is now honestly skipped rather than silently
+refused, which **opens** a live check rather than closing one. The remaining
+live checks are unchanged: the $2 seller-provenance run on `499ef1c`, the three
+actual Lua scripts against isolated Redis, the eBay rotation and challenge, and
+RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2.
