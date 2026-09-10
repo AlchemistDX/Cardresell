@@ -1,6 +1,8 @@
 # Bundle citation map
 
-**Live bundle on branch: `js/core.2e0427d1.js`.** New work cites that hash.
+**Live bundle on branch: `js/core.959a4a85.js`.** New work cites that hash.
+Renamed from `2e0427d1` at the close of the access-disclosure change
+(generation 20 below).
 Renamed from `baf80c1a` at the close of Block D9, the draft-card action row
 (generation 19 below); `baf80c1a` was renamed from `a995c941` at the close of
 the escaping batch (generation 18 below). This header named `a995c941` as live
@@ -560,3 +562,16 @@ The retired `baf80c1a` bytes were restored from `git show HEAD:js/core.baf80c1a.
 That is the same trap recorded one section above, and it fired again here:
 `asset-fingerprints` failed with "restored bytes hash to 2e0427d1, not
 baf80c1a" until the file was taken from the commit that shipped it.
+
+## `core.2e0427d1.js` → `core.959a4a85.js` (retired 2026-09-10)
+
+Generation 20 — the Seller Hub Reports access disclosure. 19 lines added
+(25465 → 25484), all of them at `:22847`, immediately above
+`_draftDownloadPanelHtml`. **Every citation above `:22847` is unshifted**;
+below it, add 19. Checked, not assumed: `esc :6498`, `_crCreateIdemKey :21173`,
+`renderCollectionView :10640`, `.ft-set :10761` and the ranker call `:327` all
+resolve to themselves.
+
+Retired bytes restored from `git show HEAD:js/core.2e0427d1.js` — the trap
+recorded in the two sections above, taken from the commit that shipped it
+rather than the working copy. `asset-fingerprints` 93/0.

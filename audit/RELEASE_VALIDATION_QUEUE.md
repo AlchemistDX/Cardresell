@@ -4300,7 +4300,7 @@ the new generation is sent**. So a seller who deleted a draft for a collection
 row could never create another one for that row, while the button invited them
 to do exactly that. Measured on the dev server: only a new key creates.
 
-**Fixed** by `_crCreateIdemKey` (`js/core.2e0427d1.js:21173`), used at `:21224`
+**Fixed** by `_crCreateIdemKey` (`js/core.959a4a85.js:21173`), used at `:21224`
 (scan path) and `:21684` (collection path). A known lifecycle generation
 suffixes the key `-g<N>`; an unknown generation gets no suffix, so the legacy
 adoption path is unchanged. A retry keeps its original generation, key and
@@ -4644,14 +4644,14 @@ so comments are stripped before scanning.
 
 The remaining two were markup regexes that outlived the markup. The cell is now
 `<td class="ft-set" data-label="Set">${esc2(p.set||'—')}</td>`
-(`js/core.2e0427d1.js:10761`) — it gained `data-label` for the stacked mobile
+(`js/core.959a4a85.js:10761`) — it gained `data-label` for the stacked mobile
 table. The requirement was *the class instead of an inline style*, not the
 absence of other attributes; the escaping never went away.
 
 **The escaping assertion, inspected directly** rather than through its regex,
 as you asked. `esc2` in the collection renderer is
 `s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')`
-(`js/core.2e0427d1.js`, `renderCollectionView` at `:10640`). Run against it: `<img src=x onerror=alert(1)>` →
+(`js/core.959a4a85.js`, `renderCollectionView` at `:10640`). Run against it: `<img src=x onerror=alert(1)>` →
 `&lt;img src=x onerror=alert(1)&gt;`, `Sword & Shield` → `Sword &amp; Shield`.
 Text-content escaping is sound, and **it found a defect next to it** — see
 below.
@@ -4666,7 +4666,7 @@ without `esc2`.
 
 It required the literal `return _rankTplBySetHint(json.data, q)`.
 `searchWithTPL` now returns a result object and the ranked rows leave as its
-`cards` field: `js/core.2e0427d1.js:327`,
+`cards` field: `js/core.959a4a85.js:327`,
 `return { ok:true, cards:_rankTplBySetHint(json.data, q), reason:null };`.
 The ranking was intact; the assertion was matching a call shape. Rewritten to
 state the requirement — the rows the caller receives went through the ranker —
@@ -4830,7 +4830,10 @@ metadata is explicitly not treated as a provenance defect.
 
 ## Generation 19 — Block D9, the draft-card action row (local, `2ea1394`)
 
-Live bundle `js/core.2e0427d1.js`. Every draft card carries its thumbnail,
+Live bundle at the time of this section was `js/core.2e0427d1.js`; generation
+20 renamed it to **`js/core.959a4a85.js`** for the access disclosure, and every
+citation in this section is unshifted between the two (the insertion sits at
+`:22847`, below all of them). Every draft card carries its thumbnail,
 title, price and readiness plus three actions. **Nothing was pushed. The
 Preview alias stays pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` (commit
 `499ef1c`) and deployment protection stays enabled.**
@@ -4920,7 +4923,7 @@ pipe-separated; binary upload is "not directly supported in File Exchange"
 ([File Exchange User Guide PDF](https://pics.ebay.com/aw/pics/pdf/us/file_exchange/File_Exchange_User_Guide.pdf),
 [picture policy](https://www.ebay.com/help/policies/listing-policies/picture-policy?id=4370)).
 CardResell's photos are local IndexedDB blobs (D7,
-`js/core.2e0427d1.js:19124-19212`). Three routes existed: self-host the images
+`js/core.959a4a85.js:19124-19212`). Three routes existed: self-host the images
 over HTTPS; upload them through the Media API or Trading
 `UploadSiteHostedPictures`; or **emit a Create-Drafts file with the photo
 column absent and have the seller attach the local photos in eBay's Drafts
@@ -4961,7 +4964,8 @@ Asked for and now supplied. A changed bundle hash shows bytes moved; it does
 not show a hostile value stayed inside its attribute in a browser.
 
 `tests/collection-escaping-browser.mjs`, re-run today against live
-`core.2e0427d1.js`: **22 passed, 0 failed, SUITE COMPLETE, exit=0**. Both
+`core.2e0427d1.js`, since renamed `core.959a4a85.js` with `esc()` unshifted at
+`:6498`: **22 passed, 0 failed, SUITE COMPLETE, exit=0**. Both
 mutations are in this session's tool record, not recalled:
 
 | mutation | recorded result |
@@ -4970,7 +4974,7 @@ mutations are in this session's tool record, not recalled:
 | double-escaped ampersand | **20 passed, 2 failed** — an `&`-and-`<` set no longer renders as its plain text, and row order breaks with it |
 
 The fix itself: three local `esc2` helpers deleted, 17 call sites rerouted to
-the canonical `esc()` at `js/core.2e0427d1.js:6498`. One behaviour, one
+the canonical `esc()` at `js/core.959a4a85.js:6498`. One behaviour, one
 implementation.
 
 ### Suites run for generation 19
@@ -4991,7 +4995,77 @@ remains unpatchable by design (`api/drafts.js:963` `normalizePatch` accepts
 title, price, status, notes only) — a documented limitation, not an omission
 to expand.
 
-### One decision for you, and it is a business one
+### Decision D-D9-1 — the file ships, the API replaces it later (taken 2026-09-10, Will)
+
+**Taken. Do not reopen.** The Create-Drafts file is Phase 1's listing route.
+The Sell / Inventory + Media API integration is Phase 2 and is its **eventual
+replacement, not a parallel listing path.** That last clause is the operative
+constraint: it keeps one business behaviour on one implementation, so when the
+API route lands the file route retires rather than coexisting with it.
+
+Reasoning of record:
+
+- eBay officially supports creating drafts from Seller Hub Reports and
+  completing them later, and its guidance explicitly permits leaving the image
+  URL column blank and adding images while converting drafts to listings. Its
+  words, quoted from the Reports help page: *"if you use the Create Drafts
+  template, you can just leave the image URL column blank"* and *"then add
+  images later when you're converting draft to listings"*
+  ([Seller Hub Reports](https://www.ebay.com/help/selling/selling-tools/seller-hub-reports?id=4096)).
+  The implemented workflow matches the documented one.
+- The API alternative is materially larger: seller authorization, inventory
+  items, locations, offers, business policies, category metadata, publishing,
+  token lifecycle, and media upload are separate resources and operations
+  ([Inventory API](https://developer.ebay.com/api-docs/sell/inventory/overview.html),
+  [Media API](https://developer.ebay.com/api-docs/commerce/media/overview.html)).
+- Media API is the right eventual photo solution — it uploads images to eBay
+  Picture Services for listings to use — and is **not** needed to prove Phase
+  1's draft handoff.
+
+### RV-16 — the Download release gate (OPEN, blocking)
+
+Download is **locally demonstrated and documentation-aligned, not
+eBay-accepted.** One gate closes that gap, and it needs a real Seller Hub
+account:
+
+Upload one generated file through a real Seller Hub account and confirm:
+
+1. it creates a **draft**, not a live listing;
+2. `Title`, `Start price`, `Quantity`, `Custom label (SKU)` and `Description`
+   all survive into the draft;
+3. the **absent photo column is accepted** rather than rejected.
+
+Until all three are confirmed, no claim may be made that eBay accepts this
+file. 82 local assertions are evidence about the file's contents and the
+seller's on-screen path; they are not evidence about eBay's uploader.
+
+### Seller Hub Reports access — disclosed in the UI, not detected
+
+Shipped in generation 20 (`js/core.959a4a85.js`, `_DRAFT_DL_ACCESS_HTML`
+immediately above `_draftDownloadPanelHtml`). The download panel now reads:
+
+> Uploading needs Seller Hub Reports. eBay opts business sellers in
+> automatically; private sellers need at least one sale before the Reports tab
+> appears.
+
+Verified against eBay's own wording before the copy was written: *"Business
+sellers are automatically opted in to Seller Hub"*, *"Private sellers just
+need to have made at least one sale to get access"*
+([Seller Hub Reports](https://www.ebay.com/help/selling/selling-tools/seller-hub-reports?id=4096)).
+
+**Disclosed rather than detected, deliberately.** Nothing in the app can read
+whether a given eBay account has Reports access — there is no authorized eBay
+session at this point in the flow — so inferring it from any signal available
+here would be inventing a fact. Three assertions cover it in
+`draft-card-actions-browser` (G6), and removing the paragraph from the panel
+fails all three (21/3), so the disclosure is a checked behaviour and not a
+comment.
+
+If that precondition materially excludes the launch audience, the decision gets
+revisited **after measuring it** — not by preemptively expanding into the API
+integration.
+
+### Superseded — the question that produced D-D9-1
 
 The Drafts-folder route works and needs no new credential, but it asks the
 seller to attach photos and pick condition inside eBay for every card. The
@@ -5001,9 +5075,9 @@ listing can be created without a file at all. That is a larger integration,
 needs the seller's eBay authorization, and would mean a second listing path
 alongside the file — which cuts against one behaviour, one implementation.
 
-Do you want the file to remain the shipped route for Phase 1, with the API
-route as Phase 2 — or should the API route replace it before launch? I have
-not started either way.
+*Answered above by D-D9-1: the file remains the shipped route for Phase 1 and
+the API route replaces it in Phase 2. Kept here so the decision's origin is
+readable.*
 
 ---
 
@@ -5014,8 +5088,21 @@ today. The button workflow you prioritized is now implemented, demonstrated in
 a browser on desktop and at 375px, and mutation-checked, which closes the item
 that was listed as unfinished; it does not by itself move a percentage that was
 never derived from a suite count. The eight failures are triaged and closed as fixture defects with the
-product unchanged; `test-scan` is now honestly skipped rather than silently
-refused, which **opens** a live check rather than closing one. The remaining
+product unchanged.
+
+**Correction, 2026-09-10.** This paragraph said `test-scan` was "honestly
+skipped rather than silently refused". That was true when written and is no
+longer: the harness was repaired and `test-scan` now runs at **36 passed, 0
+failed locally**. What the repair did *not* close is the deployed side —
+**deployed Google authentication and RV-1 remain open**, and local scan
+coverage is not evidence about either. The stale sentence is corrected here
+rather than deleted, because a status paragraph that quietly improves is not
+auditable.
+
+The remaining
 live checks are unchanged: the $2 seller-provenance run on `499ef1c`, the three
 actual Lua scripts against isolated Redis, the eBay rotation and challenge, and
 RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2.
+
+Phase 1 stays at approximately 95% until the real Seller Hub file upload closes
+alongside the existing deployment and live gates.

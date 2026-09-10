@@ -410,6 +410,18 @@ try {
     ok('the panel says photos are attached on eBay', /photo/i.test(panel) && /Drafts folder/i.test(panel));
     ok('the panel says condition is picked on eBay', /condition/i.test(panel));
     ok('the panel says account settings are not in the file', /shipping|returns|location/i.test(panel));
+
+    // ACCESS. Upload lives behind Seller Hub Reports and not every account has
+    // it: eBay opts business sellers in automatically, private sellers need at
+    // least one sale first. The app cannot detect which a seller is -- there is
+    // no authorized eBay session here -- so it must SAY so, and a download that
+    // ends at a tab the seller cannot open is the failure being prevented.
+    ok('the panel discloses that upload needs Seller Hub Reports access',
+      /Seller Hub Reports/i.test(panel));
+    ok('the disclosure names the business-seller case',
+      /business sellers/i.test(panel));
+    ok('the disclosure names the private-seller precondition',
+      /private sellers/i.test(panel) && /at least one sale/i.test(panel));
     eq('no page errors', errors.join('|'), '');
     await ctx.close();
   });
