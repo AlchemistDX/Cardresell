@@ -3991,3 +3991,69 @@ the client work below rather than claimed here.
 - Two-device check not run; it needs the wiring and the client first.
 
 Nothing pushed. Alias pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`.
+
+---
+
+## C5 — Lock expiry does not protect a write (conceded, closed locally)
+
+Will: "The expired owner must be prevented from committing stale writes, and
+release must atomically verify ownership."
+
+Correct, and the earlier contention test did not cover it. A lock with a TTL can
+lapse while its owner is mid-flight; the owner cannot detect that time passed, so
+no care inside the owner helps.
+
+Fix (`api/_draftLifecycle.js`): the lock no longer protects writes. Each
+acquisition mints a monotonic fence (`INCR draftinstfence:<sub>:<inst>:<slot>`)
+*after* winning the lock, so fences follow acquisition order. The fence is stored
+on the record; any write carrying a fence lower than the record's is refused with
+`LIFECYCLE_ERR.FENCED`. Release is compare-and-delete in one `EVAL`.
+`commitCreate` checks the fence before its superseded short-circuit — that path
+previously returned `ok:true` to a lapsed caller.
+
+Tested: A pauses, lock expires, B acquires and removes the draft, A resumes. A's
+reserve, recordDeletion and commitCreate are all FENCED; A's release returns 0
+and B still holds the lock; B's own release returns 1.
+
+Residual: `EVAL` is exercised against the in-memory double, not deployed Upstash.
+Verified on deploy, not before.
+
+## C6 — `reserved` + absence is not always "creation never landed" (conceded, closed locally)
+
+Will: "If that draft is subsequently deleted and its tombstone expires, the
+pointer can again resolve to absence under reserved."
+
+Right, and it was this module's own partial-creation case turned against it.
+
+Fix: `reservedAt` plus a 5-minute grace window. Inside it, absence under
+`reserved` is an interrupted creation and the generation stays usable. Outside
+it, the generation is spent. An interrupted creation resolves within one request;
+it is never 90 days old. Additionally, `resolveLifecycle` heals a `reserved`
+pointer forward to `live` whenever the draft reads back, so the ambiguous state
+is corrected the first time anything looks at the row instead of persisting until
+it becomes ambiguous.
+
+Tested both ways: the combined sequence (successful draft write, failed
+promotion, removal, tombstone expiry) refuses generation 0 on day 91; the same
+shape inside the window still completes. And a removal that *ran* is terminal
+without reading the draft at all.
+
+## C7 — Wording narrowed (accepted)
+
+"A previously live record now missing establishes disappearance, not necessarily
+seller deletion." Adopted. `LIFECYCLE_STATE.GONE` now records disappearance and
+is distinct from `DELETED`, which only a delete operation that actually ran
+writes. Refusing a disappeared generation is stated as policy — chosen because
+the two errors are asymmetric — not as a claim about the seller's action.
+
+## Two parser bugs found by the new tests
+
+`Number(null)` is `0`, and `0` is an integer, so `Number.isInteger(Number(x))`
+coerced absent to zero. `lastDraftGen: 0` instead of `null` shifts the repair
+floor; `reservedAt: 0` is a timestamp at the epoch, which would age every fresh
+reservation out of the grace window immediately — turning C6's fix into a block
+on legitimate recreates. Both now use an explicit null-preserving coercion.
+
+`tests/draft-lifecycle.mjs`: **52 passed, 0 failed** (was 34).
+Regressions unchanged: `draft-crud-e2e` 192/0, `draft-index-recovery` 265/0.
+Commit `96c42c1`, local, branch `phase1-block-d`. Alias unchanged for the $2 run.
