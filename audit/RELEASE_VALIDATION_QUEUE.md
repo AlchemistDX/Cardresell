@@ -2784,12 +2784,28 @@ that the branch commit was "already pushed and attributable." It was not.
 `git ls-remote` before the push returned **only** `refs/heads/main`; the branch
 did not exist remotely. It exists now, created by this push.
 
-**Deployed commit — Unverified.** `vercel inspect` surfaced no commit, branch or
-author metadata for this deployment, and protection blocks reading the served
-HTML from here, so the built commit cannot be confirmed from the sandbox. The
-**inference** is `fa76d27`: it is the branch tip that was pushed, and the build
-was created seconds afterwards targeting preview. That inference is not
-evidence. It becomes evidence at step 0 below, at no extra cost.
+**Deployed commit — VERIFIED from build logs.**
+
+```
+2026-09-10T01:31:28.809Z  Cloning github.com/AlchemistDX/Cardresell
+                          (Branch: phase1-block-d, Commit: fa76d27)
+```
+
+`vercel inspect dpl_vcRJkaNxPNymAh3UpnifguonmMiD --logs`. The deployment's own
+build record names the branch and the commit, so `fa76d27` is now an
+observation and no longer an inference. `vercel inspect` without `--logs`
+surfaces no commit metadata, which is what misled me into treating this as
+unobtainable.
+
+**A bundle check was proposed and is withdrawn — it was wrong twice over.** I
+suggested reading the served bundle name from the phone. First, Safari's Find
+on Page searches **rendered text**; a `<script src>` attribute is not rendered
+text, so the search would simply fail. Second, and more fundamental, **the
+bundle name identifies the frontend build, not the commit** — the last four
+commits on this branch are documentation-only and therefore all serve the
+identical `core.53a0674d.js`. The check could not have distinguished them even
+if the search had worked. Deployment source metadata was the correct evidence
+all along, and an unusable phone step must not become a prerequisite.
 
 **New prerequisite discovered.** The Preview is protection-gated, so the iPhone
 must be signed in to **Vercel** as well as to Google — two sign-ins, not one.
@@ -2822,12 +2838,6 @@ one real draft under Will's own `sub` into the **production** store. Recoverable
 
 **Steps.**
 
-0. **Confirm the deployed commit while you are there.** Open the alias; Vercel
-   will ask you to log in first. Once the app renders, use Safari's **share
-   sheet → Find on Page** and search for `core.`. The branch build serves
-   **`core.53a0674d.js`**; production Phase 0 serves `core.569ff536.js`. Seeing
-   the former converts the deployed-commit inference above into an observation.
-   Seeing the latter means the wrong build is aliased — **stop**.
 1. On the iPhone, open the branch alias and sign in **twice**: first to Vercel
    (protection gate), then to Google inside the app. Two known failure modes:
    `auth/unauthorized-domain` means the Firebase step was missed; a blocked
@@ -2852,7 +2862,11 @@ one real draft under Will's own `sub` into the **production** store. Recoverable
 7. In the **production** store `upstash-kv-bistre-arrow`, using **read-only
    access**, look up **that same exact key**. **Expect: absent / nil.**
 8. Record, for each store: store name, the exact key queried, and
-   present/absent. **Both halves are required** — presence in nonproduction
+   present/absent. **Record the deployment id
+   `dpl_vcRJkaNxPNymAh3UpnifguonmMiD` alongside the result**, so the outcome is
+   tied to the deployment that produced it. **Do not push the branch again
+   during the check** — a further push re-points the alias at a new deployment
+   and the result would no longer describe the one tested. **Both halves are required** — presence in nonproduction
    alone does not establish isolation without absence in production.
 9. Optional corroboration only: `drafts:<sub>` in the nonproduction store should
    contain the `draftId` (`api/_draftStore.js:15`). It is a derived index, so it
