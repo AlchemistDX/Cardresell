@@ -4457,10 +4457,15 @@ path and adopts the existing draft rather than creating a second one. The gone
 copy matrix holds: only a recorded deletion may say a draft was deleted, none
 say "you deleted this draft", and none invite refresh or retry.
 
-Not covered, deliberately: **lock TTL is not modelled** (the double's `setEx`
+Not covered by *this* suite: **lock TTL is not modelled** (the double's `setEx`
 ignores seconds), and **the Lua scripts are the suites' JS re-implementation**
-(`tests/_kvScripts.mjs`). Verifying the real scripts against an isolated Redis
-is still an open release gate.
+(`tests/_kvScripts.mjs`).
+
+**CLOSED 2026-09-10 by a second suite, not by this one.**
+`tests/draft-lifecycle-real-redis.mjs` runs the same exported constants and the
+same exported functions against a real `redis-server`. **58/0.** This suite
+keeps its double and stays registered; the two answer different questions. See
+§Real-Redis Lua verification.
 
 ### Two suites were dead and are now alive
 
@@ -4711,8 +4716,9 @@ release blocker to look at before anything else touches the Preview.
 
 **Scope of what this establishes.** Seller-price provenance **on commit
 `499ef1c`**, and nothing more. Today's lifecycle code is not in this build, and
-verification of the three actual Lua scripts against real Redis remains a
-separate check. Leave in place afterwards: the new draft, the old draft, and the
+verification of the three actual Lua scripts against real Redis is a separate
+check — **now done locally, 58/0 on 2026-09-10** (§Real-Redis Lua
+verification), which does not speak for this deployment. Leave in place afterwards: the new draft, the old draft, and the
 alias pinning.
 
 ---
@@ -4724,10 +4730,14 @@ completion-reporting gap across every remaining suite, and the runner's
 blindness to hangs and silence.
 
 Still open and unchanged: **RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2**, the
-deployed $2 case above, isolated-Redis verification of the three real Lua
-scripts (`ACQUIRE_SCRIPT`, `FENCED_SET_SCRIPT`, and the ownership release — `EVAL`
-is still exercised only against in-memory doubles), the eBay credential rotation
-and challenge (yours), and the three red suites above.
+deployed $2 case above, the eBay credential rotation and challenge (yours), and
+the three red suites above.
+
+~~isolated-Redis verification of the three real Lua scripts (`ACQUIRE_SCRIPT`,
+`FENCED_SET_SCRIPT`, and the ownership release — `EVAL` is still exercised only
+against in-memory doubles)~~ **— CLOSED 2026-09-10, 58/0 against redis-server
+8.0.5 / Lua 5.1. Upstash compatibility and deployed behaviour are NOT closed by
+it.** See §Real-Redis Lua verification.
 
 ---
 
@@ -5108,8 +5118,9 @@ implementation.
 
 Unchanged and **not** closed by it: the $2 seller-provenance run on `499ef1c`
 (no local browser is reachable from this session, so it cannot be driven from
-here), the three actual Lua scripts against isolated Redis, the eBay rotation
-and challenge, and RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2. `Quantity`
+here), ~~the three actual Lua scripts against isolated Redis~~ *(closed
+2026-09-10, 58/0 — see §Real-Redis Lua verification)*, the eBay rotation and
+challenge, and RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2. `Quantity`
 remains unpatchable by design (`api/drafts.js:963` `normalizePatch` accepts
 title, price, status, notes only) — a documented limitation, not an omission
 to expand.
@@ -5220,9 +5231,135 @@ auditable.
 
 The previously open
 live checks are unchanged; **RV-16 is newly added**. The previously open ones:
-the $2 seller-provenance run on `499ef1c`, the three actual Lua scripts against
-isolated Redis, the eBay rotation and challenge, and RV-1, RV-3, RV-4, RV-9,
-CH-1, Safeguard 2.
+the $2 seller-provenance run on `499ef1c`, ~~the three actual Lua scripts
+against isolated Redis~~ *(closed 2026-09-10, 58/0)*, the eBay rotation and
+challenge, and RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2.
 
 Phase 1 stays at approximately 95% until the real Seller Hub file upload closes
 alongside the existing deployment and live gates.
+
+---
+
+## Real-Redis Lua verification — CLOSED 2026-09-10, with a named residual
+
+**Authorized as local work; no confirmation was required and none was inferred
+for anything else.** Nothing was pushed, the Preview alias stays pinned to
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, and deployment protection stays enabled.
+
+### What was actually run
+
+| | |
+|---|---|
+| Suite | `tests/draft-lifecycle-real-redis.mjs` (new) |
+| Result | **58 passed, 0 failed — SUITE COMPLETE, exit=0** |
+| Commit under test | `29fee90a3a70e2c72829b2b4d77f2065d23c8115`, `api/_draftLifecycle.js` clean against it |
+| Server | **redis-server 8.0.5** (`00000000`), **Lua 5.1**, RESP via `node-redis` |
+| Instance | `127.0.0.1:6399`, `--save '' --appendonly no --dir /tmp/redis-iso` — isolated, no persistence, nothing shared with any hosted store |
+| `LOCK_TTL_SEC` read from the module | 15 |
+
+The commit, the server version and the Lua version are **printed by the suite
+itself**, not recorded here by hand. A pasted version string is a claim; a
+printed one is an observation the next run repeats.
+
+### The three scripts, and how they were reached
+
+Not copies. The suite imports the module's own constants and drives the
+module's own functions, so it cannot pass against a re-implementation:
+
+- **`ACQUIRE_SCRIPT`** — imported constant, via `acquireLifecycleLock`.
+- **`FENCED_SET_SCRIPT`** — imported constant, via `fencedSet`.
+- **`UNLOCK_SCRIPT`** — *not exported*, so it is reached through
+  `releaseLifecycleLock`, which is the only caller. Exporting it merely to test
+  it would have widened the module's surface for the test's convenience.
+
+Section 0 asserts the two exported strings still contain their distinguishing
+Lua, and hands both to `SCRIPT LOAD` so a syntax error is reported as one
+rather than as forty downstream failures.
+
+### The four required behaviours — return value *and* stored state
+
+Every case asserts what Redis **holds afterwards**, not only what the script
+returned. A return value cannot tell "refused" apart from "refused and also
+corrupted the row".
+
+**1. Acquisition contention.** First acquire returns fence 1; the lock key
+stores `nonce:fence` (not the nonce alone) and carries a real TTL inside the
+15s window. A second caller is refused **BUSY, retryable**. The atomicity claim
+is asserted directly: **the refused caller allocated no fence** — the counter
+is still 1 — because the `incr` sits behind the `exists` guard inside one
+script. Then 12 simultaneous acquisitions through the real function on one row:
+**exactly one winner, every loser BUSY, counter 1 and not 12**, and the stored
+lock is the winner's token.
+
+**2. Lock expiry and takeover.** Expiry is produced by **Redis**, not by a
+faked clock: the test shortens the real TTL with `PEXPIRE` and polls until the
+server drops the key. Waiting the full 15s per case would make the suite
+unusable; the expiry itself is the server's. Owner B then takes over, and the
+fencing invariant holds — **B's fence is strictly higher** (2, not 1), the
+counter records it, and A's token is no longer stored.
+
+**3. Refusal of the expired owner's writes.** A writes legitimately, loses the
+row to a Redis expiry, B takes over, and A resumes unaware and writes again.
+The write is refused **FENCED**, the refusal reports the fence A held, **the
+row still contains A's earlier value**, and neither the counter nor B's lock
+was disturbed. B's own write then lands. Three edges beyond the requirement:
+the **current** fence is not treated as stale (the guard is strictly-greater —
+an off-by-one here would lock the live owner out of its own row); a missing
+fence is refused in JS before the script runs; and a first write against a
+**never-incremented** counter is accepted rather than erroring, because `cur`
+is a Lua `false` and the guard short-circuits. That last one is real Lua
+semantics the in-memory double could only imitate.
+
+**4. Ownership-checked release.** A wrong token returns 0 and the lock
+survives. **The nonce without the fence also returns 0** — release compares the
+whole `nonce:fence` value, which is the point of storing it that way. The exact
+token returns 1 and the key is gone; releasing again returns 0. Then the race
+the script exists for: A's lock expires, B acquires, **A's late release arrives
+and does not free B's lock** (0, B's token still stored, B can still release
+its own). A `GET`-then-`DEL` in its place would have handed the row to a third
+caller while B was still working.
+
+### Mutation-checked — the suite catches the bug, it does not merely pass
+
+A green suite is not evidence it would catch anything. Each script was broken
+in turn, against the same Redis, and the module restored to pristine after each
+(`git diff` empty, verified):
+
+| Mutation | Result |
+|---|---|
+| `ACQUIRE_SCRIPT`: move the `incr` **before** the `exists` guard, so a refused caller burns a fence | **56/2** — both atomicity assertions fire ("refused caller allocated no fence", "11 refusals consumed no fences") |
+| `FENCED_SET_SCRIPT`: guard `>` → `>=`, locking the current owner out | **48/10** |
+| `UNLOCK_SCRIPT`: replace compare-and-delete with an unconditional `DEL` | **51/7** — including "A2's late release does not free B2's lock" |
+
+### Registration
+
+Added to `EXCLUDED` in `tests/test-registry.mjs` with its reason, on the stated
+precedent of `flip-completeness-e2e.mjs` and `listing-photos.mjs`: it needs an
+environment the offline runner does not stand up, and registering it as an
+offline slot would make the offline gate depend on one. `test-registry` **12/0**
+after the change. `tests/draft-lifecycle.mjs` **stays registered and keeps its
+in-memory double** — **83/0**, re-run and unaffected. The two suites answer
+different questions and neither replaces the other.
+
+Run by hand:
+
+```
+redis-server --port 6399 --save '' --appendonly no --daemonize yes --dir /tmp/redis-iso
+CR_REDIS_PORT=6399 node tests/draft-lifecycle-real-redis.mjs
+```
+
+### What this does NOT close — stated so the pass is not over-read
+
+- **Upstash compatibility is unverified.** Production speaks the Upstash REST
+  endpoint (`api/_kv.js:19-27` — one HTTP GET per command, args
+  percent-encoded into the path, result read from `j.result`). This suite
+  speaks RESP to a self-hosted server. Upstash's `EVAL` support and its reply
+  encoding are **not** covered, and the transport difference is exactly where a
+  surviving defect would live.
+- **Deployed behaviour is unverified.** Nothing here touched Preview or
+  Production. The $2 seller-provenance run on `499ef1c` remains open and
+  independent, as does **RV-16**; both need owner account access.
+- The suite proves the **scripts**' semantics. It is not a second copy of
+  `draft-lifecycle.mjs`'s resurrection and duplicate coverage.
+
+Phase 1 remains approximately **95%**.

@@ -90,6 +90,22 @@ const EXCLUDED = {
     'offline slot would make an environment-dependent check look like part of ' +
     'the offline gate. Run by hand: node tests/flip-completeness-e2e.mjs ' +
     '(22/22 as of 2026-09-08). Tracked as RV-5 in RELEASE_VALIDATION_QUEUE.md.',
+  'draft-lifecycle-real-redis.mjs':
+    'Added 2026-09-10. Runs the three actual Lua scripts -- ACQUIRE_SCRIPT, ' +
+    'FENCED_SET_SCRIPT and the UNLOCK_SCRIPT reached through ' +
+    'releaseLifecycleLock -- inside a real redis-server, which the offline ' +
+    'runner does not stand up. Excluded for the SAME reason as ' +
+    'flip-completeness-e2e.mjs and listing-photos.mjs and on that precedent: ' +
+    'registering an environment-dependent check as an offline slot would make ' +
+    'the offline gate depend on an environment it does not provide. It does ' +
+    'NOT replace draft-lifecycle.mjs, which stays registered and keeps its ' +
+    'in-memory double; this one closes the separate question of whether the ' +
+    'Lua source behaves as claimed under an actual Lua interpreter. Run by ' +
+    'hand against an isolated server: redis-server --port 6399 --save "" ' +
+    '--appendonly no, then CR_REDIS_PORT=6399 node ' +
+    'tests/draft-lifecycle-real-redis.mjs (58/58 as of 2026-09-10, ' +
+    'redis-server 8.0.5, Lua 5.1). Upstash compatibility is NOT covered: ' +
+    'production speaks the Upstash REST endpoint, this speaks RESP.',
   'listing-photos.mjs':
     'Added 2026-09-08 (D7). Drives the IndexedDB photo store and the review ' +
     'screen photo UI in a real browser -- the picker, reorder, remove, the ' +
