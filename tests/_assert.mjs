@@ -107,6 +107,19 @@ export function harness(label) {
       + ' Everything after that point is UNTESTED, not passing.');
   });
 
+  /**
+   * A suite that INTENDS not to run — a live-store suite without its opt-in
+   * env var, say. This is not completion and it is not a crash, and reporting
+   * it as either is wrong: "did not complete" on a deliberate skip trains the
+   * reader to ignore the marker that exists to catch real crashes.
+   */
+  const skipAll = (reason) => {
+    finished = true;
+    console.log(`\n${label ? label + ': ' : ''}SUITE SKIPPED -- ${reason}.`
+      + ' No assertions ran; this is not a pass.');
+    process.exit(0);
+  };
+
   const done = () => {
     finished = true;
     const code = failed ? 1 : 0;
@@ -115,5 +128,5 @@ export function harness(label) {
       + ` -- SUITE COMPLETE, exit=${code}`);
     process.exit(code);
   };
-  return { check, checkAsync, section, done, counts: () => ({ passed, failed, skipped }) };
+  return { check, checkAsync, section, done, skipAll, counts: () => ({ passed, failed, skipped }) };
 }

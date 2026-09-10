@@ -27,11 +27,10 @@
 // would be worse than the leak it fixes.
 
 import { harness } from './_assert.mjs';
-const { check, checkAsync, done } = harness('draft-kv-live');
+const { check, checkAsync, done, skipAll } = harness('draft-kv-live');
 
 if (process.env.DRAFT_KV_LIVE !== '1') {
-  console.log('draft-kv-live: SKIPPED (set DRAFT_KV_LIVE=1 to run against the real store)');
-  process.exit(0);
+  skipAll('DRAFT_KV_LIVE is not set, so nothing ran against the real store');
 }
 
 const URL_  = process.env.KV_REST_API_URL;

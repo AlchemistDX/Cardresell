@@ -131,6 +131,10 @@ export default async function handler(req, res) {
         lastState: d.lastState === undefined ? null : d.lastState,
         generation: d.generation === undefined ? null : d.generation,
         sentGeneration: d.sentGeneration === undefined ? null : d.sentGeneration,
+        // A client that sent nothing is told that its omission was read as the
+        // legacy generation and did not match, rather than being shown a
+        // `sentGeneration` it never claimed.
+        generationOmitted: d.generationOmitted === true,
         evidence: d.evidence === undefined ? null : d.evidence,
         // Deliberate: no auto-retry hint. An explicit new Create is required.
         retryable: false,

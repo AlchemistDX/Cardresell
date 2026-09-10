@@ -73,6 +73,14 @@ import {
   readLifecycle,
 } from './_draftLifecycle.js';
 
+/**
+ * The generation an unrecorded row is on, and therefore the generation a
+ * client that sends none is implicitly claiming. Not a sentinel: 0 is a real
+ * generation that a first create, a legacy adoption and an interrupted-create
+ * recovery all legitimately run at.
+ */
+export const LEGACY_GENERATION = 0;
+
 export const SERVICE_ERR = {
   ...STORE_ERR,
   IDEMPOTENCY_KEY_REQUIRED: 'IDEMPOTENCY_KEY_REQUIRED',
@@ -292,9 +300,28 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
 
   const instanceId = String((input && input.instanceId) || '');
   const slotName = String((input && input.slot) || '');
-  // The generation the client was told by sell-eligibility. `null` means the
-  // client did not send one — accepted, but then it earns no protection
-  // against its own stale retry, which is why the client always sends it.
+  // The generation the client was told by sell-eligibility.
+  //
+  // ── Omission is a claim, not a waiver (2026-09-10) ────────────────────
+  //
+  // An omitted generation used to skip the comparison entirely, which meant a
+  // request built before a deletion could be replayed after both idempotency
+  // records expired and enter the CURRENT generation as a fresh create. That
+  // put the protection back on an expiring record, which is exactly what the
+  // lifecycle generation exists to remove.
+  //
+  // So omission is now read as the LEGACY generation, 0 — the only generation
+  // a client that predates this field could truthfully be on — and then goes
+  // through the same authoritative resolution and the same comparison as an
+  // explicit value. Generation 0 still supports the three things a legacy
+  // client legitimately does: a first create on an unrecorded row, adoption of
+  // a draft that predates the record, and recovery of its own interrupted
+  // create. Once a deletion, a disappearance or a retirement has advanced the
+  // row past 0, an omitted generation can no longer authorize a create.
+  //
+  // An invalid value is NOT omission. It is rejected at the field boundary,
+  // because silently treating `"abc"` as "no claim" would hand a broken client
+  // the legacy path.
   //
   // It arrives in `opts`, NOT in `input`, and the distinction is load-bearing.
   // `input` is the mutation, and every field of it is fingerprinted for
@@ -302,8 +329,17 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
   // carried a refreshed generation look like a DIFFERENT mutation on the same
   // key, answering 409 MISMATCH where the truthful answer is 410 Gone. A
   // precondition belongs beside the request, not inside it.
-  const sentGen = (opts && opts.generation !== undefined && opts.generation !== null)
-    ? Number(opts.generation) : null;
+  const rawGen = opts ? opts.generation : undefined;
+  const genOmitted = (rawGen === undefined || rawGen === null);
+  if (!genOmitted) {
+    // Deliberately strict. `Number('')`, `Number(true)` and `Number([])` are
+    // all 0, and a create that silently ran at generation 0 because the client
+    // sent an empty string is the failure this whole change is about.
+    const ok = (typeof rawGen === 'number' && Number.isInteger(rawGen) && rawGen >= 0)
+      || (typeof rawGen === 'string' && /^\d+$/.test(rawGen.trim()) && Number.isSafeInteger(Number(rawGen)));
+    if (!ok) throw new Error('DRAFT_FIELD_INVALID:generation:non-negative-integer');
+  }
+  const sentGen = genOmitted ? LEGACY_GENERATION : Number(rawGen);
 
   const lifecycleFail = (code, detail) => {
     const err = new Error(code);
@@ -336,7 +372,11 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
       // client is told what to send with an explicit new Create, and refuse.
       const rec = await readLifecycle(kv, googleSub, instanceId, slotName);
       throw lifecycleFail(SERVICE_ERR.LIFECYCLE_STALE, {
-        sentGeneration: sentGen,
+        // Reported as sent: an omitted generation is read as 0 for the
+        // decision, but the client did not claim 0, and the response should
+        // not say it did.
+        sentGeneration: genOmitted ? null : sentGen,
+        generationOmitted: genOmitted,
         generation: rec.ok ? rec.record.gen : null,
         lastState: rec.ok ? rec.record.lastState : null,
         evidence: 'replayed-draft-not-live',
@@ -405,11 +445,18 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
 
       // The generation the client believed is no longer current: something
       // terminal happened to this row since it asked. Refused, not repaired.
-      if (sentGen !== null && sentGen !== resolved.gen) {
+      //
+      // This comparison now runs for EVERY create, including one that sent no
+      // generation: omission was resolved to LEGACY_GENERATION above, so an
+      // old client can create on a row that never advanced and cannot create
+      // on one that has.
+      if (sentGen !== resolved.gen) {
         throw lifecycleFail(SERVICE_ERR.LIFECYCLE_STALE, {
-          sentGeneration: sentGen,
+          sentGeneration: genOmitted ? null : sentGen,
+          generationOmitted: genOmitted,
           generation: resolved.gen,
           lastState: resolved.record.lastState,
+          evidence: genOmitted ? 'omitted-generation-not-legacy' : undefined,
           retryable: false,
         });
       }
