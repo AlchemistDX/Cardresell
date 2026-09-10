@@ -153,13 +153,20 @@ function cssRule(sel) {
   // failed on an attribute it never meant to constrain. The requirement is the
   // class instead of an inline style, not the absence of other attributes.
   ok('the set cell uses the class, not an inline style',
-     /<td class="ft-set"[^>]*>\$\{esc2\(p\.set/.test(HTML));
+     /<td class="ft-set"[^>]*>\$\{esc\(p\.set/.test(HTML));
   ok('the old inline-styled set cell is gone',
-     !/<td style="font-size:\.72rem;color:var\(--text-muted\)">\$\{esc2\(p\.set/.test(HTML));
-  ok('the set value is still escaped', /class="ft-set"[^>]*>\$\{esc2\(/.test(HTML));
+     !/<td style="font-size:\.72rem;color:var\(--text-muted\)\">\$\{esc2?\(p\.set/.test(HTML));
+  // 2026-09-10: these named `esc2`, a local helper that no longer exists --
+  // the three divergent copies were collapsed onto the canonical esc() at
+  // core.baf80c1a.js:6498. Naming a helper is the weakest form of this
+  // assertion anyway: a call to a DIFFERENT, wrongly implemented helper would
+  // satisfy it, which is precisely the defect that was live. What the value
+  // does in the rendered DOM is asserted in tests/collection-escaping-browser.mjs;
+  // these remain only to catch a raw, unhelpered interpolation.
+  ok('the set value is still escaped', /class="ft-set"[^>]*>\$\{esc\(/.test(HTML));
   ok('no set cell interpolates p.set unescaped',
-     !/class="ft-set"[^>]*>\$\{(?!esc2\()/.test(HTML));
-  ok('the em-dash fallback survives', /esc2\(p\.set\|\|'—'\)/.test(HTML));
+     !/class="ft-set"[^>]*>\$\{(?!esc2?\()/.test(HTML));
+  ok('the em-dash fallback survives', /esc\(p\.set\|\|'—'\)/.test(HTML));
 }
 
 /* ═══════════════════════════════════════════════════════════

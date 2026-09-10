@@ -481,6 +481,32 @@ each retired byte-identical. When restoring a retired file, take it from **the
 commit that shipped it**, not from `HEAD`: `HEAD` already carries the newer
 bytes under the older name, and `asset-fingerprints` catches the mismatch.
 
+## `core.a995c941.js` → `core.baf80c1a.js` (retired 2026-09-10)
+
+Generation 18. The three local `esc2` helpers were deleted and their 17 call
+sites rerouted to the canonical `esc()` at **`core.baf80c1a.js:6498`**, which
+already escaped `& < > "`. Three lines removed, at 10180, 10248 and 10682 of
+the retired file.
+
+| retired `a995c941` | live `baf80c1a` | note |
+|---|---|---|
+| `:327` ranker call | `:327` | unshifted — above the first deletion |
+| `:10180` `esc2` in `renderGradingLog` | *gone* | now `esc()` at `:6498` |
+| `:10248` `esc2` in `renderGradingReport` | *gone* | now `esc()` at `:6498` |
+| `:10682` `esc2` in `renderCollectionView` | *gone* | now `esc()` at `:6498` |
+| `:10764` `.ft-set` cell | `:10761` | −3 |
+| `:21176` `_crCreateIdemKey` | `:21173` | −3 |
+| `:21227` its use | `:21224` | −3 |
+
+Each live line re-verified by reading it, not by arithmetic. The three deleted
+citations are the defect itself, so they have no live counterpart by design —
+citing them means citing the retired file, which is on disk byte-identical.
+
+`a995c941` was retired **before** the edit: the modified bytes were copied to
+the new name and `git checkout` restored the old name to its shipped content,
+so the retired file is the file that shipped, not HEAD's newer bytes under an
+older name. `asset-fingerprints` agrees: 89/0.
+
 ## Not claimed
 
 - **This does not verify that a citation is still *apt*.** It proves the cited line's bytes are
