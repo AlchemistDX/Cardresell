@@ -2617,7 +2617,22 @@ nothing was run.**
 
 The safe route is the same one used for the KV rows: **edit the row's
 environment checkboxes in the dashboard**, unchecking Preview and Development
-while leaving the Production value in place. Owner action.
+while leaving the Production value in place. Owner action. Precisely:
+
+- **Keep Production selected.**
+- **Uncheck Preview and Development.**
+- **Preserve the existing value and save.** Do not delete or replace the
+  credential.
+
+**What my follow-up confirmation can and cannot establish — wording limit.**
+After the edit I will re-run the names-and-scopes listing. That listing shows
+names, targets and ages only. It therefore confirms that the **Production row
+remains configured with Production as its target**. It **cannot independently
+prove the secret value stayed identical**, because no value is readable from it
+— and no secret readback is to be attempted. **Preserving the value during the
+edit is the safeguard**; the listing corroborates the scope, not the value. Any
+report I write afterwards must be phrased that way, and must not claim the value
+was verified.
 
 The same constraint applies to any other row in §4 whose targets need
 narrowing.
@@ -2797,6 +2812,13 @@ one real draft under Will's own `sub` into the **production** store. Recoverable
    never counts as the proof on its own.
 10. Delete the synthetic draft through the app afterwards. A tombstone
     (`api/_draftStore.js:400`) is expected to remain in the nonproduction store.
+
+**Stop condition, stated so it cannot be misread later.** If the marked record
+**cannot be found in the nonproduction store** at step 4 or 5, **stop**. That is
+a **failed or incomplete check — it is not evidence of isolation.** The absence
+of the key in production means nothing on its own, since a write that never
+landed anywhere would produce exactly the same absence. Do not proceed to step 7
+and do not record a pass.
 
 **Pass condition:** the exact key present in `upstash-kv-aureolin-door` with the
 marker in its value, and **absent** in `upstash-kv-bistre-arrow`. **Scope:** this
