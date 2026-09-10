@@ -205,27 +205,45 @@ For all five names: `KV_REST_API_URL`, `KV_REST_API_TOKEN`,
 already demonstrated — an environment change needs a fresh deployment to carry
 it, and reading a value at call time does not alter that.
 
-**The provider is not yet identified.** The shared `createdAt` and the empty
-`GET /v1/storage/stores` response together indicate *an integration rather than
-a first-party Vercel store*, and that is all they establish — **they do not name
-which provider.** Identifying it from the integration or variable metadata is
-step 1 below, before any database is created. I previously wrote "marketplace
-Redis provider" as though the vendor were settled; it is not.
+**The provider is Upstash** *(resolved; this paragraph read "The provider is not
+yet identified" until 2026-09-10 18:26, which contradicted the corrected cause
+paragraph directly above it)*. **Upstash for Redis** —
+`upstash-kv-bistre-arrow` (Free Tier) serves **Production**, and
+`upstash-kv-aureolin-door` (Pay As You Go) serves **Preview + Development**,
+read from the Vercel CLI on 2026-09-10 00:20 and corroborated by the two
+distinct database UUIDs in the console URLs during the `draft:*` comparison.
+
+*What the original paragraph got right, and why it is kept as reasoning:* the
+shared `createdAt` and the empty `GET /v1/storage/stores` response establish
+only *an integration rather than a first-party Vercel store* — they never named
+a vendor, and I had earlier written "marketplace Redis provider" as though the
+vendor were settled. The name came from step 1's dashboard and CLI readings,
+not from those two signals.
 
 **The included custom environment is not needed.** Standard Preview and
 Development scopes already provide what Phase 1 requires, so the plan uses no
 custom environment and incurs no additional cost.
 
-### Execution order — owner *(historical: steps 1-4 executed 2026-09-10)*
+### Execution order — owner *(historical: all six steps executed by 2026-09-10)*
 
 > **Dated evidence, not live status.** This list was written when none of it had
-> run, and the heading said so. Steps 1 through 4 have since been executed: the
-> provider is **Upstash**, the second database exists, and the five store
-> variables target two disjoint groups (Production vs Preview+Development),
-> confirmed 2026-09-10 00:20. Read the steps below for the reasoning and the
-> safeguards, not for what remains outstanding. The one step still open is
-> **G12 / R4 activation**, tracked under release preparation. Each step's own
-> in-line progress notes are kept because they record how it was established.
+> run, and the heading said so. **All six steps have since been executed** —
+> the earlier version of this banner said "steps 1 through 4", which
+> undercounted a six-step list:
+>
+> - **1** provider identified: **Upstash for Redis**.
+> - **2** second database created (`upstash-kv-aureolin-door`).
+> - **3-4** credentials saved in Vercel and the targets separated at the
+>   environment level, the rows having no Edit control.
+> - **5** separation verified across all five names, both halves, 2026-09-10
+>   00:20 — the disjoint variable listing.
+> - **6** deployed write isolation proven by the controlled `draft:*`
+>   comparison on `499ef1c`, for the **draft keyspace** only.
+>
+> Nothing in this list is outstanding. **G12 / R4 activation is a separate
+> remaining item and lives in Section 3**, not here. Read the steps below for
+> the reasoning and the safeguards; each step's in-line progress notes are kept
+> because they record how it was established.
 
 1. **Identify the actual Redis provider** from the integration or variable
    metadata. **Partly advanced 2026-09-09 17:03** from the owner's Environment
@@ -432,7 +450,9 @@ custom environment and incurs no additional cost.
    rather than failing open. Do not treat a 503 from a Preview deployment during
    that interval as a defect.
 5. **Verify all five names show the correct separation before pushing.**
-   **PASSED for the Production half, 2026-09-09 17:20.** All five read
+   **DONE — separation confirmed complete 2026-09-10 00:20** (both halves; see
+   the supersede note in this step). **PASSED for the Production half,
+   2026-09-09 17:20.** All five read
    **Production**, and all five are present — `REDIS_URL`, `KV_URL`,
    `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`, `KV_REST_API_URL`. The
    "gone would look like narrowed" failure did not occur. ~~This verifies only
@@ -450,7 +470,15 @@ custom environment and incurs no additional cost.
    verification, which reads names and scopes, but relevant if anything
    downstream expected to pull them.
 6. **Create a Preview deployment and prove writes land only in the new
-   database** — the step that converts the design into evidence.
+   database** — the step that converts the design into evidence. **DONE
+   2026-09-10.** Preview `499ef1c` was deployed as
+   `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, a draft was created through it, and the
+   controlled `draft:*` comparison found that record **present** in
+   `upstash-kv-aureolin-door` (1 row, positive control fires) and **absent**
+   from `upstash-kv-bistre-arrow` (empty), across two distinct database UUIDs.
+   **Scope of what that proves:** the **draft keyspace**. `idem:*`,
+   `idemresource:*`, `drafts:*`, `draftquota:*` and `draftindex_*` were not
+   queried and are not claimed. See §Isolation — PASS recorded.
 
 **Safeguard 1 — preserve the production values.** Step 4 removes the
 Preview/Development targets from the existing rows; it must **not** discard the
