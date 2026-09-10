@@ -124,6 +124,25 @@ const UNRECOVERABLE = new Map([
   // filename, so it is excluded here by name rather than by loosening the
   // parser -- a looser parser would also stop noticing real deletions.
   ['75f9494e', 'a byte hash quoted in the map, never a filename'],
+
+  // ── Generation 13, RC-2 close ─────────────────────────────────────────────
+  // Two working names and the byte hashes they actually carried. Neither name
+  // was ever a settled generation: no blob in the repository hashes to either,
+  // because each rename was made in the same commit that edited the file, so
+  // the name described bytes that no longer existed by the time they were
+  // committed. They are named here rather than removed from the map, because
+  // audit documents written during the block cite them and a reader following
+  // a citation needs to find out what the name meant, not find nothing.
+  ['2cb1e377', 'working name only: renamed at 197a5b2 in the same commit that ' +
+               'edited the file, so no commit holds bytes hashing to it ' +
+               '(57f78056, then 80f64317, then 53a0674d)'],
+  ['613f164a', 'working name only: created at 6cf5922 already holding bytes ' +
+               'that hash to b5eefbc0; no commit holds bytes hashing to it'],
+  // The three byte hashes above, quoted in the map so the mislabels are
+  // legible. Same case as 75f9494e: byte hashes, never filenames.
+  ['57f78056', 'a byte hash quoted in the map, never a filename'],
+  ['80f64317', 'a byte hash quoted in the map, never a filename'],
+  ['b5eefbc0', 'a byte hash quoted in the map, never a filename'],
   // Both retired by the RV-13 fix on 2026-09-09 and both branch-only: neither
   // was ever added to origin/main, and no index.html on origin/main ever
   // referenced either (`git log origin/main -S`, 0 commits each). Production

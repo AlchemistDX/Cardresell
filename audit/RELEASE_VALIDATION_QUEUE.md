@@ -1425,7 +1425,8 @@ question is struck rather than deleted so the record shows it was answered.
 
 ### RV-13 — the fix, and what the browser actually rendered
 
-**Bundle: `js/core.2cb1e377.js`** (renamed four times during this work, per
+**Bundle: `js/core.53a0674d.js`** (renamed at the close of RC-2 from the
+working name `core.2cb1e377.js`; renamed four times during this work, per
 the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `613f164a` → `2cb1e377`; only
 `2cb1e377` matches its own content and only it is referenced by
 `index.html:3837`).
@@ -2050,12 +2051,16 @@ Two assertions were **re-pointed, neither relaxed**:
 | `tests/draft-readiness.mjs` | PASS |
 | `tests/run-all.sh` | **not run**, per standing instruction |
 
-### Bundle naming — deliberately not renamed yet
+### Bundle naming — DONE (rewritten in place 2026-09-09)
 
-`js/core.2cb1e377.js` now hashes to `80f64317`, so `tests/asset-fingerprints.mjs`
-is **69 / 4** and red by design. The standing decision is one rename at the
-**end of the block**, not per step, and RC-2 has two items left. The rename and
-the `index.html:3837` update come when RC-2's bytes settle.
+This section said the rename was deliberately deferred and the asset check was
+red by design at 69 / 4. Both statements are now out of date, and the section
+is corrected here rather than contradicted further down.
+
+RC-2's bytes settled and the rename happened: `js/core.2cb1e377.js` →
+**`js/core.53a0674d.js`**, with the `index.html` reference updated to match.
+`tests/asset-fingerprints.mjs` is **81 passed / 0 failed**, and every
+`js/core.*.js` on disk hashes to its own name.
 
 ### New finding — three retired bundles are missing from disk (SUPERSEDED)
 
@@ -2255,16 +2260,157 @@ one: there is no compatibility question to leave open. Had either been
 deployed, the entry alone would not have been sufficient, and the standard for
 that case is recorded here.
 
-### 4. The rename, and why it is not done in this commit
+### 4. The rename — DONE (rewritten in place 2026-09-09)
 
-`tests/asset-fingerprints.mjs` is **73 / 1**, up from 69 / 4. The single
-remaining failure is the live bundle (`js/core.2cb1e377.js` now hashes to
-`80f64317`) and is the planned end-of-block rename.
+This section said the rename was still pending and the asset check stood at
+73 / 1. Both are now out of date; corrected here rather than appended to.
 
-The standing decision (`audit/BUNDLE_RENAME_24cd52cb.md`) is one rename at the
-**end of the block**, from bytes that have settled. RC-2 item 2 — condition
-guidance and description text — still edits this bundle, so renaming now would
-mean renaming twice and re-pointing every citation twice. The rename and the
-`index.html:3837` update are the **last** step of RC-2, and the asset check
-goes green there, before release. Recorded so the red is legible as sequencing
-rather than as an outstanding defect.
+`js/core.2cb1e377.js` → **`js/core.53a0674d.js`**, `index.html` re-pointed,
+`tests/asset-fingerprints.mjs` **81 passed / 0 failed**. This closes RC-2's
+completion requirement.
+
+Two findings surfaced while settling it, both recorded in
+`audit/BUNDLE_CITATION_MAP.md` under generation 13:
+
+- **`2cb1e377` was never a settled generation.** No blob in the repository
+  hashes to it. The rename to that name at `197a5b2` happened in the same
+  commit that edited the file, so the committed bytes hashed to `57f78056`
+  from the start, then `80f64317`, then `53a0674d`. The asset check was
+  reporting this the whole time; the red was read as sequencing, and it was
+  also a genuine mislabel.
+- **`613f164a`, the name before it, has the same defect** — created at
+  `6cf5922` already holding bytes hashing to `b5eefbc0` — and is absent from
+  disk. It cannot be restored without inventing content. Both names, and the
+  three byte hashes, are now listed by name and reason in the UNRECOVERABLE
+  table in `tests/asset-fingerprints.mjs`, which is a reviewable act rather
+  than a wildcard.
+
+The citation map header was also corrected: it named two different live
+bundles in consecutive paragraphs (`e9f21f4e`, then `3f83abec`), neither of
+which was live.
+
+---
+
+## RC-2 items 2 and 3 — condition guidance and description text
+
+Commit `fe1ae2e`, plus the rename commit. **Local only. Nothing deployed.**
+
+### Item 2 — condition guidance
+
+`CONDITION_GUIDANCE` in `api/_conditionDescriptors.js`, attached as `guidance`
+on both branches of `buildConditionBlock`, rendered by
+`_reviewConditionGuidanceHtml()`.
+
+Against the stated boundary — guidance helps the seller assess and confirm
+condition, and must not turn an AI estimate into a certified grade:
+
+- The raw guidance says it in as many words: "Any estimated grade this app
+  shows is a scan estimate, not a grade. Do not enter it as one, and do not
+  describe the card as graded."
+- It is also true structurally, not just in copy. `estGrade` is **not** in
+  `IDENTITY_WIRE_FIELDS` (`api/_cardIdentity.js:148-163`), so the estimate
+  never leaves the browser and cannot reach the packet at all. `isSlab(row)`
+  requires **both** grader and grade, so a row carrying only `estGrade` is
+  `Ungraded`.
+- The graded branch says the app "does not verify" the slab; it asks the
+  seller to confirm the label matches.
+
+Guidance renders immediately **after the Condition row**, not after the field
+list. The list continues past Condition for four more rows, so guidance at the
+end sat well below the thing it was about.
+
+### Item 3 — description text
+
+New `api/_listingDescription.js`. `buildListingDescription` composes the text
+from recorded card details and the seller's own declarations.
+
+Against the stated boundary — no invented defects, authenticity claims,
+packaging or shipping promises:
+
+- Values are read from the normalized aspects bag, so there is one mapping
+  from card data to description, not a second one that can drift.
+- Raw cards get **no condition line at all**, an explicit
+  `omitted: ['condition']`, and an INFO note saying so. Condition on a raw
+  card is the seller's declaration; the description does not guess it.
+- Graded cards reuse `conditionHandoffLines` rather than restating it.
+- Nothing in the module emits packaging, shipping or authenticity text.
+
+### Copy consolidated
+
+Three separate strings had grown to tell a raw-card seller where to set
+condition: the condition note, the guidance, and the description note. Each
+was defensible alone; together they read as the app not trusting the seller to
+have read the previous sentence. Now stated once, with an assertion pinning
+the count at exactly one (`tests/listing-packet-offline.mjs`).
+
+### Packet schema at 3
+
+Adding `description` changed the packet's shape, so the version bumped 2 → 3
+with a registered `2 -> 3` hop. Without the bump, a v2 packet read by v3 code
+reports CURRENT with `description === undefined` — indistinguishable from a
+build that produced nothing, which is the silent null this repo treats as the
+bug. Same argument the `1 -> 2` shipping hop was built on.
+
+The migration writes `description: null` and `condition.guidance: null`. It
+deliberately does **not** reconstruct the description from stored aspects: the
+text a seller copies has to be what their own draft's build produced, not
+something inferred later from a subset of inputs. No condition block is
+fabricated where none existed.
+
+### Verification
+
+Verified through the seller's actual review and copy actions in a real
+browser, and mutation-tested — the lesson from item 1 being that a fixture
+supplying a value cannot detect a producer that never emits it:
+
+| mutation | result |
+|---|---|
+| description producer returns empty text | 3 assertions fail |
+| copy branch rebuilds from rows instead of using the packet text | 3 assertions fail |
+| `guidance` key removed from the condition block | 3 browser + 2 offline fail |
+
+| suite | result |
+|---|---|
+| `tests/listing-packet-offline.mjs` | 472 / 0 |
+| `tests/draft-review-screen.mjs` | 417 / 0 |
+| `tests/draft-index-recovery.mjs` | 259 / 0 |
+| `tests/draft-crud-e2e.mjs` | 192 / 0 |
+| `tests/draft-store.mjs` | 147 / 0 |
+| `tests/draft-list-screen.mjs` | 101 / 0 |
+| `tests/asset-fingerprints.mjs` | 81 / 0 |
+| `tests/condition-applicability.mjs` | 17 / 0 |
+| `tests/draft-readiness.mjs`, `tests/copy-truth-offline.mjs` | PASS |
+| `tests/run-all.sh` | **not run**, per standing instruction |
+
+A fixture repair came with this: the "no registered migration" check in
+`tests/draft-index-recovery.mjs` used a literal version, and a literal version
+there becomes a real hop at the next bump — it had already broken once that
+way. It is now derived from `PACKET_SCHEMA_VERSION`, so it moves itself.
+
+---
+
+## Questions for you — RC-2 items 2 and 3
+
+**Q-RC2-4. Should the pricing condition become a listing declaration?**
+The pricing panel has a condition selector (`#condPills`, values
+`nm/lp/mp/hp/dmg`). The listing path does not read it: `_crPricingContext`
+does not capture it, and the packet does not receive it. I left it that way on
+the reasoning that a condition chosen to *fetch a comp* and a condition
+*warranted to a buyer* are different statements, and silently promoting one to
+the other would put a declaration in the seller's mouth. The cost is that a
+seller who already picked "LP" for pricing picks condition again in eBay's
+form. Leave them separate, or prefill the listing condition from it as an
+editable suggestion?
+
+**Q-RC2-5. Should the description carry a provenance line?**
+The description is currently card details only. I deliberately omitted any
+"identified with CardResell" or comp-source line — it is buyer-facing text,
+and a line about our tooling is a marketing claim in a place a buyer reads as
+a product statement. Confirm omission, or specify wording.
+
+**Q-RC2-6. The line-number citations against `core.2cb1e377.js`.**
+Audit documents from this block cite line numbers in a filename whose bytes
+were never stable (see §4 above). Those citations resolve against whatever the
+working file held when each document was written. Re-resolving them to
+`53a0674d` is mechanical but touches many documents. Worth doing before
+release, or accept the map's generation-13 note as the explanation?

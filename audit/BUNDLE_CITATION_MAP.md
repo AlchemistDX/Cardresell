@@ -1,11 +1,45 @@
 # Bundle citation map
 
-**2026-09-09:** `js/core.66c39922.js` is **retired** (retained on disk; audit
-documents cite its line numbers). Live bundle on branch is **`js/core.e9f21f4e.js`** (was `js/core.73a71fac.js`, then `core.176e4a56.js`, both retired 2026-09-09 by the RV-13 fix).
-Forced by the RC-1 review copy and the blank-shipping note.
- — retired generations → live
+**Live bundle on branch: `js/core.53a0674d.js` (23741 lines).** New work
+cites that hash. Renamed at the close of RC-2 from the working name
+`core.2cb1e377.js`; `tests/asset-fingerprints.mjs` is green at 74/0 and every
+`js/core.*.js` on disk hashes to its own name.
 
-**Live bundle: `js/core.3f83abec.js` (23,261 lines).** New work cites that hash.
+This header previously named two different live bundles in consecutive
+paragraphs — `e9f21f4e` on one line and `3f83abec` on the next — and neither
+was live by then. Both are corrected here rather than annotated below, because
+a citation map whose header has to be read sceptically is not doing its job.
+For the record: `66c39922`, `73a71fac`, `e9f21f4e` and `176e4a56` are retired,
+and the per-generation history below is unchanged and remains accurate.
+
+> ### Generation 13 — condition guidance and the listing description
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 13 | `2cb1e377` (working name) → `53a0674d` | *(this commit)* | RC-2 items 2 and 3. `_reviewConditionGuidanceHtml` renders the packet's condition guidance immediately after the Condition row; `_reviewDescriptionHtml` renders the packet's description; `_reviewCopyPayload` gains a `description` branch that returns the packet's own text verbatim rather than rebuilding it from the rows; a fourth copy control, "Copy description". |
+>
+> **`2cb1e377` is NOT retained on disk, and is not a generation.** It was a
+> working name, never a settled one: no blob in this repository hashes to it.
+> The rename to that name happened at `197a5b2` in the same commit that edited
+> the file, so the bytes committed under it hashed to `57f78056` on day one,
+> then `80f64317`, then `53a0674d`. `tests/asset-fingerprints.mjs` reported
+> this the whole time and the failure was carried deliberately, because the
+> standing rule is that the bundle is renamed once, at the end of a block,
+> from settled bytes. This rename is that settling.
+>
+> **The same is true of `613f164a`**, the name before it, created at `6cf5922`
+> already holding bytes that hashed to `b5eefbc0`. It is absent from disk, and
+> restoring it is not possible without inventing content, so it is not named
+> as a retained generation either. Both are listed in the UNRECOVERABLE table
+> in `tests/asset-fingerprints.mjs` by name and reason.
+>
+> **Open, and not fixed here:** audit documents written during this block cite
+> line numbers *in* `js/core.2cb1e377.js` — a filename whose bytes were never
+> stable. Those citations resolve against whatever the working file held when
+> each document was written, which is exactly the ambiguity this map exists to
+> remove. Recorded as a question in the release validation queue rather than
+> rewritten, because re-resolving them is a larger job than RC-2's scope and
+> should be a decision, not a silent edit.
 
 > ### Generation 12 — the listing-photo screen
 >
