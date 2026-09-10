@@ -4124,3 +4124,99 @@ Handlers and UI are unwired. Legacy adoption is asserted only as "invisible to
 the module" and belongs in the handler tests, where index discovery must fail
 closed: an incomplete or failed index lookup must not authorize generation 0 as
 empty.
+
+---
+
+## D8 wired — handlers, HTTP mapping, and the six-case workflow
+
+Commits `b12f462` and `f6534ae` on `phase1-block-d`. Local only; nothing pushed.
+
+### What the endpoint now answers
+
+| Refusal | Status | `retryable` | Why that status |
+|---|---|---|---|
+| `DRAFT_GENERATION_STALE` | 410 | `false` | The draft was deleted. An explicit new Create is required and **no auto-retry hint is sent** — auto-retrying after 410 defeats the protection. |
+| `DRAFT_LIFECYCLE_BUSY` | 409 | `true` | Another writer holds the row. The lock expires in seconds. |
+| `DRAFT_LIFECYCLE_UNRESOLVED` | 503 | `true` | The state could not be read. Not 500, and never reported as "no draft exists" — an unreadable row is not an empty one. |
+| `DRAFT_WRITE_FENCED` | 409 | `false` | A newer owner holds the row; the draft this operation meant to write is not the draft that is there. |
+
+A create that finds the row already holding a live draft returns **200 with
+`existing: true`**, not 201. Nothing was created and the body says so.
+
+`generation` is read from the body separately from the mutation and passed as a
+precondition, never fingerprinted and never stored on the draft. Folding it into
+the idempotency fingerprint would make a retry carrying a refreshed generation
+look like a *different* mutation on the same key — 409 MISMATCH where the
+truthful answer is 410 Gone.
+
+**The generation counts deletions, not drafts.** A create lands *at* the current
+generation. Only a deletion advances it.
+
+### The six cases, all green
+
+Driven through the real endpoint in `tests/draft-crud-e2e.mjs` (230 passed, 0
+failed). Create / repeat tap / reload → one draft. Delete, lose the response,
+reconcile → 410, unlisted, DELETED, generation advanced once. Original create
+retried after deletion with no idempotency record → refused, not retryable.
+Fresh explicit Create → new draft. Legacy row with no lifecycle record →
+adopted, then deletes and stays deleted. Two contexts → A's pending retry cannot
+resurrect what B deleted.
+
+### A defect these found, and the shape of it
+
+`finishDelete` called `recordDeletion` with `fence` in the `deletedDraftGen`
+argument position. Both are numbers, so it type-checked. The fence arrived
+`undefined`, the fenced write refused with `no-fence`, and **the deletion was
+never recorded** — while every behavioural assertion still passed, because
+`resolveLifecycle`'s disappearance rule repaired the row on the next read.
+
+A repair path was silently standing in for a lost durable write. The assertion
+that caught it reads the record itself rather than the behaviour around it. That
+is the general lesson and it is recorded here as one: where a repair path exists,
+correct observed behaviour is not evidence that the write happened.
+
+`api/drafts.js` now returns `lifecycle` and `generation` on a successful delete.
+Dropping that result made a write that did not happen indistinguishable from one
+that did.
+
+### Structural check — what it does and does not prove
+
+There is a check that acquisition uses the single script rather than two
+commands. It asserts the *shape* of the implementation, because the counter and
+lock values being correct on return would also be true of the old two-command
+version during an ordinary run — those value assertions alone do not prove the
+gap is absent.
+
+**Still unproven: neither script has run against deployed Upstash.** `EVAL` is
+exercised only against the in-memory double, which models Redis script atomicity
+by construction. Verifying the actual scripts against an isolated Redis is a
+release gate and is **not** done.
+
+### Question for Will — legacy adoption, the client-visible half
+
+`sell-eligibility` reports a legacy live draft (one with no lifecycle record) as
+`live: false, generation: 0`, because it will not infer a draft's existence from
+an absent record. So the button says **"Start a listing"**. The seller taps it,
+the create handler resolves the authoritative state itself, finds the existing
+draft, adopts it, and returns it with `existing: true` and HTTP 200.
+
+The seller therefore taps "Start a listing" and lands on the draft they already
+had, rather than a new one.
+
+**Is opening the existing draft the behaviour you want here** — or would you
+rather the button read something else for that row, accepting that eligibility
+would then have to pay a stored read per row to know? Only pre-D8 drafts are in
+this state, so the population is finite and shrinking.
+
+### Post–Phase 1 — the Drafts tab, recorded as agreed
+
+Not started, and not to be started before Phase 1 closes. A cleaner Drafts tab
+with a thumbnail, title, price, and readiness status, and three actions:
+
+- **Download** — export in a verified eBay-supported import format, with upload instructions.
+- **Edit** — a focused editor with clear fields, photo controls, and save feedback.
+- **Delete** — the confirmed deletion behaviour completed in Phase 1.
+
+The first task is verification, not design: eBay's import format, its required
+fields, the account requirements, and how it handles photos. The export and the
+simpler interface get designed around the workflow eBay actually supports.
