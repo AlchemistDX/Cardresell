@@ -4300,7 +4300,7 @@ the new generation is sent**. So a seller who deleted a draft for a collection
 row could never create another one for that row, while the button invited them
 to do exactly that. Measured on the dev server: only a new key creates.
 
-**Fixed** by `_crCreateIdemKey` (`js/core.a995c941.js:21176`), used at `:21227`
+**Fixed** by `_crCreateIdemKey` (`js/core.2e0427d1.js:21173`), used at `:21224`
 (scan path) and `:21684` (collection path). A known lifecycle generation
 suffixes the key `-g<N>`; an unknown generation gets no suffix, so the legacy
 adoption path is unchanged. A retry keeps its original generation, key and
@@ -4644,14 +4644,14 @@ so comments are stripped before scanning.
 
 The remaining two were markup regexes that outlived the markup. The cell is now
 `<td class="ft-set" data-label="Set">${esc2(p.set||'—')}</td>`
-(`js/core.a995c941.js:10764`) — it gained `data-label` for the stacked mobile
+(`js/core.2e0427d1.js:10761`) — it gained `data-label` for the stacked mobile
 table. The requirement was *the class instead of an inline style*, not the
 absence of other attributes; the escaping never went away.
 
 **The escaping assertion, inspected directly** rather than through its regex,
 as you asked. `esc2` in the collection renderer is
 `s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')`
-(`js/core.a995c941.js:10682`). Run against it: `<img src=x onerror=alert(1)>` →
+(`js/core.2e0427d1.js`, `renderCollectionView` at `:10640`). Run against it: `<img src=x onerror=alert(1)>` →
 `&lt;img src=x onerror=alert(1)&gt;`, `Sword & Shield` → `Sword &amp; Shield`.
 Text-content escaping is sound, and **it found a defect next to it** — see
 below.
@@ -4666,7 +4666,7 @@ without `esc2`.
 
 It required the literal `return _rankTplBySetHint(json.data, q)`.
 `searchWithTPL` now returns a result object and the ranked rows leave as its
-`cards` field: `js/core.a995c941.js:327`,
+`cards` field: `js/core.2e0427d1.js:327`,
 `return { ok:true, cards:_rankTplBySetHint(json.data, q), reason:null };`.
 The ranking was intact; the assertion was matching a call shape. Rewritten to
 state the requirement — the rows the caller receives went through the ranker —
@@ -4764,9 +4764,9 @@ characters:
 
 | definition | escapes | scope |
 |---|---|---|
-| `js/core.a995c941.js:10180` | `& < > "` | `renderGradingLog()` |
-| `js/core.a995c941.js:10248` | `& <` | `renderGradingReport()` |
-| `js/core.a995c941.js:10682` | `& < >` | `renderCollectionView()` |
+| `js/core.a995c941.js:10180` *(retired; line deleted)* | `& < > "` | `renderGradingLog()` |
+| `js/core.a995c941.js:10248` *(retired; line deleted)* | `& <` | `renderGradingReport()` |
+| `js/core.a995c941.js:10682` *(retired; line deleted)* | `& < >` | `renderCollectionView()` |
 
 `renderCollectionView`'s version does **not** escape `"`, and that scope
 interpolates into **double-quoted attributes**:
@@ -4828,10 +4828,192 @@ metadata is explicitly not treated as a provenance defect.
 
 ---
 
+## Generation 19 — Block D9, the draft-card action row (local, `2ea1394`)
+
+Live bundle `js/core.2e0427d1.js`. Every draft card carries its thumbnail,
+title, price and readiness plus three actions. **Nothing was pushed. The
+Preview alias stays pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` (commit
+`499ef1c`) and deployment protection stays enabled.**
+
+### Demonstrated in a real browser, not asserted from source
+
+`tests/draft-card-actions-browser.mjs`, new, **79 passed, 0 failed, SUITE
+COMPLETE, exit=0**, registered as slot **57/58** in `tests/run-all.sh`
+(`test-registry` 12/0 derives that registration rather than trusting it).
+Eight sections drive the actual DOM through Playwright against
+`tools/dev-draft-server.mjs`:
+
+| section | what a seller does | assertions |
+|---|---|---|
+| G1 | reads a card | 7 |
+| G2 | edits title and price, saves, reloads, reopens | 13 |
+| G3 | edits into a revision conflict | 8 |
+| G4 | deletes: cancels, then confirms | 11 |
+| G5 | deletes with the response lost | 4 |
+| G6 | downloads the eBay file | 21 |
+| G7 | does all three at 375px | 14 |
+| G8 | desktop evidence shots | screenshots |
+
+**The first run of this suite did not pass and the failure is worth recording.**
+G1 passed — the card rendered — while G2–G6 failed with Playwright resolving
+the button and reporting "element is not visible". The suite was driving
+`renderDraftsView(null)`, which paints rows into `#draftsView`, a container
+`index.html:2977` ships as `style="display:none"`. Only `switchView('drafts')`
+un-hides it. So the rows existed and no seller could have seen or touched
+them. A click on an invisible button is not the action under test, so the
+suite now enters through `switchView('drafts')` — the same entry point the
+Collection tab and the review screen's back-out use.
+
+### Mutation-checked, because a green suite is not evidence it would catch the bug
+
+| mutation | result |
+|---|---|
+| client adds `priceSource:'seller'` to the PATCH payload | G2 fails "client did not send priceSource" — 13/1 |
+| conflict branch reseeds `e.draft` from the server copy | G3 fails "the typed price is still in the field" and "the typed title is still in the field" — 6/2 |
+| CSV emits `Action=Add`, `$`-prefixed price, and an `Item photo URL` column | G6 fails four export assertions — 17/4 |
+
+All three reverted; the live bundle hashes to its own name (`asset-fingerprints`
+91/0).
+
+### Edit — where provenance is decided
+
+Manual price provenance is **not** set by the client. `api/_draftStore.js:688`
+sets `priceSource` to `seller` when the stored price actually moves, and
+`_draftEditSaved` reports back what the server recorded. The price box is sent
+as the seller typed it because `api/drafts.js:663` `normMoney` owns the parsing
+— a second parser in the client would be a second implementation of one
+behaviour. G2 confirms both halves against the store: after save the record
+reads `priceSource:"seller"`, and the request body carried no `priceSource` key.
+
+On 409 / 412 / 428 the seller's text is left alone. `e.draft` stays theirs and
+the server copy goes in `e.server`, so nothing typed is replaced by anything
+they did not type. G3 drives a real competing write and then reads the input
+values back out of the DOM.
+
+### Delete — the existing implementation, connected
+
+The card calls `_draftDeleteRun({draftId, rev, instanceId, ui})`, the same
+executor the review screen calls. One behaviour, one implementation. Cancel
+sends no request at all (G4 counts DELETEs, it does not just check that the
+panel closed); a lost response reconciles with a GET rather than reporting a
+failure (G5 asserts the GET followed the DELETE); 410 shows the deleted state
+and requires an explicit new Create, with no automatic retry.
+
+### Download — verified against eBay's contract first, then implemented
+
+eBay's own documentation was fetched before any code was written. **File
+Exchange is legacy**; the current tool is Seller Hub → Reports → Upload
+([bulk listing tools](https://www.ebay.com/help/selling/listings/listing-tips/bulk-listings?id=4160),
+[Seller Hub Reports](https://www.ebay.com/help/selling/selling-tools/seller-hub-reports?id=4096),
+[uploadable templates](https://pages.ebay.com/sh/reports/help/uploadable-file-feeds/),
+[create listings in bulk](https://pages.ebay.com/sh/reports/help/create-listings-bulk/)).
+
+Emitted: `Action=Draft`, `Category ID`, `Title` (≤80), `Description`,
+`Format=FixedPrice`, `Duration=GTC`, `Start price` (no currency symbol),
+`Quantity`, `Custom label (SKU)`. CRLF endings, no newline inside a field,
+plain quotes.
+
+**Photos are the decisive finding, and downloading a file does not prove eBay
+can use it.** A local file can never reach a listing through this file at all:
+eBay accepts **web-hosted `https://` image URLs only**, ≥500px, up to 12,
+pipe-separated; binary upload is "not directly supported in File Exchange"
+([File Exchange User Guide PDF](https://pics.ebay.com/aw/pics/pdf/us/file_exchange/File_Exchange_User_Guide.pdf),
+[picture policy](https://www.ebay.com/help/policies/listing-policies/picture-policy?id=4370)).
+CardResell's photos are local IndexedDB blobs (D7,
+`js/core.2e0427d1.js:19124-19212`). Three routes existed: self-host the images
+over HTTPS; upload them through the Media API or Trading
+`UploadSiteHostedPictures`; or **emit a Create-Drafts file with the photo
+column absent and have the seller attach the local photos in eBay's Drafts
+folder.** The third is implemented, and the panel says so on screen in those
+words — G6 asserts the copy, not just the columns. Condition and item-specific
+columns are omitted on the same principle: their value ids are not resolved
+here.
+
+**Not established:** no file has been uploaded to a real eBay seller account.
+The columns match published documentation; acceptance by eBay's uploader is
+unverified. **A business question for you is at the end of this document.**
+
+### A discrepancy recorded rather than silently fixed
+
+`api/_conditionDescriptors.js` uses condition descriptor ids `2750` and `4000`
+and declares `DESCRIPTOR_VALUES_RESOLVED = false`. eBay's published list uses
+**27501** (grader), **27502** (grade), **27503** (cert) and **40001**
+(ungraded), and does not contain `2750`
+([MIP condition descriptor ids for trading cards](https://developer.ebay.com/api-docs/user-guides/static/mip-user-guide/mip-enum-condition-descriptor-ids-for-trading-cards.html)).
+Card leaf categories from the same source: **183454** Pokémon CCG singles,
+**183050** non-sport, **261328** sports singles. Nothing was changed on the
+strength of one fetch; the condition column stays out of the export until this
+is settled deliberately.
+
+### A test assertion whose reach was wrong
+
+`draft-list-screen`'s "no stub row says the draft was `deleted`" scanned
+`#draftsWrap.innerText` — the whole container. The **Delete action on a
+healthy card** tripped it. The behaviour it names, what a stub row tells a
+seller whose record vanished, was never in question, so the assertion was
+narrowed to stub-row copy and given its own non-empty floor. It still catches
+its bug: a mutation putting "You deleted this draft." in `DRAFT_VANISHED` copy
+fails it (101/1). Suite now **102 passed, 0 failed**.
+
+### The escaping fix — rendered verification, which the fingerprint count never was
+
+Asked for and now supplied. A changed bundle hash shows bytes moved; it does
+not show a hostile value stayed inside its attribute in a browser.
+
+`tests/collection-escaping-browser.mjs`, re-run today against live
+`core.2e0427d1.js`: **22 passed, 0 failed, SUITE COMPLETE, exit=0**. Both
+mutations are in this session's tool record, not recalled:
+
+| mutation | recorded result |
+|---|---|
+| a quote-unsafe helper shadows `esc` in `renderCollectionView` | **13 passed, 9 failed** — the nine name attribute-injection outcomes: a quote-bearing thumbnail URL and card name broken out of `src` / `title`, elements gaining attributes the renderer never wrote, an event-handler attribute appearing, an attacker `data-*` attribute created |
+| double-escaped ampersand | **20 passed, 2 failed** — an `&`-and-`<` set no longer renders as its plain text, and row order breaks with it |
+
+The fix itself: three local `esc2` helpers deleted, 17 call sites rerouted to
+the canonical `esc()` at `js/core.2e0427d1.js:6498`. One behaviour, one
+implementation.
+
+### Suites run for generation 19
+
+`draft-card-actions-browser` 79/0 · `asset-fingerprints` 91/0 ·
+`test-registry` 12/0 · `draft-list-screen` 102/0 · `draft-delete-browser`
+113/0 · `launch-audit-regressions` 440/0 · `a11y-mobile-2026-09-04` 178/0 ·
+`collection-escaping-browser` 22/0. Run in batches of at most three;
+`tests/run-all.sh` was not run.
+
+### Still open after this work
+
+Unchanged and **not** closed by it: the $2 seller-provenance run on `499ef1c`
+(no local browser is reachable from this session, so it cannot be driven from
+here), the three actual Lua scripts against isolated Redis, the eBay rotation
+and challenge, and RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2. `Quantity`
+remains unpatchable by design (`api/drafts.js:963` `normalizePatch` accepts
+title, price, status, notes only) — a documented limitation, not an omission
+to expand.
+
+### One decision for you, and it is a business one
+
+The Drafts-folder route works and needs no new credential, but it asks the
+seller to attach photos and pick condition inside eBay for every card. The
+alternative is the **Sell / Inventory API plus the Media API**: photos upload
+from the app, condition descriptors are submitted programmatically, and a
+listing can be created without a file at all. That is a larger integration,
+needs the seller's eBay authorization, and would mean a second listing path
+alongside the file — which cuts against one behaviour, one implementation.
+
+Do you want the file to remain the shipped route for Phase 1, with the API
+route as Phase 2 — or should the API route replace it before launch? I have
+not started either way.
+
+---
+
 ### Phase 1 status
 
 Approximately **95%**, by judgment — your figure, and I have no basis to move it
-today. The eight failures are triaged and closed as fixture defects with the
+today. The button workflow you prioritized is now implemented, demonstrated in
+a browser on desktop and at 375px, and mutation-checked, which closes the item
+that was listed as unfinished; it does not by itself move a percentage that was
+never derived from a suite count. The eight failures are triaged and closed as fixture defects with the
 product unchanged; `test-scan` is now honestly skipped rather than silently
 refused, which **opens** a live check rather than closing one. The remaining
 live checks are unchanged: the $2 seller-provenance run on `499ef1c`, the three
