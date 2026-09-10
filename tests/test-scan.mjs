@@ -3,7 +3,49 @@
 // Mocks global fetch to intercept OpenAI + Upstash KV traffic, then calls the handler directly.
 
 import { completionGuard } from './_complete.mjs';
-const { finish: _finish } = completionGuard('test-scan');
+const { finish: _finish, skipAll: _skipAll } = completionGuard('test-scan');
+
+/* ── PREREQUISITE GATE ──────────────────────────────────────────────────────
+ *
+ * Every case here calls the /api/scan handler directly with a hand-built,
+ * UNSIGNED JWT. That worked while the endpoint accepted body-supplied
+ * identity. On 2026-08-25 the endpoint was deliberately hardened (see the
+ * comment at api/scan.js:646) so identity comes only from a cryptographically
+ * verified token, and body identity is ignored.
+ *
+ * Established empirically on 2026-09-10, not assumed: the refusal is
+ * api/scan.js:664 -- the catch around verifyTokenFlexible(idToken) -- with
+ * `Session expired. Sign in again to use the scanner.` Firebase JWK
+ * verification rejects the unsigned token, the flexible verifier then falls
+ * back to https://oauth2.googleapis.com/tokeninfo, and the suite's own fetch
+ * mock refuses that host. So all 29 cases were answered 401 BEFORE any scan
+ * logic ran: the credit math, refund, and Deep Grade behaviour they exist to
+ * check was never exercised. A 401 is not a scan result.
+ *
+ * It cannot be repaired with a fixture edit. A token that verifies must be
+ * signed by Google, and the endpoint must not be given a test-only bypass.
+ * Running these cases needs a real signed ID token, which means:
+ *
+ *   SCAN_ID_TOKEN=<a live Firebase ID token for the signing project>
+ *   SCAN_ID_SUB=<that token's uid>      # the KV keys below are keyed on it
+ *   SCAN_ID_EMAIL=<that token's email>
+ *   plus real network egress to Google (the fetch mock must let the verifier
+ *   host through).
+ *
+ * Absent those, the suite reports an explicit prerequisite skip rather than a
+ * pass or a silent 401 sweep. The live check stays open in
+ * audit/RELEASE_VALIDATION_QUEUE.md; the failed run is recorded there too.
+ * Rekeying the fixtures onto the supplied uid/email is work not yet done.
+ */
+if (!process.env.SCAN_ID_TOKEN || !process.env.SCAN_ID_SUB || !process.env.SCAN_ID_EMAIL) {
+  _skipAll(
+    'PREREQUISITE MISSING: needs a real signed Firebase ID token. Set ' +
+    'SCAN_ID_TOKEN, SCAN_ID_SUB and SCAN_ID_EMAIL with network egress to ' +
+    'Google. Without one, api/scan.js:664 refuses every case with 401 and no ' +
+    'scan behaviour is exercised. This is NOT a pass -- the live scan check ' +
+    'remains open.'
+  );
+}
 
 import handler from '../api/scan.js';
 

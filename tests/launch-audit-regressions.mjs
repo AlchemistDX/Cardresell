@@ -1392,10 +1392,25 @@ try {
 {
   const idx = readAppSource();
 
+  // 2026-09-10: this asserted the literal `return _rankTplBySetHint(json.data,
+  // q)`. searchWithTPL now returns a result object and the ranked rows leave as
+  // its `cards` field, so the assertion failed on the call's shape while the
+  // ranking itself was intact. The requirement is that the rows the caller sees
+  // went through the ranker, so that is what is asserted -- including that no
+  // other path hands back the upstream order.
+  const tplBody = idx.slice(idx.indexOf('async function searchWithTPL'),
+                            idx.indexOf('async function searchWithTPL') + 4000);
   check('the set-hint ranker exists and is applied to TPL search results',
         /function _rankTplBySetHint/.test(idx)
-          && /return _rankTplBySetHint\(json\.data, q\)/.test(idx),
+          && /_rankTplBySetHint\(json\.data,\s*q\)/.test(tplBody),
         'ranking that is never called cannot fix row 0');
+  check('the ranked rows are what the caller receives',
+        /cards\s*:\s*_rankTplBySetHint\(json\.data,\s*q\)/.test(tplBody)
+          || /return\s+_rankTplBySetHint\(json\.data,\s*q\)/.test(tplBody),
+        'ranking whose result is discarded leaves row 0 wrong');
+  check('no success path returns the upstream order for a non-empty result',
+        !/cards\s*:\s*json\.data\b/.test(tplBody),
+        'a second return path would reintroduce the Base Set 2 pick');
 
   // Exact set match MUST outrank a longer set that merely starts with the
   // hint, or Base Set 2 wins again -- this is the entire bug.

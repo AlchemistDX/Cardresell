@@ -52,10 +52,38 @@ function grabFn(src, name) {
   }
   throw new Error(`unbalanced braces for ${name}`);
 }
+/* Every CSS rule whose selector list mentions `sel`, in source order.
+ *
+ * 2026-09-10: the old implementation was `HTML.match('\\.ft-card\\s*\\{...')`,
+ * which matches the FIRST text in the file that ends in the selector -- and
+ * that is `.col-table td[data-label="Card"] .ft-card{...}`, a narrower
+ * table-cell override sitting above the base rule. Every declaration this
+ * section checks lives on the base rule, so five assertions read an override
+ * that was never supposed to carry them and reported the product as broken.
+ * A selector match now has to be a whole comma-separated member of a rule's
+ * selector list, and `standalone` distinguishes the element's own rule from a
+ * descendant-scoped override of it.
+ */
+function cssRules(sel) {
+  // Comments are stripped first: a CSS comment contains no braces, so a rule
+  // preceded by one would otherwise be matched starting at the comment and the
+  // comment text would end up inside the captured selector list. A selector
+  // may not contain `;` or a newline here, which is what keeps JS statements
+  // out of the scan.
+  const CSS = HTML.replace(/\/\*[\s\S]*?\*\//g, '\n');
+  const out = [];
+  const re = /(?<=^|\}|\n)[ \t]*([^{}@;\n]+?)\{([^{}]*)\}/g;
+  let m;
+  while ((m = re.exec(CSS)) !== null) {
+    const selectors = m[1].split(',').map((x) => x.trim()).filter(Boolean);
+    if (!selectors.some((x) => x === sel || x.endsWith(' ' + sel))) continue;
+    out.push({ selector: m[1].trim(), body: m[2], standalone: selectors.includes(sel) });
+  }
+  return out;
+}
 function cssRule(sel) {
-  const re = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}');
-  const m = HTML.match(re);
-  return m ? m[1] : null;
+  const own = cssRules(sel).find((r) => r.standalone);
+  return own ? own.body : null;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -101,6 +129,18 @@ function cssRule(sel) {
   ok('.ft-card has a rem-based cap', !!mw);
   ok('.ft-card cap is wider than before', mw && parseFloat(mw[1]) >= 18);
   ok('.ft-card keeps its weight and colour', /font-weight:600/.test(card) && /var\(--text\)/.test(card));
+  // The base rule being right is not enough: a narrower override can clip the
+  // identity again. SOL-PLAT-005 is about what renders, so every rule that
+  // touches .ft-card has to be checked, not just its own.
+  const cardRules = cssRules('.ft-card');
+  ok('more than the base .ft-card rule was examined', cardRules.length >= 2);
+  for (const r of cardRules) {
+    ok(`no .ft-card rule re-clips the identity (${r.selector})`,
+       !/white-space:nowrap/.test(r.body) &&
+       !/text-overflow:ellipsis/.test(r.body) &&
+       !/overflow:hidden/.test(r.body) &&
+       !/max-width:1[0-6]\dpx/.test(r.body));
+  }
 
   const set = cssRule('.ft-set');
   ok('.ft-set exists', !!set);
@@ -108,11 +148,17 @@ function cssRule(sel) {
   ok('.ft-set wraps long set names', /overflow-wrap:anywhere/.test(set));
   ok('.ft-set keeps the muted small type', /font-size:\.72rem/.test(set) && /var\(--text-muted\)/.test(set));
 
+  // 2026-09-10: was /<td class="ft-set">/ — the cell has since gained
+  // data-label="Set" for the mobile stacked-table layout, so the assertion
+  // failed on an attribute it never meant to constrain. The requirement is the
+  // class instead of an inline style, not the absence of other attributes.
   ok('the set cell uses the class, not an inline style',
-     /<td class="ft-set">\$\{esc2\(p\.set/.test(HTML));
+     /<td class="ft-set"[^>]*>\$\{esc2\(p\.set/.test(HTML));
   ok('the old inline-styled set cell is gone',
      !/<td style="font-size:\.72rem;color:var\(--text-muted\)">\$\{esc2\(p\.set/.test(HTML));
-  ok('the set value is still escaped', /class="ft-set">\$\{esc2\(/.test(HTML));
+  ok('the set value is still escaped', /class="ft-set"[^>]*>\$\{esc2\(/.test(HTML));
+  ok('no set cell interpolates p.set unescaped',
+     !/class="ft-set"[^>]*>\$\{(?!esc2\()/.test(HTML));
   ok('the em-dash fallback survives', /esc2\(p\.set\|\|'—'\)/.test(HTML));
 }
 

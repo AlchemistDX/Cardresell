@@ -4543,29 +4543,38 @@ has only ever been shown locally. This run shows it on the deployed build.
 deployment and moves the alias off the pinned one mid-check. Record the
 deployment ID with the result.
 
-**Steps**
+**Steps** — corrected 2026-09-10 after your review; three errors in the first
+draft of this runbook are struck below with the reason.
 
-1. Open the Preview URL, sign in with Google, and confirm the footer/bundle
-   matches the pinned build before doing anything else.
-2. Open the collection and find **`Charizard ISO-CHECK-20260910-K7M2Q9`**.
-   Use this entry, not the Lost Origin TG03 card — the marked entry is the one
-   with no comp behind it.
-3. Start the sell flow on it. When the price step appears, **type `2`** as the
-   price. Do not accept a suggested or comp price, and do not let a Quick
-   Pricing value populate the field.
-4. Complete the create with **one tap**. If nothing appears to happen, wait —
-   do not tap again; repeat-tap dedupe on the deployed build is a separate
-   unverified item and a second tap would confound this one.
-5. Screenshot the review screen showing the **$2** figure and whatever
-   provenance line it displays.
-6. In Upstash, open `upstash-kv-aureolin-door` → Data Browser, and search the
-   key prefix **`draft:`**. There will now be two records. Open the new one
-   (not `drf_3471a1a85ccddb2cca04958fa66ed58a`).
+1. Open the Preview URL and complete Vercel and Google sign-in if prompted.
+   ~~Confirm the footer/bundle matches the pinned build.~~ **Withdrawn** — no
+   phone-visible commit indicator has been established on this build, and the
+   bundle hash cannot uniquely identify a commit anyway. The pinned commit is
+   identified by the deployment metadata above, not by anything on the page.
+2. Open the collection and find **`Charizard ISO-CHECK-20260910-K7M2Q9`** by its
+   title. Use this entry; if it is missing, screenshot the collection and stop
+   rather than substituting another card.
+3. ~~When the price step appears, type `2`.~~ **Withdrawn** — the Sell flow was
+   not established to have a price-entry step; the Collection path uses the
+   row's **saved** value. So: **set the marked entry's own value to `2` using
+   its actual editing control on the row, and save it.** If that control is not
+   present or does not accept a manual value, screenshot it and stop — that is
+   itself a finding, and picking a different card would not answer the question.
+4. Then create the listing draft with **one tap**. If nothing appears to happen,
+   wait — do not tap again. Repeat-tap dedupe on the deployed build is a
+   separate unverified item and a second tap would confound this one.
+5. **Reload the page and reopen that draft.** Confirm the price still reads
+   **$2** after the round trip, not only at the moment of creation.
+6. In Upstash, open `upstash-kv-aureolin-door` → Data Browser and search
+   **`draft:*`** — the exact query the paired-store check already validated.
+   Locate the record by the **marked title**. Do not assume a particular number
+   of records exists.
 
 **What to capture — from the record itself, not from the UI**
 
 | field | expected | why it matters |
 |---|---|---|
+| marked title | `Charizard ISO-CHECK-20260910-K7M2Q9` | this is the record under test, identified by title |
 | `draftId` | a new `drf_…` | it is not the old draft |
 | `price` | `2` | the value you typed survived the round trip |
 | `priceSource` | **`"seller"`** | the whole point of the run |
@@ -4573,14 +4582,19 @@ deployment ID with the result.
 | `rev` | `1` | one create, not a create plus an edit |
 | `createdAt` | today | it is this run's record |
 
-Paste the record (or a screenshot of it) back and I will reconcile it against
-the decision of record and close the item. **If `priceSource` reads anything
-other than `"seller"`, stop there** — that is a release blocker and I should look
-at it before you do anything else with the Preview.
+**The required result is `price: 2` and `priceSource: "seller"` on that
+identified record.** Conflicting *price-source* metadata needs investigation.
+Unrelated **card-identification** metadata on the record is not automatically a
+provenance defect and should not be read as one.
 
-**Leave in place afterwards:** the new draft, the old draft, and the alias
-pinning. The isolated-Redis Lua verification runs after this, and I have kept
-everything local until it finishes.
+If the result differs, **leave the record unchanged** and stop there — that is a
+release blocker to look at before anything else touches the Preview.
+
+**Scope of what this establishes.** Seller-price provenance **on commit
+`499ef1c`**, and nothing more. Today's lifecycle code is not in this build, and
+verification of the three actual Lua scripts against real Redis remains a
+separate check. Leave in place afterwards: the new draft, the old draft, and the
+alias pinning.
 
 ---
 
