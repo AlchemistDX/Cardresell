@@ -43,9 +43,9 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-5 flip completeness | **PASSED** — re-run 2026-09-09, 22 / 0 |
 | RV-6 rendered ranking | **PASSED, narrowed** — re-run 2026-09-09, identical in 4 / 4 cases, two default-tier rows only |
 | RV-7 D7 listing photos | **PASSED** — re-run 2026-09-09, 92 / 0; Safari/iOS limitation retained |
-| RV-8 preview reads production KV | **BLOCKING** — confirmed by configuration shape, not inference; 32 `api/` files read `KV_REST_API_URL`. Decide before the first push (G1) |
+| RV-8 preview reads production KV | **CONFIGURATION CLOSED, deployed proof pending** — verified 2026-09-10 00:20 from the Vercel CLI: the five KV names now exist as **two disjoint groups**, Production and Preview+Development, so Preview no longer resolves to the production store. Preview writes remain unproven because **no Preview deployment exists** (see §Redis reconciliation) |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
-| RV-10 containment mechanism | **BLOCKING, design established** (15:48, corrected 15:57) — cause is five single-row store vars targeting all three environments; remedy is a second Redis database with **disjoint** targeting (existing values → Production only, new values → Preview/Development only), not an override alongside the existing rows. Provider not yet identified. The preview-scoped deployment toggle I proposed **does not exist** and is disproved. **Designed, not executed.** |
+| RV-10 containment mechanism | **EXECUTED for KV, verified by listing** — the second Redis database was created and the targeting is disjoint (Production vs Preview+Development), confirmed 2026-09-10 00:20. The earlier row read "designed, not executed" and is corrected. Cause and rejected alternatives retained in §4. **Three non-KV production resources are still reachable from Preview** — see §Redis reconciliation. |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
 | CH-2 code fallback to that token | **CLOSED IN CODE at `6c610e2`** — the literal is gone, the token is read at call time, and an absent token fails closed with `503 verification_token_unset`. Reaches production when the release deploys. *(An earlier row here said "prepared, not applied" — wrong, and corrected 15:12.)* |
 | CH-3 unencrypted TPL key | **CLOSED at `c4ea5e4`** — #518 revoked, replacement verified by post-revocation lookups, storage type now `sensitive` (`3570d97`). Public and plain-storage exposures both closed. **Do not re-open; the TPL rotation is done.** Only G12 / R4 activation remains, tracked under release preparation. |
@@ -383,10 +383,12 @@ custom environment and incurs no additional cost.
    **PASSED for the Production half, 2026-09-09 17:20.** All five read
    **Production**, and all five are present — `REDIS_URL`, `KV_URL`,
    `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`, `KV_REST_API_URL`. The
-   "gone would look like narrowed" failure did not occur. **This verifies only
+   "gone would look like narrowed" failure did not occur. ~~This verifies only
    that Production was vacated of the other two environments; Preview and
    Development are currently bound to nothing, which is the intended midpoint,
-   not the finished state.**
+   not the finished state.~~ **Superseded 2026-09-10:** that was true when
+   written. Preview and Development are now bound to the second database, so
+   the separation is complete as configuration. See §Redis reconciliation.
 
    **Unplanned gain: the five are now write-only.** Each row now shows a
    **padlock**, where before it showed `<>` with a reveal control. Narrowing the
@@ -2436,3 +2438,136 @@ were never stable (see §4 above). Those citations resolve against whatever the
 working file held when each document was written. Re-resolving them to
 `53a0674d` is mechanical but touches many documents. Worth doing before
 release, or accept the map's generation-13 note as the explanation?
+
+---
+
+## Redis reconciliation, and what Preview can still reach — 2026-09-10
+
+**A tooling change makes this section evidence rather than recollection.** The
+Vercel REST API is unreachable from this sandbox (curl exit 60, HTTP 000) and
+that had been treated as "no direct verification available". It was not: a
+`vercel` CLI is installed at `/usr/local/bin/vercel` and reaches the API
+normally. Everything below is read from it. No values were requested, read or
+printed — `env ls` reports names, targets and ages only.
+
+### 1. The KV separation is complete as configuration
+
+Ten rows, two disjoint groups, no name targeting more than one group:
+
+| names | target | age at check |
+| --- | --- | --- |
+| `KV_URL`, `KV_REST_API_URL`, `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`, `REDIS_URL` | **Preview, Development** | 3h |
+| the same five | **Production** | 3h |
+
+This closes the reconciliation Will asked for. The queue held two statements
+that could not both be true — §4 step 5 said Preview and Development were bound
+to nothing, while the store table recorded `upstash-kv-aureolin-door` as
+targeted at Preview and Development. The listing settles it in favour of the
+store table; step 5's sentence described a real midpoint that has since been
+passed, and is struck through in place rather than deleted.
+
+All ten rows report `Encrypted`, consistent with the padlock observed at 17:20.
+
+### 2. The live deployment predates the current configuration
+
+| | |
+| --- | --- |
+| live production deployment | `dpl_BJuH3okrHAsHpM7vUhCZv85or225` |
+| created | 2026-09-09 17:03:19 UTC (**7h** before the check) |
+| aliases | `www.cardresell.org`, `cardresell.org`, `cardresell.vercel.app`, `…-git-main-…` |
+| bundle served | `js/core.569ff536.js` — **Phase 0**, confirmed in the cloud browser |
+| KV rows | **3h** before the check |
+
+The KV rows are four hours *newer* than the deployment carrying them. On the
+recorded rule — changing environment variables after deployment requires a new
+deployment to carry those settings; reading them at call time does not change
+that — **the currently-aliased production deployment cannot be assumed to hold
+the Production-scoped KV values.** This is not a fault in the separation; it is
+the ordinary consequence of configuring after deploying, and it is exactly the
+condition R4 verification exists to catch. It also means the *production* half
+of the separation is unproven in the same way the Preview half is.
+
+There is no read-only way to settle it from outside: `api/health.js` reports
+`{ok, service, time}` and nothing about store binding, and the endpoints that
+would reveal a binding are the ones that consume paid quota. **Not probed.**
+
+### 3. No Preview deployment exists
+
+All twenty deployments returned by `vercel ls` have `Environment: Production`.
+"Verify the fresh Preview" has no subject yet — §4 step 6 is genuinely
+outstanding, and creating that deployment is a deploy action, so it waits for
+authorization.
+
+### 4. Three production resources remain reachable from Preview
+
+The KV work isolated the store. It did not isolate anything else. Rows still
+targeting Preview, and whether code reads them:
+
+| name | targets | read by | assessment |
+| --- | --- | --- | --- |
+| `PRICECHARTING_API_TOKEN` | Production, Preview, Development | `api/pricecharting.js` | **Live leak.** A Preview deployment would spend the production PriceCharting quota. Against "don't demonstrate abuse by consuming paid quota", and it sits on top of the unresolved permission thread. |
+| `TURNSTILE_SECRET_KEY` | Production, Preview | `api/verify-claim-firebase.js` | Shared production secret; lets Preview validate against the production Turnstile site. |
+| `BLOB_STORE_ID`, `BLOB_WEBHOOK_PUBLIC_KEY` | Production, Preview | **nothing** | **Dead configuration** — see below. |
+
+The `STRIPE_*_PRICE_*` rows that target all three environments are price
+identifiers, not credentials, and are not treated as leaks.
+
+### 5. The recorded Blob question, settled
+
+The open item asked whether `cardresell-blob` being Production+Preview gives a
+Preview deployment write access to production photo storage. **It does not, and
+the reason is stronger than scoping: no code reads either variable.** A search
+across `api/`, `js/` and the HTML for `BLOB_STORE_ID`, `BLOB_WEBHOOK_PUBLIC_KEY`,
+`@vercel/blob` and `vercel-blob` returns nothing outside `audit/`.
+
+The `blobs.put(...)` call at `js/core.53a0674d.js:18811` is **IndexedDB**, not
+Vercel Blob — `s.blobs` is an object store inside `_photoTx()`, which is what
+"browser-local listing photos" means. D7 photos never leave the browser, so
+there is no production photo storage for Preview to reach.
+
+Both rows also display their values in plain text in the listing
+(`-----BEGIN PUBLIC …`, `store_YYN5SXl8CzIa…`), i.e. Config rather than Secret.
+Neither is a credential — one is a public key, the other an identifier — so this
+is hygiene, not exposure. The hazard is that dead configuration reads as live.
+
+### 6. One correction to the containment record
+
+The record states the eBay variables are typed Config rather than Secret, and
+that rotation must therefore write replacements as Sensitive.
+`EBAY_CERT_ID`, `EBAY_VERIFICATION_TOKEN` and `EBAY_APP_ID` all report
+`Encrypted` in the listing, the same as every other secret, while the two
+genuinely non-sensitive rows print their values. That is evidence **against**
+the Config typing, but it is not proof: the listing may collapse the
+distinction the dashboard draws. **Flagged as contradicted, not corrected** —
+writing replacements as Sensitive stays the instruction either way, since it is
+correct under both readings.
+
+### Questions
+
+**Q-RV-1. Creating the Preview deployment.** Step 6 needs one, and none exists.
+Pushing branch `phase1-block-d` to `origin` would produce a Preview from a
+known commit; `vercel deploy` from this sandbox would upload the working tree
+instead, which I do not recommend — it deploys something no commit describes.
+Push the branch, or create it another way? This is a deploy action and is not
+started.
+
+**Q-RV-2. PriceCharting before any Preview exists.** As configured, a Preview
+deployment can spend the production PriceCharting quota. Remove
+`PRICECHARTING_API_TOKEN` from Preview and Development first — accepting that
+Preview's PriceCharting path then fails closed — or leave it and confine
+verification to paths that never call it? I recommend removing it: a Preview
+that cannot reach a paid provider is the safer default, and R4 does not need it.
+
+**Q-RV-3. Turnstile in Preview.** Same shape, lower stakes. Narrow
+`TURNSTILE_SECRET_KEY` to Production, or leave it so Preview can exercise claim
+verification?
+
+**Q-RV-4. The dead Blob rows.** Delete both, narrow them to Production, or
+leave them? I recommend deleting them — nothing reads them, and configuration
+that looks live but is not has already cost this project time.
+
+**Q-RV-5. Re-deploying production to carry the KV configuration.** The live
+deployment predates the Production KV rows, so the production half of the
+separation is unverified. Confirming it requires a production deployment built
+after the change. Does that fold into the eBay rotation window, which already
+plans a redeploy of the exact live commit, or stay separate?
