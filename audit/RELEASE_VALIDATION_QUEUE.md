@@ -103,15 +103,27 @@ RV-13's local implementation is complete and adjudicated; it is no longer the
 head of this queue. What follows is, and **none of it is code**.
 
 **Authorization recorded 2026-09-09 15:31 EDT:** Will granted permission to
-push what Phase 1 needs. Recorded, and deliberately **not acted on yet** —
-authorization was never the constraint here. The first Phase 1 push is gated by
-containment (steps 11a/11b of the rotation checklist), whose control has not
-been read yet, and that gate exists to stop a push from deploying into a shared
-store. A standing permission does not remove a technical prerequisite, so the
-push waits on containment rather than on consent.
+push what Phase 1 needs.
 
-Nothing below has been executed. Local implementation is not authorization, and
-authorization is not readiness.
+**Superseded 2026-09-10 18:18.** This paragraph said the first Phase 1 push was
+gated by containment, that containment's control "has not been read yet", and
+that "nothing below has been executed". All three are now false:
+
+- **Containment was executed.** The second Redis database exists and the five
+  store variables target two disjoint groups — Production, and
+  Preview+Development — confirmed 2026-09-10 00:20 from the Vercel CLI.
+- **The control was read**, on the same reading; the provider is **Upstash**
+  (`upstash-kv-aureolin-door` for Preview+Development,
+  `upstash-kv-bistre-arrow` for Production).
+- **A Phase 1 push has happened.** Preview `499ef1c` was pushed and deployed as
+  `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, which is the pinned deployment the $2
+  seller-provenance check is waiting on.
+
+What has **not** happened, and what standing authorization still does not
+cover, is a push to `main`. Standing authorization covers Phase 1
+**preview/branch** pushes only; production deployment remains Will's alone and
+must be explicit. That distinction is the part of this paragraph worth keeping
+— not the containment gate, which is closed.
 
 ### Already closed — do not re-open
 
@@ -147,7 +159,9 @@ three non-KV production resources reachable from Preview are tracked
 separately and are not RV-8.)* Both halves are settled
 and neither is an inference.
 
-**Cause.** Five store variables each exist as a **single row targeting
+**Cause** *(as configured until the 2026-09-10 split; stated in the present
+tense because that is how it was found, not because it is still true)*. Five
+store variables each existed as a **single row targeting
 `production,preview,development`**: `KV_REST_API_URL`, `KV_REST_API_TOKEN`,
 `KV_REST_API_READ_ONLY_TOKEN`, `KV_URL`, `REDIS_URL`
 (`audit/ROTATION_GATE_ANSWERED.md:82-86`). One row carries one value to every
@@ -156,7 +170,13 @@ as Production**. Established from the configuration's shape — no secret
 decrypted. All five share `createdAt 1783172908043`, the signature of one
 integration writing one store's credentials, and `GET /v1/storage/stores`
 returns `{"stores": []}`, which together indicate **an integration rather than a
-first-party Vercel store** — without identifying which provider. The blast radius is wide: **32 files under `api/`
+first-party Vercel store**. *(This sentence ended "without identifying which
+provider" until 2026-09-10 18:18. The provider was identified on the
+2026-09-10 00:20 CLI reading and is named in step 1 of the execution order
+below — **Upstash for Redis**, store `upstash-kv-bistre-arrow` for Production
+and `upstash-kv-aureolin-door` for Preview+Development.)*
+
+The blast radius is wide: **32 files under `api/`
 read `KV_REST_API_URL`**, so this is not only R4's problem.
 
 **Remedy.** Not a deployment gate. The project's Environments page exposes
@@ -196,7 +216,16 @@ Redis provider" as though the vendor were settled; it is not.
 Development scopes already provide what Phase 1 requires, so the plan uses no
 custom environment and incurs no additional cost.
 
-### Execution order — owner, and none of it executed
+### Execution order — owner *(historical: steps 1-4 executed 2026-09-10)*
+
+> **Dated evidence, not live status.** This list was written when none of it had
+> run, and the heading said so. Steps 1 through 4 have since been executed: the
+> provider is **Upstash**, the second database exists, and the five store
+> variables target two disjoint groups (Production vs Preview+Development),
+> confirmed 2026-09-10 00:20. Read the steps below for the reasoning and the
+> safeguards, not for what remains outstanding. The one step still open is
+> **G12 / R4 activation**, tracked under release preparation. Each step's own
+> in-line progress notes are kept because they record how it was established.
 
 1. **Identify the actual Redis provider** from the integration or variable
    metadata. **Partly advanced 2026-09-09 17:03** from the owner's Environment
@@ -462,7 +491,10 @@ non-production deployments would have removed the very environment R4 has to be
 verified in, whereas a separate store both contains the leak and *creates* the
 isolated store that item 3's verification requires.
 
-This gates the first push. It does not gate item 1.
+~~This gates the first push.~~ **Satisfied 2026-09-10.** The store split was
+executed and the first Phase 1 push went out — Preview `499ef1c`, deployed as
+`dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`. This gated the first push and no longer
+gates anything. It never gated item 1.
 
 ### 3. R4 activation — the activated deployment must carry both halves
 
@@ -604,11 +636,17 @@ production. Nothing here should be read as asking for it.
 
 ### Where Phase 1 stands
 
+> **Superseded 2026-09-10 18:18 — kept as the 2026-09-09 reading.** The current
+> figure is **approximately 95%** (Will's judgment), and containment is
+> **executed**, not designed. Two claims below are stale: the percentage, and
+> the containment sentence. The reasoning about what the remainder consists of
+> is unchanged and is why the figure has moved so little.
+
 **Roughly 90–92% complete — a judgment, not a computed figure**, recorded as one
 so it is not later quoted as a measurement. What remains is **release
 configuration and verification against what is actually deployed**, which no
-passing local suite can substitute for. **Containment is designed but not
-executed**, and design is not progress against that remainder.
+passing local suite can substitute for. ~~**Containment is designed but not
+executed**~~, and design is not progress against that remainder.
 
 ---
 
@@ -664,8 +702,13 @@ mocked or fixture card.
 4. Client-side, `_crGradingScope` resolves to `scan:<analysis_id>` and not to an
    anonymous WeakMap token. If it resolves to a token, item 1 failed silently.
 
-**Blocked by:** `tests/test-scan.mjs` has no offline harness (existing open
-item). This entry is the concrete reason to build one.
+**Blocked by:** *(corrected 2026-09-10 18:18)* — this read "`tests/test-scan.mjs`
+has no offline harness". **The harness was built and runs 36 passed, 0 failed
+locally.** RV-1 is blocked on one thing only: **exercising the deployed grade
+contract**, which needs the deployed function and a signed-in session. The four
+observations above are about a response this app has not yet made in
+production, and a local harness cannot produce one. Deployed Google
+authentication is the adjacent open item.
 
 ---
 
@@ -1012,7 +1055,19 @@ KV isolation.** Q-CH3-1..4 await owner answers; R2–R3 await authorization.
 
 ---
 
-## RV-10 — containment mechanism unverified
+## RV-10 — containment mechanism *(historical: unverified as written; executed and verified 2026-09-10)*
+
+> **Dated evidence, not live status.** The heading read "containment mechanism
+> unverified" until 2026-09-10 18:18, which made a closed item look live. The
+> mechanism was **executed and verified by listing**: the second Upstash
+> database exists and the five store variables target two disjoint groups
+> (Production vs Preview+Development), confirmed 2026-09-10 00:20, and the
+> deployed `draft:*` comparison on `499ef1c` showed the draft record present in
+> Preview's store and absent from Production's. What follows is the original
+> analysis of the control that was *rejected* — the deployment toggle — and it
+> is kept because the rejection is still the reason a store split was the
+> remedy. **Three non-KV production resources remain reachable from Preview**
+> and are tracked separately; they are not RV-10.
 
 `audit/ROTATION_EXECUTION_CHECKLIST.md` §4. The "disable automatic Preview
 deployment" toggle named in the earlier plan was **not established to exist with
