@@ -1693,13 +1693,18 @@ console.log('\nthe complete seller workflow: create, delete, recreate');
         `${Aretry.status} ${JSON.stringify(Aretry.body)}`);
   check('W6 and no draft came back', (await listIds()).length === 0, JSON.stringify(await listIds()));
 
-  // A's retry on its ORIGINAL key is the other half: idempotency replays the
-  // recorded result, which names a draft that no longer exists. The client
-  // reconciles by reading it, and gets 410 -- not a resurrected draft.
-  const AreplayId = (await call({ method: 'POST', headers: HDRS('wf6-A'), body: bodyA })).body.draftId;
-  const AreplayRead = await call({ method: 'GET', query: { id: AreplayId } });
-  check('W6 🔴 an idempotent replay of A\u2019s create returns the id but the draft is GONE',
-        AreplayRead.status === 410, `${AreplayRead.status}`);
+  // A's retry on its ORIGINAL key is the other half, and the harder one:
+  // runOnce returns a recorded result WITHOUT running the body, so a replay
+  // would skip the lifecycle check entirely and hand back a deleted draft id
+  // dressed as a success. Excluding the generation from the fingerprint does
+  // not produce the 410 by itself -- the authoritative check has to run
+  // BEFORE the replay can bypass it. It does, so the replay is refused.
+  const Areplay = await call({ method: 'POST', headers: HDRS('wf6-A'), body: bodyA });
+  check('W6 🔴 an idempotent replay of A\u2019s create is REFUSED, not replayed',
+        Areplay.status === 410 && Areplay.body.code === 'DRAFT_GENERATION_STALE',
+        `${Areplay.status} ${JSON.stringify(Areplay.body)}`);
+  check('W6 and the refusal names the evidence, not a generic staleness',
+        Areplay.body.evidence === 'replayed-draft-not-live', JSON.stringify(Areplay.body.evidence));
   check('W6 and the store still holds no live draft', (await listIds()).length === 0);
 
   // Finally: A, having seen the deleted state, presses Create explicitly.
@@ -1708,6 +1713,66 @@ console.log('\nthe complete seller workflow: create, delete, recreate');
         Afresh.status === 201 && Afresh.body.draftId !== A1.body.draftId,
         `${Afresh.status} ${Afresh.body.draftId}`);
   check('W6 and the row holds exactly one draft', (await listIds()).length === 1);
+}
+
+// ══ Eligibility reports presence in THREE states, not two ═══════════════════
+//
+// Here rather than in tests/sell-eligibility.mjs because the distinction is
+// about the lifecycle record in the store, and this file is where the store
+// exists. The suite over there covers the stamps, which are pure.
+
+console.log('\nsell-eligibility distinguishes unknown from empty');
+{
+  const ELIG = await import('../api/sell-eligibility.js');
+  const SLOT = 'ebay:fixed-price';
+  const call = async (req) => { const res = fakeRes(); await EP.default(fakeReq(req), res); return { status: res.statusCode, body: res.body }; };
+  const eligCall = async (draftState) => {
+    const res = fakeRes();
+    await ELIG.default(fakeReq({ method: 'POST', body: { rows: [], draftState } }), res);
+    return { status: res.statusCode, body: res.body };
+  };
+
+  reset();
+  // A row that HOLDS a draft.
+  const liveRow = 'inst_pres_live';
+  const mk = await call({ method: 'POST', headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K('pres-live') },
+                          body: { ...httpInput(), instanceId: liveRow } });
+  check('E setup: a draft exists', mk.status === 201, `${mk.status}`);
+
+  // A row whose draft was deleted.
+  const goneRow = 'inst_pres_gone';
+  const mk2 = await call({ method: 'POST', headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K('pres-gone') },
+                           body: { ...httpInput(), instanceId: goneRow } });
+  const rev2 = (await call({ method: 'GET', query: { id: mk2.body.draftId } })).body.draft.rev;
+  await call({ method: 'DELETE', query: { id: mk2.body.draftId },
+               headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K('pres-gone-del') },
+               body: { expectedRev: rev2 } });
+
+  // A row nothing has ever touched -- which is ALSO the shape of a pre-D8
+  // draft, and that is the whole point of the third state.
+  const unknownRow = 'inst_pres_untouched';
+
+  const e = await eligCall({ slot: SLOT, instanceIds: [liveRow, goneRow, unknownRow] });
+  check('E the endpoint answers', e.status === 200, `${e.status}`);
+  const R = (e.body.draftState || {}).rows || {};
+
+  check('E a row holding a draft reads live, with its id',
+        R[liveRow] && R[liveRow].presence === 'live' && R[liveRow].draftId === mk.body.draftId,
+        JSON.stringify(R[liveRow]));
+  check('E a row whose draft was deleted reads empty',
+        R[goneRow] && R[goneRow].presence === 'empty' && R[goneRow].live === false,
+        JSON.stringify(R[goneRow]));
+  check('E and it is marked deleted, because a delete actually ran',
+        R[goneRow] && R[goneRow].deleted === true, JSON.stringify(R[goneRow]));
+  check('E 🔴 a row with NO record reads unknown, NOT empty',
+        R[unknownRow] && R[unknownRow].presence === 'unknown',
+        JSON.stringify(R[unknownRow]));
+  check('E 🔴 and unknown does not claim the row is deleted',
+        R[unknownRow] && R[unknownRow].deleted === false && R[unknownRow].live === false,
+        JSON.stringify(R[unknownRow]));
+  check('E the generation to send is reported for every resolvable row',
+        R[liveRow].generation === 0 && R[goneRow].generation === 1 && R[unknownRow].generation === 0,
+        `${R[liveRow].generation}/${R[goneRow].generation}/${R[unknownRow].generation}`);
 }
 
 done();

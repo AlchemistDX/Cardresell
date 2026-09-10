@@ -502,7 +502,14 @@ async function advance(kv, sub, instanceId, slot, rec, terminalState, fence) {
 // `deletedDraftGen` is the generation the removed draft was CREATED at, which
 // is why it is persisted on create. Advancing to `max(gen, thatGen + 1)` makes
 // this safe to call twice, safe to call concurrently, and safe to call late.
-export async function recordDeletion(kv, sub, instanceId, slot, draftId, deletedDraftGen, fence) {
+export async function recordDeletion(kv, sub, instanceId, slot, draftId, opts = {}) {
+  // NAMED, not positional. This used to take (…, deletedDraftGen, fence) as
+  // two adjacent numbers and finishDelete passed the fence into the
+  // generation slot. It type-checked, the fenced write refused with
+  // 'no-fence', and the deletion was silently never recorded. Two adjacent
+  // arguments of the same type with no way to tell them apart is the defect;
+  // the wrong call was the symptom.
+  const { deletedDraftGen = null, fence } = opts;
   const r = await readLifecycle(kv, sub, instanceId, slot);
   if (!r.ok) return r;
   const rec = r.record;

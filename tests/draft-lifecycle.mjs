@@ -163,7 +163,7 @@ console.log('\n── the normal lifecycle ──');
   check('a committed draft resolves as the live draft', live.ok && live.live === 'drf_A' && live.gen === 0);
 
   D.put('drf_A', { deleted: true });                       // tombstone FIRST
-  const del = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_A', 0, f));
+  const del = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_A', { deletedDraftGen: 0, fence: f }));
   check('removal advances the generation exactly once', del.ok && del.gen === 1 && del.advanced === true);
 
   const after = await op(kv, INST, SLOT, (f) => resolveLifecycle(kv, SUB, INST, SLOT, D.probe, f));
@@ -210,7 +210,7 @@ console.log('\n── lock expiry while the owner is still running ──');
 
   // B changes the row: removes the draft.
   D.put('drf_K', { deleted: true });
-  const bDel = await recordDeletion(kv, SUB, INST, SLOT, 'drf_K', 0, b.fence);
+  const bDel = await recordDeletion(kv, SUB, INST, SLOT, 'drf_K', { deletedDraftGen: 0, fence: b.fence });
   check('B advances the generation', bDel.ok && bDel.gen === 1);
 
   // A resumes, still believing it holds the row, and writes.
@@ -222,7 +222,7 @@ console.log('\n── lock expiry while the owner is still running ──');
   check('so the row still shows B\'s state, not A\'s',
         stillB.record.gen === 1 && stillB.record.lastState === LIFECYCLE_STATE.DELETED);
 
-  const aDel = await recordDeletion(kv, SUB, INST, SLOT, 'drf_K', 0, a.fence);
+  const aDel = await recordDeletion(kv, SUB, INST, SLOT, 'drf_K', { deletedDraftGen: 0, fence: a.fence });
   check('and A cannot record a removal either', aDel.ok === false && aDel.error === LIFECYCLE_ERR.FENCED);
   const aCommit = await commitCreate(kv, SUB, INST, SLOT, 'drf_K2', 0, a.fence);
   check('nor commit one', aCommit.ok === false && aCommit.error === LIFECYCLE_ERR.FENCED);
@@ -364,7 +364,7 @@ console.log('\n── the fence reaches the DRAFT write, not just the record ─
   await reserveCreate(kv3, SUB, INST, SLOT, 'drf_R', 0, a3.fence);
   kv3._expireKey(lifecycleLockKey(SUB, INST, SLOT));
   const b3 = await acquireLifecycleLock(kv3, SUB, INST, SLOT);
-  await recordDeletion(kv3, SUB, INST, SLOT, 'drf_R', 0, b3.fence);
+  await recordDeletion(kv3, SUB, INST, SLOT, 'drf_R', { deletedDraftGen: 0, fence: b3.fence });
   const a3Write = await D3.write(SUB, INST, SLOT, a3.fence, 'drf_R');
   check('a draft write after its reservation was DELETED is refused',
         a3Write.ok === false && a3Write.error === LIFECYCLE_ERR.FENCED);
@@ -481,7 +481,7 @@ console.log('\n── a delete that RAN closes the ambiguity permanently ──'
     return { ok: true };
   });
   D.put('drf_N', { deleted: true });
-  await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_N', 0, f));
+  await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_N', { deletedDraftGen: 0, fence: f }));
   D.expire('drf_N');                                        // day 91
 
   const res = await op(kv, INST, SLOT, (f) =>
@@ -521,7 +521,7 @@ console.log('\n── repair is repeatable and cannot advance twice ──');
   D.put('drf_C', { deleted: true });
   const a = await op(kv, INST, SLOT, (f) => resolveLifecycle(kv, SUB, INST, SLOT, D.probe, f));
   const b = await op(kv, INST, SLOT, (f) => resolveLifecycle(kv, SUB, INST, SLOT, D.probe, f));
-  const c = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_C', 3, f));
+  const c = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_C', { deletedDraftGen: 3, fence: f }));
   check('three repairs of one removal all land on the same generation',
         a.gen === 4 && b.gen === 4 && c.gen === 4,
         'an INCR here would have produced 4, 5, 6');
@@ -545,10 +545,10 @@ console.log('\n── a retry of an OLD removal must not touch a newer lifecycle
   const kv = makeKv(); const D = drafts();
   await createDraft(kv, D, INST, SLOT, 'drf_OLD', 0);
   D.put('drf_OLD', { deleted: true });
-  await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_OLD', 0, f));
+  await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_OLD', { deletedDraftGen: 0, fence: f }));
   await createDraft(kv, D, INST, SLOT, 'drf_NEW', 1);
 
-  const late = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_OLD', 0, f));
+  const late = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_OLD', { deletedDraftGen: 0, fence: f }));
   const rec = await readLifecycle(kv, SUB, INST, SLOT);
   check('the late retry does not advance the generation', late.gen === 1 && rec.record.gen === 1);
   check('and does not overwrite the newer pointer',
@@ -646,7 +646,7 @@ console.log('\n── a create paused immediately after its generation check ─
   });
   const del = withLifecycleLock(kv, SUB, INST, SLOT, async ({ fence }) => {
     D.put('drf_J', { deleted: true });
-    return recordDeletion(kv, SUB, INST, SLOT, 'drf_J', 0, fence);
+    return recordDeletion(kv, SUB, INST, SLOT, 'drf_J', { deletedDraftGen: 0, fence: fence });
   });
   const [cOut, dOut] = await Promise.all([create, del]);
   check('the removal could not interleave with the paused create',
@@ -656,7 +656,7 @@ console.log('\n── a create paused immediately after its generation check ─
         cOut.staleAfterPause === false);
 
   D.put('drf_J', { deleted: true });
-  const retry = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_J', 0, f));
+  const retry = await op(kv, INST, SLOT, (f) => recordDeletion(kv, SUB, INST, SLOT, 'drf_J', { deletedDraftGen: 0, fence: f }));
   check('and the retried removal advances the generation once', retry.gen === 1);
 }
 

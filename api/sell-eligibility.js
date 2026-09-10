@@ -188,16 +188,35 @@ async function maybeDraftState(body, uid) {
         rows[instanceId] = { generation: null, reason: rec.error || 'unreadable' };
         continue;
       }
+      // ── Three states, because there are three ─────────────────────────
+      //
+      // An ABSENT lifecycle record is not evidence that the row has no
+      // draft. Every draft made before this record existed is in exactly
+      // that state, and reporting it as `live: false` overstated what this
+      // endpoint knows: it is UNKNOWN, and only the create handler — which
+      // scans the seller's drafts and fails closed — can resolve it.
+      //
+      // The client uses this for WORDING only, never to decide whether a
+      // create is allowed. That decision is the handler's.
+      //
+      //   live     the row holds a draft, and its id is here
+      //   empty    a terminal state is recorded: nothing is there now
+      //   unknown  no record at all — a pre-lifecycle draft may exist
+      const st = rec.record.lastState;
+      const hasRecord = !!rec.record.lastDraftId || rec.record.gen > 0;
+      const presence = st === LIFECYCLE_STATE.LIVE ? 'live'
+        : (hasRecord ? 'empty' : 'unknown');
       rows[instanceId] = {
         // The generation to send with the NEXT create for this row.
         generation: rec.record.gen,
-        // Whether the row currently HOLDS a draft, by the lifecycle record's
-        // own account. The client uses this to choose its wording — "Open
-        // draft" vs "Start listing" — never to decide whether a create is
-        // allowed. That decision is the handler's.
-        live: rec.record.lastState === LIFECYCLE_STATE.LIVE,
-        deleted: rec.record.lastState === LIFECYCLE_STATE.DELETED,
-        draftId: rec.record.lastState === LIFECYCLE_STATE.LIVE ? (rec.record.lastDraftId || null) : null,
+        presence,
+        live: presence === 'live',
+        // Only true where a delete operation actually ran. A retired
+        // reservation or a disappearance also spends a generation and lands
+        // as 'gone', and neither is evidence of a seller deletion.
+        deleted: st === LIFECYCLE_STATE.DELETED,
+        lastState: st || null,
+        draftId: presence === 'live' ? (rec.record.lastDraftId || null) : null,
       };
     } catch (e) {
       rows[instanceId] = { generation: null, reason: String((e && e.message) || e) };

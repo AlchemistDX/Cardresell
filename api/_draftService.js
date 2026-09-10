@@ -49,6 +49,7 @@ import {
   runOnce,
   SCOPES,
   selectMutation,
+  IDEMPOTENCY_STATE,
 } from './_idempotency.js';
 
 import {
@@ -310,7 +311,45 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
     return err;
   };
 
-  return runOnce(kv, googleSub, scope, idempotencyKey, async () => {
+  // ── The replay gate ────────────────────────────────────────────────────
+  //
+  // `runOnce` returns a recorded result WITHOUT running the body, which means
+  // a replay would otherwise skip the lifecycle check entirely and hand back
+  // a draft id that has since been deleted, dressed as a success. Excluding
+  // the generation from the idempotency fingerprint does not by itself
+  // produce the 410: the authoritative check has to run before a replay can
+  // bypass it.
+  //
+  // So a replay is verified against the resource it names. This is a
+  // read-only gate: it takes no lock and performs no repair, because it only
+  // ever decides between "the recorded result still stands" and "refuse".
+  const gateReplay = async (out) => {
+    if (!out || out.state !== IDEMPOTENCY_STATE.REPLAYED) return out;
+    const id = out.result && out.result.draftId;
+    if (!id) return out;
+
+    const cur = await getDraft(kv, googleSub, id);
+    if (cur.ok) return out;                       // still live; the replay stands
+
+    if (cur.error === STORE_ERR.DELETED || cur.error === STORE_ERR.NOT_FOUND) {
+      // The draft this key created is gone. Read the current generation so the
+      // client is told what to send with an explicit new Create, and refuse.
+      const rec = await readLifecycle(kv, googleSub, instanceId, slotName);
+      throw lifecycleFail(SERVICE_ERR.LIFECYCLE_STALE, {
+        sentGeneration: sentGen,
+        generation: rec.ok ? rec.record.gen : null,
+        lastState: rec.ok ? rec.record.lastState : null,
+        evidence: 'replayed-draft-not-live',
+        retryable: false,
+      });
+    }
+    // Unreadable is not absent. Refusing to guess in either direction.
+    throw lifecycleFail(SERVICE_ERR.LIFECYCLE_UNRESOLVED, {
+      evidence: 'replay-verification-failed', retryable: true,
+    });
+  };
+
+  return gateReplay(await runOnce(kv, googleSub, scope, idempotencyKey, async () => {
     // ── The row's state is resolved HERE, by the create itself ────────────
     //
     // Not by eligibility. Eligibility may repair the row for convenience, but
@@ -425,7 +464,7 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
         validation: validateDraftForSlot(cur.draft),
       };
     },
-  });
+  }));
 }
 
 /**
@@ -795,18 +834,16 @@ async function finishDelete(kv, googleSub, draftId, expectedRev, operationId, ro
   // "was live, now unreadable" rule refuses the old generation anyway.
   let lifecycle = { recorded: false, reason: 'no-row' };
   if (row) {
-    // The signature is (kv, sub, instanceId, slot, draftId, deletedDraftGen,
-    // fence). `deletedDraftGen` is passed as null ON PURPOSE: recordDeletion
-    // derives it from the record itself (lastDraftId === draftId ?
-    // lastDraftGen : null), which is the only place that knows which
-    // generation this draft was created at. Passing `fence` here — a number,
-    // so it type-checks — was an argument-position bug that left the fence
-    // undefined, so the fenced write refused with 'no-fence' and the deletion
-    // was never recorded. Nothing failed loudly: resolveLifecycle's
-    // disappearance rule repaired the row on the next read, so the seller saw
-    // correct behaviour while the durable record stayed wrong.
+    // Named fields, because the two values this used to take positionally
+    // were both numbers and the fence was passed into the generation slot.
+    // It type-checked, the fenced write refused with 'no-fence', and the
+    // deletion was silently never recorded — while every behavioural
+    // assertion still passed, because resolveLifecycle repaired the row on
+    // the next read. `deletedDraftGen` is omitted on purpose: recordDeletion
+    // derives it from the record, the only place that knows which generation
+    // this draft was created at.
     const rec = await recordDeletion(
-      kv, googleSub, row.instanceId, row.slot, draftId, null, fence,
+      kv, googleSub, row.instanceId, row.slot, draftId, { fence },
     );
     lifecycle = rec.ok
       ? { recorded: true, generation: rec.gen }

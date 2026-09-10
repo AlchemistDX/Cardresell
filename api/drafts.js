@@ -114,11 +114,24 @@ export default async function handler(req, res) {
     // 409 and 503 may be.
     if (msg === SERVICE_ERR.LIFECYCLE_STALE) {
       const d = (e && e.detail) || {};
+      // ── What the seller is told depends on what was RECORDED ───────────
+      //
+      // Only 'deleted' is evidence of a seller action: a delete operation
+      // ran. A generation is also spent when a reservation is retired or a
+      // live draft disappears, and both land here as 'gone'. Telling a seller
+      // "you deleted this" when the record says GONE is a claim the record
+      // does not support, so that case says only that it is no longer
+      // available.
+      const deletedByUs = d.lastState === 'deleted';
       return res.status(410).json({
-        error: 'That draft was deleted. Create a new one to start again.',
+        error: deletedByUs
+          ? 'That draft was deleted. Create a new one to start again.'
+          : 'That draft is no longer available. Create a new one to start again.',
         code: SERVICE_ERR.LIFECYCLE_STALE,
+        lastState: d.lastState === undefined ? null : d.lastState,
         generation: d.generation === undefined ? null : d.generation,
         sentGeneration: d.sentGeneration === undefined ? null : d.sentGeneration,
+        evidence: d.evidence === undefined ? null : d.evidence,
         // Deliberate: no auto-retry hint. An explicit new Create is required.
         retryable: false,
       });
