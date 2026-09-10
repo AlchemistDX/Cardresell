@@ -1,5 +1,26 @@
 # CardResell — Phase 1 To-Do
 
+> **Citation provenance.** Bundle citations in this document were
+> re-resolved on 2026-09-09 against **`js/core.53a0674d.js`** at commit
+> **`5a4ce14`**. They were resolved by matching the *content* of each
+> cited line in its original generation — every retired generation is
+> retained on disk — not by offsetting line numbers, and each was
+> re-verified after rewriting (`tools/resolve-citations.mjs`).
+>
+> Citations that are **historical evidence for a closed finding** were
+> deliberately left at their original generation and commit, with a note,
+> rather than redirected to today's code.
+>
+> | was | now | function |
+> | --- | --- | --- |
+> | `core.541c4c39.js:7658` | `:7913` | `listPriceForTargetNet()` |
+> | `core.7f9c03ad.js:6840` | `:8257` | `feeCardsphere()` |
+> | `core.86000bf2.js:6881` | `:7116` | `venueTrsNote()` |
+> | `core.9f0f6b30.js:2660` | `:2812` | `_pcFetch()` |
+> | `core.9f0f6b30.js:3834` | `:4003` | `_showImgUnavailable()` |
+> | `core.d9e1b484.js:18394` | `:21036` | `_crCreateDraft()` |
+> | `core.d9e1b484.js:2513` | `:2892` | `_pcFetch()` |
+
 Live list of what is next. Keeps two tracks: the Block D path we are already on (top), and small survivors from the audits worth doing on the side (bottom). One place, not two.
 
 Last update: 2026-09-06 after filing the D2.1 contract and the `94dc777` decision. Prior: the D2.1 + orientation question packets (`audit/d21/D21_AND_ORIENTATION_ANSWERS.md`). Prior update: reviewer-62 audit (`audit/reviewer62/REVIEWER_62_VERDICT.md`, commit `047d83e`).
@@ -54,7 +75,7 @@ The contract is at **`audit/DRAFT_LIST_API_CONTRACT.md`** (commit `a6a15e7`, Ame
 in `cbb5552`). It is written against the real field names and both open decisions are closed:
 rows are not tappable in D2.1, and blocker copy is owned by the server, shipped as
 `{ code, message }`. Filing it there closed the dangling reference at
-`js/core.d9e1b484.js:18394`.
+`js/core.53a0674d.js:21036`.
 
 Nothing in the spec awaits a decision. The remaining D2.1 work is writing the code.
 
@@ -99,12 +120,31 @@ Ordered by cost of leaving them broken, not by ease.
 - **Fix:** build **one** shared KV-counter rate-limit helper (pattern already in `api/scan-refund.js:91-101`). Apply it to both endpoints. Per-IP + per-hour cap.
 - **Watch:** rule 1 — do not inline a second limiter in each endpoint. One helper, two call sites.
 
-### T2.5 — Stop printing a fabricated ±15% band as observed
+### T2.5 — Stop printing a fabricated ±15% band as observed — **CLOSED 2026-09-08**
 
-- **Where:** `api/tcg-price.js:290-295` synthesizes `low = market × 0.85` / `high = market × 1.15` on the fallback rung; `js/core.d9e1b484.js:1859-1870` renders it as a real range.
-- **Why:** fires precisely when the primary feed is down — the moment the number deserves the least confidence gets a made-up spread. Rule 2 violation.
-- **Fix:** two options — (a) drop `low`/`high` on the fallback rung entirely; (b) render them but label as "estimated range" and change the caption to reflect the source. Prefer (a) unless we have a downstream consumer that needs them.
-- **Watch:** the existing fallback caption at `js/core.d9e1b484.js:2513-2543` correctly names the rung. Do not weaken that.
+Closed by Q7 option (iii), and rewritten here rather than left open: the code
+this item pointed at no longer exists, which the citation pass surfaced.
+
+- **What happened:** both synthesizers were **deleted**, not relabelled. The
+  tcgcsv rung's `low: r.low ?? (_spreadOk ? displayMarket * 0.85 : null)` pair
+  and the fallback rung's `low: fb.low ?? (fb.market * 0.85)` pair are gone;
+  each site retains the removed lines quoted inside a comment recording why
+  (`api/tcg-price.js:265-282` and `:365-375`).
+- **Why option (a) and not (b):** the recorded reason is worth keeping, because
+  the label *looked* like the fix. Q3-C had already narrowed the synthesizers to
+  fire only around an observed centre and tagged the result `lowBasis:
+  'derived'`, which was honest at the boundary. It was not sufficient: client
+  ingestion stamped `lowBasis = 'tcgplayer'` from **value presence**
+  (`if (Number(d.low) > 0)`), so a `0.85 × market` figure crossed the wire
+  correctly labelled and was relabelled as provider data on arrival, then
+  passed the measured-range gate as a TCGplayer endpoint. Tagging a synthesized
+  number does not protect a consumer that infers the tag instead of reading it.
+- **Renderer:** the old `rangeStr` renderer named here was replaced by
+  `_crRangeHtml()` (`js/core.53a0674d.js:4308`, commit `5a4ce14`), which routes
+  through `_crMeasuredRange()` and returns empty rather than rendering an
+  unattributed or derived pair.
+- **Watch (still live):** the fallback caption at
+  `js/core.53a0674d.js:2892-2922` correctly names the rung. Do not weaken it.
 
 ### T2.6 — Fix bulk `needsPicker` rendering as a confident ✓
 
@@ -113,10 +153,40 @@ Ordered by cost of leaving them broken, not by ease.
 - **Fix:** branch on the server's `needsPicker` flag before `card_name`. In bulk, a `needsPicker` row should render as "Pick correct match" with a picker action, not as ✓.
 - **Watch:** verify the bulk refund path still works if the user cancels the picker — the credit was debited pre-scan and the picker confirms via `api/scan-debit-id.js`.
 
-### T2.7 — Grading panel uses a flat $25 fee against our own tiers
+### T2.7 — Grading panel uses a flat $25 fee against our own tiers — **CLOSED**
 
-- **Where:** `js/core.d9e1b484.js:10926` (`GRADING_FEE = 25`), applied `:10975`,
-  printed to the seller `:11043`. Tier table: `api/grade-opportunity.js:44-52`.
+Closed by the BIAS-1 and BIAS-3 grading work. Rewritten here rather than left
+open: the citation pass found `GRADING_FEE` no longer exists anywhere in the
+bundle, which is how this item surfaced as stale.
+
+- **Resolved (1) — the flat fee is gone, and was not re-tuned.** Grading cost is
+  now entered by the seller, scoped to that card and that grader, starting
+  empty: `GRADING_COST = _costRec.value` (`js/core.53a0674d.js:12926`, commit
+  `5a4ce14`), fed by `_crGradingCostFor()` (`:12925`) and `null` until entered.
+  `_hasCost` (`:12928`) gates the panel, which shows comps and eBay net per
+  column and **no upside at all** until a cost exists. The reasoning is in
+  `audit/GRADING_COST_BASIS.md`; the short version is that no constant we could
+  pick is a fact about the seller's grader and tier, so the panel asks instead
+  of asserting. This also retires sub-item 2 — there is no grader-cost policy
+  to own, because we no longer claim one.
+- **Resolved (2) — the second fee model is gone.** `FEES_PCT = 13` was deleted,
+  not adjusted, and the panel routes through the shared eBay calculation:
+  `g.net = g.price > 0 ? netEbayForPrice(g.price, _feeCtx) : null`
+  (`js/core.53a0674d.js:13014`). That closes sub-item 1 (rule 1) and sub-item 4,
+  since `_feeCtx` carries the stated inputs rather than the panel inventing
+  them.
+- **Resolved (3) — the baseline is net versus net.** Both sides go through the
+  same function: `raw_net = netEbayForPrice(raw)`, `graded_net =
+  netEbayForPrice(graded)`, with `g.upsideNet = g.net - rawNet - GRADING_COST`
+  (`js/core.53a0674d.js:13027`). Not graded net vs raw gross.
+- **Original analysis retained below** as the record of why this was the
+  dominant error term. The **"always toward grade it" claim stays withdrawn.**
+
+- **Where (historical, generation `d9e1b484`):** `js/core.d9e1b484.js:10926`
+  (`GRADING_FEE = 25`), applied `:10975`, printed to the seller `:11043`. Tier
+  table: `api/grade-opportunity.js:44-52`. Kept at its original generation
+  deliberately — this is evidence for a closed finding, not a pointer to
+  today's code.
 - **Why:** our own server model says PSA is $50 over $200 raw and $100 over
   $500. **"Always toward grade it" is withdrawn — corrected 2026-09-07.** The
   flat $25 *overstates* CGC and SGC cost by $7 at every price, and on the
@@ -242,7 +312,7 @@ of 15** (2 confirmed tax-inclusive, 8 unknown, suppressed on 5 confirmed zeros).
 > **Separately: 10 of 15 is model coverage, not seller visibility.** On the
 > listing path only **eBay** is reachable (the D1 slot is `ebay:fixed-price`).
 > On the payout panel, **eBay and TCGplayer** on a free plan with defaults
-> (`VENUE_DEFAULT_ENABLED`, `FREE_PLATFORMS`, `js/core.86000bf2.js:6881-6883`);
+> (`VENUE_DEFAULT_ENABLED`, `FREE_PLATFORMS`, `js/core.53a0674d.js:7116-7118`);
 > the ineligible branch renders no fee block at all (`:8869`), so the remaining
 > 8 states need the venue enabled AND the plan. Reconciled in full at
 > `audit/PHASE1_RECONCILIATION_2026-09-08.md` §7.3.
@@ -260,7 +330,7 @@ above `feeWhatnot` since 2026-09-01 and changed nothing, because a comment is
 not a field.
 
 **Original statement of the defect, kept for the record:** `taxNote` is
-hardcoded inside `feeEbay` (`js/core.7f9c03ad.js:6840`); eleven of twelve venues
+hardcoded inside `feeEbay` (`js/core.53a0674d.js:8257`); eleven of twelve venues
 consequently show a fee total with no tax disclosure, none of it a decision.
 (That count was written against a twelve-venue set and was already stale at a
 fifteen-venue one — the true ratio at closure was 14 of 15 undisclosed.) Full
@@ -314,7 +384,7 @@ paths**. Every remaining `0.85` in `api/tcg-price.js` (`:243`, `:267`, `:278`,
 `low: fb.low ?? null` (free-API fallback, `:360`). `_spreadOk` is gone.
 **No regression: synthesis has not returned.**
 
-The client hole closed with it. `js/core.9f0f6b30.js:3834` now reads
+The client hole closed with it. `js/core.53a0674d.js:4003` now reads
 `lowBasis: _dLow != null ? (d.lowBasis || null) : null` — attribution off the
 wire, replacing the value-presence stamp that relabelled derived numbers
 `'tcgplayer'`. `_crTplAskEndpoints` (`:334`) still stamps `'tcgplayer'` from
@@ -331,22 +401,38 @@ of the deleted synthesizer. They are retained in
 
 ---
 
-**NEW, and live: `mid` crosses the whole path unattributed.**
+**`mid` crossing the path unattributed — CLOSED 2026-09-08 as T2.10.**
 
-The Q7 (iii) remedy gave `low` and `high` basis fields and taught the client to
-read them. **`mid` did not get one on the primary path.**
+This section read "NEW, and live" and described a gap that has since been
+closed on both sides of the wire. Corrected in place; the finding as originally
+written is preserved below it, because the reasoning is what justified the fix.
 
-- `api/tcg-price.js:290` emits `mid: r.mid ?? displayMarket` and the payload has
-  `marketBasis`, `lowBasis`, `highBasis` — **no `midBasis`**. When `r.mid` is
-  absent, `mid` is `displayMarket`, i.e. the `_headlinePrice` blend: a derived
+- **Server, both paths now attribute it.** `api/tcg-price.js:317` emits
+  `midBasis: r.mid != null ? 'observed' : 'derived'` on the primary rung, and
+  `:387` keeps `midBasis: fb.mid != null ? 'provider' : 'derived'` on the
+  fallback. The rule-1 disagreement between the two paths is gone.
+- **Client carries it.** `js/core.53a0674d.js:2821` copies
+  `midBasis: tcg.midBasis ?? null` — the comment there names T2.10 as the
+  reason — and `:2864` carries it through `_basisMeta`.
+- **`_rangeParts` reads it.** Now `_rangeParts(low, mid, high, mult, midBasis)`
+  (`js/core.53a0674d.js:5666`, commit `5a4ce14`). The **label** changes with the
+  basis rather than the number: `'derived'` prints "Ref $X (calculated)",
+  `'observed'`/`'provider'` prints "Mid $X", and `null` also prints "Mid $X" —
+  deliberately, because an untagged mid is not evidence of derivation, and
+  relabelling it would invent provenance in the other direction.
+- **Still true, and still worth watching:** `_crMeasuredRange` gates the
+  `low`/`high` pair only. **`mid` is not one of the endpoints it gates** — the
+  label carries the provenance, not the gate.
+
+The finding as originally recorded:
+
+- `api/tcg-price.js:290` emitted `mid: r.mid ?? displayMarket` with
+  `marketBasis`, `lowBasis`, `highBasis` and **no `midBasis`**. When `r.mid` was
+  absent, `mid` was `displayMarket`, i.e. the `_headlinePrice` blend: a derived
   centre, shipped indistinguishable from an observed median ask.
-- The **fallback** path does better — `:367` sets
-  `midBasis: fb.mid != null ? 'provider' : 'derived'`. So the two paths disagree
-  about whether `mid` needs provenance, which is itself the rule-1 smell.
-- The client never carries it either: `js/core.9f0f6b30.js:2660-2662` and
-  `:2701-2703` copy `marketBasis`/`lowBasis`/`highBasis` and **not** `midBasis`.
-- `_rangeParts` (`js/core.9f0f6b30.js:5414`) prints `Mid $X` with **no basis
-  check and no ordering check against `low`**. `_crMeasuredRange` (`:4108`) gates
+- The client did not carry it either, and `_rangeParts`
+  (`js/core.9f0f6b30.js:5414`, that generation) printed `Mid $X` with no basis
+  check. `_crMeasuredRange` (`:4108`) gates
   the pair well — it refuses unattributed, mixed-origin, derived, reversed and
   degenerate endpoints — but it only ever compares `low` against `high`. **`mid`
   is not one of the endpoints it gates.**
@@ -609,7 +695,7 @@ state look different from the never-had-it state?
 - **NEW — packet normalizer sweep, siblings found.** `priceBasis: null`, `retrievedAt: null` (absent vs unreadable, undistinguished), `label`/`sourceUrl` null all go unreported; `taxonomyTreeVersion` accepts garbage, stamps it `source: 'live'` and suppresses `TAXONOMY_VERSION_ASSUMED` — a false positive claim, the mirror of the silent-null family. See `audit/d3/LANE_A_STEP1_PACKET.md §7e`.
 - **NEW — `applyEdit` changes `price` but never `priceSource`.** A comp-priced draft repriced by the seller keeps `priceSource: 'comp'`, so `SELLER_PRICED` never fires on the number the seller actually typed. The standing rule is "manual price = seller always"; the edit path does not enforce it. Verified by running the store directly.
 - **NEW — target-net inversion was NEVER WIRED, not cut.** Zero call sites outside its own definition in every commit in history. Entered with `buildListingPacket` in Block B; both shipped without an entry point. Plan §5.3 governs it as if live. Scope as "finish Block B", not "restore a regression".
-- **`listPriceForTargetNet` has no production caller.** Defined at `js/core.541c4c39.js:7658`, called only by `tests/listing-packet-offline.mjs` via source extraction. `buildListingPacket`'s `pricing` input therefore has no producer, and omitting it makes `NO_PRICE` fire on drafts that have a price ("Set a target payout to get one" beside a $250 price). Blocks the client `pricingContext` wiring. Options (a) rename to `NO_TARGET_NET_PRICING`, (b) pass the already-declared `price`/`priceSource` into the packet context so `NO_PRICE` means its name, (c) give the inversion a production caller. See `audit/d3/LANE_A_STEP1_PACKET.md §7c`.
+- **`listPriceForTargetNet` has no production caller.** Defined at `js/core.53a0674d.js:7913`, called only by `tests/listing-packet-offline.mjs` via source extraction. `buildListingPacket`'s `pricing` input therefore has no producer, and omitting it makes `NO_PRICE` fire on drafts that have a price ("Set a target payout to get one" beside a $250 price). Blocks the client `pricingContext` wiring. Options (a) rename to `NO_TARGET_NET_PRICING`, (b) pass the already-declared `price`/`priceSource` into the packet context so `NO_PRICE` means its name, (c) give the inversion a production caller. See `audit/d3/LANE_A_STEP1_PACKET.md §7c`.
 - **Fee-schedule stamp fixed** in `af65ece`; the docblock previously named `PLATFORMS.ebay.verified`, which does not exist.
 
 ## Rotation and the dashboard answers

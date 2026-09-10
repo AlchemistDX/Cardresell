@@ -1,5 +1,22 @@
 # PriceCharting — written permission received, and what it obliges us to do
 
+> **Citation provenance.** Bundle citations in this document were
+> re-resolved on 2026-09-09 against **`js/core.53a0674d.js`** at commit
+> **`5a4ce14`**. They were resolved by matching the *content* of each
+> cited line in its original generation — every retired generation is
+> retained on disk — not by offsetting line numbers, and each was
+> re-verified after rewriting (`tools/resolve-citations.mjs`).
+>
+> Citations that are **historical evidence for a closed finding** were
+> deliberately left at their original generation and commit, with a note,
+> rather than redirected to today's code.
+>
+> | was | now | function |
+> | --- | --- | --- |
+> | `core.3f83abec.js:4466` | `:4618` | `pct()` |
+> | `core.3f83abec.js:4937` | `:5089` | `updatePriceFromPrinting()` |
+> | `core.3f83abec.js:2618, :2690` | `:2770, 2842` | _basisMeta listing-basis label |
+
 **Status: permission granted in writing, 2026-09-04, by Brady Haugh of
 PriceCharting, in reply to the 2026-09-03 request.** Nothing in this document
 is deployed or pushed. It records the terms, audits the shipped code against
@@ -48,9 +65,9 @@ Audited against the shipped bundle `js/core.3f83abec.js`:
 
 | Surface | Name shown | Linkback | Verdict |
 |---|---|---|---|
-| Quick Pricing grade ladder | "PriceCharting guide values" (`js/core.3f83abec.js:4466-4467`) | **only when `ladder.url` exists** — otherwise the same words render as plain text | **gap** |
-| Price row caption | "PriceCharting guide value" via `srcMap` (`js/core.3f83abec.js:4937`) | none at this element | **gap** |
-| Listing basis label | "PriceCharting guide value" (`js/core.3f83abec.js:2618`, `:2690`) | none | **gap** |
+| Quick Pricing grade ladder | "PriceCharting guide values" (`js/core.53a0674d.js:4618-4619`) | **only when `ladder.url` exists** — otherwise the same words render as plain text | **gap** |
+| Price row caption | "PriceCharting guide value" via `srcMap` (`js/core.53a0674d.js:5089`) | none at this element | **gap** |
+| Listing basis label | "PriceCharting guide value" (`js/core.53a0674d.js:2770`, `:2842`) | none | **gap** |
 | JP search helper | "PriceCharting JP Search" link (`index.html:2329`) | yes | ok |
 | Graded search links | `pricecharting.com/search-products?q=…` | yes, but to a **search URL**, not a product page | see Q2 |
 
@@ -80,7 +97,7 @@ The display layer then throws that distinction away:
 
 ```
 pricecharting: 'PriceCharting guide value', sportscardspro: 'PriceCharting guide value'
-                                                              ^ js/core.3f83abec.js:4937
+                                                              ^ js/core.53a0674d.js:5089
 ```
 
 **A sports-card value fetched from SportsCardsPro is captioned "PriceCharting
@@ -191,8 +208,8 @@ second credit line, no visual change beyond the label becoming clickable:
 
 | Surface | Today | After |
 |---|---|---|
-| Price row caption (`js/core.3f83abec.js:4937`) | text | same text, linked |
-| Listing basis label (`js/core.3f83abec.js:2618`, `:2690`) | text | same text, linked |
+| Price row caption (`js/core.53a0674d.js:5089`) | text | same text, linked |
+| Listing basis label (`js/core.53a0674d.js:2770`, `:2842`) | text | same text, linked |
 | Quick Pricing ladder no-url fallback (`:4467`) | text | linked to their canonical page |
 
 That is a small, contained edit to the display layer. It removes the ambiguity

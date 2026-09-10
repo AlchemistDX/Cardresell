@@ -1,5 +1,26 @@
 # RC-1 — comparison copy and release checklist
 
+> **Citation provenance.** Bundle citations in this document were
+> re-resolved on 2026-09-09 against **`js/core.53a0674d.js`** at commit
+> **`5a4ce14`**. They were resolved by matching the *content* of each
+> cited line in its original generation — every retired generation is
+> retained on disk — not by offsetting line numbers, and each was
+> re-verified after rewriting (`tools/resolve-citations.mjs`).
+>
+> Citations that are **historical evidence for a closed finding** were
+> deliberately left at their original generation and commit, with a note,
+> rather than redirected to today's code.
+>
+> | was | now | function |
+> | --- | --- | --- |
+> | `core.73a71fac.js:1043` | `:1152` | `onGameSelectChange()` |
+> | `core.73a71fac.js:301` | `:312` | `searchWithTPL()` |
+> | `core.73a71fac.js:515` | `:601` | `fetchTPLCardById()` |
+> | `core.73a71fac.js:533` | `:619` | `fetchTPLGradedByNameNumber()` |
+> | `core.73a71fac.js:7652` | `:7804` | `feeEbay()` |
+> | `core.73a71fac.js:8357` | `:8509` | `calc()` |
+> | `core.73a71fac.js:8549` | `:8701` | `calc()` |
+
 **Date:** 2026-09-09 · branch `phase1-block-d`
 **Nothing is pushed, deployed, or rotated.** No deployment authorization is
 claimed or implied. This document is the single current execution view for the
@@ -749,7 +770,7 @@ when measured demand approaches it, not because the ceiling moved.**
 
 **Why 15 per IP is not yet a defensible number.** The unit is **provider calls,
 not seller actions**, and the live bundle spends more than one per action. There
-are three distinct call sites: a search at `js/core.73a71fac.js:301`
+are three distinct call sites: a search at `js/core.53a0674d.js:312`
 (`/v1/cards/search`, `limit=100`), a by-id fetch at `:515` (`/v1/cards/<id>`),
 and a second name search at `:533` (`limit=20`). A search-then-select flow
 therefore costs **at least two** calls, so 15 is on the order of **seven seller
@@ -871,7 +892,7 @@ auto-deploys, so there is no rehearsal.
 
 **Zero is a fallback assumption, not an established shipping cost.** When a
 shipping field is blank, the ranking treats it as `$0` — `parseFloat(raw) || 0`
-at `js/core.73a71fac.js:8357-8358`. That is an assumption the product is making
+at `js/core.53a0674d.js:8509-8510`. That is an assumption the product is making
 on the seller's behalf, and it is now visible beside the comparison it feeds
 (`:8720`, `data-ship-assumed`): *"Shipping: … is blank, so this ranking assumes
 $0. Venues differ in how shipping is treated, so entering it can change the
@@ -932,7 +953,7 @@ that shipping could therefore reorder the recommendation. **I checked the
 client, and that claim is wrong in both halves.** I had grepped `api/` only and
 generalised from an empty result.
 
-**The ranking surface already models shipping in full.** `js/core.73a71fac.js:8549`
+**The ranking surface already models shipping in full.** `js/core.53a0674d.js:8701`
 computes `netPayout = price + effectiveShipCharge − totalFees − p.sellerShip`,
 where `effectiveShipCharge` is zeroed per venue when the venue keeps buyer
 shipping (`:8547`, driven by `buyerShippingRevenue: false` on the venues that
@@ -1041,7 +1062,7 @@ describe the output as complete, ready to publish, or ready to list.**
 
 ## H-7. Implemented since the last packet
 
-**Review-screen copy — your wording, verbatim** (`js/core.73a71fac.js:7652`,
+**Review-screen copy — your wording, verbatim** (`js/core.53a0674d.js:7804`,
 rendered at `:22073`). Added to `FEE_DISCLOSURE` rather than typed inline, so it
 cannot drift the way the tax copy did. Pinned by five assertions in
 `tests/copy-truth-offline.mjs`: that it says what the estimate covers, that it
@@ -1339,15 +1360,15 @@ of **three real call sites stands, now verified rather than assumed**:
 
 | Site | Function | Path |
 | --- | --- | --- |
-| `js/core.73a71fac.js:301` | `searchWithTPL` | `/v1/cards/search` |
-| `js/core.73a71fac.js:515` | `fetchTPLCardById` | `/v1/cards/{id}` |
-| `js/core.73a71fac.js:533` | `fetchTPLGradedByNameNumber` | `/v1/cards/search` |
+| `js/core.53a0674d.js:312` | `searchWithTPL` | `/v1/cards/search` |
+| `js/core.53a0674d.js:601` | `fetchTPLCardById` | `/v1/cards/{id}` |
+| `js/core.53a0674d.js:619` | `fetchTPLGradedByNameNumber` | `/v1/cards/search` |
 
 **Three findings that drive the number up, each with its own evidence.**
 
 1. **`searchWithTPL` is invoked from 8 places** — `:1125`, `:1261`, `:1423`,
    `:1523`, `:1607`, `:1646`, `:1676`, `:14569`. It is not one screen's helper.
-2. **Search is debounced at 180 ms** (`js/core.73a71fac.js:1043`,
+2. **Search is debounced at 180 ms** (`js/core.53a0674d.js:1152`,
    `setTimeout(() => doSearch(q), 180)`). 180 ms is shorter than an ordinary
    mid-word typing pause, so one card name can emit **several** searches rather
    than one.
@@ -1425,7 +1446,7 @@ guessed at.
   **listing twenty cards in an evening**, and the reported unit is
   **lookups per card**, with the twenty-card hour derived from it.
 - **The debounce is a separate defect from the cap.** 180 ms
-  (`js/core.73a71fac.js:1043`) is shorter than a mid-word typing pause, so every
+  (`js/core.53a0674d.js:1152`) is shorter than a mid-word typing pause, so every
   card name spends several lookups **whatever the cap is**. That is waste at the
   source. A client-side cache in front of the three call sites cuts both the
   spend and the pressure on the cap. **Raising the cap without cutting the

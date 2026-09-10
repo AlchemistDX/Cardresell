@@ -1,5 +1,21 @@
 # Phase 1 — Release candidate scope
 
+> **Citation provenance.** Bundle citations in this document were
+> re-resolved on 2026-09-09 against **`js/core.53a0674d.js`** at commit
+> **`5a4ce14`**. They were resolved by matching the *content* of each
+> cited line in its original generation — every retired generation is
+> retained on disk — not by offsetting line numbers, and each was
+> re-verified after rewriting (`tools/resolve-citations.mjs`).
+>
+> Citations that are **historical evidence for a closed finding** were
+> deliberately left at their original generation and commit, with a note,
+> rather than redirected to today's code.
+>
+> | was | now | function |
+> | --- | --- | --- |
+> | `core.66c39922.js:8549` | `:8735` | `calc()` |
+> | `core.66c39922.js:6433,6479` | `:6585,6631` | VENUES (eBay, Whatnot) tax-base fields |
+
 **Date:** 2026-09-09 · Purpose: turn the remaining Phase 1 seller work into a
 release candidate instead of a growing list. Every state claim below is from
 code at `0f78dfe`, branch `phase1-block-d`.
@@ -56,7 +72,7 @@ caveat. See §3.
 
 **Everything in §3 below is withdrawn (2026-09-09).** I grepped `api/` only and
 generalised from an empty result. The ranking surface models shipping in full —
-`js/core.66c39922.js:8549` computes `netPayout = price + effectiveShipCharge −
+`js/core.53a0674d.js:8735` computes `netPayout = price + effectiveShipCharge −
 totalFees − p.sellerShip`, per venue. Shipping therefore cannot reorder the
 recommendation, because the recommendation already includes it. The item-only
 net belongs to the connected-selling review screen, which already labels itself
@@ -72,7 +88,7 @@ The product's premise is a **venue-neutral recommendation based on seller-specif
 net**. Net today is **item-price-only**. Venues differ in who pays shipping, in
 whether shipping is inside the fee base, and in whether it is inside the tax
 base — the outgoing bundle already records two venues whose tax base "includes
-buyer-paid shipping and sales tax" (`js/core.66c39922.js:6433,6479`) and one
+buyer-paid shipping and sales tax" (`js/core.53a0674d.js:6585,6631`) and one
 whose 5% fee is "on merchandise only, NOT shipping" (`:6493`).
 
 So shipping does not shift every payout by the same amount. **It can reorder

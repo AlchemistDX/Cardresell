@@ -1,5 +1,20 @@
 # Release-validation queue
 
+> **Citation provenance.** Bundle citations in this document were
+> re-resolved on 2026-09-09 against **`js/core.53a0674d.js`** at commit
+> **`5a4ce14`**. They were resolved by matching the *content* of each
+> cited line in its original generation — every retired generation is
+> retained on disk — not by offsetting line numbers, and each was
+> re-verified after rewriting (`tools/resolve-citations.mjs`).
+>
+> Citations that are **historical evidence for a closed finding** were
+> deliberately left at their original generation and commit, with a note,
+> rather than redirected to today's code.
+>
+> | was | now | function |
+> | --- | --- | --- |
+> | `core.3f83abec.js:3556` | `:3708` | `loadCardUI()` |
+
 Checks that cannot run offline in this sandbox and must run before release.
 Created 2026-09-08. This file exists because "carry it into release validation"
 was previously said in prose and then lived nowhere — a queue nobody can read is
@@ -752,7 +767,7 @@ asserted because glare is advisory, not a gate.
 Tracked here rather than left inside the D7 basis-loss packet, because it is a
 product decision with a release consequence and it is nobody's side note.
 
-**What is established.** `loadCardUI` (`js/core.3f83abec.js:3556`) clears
+**What is established.** `loadCardUI` (`js/core.53a0674d.js:3708`) clears
 `_crBasis` on every card load. The clear **treats both cases alike**: a load of
 a DIFFERENT card, where dropping the previous card's basis is the leak
 prevention the binding work was built for, and a reload of the SAME card, where
@@ -1425,11 +1440,18 @@ question is struck rather than deleted so the record shows it was answered.
 
 ### RV-13 — the fix, and what the browser actually rendered
 
-**Bundle: `js/core.53a0674d.js`** (renamed at the close of RC-2 from the
-working name `core.2cb1e377.js`; renamed four times during this work, per
-the content-addressed convention: `73a71fac` → `176e4a56` → `e9f21f4e` → `613f164a` → `2cb1e377`; only
-`2cb1e377` matches its own content and only it is referenced by
-`index.html:3837`).
+**Bundle: `js/core.53a0674d.js`** (`index.html:3842`). Renamed at the close of
+RC-2 from the working name `core.2cb1e377.js`. The chain during this work was
+`73a71fac` → `176e4a56` → `e9f21f4e` → `613f164a` → `2cb1e377` → `53a0674d`.
+
+A clause here previously said `2cb1e377` "matches its own content", which was
+wrong and contradicted the sentence naming `53a0674d` beside it. It is removed
+rather than annotated. `2cb1e377` and `613f164a` never matched their own
+content — no blob in the repository hashes to either — and both are recorded
+as working names, not generations, in `audit/BUNDLE_CITATION_MAP.md`
+(generation 13) and in the UNRECOVERABLE table in
+`tests/asset-fingerprints.mjs`. `53a0674d` does match its own content, and is
+the only bundle `index.html` references.
 
 **1. The helper stopped merging outcomes.** `searchWithTPL` returns a
 discriminated result instead of `null`:
@@ -1954,7 +1976,7 @@ the live bundle rather than inferred:
 
 | End | Finding | Evidence |
 | --- | --- | --- |
-| Send | `_crPricingContext` returned only `{feeModelRevision, feeScheduleVerified?, basisMeta?}` — no shipping key existed | `js/core.2cb1e377.js:20903` before `37269c9` |
+| Send | `_crPricingContext` returned only `{feeModelRevision, feeScheduleVerified?, basisMeta?}` — no shipping key existed | `_crPricingContext()` in the bundle at `37269c9^`, then named `js/core.2cb1e377.js:20903`. Left at its original commit as historical evidence. That filename never matched its own bytes (they hashed to `57f78056`); the commit is what makes the line resolvable. |
 | Render | No shipping rendering at all; `grep` for `packet.shipping` and `SHIPPING_[A-Z_]*` in the live bundle returned **zero matches** | live bundle, pre-`37269c9` |
 
 So in production every draft would have recorded `SHIPPING_ABSENT` and the

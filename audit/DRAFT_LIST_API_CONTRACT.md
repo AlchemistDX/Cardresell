@@ -1,6 +1,26 @@
 # Draft List API Contract — D2.1
 
-`js/core.d9e1b484.js:18394` points at this path. This file closes that dangling reference.
+> **Citation provenance.** Bundle citations in this document were
+> re-resolved on 2026-09-09 against **`js/core.53a0674d.js`** at commit
+> **`5a4ce14`**. They were resolved by matching the *content* of each
+> cited line in its original generation — every retired generation is
+> retained on disk — not by offsetting line numbers, and each was
+> re-verified after rewriting (`tools/resolve-citations.mjs`).
+>
+> Citations that are **historical evidence for a closed finding** were
+> deliberately left at their original generation and commit, with a note,
+> rather than redirected to today's code.
+>
+> | was | now | function |
+> | --- | --- | --- |
+> | `core.d9e1b484.js:17500` | `:19960` | `showToast()` |
+> | `core.d9e1b484.js:18014` | `:20476` | `_clearFirstVisit()` |
+> | `core.d9e1b484.js:18093` | `:20555` | `_crWireRow()` |
+> | `core.d9e1b484.js:18394` | `:21036` | `_crCreateDraft()` |
+> | `core.d9e1b484.js:8111` | `:9650` | `switchView()` |
+> | `core.d9e1b484.js:8131-8134` | `:9674-9677` | switchView() |
+
+`js/core.53a0674d.js:21036` points at this path. This file closes that dangling reference.
 
 **Verified against tip `95435b4`**, branch `phase1-block-d`, via
 `audit/d21/D21_AND_ORIENTATION_ANSWERS.md`. Every field name below is copied from source, not
@@ -112,7 +132,7 @@ assigned `blocking: blocks(severity)` at `:251`, the same predicate `finish()` c
 module publishes.
 
 A second readiness formula inside `_draftService` would be the fifth instance of the defect
-shape recorded at `js/core.d9e1b484.js:18014-18019`.
+shape recorded at `js/core.53a0674d.js:20476-20481`.
 
 ### 1.3 Why this is safe to add
 
@@ -415,7 +435,7 @@ is actually present. §3.1a is written so both resolve to the same safe outcome.
 ### 3.1 Mounting and navigation
 
 There is no router. Screens are top-level `<div>`s that `switchView(view)` shows and hides
-(`js/core.d9e1b484.js:8111-8137`; containers at `index.html:1674, 2431, 2516, 2579`; tabs at
+(`js/core.53a0674d.js:9650-9694`; containers at `index.html:1674, 2431, 2516, 2579`; tabs at
 `index.html:1667-1671`).
 
 Add a `#draftsView` container, a tab, and a branch in `switchView`. Call
@@ -423,7 +443,7 @@ Add a `#draftsView` container, a tab, and a branch in `switchView`. Call
 
 **Trap:** `switchView` uses three different show/hide mechanisms. `.flips-view` carries
 `display:none` in CSS (`index.html:954`), so setting `style.display = ''` on a container in that
-class yields a blank tab — documented at `js/core.d9e1b484.js:8131-8134`. Set an explicit
+class yields a blank tab — documented at `js/core.53a0674d.js:9674-9677`. Set an explicit
 display value, or keep `#draftsView` out of `.flips-view`.
 
 ### 3.1a Rows are not tappable in D2.1
@@ -498,7 +518,7 @@ behind it.
 
 ### 3.2 Auth
 
-Use `_crIdToken()` (`js/core.d9e1b484.js:18093-18108`). There is **no canonical
+Use `_crIdToken()` (`js/core.53a0674d.js:20555-20570`). There is **no canonical
 authenticated-fetch wrapper** — roughly 25 call sites hand-roll
 `'Authorization': 'Bearer ' + token`. Hand-roll it once here and do not add another inline
 force-refresh block; the bundle already carries six, and the comment claiming four is stale.
@@ -509,7 +529,7 @@ Build: a list-row renderer (both existing list screens hand-build
 `<table class="flip-table">` inline), a degraded/error banner (only a single-use
 `.warning-banner` exists), and a spinner (CSS only).
 
-Reuse: `showToast()` (`js/core.d9e1b484.js:17500-17520`), `.empty-flips` empty-state CSS
+Reuse: `showToast()` (`js/core.53a0674d.js:19960-19980`), `.empty-flips` empty-state CSS
 (`index.html:1024-1027`).
 
 CSS lives inline in `index.html` — there is no stylesheet file. JS-rendered components use
@@ -870,7 +890,7 @@ reflect that; the former §3.4a is deleted.
   (`SOL-PLAT-009 — 44x44 minimum touch targets at 375px`, `:269`), so adding selectors there is
   correct — but it will not gate. Recorded in §3.6 and Part 7 rather than left implied.
 - **The `switchView` blank-tab trap** (`.flips-view { display:none }`, `index.html:954`;
-  documented at `js/core.d9e1b484.js:8131-8134`) was missing from §3.1 and is now stated. It is
+  documented at `js/core.53a0674d.js:9674-9677`) was missing from §3.1 and is now stated. It is
   the most likely way a correct implementation ships an empty screen.
 - **Two knock-ons from Decision 1** that the amendment did not cover, now folded in: §3.6's
   44×44 rule no longer applies to rows, only to stub actions and paging, since a
