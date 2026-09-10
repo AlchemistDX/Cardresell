@@ -5261,6 +5261,31 @@ The commit, the server version and the Lua version are **printed by the suite
 itself**, not recorded here by hand. A pasted version string is a claim; a
 printed one is an observation the next run repeats.
 
+#### Second observation — reproduction on `cd4b796`, 2026-09-10 19:10
+
+Recorded **separately, not merged into the row above**, because the two runs
+are two observations and each keeps its own provenance. Nothing about the first
+run is amended.
+
+| | |
+|---|---|
+| Suite | `tests/draft-lifecycle-real-redis.mjs`, unchanged |
+| Result | **58 passed, 0 failed — SUITE COMPLETE, exit=0** |
+| Commit under test | `cd4b796d86308e8af649d1e3cca6c77846842ca6` — the commit that added the suite |
+| Server | redis-server 8.0.5, Lua 5.1, RESP via node-redis, port 6399 |
+| Store state | `FLUSHALL` first, so the run started from an empty keyspace |
+
+**`api/_draftLifecycle.js` is byte-identical across the two commits**, which is
+what makes the second run a reproduction rather than a second subject. Both
+commits resolve the file to blob
+`96e80fde9dea1b26a5c6d59b7d7d31a135905fcf`, and `git diff 29fee90 cd4b796 --
+api/_draftLifecycle.js` is empty. The scripts under test did not change; only
+HEAD did, because the intervening commit added the suite itself.
+
+The mutation results are **not** re-derived here. They were produced against
+`29fee90` and stand as recorded; a reproduction of the passing case is not a
+reproduction of the mutation cases.
+
 ### The three scripts, and how they were reached
 
 Not copies. The suite imports the module's own constants and drives the
