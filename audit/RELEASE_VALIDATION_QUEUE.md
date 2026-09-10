@@ -3539,3 +3539,120 @@ and a different approach is needed.
 Deployment `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` / `499ef1c` unchanged, alias
 pinned, nothing pushed. Draft `drf_3471a1a85ccddb2cca04958fa66ed58a` retained.
 Generation counter not started.
+
+---
+
+## Isolation — PASS recorded
+
+Deployment `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`, commit `499ef1c`, bundle
+`js/core.8e7fee75.js`.
+
+| | store | plan / role | database id in URL | query | result |
+|---|---|---|---|---|---|
+| positive control | `upstash-kv-aureolin-door` | Pay-as-you-go = Preview + Development | `b0de2137-6c5c-41b4-8af4-da80a70ce1c3` | `draft:*` | **1 row** — `draft:fzUpcrXKDdQzGORl0bLQ6mTwML73…` |
+| subject | `upstash-kv-bistre-arrow` | Free Tier = Production | `dc621a30-497c-4851-a3c3-42a51309f094` | `draft:*` | **empty** — "Data on a break" |
+
+Why this one closes it where the long-key attempt did not:
+
+- The query is `draft:*`, short enough to be **fully visible in both
+  screenshots**. No hidden suffix, so byte-identity of the two inputs is
+  established by reading them rather than assumed.
+- The positive control fires. The method demonstrably matches this key shape in
+  a store known to hold the record, so the empty result in the other store is a
+  real absence and not an unvalidated negative.
+- The two database UUIDs in the console URLs **differ**, which independently
+  confirms two distinct databases rather than one store viewed twice.
+
+**Scope of the claim, stated precisely:** at time of check, production held no
+key matching `draft:*`. That covers the subject draft and every other draft
+record. It does not speak to `idem:*`, `idemresource:*`, `drafts:*`,
+`draftquota:*`, or `draftindex_*`, which were not queried and are not claimed.
+
+**Recovered from the earlier retraction:** `draft:*` in `aureolin-door` returned
+exactly one row, so preview holds exactly one draft record. The "a second draft
+would be its own key" gap raised against the timestamp argument is closed by
+this glob — not by the timestamps, which still prove only that this record was
+never updated.
+
+Safeguard 2 and the Preview-write proof (Step 6) are satisfied for the draft
+keyspace by this pair.
+
+---
+
+## Generation counter — STOPPED before implementing. Decision needed.
+
+The agreed design bumps a generation on the collection entry **when a draft for
+it is deleted**, folded in as `_crIdemKey('sell-col', entryId, gen,
+CR_D1_SLOT)`, so an explicit new Create makes a fresh draft while retries of the
+original operation stay deduplicated.
+
+**The trigger does not exist. The client cannot delete a draft.**
+
+Established against the live bundle `js/core.8e7fee75.js`:
+
+- Every request the client makes to the drafts API: create `POST` (`:21354`),
+  list `GET` (`:21827`), single `GET` (`:22188`, `:23662`), revise `PATCH`
+  (`:23670`). **No `DELETE`.**
+- The string `DELETE` occurs **once in the whole bundle**, at `:22089` — the
+  error-state key `DRAFT_DELETED`, which renders the tombstone at `:22090`
+  ("You deleted this draft. Deleting is final, so there is nothing here to
+  review."). That is a *reader* of a deletion someone else performed, not a way
+  to perform one.
+- Server-side the endpoint is real — `api/drafts.js:80` routes `DELETE`,
+  `:442` mints the `del-<draftId>` default key — so deletion is reachable by
+  API, and by nothing a seller can press.
+
+So the sequence the counter exists to fix — delete a draft, then press Create
+again and expect a new one — **cannot be reached from the product as shipped**.
+Building the counter now produces a mechanism with no trigger: a generation
+that never increments, and a code path no test can exercise through the UI.
+
+That is the shape we removed nine commits ago. `instanceDraftsKey` was storage
+advertising a guarantee nothing enforced; a generation counter with no delete
+action is dedupe logic advertising a recovery nothing can invoke. Implementing
+it to satisfy the checklist item would re-introduce the defect class the
+removal was meant to close.
+
+**Not implemented, pending Will's call. Three options:**
+
+**Option A — defer, documented.** Ship without it. The unreachable-state
+argument holds: with no delete action, a seller cannot land in the situation
+the counter addresses, and the 24 h idempotency TTL means even a hypothetical
+API-side deletion resolves itself once the window lapses. Cost: the item stays
+open into the release. Risk: none reachable today.
+
+**Option B — implement counter and a delete action together, as one unit.**
+This is the only version that is testable end to end. It is also **feature
+expansion**, which is closed for Phase 1, so it needs an explicit exception.
+
+**Option C — implement the counter alone, against the server delete path.**
+Rejected on analysis, recorded so it is not re-proposed: the generation lives on
+the client's collection entry, while deletion happens server-side. A deletion
+performed through the API would not increment a counter held in client state,
+so the mechanism would not fire even in the one case that can occur today. It
+would be correct-looking and inert.
+
+**Recommendation: Option A.** Defer with this entry as the record, and pair the
+counter with the delete action whenever deletion becomes a product requirement,
+built and tested as one behaviour.
+
+### Open question for Will
+
+**Q-D8-4.** Was "implement the generation counter before release" premised on
+sellers being able to delete drafts? If deletion was assumed present, the
+finding above is the more important one and the release scope question is
+whether Phase 1 ships a listing draft that can be created and revised but never
+removed.
+
+---
+
+## Still open after the pass
+
+- **Manual $2 `priceSource: "seller"` on the deployed build.** The only
+  deployed draft reads `"comp"`. The marked entry
+  `Charizard ISO-CHECK-20260910-K7M2Q9` is still in the collection.
+- Repeat-tap dedupe on the deployed build (one tap pressed, per instruction).
+- Deployed TTL on `idem:*` / `idemresource:*` — never observed, code and local
+  run only.
+- Nothing pushed. Alias pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw`. Draft
+  `drf_3471a1a85ccddb2cca04958fa66ed58a` retained.
