@@ -27,12 +27,17 @@ field was written, never that it arrives.
 
 ---
 
-## ADJUDICATED 2026-09-09 — verdicts
+## ADJUDICATED — verdicts (re-dated 2026-09-10 18:05 EDT)
 
 Every entry below now carries a verdict: **passed**, **blocking**, or
 **deferred with its limitation**. The offline and read-only items were finished
 without waiting on credentials; three items that had been parked behind "needs
 Playwright and a local server" were run on 2026-09-09.
+
+**This table was still dated 2026-09-09 after two days of changes**, which made
+it the least trustworthy part of the document — the section a reader checks
+first was the section furthest behind. Re-dated, with RV-8 corrected and RV-16
+added. Two entries changed today and both are marked in the rows themselves.
 
 | Item | Verdict |
 | --- | --- |
@@ -43,23 +48,37 @@ Playwright and a local server" were run on 2026-09-09.
 | RV-5 flip completeness | **PASSED** — re-run 2026-09-09, 22 / 0 |
 | RV-6 rendered ranking | **PASSED, narrowed** — re-run 2026-09-09, identical in 4 / 4 cases, two default-tier rows only |
 | RV-7 D7 listing photos | **PASSED** — re-run 2026-09-09, 92 / 0; Safari/iOS limitation retained |
-| RV-8 preview reads production KV | **CONFIGURATION CLOSED, deployed proof pending** — verified 2026-09-10 00:20 from the Vercel CLI: the five KV names now exist as **two disjoint groups**, Production and Preview+Development, so Preview no longer resolves to the production store. Preview writes remain unproven — the 21 existing Preview deployments all predate the split and were built against the production store, so a **fresh** Preview is what proves it (see §Redis reconciliation) |
+| RV-8 preview reads production KV | **CLOSED FOR THE DRAFT KEYSPACE** *(corrected 2026-09-10 18:05 — this row said "deployed proof pending" after the proof had already been recorded further down this document)*. Configuration: verified 2026-09-10 00:20 from the Vercel CLI — the five KV names exist as **two disjoint groups**, Production and Preview+Development, so Preview no longer resolves to the production store. Deployed write proof: **established** by the controlled `draft:*` comparison on `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` / `499ef1c` — positive control `aureolin-door` (Preview+Development) returned **1 row**, subject `bistre-arrow` (Production) returned **empty**, two distinct database UUIDs, and the query short enough to be fully visible in both screenshots (see §Isolation — PASS recorded). **Scope, precisely:** the draft keyspace. `idem:*`, `idemresource:*`, `drafts:*`, `draftquota:*` and `draftindex_*` were not queried and are not claimed. |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
 | RV-10 containment mechanism | **EXECUTED for KV, verified by listing** — the second Redis database was created and the targeting is disjoint (Production vs Preview+Development), confirmed 2026-09-10 00:20. The earlier row read "designed, not executed" and is corrected. Cause and rejected alternatives retained in §4. **Three non-KV production resources are still reachable from Preview** — see §Redis reconciliation. |
+| RV-16 eBay accepts the Download file | **BLOCKING, newly added 2026-09-10** — needs a real Seller Hub account. Upload one generated file and confirm it creates a **draft** rather than a live listing, that `Title`, `Start price`, `Quantity`, `Custom label (SKU)` and `Description` survive into it, and that the **absent photo column is accepted**. `draft-card-actions-browser` 82/0 proves the file's contents and the seller's on-screen path; it is not evidence about eBay's uploader. See §RV-16. |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
 | CH-2 code fallback to that token | **CLOSED IN CODE at `6c610e2`** — the literal is gone, the token is read at call time, and an absent token fails closed with `503 verification_token_unset`. Reaches production when the release deploys. *(An earlier row here said "prepared, not applied" — wrong, and corrected 15:12.)* |
 | CH-3 unencrypted TPL key | **CLOSED at `c4ea5e4`** — #518 revoked, replacement verified by post-revocation lookups, storage type now `sensitive` (`3570d97`). Public and plain-storage exposures both closed. **Do not re-open; the TPL rotation is done.** Only G12 / R4 activation remains, tracked under release preparation. |
 | Same-card basis retention | **DEFERRED** — product decision; consequence is disclosed, not silent |
 | D5 §8.3 signed-in continuation | **PASSED for one tested case**; stays in the queue. Q-D5-5 desktop never exercised |
 
-**4 passed · 7 blocking · 2 closed · 3 deferred.** Every blocking item is
-credential-, configuration-, or deployment-gated. None is blocked on writing
+**6 blocking · 3 passed · 4 closed · 2 deferred · 1 passed-but-retained**,
+counted by reading the sixteen rows above on 2026-09-10:
+
+- **Blocking (6):** RV-1, RV-3, RV-4, RV-9, **RV-16**, CH-1.
+- **Passed (3):** RV-5, RV-6 (narrowed), RV-7.
+- **Closed (4):** RV-8 (draft keyspace), RV-10 (KV), CH-2, CH-3.
+- **Deferred (2):** RV-2, same-card basis retention.
+- **Passed for one case, retained (1):** D5 §8.3.
+
+The previous line read "4 passed · 7 blocking · 2 closed · 3 deferred" and its
+categories could not be reproduced from the rows, so this is a recount from the
+table rather than an adjustment of it. Every blocking item is credential-,
+configuration-, deployment-, or account-gated. None is blocked on writing
 more code. **Closed** means done and evidenced — CH-2 in code at `6c610e2`,
 CH-3 by the completed rotation at `c4ea5e4`. Neither is owner work any more;
 CH-2 reaches production with the release, and the only TPL item left is R4
 activation (G12).
 
-*Counts and verdicts in this table are current as of 2026-09-09 15:12 EDT.*
+*Counts and verdicts in this table are current as of 2026-09-10 18:05 EDT.*
+*RV-8 and RV-16 changed at that time; every other row is unchanged since*
+*2026-09-09 15:12 EDT and carries its own evidence date.*
 *Anything in the History and withdrawn sections below is dated evidence, not*
 *live status — see the banner above those sections before treating an entry*
 *there as a blocker.*
@@ -120,8 +139,12 @@ the new token.
 
 ### 2. Deployment containment and non-production KV isolation
 
-**Still blocking, but the mechanism is now ESTABLISHED** (RV-8, RV-10) — as of
-2026-09-09 15:48, from the owner's dashboard readings. Both halves are settled
+**Mechanism ESTABLISHED** (RV-8, RV-10) — as of 2026-09-09 15:48, from the
+owner's dashboard readings. *(This read "Still blocking, but the mechanism is
+now ESTABLISHED" until 2026-09-10 18:05; neither item is blocking any more —
+RV-8 is closed for the draft keyspace, RV-10 executed and verified for KV. The
+three non-KV production resources reachable from Preview are tracked
+separately and are not RV-8.)* Both halves are settled
 and neither is an inference.
 
 **Cause.** Five store variables each exist as a **single row targeting
@@ -565,10 +588,15 @@ legitimate annual subscriber the moment it ships.
 
 ### 5. Remaining release checks, then deployment authorization
 
-The blocking entries in the verdict table: RV-1, RV-3, RV-4, RV-8, RV-9, RV-10
-and CH-1, plus the live suites never run (`tests/ebay-live.mjs`,
-`tests/test-scan.mjs`). They share one shape — each needs a deployed function, a
-live credential, or a real store.
+The blocking entries in the verdict table: RV-1, RV-3, RV-4, RV-9, **RV-16**
+and CH-1, plus the live suite never run (`tests/ebay-live.mjs`). *(Corrected
+2026-09-10: RV-8 and RV-10 are no longer blocking — RV-8 is closed for the
+draft keyspace and RV-10 is executed and verified for KV. `tests/test-scan.mjs`
+is no longer "never run": it runs 36/0 locally, while deployed Google
+authentication and RV-1 stay open. RV-16 is added.)*
+
+They share one shape — each needs a deployed function, a live credential, a
+real store, or a real seller account.
 
 **Deployment is yours alone and must be explicit.** A push to `main`
 auto-deploys, so there is no rehearsal step between authorization and
@@ -852,6 +880,14 @@ preserve prefill (D5 verification §7.2).
 ---
 
 ## RV-8 — Preview and Development read production KV
+
+> **Status as of 2026-09-10 18:05: CLOSED for the draft keyspace.** This
+> section is the original finding and its cause analysis; read it as dated
+> evidence, not live status. The configuration split was verified 2026-09-10
+> 00:20 and the deployed Preview-write proof was established by the controlled
+> `draft:*` comparison in §Isolation — PASS recorded. `idem:*`,
+> `idemresource:*`, `drafts:*`, `draftquota:*` and `draftindex_*` were never
+> queried and remain unclaimed.
 
 **Established 2026-09-08** (`audit/ROTATION_GATE_ANSWERED.md` §2.2): every
 KV/Redis variable on the `cardresell` project is a single row targeting
@@ -5099,10 +5135,11 @@ coverage is not evidence about either. The stale sentence is corrected here
 rather than deleted, because a status paragraph that quietly improves is not
 auditable.
 
-The remaining
-live checks are unchanged: the $2 seller-provenance run on `499ef1c`, the three
-actual Lua scripts against isolated Redis, the eBay rotation and challenge, and
-RV-1, RV-3, RV-4, RV-9, CH-1, Safeguard 2.
+The previously open
+live checks are unchanged; **RV-16 is newly added**. The previously open ones:
+the $2 seller-provenance run on `499ef1c`, the three actual Lua scripts against
+isolated Redis, the eBay rotation and challenge, and RV-1, RV-3, RV-4, RV-9,
+CH-1, Safeguard 2.
 
 Phase 1 stays at approximately 95% until the real Seller Hub file upload closes
 alongside the existing deployment and live gates.
