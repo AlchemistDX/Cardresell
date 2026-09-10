@@ -4220,3 +4220,61 @@ with a thumbnail, title, price, and readiness status, and three actions:
 The first task is verification, not design: eBay's import format, its required
 fields, the account requirements, and how it handles photos. The export and the
 simpler interface get designed around the workflow eBay actually supports.
+
+## D8 client landed — and the regression it turned out not to be (2026-09-10)
+
+Commit `9d4ce4b` on `phase1-block-d`, local only. Nothing pushed; the Preview
+alias stays pinned to `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` for the $2 test.
+
+### What shipped in the bundle (`core.8e7fee75.js` → `core.69fb43dd.js`)
+
+Delete with a confirmation step; a lost delete response **reconciled by
+re-reading** rather than answered with a promise; 410 shows the deleted state
+and does **not** retry; the drafts badge goes **unknown** rather than being
+decremented locally; a retry keeps its original generation, key and payload;
+`generation` is sent only when it is a known integer; `existing: true` opens
+the saved draft with a brief notice and emits no created event; the three
+button labels come from one helper.
+
+### The 18 failures were a fixture defect, and the bisect says so
+
+`tests/draft-review-screen.mjs` had dropped from 417/0 to 347/18. A worktree
+bisect — not inference — puts the change at `b12f462`, the commit that wired
+the lifecycle into the handlers: 417/0 at `7ae8a35`, 347/18 at `b12f462`.
+
+The cause is the new one-draft-per-`(instanceId, slot)` rule meeting fixtures
+that all reused `httpInput()`'s default instanceId with no reset between them.
+From the second POST onward the handler resolved the row, found the first
+fixture's draft live on it, and **correctly** returned that draft with
+`existing: true`. Demonstrated, not argued: `packetShipDeclared`,
+`packetShipZero` and `packetShipUnreadable` were the same `drf_` id, which is
+why the declared-zero shipping case rendered `$5.99`.
+
+So the product was right and the fixtures were wrong. Each fixture POST now
+gets its own row, derived once in the `post` helper from its idempotency key.
+Suite is back to 417/0, matching the pre-lifecycle baseline exactly.
+
+**The uncomfortable part, recorded deliberately.** Those 18 failures were
+invisible for three commits because the two client suites were crashing at
+fixture seeding for an unrelated reason (the in-memory double had no `eval`
+command). A crashing suite and a passing suite are not distinguishable from
+a totals line.
+
+### Two mistakes made and corrected in the rename
+
+The bundle naming scheme is **sha256[:8]**, not md5. The first attempt shipped
+`core.1620e5f5.js`, an md5 prefix, and `tests/asset-fingerprints.mjs` refused
+it. It also refused the *deletion* of the retired `core.8e7fee75.js` — retired
+generations are retained on disk so cached HTML does not 404 — which is
+restored with its committed bytes. 87/0 after both corrections.
+
+### Not claimed, and still owed
+
+**No browser test yet exercises the new delete path**, the confirmation, the
+reconcile, the 410 stop, or the `existing: true` adoption. The seven green
+suites cover the code the screen shares with them, not those behaviours. That
+proof is the next piece of work and it runs against the local dev server, not
+a new deployment, precisely so the pinned Preview stays untouched.
+
+The `EVAL` scripts remain exercised only against in-memory doubles. Verifying
+them against isolated Redis is still an open release gate.
