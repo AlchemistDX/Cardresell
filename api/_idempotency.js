@@ -332,10 +332,36 @@ function safePart(v) {
   return s;
 }
 
-/** A client-supplied key must be a real uuid, not whatever the caller felt like. */
+/**
+ * A client-supplied key is an OPAQUE BOUNDED TOKEN, not necessarily a uuid.
+ *
+ * This previously demanded a uuid, on the stated grounds that otherwise "a
+ * client could pass a value like 'draft-1' that another client would collide
+ * with". That reasoning does not survive `idempotencyKeyFor`: every key is
+ * already namespaced by `googleSub`, so two sellers cannot collide no matter
+ * what they send. What the uuid rule actually did was reject the keys this
+ * application sends -- `sell-col-<entryId>-<slot>` from a Collection row,
+ * `sell-<instanceId>-<slot>` from the card panel, `pkt-<draftId>-r<rev>` on a
+ * rebuild -- and the two defaults THIS FILE'S OWN CALLERS mint when no header
+ * is present, `rev-<draftId>` and `del-<draftId>`. A validator that refuses
+ * the keys its own server generates was never coherent.
+ *
+ * The derived shape is not incidental: it is what makes a double tap replay
+ * the seller's existing draft instead of opening a second one. A per-attempt
+ * uuid cannot do that, because every tap would mint a new one.
+ *
+ * What is still enforced is everything that protects the store: a bounded
+ * length, and a charset that excludes `:` and whitespace so `safePart` cannot
+ * be walked out of its namespace. Uuids continue to pass unchanged.
+ */
+export const IDEMPOTENCY_KEY_MAX = 128;
+export const IDEMPOTENCY_KEY_MIN = 8;
 export function validIdempotencyKey(v) {
-  return typeof v === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.trim());
+  if (typeof v !== 'string') return false;
+  const s = v.trim();
+  return s.length >= IDEMPOTENCY_KEY_MIN &&
+         s.length <= IDEMPOTENCY_KEY_MAX &&
+         /^[A-Za-z0-9._~-]+$/.test(s);
 }
 
 export function policyFor(scope) {

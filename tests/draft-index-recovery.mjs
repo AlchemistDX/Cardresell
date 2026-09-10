@@ -655,10 +655,33 @@ check('another user cannot replay this user\'s attempt',
 check('the same key in a different scope is a different action',
       (await IDEM.runOnce(idemKv, 'sub1', 'draft-create', UUID, create, { request: REQ_A })).replayed === false);
 
-for (const bad of ['', 'abc', null, 42, 'not-a-uuid-at-all', undefined]) {
-  check(`idempotency key ${JSON.stringify(bad)} is refused`,
-        (() => { try { IDEM.validIdempotencyKey(bad); return !IDEM.validIdempotencyKey(bad); }
+// A key is an opaque bounded token, not a uuid. The uuid-only rule this block
+// used to assert is the rule that made every create from the UI fail with
+// IDEMPOTENCY_KEY_INVALID, because the keys the app sends are derived
+// (`sell-col-<entryId>-<slot>`), never uuids. What must stay refused is
+// anything that could walk out of the `idemresource:<sub>:<scope>:<key>`
+// namespace, or that is too short to be a meaningful key at all.
+for (const bad of ['', 'abc', null, 42, undefined,
+                   'sell:col:1',            // `:` is the store's delimiter
+                   'sell col 1 2 3 4',      // whitespace
+                   'sell/col/1/2/3/4',      // path separator
+                   'x'.repeat(129)]) {      // over IDEMPOTENCY_KEY_MAX
+  check(`idempotency key ${String(JSON.stringify(bad)).slice(0, 24)} is refused`,
+        (() => { try { return !IDEM.validIdempotencyKey(bad); }
                  catch { return true; } })());
+}
+// The keys this application actually sends must be accepted. Asserting the
+// shipped shapes by name is the check that was missing: the suite minted its
+// own uuids via K(), so it passed while the product could not create a draft.
+for (const good of ['sell-col-1757900000000-ebay-fixed-price',
+                    'sell-inst_col_1757900000000-ebay-fixed-price',
+                    'pkt-drf_6faa96487b4bac636a05a2e1b3ba9293-r1',
+                    'rev-drf_6faa96487b4bac636a05a2e1b3ba9293',
+                    'del-drf_6faa96487b4bac636a05a2e1b3ba9293',
+                    '11111111-2222-3333-4444-555555555555']) {
+  check(`the shipped key ${good.slice(0, 30)} is accepted`,
+        IDEM.validIdempotencyKey(good) === true,
+        'a validator that refuses the keys its own client and server generate is the D8 defect');
 }
 idemStore = new Map(); creations = 0;
 const boom = async () => { creations += 1; throw new Error('WORK_FAILED'); };

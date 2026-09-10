@@ -1,8 +1,9 @@
 # Bundle citation map
 
-**Live bundle on branch: `js/core.49b84d4b.js`.** New work
-cites that hash. Renamed from `53a0674d` at the close of the collection /
-provenance batch (generation 14 below). Renamed at the close of RC-2 from the working name
+**Live bundle on branch: `js/core.8e7fee75.js`.** New work
+cites that hash. Renamed from `49b84d4b` at the close of the idempotency-key
+batch (generation 15 below); `49b84d4b` itself was renamed from `53a0674d` at
+the close of the collection / provenance batch (generation 14). Renamed at the close of RC-2 from the working name
 `core.2cb1e377.js`; `tests/asset-fingerprints.mjs` is green at 74/0 and every
 `js/core.*.js` on disk hashes to its own name.
 
@@ -12,6 +13,12 @@ was live by then. Both are corrected here rather than annotated below, because
 a citation map whose header has to be read sceptically is not doing its job.
 For the record: `66c39922`, `73a71fac`, `e9f21f4e` and `176e4a56` are retired,
 and the per-generation history below is unchanged and remains accurate.
+
+> ### Generation 15 — idempotency key accepted end to end
+>
+> | # | from → to | commit | what moved |
+> |---|---|---|---|
+> | 15 | `49b84d4b` → `8e7fee75` | *(this commit)* | `_crIdemPart` / `_crIdemKey` added beside `CR_D1_SLOT`, and the three call sites that built an `Idempotency-Key` by string concatenation (`sell-`, `sell-col-`, `pkt-`) routed through it. `CR_D1_SLOT` is `ebay:fixed-price`; splicing it raw put the store's reserved `:` delimiter into every key the app has ever sent, so every create was refused before draft validation ran. |
 
 > ### Generation 14 — collection reflow, popup contrast, price provenance
 >

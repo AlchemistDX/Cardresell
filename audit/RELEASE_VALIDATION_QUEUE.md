@@ -2904,3 +2904,225 @@ test keys need an **environment-aware mechanism** — the sitekey is hardcoded a
 `index.html:1565`, so there is currently no way to vary it per environment
 without editing committed HTML — and production must retain its real pair. Test
 secrets reject real tokens, so a partial swap on either side fails closed.
+
+---
+
+## Batch 2026-09-10 — provenance, contrast, mobile reach (commit `c3dd619`, bundle `js/core.49b84d4b.js`)
+
+Deployment under test: **`dpl_H1cMkvLseYFSAoND7gPd27fQq13p`** (preview, Ready,
+2026-09-10 04:08:22 UTC). This is the deployment the Redis isolation check
+restarts against — not `dpl_vcRJ…`, which is superseded.
+
+### Five focused tests — all pass (Playwright, 390x844, local bundle)
+
+| # | Behaviour | Evidence |
+|---|---|---|
+| 1 | Manual card refuses for game + number, offers exactly those two fields, saving them flips eligibility | popup label `Add missing details` → `Create listing draft`; fields `ccmFixGame`, `ccmFixNumber`; row after save `{game:'pokemon', cardType:'pokemon', number:'4/102'}` with `valueSource` still `'seller'` |
+| 2 | Draft carries seller-entered provenance on the wire | POST `/api/drafts` body `price: 2, priceSource: 'seller'`. Matrix: `seller`→`seller`, `comp`→`comp`, legacy (no `valueSource`)→`seller`, legacy + `lastRefreshed`→`seller` |
+| 3 | Mobile row actions reachable without horizontal scroll | at `clientWidth` 390: `docScrollWidth` 390, table overflow 0px, all four controls (`🛠️ List`, `🎉 Sold`, `↻`, `✕`) fully inside the viewport |
+| 4 | Popup controls readable in both themes | computed contrast — light: View full card 5.48, Refresh 18.10, Remove 6.04, Close 5.14; dark: 8.50 / 10.80 / 6.36 / 5.43. `Create listing draft` is white on a blue gradient in both. Screenshots `t4-popup-light.png`, `t4-popup-dark.png` |
+| 5 | Draft badge and heading synchronised | with a 3-draft response: heading `3 drafts`, `colSubDraftsCount` `3`, `_crDraftCount` 3, cards badge `1` |
+
+### Full-card caption — the exact defect reported
+
+With every price provider failing and no catalogue match (Will's card name
+matches nothing), the caption now reads by provenance:
+
+| `valueSource` | caption | `selectedCard.source` |
+|---|---|---|
+| `seller` | **Manual entry** | `Manual` |
+| `comp` | TCGPlayer market | `TCGPlayer` |
+| unrecorded | Saved value | `Saved value` |
+
+Before this batch all three read "TCGPlayer market".
+
+### Verification banner — source of truth established
+
+- `_updateVerifyBanner` (`js/core.49b84d4b.js:12498`) reads **only**
+  `window.googleUser.emailVerified`. No Redis read, no API call, no bonus record.
+- That flag is set at `js/auth.5cf1cd22.js:202,222` from the Firebase client
+  user record: `!!user.emailVerified || isApple`.
+- One server override exists: `checkProStatus` (`:19574`) assigns
+  `d.emailVerified` from `/api/pro-status`. On the server
+  (`api/pro-status.js:31,183-190`) that value is seeded from the Firebase token
+  claim and can only be **upgraded** false→true by the KV key
+  `email_verified:<uid>`. It never downgrades true→false.
+- Therefore the banner can only appear when the Firebase claim is false **and**
+  the KV row is absent. Verification completed through CardResell's own
+  verify flow writes `email_verified:<uid>` to KV without changing the Firebase
+  claim — so that verified state is environment-scoped, and a Preview pointed at
+  `upstash-kv-aureolin-door` legitimately lacks it.
+- **Not yet measured:** whether Will's Firebase claim is in fact false. The
+  branch is decidable in one step from his own session
+  (`window.googleUser.emailVerified`); nothing here copies production claim data
+  or awards duplicate credits.
+
+### Lookup failure — what is and is not established
+
+Measured, this batch:
+
+- **Production is healthy.** From the cloud browser on `www.cardresell.org`,
+  all five endpoints returned **200**: `/api/tpl-proxy` (returned Charizard
+  rows), `/api/tcg-price` (`market 897.19`, source `tcgcsv`), `/api/ebay-sold`,
+  `/api/pricecharting`, `/api/pro-status`. `window.tplApiKey` is truthy.
+- **The preview alias is SSO-gated.** An unauthenticated load of
+  `cardresell-git-phase1-block-d-…vercel.app/` redirects to
+  `vercel.com/login?next=/sso-api…`. Relative `/api/*` fetches from that page
+  therefore resolve against `vercel.com` and return Vercel's own 404 envelope —
+  the preview's functions are not reachable from here at all.
+- **The message Will saw is reachable from exactly one branch.** "Could not
+  reach the card database" is `reason: 'network'`, returned only from the
+  `catch` in `searchWithTPL` (`:328-330`) — a fetch that *threw*. A missing
+  server key gives HTTP 500 (`api/tpl-proxy.js:88`) → `'unavailable'`
+  ("temporarily unavailable"); a missing client flag gives `'not_configured'`;
+  429 gives `'rate_limited'`. So the absent Preview paid keys do **not** produce
+  the copy he saw.
+
+Not established: the request-level cause inside Will's authenticated preview
+session. `vercel logs` on this plan tails forward only and returns no history,
+and the deployment cannot be reached without his Vercel SSO cookie. A
+same-origin fetch whose response is an SSO redirect to `vercel.com` is a
+cross-origin redirect the browser refuses to follow, which throws exactly this
+way — consistent with every measurement above, but it is a hypothesis, not a
+capture.
+
+**Working next step:** stop diagnosing the lookup on a protection-gated
+preview. Either capture it from Will's own session (DevTools → Network, filter
+`/api/`, reproduce the search, report status or "(failed)" per row), or take the
+preview off Standard Protection for the duration of the check so the isolation
+check and the provider chain can both be observed directly.
+
+### Bundle
+
+`js/core.53a0674d.js` on disk had drifted from its own name at `fff102a`
+(hashed `8cdd9ef0`). Its settled bytes are restored from `5a4ce14`, the live
+bundle is renamed `js/core.49b84d4b.js`, and `tests/asset-fingerprints.mjs`
+reports **83 passed, 0 failed**.
+
+---
+
+## D8 — "Idempotency-Key is not a valid key": cause, fix, proof
+
+Bundle `js/core.8e7fee75.js` (generation 15). **Committed locally, not pushed** —
+no deploy authorization was given for this batch.
+
+### Two defects, both required to break it
+
+**1. The client put the store's reserved delimiter in every key.**
+`CR_D1_SLOT` is `'ebay:fixed-price'` (`js/core.49b84d4b.js:21088`). All three
+call sites built the header by concatenation:
+
+| site | key it sent |
+|---|---|
+| card panel (`:21134`) | `sell-<instanceId>-ebay:fixed-price` |
+| Collection row (`:21495`) | `sell-col-<entryId>-ebay:fixed-price` |
+| packet rebuild (`:23649`) | `pkt-<draftId>-r<rev>` |
+
+The server stores the record at `idemresource:<sub>:<scope>:<key>`, and
+`safePart` (`api/_idempotency.js:328-333`) refuses any segment containing `:`
+or whitespace. So the first two shapes were unsafe by construction.
+
+**2. The server's validator demanded a uuid, which nothing in the system sends.**
+`validIdempotencyKey` required
+`/^[0-9a-f]{8}-[0-9a-f]{4}-…$/`. Its stated reason was to stop one client
+colliding with another — but keys are already namespaced by `googleSub`, so
+that collision is impossible. What the rule actually rejected was every key
+the product sends **and the two defaults `api/drafts.js` mints itself** when no
+header is present: `rev-<draftId>` (`:264`) and `del-<draftId>` (`:442`). A
+validator that refuses the keys its own server generates was never coherent.
+
+Either defect alone produces `400 IDEMPOTENCY_KEY_INVALID` before draft
+validation ever runs. That is why the reachable Create button never created
+anything.
+
+### Why the suite did not catch it
+
+`tests/draft-crud-e2e.mjs:20-29` mints deterministic **uuids** from a label and
+sends those. It never sent a key the client produces, so 192 assertions passed
+against a create path the application could not use. The same shape the
+codebase keeps getting caught by: the assertion evidenced a surface the product
+does not exercise.
+
+### The fix
+
+- `api/_idempotency.js` — key is an opaque bounded token: 8–128 chars,
+  `[A-Za-z0-9._~-]`. Still excludes `:`, whitespace and path separators, so the
+  namespace guarantee `safePart` protects is unchanged; uuids still pass.
+  `IDEMPOTENCY_KEY_MIN` / `IDEMPOTENCY_KEY_MAX` exported so the client can
+  mirror the bound rather than restate it.
+- `js/core.8e7fee75.js` — `_crIdemPart` / `_crIdemKey` added beside
+  `CR_D1_SLOT`, and all three call sites routed through it. One
+  implementation of the rule, deterministic, so the dedupe property is intact:
+  `sell-col-1757900000000-ebay-fixed-price`.
+- `tests/draft-index-recovery.mjs` — the block asserting "must be a uuid" now
+  asserts the real contract from both directions: `sell:col:1`, whitespace,
+  path separators, under-8 and over-128 are refused; **the five shipped key
+  shapes are accepted by name.** That is the assertion whose absence let this
+  ship.
+
+### Proof — through the real server, not a stubbed POST
+
+`tools/dev-draft-server.mjs` (local only, never imported by the app) mounts the
+**real** `api/*.js` handlers. Only two things are substituted, both unreachable
+from the sandbox: Google's JWKS endpoint is replaced by a keypair minted in
+process — so `_verifyToken.js` still performs a real RS256 signature
+verification — and Upstash REST is replaced by an in-memory map speaking the
+same path protocol `makeKv()` uses. **No production data and no production
+credential is touched.**
+
+Header-level ladder (`tools/dev-draft-probe.mjs`):
+
+| request | result |
+|---|---|
+| real popup key, first tap | **201** `drf_…`, `replayed:false`, `fresh` |
+| same key, second tap | **200** same `draftId`, `replayed:true` |
+| same key, third tap | **200** same `draftId`, `replayed:true` |
+| card-panel key shape | **201** (different key = different intent) |
+| **the key that shipped** (`…-ebay:fixed-price`) | **400 IDEMPOTENCY_KEY_INVALID** — the defect, still refused |
+| no header | 400 `IDEMPOTENCY_KEY_REQUIRED` |
+| key with `:` | 400 `IDEMPOTENCY_KEY_INVALID` |
+| key under 8 chars | 400 `IDEMPOTENCY_KEY_INVALID` |
+| uuid | 201 — unregressed |
+
+Through the actual UI, 390×844, real bundle, real handlers:
+
+1. Popup opened on the seller-entered card; `/api/sell-eligibility` returned
+   `{eligible:true, missing:[]}` and the button read **Create listing draft**.
+2. **Three taps on `#ccmDraftBtn`.** Three POSTs went out, all carrying
+   `Idempotency-Key: sell-col-1757900000000-ebay-fixed-price`. Responses:
+   **201, 200, 200 — one `draftId`, `drf_6faa96487b4bac636a05a2e1b3ba9293`.**
+   No duplicate.
+3. **Page reloaded.** `GET /api/drafts` → 200, **one row**.
+4. **Draft reopened:** `price 2`, `priceSource "seller"`, `status draft`,
+   `rev 1`, title carrying the card. The seller-entered provenance survives
+   creation, persistence and reopen.
+5. `PATCH` with the rebuild key `pkt-drf_…-r1` → **200, rev 2.** That path was
+   broken by the same mismatch and is now clear.
+
+Suites after the change: `draft-crud-e2e` **192 passed, 0 failed**;
+`draft-index-recovery` **268 passed, 0 failed**; `asset-fingerprints`
+**85 passed, 0 failed**.
+
+### Not proven by this, and worth saying plainly
+
+This is a full round trip against the real handlers, **not** a deployed round
+trip. Deployment and the Redis isolation check are still open, and no push was
+made. What the local proof does establish is that the code path is no longer
+the blocker.
+
+### Questions for Will
+
+- **Q-D8-1 — deploy authorization.** Generation 15 is committed locally only.
+  Push `phase1-block-d`? That creates a new preview deployment and is what
+  would restart the Redis isolation check. Nothing is pushed until you say so.
+- **Q-D8-2 — key lifetime after a delete.** The create key is derived from
+  entry + slot, so it is stable forever. If a seller deletes a draft and taps
+  Create again on the same card, should that (a) replay/refuse as a duplicate,
+  or (b) create a fresh draft? (b) needs a discriminator in the key — a
+  generation counter on the entry is the cheapest. Not changed without your
+  answer, because it is a behaviour decision, not a defect.
+- **Q-D8-3 — `createdByOperation` is null.** `api/_idempotency.js` documents
+  that the operation id should be persisted on the created resource so the
+  record carries its own provenance; the reopened draft has
+  `createdByOperation: null`. Recovery after a lost result record leans on
+  `reconcile` instead. Worth closing before release, or accept for Phase 1?
