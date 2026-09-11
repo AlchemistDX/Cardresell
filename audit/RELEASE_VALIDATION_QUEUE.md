@@ -168,9 +168,25 @@ The portal-side save (7-alt) removes the published value from eBay's stored copy
 too, and is required for closure; any challenge eBay happens to issue on save is
 recorded as a bonus observation, not the gate.
 
-**Two things this does NOT close.** **CH-2** — the code fallback to the
-published literal at `api/ebay-notifications.js` — is untouched and still
-BLOCKING on its own terms. And the **exempt state is revocable**: if the
+**6b PASSED 2026-09-11** against `dpl_BS1a9nXNzpUtEqiWpRLakQmjMRXz`, so the
+production half of CH-1 is **established**: the deployed endpoint hashes the
+clean replacement token, no whitespace corruption, and the value is freshly
+generated and never committed. Remaining for closure is **7-alt** (the portal's
+retained copy), tracked as a **separate uncertainty** — not a reason to repeat
+6b.
+
+**Two things this does NOT close.** **CH-2** — **CORRECTED 2026-09-11 11:52: the
+fix already exists in the branch at `6c610e2`, and needs no further
+implementation.** That commit removes the published literal
+(`6c610e2:api/ebay-notifications.js:32` reads
+`cleanCredential(process.env.EBAY_VERIFICATION_TOKEN) || ''`), reads at call
+time so a warm instance cannot freeze a stale value, and fails **closed** on
+GET with `503 verification_token_unset`, `no-store`, and **no
+`challengeResponse` field at all** — while POST stays open on purpose, since
+refusing a deletion notification over our own misconfiguration would convert a
+config defect into a compliance failure. My earlier framing of CH-2 as needing
+work was wrong. **What is actually outstanding is deployment**: production runs
+`9aaf326`, which still carries the fallback, and `6c610e2` is unpushed. And the **exempt state is revocable**: if the
 exemption is ever lifted, or the app begins persisting eBay data, the
 challenge-code path becomes live and **must be verified at that point**.
 Recorded as a conditional re-open trigger rather than a closed question.

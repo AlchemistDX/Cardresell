@@ -782,3 +782,72 @@ this variable through the dashboard path. **Two consequences:**
 **CH-1 remains open.** It closes only when the replacement token is serving
 production **and** eBay's own verification succeeds.
 
+
+---
+
+## 15. 6b PASSED; exemption eligibility is NOT established; CH-2 already fixed (2026-09-11 11:52)
+
+### 6b — PASS, recorded against the second rebuild
+
+Owner-run `tools/verify-challenge.mjs` against
+**`dpl_BS1a9nXNzpUtEqiWpRLakQmjMRXz`**: the endpoint's `challengeResponse`
+matches the clean replacement token, **no whitespace shape**. With the token
+freshly generated and never committed, **production no longer serves the
+repository default**. That is **RV-9 check 19**, and it does **not** establish
+the other eighteen. **Completed — not to be re-run.**
+
+### Exemption eligibility — my check was too narrow, and the result changes
+
+I declared the exemption "a true declaration" on the strength of
+`api/ebay-notifications.js` alone. **That was the wrong scope**, and widening
+it to caches finds eBay data persisted in production:
+
+`9aaf326:api/ebay-sold.js:29-36` writes Upstash keys `ebay_cache:<v3|keywords|limit>`
+via `SETEX` with **`CACHE_TTL_SEC = 15 * 60`** (`:15`), storing per-item
+records built at `:336` — `title`, `price`, `currency`, `url`, `soldDate`,
+`imgUrl`, `itemId`. So **eBay listing data is written to durable storage**,
+not merely proxied.
+
+**What I can and cannot conclude:**
+
+- **Established:** production persists eBay-derived *listing* data for 15
+  minutes. Namespaces written by production API code are `ebay_cache:`,
+  `pc_cache:`, `tcgprice:`, `type:` — one of which is eBay-derived.
+- **Established:** no eBay **user identifier** appears in the cached record.
+  The item shape at `:336` has no seller username, seller id, buyer, or
+  feedback field.
+- **NOT established — and this is the reviewer's point:** whether a 15-minute
+  cache of listing fields counts as "persisting eBay data" for the exemption.
+  eBay's page states the exemption is for applications **"not persisting any
+  eBay data"** and warns that incorrect information "may result in penalties or
+  having their account disabled." Marketplace *Account Deletion* notifications
+  concern **user** data, which suggests listing caches are outside their
+  intent, but eBay's toggle wording is **broader than user data** and I have
+  found no source resolving the gap.
+- **Unverified:** client-side storage. The production bundle
+  `js/core.569ff536.js` contains **137** case-insensitive matches for "ebay";
+  no per-key audit of browser storage was performed here.
+
+**Consequence:** the exemption's accuracy is **an open compliance question for
+the owner**, not something I have confirmed. My §14-era "it also happens to be
+a true declaration" is **withdrawn**. The instruction stands unchanged in the
+other direction too: **leave the exemption as it is** — nothing here justifies
+touching a pre-existing declaration, and this finding is a reason for owner
+review, not for an agent-initiated toggle.
+
+### CH-2 — already fixed in the branch; I was wrong to call it outstanding work
+
+**`6c610e2`** removes the published literal:
+`6c610e2:api/ebay-notifications.js:32` reads
+`cleanCredential(process.env.EBAY_VERIFICATION_TOKEN) || ''`. Read at call
+time, so a warm instance cannot freeze a stale value. GET **fails closed** —
+`503 verification_token_unset`, `no-store`, **no `challengeResponse` field at
+all**. POST stays open deliberately: refusing a deletion notification over our
+own misconfiguration would convert a config defect into a compliance failure,
+and that asymmetry is pinned by a test.
+
+I called CH-2 "the more interesting of the two" and implied it needed
+implementing. **Withdrawn.** What is outstanding is **deployment**: production
+runs `9aaf326`, which still carries the fallback, and `6c610e2` is unpushed on
+`phase1-block-d`. **Deployment authorization is the owner's and is not
+inferred** from this finding.
