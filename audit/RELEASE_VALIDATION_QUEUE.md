@@ -903,48 +903,100 @@ rather than by timing. Production clearing stays unchanged until then.
 ---
 
 
-## EXP-1 — `EBAY_OAUTH_TICKET.md` carries credential literals (OPEN, not blocking Phase 1)
+## EXP-1 — `EBAY_OAUTH_TICKET.md` carries credential literals (OPEN — **classification pending**)
 
-**Registered 2026-09-10 22:55.** Found while tracing the production commit; it
-is on no existing remediation list, so it gets its own row rather than being
-folded silently into the eBay rotation.
+**Registered 2026-09-10 22:55; classified 23:05.** Found while tracing the
+production commit; on no existing remediation list, so it gets its own row
+rather than being folded silently into the eBay rotation.
 
 | | |
 |---|---|
-| File | `EBAY_OAUTH_TICKET.md` — repository root |
+| File | `EBAY_OAUTH_TICKET.md` — repository root, 164 lines |
 | Tracked at | **`origin/main`**, and present in the working tree |
 | Introduced | `94dc777`, 2026-09-05 |
 | Scope | The **only** tracked file matching a production-keyset literal shape across `origin/main` |
-| Values | **Not read.** Type labels and match counts only. |
+| Values | **Not read, not printed.** Classified by `tools/classify-credential-mentions.mjs`, which emits line number, type, classification and environment only. |
 
-**Credential types named in the file** (labels counted, values never read):
+### Classification result
 
-| Type | Mentions | Covered by the planned rotation? |
-|---|---|---|
-| **Cert ID** | 3 | **Yes** — this is the credential being rotated. |
-| **App ID** | 2 | **No.** An identifier, not a secret, and not rotated. Not independently sensitive, but it does identify the keyset. |
-| **Verification token** | 1 | **Yes** — rotated in the same runbook (step 3). |
-| **User token** | 2 | **No.** Nothing in the rotation addresses a user token, and the re-check leaves out-of-band user tokens unresolved. |
-| Environment | 3 × `PRD`, 1 sandbox mention | Production keyset, so in scope for the rotation's concern. |
+Six labelled mentions, **all prose**:
 
-**The distinction that matters:** presence of a literal establishes only that a
-value **was written down**, not that it is **still active**. Whether each
-remains valid is an account fact, not a repository fact.
+| Line | Type | Classification | Environment |
+|---|---|---|---|
+| 8 | Cert ID | prose | not stated |
+| 15 | Cert ID + App ID | prose | not stated |
+| 27 | App ID | prose | not stated |
+| 28 | Cert ID + Verification token | prose | not stated |
+| **49** | **User token** | **prose** | not stated |
+| **66** | **User token** | **prose** | not stated |
+
+**The user-token question is closed.** Both mentions are prose — narrative
+references, not literals. Two mentions never established two literals, and
+that is now checked rather than assumed. **No user-token value is present in
+this file.** Its remediation therefore does not attach here; out-of-band user
+tokens remain open under the token-inventory item in
+`audit/ROTATION_RECHECK_2026-09-10.md` §9, on their own evidence.
+
+### The part that does not close — and a gap in my first pass
+
+A first version scanned **only lines naming a credential type** and reported
+zero values. That was wrong by construction: a value can sit on a line that
+names no type. A second pass over **every** line found **two**:
+
+| Line | Nearest label | Shape | Environment |
+|---|---|---|---|
+| **22** | none within 6 lines; nearest heading is `## Root cause: two characters` | `PRD-` prefixed — eBay **production keyset** shape | production (stated) |
+| **33** | Cert ID + Verification token (line 28) | `PRD-` prefixed — eBay **production keyset** shape | production (stated) |
+
+Neither is a placeholder, and neither sits in a code fence. So **two apparent
+production-keyset credential values are committed to `origin/main`**, and the
+"all prose" reading would have been a false all-clear.
+
+Line 33 sits under a line naming **Cert ID and verification token**, which is
+suggestive of type but does not settle which. Line 22's type is **not
+established**; its heading is about the credential-corruption root cause.
+`PRD-` is eBay's production prefix for **App ID and Cert ID**, so the shape
+argues against its being a verification token — but shape is not a label.
+
+### Classification pending
+
+Downgraded from "not blocking Phase 1" to **classification pending**, which is
+what the evidence supports:
+
+- **Two production-shaped values are present.** Established.
+- **Which credential each is.** Line 33: narrowed to Cert ID or verification
+  token, not resolved. Line 22: **unresolved**.
+- **Whether either remains active.** **Unresolved**, and not a repository
+  question — presence establishes that a value was written down, not that it
+  is live.
+
+### Rotation coverage — planned, not matched
+
+Neither row below is established as covering these literals. Labels in a
+document do not tie a written-down value to the credential being rotated;
+only comparing values would, and that is not being done.
+
+| Type | Coverage |
+|---|---|
+| **Cert ID** | **Planned coverage; matching not established.** |
+| **Verification token** | **Planned coverage; matching not established.** |
+| **App ID** | Not rotated — an identifier, not a secret, though it identifies the keyset. |
+| **User token** | Not applicable here; no literal in this file. |
+
+If the line-22 and line-33 values are the credentials being rotated, the
+rotation closes them. If they are older or different values, it does not, and
+nothing currently on any list would.
+
+### Cleanup and invalidation stay distinct
 
 - **Repository cleanup** — deleting the file, and the separate question of
   history rewriting — **invalidates nothing**. A literal already committed to
   `origin/main` must be assumed disclosed for as long as the underlying value
   is live.
-- **Credential invalidation** — rotating or revoking at eBay — is what closes
-  exposure, and is independent of whether the file is tidied.
+- **Credential invalidation** — rotating or revoking at eBay — closes
+  exposure whether or not the file is tidied.
 
-Doing either alone leaves the other open. **Neither is done.** The rotation
-covers two of the four types; the App ID needs none; the **user-token mentions
-are uncovered and unexplained** — possibly a note rather than a value, which
-cannot be settled without reading the file, and reading it is not warranted for
-this decision.
-
-**Not blocking Phase 1.** Tracked here so it is not lost.
+**Neither is done.** No history rewrite is proposed, and none was performed.
 
 
 ## Not in this queue
