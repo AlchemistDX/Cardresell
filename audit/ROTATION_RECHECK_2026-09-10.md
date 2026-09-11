@@ -3,7 +3,7 @@
 identified as the TPL rotation rebuild, §3 recorded as a superseded plan, the
 non-KV count corrected from three to one. Extended 22:05 with §7 eBay token
 treatment and §8 verify-challenge operator requirements; §6 re-sorted so
-separately-tracked work is not listed as a rotation gate. **Re-check closed**; extended 22:20 with three wording corrections, the GET/POST distinction, and §9 token inventory.)*
+separately-tracked work is not listed as a rotation gate. **Re-check closed**; extended 22:20 with three wording corrections, the GET/POST distinction, and §9 token inventory; §9's cache consequence corrected 22:40 after review.)*
 
 Preparation only. **No production action was taken and none is proposed here
 beyond what the existing runbooks already say.** Will performs the production
@@ -349,21 +349,109 @@ developer portal's own test tooling, sandbox experiments, any earlier manual
 OAuth consent, or another application on the same keyset. Those are account
 facts, not code facts, and only the eBay portal can answer them. **Unresolved.**
 
-### A concrete rotation consequence
+### A concrete rotation consequence — CORRECTED 2026-09-10 22:40
 
-The cached application token in Redis under `ebay:app_token` was **minted with
-the old Cert ID and is unaffected by rotation**. It stays valid, and
-`getEbayAppToken` will keep serving it from cache (`:211-217`) for up to
-**≈2 hours** after the new credential is live. Two options, Will's choice:
+An earlier version of this section said the cached application token is
+"unaffected by rotation" and offered two operator options, one of which
+claimed "nothing breaks either way". **Both are withdrawn.** Three separate
+faults, and the third invalidates the section's premise for production.
 
-- **Delete the `ebay:app_token` key** in production Redis after the redeploy,
-  forcing an immediate re-mint under the new Cert ID. Cheap and immediate.
-- **Wait out the TTL.** Nothing breaks; the old-credential token simply keeps
-  being used until it expires.
+**Fault 1 — survival is unverified, and §7 says so.** Cache retention
+establishes what *our application may reuse*, not whether *eBay will keep
+accepting it*. eBay states only that active tokens can persist "for a
+considerable period" after a reset
+([Credentials and token management](https://developer.ebay.com/api-docs/static/gs_credentials-and-token-management.html)),
+which does not settle the application-token case. Writing "unaffected by
+rotation" in §9 contradicted my own §7. The honest statement: **a cached token
+may or may not continue to be accepted; that is unresolved**, and "nothing
+breaks either way" was never supportable.
 
-This matters for *verifying* the rotation as much as for exposure: a live API
-call succeeding right after the redeploy may be succeeding on the **old**
-token, and would prove nothing about the new credential.
+**Fault 2 — deleting Redis does not clear the memo.** Traced at
+`api/_ebayAuth.js`:
+
+- `_memo` is module-level per lambda instance (`:34`); a new deployment starts
+  with it empty.
+- The read order is memo → Redis → eBay (`:210-217`). So the **first request
+  after a redeploy loads the old Redis record into that instance's memo**, and
+  deleting `ebay:app_token` afterwards does not evict it.
+- **No production route can force a refresh.** The only caller is
+  `_ebayTaxonomy.js:108`, `getEbayAppToken()` with no arguments.
+  `forceRefresh` (`:207`) is never passed by product code, and
+  `_resetTokenMemo` (`:230`) is documented "Tests only". Adding a production
+  cache-bust route would be a test-only production surface — excluded.
+
+  So "delete the key after the redeploy" **does not guarantee an immediate
+  mint**. It loses a race it cannot see.
+
+**What *is* established about expiry.** The memo is not unbounded: `:211`
+gates on `_memo.expiresAtMs > now`, and both caches are written from the same
+record with the same `ttl = expires_in − 120` (`:221-224`). **Memo expiry and
+Redis TTL are the same value**, so **≈2 hours is an upper bound on both** —
+the memory-expiry behaviour the review asked to see established. That bounds
+"wait it out"; it does not make it a *verification* method, because the bound
+is a ceiling, not an observation.
+
+**Fault 3 — none of this applies to production today.** At **commit
+`9aaf326`**, the deployed code:
+
+- does **not contain `api/_ebayAuth.js` at all** (`git ls-tree 9aaf326 -- api/`
+  lists only `ebay-notifications.js` and `ebay-sold.js`);
+- performs **no token exchange** — `git grep client_credentials 9aaf326 --
+  api/` returns nothing;
+- **never reads `EBAY_APP_ID` or `EBAY_CERT_ID`.** The only eBay credential
+  production reads is `EBAY_VERIFICATION_TOKEN`
+  (`9aaf326:api/ebay-notifications.js:8`);
+- reaches eBay through an **unauthenticated fetch of a search URL** with
+  rotated browser headers, cached under `ebay_cache:`
+  (`9aaf326:api/ebay-sold.js:20-33, 235`).
+
+**There is therefore no `ebay:app_token` key in production Redis to delete,
+and no production cache race.** The entire concern is **branch work** — real
+for when `_ebayAuth.js` ships, not an operator instruction for this rotation.
+I generalised from the working tree to production, which is the same error as
+the bundle-agreement claim, made again.
+
+**Consequence for the rotation itself:** rotating the Cert ID changes nothing
+the deployed application uses. The rotation is justified by the credential's
+**exposure**, not by production dependence on it. Note also
+`EBAY_OAUTH_TICKET.md`, tracked at `origin/main` and present in the working
+tree, which carries credential literals (7 matching lines; values deliberately
+not read). It is an **exposure surface in its own right** and is **not** on
+any current remediation list — logged here, unresolved, not silently folded
+into this rotation.
+
+### Verification method — `tools/verify-ebay-credential.mjs`
+
+Added today. One hidden-prompt exchange against
+`https://api.ebay.com/identity/v1/oauth2/token`, `grant_type=client_credentials`.
+
+| | |
+|---|---|
+| Invocation | `node tools/verify-ebay-credential.mjs` — no arguments |
+| Input | App ID and Cert ID, both **hidden prompts**. **Refuses piped stdin** outright, since a pipe routes the secret through a shell. |
+| Output | Non-secret only: HTTP status, `token_type`, `expires_in`, `scope`, observation timestamp. **The access token is never printed.** |
+| Failure | Reports eBay's own `error` / `error_description` — `invalid_client` means the pair was rejected. |
+| Unreachable | Reported as **INCOMPLETE**, explicitly neither a failed credential nor a pass. |
+| Quota | **One** real exchange. Application-token requests are daily-limited. Run it once. |
+
+**What a pass establishes:** eBay's token endpoint accepts the replacement
+pair and issues an application token.
+
+**What it does not:** that the **deployed application** uses that credential.
+Proving that additionally requires tying an exchange to the rebuilt
+deployment — and at `9aaf326` that tie **cannot be made at all**, because the
+deployed application performs no exchange. It becomes checkable only once
+`_ebayAuth.js` reaches production, and the check would then have to observe
+the deployment minting, not a direct exchange from a laptop.
+
+### Out-of-band token inventory — scope corrected
+
+Scoped to the **production keyset only**. Sandbox experiments are a different
+keyset and **do not establish production token exposure**; citing them either
+way would be noise. Further: whether the developer portal even exposes a
+**complete token inventory** for a keyset is **not established** as an
+available capability. Until it is, "no user tokens exist" cannot be concluded
+from the portal any more than it can from the code. Both halves stay open.
 
 ## Method
 
