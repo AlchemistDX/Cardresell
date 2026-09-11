@@ -144,6 +144,15 @@ a Preview, and named two routes. Both are needed; the question is order.
 **Chosen: disable automatic Preview deployment first, then build the separate
 non-production store, then re-enable.**
 
+> **NOT EXECUTED IN THIS ORDER — recorded 2026-09-10 21:30.** The separate
+> store was built and is disjoint; automatic Preview deployment was **never
+> disabled**, and pushes have created Previews repeatedly since. The exposure
+> this ordering targeted is closed for the draft keyspace by the store split,
+> so the outcome holds — but it was reached by the other route. Read the text
+> below as the decision taken, not as a description of what happened. Three
+> non-KV production resources remain reachable from Preview.
+> See `audit/ROTATION_RECHECK_2026-09-10.md` §4.
+
 - **Why this order.** The thing being unblocked is *pushing*. A push creates a
   Preview, and that Preview is the exposure. Disabling automatic Preview
   deployment is **one project setting**, reversible, and removes the trigger
@@ -194,7 +203,7 @@ newline**, which is the exact defect §0 measured.
 | 2 | Update `EBAY_CERT_ID`, **Production only** | Vercel → Settings → Environment Variables | Answer 1: Preview holds no eBay credential. Do **not** add it to Preview. |
 | 3 | **Strip the trailing newline from `EBAY_VERIFICATION_TOKEN`**, Production | same | §0 Remedy A. Fixes check 19 at `9aaf326` with no code change. **Skipping this leaves 19/19 unreachable in this sitting.** |
 | 4 | Confirm the old Cert ID is retired, and check what happens to **already-issued tokens** | eBay portal | Secret rotation does not necessarily invalidate live tokens; assuming it does is how a rotation looks complete while the old credential still works. |
-| 5 | **Redeploy the currently live commit `9aaf326e7`** to Production, with **no** outgoing work included | Vercel → Deployments → the `dpl_AuwggY9Y…` production deployment → Redeploy | **The reviewer's point, and the gap in my previous packet.** Environment changes apply to new deployments; the running deployment captured the old values at build time. Without this, the stored replacement and the running application differ — steps 2 and 3 would be invisible. Verify the redeployment reports commit `9aaf326e7`, **not** a branch head. |
+| 5 | **Redeploy the currently live commit `9aaf326e7`** to Production, with **no** outgoing work included | Vercel → Deployments → ~~the `dpl_AuwggY9Y…` production deployment~~ **`dpl_BJuH3okrHAsHpM7vUhCZv85or225`** → Redeploy. **Corrected 2026-09-10 21:30** — production moved on 2026-09-09; see `audit/ROTATION_RECHECK_2026-09-10.md` §1. | **The reviewer's point, and the gap in my previous packet.** Environment changes apply to new deployments; the running deployment captured the old values at build time. Without this, the stored replacement and the running application differ — steps 2 and 3 would be invisible. Verify the redeployment reports commit `9aaf326e7`, **not** a branch head. |
 | 6 | `EBAY_LIVE=1 node tests/ebay-live.mjs` | owner shell | **Bar: 19/19.** Record per §1.4 — failed assertion names, all warnings, target deployment id, commit, timestamp, and the verbatim `passed/failed/warnings` line. Not a score. |
 | 7 | Delete `refs/recovery/pre-scrub-c2366b2` | git | Only after 6 is recorded. |
 | 8 | Record status, checker, and time | audit file | Values never. |

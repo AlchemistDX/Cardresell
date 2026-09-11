@@ -23,7 +23,7 @@ Both gating questions are answered, and they answer in the *safe* direction.
 | # | Question | Answer | What it decides |
 | --- | --- | --- | --- |
 | **1** | Does Preview receive live eBay secrets? | **No.** `EBAY_CERT_ID` targets **`production` only** — and so do `EBAY_APP_ID` and `EBAY_VERIFICATION_TOKEN`. | **Rotate Production only.** Do **not** add the new Cert ID to Preview. |
-| **2** | Does Preview read production KV? | **Yes.** Every KV/Redis variable is a **single row targeting `production,preview,development`** — one value shared by all three. | Doesn't gate the rotation. **Becomes a release-validation item** — see §4. |
+| **2** *(**SUPERSEDED 2026-09-10** — the stores are now disjoint; this is the dated 2026-09-08 reading, not current state. See `audit/ROTATION_RECHECK_2026-09-10.md` §3.)* | Does Preview read production KV? | **Yes.** Every KV/Redis variable is a **single row targeting `production,preview,development`** — one value shared by all three. | Doesn't gate the rotation. **Becomes a release-validation item** — see §4. |
 
 Together these dissolve the hazard the gate existed for. The feared case was
 Preview holding the *same live eBay credential* **and** reading *production
@@ -109,7 +109,7 @@ Not gating, but the tabs were open. Two came back refused by token scope.
 | # | Question | Answer |
 | --- | --- | --- |
 | 3 | Production branch | **`main`** (`link.productionBranch`). |
-| 4 | Active production deployment | `dpl_AuwggY9Y…`, state **READY**, branch `main`, commit **`9aaf326e7`**. **This independently confirms what is live**: `9aaf326` is exactly the `origin/main` this branch is measured against, so **none of the outgoing `phase1-block-d` work is deployed.** First time that has been checked against Vercel rather than inferred from git. |
+| 4 | Active production deployment *(reading of 2026-09-08; **superseded 2026-09-10 21:30** — production is now `dpl_BJuH3okrHAsHpM7vUhCZv85or225`, created 2026-09-09 17:03 UTC. See `audit/ROTATION_RECHECK_2026-09-10.md` §1.)* | `dpl_AuwggY9Y…`, state **READY**, branch `main`, commit **`9aaf326e7`**. **This independently confirms what is live**: `9aaf326` is exactly the `origin/main` this branch is measured against, so **none of the outgoing `phase1-block-d` work is deployed.** First time that has been checked against Vercel rather than inferred from git. |
 | 5 | Do feature-branch pushes produce Previews, and where | Preview deployments are **on** (`deploymentEnabled` unset = default enabled; `gitForkProtection` true). URLs are per-deployment `…-willsep200-9430s-projects.vercel.app`, not a stable branch alias I can name from the API. **`ssoProtection.deploymentType = all_except_custom_domains`** — every deployment except the custom domains sits behind Vercel SSO, so preview URLs are not publicly reachable. |
 | 6 | Domain routing | `www.cardresell.org` **verified, canonical**; `cardresell.org` **verified, redirects to `www`**; `cardresell.vercel.app` verified. This is the basis for the standing "always curl `www`" rule, now confirmed rather than assumed. |
 | 7 | Integrations and webhooks | **Unanswered — 403.** "You don't have permission to list the webhook" / "…the integration configuration." A scope limit on this token, not a network failure. **Still owner-only**, and the only §1 item that is. |

@@ -433,7 +433,7 @@ commit **already live**, redeployed only to pick up the new variable:
 | | |
 | --- | --- |
 | Commit | **`9aaf326`** (`9aaf326e75b235ee500cf134eeb5f869f299b2a4`) |
-| Existing production deployment | `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`, `READY`, created **2026-09-05T17:17:47Z**, ref `main` |
+| Existing production deployment | `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`, `READY`, created **2026-09-05T17:17:47Z**, ref `main`. **Superseded 2026-09-10 21:30 — production is now `dpl_BJuH3okrHAsHpM7vUhCZv85or225`, created 2026-09-09 17:03 UTC. Every "redeploy from `dpl_AuwggY9Y…`" step in this checklist names a deployment that is no longer live.** See `audit/ROTATION_RECHECK_2026-09-10.md` §1. |
 | Action | **Redeploy that deployment** — Vercel's "Redeploy" on that specific entry. Not a branch deploy, not a push, not `--prod` from this working tree. |
 | Configuration it must carry | `CARDSELL_TPL_KEY` = the new value, **`type: encrypted`** |
 | Must NOT carry | Any commit from `phase1-block-d`, and **not** the CH-2 change (G13) |

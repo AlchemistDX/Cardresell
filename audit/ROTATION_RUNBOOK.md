@@ -38,7 +38,7 @@ Vercel → the CardResell project.
 | # | Question | Where | Gating? |
 |---|---|---|---|
 | 1 | **ANSWERED — NO.** `EBAY_CERT_ID` targets `production` only, as do `EBAY_APP_ID` and `EBAY_VERIFICATION_TOKEN`. Rotate Production only; do **not** add to Preview. Originally: **Does Preview receive live eBay secrets?** | Settings → Environment Variables → check the environment checkboxes on the eBay Cert ID row. Record which of Production / Preview / Development are ticked. **Record the tick boxes, never the value.** | **GATING** |
-| 2 | **ANSWERED — YES.** Every KV/Redis variable is one row targeting `production,preview,development`, so one value serves all three. Does not gate rotation; filed as a release-validation item. Originally: **Does Preview read production KV?** | Storage → the KV/Redis store → Connected Projects and the environments it is linked to | **GATING** |
+| 2 | **ANSWERED — YES** *(as of 2026-09-08; **SUPERSEDED 2026-09-10** — Preview and Production now target two disjoint stores. Recheck §3.)* Every KV/Redis variable is one row targeting `production,preview,development`, so one value serves all three. Does not gate rotation; filed as a release-validation item. Originally: **Does Preview read production KV?** | Storage → the KV/Redis store → Connected Projects and the environments it is linked to | **GATING** |
 | 3 | **ANSWERED — `main`.** Which Git branch is Production? | Settings → Git → Production Branch | no |
 | 4 | **ANSWERED — `9aaf326e7`, READY, branch `main`** — equal to `origin/main`, so no outgoing work is live. Active production deployment SHA | Deployments → the one badged Production | no |
 | 5 | Does a feature-branch push produce a Preview, and at what URL? | Settings → Git → "Deploy Previews" / branch settings | no |
