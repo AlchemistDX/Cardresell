@@ -903,100 +903,96 @@ rather than by timing. Production clearing stays unchanged until then.
 ---
 
 
-## EXP-1 — `EBAY_OAUTH_TICKET.md` carries credential literals (OPEN — **classification pending**)
+## EXP-1 — `EBAY_OAUTH_TICKET.md` credential literals (**closed per candidate**, one correction)
 
-**Registered 2026-09-10 22:55; classified 23:05.** Found while tracing the
-production commit; on no existing remediation list, so it gets its own row
-rather than being folded silently into the eBay rotation.
+**Registered 22:55, classified 23:05, resolved 23:12 by masked inspection.**
+No value was printed, no authentication request made, no history rewritten,
+and the owner-run keyset comparison proved unnecessary.
 
-| | |
-|---|---|
-| File | `EBAY_OAUTH_TICKET.md` — repository root, 164 lines |
-| Tracked at | **`origin/main`**, and present in the working tree |
-| Introduced | `94dc777`, 2026-09-05 |
-| Scope | The **only** tracked file matching a production-keyset literal shape across `origin/main` |
-| Values | **Not read, not printed.** Classified by `tools/classify-credential-mentions.mjs`, which emits line number, type, classification and environment only. |
+### Correction first — I conflated two different files
 
-### Classification result
+Earlier entries said this file is "tracked at `origin/main`, carrying
+credential literals," citing counts taken from the **working tree**. Those are
+**two different documents**:
 
-Six labelled mentions, **all prose**:
+| | `origin/main` copy | working-tree copy |
+|---|---|---|
+| Lines | **48** | **164** |
+| Identical? | **No** | — |
+| Contains the two values classified at 23:05? | **No** | Yes (lines 22, 33) |
 
-| Line | Type | Classification | Environment |
-|---|---|---|---|
-| 8 | Cert ID | prose | not stated |
-| 15 | Cert ID + App ID | prose | not stated |
-| 27 | App ID | prose | not stated |
-| 28 | Cert ID + Verification token | prose | not stated |
-| **49** | **User token** | **prose** | not stated |
-| **66** | **User token** | **prose** | not stated |
+So the values I flagged as "committed to `origin/main`" **are not in the
+published copy at all**. They exist only in the unpushed branch version. The
+earlier statement was wrong, and the correction narrows the exposure rather
+than widening it.
 
-**The user-token question is closed.** Both mentions are prose — narrative
-references, not literals. Two mentions never established two literals, and
-that is now checked rather than assumed. **No user-token value is present in
-this file.** Its remediation therefore does not attach here; out-of-band user
-tokens remain open under the token-inventory item in
-`audit/ROTATION_RECHECK_2026-09-10.md` §9, on their own evidence.
+### Candidate 1 & 2 — working-tree lines 22 and 33: **synthetic placeholders**
 
-### The part that does not close — and a gap in my first pass
+Reading the surrounding explanation with both values replaced by opaque
+markers resolved it without any comparison. Lines 14–17 of that copy state the
+values are **synthetic placeholders with the same shape and character length
+as the real ones** (App ID 40, Cert ID 36), written so the document's length
+arithmetic still demonstrates the corruption bug. Line 22 is the `EBAY_APP_ID`
+assignment; line 33 is the Basic-Auth pair, so the types are **App ID** and
+**Cert ID**.
 
-A first version scanned **only lines naming a credential type** and reported
-zero values. That was wrong by construction: a value can sit on a line that
-names no type. A second pass over **every** line found **two**:
+A self-declaration is a claim, so it was corroborated four ways, none of which
+required printing anything:
 
-| Line | Nearest label | Shape | Environment |
-|---|---|---|---|
-| **22** | none within 6 lines; nearest heading is `## Root cause: two characters` | `PRD-` prefixed — eBay **production keyset** shape | production (stated) |
-| **33** | Cert ID + Verification token (line 28) | `PRD-` prefixed — eBay **production keyset** shape | production (stated) |
+1. The App ID literal begins `FAKEUSER-Fakeapps-` — self-evidently not a real
+   keyset owner.
+2. Measured lengths are exactly 40 and 36 — matching the stated real lengths,
+   consistent with a shape-preserving fake.
+3. The Cert ID candidate has **13 distinct characters across 36** and contains
+   an obvious filler sequence. A real Cert ID is high-entropy.
+4. Both appear in `tests/ebay-auth-offline.mjs` as `SYNTHETIC_APP`, commented
+   "synthetic — never put a real credential here." That file is **not tracked
+   at `origin/main`** either.
 
-Neither is a placeholder, and neither sits in a code fence. So **two apparent
-production-keyset credential values are committed to `origin/main`**, and the
-"all prose" reading would have been a false all-clear.
+**Closed.** Established as non-credentials. Nothing to rotate, nothing to
+invalidate, no exposure.
 
-Line 33 sits under a line naming **Cert ID and verification token**, which is
-suggestive of type but does not settle which. Line 22's type is **not
-established**; its heading is about the credential-corruption root cause.
-`PRD-` is eBay's production prefix for **App ID and Cert ID**, so the shape
-argues against its being a verification token — but shape is not a label.
+### Candidate 3 — published copy, line 39: a **real production App ID**
 
-### Classification pending
+The classifier found one apparent value in the `origin/main` copy, inside
+drafted ticket text to eBay Developer Support: a Production **App ID** of the
+form `WillJone-Cardress-PRD-…`. This is real, not synthetic.
 
-Downgraded from "not blocking Phase 1" to **classification pending**, which is
-what the evidence supports:
+**Closed as a non-secret identifier.** An App ID is the public half of the
+keyset — it is not rotated and is not a secret. Worth stating plainly: it
+**does publicly identify the production keyset and its owner**, which is a
+privacy consideration for a public repository, not a credential exposure.
 
-- **Two production-shaped values are present.** Established.
-- **Which credential each is.** Line 33: narrowed to Cert ID or verification
-  token, not resolved. Line 22: **unresolved**.
-- **Whether either remains active.** **Unresolved**, and not a repository
-  question — presence establishes that a value was written down, not that it
-  is live.
+### Candidate 4 — published copy, lines 29–30: **already masked**
 
-### Rotation coverage — planned, not matched
+Both are written with the document's own ellipsis masking — an App ID suffix
+and a `PRD-…-4ca1` Cert ID prefix-plus-suffix fragment. Partial. **No full
+Cert ID literal exists anywhere in the published copy.** Closed.
 
-Neither row below is established as covering these literals. Labels in a
-document do not tie a written-down value to the credential being rotated;
-only comparing values would, and that is not being done.
+### What this does to the rotation coverage question
 
-| Type | Coverage |
-|---|---|
-| **Cert ID** | **Planned coverage; matching not established.** |
-| **Verification token** | **Planned coverage; matching not established.** |
-| **App ID** | Not rotated — an identifier, not a secret, though it identifies the keyset. |
-| **User token** | Not applicable here; no literal in this file. |
+The "planned coverage; matching not established" rows are **moot**, not
+resolved: there is no committed secret literal for the rotation to match. The
+question disappears rather than being answered.
 
-If the line-22 and line-33 values are the credentials being rotated, the
-rotation closes them. If they are older or different values, it does not, and
-nothing currently on any list would.
+**The owner-run keyset comparison is not needed** and was not built. Step one
+was sufficient.
 
-### Cleanup and invalidation stay distinct
+### One thing this surfaced for the rotation runbook
 
-- **Repository cleanup** — deleting the file, and the separate question of
-  history rewriting — **invalidates nothing**. A literal already committed to
-  `origin/main` must be assumed disclosed for as long as the underlying value
-  is live.
-- **Credential invalidation** — rotating or revoking at eBay — closes
-  exposure whether or not the file is tidied.
+Published copy line 27 records: **"Cert ID rotation performed — same 401 with
+the fresh cert."** A Cert ID rotation **has already happened once**, during
+the `invalid_client` investigation. The planned rotation would be the
+**second**. That does not change the plan, but the runbook should not describe
+it as a first rotation, and any reasoning that assumed a single Cert ID
+lifetime should be re-read. The `401` was later traced to transport corruption
+(a literal `\n`), not the credential.
 
-**Neither is done.** No history rewrite is proposed, and none was performed.
+### Residual
+
+**None blocking.** Cleanup of the file remains optional tidying — and, as
+before, **invalidates nothing**, since nothing needing invalidation is in it.
+EXP-1 does not delay preparation of the known credential rotation.
 
 
 ## Not in this queue
