@@ -929,13 +929,16 @@ fields today. But an unbounded whole-object stash is a shape that could
 silently begin carrying new fields later. **Filed as an observation, not a
 defect; no change proposed** (no further feature expansion).
 
-### What this settles
+### What this settles — SUPERSEDED 2026-09-11 13:15, see §18
 
-The exemption question turns on **exactly one** storage location: the
-server-side Upstash cache `ebay_cache:*`, 15-minute TTL
-(`9aaf326:api/ebay-sold.js:15, :29-36`; records at `:336`). Browser storage is
-**not** a second site, and **no eBay user data is persisted in anything
-audited**.
+This section originally concluded that the exemption question turned on
+**"exactly one"** storage location and that browser storage was **"not a second
+site."** **Both claims are WITHDRAWN.** They rested on negative keyword
+searches, which cannot establish absence. Tracing the payloads found
+eBay-derived values reaching **two further locations**, one of them with **no
+expiry at all**. §18 supersedes this subsection. The key enumeration and the
+"no eBay user identifier" findings above still stand; the *conclusion* drawn
+from them did not.
 
 ---
 
@@ -981,33 +984,60 @@ browser `User-Agent` (`:229-233`) and parses the returned HTML by splitting on
    and **nothing here proposes changing it.** Recorded so the exemption
    declaration is not made on a partial picture.
 
-### Draft question for eBay Developer Support
+### Draft question for eBay Developer Support — REVISED 2026-09-11 13:15
 
-Not sent. Owner's to send or discard.
+**Not sent. Unsent until the owner approves it.** The first draft was wrong in
+three ways: it omitted `itemId`, it did not say the data comes from **HTML**
+rather than the API, and it claimed *"we do not store any eBay user's personal
+data anywhere in the application"* — a whole-application assertion my audit
+never supported. It also described only the 15-minute cache, which §18 shows is
+not the whole picture. Revised:
 
-> **Subject:** Marketplace account deletion exemption — does a short-lived
-> non-user listing cache count as "persisting eBay data"?
+> **Subject:** Marketplace account deletion exemption — does derived sold-price
+> data count as "persisting eBay data"?
 >
 > Our application shows sellers recent sold-price comparables for trading
-> cards. To limit request volume against your site, a server-side cache holds
-> the derived result for **15 minutes**, after which it expires automatically.
+> cards. We would like to confirm whether our current exemption is accurate,
+> and we would rather ask than declare something incorrect.
 >
-> Each cached record contains only: item title, price, currency, item URL, an
-> image URL, and a sold date. It contains **no eBay user identifier** — no
-> username, user ID, buyer, seller, or feedback data — and we do not store any
-> eBay user's personal data anywhere in the application.
+> **How we obtain the data.** We do **not** use the eBay API for this. Our
+> server requests the public sold-listings search page on `ebay.com` and parses
+> the returned HTML.
 >
-> The exemption is described as being for applications *"not persisting any
-> eBay data,"* while the subscription obligation is described in terms of
-> *"API calls that use/store eBay **user** data."*
+> **What we retain, in two places.**
 >
-> **Our question:** for exemption purposes, does a 15-minute expiring cache of
-> non-user listing fields count as "persisting eBay data," or does the
-> exemption remain accurate for an application that stores no eBay user data?
+> 1. A server-side cache of the parsed result, expiring automatically after
+>    **15 minutes**. Each record contains: item **title**, **price**,
+>    **currency**, **item URL**, **image URL**, **sold date**, and an
+>    **item ID**.
+> 2. When a user saves a card to their collection, we store a **single derived
+>    figure** — the **median** of those sold prices — as that card's current
+>    value, together with a refresh timestamp. This is retained **indefinitely**
+>    and is associated with **that user's account identifier** until they delete
+>    the card or their data. Individual listings, item IDs and listing URLs are
+>    **not** retained in this second store.
 >
-> If it does count, we will disable the exemption and subscribe to marketplace
-> account deletion notifications. We would rather ask than declare something
-> inaccurate.
+> **What we do not retain.** In the surfaces we have audited we found no eBay
+> **user** identifiers — no eBay username, user ID, buyer, seller or feedback
+> data. We are describing the storage paths we traced, not making a
+> whole-application guarantee.
+>
+> **Our questions.**
+>
+> 1. For exemption purposes, does either of these count as "persisting eBay
+>    data" — the 15-minute listing cache, or the indefinitely-retained derived
+>    median associated with a user account?
+> 2. Does it change the answer that the data is obtained from the public
+>    website rather than through an eBay API?
+>
+> If either counts, we will disable the exemption and subscribe to marketplace
+> account deletion notifications.
+
+**Note for the owner before sending.** Question 2 discloses the HTML-retrieval
+method. That is the honest framing, and eBay cannot give a reliable answer
+without it — but it may prompt a separate conversation about site terms
+(§17 above). That trade-off is yours to make, which is one more reason this
+stays unsent.
 
 ### Status
 
@@ -1017,3 +1047,83 @@ browser-storage copy. What remains is eBay's policy interpretation, which we
 cannot supply from the code. **Leave the exemption unchanged**; if eBay answers
 that the cache counts, disabling it and subscribing is the correct response,
 and the challenge path must then be verified.
+
+---
+
+## 18. Payload trace — my "exactly one storage location" claim was FALSE (2026-09-11 13:15)
+
+The reviewer's objection was correct and it changes the finding, not just its
+phrasing. §16 searched for **field names** (`soldDate`, `itemId`, `comps`) and
+for `ebay` **near** `setItem`. A renamed field, an `Object.assign` graft, or a
+whole-object stash defeats every one of those searches. Tracing the payloads
+instead of the names:
+
+### eBay-derived data DOES reach browser storage
+
+The chain, end to end, all in `9aaf326`:
+
+1. `js/core.569ff536.js:8861` — the raw-card refresh path fetches
+   `/api/ebay-sold?q=…`.
+2. `:8866` — `return data.median`. **This is the eBay-derived value**: the
+   median of sold-listing prices parsed from eBay's HTML.
+3. `:8991` (bulk refresh) and `:9026` (single-row refresh) —
+   `p.currentValue = price; p.lastRefreshed = new Date().toISOString();`
+   **The field is renamed.** Nothing called `median`, `sold`, or `ebay`
+   survives, which is exactly why §16's searches came back clean.
+4. `:8937` — `_PRICE_REFRESH_FIELDS = ['currentValue','lastRefreshed','img','imageUrl','tcgplayerUrl']`.
+5. `:8939` `_commitPortfolioRefresh` — `const out = Object.assign({}, row)`,
+   then grafts those fields on. **This is the spread the reviewer named.**
+6. `:16281` `savePortData` — `_lsWrite(getUserKey('portfolio'), JSON.stringify(data))`.
+   **localStorage.** No expiry.
+
+**So `getUserKey('portfolio')` in localStorage holds eBay-derived sold-price
+medians, indefinitely.** §16 called that key clean. It was wrong.
+
+### And it does not stop at the browser
+
+`savePortData` also calls **`_scheduleUserDataSync()`** — commented in source as
+*"propagate to cloud so other devices see it"*. That debounces
+**`_pushUserData`** → `POST /api/user-data`, which at
+`9aaf326:api/user-data.js:54` writes KV key **`userdata:<googleSub>`** with a
+payload of `{ portfolio, flips, tombstones, serverUpdatedAt }` (`:110-115`) via
+`kvSet` — a plain **`/set/`** with **no `EX`, no `SETEX`, no expiry**
+(`:215-223`).
+
+**Consequence, stated plainly:** eBay-derived sold-price medians are persisted
+**server-side, indefinitely, keyed by the user's Google subject identifier.**
+That is a materially different compliance posture from a 15-minute anonymous
+cache, and I had asserted the opposite.
+
+### Corrected inventory — three locations, not one
+
+| Location | Content | Expiry | Keyed by |
+|---|---|---|---|
+| `ebay_cache:*` (Upstash) | listing records: `title`, `price`, `currency`, `url`, `soldDate`, `imgUrl`, `itemId` (`api/ebay-sold.js:336`) | **15 min** (`:15`) | search terms |
+| `getUserKey('portfolio')` (localStorage) | eBay-derived **median** as `currentValue` + `lastRefreshed` | **none** | local user |
+| `userdata:<googleSub>` (Upstash, `api/user-data.js:54`) | same portfolio rows, synced | **none** | **Google subject ID** |
+
+`flips`, `grading_log` and `tombstones` share the same write helper family;
+`flips` is in the synced payload. Whether an eBay-derived value reaches those
+two was **not** traced and is **not** claimed either way.
+
+### What is still true, and what I will not now claim
+
+- **Still established:** no eBay **username, user ID, buyer, seller or feedback
+  field** appears anywhere in the audited bundle. The persisted eBay-derived
+  value is a **price aggregate**, not an eBay user's record.
+- **Withdrawn:** "exactly one storage location"; "browser storage is not a
+  second site"; "no eBay user data is persisted in anything audited" — the last
+  overreached even where it was accidentally right, because absence of a
+  *keyword* is not absence of *data*.
+- **Not claimed:** that this inventory is now exhaustive. It is the result of
+  tracing four write paths. `_fullCard` (`:505-530`) stores whole card objects
+  from the catalogue path and carries `_jpEbayUrl` (`:1198`, `:11752`) — a URL
+  **we construct locally** from the card name, not data returned by eBay — so
+  it is eBay-*related* but not eBay-*derived*. I checked it; I am not asserting
+  nothing else exists.
+
+**Effect on the exemption question:** it gets **harder**, not easier. An
+indefinitely-retained, user-keyed store of eBay-derived values is much closer
+to "persisting eBay data" than a 15-minute anonymous cache. This is a stronger
+reason to ask eBay rather than to assume, and it does not change the standing
+instruction: **leave the exemption unchanged** pending clarification.
