@@ -5505,4 +5505,22 @@ before any edit, and fixed; two mutations (87/1, 81/7) both caught.
 **`dpl_9J3HHDXTdMgez8kKCAmqk9DENMAP`**, READY, protection enabled. `main`
 untouched, production still Phase 0 on `js/core.569ff536.js`.
 
-**RV-16 remains blocking.** The corrected file has not been uploaded.
+**RV-16 — PASSED 2026-09-10 21:06** (Will's report, not my observation), for
+**this file and this account**, against exporter generation 21
+(`js/core.ebc21977.js`, Preview `dpl_9J3HHDXTdMgez8kKCAmqk9DENMAP`). Accepted;
+`Action=Draft` and **not published**; `Price=32.84`, quantity `1`,
+`Format=FixedPrice`; title, SKU, description carried through; **blank photo
+column raised no error**.
+
+Two scope limits kept explicit:
+
+1. **The accepted file was the $32.84 comp-priced draft, not the $2 card.** The
+   $2 result on this same date was a *Redis provenance* pass on the deployed
+   build, not an eBay upload. No manually-priced draft's CSV has been uploaded.
+2. **eBay accepted a blank `Item photo URL` column.** That does not establish
+   acceptance of generation 20's *omitted* column, whose refusal was never
+   isolated to a cause.
+
+Full record: `audit/d9/RV16_EXPORTER_CORRECTION.md`. The eBay draft is left
+unpublished. The earlier generation-20 rejection stands as its own separate
+observation, unamended.

@@ -1,7 +1,7 @@
 # RV-16 — the exporter corrected against eBay's real template
 
 **Date** 2026-09-10 · **Bundle** `js/core.ebc21977.js` (generation 21, from
-`core.959a4a85.js`) · **Status** file verified locally, **upload UNVERIFIED**
+`core.959a4a85.js`) · **Status** **upload PASSED 2026-09-10** for this file and account (see the RV-16 section)
 
 ## What happened
 
@@ -85,9 +85,73 @@ re-checked):
 | `#INFO` preamble not emitted | **87/1** — caught |
 | UPC dropped from the row (10 fields vs 11 header) | **81/7** — caught |
 
-## Still open
+## RV-16 — PASSED 2026-09-10 21:06, for this file and this account
 
-RV-16 remains **blocking**. The corrected file has not been uploaded. What the
-upload must show: the row lands as a **draft and not a live listing**, and
-title, start price, quantity, custom label/SKU and description survive, with no
-error from the blank photo column.
+**Reported by Will**, who ran the upload and read the resulting draft. I did not
+observe it; this is his report, recorded as such.
+
+**Exporter version that produced the accepted file:** generation 21,
+`js/core.ebc21977.js`, served from Preview
+`dpl_9J3HHDXTdMgez8kKCAmqk9DENMAP` (commit `e75700c`).
+
+| What the upload showed | |
+|---|---|
+| Accepted | yes, via Seller Hub Reports upload |
+| `Action` | `Draft` — **not published** |
+| `Price` | `32.84` |
+| `Quantity` | `1` |
+| `Format` | `FixedPrice` |
+| Title | carried through |
+| Custom label (SKU) | populated |
+| Description | carried through |
+| Blank photo column | **no error** |
+
+### The accepted file was the $32.84 draft, not the $2 card
+
+Worth stating because it is easy to run together with the other result on this
+date. The accepted row carries `Price=32.84`, which is the **comp-priced**
+draft. The **$2 `priceSource: "seller"` card is a different draft** and its
+file was not the one uploaded here.
+
+So the two 2026-09-10 results cover different things and neither extends to the
+other:
+
+- **$2 seller-provenance** — passed, in **Redis on the deployed build**
+  (`price: 2`, `priceSource: "seller"`, `rev: 1`). Nothing to do with eBay.
+- **RV-16** — passed, as an **eBay upload of the $32.84 draft's file**. Nothing
+  to do with provenance.
+
+No manually-priced draft's CSV has been uploaded to eBay. There is no reason to
+expect the price column to behave differently — it is the same code path and
+the same column — but it has not been shown, and the pass should not be read as
+covering it.
+
+### The photo result, stated precisely
+
+**eBay accepted an `Item photo URL` column present with a blank value.** That
+is the whole of what was shown.
+
+It does **not** establish that the generation-20 file's *omitted* column would
+have been accepted. That file was refused, and the cause of the refusal was
+never isolated — four differences were corrected at once. The blank column is
+now a tested configuration; the omitted column remains an untested one that
+happened to be part of a refused file.
+
+### Scope of the pass
+
+**This file, this account, this exporter version.** One row, one category
+(`183454`), one condition-less Pokémon card, one seller account with Seller Hub
+Reports access. It does not speak for multi-row files, other categories, graded
+slabs, other accounts, or any later exporter change.
+
+## Reference artifact
+
+The accepted CSV is held by Will. **It is not in this repo** — I generated an
+equivalent file for the $2 card locally, but the bytes eBay actually accepted
+came from his browser download and I do not have them. If it is attached later
+it should be committed under `audit/d9/` as the reference, since "the file that
+worked" is worth more as bytes than as a description.
+
+## Left as instructed
+
+The eBay draft stays **unpublished**. No repeat upload.
