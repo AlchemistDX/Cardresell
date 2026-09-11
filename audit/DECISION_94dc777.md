@@ -47,7 +47,31 @@ rotation makes that harmless.
 
 ## The binding rule this produces
 
-> **Do not push before the Cert ID is rotated. Full stop, under either option.**
+> **Do not push to `main` / cut a production release before the Cert ID is
+> rotated. Full stop, under either option.**
+
+**Amended 2026-09-10 23:55 — two corrections to this record.**
+
+**1. "The first push" no longer identifies anything.** Several **branch and
+Preview pushes have since occurred**, so read literally this gate is already
+spent. It always meant the **first push to `main`**, which is the production
+release event; the standing authorization covering Phase 1 preview/branch
+pushes presupposes exactly that reading. The rule above is restated
+accordingly. Nothing is loosened — `main` remains untouched.
+
+**2. The fragment rationale is retired.** The text below argues the push
+publishes "fragments of a live credential," meaning the `EBAY_OAUTH_TICKET.md`
+literals introduced at `94dc777`. Those are now **established synthetic**
+placeholders, self-declared and corroborated four ways — see **EXP-1** in
+`audit/RELEASE_VALIDATION_QUEUE.md`. **That argument must not be cited again.**
+Relatedly, the Cert ID exposure premise itself is no longer established:
+confirmed exposure **not established**, possible earlier-session exposure
+**unresolved** (`audit/ROTATION_RECHECK_2026-09-10.md` §11).
+
+**The gate survives on its own authority.** Its remaining bases are **CH-1**
+— the published verification token, independently established — and the
+**owner's unrevisited release hold**. Neither depends on anything withdrawn
+here. **The decision itself (Option A, keep the history) is unchanged.**
 
 `94dc777` is unreachable from `origin/main` (`git merge-base --is-ancestor` returns false), so
 the fragments exist only in unpushed history. **The push is the publishing event.** Pushing

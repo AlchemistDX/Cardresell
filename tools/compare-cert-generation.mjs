@@ -14,7 +14,14 @@
 // Vercel-stored value (EBAY_CERT_ID is stored `encrypted`, not `sensitive`,
 // so the owner can reveal it) and each generation the portal currently lists.
 //
-// What a match establishes: the configured value IS that generation.
+// SCOPE. This compares against the value on the Vercel PROJECT's environment
+// row. That is not the same thing as a credential embedded in the running
+// production deployment, and the step must not be written up as if it were.
+// At 9aaf326 production does not read EBAY_CERT_ID at all, so the row is the
+// only thing there is to identify.
+//
+// What a match establishes: the configured PROJECT ROW value IS that
+// generation. Complete-value equality only -- never a partial or closest match.
 // What "no match" establishes: it is none of the generations the portal
 // currently DISPLAYS. Expired generations that are no longer shown cannot be
 // ruled in or out, so "no match" leaves the configured generation UNKNOWN
@@ -23,8 +30,11 @@
 import { createInterface } from 'node:readline';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-/** Fixed-width digest so comparison never depends on length, and so nothing
- *  derived from a value is ever displayed. */
+/** Complete-value equality only. The digest covers the WHOLE value; there is
+ *  deliberately no prefix, partial, fuzzy, or "closest" comparison anywhere in
+ *  this file, and no such result can be reported. Fixed width means the
+ *  comparison never depends on length, and nothing derived from a value is
+ *  ever displayed. */
 export const fingerprint = (v) => createHash('sha256').update(String(v).trim(), 'utf8').digest();
 
 export function matchGeneration(stored, generations) {
@@ -58,7 +68,9 @@ async function hidden(prompt) {
 
 async function main() {
   if (!process.stdin.isTTY) {
-    console.error('Refusing to run without a TTY: piped input would appear in shell history.');
+    console.error('Refusing to run without an interactive TTY. Piped or redirected');
+    console.error('input would appear in shell history or a file. Same rule as');
+    console.error('tools/verify-ebay-credential.mjs.');
     process.exit(2);
   }
   console.log('Compare the Vercel-stored Cert ID against the portal-visible generations.');

@@ -518,7 +518,7 @@ discloses nothing. My reading was the less literal one and is withdrawn.
 |---|---|
 | **Confirmed exposure** | **Not established.** |
 | **Possible earlier-session exposure** | **Unresolved.** Absence from accessible context is not proof it never happened. |
-| **Rotation** | **Retained as a precaution** — reasonable given an unresolved possibility and a credential of low operational value. |
+| **Rotation** | **Retained as a precaution.** The rationale is **not** that the Cert ID is unimportant — it **authenticates the application** and is security-sensitive. It is that **current production does not depend on it** (nothing at `9aaf326` reads `EBAY_CERT_ID`) and the **precautionary rotation cost is bounded**, so rotating against an unresolved possibility is cheap and rotating is the safe direction. |
 
 **How it must be described.** Not as remediation of a proven plaintext
 disclosure, unless the original transcript is recovered. Every document that
@@ -573,8 +573,8 @@ steps, in that order:
 | Step | What it does | What it establishes |
 |---|---|---|
 | **1c** | Record displayed generations, current/grace/expiry, **no values** | The **visible** generation set — not the historical count |
-| **1d** | `tools/compare-cert-generation.mjs` — local, no network, hidden prompts, prints matched label or `no match` | A **match** identifies the configured generation. **`no match`** rules out only the **displayed** ones; the configured generation stays **unknown** |
-| **1e** | One token exchange on that exact pair | **accepted** / **rejected** / **unreachable** — describes the **pair**, never a generation |
+| **1d** | `tools/compare-cert-generation.mjs` — interactive TTY required, piped input refused, no network, complete-value equality, prints matched label or `no match` | A **match** identifies the generation on the **Vercel project row** — not a credential in the running deployment. **`no match`** rules out only the **displayed** ones; the configured generation stays **unknown** |
+| **1e** | One token exchange on that exact pair | **accepted** / **rejected** / **unreachable** — describes the **pair**, never a generation. **rejected** means only *this supplied pair was rejected*; it establishes a Vercel misconfiguration **only if 1d already matched the supplied value to the Vercel row** |
 | **1f** | Record the superseded generation and its revocation route | **Unknown** where 1d did not match or could not run |
 
 `EBAY_CERT_ID` is stored **`encrypted`, not `sensitive`**
@@ -594,6 +594,15 @@ fails 1.
 publishes fragments of a live credential." Those fragments are the
 `EBAY_OAUTH_TICKET.md` literals introduced at `94dc777`, now established
 **synthetic**. **That rationale is retired** and must not be cited again.
-**The owner's gate stands on its own authority**, unchanged. **CH-1 remains
-independently established** and needs no premise from EXP-1 or from the
-unresolved session question.
+
+**The gate's wording also needs correcting.** `DECISION_94dc777.md` speaks of
+"the first push." Several **branch and Preview pushes have since occurred**,
+so read literally the gate is already spent. The surviving gate must be stated
+explicitly as **the first push to `main` / production release** — which is
+what it always meant operationally, and which the standing authorization for
+Phase 1 preview/branch pushes already presupposes.
+
+**The owner's gate stands on its own authority**, unchanged in force. Its
+remaining bases are **CH-1** and the **owner's unrevisited release hold** —
+not the retired fragment rationale, and not the unresolved session question.
+**CH-1 remains independently established.**
