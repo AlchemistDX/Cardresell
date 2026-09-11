@@ -144,13 +144,26 @@ happened to be part of a refused file.
 Reports access. It does not speak for multi-row files, other categories, graded
 slabs, other accounts, or any later exporter change.
 
-## Reference artifact
+## Reference artifact — the accepted bytes, retained
 
-The accepted CSV is held by Will. **It is not in this repo** — I generated an
-equivalent file for the $2 card locally, but the bytes eBay actually accepted
-came from his browser download and I do not have them. If it is attached later
-it should be committed under `audit/d9/` as the reference, since "the file that
-worked" is worth more as bytes than as a description.
+`audit/d9/ebay-draft-v2-PKMLOSTORIGINTRAINER-280ab9265ca3153f.csv`
+
+| | |
+|---|---|
+| sha256 | `761d5ac9be0c59adb593741feea1820079ae9b1fd93af127784dc5c0a4d2565a` |
+| size | 1042 bytes |
+| lines 0–4 vs eBay's template | **byte-identical** |
+| header / row field count | 11 / 11 |
+| line endings | CRLF only |
+
+The card is **Charizard, Lost Origin Trainer Gallery TG03**, SKU
+`v2-PKMLOSTORIGINTRAINER-280ab9265ca3153f`, category `183454`, `Price=32.84`,
+quantity `1`, `Format=FixedPrice`, `UPC` / `Item photo URL` / `Condition ID`
+all blank.
+
+This supersedes an earlier note in this file saying the accepted bytes were not
+in the repo. They are now, which matters: the reference is the file eBay took,
+not a regenerated equivalent.
 
 ## Left as instructed
 

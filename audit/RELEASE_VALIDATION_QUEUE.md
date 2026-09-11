@@ -51,18 +51,19 @@ added. Two entries changed today and both are marked in the rows themselves.
 | RV-8 preview reads production KV | **CLOSED FOR THE DRAFT KEYSPACE** *(corrected 2026-09-10 18:05 — this row said "deployed proof pending" after the proof had already been recorded further down this document)*. Configuration: verified 2026-09-10 00:20 from the Vercel CLI — the five KV names exist as **two disjoint groups**, Production and Preview+Development, so Preview no longer resolves to the production store. Deployed write proof: **established** by the controlled `draft:*` comparison on `dpl_AK2G5czmDUuf4J2SQXR2oB4KyMxw` / `499ef1c` — positive control `aureolin-door` (Preview+Development) returned **1 row**, subject `bistre-arrow` (Production) returned **empty**, two distinct database UUIDs, and the query short enough to be fully visible in both screenshots (see §Isolation — PASS recorded). **Scope, precisely:** the draft keyspace. `idem:*`, `idemresource:*`, `drafts:*`, `draftquota:*` and `draftindex_*` were not queried and are not claimed. |
 | RV-9 the other eighteen live checks | **BLOCKING** — same gate as RV-3 |
 | RV-10 containment mechanism | **EXECUTED for KV, verified by listing** — the second Redis database was created and the targeting is disjoint (Production vs Preview+Development), confirmed 2026-09-10 00:20. The earlier row read "designed, not executed" and is corrected. Cause and rejected alternatives retained in §4. **Three non-KV production resources are still reachable from Preview** — see §Redis reconciliation. |
-| RV-16 eBay accepts the Download file | **BLOCKING, newly added 2026-09-10** — needs a real Seller Hub account. Upload one generated file and confirm it creates a **draft** rather than a live listing, that `Title`, `Start price`, `Quantity`, `Custom label (SKU)` and `Description` survive into it, and that the **absent photo column is accepted**. `draft-card-actions-browser` 82/0 proves the file's contents and the seller's on-screen path; it is not evidence about eBay's uploader. See §RV-16. |
+| RV-16 eBay accepts the Download file | **PASSED FOR ONE FILE AND ONE ACCOUNT** *(added 2026-09-10, passed and re-verdicted 2026-09-10 21:06 — this row read "BLOCKING" after the pass had been recorded further down this document)*. A generated file was uploaded through a real Seller Hub Reports account and **accepted**: `Action=Draft`, **not published**; `Price=32.84`; `Quantity=1`; `Format=FixedPrice`; `Title`, `Custom label (SKU)` and `Description` carried into the draft. **`Item photo URL` present with a blank value raised no error.** Accepted bytes retained at `audit/d9/ebay-draft-v2-PKMLOSTORIGINTRAINER-280ab9265ca3153f.csv` (sha256 `761d5ac9…4d2565a`). Produced by exporter **generation 21**, `js/core.ebc21977.js`, Preview `dpl_9J3HHDXTdMgez8kKCAmqk9DENMAP` / `e75700c`. **Scope:** one row, category `183454`, one raw card, one account. It does **not** establish acceptance of generation 20's *omitted* photo column, multi-row files, other categories, slabs, or other accounts. The generation-20 refusal stands as its own observation with its cause never isolated. See §RV-16. |
 | CH-1 published verification token | **BLOCKING** — G3; replacement token is step 3 of the rotation window |
 | CH-2 code fallback to that token | **CLOSED IN CODE at `6c610e2`** — the literal is gone, the token is read at call time, and an absent token fails closed with `503 verification_token_unset`. Reaches production when the release deploys. *(An earlier row here said "prepared, not applied" — wrong, and corrected 15:12.)* |
 | CH-3 unencrypted TPL key | **CLOSED at `c4ea5e4`** — #518 revoked, replacement verified by post-revocation lookups, storage type now `sensitive` (`3570d97`). Public and plain-storage exposures both closed. **Do not re-open; the TPL rotation is done.** Only G12 / R4 activation remains, tracked under release preparation. |
 | Same-card basis retention | **DEFERRED** — product decision; consequence is disclosed, not silent |
 | D5 §8.3 signed-in continuation | **PASSED for one tested case**; stays in the queue. Q-D5-5 desktop never exercised |
 
-**6 blocking · 3 passed · 4 closed · 2 deferred · 1 passed-but-retained**,
-counted by reading the sixteen rows above on 2026-09-10:
+**5 blocking · 4 passed · 4 closed · 2 deferred · 1 passed-but-retained**,
+counted by reading the sixteen rows above on 2026-09-10 21:13:
 
-- **Blocking (6):** RV-1, RV-3, RV-4, RV-9, **RV-16**, CH-1.
-- **Passed (3):** RV-5, RV-6 (narrowed), RV-7.
+- **Blocking (5):** RV-1, RV-3, RV-4, RV-9, CH-1.
+- **Passed (4):** RV-5, RV-6 (narrowed), RV-7, **RV-16** (scoped — one file, one
+  account; blank photo column accepted).
 - **Closed (4):** RV-8 (draft keyspace), RV-10 (KV), CH-2, CH-3.
 - **Deferred (2):** RV-2, same-card basis retention.
 - **Passed for one case, retained (1):** D5 §8.3.
@@ -76,8 +77,9 @@ CH-3 by the completed rotation at `c4ea5e4`. Neither is owner work any more;
 CH-2 reaches production with the release, and the only TPL item left is R4
 activation (G12).
 
-*Counts and verdicts in this table are current as of 2026-09-10 18:05 EDT.*
-*RV-8 and RV-16 changed at that time; every other row is unchanged since*
+*Counts and verdicts in this table are current as of 2026-09-10 21:13 EDT.*
+*RV-16 moved from blocking to a scoped pass at 21:13. RV-8 and RV-16 changed*
+*at 18:05; every other row is unchanged since*
 *2026-09-09 15:12 EDT and carries its own evidence date.*
 *Anything in the History and withdrawn sections below is dated evidence, not*
 *live status — see the banner above those sections before treating an entry*
@@ -648,12 +650,16 @@ legitimate annual subscriber the moment it ships.
 
 ### 5. Remaining release checks, then deployment authorization
 
-The blocking entries in the verdict table: RV-1, RV-3, RV-4, RV-9, **RV-16**
+The blocking entries in the verdict table: RV-1, RV-3, RV-4, RV-9
 and CH-1, plus the live suite never run (`tests/ebay-live.mjs`). *(Corrected
 2026-09-10: RV-8 and RV-10 are no longer blocking — RV-8 is closed for the
 draft keyspace and RV-10 is executed and verified for KV. `tests/test-scan.mjs`
 is no longer "never run": it runs 36/0 locally, while deployed Google
-authentication and RV-1 stay open. RV-16 is added.)*
+authentication and RV-1 stay open. RV-16 was added.)* *(Corrected 2026-09-10
+21:13: **RV-16 is no longer blocking.** It passed for one file and one account
+on exporter generation 21, blank `Item photo URL` column accepted. It is not
+listed above and is not a remaining release check. Its scope limits are on its
+verdict row.)*
 
 They share one shape — each needs a deployed function, a live credential, a
 real store, or a real seller account.
@@ -4655,11 +4661,21 @@ local only.
 > stated flat. The runbook below is kept unedited as the procedure that was
 > followed.
 >
-> **Scope.** Seller-price provenance on commit `499ef1c`. `rev: 1` says the
-> record was written once and not rewritten by a later pass — consistent with
-> the server owning provenance (`api/_draftStore.js:688`) and the client never
-> setting it. It does not speak for any other keyspace, any later commit, or
-> production, which remains Phase 0 and untouched.
+> **Scope.** Seller-price provenance on commit `499ef1c`. It does not speak for
+> any other keyspace, any later commit, or production, which remains Phase 0
+> and untouched.
+>
+> **Corrected 2026-09-10 21:13 — what `rev: 1` does and does not say.** An
+> earlier version of this paragraph read that `rev: 1` "says the record was
+> written once and not rewritten by a later pass — consistent with the server
+> owning provenance (`api/_draftStore.js:688`) and the client never setting
+> it." That overstated it twice. `rev: 1` is **the recorded revision number**.
+> It is not proof of exactly one physical write, and it says nothing about
+> whether the client supplied provenance. The observed result — `price: 2`,
+> `priceSource: "seller"`, surviving reload — stands on its own and is kept
+> without that inference. Server ownership of manual-price provenance remains
+> a code-level claim about `api/_draftStore.js:688`, not something this reading
+> demonstrated.
 
 ### Runbook as written (procedure of record, unedited)
 
@@ -5173,7 +5189,13 @@ Reasoning of record:
   Picture Services for listings to use — and is **not** needed to prove Phase
   1's draft handoff.
 
-### RV-16 — the Download release gate (OPEN, blocking)
+### ~~RV-16 — the Download release gate (OPEN, blocking)~~
+
+> **SUPERSEDED 2026-09-10 21:13 — PASSED.** Kept as the dated statement of the
+> gate as it stood when opened. The gate text below describes the
+> generation-20 file with its *omitted* photo column; the file that actually
+> passed was generation 21 with the column **present and blank**. See the
+> verdict row and §RV-16 — PASSED.
 
 Download is **locally demonstrated and documentation-aligned, not
 eBay-accepted.** One gate closes that gap, and it needs a real Seller Hub
