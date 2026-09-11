@@ -147,9 +147,33 @@ the committed literal it was serving — it was agreeing with itself.
 
 The verification token is **replaced with a fresh random value**, never the repo
 literal nor that literal with the newline stripped: whitespace-cleaning a
-published value leaves a published value in production. **CH-1** closes when
-production stops serving the repo default and eBay's challenge completes against
-the new token.
+published value leaves a published value in production.
+
+**CH-1 closure condition RESTATED 2026-09-11 11:49.** It previously read "when
+production stops serving the repo default **and eBay's challenge completes**
+against the new token." The second clause was written on an assumption that has
+now been checked and is false in the current portal state: the Production keyset
+is **exempt from Marketplace Account Deletion** ("Not persisting eBay data",
+pre-existing, unchanged), and per eBay's page the exemption **stops notification
+delivery to the configured endpoint** while keeping endpoint and token saved.
+An eBay-delivered challenge is therefore **not available** as a closure
+condition, and **disabling the exemption to manufacture one is refused** — the
+toggle is a compliance declaration about data persistence, not a test fixture,
+and eBay warns that incorrect information there risks account penalties.
+
+**CH-1 now closes on the defect it actually measured:** production no longer
+serves the repository default, established by a **6b hash-comparison PASS**
+against a fresh random value — the 6b checker, not READY and not an HTTP 200.
+The portal-side save (7-alt) removes the published value from eBay's stored copy
+too, and is required for closure; any challenge eBay happens to issue on save is
+recorded as a bonus observation, not the gate.
+
+**Two things this does NOT close.** **CH-2** — the code fallback to the
+published literal at `api/ebay-notifications.js` — is untouched and still
+BLOCKING on its own terms. And the **exempt state is revocable**: if the
+exemption is ever lifted, or the app begins persisting eBay data, the
+challenge-code path becomes live and **must be verified at that point**.
+Recorded as a conditional re-open trigger rather than a closed question.
 
 ### 2. Deployment containment and non-production KV isolation
 
