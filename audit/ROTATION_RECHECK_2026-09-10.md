@@ -624,3 +624,45 @@ Phase 1 preview/branch pushes already presupposes.
 remaining bases are **CH-1** and the **owner's unrevisited release hold** —
 not the retired fragment rationale, and not the unresolved session question.
 **CH-1 remains independently established.**
+
+---
+
+## 12. 1c executed — the portal displays no generation state (2026-09-11 00:58)
+
+**Owner-run, read-only, controls untouched. Result: not displayed.** The eBay
+Production keyset shows **no** generation count, **no** current-vs-grace
+marking, and **no** expiry date or status.
+
+**What that is and is not.** It is a fact about the **portal's UI**. It does
+**not** establish that only one generation exists, nor that none is in grace.
+eBay's grace model can still be operating invisibly.
+
+**Three consequences, all narrowing what this runbook can claim.**
+
+**1. The historical count stays unobtainable.** As anticipated when 1c was
+written. A prior rotation *attempt* is on record
+(`EBAY_OAUTH_TICKET.md` line 27); **"at least the second"** remains the whole
+claim, and no step here can sharpen it.
+
+**2. 1d is not runnable, so the configured generation is UNKNOWN.** The
+comparison needs portal-displayed generation values to match the Vercel
+project row against. There are none. The tool and its suite are retained for a
+portal that displays them, but **nothing in this runbook can identify which
+generation Vercel holds**, and no document may claim otherwise. Reading the
+Vercel row alone is pointless — a value with nothing to map it to — so
+readback is **not** performed.
+
+**3. 1f's predecessor is UNKNOWN, recorded rather than inferred.** The
+generation being superseded cannot be named, so **no old-generation revocation
+route can be selected for it**. The rotation proceeds as a replacement whose
+**predecessor is unidentified**, and any older generation eBay still honours
+in grace remains **unaccounted for**. That gap is a limit of the portal
+surface; this runbook cannot close it.
+
+**What still works.** **1e** is unaffected: one exchange on the supplied pair
+returns **accepted**, **rejected**, or **unreachable**, describing the
+**supplied pair** — and `rejected` means only that the supplied pair was
+rejected, since the supplied App ID could itself be wrong. Validity is
+obtainable; **identity is not**. The precautionary basis for the rotation is
+also unaffected, since it never depended on identifying a generation.
+
