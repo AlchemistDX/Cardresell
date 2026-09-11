@@ -749,3 +749,36 @@ unambiguous.
 
 **CH-1 closes only when the replacement token is serving production and eBay's
 own verification succeeds** — not at rotation, not at READY.
+
+---
+
+## 14. 6b failed on a trailing newline; second rebuild READY (2026-09-11 15:38)
+
+**First 6b attempt: FAIL, shape named `a trailing newline`.** The checker
+matched the endpoint's `challengeResponse` against
+`sha256(token + "\n")`, so the **value stored in Vercel Production carried a
+trailing newline** while the owner's pasted value did not. Owner replaced the
+Production value with a clean copy; second rebuild authorized and READY as
+**`dpl_BS1a9nXNzpUtEqiWpRLakQmjMRXz`**, commit `9aaf326` from the build log,
+cache skipped, `www.cardresell.org` aliased and serving 200.
+
+### Why this matters beyond one retry
+
+**This is the same class of defect as the original CH-1 corruption** — a stored
+credential carrying trailing whitespace, invisible to READY and invisible to a
+200 response. It is the second time a whitespace-carrying value has entered
+this variable through the dashboard path. **Two consequences:**
+
+1. **READY and HTTP 200 remain worthless as token evidence.** Both were green
+   while the stored value was corrupt. Only the hash comparison caught it.
+   Recorded because I previously offered a 200 as a baseline observation.
+2. **It gives the 1d whitespace explanation observed support.** A newline
+   demonstrably entered a credential value in this workflow. That makes
+   "formatting difference" a **live, evidenced explanation** for 1d's NO MATCH
+   — but it still does **not establish** that 1d's NO MATCH *was* whitespace.
+   1d compared different values through a different path; nothing here
+   identifies what happened there. The Cert ID rotation stays **paused**.
+
+**CH-1 remains open.** It closes only when the replacement token is serving
+production **and** eBay's own verification succeeds.
+
