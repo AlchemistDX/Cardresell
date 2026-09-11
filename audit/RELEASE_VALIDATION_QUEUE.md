@@ -5473,3 +5473,36 @@ cost decision.
 Deliberately. The deployed tip stays **`880c09d`** so the Preview does not move
 under RV-16 while you are using it. Nothing further will be pushed without you
 saying so.
+
+---
+
+## RV-16 — exporter corrected, new Preview live (2026-09-10 20:48)
+
+The generation-20 export was **refused by a real eBay account** with a generic
+reading error. Four differences against eBay's downloaded template were found
+at once — Action header, `Start price` vs `Price`, missing `#INFO` rows, omitted
+photo column, and a `Duration` column eBay does not have.
+
+**Which one caused the refusal is NOT established** and nothing here claims to
+isolate it. All four were corrected together, so a passing re-upload shows the
+corrected file works and nothing more.
+
+The header and four `#INFO` rows are now eBay's own bytes, emitted verbatim.
+Lines 0–4 of the generated file are **byte-identical** to eBay's template; both
+header and data row are 11 fields; CRLF only; UTF-8 clean; no smart quotes.
+
+**Design change recorded:** the photo column was omitted, and is now **present
+and blank** — reversing a documented generation-20 decision. `UPC` and
+`Condition ID` are blank for the same field-count reason. `Duration` is gone.
+Full record: `audit/d9/RV16_EXPORTER_CORRECTION.md`.
+
+Bundle `core.959a4a85.js` → **`core.ebc21977.js`** (generation 21).
+`draft-card-actions-browser` **88/0**, `test-registry` 12/0,
+`draft-lifecycle` 83/0. A harness parser bug was found, its cause established
+before any edit, and fixed; two mutations (87/1, 81/7) both caught.
+
+**Deployed:** `phase1-block-d` pushed `880c09d..e75700c`; Preview alias now
+**`dpl_9J3HHDXTdMgez8kKCAmqk9DENMAP`**, READY, protection enabled. `main`
+untouched, production still Phase 0 on `js/core.569ff536.js`.
+
+**RV-16 remains blocking.** The corrected file has not been uploaded.
