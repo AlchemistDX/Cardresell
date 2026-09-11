@@ -1039,14 +1039,46 @@ without it — but it may prompt a separate conversation about site terms
 (§17 above). That trade-off is yours to make, which is one more reason this
 stays unsent.
 
-### Status
+### Status — CORRECTED 2026-09-11 13:54
 
-**Exemption eligibility: UNRESOLVED, owner-held.** The factual basis is now
-complete on our side — one cache, 15-minute TTL, no user identifiers, no
-browser-storage copy. What remains is eBay's policy interpretation, which we
-cannot supply from the code. **Leave the exemption unchanged**; if eBay answers
-that the cache counts, disabling it and subscribing is the correct response,
-and the challenge path must then be verified.
+The previous status paragraph said the factual basis was *"complete on our
+side — one cache, 15-minute TTL, no user identifiers, no browser-storage
+copy."* **Every clause of that is now wrong**, and it survived the §18
+correction because I appended §18 instead of reconciling §17. Contradiction
+closed here.
+
+**What is retained — two kinds of data, across three known locations.**
+
+| Kind | Location | Expiry | Key |
+|---|---|---|---|
+| **Listing records** — `title`, `price`, `currency`, item `url`, `imgUrl`, `soldDate`, **`itemId`** | `ebay_cache:*` (Upstash) | **15 min** | search terms, no user |
+| **Derived median** — as `currentValue` + `lastRefreshed` | `getUserKey('portfolio')` (browser localStorage) | **none** | local user |
+| **Derived median** — same rows, synced | `userdata:<googleSub>` (Upstash) | **none** | **the user's Google subject identifier (`sub`) from their Google ID token** |
+
+So: **a browser-storage copy exists**, the retention is **not** limited to 15
+minutes, and the cloud copy is **account-keyed by a Google identifier**. The
+support question in the revised draft above describes all three.
+
+**No eBay user identifier** was found in the audited surfaces — that clause
+alone survives, and it is about eBay usernames/IDs, not about the Google key
+under which we store our own users' data.
+
+**Deletion behaviour is UNVERIFIED and must not be promised.** Tombstones
+(`_applyTombstones`, `api/user-data.js:107-108`) are the mechanism by which a
+deleted row stops being resurrected across devices, and `savePortData` +
+`_pushUserData` are the write paths. But I have **not** traced whether deleting
+a card, or deleting an account, removes the derived median from **all three**
+locations — in particular whether `userdata:<googleSub>` is rewritten without
+the row, and what happens to a copy in another device's localStorage that has
+not synced. **Until that is traced, the support message must not tell eBay that
+deletion clears every copy.** The revised draft above does not say so; this note
+exists so it is not added later.
+
+**Exemption eligibility: UNRESOLVED, owner-held.** What we can supply from the
+code is now described accurately. What remains is eBay's policy interpretation.
+**Leave the exemption unchanged.** If eBay answers that either kind counts,
+disabling it and subscribing is the correct response, and the challenge path
+must then be verified.
 
 ---
 
@@ -1127,3 +1159,73 @@ indefinitely-retained, user-keyed store of eBay-derived values is much closer
 to "persisting eBay data" than a 15-minute anonymous cache. This is a stronger
 reason to ask eBay rather than to assume, and it does not change the standing
 instruction: **leave the exemption unchanged** pending clarification.
+
+---
+
+## 19. Preview KV — binding inspected, REST compatibility EXECUTED (2026-09-11 13:54)
+
+### The binding already exists. I proposed changing configuration that did not need changing.
+
+`vercel env ls preview` — **inspection only, no change made**:
+
+| Variable | Environments | Age |
+|---|---|---|
+| `KV_REST_API_URL` | Preview, Development | 2d |
+| `KV_REST_API_TOKEN` | Preview, Development | 2d |
+| `KV_URL`, `REDIS_URL`, `KV_REST_API_READ_ONLY_TOKEN` | Preview, Development | 2d |
+
+`api/_kv.js:35-39` `kvFromEnv` reads exactly `KV_REST_API_URL` and
+`KV_REST_API_TOKEN`. **Both are present on Preview.** So the queue entry I wrote
+at 13:15 — *"Bind KV on Preview"* — was wrong: **nothing needs binding**, and no
+missing binding has been demonstrated. **No configuration was changed.** G1 was
+never a missing-binding gate; it was an unexecuted-check gate. Corrected in the
+queue.
+
+### REST compatibility — the actual draft/lifecycle command surface
+
+Simple set/get would not have answered this, correctly. I first enumerated what
+the draft and lifecycle path actually issues through `makeKv`
+(`api/_draftIndex.js`, `api/_draftQuota.js`, `api/drafts.js`):
+
+`get` · `set` · **`set … NX`** (`api/_draftQuota.js:123`) · **`set … EX`**
+(`:146`) · `del` · `incr` · `decr` · `expire` · **`sadd` · `srem` ·
+`smembers` · `scard`** · `scan`
+
+**Lua/EVAL dependency: NONE.** No `EVAL`, `EVALSHA`, `SCRIPT`, `MULTI`, `WATCH`
+or pipeline call appears in the draft, quota, or index modules. The cap race was
+closed with `SET … NX` plus a set-cardinality read, not with a script. So the
+compatibility question is about the **set-type commands and conditional SET**,
+which is where a REST backend most often diverges — not about scripting.
+
+Executed against the Preview database using the **exact transport shape from
+`api/_kv.js:19-26`** (command words URL-encoded as path segments, bare `result`),
+on a throwaway `compat:probe:*` namespace, cleaned up afterwards:
+
+| Command | Result |
+|---|---|
+| `set` / `get` | PASS |
+| `set … NX` on a taken key | PASS — returns `null`, prior value intact |
+| `set … EX` + `ttl` | PASS — TTL > 0 |
+| `expire` | PASS — `1` |
+| `incr` / `incr` / `decr` | PASS — 1, 2, 1 |
+| `sadd` ×2 / `scard` / `smembers` / `srem` / `scard` | PASS — 2, `["a","b"]`, 1, 1 |
+| `scan … match … count` | PASS — array |
+| `del` / `get` after del | PASS — `1`, then `null` |
+| `eval` (probe, not used by the product) | responds — so scripting exists, but nothing depends on it |
+
+**20 of 20 pass, 0 failures.** Value size through the path-based transport also
+round-trips cleanly at **1KB → 64KB** (`api/_kv.js:15-17` flags URL length as a
+concern for large values; at draft-packet sizes it is not one).
+
+### What this does and does not establish
+
+- **Established:** the Preview store answers every Redis command the draft and
+  lifecycle code issues, with the semantics that code depends on — in
+  particular `SET NX` refusing a taken key, which is the cap-race guard.
+- **NOT established:** that the deployed draft round-trip works. This exercised
+  the **store**, not the **application**. **RV-4 is still open.** It needs a
+  Preview deployment and a signed-in session to create and reopen a marked
+  draft, prove the record exists in nonproduction, and prove the same key is
+  absent from production. This removes a dependency; it does not close the item.
+- The Preview credentials were fetched, used, and the file **deleted**. No value
+  was printed, and nothing was committed.

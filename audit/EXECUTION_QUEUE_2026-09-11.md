@@ -12,8 +12,13 @@ waits on a production release. Two corrections applied:
   "needs the deployed release" was wrong and would have idled them behind a
   release they don't depend on.
 
-Phase 1: approximately 95%. Production token replacement complete. Remaining
-validation and exemption clarification open.
+**Phase 1 estimate, stated honestly:** the **previously scoped** Phase 1 work
+remains **~95%** complete. **Batch drafting (section C2) is new scope and is not
+started**, so it cannot be folded into that figure without either hiding the new
+work or falsely discounting the finished work. I am not issuing a single blended
+percentage until you decide whether batch drafting sits inside the Phase 1 line.
+Production token replacement complete. Remaining validation and exemption
+clarification open.
 
 ---
 
@@ -21,10 +26,11 @@ validation and exemption clarification open.
 
 | Item | Target | Required access | Next action |
 |---|---|---|---|
-| RV-4 draft KV live | Isolated Preview | Preview KV binding (G1) — Preview+Development group already exists | Bind KV on Preview, then run the draft round-trip |
-| Deployed lifecycle behaviour | Isolated Preview | Same Preview binding | After RV-4: create → delete → confirm explicit new Create required (Q-D8-6) |
-| Upstash REST compatibility | Isolated Preview | Preview KV binding | Exercise `/set`, `/setex`, `/get` against the Preview database |
+| RV-4 draft KV live | Isolated Preview | **Binding already present** (§19) — needs a Preview deployment + signed-in session | Deploy Preview, then create and reopen one marked draft; prove the record in nonproduction and its absence from production. **No config change needed** |
+| Deployed lifecycle behaviour | Isolated Preview | Same Preview deployment | After RV-4: create → delete → confirm explicit new Create required (Q-D8-6) |
+| ~~Upstash REST compatibility~~ | Isolated Preview | — | **CLOSED 13:54 — 20/20 pass, no Lua dependency (§19).** Exercised the real draft/lifecycle surface incl. `SET NX`, `sadd/srem/scard/smembers`, `scan` |
 | Deployed Google authentication | Isolated Preview | Preview deployment + a Google sign-in | Sign in on Preview, confirm `userdata:<sub>` round-trip |
+| **Deletion coverage** (new) | Preview | Same Preview deployment | Trace whether deleting a card clears the derived median from **all three** locations (§17). Until traced, the support message must not promise it |
 
 ## B. Needs the authorized production release
 
@@ -44,6 +50,12 @@ validation and exemption clarification open.
 | Exemption eligibility | eBay policy | — | Approve or discard the revised §17 draft. **Unsent.** Exemption stays unchanged |
 | Site-terms question (HTML retrieval) | Counsel | — | Your call; pre-existing production behaviour, not a release blocker |
 | Safeguard 2 | Vercel | Deployment protection settings | Old deployments retain prior access — still OPEN |
+
+## C2. New scope — sized, not started
+
+| Item | Target | Required access | Next action |
+|---|---|---|---|
+| **Batch drafting** — Bulk + Rapid Scan selection, Select All, Create Selected Drafts | Client | None to size; **your scope decision to build** | Spec written: `audit/REQ_BATCH_DRAFTING.md`. **4 units, 1 of them a pre-existing defect** (`AT_CAP` has no client sentence). Uses the existing review/export handoff — **not** eBay integration, **no auto-publish** |
 
 ## D. Separately tracked — NOT release blockers
 
