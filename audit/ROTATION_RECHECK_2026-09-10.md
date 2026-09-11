@@ -688,3 +688,47 @@ wrong. **unreachable** is neither and cannot license proceeding.
 
 The precautionary basis for the rotation is unaffected throughout: it never
 depended on identifying a generation.
+
+---
+
+## 13. 1d and 1e executed — ACCEPTED on the portal pair, NO MATCH against Vercel (2026-09-11 09:40)
+
+| Step | Result | Establishes | Does **not** establish |
+|---|---|---|---|
+| **1e** | **ACCEPTED** — eBay issued an application token for the **portal-shown pair** | That pair is **currently valid**. The **"appears not enrolled for `client_credentials`" hypothesis is disproved** — the grant works | That the **deployed application** uses that pair. At `9aaf326` production reads **neither** `EBAY_APP_ID` nor `EBAY_CERT_ID`. Nor anything about the **Vercel row**, which was never exchanged |
+| **1d** | **NO MATCH** — complete-value equality | The Vercel project row **differs** from the portal-shown Cert ID. Not a near-miss or formatting artefact | Which is older; which generation either is; or that the Vercel value is **invalid**. 1e's pass does **not** transfer to it |
+
+### The finding that matters, and it is not tidy
+
+**There are three values in play, not two:** the portal-current Cert ID
+(validated), the Vercel Production row (a **different** value, **never
+exchanged, status unknown**), and the replacement about to be generated.
+
+I will not smooth this into "so the Vercel value is stale." That is the
+*likely* reading, but **untested**: confirming it would need a second live
+exchange on the Vercel row, which was not performed and which I am not
+proposing — it would spend a second credential handling step to learn
+something the rotation makes moot. Recorded at **1f** as **an unaccounted
+credential value, status unknown**: not assumed dead, not assumed live.
+
+### What this does to the rotation
+
+**Nothing weakens; one thing strengthens.** A configured value that matches no
+portal-shown credential is *itself* a reason to replace it, independent of the
+withdrawn exposure premise — the precautionary basis now has a **concrete
+observed defect** behind it rather than only an unresolved possibility.
+
+**And the Cert ID half remains the low-risk half.** Production consumes no
+Cert ID at `9aaf326`, so replacing it cannot break the live site. **CH-1 — the
+published verification token — is still the blocking defect**, and
+`EBAY_VERIFICATION_TOKEN` **is** live at
+`9aaf326:api/ebay-notifications.js:8`. Steps 3–7 carry the real risk.
+
+### One correction to my own advice, on the record
+
+I argued 1e's expected information was low, citing the enrollment hypothesis.
+**1e passed.** The hypothesis was wrong, my recommendation against running the
+step was wrong, and the reviewer's push to run it anyway was right. Recorded
+because the same instinct — treating an unverified old note as a reason not to
+test — is what produced several earlier corrections in this thread.
+
