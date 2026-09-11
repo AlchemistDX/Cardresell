@@ -421,8 +421,19 @@ rotation does not change a credential current production consumes** — nothing
 at `9aaf326` reads `EBAY_APP_ID` or `EBAY_CERT_ID`. **Verification-token
 rotation does**: `EBAY_VERIFICATION_TOKEN` is read at
 `9aaf326:api/ebay-notifications.js:8` and is live. The two halves of this
-runbook carry different risk, and only the second can break production. The rotation is justified by the credential's
-**exposure**, not by production dependence on it. `EBAY_OAUTH_TICKET.md` is now registered as **EXP-1** in
+runbook carry different risk, and only the second can break production.
+
+> **WITHDRAWN 2026-09-11 00:28 — superseded basis.** This section previously
+> read: *"The rotation is justified by the credential's **exposure**, not by
+> production dependence on it."* **That justification is withdrawn.**
+> Confirmed exposure is **not established**; a possible earlier-session
+> exposure is **unresolved** (§11). The Cert ID rotation's basis is
+> **precautionary**: the Cert ID authenticates the application and is
+> security-sensitive, current production does not depend on it, and the
+> rotation cost is bounded. **CH-1** — the published verification token — is
+> the independently established, blocking credential defect.
+
+`EBAY_OAUTH_TICKET.md` is now registered as **EXP-1** in
 `audit/RELEASE_VALIDATION_QUEUE.md`, with its credential types identified and
 rotation coverage assessed — repository cleanup and credential invalidation
 kept distinct, since neither substitutes for the other.
@@ -492,7 +503,12 @@ EXP-1 resolved to synthetic fixtures, a non-secret App ID and self-masked
 fragments, so it supplies **no evidence of secret disclosure**. If the Cert ID
 rotation had been resting on it, it would now be unsupported. It was not.
 
-**The stated basis, which predates EXP-1 and survives it:**
+> **WITHDRAWN 2026-09-11 00:28.** The table and the "Retained" paragraph
+> immediately below are the **superseded** reading, kept only as a record of
+> what was claimed and corrected. **Do not cite them as a basis.** The
+> correction that follows them governs.
+
+**The stated basis, which predates EXP-1 and survives it:** *(withdrawn)*
 
 | | |
 |---|---|
@@ -501,9 +517,11 @@ rotation had been resting on it, it would now be unsupported. It was not.
 | Credential identified by | `sha256[:12] = e3f0a0bc343d` — a fingerprint used throughout the corpus as a non-disclosing reference (`audit/d3/D3_STEP5_SECOND_REVIEW_RESPONSE.md:475`, which also records **0 published blobs**) |
 | Surface | A **conversation transcript**, not this repository |
 
-**Retained.** The exposure is a session disclosure, entirely independent of
+~~**Retained.** The exposure is a session disclosure, entirely independent of
 any repository literal, and EXP-1's collapse does not touch it. "0 published
-blobs" is consistent: the repository was never the exposure surface.
+blobs" is consistent: the repository was never the exposure surface.~~
+**— WITHDRAWN.** "The exposure is a session disclosure" asserts as fact the
+very thing that is not established. Superseded by the correction below.
 
 **Corrected 2026-09-10 23:55 — the exposure is not established.** I read
 `TODO_PHASE1.md:234` as meaning the credential was printed, and adopted that
@@ -574,7 +592,7 @@ steps, in that order:
 |---|---|---|
 | **1c** | Record displayed generations, current/grace/expiry, **no values** | The **visible** generation set — not the historical count |
 | **1d** | `tools/compare-cert-generation.mjs` — interactive TTY required, piped input refused, no network, complete-value equality, prints matched label or `no match` | A **match** identifies the generation on the **Vercel project row** — not a credential in the running deployment. **`no match`** rules out only the **displayed** ones; the configured generation stays **unknown** |
-| **1e** | One token exchange on that exact pair | **accepted** / **rejected** / **unreachable** — describes the **pair**, never a generation. **rejected** means only *this supplied pair was rejected*; it establishes a Vercel misconfiguration **only if 1d already matched the supplied value to the Vercel row** |
+| **1e** | One token exchange on that exact pair | **accepted** / **rejected** / **unreachable** — describes the **pair**, never a generation. **rejected** means **only** *the supplied pair was rejected*. Even with a 1d Cert ID match it is **not** proof of Vercel misconfiguration: the **supplied App ID** could be wrong |
 | **1f** | Record the superseded generation and its revocation route | **Unknown** where 1d did not match or could not run |
 
 `EBAY_CERT_ID` is stored **`encrypted`, not `sensitive`**

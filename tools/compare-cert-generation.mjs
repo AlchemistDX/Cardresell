@@ -113,7 +113,10 @@ async function main() {
     console.log('remains UNKNOWN. The rotation may replace it either way.');
   }
   console.log('\nThis comparison makes no authentication request. Run the single token');
-  console.log('exchange separately, on this exact pair.');
+  console.log('exchange separately, on this exact pair. If that exchange is rejected,');
+  console.log('the conclusion is only that the supplied pair was rejected -- a match');
+  console.log('here does not make it proof of a Vercel misconfiguration, since the');
+  console.log('supplied App ID could itself be wrong.');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
