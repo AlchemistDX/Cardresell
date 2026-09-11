@@ -175,3 +175,12 @@ credential in an environment that did not have one.** The unconditional wording
 was written before the Preview questions were posed and reads as safe-by-default
 only if you assume Preview already holds the secret — which is precisely the
 thing answer 1 exists to establish.
+
+## 6. Where the eBay support question lives
+
+This file stops at §5. The `§17`/`§18` material — the marketplace-account-deletion
+exemption question, what we retain, and the draft message to eBay Developer
+Support — was never committed here; it existed only in a prior session's
+re-check notes. It now lives at **`audit/EBAY_SUPPORT_QUESTION.md`**, corrected
+(three locations, not two; no deletion promise) and still **UNSENT**. Read that
+file rather than reconstructing the question from memory.

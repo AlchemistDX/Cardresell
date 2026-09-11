@@ -112,9 +112,14 @@ check('Feature flag defaults to ON (checks for === false to trigger legacy)',
       'The flag check should be `window._SCAN_MISS_V2 === false` so the new panel is default');
 
 // The new panel renderer must be reachable from the fallthrough
-check('_renderScanMissPanel is called from the fallthrough',
-      /_renderScanMissPanel\s*\(\s*pending\s*\)/.test(fnBody),
-      '_renderScanMissPanel(pending) must be called when no confident match is found');
+// 2026-09-11: this asserted the call was EXACTLY `_renderScanMissPanel(pending)`,
+// so it went red the day the renderer gained a second argument
+// (`_renderScanMissPanel(pending, _scanTplOutcome)`) even though the call site
+// was still there and still correct. The thing worth guarding is that `pending`
+// is what gets handed to the panel, not the argument count.
+check('_renderScanMissPanel is called from the fallthrough, with pending first',
+      /_renderScanMissPanel\s*\(\s*pending\s*[,)]/.test(fnBody),
+      '_renderScanMissPanel(pending, ...) must be called when no confident match is found');
 
 // The miss logger must be called
 check('_logScanMiss is called from the fallthrough',
@@ -180,11 +185,27 @@ check('_scanMissDismiss function defined', /function\s+_scanMissDismiss\s*\(/.te
 check('_logScanMiss function defined', /function\s+_logScanMiss\s*\(/.test(html));
 
 // Panel uses affiliate URL builders (would lose revenue if raw eBay/TCG URLs were used)
+// 2026-09-11: these two searched a fixed 2000-character window after the
+// function NAME. The TCGplayer builder sits further down the panel than the
+// eBay one, so a comment added above it pushed the call outside the window and
+// the check reported a lost affiliate tag that was never lost. Read the
+// function's actual body instead, bounded by the next top-level declaration, so
+// the assertion cannot drift with formatting -- and fail loudly if the body
+// cannot be located at all, rather than passing on an empty string.
+const missPanelStart = html.search(/function\s+_renderScanMissPanel\s*\(/);
+const missPanelRest = missPanelStart < 0 ? '' : html.slice(missPanelStart + 10);
+const missPanelEnd = missPanelRest.search(/\n(?:async )?function\s/);
+const missPanelBody = missPanelStart < 0
+  ? ''
+  : (missPanelEnd < 0 ? missPanelRest : missPanelRest.slice(0, missPanelEnd));
+check('the _renderScanMissPanel body could be located for inspection',
+      missPanelBody.length > 200,
+      'anchor not found — the two affiliate checks below would otherwise pass vacuously');
 check('Scan-miss panel uses buildEbayUrl (affiliate-tagged eBay button)',
-      /_renderScanMissPanel[\s\S]{0,2000}buildEbayUrl\s*\(/.test(html),
+      /buildEbayUrl\s*\(/.test(missPanelBody),
       'The eBay button in the scan-miss panel MUST use buildEbayUrl to keep EPN affiliate tracking');
 check('Scan-miss panel uses buildTcgpUrl (affiliate-tagged TCGplayer button)',
-      /_renderScanMissPanel[\s\S]{0,2000}buildTcgpUrl\s*\(/.test(html),
+      /buildTcgpUrl\s*\(/.test(missPanelBody),
       'The TCGplayer button in the scan-miss panel MUST use buildTcgpUrl to keep Impact affiliate tracking');
 
 // Endpoint exists

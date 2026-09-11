@@ -101,7 +101,13 @@ check('Scan-miss no longer uses joker emoji in thumbnail',    !INDEX.includes('f
 
 console.log('\n[TPL secondary source + synthetic card 2026-08-13]');
 check('Scan uses TPL as secondary source',                   INDEX.includes('SECONDARY SOURCE: TCGPriceLookup'));
-check('TPL fallback calls searchWithTPL(cleanName)',         /tplHits = await searchWithTPL\(cleanName/.test(INDEX));
+// 2026-09-11: this was pinned to the old variable name (`tplHits = await
+// searchWithTPL(cleanName`). The scan fallback now holds the response in
+// `_tplScanRes` and reads `.cards` off it, so the guard had been red at HEAD
+// while the behaviour it protects was intact. Assert the call, its argument,
+// and the pokemon slug -- not the name of the local it lands in.
+check('TPL fallback calls searchWithTPL(cleanName) on the scan path',
+      /await searchWithTPL\(\s*cleanName\s*,\s*'pokemon'\s*\)/.test(INDEX));
 check('TPL match sets selectedCard + loadCardUI',            /tplCardToNormalized\(tplMatch/.test(INDEX));
 check('Synthetic card fallback exists',                      INDEX.includes('SYNTHETIC CARD FALLBACK'));
 check('Synthetic card sets _synthetic flag',                 /_synthetic:\s*true/.test(INDEX));
@@ -172,7 +178,17 @@ check('Bulk fetch timeout bumped to 7s',                        INDEX.includes('
 check('Bulk fetch falls back to name-only query',               INDEX.includes('queries.push(`name:"${cleanName}"`)'));
 check('_bulkScanOne captures thumbnail data URL',               INDEX.includes("result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64"));
 check('Bulk save uses user-photo thumbnail fallback',           INDEX.includes('const thumb = r.imageUrl || r.imageDataUrl || null'));
-check('Bulk save writes img field (single-add compat)',         INDEX.includes("img: thumb,\n        imageUrl: thumb"));
+// 2026-09-11: this matched an exact indented two-line string. The bulk save
+// path now composes its collection entry through the shared
+// `_bulkScanRowToCard` mapper (so batch drafting and collection save cannot
+// drift apart), which re-indented those lines. Assert the pair is emitted from
+// one thumbnail value inside that mapper, which is what single-add compat
+// actually depends on.
+const bulkMapper = (INDEX.match(/function _bulkScanRowToCard\s*\([\s\S]{0,2500}?\n\}/) || [''])[0];
+check('the _bulkScanRowToCard mapper could be located for inspection',
+      bulkMapper.length > 200);
+check('Bulk save writes img field (single-add compat)',
+      /img:\s*thumb\s*,/.test(bulkMapper) && /imageUrl:\s*thumb\s*,/.test(bulkMapper));
 check('Bulk save persists number field',                        INDEX.includes("number: r.cardNumber || ''"));
 check('Bulk save persists tcgplayerUrl',                        INDEX.includes("tcgplayerUrl: r.tcgplayerUrl || ''"));
 check('Collection modal has View full card button',             INDEX.includes("id=\"ccmViewFullBtn\""));

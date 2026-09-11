@@ -295,6 +295,7 @@ const B = new Function(`
   const localStorage = { getItem: () => JSON.stringify(_saved || []) };
   const window = {};
   const console = { warn(){} };
+  ${grabFn('_bulkScanRowToCard')}
   ${grabFn('_bulkSaveToCollection')}
   return (rows, costs, skip) => { _bulkSaveToCollection(rows, costs, skip); return _saved; };
 `)();
@@ -374,7 +375,12 @@ ok('the scan response set_code is carried onto the bulk row',
 // Field parity with the single-add path.
 {
   const single = stripComments(grabFn('saveFlipEntry'));
-  const bulk   = stripComments(grabFn('_bulkSaveToCollection'));
+  // 2026-09-11: the collection entry is now composed by the shared
+  // `_bulkScanRowToCard` mapper that batch drafting also reads, so the identity
+  // fields live there rather than inline in the save function. Parity is still
+  // the property under test -- read both halves of the save path.
+  const bulk   = stripComments(grabFn('_bulkSaveToCollection')) +
+                 stripComments(grabFn('_bulkScanRowToCard'));
   for (const field of ['game', 'cardType', 'setCode', 'groundedId', 'rarity', 'isJapanese', 'grader', 'grade']) {
     ok(`single-add writes ${field}`, new RegExp(`${field}:`).test(single));
     ok(`bulk-save writes ${field} too`, new RegExp(`${field}:`).test(bulk));

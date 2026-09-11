@@ -4014,8 +4014,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </div><!-- /wrap -->
 
 <script defer src="/js/config.20ebe911.js"></script>
-<script defer src="/js/core.ebc21977.js"></script>
-<script defer src="/js/ui.6b3a528e.js"></script>
+<script defer src="/js/core.2db046e6.js"></script>
+<script defer src="/js/ui.e6529e78.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.5cf1cd22.js"></script>
 
@@ -4247,14 +4247,26 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <div id="bulkPackTrackerStatus" style="font-size:.66rem;color:rgba(255,255,255,.5);margin-top:.4rem;line-height:1.35">Scanning…</div>
         </div>
       </div>
+      <!-- Draft selection bar. Hidden until there is at least one identified
+           card, so an empty or still-scanning list shows no controls. The count
+           is populated by _bulkDraftSyncSelectionUI in js/ui. -->
+      <div id="bulkDraftSelectBar" style="display:none;align-items:center;gap:.6rem;padding:.5rem 1rem;border-bottom:1px solid #1a1a1a;background:#0d0d0d;flex-shrink:0">
+        <button id="bulkDraftSelectAllBox" role="checkbox" aria-checked="false" aria-label="Select all identified cards for drafting" onclick="bulkDraftSelectAll()" style="flex-shrink:0;width:22px;height:22px;padding:0;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.25);color:transparent;font-size:.7rem;font-weight:900;line-height:1;cursor:pointer">✓</button>
+        <button onclick="bulkDraftSelectAll()" style="background:none;border:none;padding:0;color:rgba(255,255,255,.75);font-size:.75rem;font-weight:700;cursor:pointer">Select all</button>
+        <div id="bulkDraftSelectCount" style="margin-left:auto;font-size:.72rem;color:rgba(255,255,255,.45)">Select cards to draft</div>
+      </div>
       <!-- Results list -->
       <div id="bulkResultsList" style="flex:1;overflow-y:auto;padding:.75rem 1rem 1rem;display:flex;flex-direction:column;gap:.5rem"></div>
       <!-- Bottom action bar -->
       <div id="bulkBottomBar" style="display:none;padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0">
         <div id="bulkSummaryLine" style="font-size:.78rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.65rem"></div>
+        <div id="bulkDraftHeadroomNote" style="display:none;font-size:.7rem;color:rgba(251,191,36,.9);text-align:center;margin-bottom:.5rem;line-height:1.4"></div>
         <div style="display:flex;gap:.75rem">
           <button onclick="closeBulkScan()" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>
           <button id="bulkAddAllBtn" onclick="bulkAddAllToCollection()" style="flex:2;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">📦 Add All to Collection</button>
+        </div>
+        <div style="margin-top:.5rem">
+          <button id="bulkCreateDraftsBtn" onclick="bulkCreateSelectedDrafts()" disabled style="width:100%;padding:.6rem;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.55);color:rgba(196,181,253,1);border-radius:10px;font-weight:800;font-size:.82rem;cursor:default;opacity:.45">Create Listing Drafts</button>
         </div>
         <div style="margin-top:.5rem">
           <button id="bulkScanMoreBtn" onclick="bulkScanMore()" style="width:100%;padding:.55rem;background:transparent;border:1px solid rgba(139,92,246,.4);color:rgba(139,92,246,1);border-radius:10px;font-weight:700;font-size:.8rem;cursor:pointer">+ Scan More Cards</button>
