@@ -22735,8 +22735,17 @@ function _draftDeleteGo(draftId) {
         -- https://pages.ebay.com/sh/reports/help/create-listings-bulk/
 
    The third is the only one that needs no hosting and no seller credentials,
-   so it is what this emits: `Action=Draft`, photo column omitted, and the UI
-   says in words that the photos are added on eBay. The first two belong to
+   so it is what this emits: `Action=Draft`, the photo column PRESENT AND
+   BLANK, and the UI says in words that the photos are added on eBay.
+
+   DESIGN CHANGE, 2026-09-10: the photo column was previously OMITTED
+   ENTIRELY. It is now present and empty. A real upload of the omitting file
+   was refused by eBay with a generic reading error, and a downloaded template
+   showed eBay ships `Item photo URL` as one of its eleven columns. An absent
+   column and a blank column are not the same thing to a parser that counts
+   fields against its own header. Which difference caused that refusal is NOT
+   established -- four differences were found at once -- so this is a change
+   made to match eBay's file, not a diagnosis. The first two belong to
    connected selling, where an OAuth token exists.
 
    WHAT IS DELIBERATELY NOT IN THE FILE:
@@ -22752,10 +22761,24 @@ function _draftDeleteGo(draftId) {
    Every one of those is stated on screen, so the seller is not left to
    discover an empty column in eBay's error report.
 
-   NOT ESTABLISHED: no upload of this file to a real eBay seller account has
-   been performed, so eBay's acceptance of it is UNVERIFIED. The columns and
+   NOT ESTABLISHED: the previous version of this file WAS uploaded to a real
+   eBay seller account on 2026-09-10 and was REFUSED with a generic reading
+   error. This version has not been uploaded, so eBay's acceptance of it is
+   still UNVERIFIED -- and because four differences were corrected together, a
+   pass would not isolate which one mattered. The columns and
    values below are each traceable to a fetched eBay page; that is evidence
    about the contract, not evidence about the outcome. */
+
+/* eBay's template metadata rows, byte-for-byte from the 2026-09-10 download.
+   Kept because the earlier export omitted them entirely and eBay refused that
+   file with a generic reading error. Which difference caused the refusal is
+   NOT established; preserving eBay's own rows removes the question. */
+const _EBAY_TEMPLATE_PREAMBLE = [
+  '#INFO,Version=0.0.2,Template= eBay-draft-listings-template_US,,,,,,,,',
+  '#INFO Action and Category ID are required fields. 1) Set Action to Draft 2) Please find the category ID for your listings here: https://pages.ebay.com/sellerinformation/news/categorychanges.html,,,,,,,,,,',
+  '"#INFO After you\'ve successfully uploaded your draft from the Seller Hub Reports tab, complete your drafts to active listings here: https://www.ebay.com/sh/lst/drafts",,,,,,,,,,',
+  '#INFO,,,,,,,,,,'
+];
 
 /** eBay's documented cap on one title. */
 const _EBAY_TITLE_MAX = 80;
@@ -22780,18 +22803,29 @@ function _csvField(v) {
 /**
  * The eBay Create-Drafts row for one draft, plus what the seller still owes.
  *
- * Column names are eBay's current Seller Hub Reports names, not the legacy
- * `*Action(...)` smart-header ones:
- *   Action           "Valid entry: Draft"
- *   Category ID      "the numeric ID of a Category"
- *   Title            max length 80
- *   Description       -- newlines not permitted, see _csvField
- *   Format           "Valid entry: Auction or FixedPrice"
- *   Duration         "For FixedPrice listings use GTC"
- *   Start price      "accepts decimal point but no currency symbols"
- *   Quantity         integer
- *   Custom label (SKU)  optional, buyer does not see it
- * all -- https://pages.ebay.com/sh/reports/help/create-listings-bulk/
+ * The header is eBay's OWN, copied byte-for-byte from a template downloaded
+ * from Seller Hub Reports on 2026-09-10. It is not a header assembled from
+ * the help page's prose, which is what the previous version did and which
+ * differed from the real file in four ways:
+ *
+ *   this exporter emitted     eBay's template has
+ *   -----------------------   ---------------------------------------------
+ *   `Action`                  `Action(SiteID=US|Country=US|Currency=USD|
+ *                              Version=1193|CC=UTF-8)`
+ *   `Start price`             `Price`
+ *   `Duration` (=GTC)         no Duration column at all
+ *   (no #INFO rows)           four #INFO metadata rows above the header
+ *   (no photo column)         `Item photo URL`
+ *
+ * The eleven columns, in eBay's order: Action(...), Custom label (SKU),
+ * Category ID, Title, UPC, Price, Quantity, Item photo URL, Condition ID,
+ * Description, Format. UPC, Item photo URL and Condition ID are emitted
+ * BLANK -- present so the field count matches eBay's header, empty because
+ * their values are unresolved (see the block above on descriptors and photos).
+ *
+ * `Duration` is no longer emitted. eBay's own FixedPrice template carries no
+ * such column, so GTC is left to eBay's default rather than asserted by us.
+ * help page -- https://pages.ebay.com/sh/reports/help/create-listings-bulk/
  *
  * Returns `{ csv, owed }`. `owed` is the list of things eBay will require that
  * this file does not carry; it is rendered, not swallowed.
@@ -22823,19 +22857,26 @@ function _ebayDraftCsv(draft, packet) {
 
   const qty = Number.isInteger(draft.quantity) && draft.quantity > 0 ? draft.quantity : 1;
 
-  owed.push('the photos \u2014 attach them from this device in eBay\u2019s Drafts folder');
-  owed.push('the condition (and, for a slab, grader/grade/cert) from eBay\u2019s own dropdowns');
+  owed.push('the photos \u2014 the column is present but left blank, so attach them from this device in eBay\u2019s Drafts folder');
+  owed.push('the condition (and, for a slab, grader/grade/cert) \u2014 the column is present but left blank, so pick it from eBay\u2019s own dropdowns');
   owed.push('any required item specifics eBay asks for in that category');
   owed.push('location, shipping, returns and payment \u2014 your account settings, which this app never collects');
 
-  const cols = ['Action', 'Category ID', 'Title', 'Description', 'Format',
-                'Duration', 'Start price', 'Quantity', 'Custom label (SKU)'];
-  const row  = ['Draft', cat, title, desc, 'FixedPrice', 'GTC', price, String(qty),
-                String(draft.sku || '')];
+  /* The header and the four #INFO rows are eBay's own, copied byte-for-byte
+     from a template downloaded from Seller Hub Reports on 2026-09-10
+     (`eBay-draft-listing-template-Sep-10-2026-20-38-3.csv`). They are emitted
+     VERBATIM and are deliberately not passed through `_csvField`: three of
+     them contain commas and one is already quoted, so re-quoting them would
+     change bytes eBay wrote. The trailing commas pad each row to the header's
+     11 fields, which is how eBay's own file is shaped. */
+  const cols = ['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8),Custom label (SKU),Category ID,Title,UPC,Price,Quantity,Item photo URL,Condition ID,Description,Format'];
+  const row  = ['Draft', String(draft.sku || ''), cat, title, '', price,
+                String(qty), '', '', desc, 'FixedPrice'];
 
-  // CRLF: eBay documents that a Unix-created CSV "must be converted from Unix
-  // format to DOS format before upload".
-  const csv = cols.map(_csvField).join(',') + '\r\n'
+  /* CRLF: eBay documents that a Unix-created CSV "must be converted from Unix
+     format to DOS format before upload". */
+  const csv = _EBAY_TEMPLATE_PREAMBLE.map((l) => l + '\r\n').join('')
+            + cols.join(',') + '\r\n'
             + row.map(_csvField).join(',') + '\r\n';
   return { csv, owed };
 }

@@ -372,9 +372,25 @@ try {
     ok('the file is named for the draft', /\.csv$/.test(dl.suggestedFilename()));
     ok('CRLF line endings', text.includes('\r\n'));
 
-    const [head, row] = text.trim().split('\r\n');
-    const cols = head.split(',');
-    const cells = row.match(/("([^"]|"")*"|[^,]*)/g).filter((_, n) => n % 2 === 0);
+    // eBay's template carries four #INFO rows above the header. They are
+    // emitted verbatim, so the header is not line 0 any more.
+    const lines = text.trim().split('\r\n');
+    const info  = lines.filter((l) => l.startsWith('#INFO') || l.startsWith('"#INFO'));
+    const hIdx  = lines.findIndex((l) => l.startsWith('Action('));
+    const head  = lines[hIdx];
+    const row   = lines[hIdx + 1];
+    const cols  = head.split(',');
+    eq('eBay\u2019s four #INFO metadata rows are preserved', info.length, 4);
+    eq('the header is eBay\u2019s own smart header',
+      cols[0], 'Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)');
+    /* FIXED 2026-09-10. The previous cell parser was
+         row.match(/("([^"]|"")*"|[^,]*)/g).filter((_, n) => n % 2 === 0)
+       which silently drops every field after the first EMPTY one -- on an
+       11-field row with three blanks it returns 10 cells, all the tail values
+       shifted to ''. It passed only because the old export had no empty
+       fields. The product row is correct; the harness was wrong. Verified:
+       the row splits to exactly `cols.length` fields, asserted above. */
+    const cells = row.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
     const at = (name) => {
       const i = cols.indexOf(name);
       if (i < 0) return null;
@@ -384,11 +400,16 @@ try {
     };
 
     // Columns and values from eBay's Create-Drafts template documentation.
-    eq('Action is Draft, not Add', at('Action'), 'Draft');
+    eq('Action is Draft, not Add',
+      at('Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)'), 'Draft');
     eq('Format is FixedPrice', at('Format'), 'FixedPrice');
-    eq('Duration is GTC', at('Duration'), 'GTC');
-    ok('Start price has no currency symbol', /^\d+\.\d{2}$/.test(at('Start price')));
-    eq('Start price is the draft price', at('Start price'), '32.84');
+    // Duration is gone: eBay's own FixedPrice template has no such column, so
+    // GTC is left to eBay's default rather than asserted by this file.
+    eq('no Duration column, because eBay\u2019s template has none',
+      cols.filter((c) => /^Duration/i.test(c)).length, 0);
+    ok('Price has no currency symbol', /^\d+\.\d{2}$/.test(at('Price')));
+    eq('Price is the draft price', at('Price'), '32.84');
+    eq('every row has the header\u2019s field count', row.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).length, cols.length);
     eq('Quantity present', at('Quantity'), '1');
     ok('Title within eBay\u2019s 80 characters', (at('Title') || '').length > 0 && at('Title').length <= 80);
     ok('Category ID is the packet category',
@@ -396,11 +417,18 @@ try {
     ok('Description present', (at('Description') || '').length > 0);
     ok('no newline survived into a field', !/\n/.test(row));
 
-    // The three deliberate omissions, each of which the panel must explain.
-    eq('no photo column, because a local file cannot travel in this file',
-      cols.filter((c) => /photo/i.test(c)).length, 0);
-    eq('no condition column, because descriptor value ids are unresolved',
-      cols.filter((c) => /^Condition/i.test(c)).length, 0);
+    /* CHANGED 2026-09-10. The photo and condition columns were previously
+       OMITTED. They are now PRESENT AND BLANK, because eBay's downloaded
+       template ships both and a real upload of the omitting file was refused.
+       A blank column and an absent column are different things to a parser
+       counting fields, so the assertion is now presence-with-empty-value. */
+    eq('the photo column is present', cols.filter((c) => /photo/i.test(c)).length, 1);
+    eq('the photo column is blank, so no local path is claimed',
+      at('Item photo URL'), '');
+    eq('the condition column is present', cols.filter((c) => /^Condition/i.test(c)).length, 1);
+    eq('the condition column is blank, because descriptor value ids are unresolved',
+      at('Condition ID'), '');
+    eq('UPC is blank rather than invented', at('UPC'), '');
     eq('no item-specific columns, because aspect values are unverified',
       cols.filter((c) => /^C:/.test(c)).length, 0);
 
