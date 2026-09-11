@@ -793,8 +793,19 @@ Owner-run `tools/verify-challenge.mjs` against
 **`dpl_BS1a9nXNzpUtEqiWpRLakQmjMRXz`**: the endpoint's `challengeResponse`
 matches the clean replacement token, **no whitespace shape**. With the token
 freshly generated and never committed, **production no longer serves the
-repository default**. That is **RV-9 check 19**, and it does **not** establish
-the other eighteen. **Completed — not to be re-run.**
+repository default**.
+**Wording corrected 2026-09-11 11:57:** I called this **"RV-9 check 19"** and
+**"the one live-harness check needing no credential."** **Both withdrawn.** The
+check consumed the owner's **privately supplied replacement token** at a hidden
+prompt — that *is* a credential, so "needing no credential" was false. And the
+harness assertion `'deployed challenge hash matches the CLEAN token'`
+(`tests/ebay-live.mjs:272`) sits inside a 20-check run that also loads
+`.env.production` (`:26-34`) and asserts `'deployed endpoint answers the
+challenge'` (`:269`) alongside it; claiming that named assertion passed requires
+establishing the equivalent checks, which was not done. Record this as a
+**standalone challenge-check PASS** by `tools/verify-challenge.mjs`. **RV-9
+remains entirely unverified — 0 of its checks established, not 1 of 19.**
+**Completed — not to be re-run.**
 
 ### Exemption eligibility — my check was too narrow, and the result changes
 
@@ -824,9 +835,9 @@ not merely proxied.
   concern **user** data, which suggests listing caches are outside their
   intent, but eBay's toggle wording is **broader than user data** and I have
   found no source resolving the gap.
-- **Unverified:** client-side storage. The production bundle
-  `js/core.569ff536.js` contains **137** case-insensitive matches for "ebay";
-  no per-key audit of browser storage was performed here.
+- **Client-side storage — AUDIT NOW COMPLETE (2026-09-11 11:57), see §16.**
+  The **137** case-insensitive "ebay" matches in `js/core.569ff536.js` do
+  **not** correspond to any stored eBay data.
 
 **Consequence:** the exemption's accuracy is **an open compliance question for
 the owner**, not something I have confirmed. My §14-era "it also happens to be
@@ -851,3 +862,158 @@ implementing. **Withdrawn.** What is outstanding is **deployment**: production
 runs `9aaf326`, which still carries the fallback, and `6c610e2` is unpushed on
 `phase1-block-d`. **Deployment authorization is the owner's and is not
 inferred** from this finding.
+
+---
+
+## 16. Browser-storage audit — COMPLETE (2026-09-11 11:57)
+
+Scope: every browser-storage write in the **deployed** production bundle
+`9aaf326:js/core.569ff536.js` (911,576 bytes). Method: enumerate the storage
+APIs used, then every key written, then read the payload construction for each
+key that could plausibly carry eBay-derived data.
+
+### Storage APIs present
+
+| API | Occurrences | Note |
+|---|---|---|
+| `localStorage` | 70 | audited below |
+| `sessionStorage` | 18 | audited below |
+| `indexedDB` | **0** in this bundle | photo path uses IndexedDB elsewhere (D-RV-4); no eBay payload |
+| `openDatabase` | **0** | not used |
+| `caches` | 1 | single reference; no eBay payload write found |
+
+### Every key written
+
+**Literal keys.** `cardsell_openai_key`, `cardsell_google_client_id`,
+`cardsell_tpl_key`, `cs_landing_seen`, `cs_banner_dismissed`,
+`cs_nudge_dismissed`, `cr_photoTips_alwaysShow`, `cr_photoTips_seen`,
+`cr_roi_upsell_shown`, `cr_density`, `verifyBannerDismissed`,
+`_pendingUpgradeTier`, `_pendingUpgradeInterval`, `_pendingRefCode`.
+
+**Computed keys.** `cr:lastCard:v1` and `cr:lastCard:v1:ident`
+(`_CR_LAST_CARD_KEY`), `cr_seller_profile_v1` (`SELLER_PROFILE_LS`),
+`cr_venues_enabled` (`_VENUE_LS_KEY`), `cr_venue_tip_seen` (`VENUE_TIP_KEY`),
+`_VENUE_SHIP_KEY`, `_VENUE_CM_ACCT_KEY`, `cardsell_migrated_<uid>`
+(`flagKey`), `PRO_WELCOME_KEY`, and `getUserKey(...)` for `portfolio`,
+`flips`, `grading_log`, `tombstones`.
+
+### Finding: no eBay-derived data is written to browser storage
+
+Four independent checks, all negative:
+
+1. **No eBay payload reaches a storage write.** No `setItem` call site has an
+   `ebay` reference in surrounding context.
+2. **Comps are never serialized.** No `setItem(...)` carries a `comps`
+   argument, and no eBay-derived property is ever attached onto a stored
+   object — `(card|_fullCard|snapshot).(ebay|comps|sold)* =` matches **zero**
+   times.
+3. **The server-side cached field names are absent client-side:** `soldDate`
+   **0**, `itemId` **0**. (`imgUrl` 17 and `searchUrl` 4 occur, but in no
+   storage write.)
+4. **No eBay user identifier anywhere in the bundle:** `ebaySeller`,
+   `sellerName`, `username`, `seller_id`, `ebayUserId`, `feedbackScore` — all
+   **0**.
+
+**Two eBay-*named* keys hold no eBay data.** `cr_seller_profile_v1` stores four
+values the seller picks from dropdowns —
+`SELLER_PROFILE_KEYS = ['tcgLevel','ebayStore','ebayTopRated','ebayPromo']`,
+i.e. *do I have an eBay store / Top Rated status / a promo rate* — the seller's
+own attributes, used for fee math, described in the source comment as
+*"WHO the seller is, not what they are pricing."* Not data obtained from eBay.
+`cr_venues_enabled` stores which venues the seller toggled on.
+
+**One observation, outside the eBay question.** `cr:lastCard:v1` stores
+`_fullCard: card` — *"stash the whole thing for exact re-render."* The card
+comes from the catalogue/scan path, not `ebay-sold`, and carries no eBay
+fields today. But an unbounded whole-object stash is a shape that could
+silently begin carrying new fields later. **Filed as an observation, not a
+defect; no change proposed** (no further feature expansion).
+
+### What this settles
+
+The exemption question turns on **exactly one** storage location: the
+server-side Upstash cache `ebay_cache:*`, 15-minute TTL
+(`9aaf326:api/ebay-sold.js:15, :29-36`; records at `:336`). Browser storage is
+**not** a second site, and **no eBay user data is persisted in anything
+audited**.
+
+---
+
+## 17. The cache question — eBay's docs do not settle it, so here is the question to ask
+
+### Re-read of the source, and what it does and does not say
+
+[eBay's marketplace account deletion page](https://developer.ebay.com/marketplace-account-deletion):
+
+- The exemption: *"For any developer application that is **not persisting any
+  eBay data**, there is an option to opt out of eBay marketplace account
+  deletion/closure notifications."*
+- The obligation: *"Every eBay Developers Program application that is making
+  **API calls that use/store eBay user data** must be subscribed…"* and *"It is
+  the responsibility of each developer to remove all **user data** associated
+  with the eBay user specified in the notification."*
+- The risk: *"failure to provide correct information may result in penalties or
+  having their account disabled."*
+
+**The page does not define "eBay data."** It is silent on public listing data,
+on short-lived caches, on any duration threshold, and on data containing no
+user identifiers. So the tension is real and textual: the **exemption clause**
+says *any eBay data*, while the **obligation clause** says *user data* — and
+our cache sits precisely in the gap between them.
+
+### One further fact that bears on the question
+
+`api/ebay-sold.js` does **not** obtain this data through the eBay API. It
+fetches `https://www.ebay.com/sch/i.html?…&LH_Sold=1` (`:220`) with a rotated
+browser `User-Agent` (`:229-233`) and parses the returned HTML by splitting on
+`<li class="s-item …">` (`:263`) with regexes for price, title and item URL
+(`:267-281`). So the obligation clause's trigger — *"making API calls"* — is
+**not** met by this path on a literal reading.
+
+**Two consequences, stated separately:**
+
+1. It **strengthens** the case that the cache falls outside the account-deletion
+   obligation, which is scoped to API calls and user data.
+2. It **raises a distinct question I am not qualified to close and that is not
+   part of this rotation**: whether HTML retrieval with rotated User-Agents is
+   consistent with eBay's site terms. That is an **owner/counsel** question. It
+   is **pre-existing production behaviour**, it is **not** a rotation blocker,
+   and **nothing here proposes changing it.** Recorded so the exemption
+   declaration is not made on a partial picture.
+
+### Draft question for eBay Developer Support
+
+Not sent. Owner's to send or discard.
+
+> **Subject:** Marketplace account deletion exemption — does a short-lived
+> non-user listing cache count as "persisting eBay data"?
+>
+> Our application shows sellers recent sold-price comparables for trading
+> cards. To limit request volume against your site, a server-side cache holds
+> the derived result for **15 minutes**, after which it expires automatically.
+>
+> Each cached record contains only: item title, price, currency, item URL, an
+> image URL, and a sold date. It contains **no eBay user identifier** — no
+> username, user ID, buyer, seller, or feedback data — and we do not store any
+> eBay user's personal data anywhere in the application.
+>
+> The exemption is described as being for applications *"not persisting any
+> eBay data,"* while the subscription obligation is described in terms of
+> *"API calls that use/store eBay **user** data."*
+>
+> **Our question:** for exemption purposes, does a 15-minute expiring cache of
+> non-user listing fields count as "persisting eBay data," or does the
+> exemption remain accurate for an application that stores no eBay user data?
+>
+> If it does count, we will disable the exemption and subscribe to marketplace
+> account deletion notifications. We would rather ask than declare something
+> inaccurate.
+
+### Status
+
+**Exemption eligibility: UNRESOLVED, owner-held.** The factual basis is now
+complete on our side — one cache, 15-minute TTL, no user identifiers, no
+browser-storage copy. What remains is eBay's policy interpretation, which we
+cannot supply from the code. **Leave the exemption unchanged**; if eBay answers
+that the cache counts, disabling it and subscribing is the correct response,
+and the challenge path must then be verified.
