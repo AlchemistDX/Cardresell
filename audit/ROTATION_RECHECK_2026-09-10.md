@@ -627,42 +627,64 @@ not the retired fragment rationale, and not the unresolved session question.
 
 ---
 
-## 12. 1c executed — the portal displays no generation state (2026-09-11 00:58)
+## 12. 1c executed — partial result, and my over-reading of it (2026-09-11 00:58, corrected 07:24)
 
-**Owner-run, read-only, controls untouched. Result: not displayed.** The eBay
-Production keyset shows **no** generation count, **no** current-vs-grace
-marking, and **no** expiry date or status.
+### Three columns, kept apart
 
-**What that is and is not.** It is a fact about the **portal's UI**. It does
-**not** establish that only one generation exists, nor that none is in grace.
-eBay's grace model can still be operating invisibly.
+| | |
+|---|---|
+| **Reported by the owner, verbatim** | *"generation and expiry details not displayed."* Read-only inspection, controls untouched, no values shared. |
+| **Still unknown** | How many generations exist; whether any is in grace; the historical rotation count; the **generation number** of any value. |
+| **What the portal CAN reveal** | **Credential values are hidden but revealable.** The **Production Cert ID currently shown** is obtainable by the owner. |
 
-**Three consequences, all narrowing what this runbook can claim.**
+### My error, stated plainly
 
-**1. The historical count stays unobtainable.** As anticipated when 1c was
-written. A prior rotation *attempt* is on record
-(`EBAY_OAUTH_TICKET.md` line 27); **"at least the second"** remains the whole
-claim, and no step here can sharpen it.
+I collapsed those three into one owner-attested finding — **"the portal
+displays no generation state"** — and then built two conclusions on it: that
+1d was **not runnable** and that the configured generation was
+**unidentifiable by any step**. The wording was my own conditional suggestion,
+not something the owner attested, and the third column makes the strongest
+conclusion wrong. **Both are withdrawn.** The pattern is the one already
+recorded against me repeatedly in this thread: treating a narrow observation
+as a broader established fact.
 
-**2. 1d is not runnable, so the configured generation is UNKNOWN.** The
-comparison needs portal-displayed generation values to match the Vercel
-project row against. There are none. The tool and its suite are retained for a
-portal that displays them, but **nothing in this runbook can identify which
-generation Vercel holds**, and no document may claim otherwise. Reading the
-Vercel row alone is pointless — a value with nothing to map it to — so
-readback is **not** performed.
+### 1d is runnable, with a narrowed conclusion
 
-**3. 1f's predecessor is UNKNOWN, recorded rather than inferred.** The
-generation being superseded cannot be named, so **no old-generation revocation
-route can be selected for it**. The rotation proceeds as a replacement whose
-**predecessor is unidentified**, and any older generation eBay still honours
-in grace remains **unaccounted for**. That gap is a limit of the portal
-surface; this runbook cannot close it.
+The comparison never needed generation *numbering* — only two values. The
+owner can reveal the **Production Cert ID currently shown**, so the comparison
+runs with that single entry labelled `portal-current`.
 
-**What still works.** **1e** is unaffected: one exchange on the supplied pair
-returns **accepted**, **rejected**, or **unreachable**, describing the
-**supplied pair** — and `rejected` means only that the supplied pair was
-rejected, since the supplied App ID could itself be wrong. Validity is
-obtainable; **identity is not**. The precautionary basis for the rotation is
-also unaffected, since it never depended on identifying a generation.
+**A match establishes exactly:** *the Vercel project row matches the
+Production Cert ID the portal currently shows.* It does **not** establish that
+value's **historical generation number**, and it does **not exclude another
+credential still honoured in grace**. **`no match`** establishes only that the
+row differs from the shown value. No new tooling — the existing tool accepts a
+single labelled generation.
 
+### Absence of labelling is a UI fact
+
+It neither establishes that one generation exists nor excludes one in grace.
+The historical count stays unobtainable and **"at least the second"** remains
+the whole claim. **1f** accordingly records the predecessor at the available
+precision — *"the Cert ID the portal showed as current on 2026-09-11, generation
+number not exposed"* — or **unknown**, and no revocation route can be selected
+by number.
+
+### The enrollment sentence — withdrawn as a reason not to run 1e
+
+I cited `EBAY_OAUTH_TICKET.md` line 35, *"appears to not be enrolled for the
+`client_credentials` grant type,"* to argue 1e's expected information was low.
+That is an **old hypothesis, not a confirmed account restriction**, and the
+**recorded transport corruption** — a literal `\n` in the stored value — is
+an equally good explanation for the same earlier failures. It justifies
+neither discounting a fresh exchange nor opening a support dependency.
+**Withdrawn.**
+
+**1e stands as the next step.** **accepted** settles whether the supplied pair
+works now. **rejected** is a **fresh diagnostic** and is recorded as *the
+supplied pair was rejected* — without pretending to identify the cause, and
+without a 1d match upgrading it, since the supplied App ID could itself be
+wrong. **unreachable** is neither and cannot license proceeding.
+
+The precautionary basis for the rotation is unaffected throughout: it never
+depended on identifying a generation.
