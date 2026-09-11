@@ -691,44 +691,61 @@ depended on identifying a generation.
 
 ---
 
-## 13. 1d and 1e executed — ACCEPTED on the portal pair, NO MATCH against Vercel (2026-09-11 09:40)
+## 13. 1d and 1e executed — and two corrections to my reading (2026-09-11 09:40, corrected 10:22)
 
-| Step | Result | Establishes | Does **not** establish |
-|---|---|---|---|
-| **1e** | **ACCEPTED** — eBay issued an application token for the **portal-shown pair** | That pair is **currently valid**. The **"appears not enrolled for `client_credentials`" hypothesis is disproved** — the grant works | That the **deployed application** uses that pair. At `9aaf326` production reads **neither** `EBAY_APP_ID` nor `EBAY_CERT_ID`. Nor anything about the **Vercel row**, which was never exchanged |
-| **1d** | **NO MATCH** — complete-value equality | The Vercel project row **differs** from the portal-shown Cert ID. Not a near-miss or formatting artefact | Which is older; which generation either is; or that the Vercel value is **invalid**. 1e's pass does **not** transfer to it |
+### The corrected scripts, adopted
 
-### The finding that matters, and it is not tidy
+The owner's results came from **corrected** scripts, not my repository copies.
+Adopted into `tools/` and `tests/`, with a shared
+`tools/hidden-prompt.mjs`: readline output is routed to a **muted `Writable`**
+rather than repainted, `historySize: 0`, `SIGINT` and `close` both settle the
+promise, and **both** stdin *and* stdout must be TTYs. `verify-challenge.mjs`
+**no longer accepts piped input at all** — my copy did, which was the weaker
+rule. Suites re-run after adoption: **15/0** and **58/0**.
 
-**There are three values in play, not two:** the portal-current Cert ID
-(validated), the Vercel Production row (a **different** value, **never
-exchanged, status unknown**), and the replacement about to be generated.
+**The change that matters for interpretation:** `fingerprint` **no longer
+calls `.trim()`**. Comparison is exact input, and the corrected suite asserts
+*"trailing newline is a different complete value."*
 
-I will not smooth this into "so the Vercel value is stale." That is the
-*likely* reading, but **untested**: confirming it would need a second live
-exchange on the Vercel row, which was not performed and which I am not
-proposing — it would spend a second credential handling step to learn
-something the rotation makes moot. Recorded at **1f** as **an unaccounted
-credential value, status unknown**: not assumed dead, not assumed live.
+### Correction 1 — NO MATCH does not rule out a formatting difference
 
-### What this does to the rotation
+I wrote that NO MATCH was "not a near-miss or formatting artefact." **Wrong,
+and withdrawn.** Under exact comparison, **leading or trailing whitespace, a
+truncated copy, or any paste slip produces NO MATCH.** What it establishes is
+narrower: **the two entered strings differed.** Whether the two *stored
+credentials* differ is **not established**.
 
-**Nothing weakens; one thing strengthens.** A configured value that matches no
-portal-shown credential is *itself* a reason to replace it, independent of the
-withdrawn exposure premise — the precautionary basis now has a **concrete
-observed defect** behind it rather than only an unresolved possibility.
+### Correction 2 — there is no third value
 
-**And the Cert ID half remains the low-risk half.** Production consumes no
-Cert ID at `9aaf326`, so replacing it cannot break the live site. **CH-1 — the
-published verification token — is still the blocking defect**, and
-`EBAY_VERIFICATION_TOKEN` **is** live at
-`9aaf326:api/ebay-notifications.js:8`. Steps 3–7 carry the real risk.
+I described "three values in play," counting a replacement Cert ID. **No
+replacement Cert ID exists** — none was generated, and the Cert ID rotation is
+**paused**. Withdrawn.
 
-### One correction to my own advice, on the record
+What remains: the **portal pair authenticates**, so a **known-working
+production credential exists**. The Vercel-row value is **untested**. Nothing
+established requires resetting a working credential — the exposure premise was
+already withdrawn, and NO MATCH does not replace it. I had written that NO
+MATCH "strengthens" the rotation; **that is withdrawn too**, since it rested
+on reading NO MATCH as a genuine value difference.
 
-I argued 1e's expected information was low, citing the enrollment hypothesis.
-**1e passed.** The hypothesis was wrong, my recommendation against running the
-step was wrong, and the reviewer's push to run it anyway was right. Recorded
-because the same instinct — treating an unverified old note as a reason not to
-test — is what produced several earlier corrections in this thread.
+### What 1e did establish
 
+**ACCEPTED** on the portal pair: that pair is currently valid, and the
+**"appears not enrolled for `client_credentials`" hypothesis is disproved**.
+It does **not** establish that the deployed application uses that pair — at
+`9aaf326` production reads **neither** `EBAY_APP_ID` nor `EBAY_CERT_ID` — and
+says nothing about the Vercel row, which was never exchanged.
+
+**On the record against me:** I argued 1e's expected information was low,
+citing the enrollment note. 1e passed; the recommendation was wrong.
+
+### The window ahead is the verification token alone
+
+**`EBAY_CERT_ID` is removed from step 4.** Step 2 is deferred. The window is:
+fresh verification token → Production-only variable → rebuild of `9aaf326e7` →
+commit check → local challenge **PASS** → save in eBay's portal and let its
+challenge succeed. Changing exactly one variable also keeps 6b's result
+unambiguous.
+
+**CH-1 closes only when the replacement token is serving production and eBay's
+own verification succeeds** — not at rotation, not at READY.

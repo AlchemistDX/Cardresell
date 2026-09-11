@@ -28,6 +28,7 @@
 // rather than establishing it is absent.
 
 import { createInterface } from 'node:readline';
+import { promptHidden as hidden } from './hidden-prompt.mjs';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 /** Complete-value equality only. The digest covers the WHOLE value; there is
@@ -35,7 +36,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
  *  this file, and no such result can be reported. Fixed width means the
  *  comparison never depends on length, and nothing derived from a value is
  *  ever displayed. */
-export const fingerprint = (v) => createHash('sha256').update(String(v).trim(), 'utf8').digest();
+export const fingerprint = (v) => createHash('sha256').update(String(v), 'utf8').digest();
 
 export function matchGeneration(stored, generations) {
   const s = fingerprint(stored);
@@ -48,23 +49,6 @@ export function matchGeneration(stored, generations) {
 /** True when the entered text still carries the transport defect. Reported as
  *  a boolean; the value is never shown. */
 export const hasEdgeWhitespace = (v) => v !== String(v).trim() || /\\n$/.test(v);
-
-async function hidden(prompt) {
-  process.stdout.write(prompt);
-  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  const onData = (ch) => {
-    const s = ch.toString();
-    if (s === '\r' || s === '\n' || s === '\u0004') return;
-    process.stdout.write('\u001b[2K\u001b[200D' + prompt);
-  };
-  process.stdin.on('data', onData);
-  try {
-    return await new Promise((res) => rl.question('', (a) => { rl.close(); res(a); }));
-  } finally {
-    process.stdin.removeListener('data', onData);
-    process.stdout.write('\n');
-  }
-}
 
 async function main() {
   if (!process.stdin.isTTY) {
@@ -86,7 +70,7 @@ async function main() {
 
   const n = Number(await new Promise((res) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    rl.question('How many generations does the portal currently list? ', (a) => { rl.close(); res(a); });
+    rl.question('How many portal Cert ID values will you compare (1 for the shown Production value)? ', (a) => { rl.close(); res(a); });
   }));
   if (!Number.isInteger(n) || n < 1 || n > 10) { console.error('Expected 1-10.'); process.exit(2); }
 
@@ -105,7 +89,7 @@ async function main() {
   console.log('\n--- result ---');
   if (r.matched) {
     console.log(`MATCH: the Vercel-stored Cert ID is the generation labelled "${r.label}".`);
-    console.log('Established: the configured value is that generation.');
+    console.log('Established: the supplied Vercel row value matches that supplied portal value.');
   } else {
     console.log('NO MATCH against any generation the portal currently displays.');
     console.log('NOT established: that it is absent. Expired generations no longer');

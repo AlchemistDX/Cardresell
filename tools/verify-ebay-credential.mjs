@@ -25,7 +25,7 @@
 // QUOTA: this performs ONE real token exchange against the production
 // endpoint. Application-token requests are rate-limited daily. Run it once.
 
-import { createInterface } from 'node:readline';
+import { promptHidden } from './hidden-prompt.mjs';
 
 export const TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token';
 export const SCOPE     = 'https://api.ebay.com/oauth/api_scope';
@@ -114,30 +114,10 @@ export async function checkCredential({ appId, certId, fetchImpl = fetch, now = 
   return { ok: true, status: 'pass', out, err };
 }
 
-function promptHidden(question) {
-  return new Promise((resolve) => {
-    if (!process.stdin.isTTY) {
-      console.error('FAIL — refusing to read credentials from a pipe.');
-      console.error('Piping routes the secret through a shell. Run this on a terminal.');
-      process.exit(1);
-    }
-    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    const onData = () => { rl.output.write('\x1b[2K\r' + question); };
-    process.stdout.write(question);
-    rl.input.on('data', onData);
-    rl.question('', (answer) => {
-      rl.input.off('data', onData);
-      rl.close();
-      process.stdout.write('\n');
-      resolve(answer);
-    });
-  });
-}
-
 // ── CLI entry. Skipped on import, so the tests exercise the logic above. ──
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const rawApp  = await promptHidden('Replacement App ID  (hidden): ');
-  const rawCert = await promptHidden('Replacement Cert ID (hidden): ');
+  const rawApp  = await promptHidden('Production App ID  (hidden): ');
+  const rawCert = await promptHidden('Production Cert ID (hidden): ');
 
   for (const [name, raw] of [['App ID', rawApp], ['Cert ID', rawCert]]) {
     if (!raw) { console.error(`FAIL — no ${name} supplied; nothing verified.`); process.exit(1); }

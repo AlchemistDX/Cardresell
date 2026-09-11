@@ -6,7 +6,7 @@
 // saved in eBay's portal. READY means the build finished; it does not mean the
 // replacement value is the one being hashed.
 //
-// The token is read from a HIDDEN prompt (or stdin when piped). It is never
+// The token is read from a HIDDEN prompt (interactive terminal required). It is never
 // echoed, never printed, never written to a file, and never placed in argv, so
 // it cannot reach shell history, `ps` output, or logs.
 //
@@ -16,30 +16,9 @@
 // Exit 1 = it does not, with the corruption shape named when identifiable.
 
 import { createHash } from 'node:crypto';
-import { createInterface } from 'node:readline';
+import { promptHidden } from './hidden-prompt.mjs';
 
 const ENDPOINT = 'https://www.cardresell.org/api/ebay-notifications';
-
-function promptHidden(question) {
-  return new Promise((resolve) => {
-    if (!process.stdin.isTTY) {                    // piped input
-      let buf = '';
-      process.stdin.on('data', (d) => { buf += d; });
-      process.stdin.on('end', () => resolve(buf.replace(/\r?\n$/, '')));
-      return;
-    }
-    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    const onData = () => { rl.output.write('\x1b[2K\r' + question); };
-    process.stdout.write(question);
-    rl.input.on('data', onData);                    // repaint, so nothing shows
-    rl.question('', (answer) => {
-      rl.input.off('data', onData);
-      rl.close();
-      process.stdout.write('\n');
-      resolve(answer);
-    });
-  });
-}
 
 const raw = await promptHidden('Verification token (hidden): ');
 if (!raw) { console.error('no token supplied — nothing verified'); process.exit(1); }

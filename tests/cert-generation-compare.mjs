@@ -20,8 +20,8 @@ ck('no match returns a null label', matchGeneration('PRD-9999zzzz8888-7777-yyyy-
 ck('near-miss by one char does not match', matchGeneration(G[0].value.slice(0, -1) + '4', G).matched === false);
 ck('prefix of a generation does not match', matchGeneration(G[0].value.slice(0, 20), G).matched === false);
 ck('empty list yields no match', matchGeneration(G[0].value, []).matched === false);
-ck('trailing newline is tolerated, not treated as a different value',
-  matchGeneration(G[0].value + '\n', G).label === 'current');
+ck('trailing newline is a different complete value',
+  matchGeneration(G[0].value + '\n', G).matched === false);
 
 // The result object is the only thing printed. It must carry no value.
 const r = JSON.stringify(matchGeneration(G[0].value, G));
