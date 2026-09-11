@@ -3,7 +3,7 @@
 identified as the TPL rotation rebuild, §3 recorded as a superseded plan, the
 non-KV count corrected from three to one. Extended 22:05 with §7 eBay token
 treatment and §8 verify-challenge operator requirements; §6 re-sorted so
-separately-tracked work is not listed as a rotation gate. **Re-check closed**; extended 22:20 with three wording corrections, the GET/POST distinction, and §9 token inventory; §9's cache consequence corrected 22:40 after review.)*
+separately-tracked work is not listed as a rotation gate. **Re-check closed**; extended 22:20 with three wording corrections, the GET/POST distinction, and §9 token inventory; §9's cache consequence corrected 22:40; output handling verified and EXP-1 registered 22:55.)*
 
 Preparation only. **No production action was taken and none is proposed here
 beyond what the existing runbooks already say.** Will performs the production
@@ -405,20 +405,27 @@ is a ceiling, not an observation.
   rotated browser headers, cached under `ebay_cache:`
   (`9aaf326:api/ebay-sold.js:20-33, 235`).
 
-**There is therefore no `ebay:app_token` key in production Redis to delete,
-and no production cache race.** The entire concern is **branch work** — real
+**The supported conclusion — narrowed 2026-09-10 22:55.** An earlier draft
+said there is *no* `ebay:app_token` key in production Redis. That overreaches:
+no writer in *current* code does not prove no key *exists*, since an earlier
+deployment or ad-hoc tooling could have written one. What is supported is
+enough: **current production neither reads nor writes that cache, so deleting
+it is unnecessary for this rebuild** — and no Redis inspection is needed to
+reach that. The entire concern is **branch work** — real
 for when `_ebayAuth.js` ships, not an operator instruction for this rotation.
 I generalised from the working tree to production, which is the same error as
 the bundle-agreement claim, made again.
 
-**Consequence for the rotation itself:** rotating the Cert ID changes nothing
-the deployed application uses. The rotation is justified by the credential's
-**exposure**, not by production dependence on it. Note also
-`EBAY_OAUTH_TICKET.md`, tracked at `origin/main` and present in the working
-tree, which carries credential literals (7 matching lines; values deliberately
-not read). It is an **exposure surface in its own right** and is **not** on
-any current remediation list — logged here, unresolved, not silently folded
-into this rotation.
+**Consequence for the rotation itself, stated by credential:** **Cert ID
+rotation does not change a credential current production consumes** — nothing
+at `9aaf326` reads `EBAY_APP_ID` or `EBAY_CERT_ID`. **Verification-token
+rotation does**: `EBAY_VERIFICATION_TOKEN` is read at
+`9aaf326:api/ebay-notifications.js:8` and is live. The two halves of this
+runbook carry different risk, and only the second can break production. The rotation is justified by the credential's
+**exposure**, not by production dependence on it. `EBAY_OAUTH_TICKET.md` is now registered as **EXP-1** in
+`audit/RELEASE_VALIDATION_QUEUE.md`, with its credential types identified and
+rotation coverage assessed — repository cleanup and credential invalidation
+kept distinct, since neither substitutes for the other.
 
 ### Verification method — `tools/verify-ebay-credential.mjs`
 
@@ -433,6 +440,22 @@ Added today. One hidden-prompt exchange against
 | Failure | Reports eBay's own `error` / `error_description` — `invalid_client` means the pair was rejected. |
 | Unreachable | Reported as **INCOMPLETE**, explicitly neither a failed credential nor a pass. |
 | Quota | **One** real exchange. Application-token requests are daily-limited. Run it once. |
+| Output safety | Every line on both streams passes through `redact()` before printing — the supplied values, the Basic header, and token-shaped strings are removed. |
+
+**Output handling verified against mocked responses** —
+`tests/ebay-credential-check.mjs`, **58 passed, 0 failed**, no network, no real
+credential. Covers success, `invalid_client` rejection, malformed body, `200`
+with no token, and network failure, asserting on **every** path that neither
+supplied credential, the Basic header, nor the returned token appears on either
+stream.
+
+**The assumption that check removed.** I had called eBay's `error_description`
+non-secret. It is upstream text that may quote the client identifier it
+rejected, and the suite includes exactly that case: the description is
+**redacted rather than dropped**, so the diagnostic survives and the value does
+not. Redaction is not trusted on a passing suite — three mutations were run:
+disabling `redact()` fails 9 assertions, accepting a tokenless `200` as success
+fails 1, collapsing `incomplete` into `fail` fails 2. Restored: 58/0.
 
 **What a pass establishes:** eBay's token endpoint accepts the replacement
 pair and issues an application token.

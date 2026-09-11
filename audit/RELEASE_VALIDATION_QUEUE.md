@@ -902,6 +902,51 @@ rather than by timing. Production clearing stays unchanged until then.
 
 ---
 
+
+## EXP-1 — `EBAY_OAUTH_TICKET.md` carries credential literals (OPEN, not blocking Phase 1)
+
+**Registered 2026-09-10 22:55.** Found while tracing the production commit; it
+is on no existing remediation list, so it gets its own row rather than being
+folded silently into the eBay rotation.
+
+| | |
+|---|---|
+| File | `EBAY_OAUTH_TICKET.md` — repository root |
+| Tracked at | **`origin/main`**, and present in the working tree |
+| Introduced | `94dc777`, 2026-09-05 |
+| Scope | The **only** tracked file matching a production-keyset literal shape across `origin/main` |
+| Values | **Not read.** Type labels and match counts only. |
+
+**Credential types named in the file** (labels counted, values never read):
+
+| Type | Mentions | Covered by the planned rotation? |
+|---|---|---|
+| **Cert ID** | 3 | **Yes** — this is the credential being rotated. |
+| **App ID** | 2 | **No.** An identifier, not a secret, and not rotated. Not independently sensitive, but it does identify the keyset. |
+| **Verification token** | 1 | **Yes** — rotated in the same runbook (step 3). |
+| **User token** | 2 | **No.** Nothing in the rotation addresses a user token, and the re-check leaves out-of-band user tokens unresolved. |
+| Environment | 3 × `PRD`, 1 sandbox mention | Production keyset, so in scope for the rotation's concern. |
+
+**The distinction that matters:** presence of a literal establishes only that a
+value **was written down**, not that it is **still active**. Whether each
+remains valid is an account fact, not a repository fact.
+
+- **Repository cleanup** — deleting the file, and the separate question of
+  history rewriting — **invalidates nothing**. A literal already committed to
+  `origin/main` must be assumed disclosed for as long as the underlying value
+  is live.
+- **Credential invalidation** — rotating or revoking at eBay — is what closes
+  exposure, and is independent of whether the file is tidied.
+
+Doing either alone leaves the other open. **Neither is done.** The rotation
+covers two of the four types; the App ID needs none; the **user-token mentions
+are uncovered and unexplained** — possibly a note rather than a value, which
+cannot be settled without reading the file, and reading it is not warranted for
+this decision.
+
+**Not blocking Phase 1.** Tracked here so it is not lost.
+
+
 ## Not in this queue
 
 Everything else registered in `tests/run-all.sh` runs offline and was run at the
