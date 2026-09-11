@@ -505,15 +505,24 @@ rotation had been resting on it, it would now be unsupported. It was not.
 any repository literal, and EXP-1's collapse does not touch it. "0 published
 blobs" is consistent: the repository was never the exposure surface.
 
-**One ambiguity I cannot resolve, stated rather than smoothed over.**
-`TODO_PHASE1.md:234` reads "sha256[:12] `e3f0a0bc343d` was printed in
-plaintext." Two readings: the **credential** identified by that fingerprint
-was printed, or the **fingerprint itself** was. Only the first is an exposure
-— a truncated hash of a high-entropy secret discloses nothing. The first
-reading is the more natural one given the fingerprint is used purely as an
-identifier elsewhere, and I have adopted it. But I cannot verify it: the
-earlier session is not in this repository. **Will can settle it; until then
-the rotation proceeds on the exposure reading**, which is the safe direction.
+**Corrected 2026-09-10 23:55 — the exposure is not established.** I read
+`TODO_PHASE1.md:234` as meaning the credential was printed, and adopted that
+reading. Will checked the accessible prior context: it contains **no plaintext
+Cert ID** and repeatedly instructs keeping credentials out of chat, and
+conversation retrieval did not recover the underlying session. And the
+sentence, read as written — "sha256[:12] `e3f0a0bc343d` was printed in
+plaintext" — **grammatically says the fingerprint was printed**, which
+discloses nothing. My reading was the less literal one and is withdrawn.
+
+| Status | |
+|---|---|
+| **Confirmed exposure** | **Not established.** |
+| **Possible earlier-session exposure** | **Unresolved.** Absence from accessible context is not proof it never happened. |
+| **Rotation** | **Retained as a precaution** — reasonable given an unresolved possibility and a credential of low operational value. |
+
+**How it must be described.** Not as remediation of a proven plaintext
+disclosure, unless the original transcript is recovered. Every document that
+calls this a response to a known exposure overstates the record.
 
 **CH-1 is unaffected and independent.** The published verification token is an
 established, repository-visible defect requiring rotation on its own evidence.
@@ -529,7 +538,7 @@ was written. **The gate stands**: it is the owner's decision, the session
 disclosure is untouched by this, and nothing here is a reason to push. Logged
 so the rationale is not cited later as stronger than it is.
 
-### The generation gap — new pre-steps 1c and 1d
+### The generation gap — pre-steps 1c–1f (corrected 23:55)
 
 "At least the second rotation" is an inference from one documentary sentence.
 It fixes neither how many generations exist now, nor which one is live.
@@ -540,14 +549,51 @@ It fixes neither how many generations exist now, nor which one is live.
   the stored value. It says **neither** that the fresh Cert ID was invalid,
   **nor** that it is the credential currently configured.
 - eBay's grace model means **two generations can be simultaneously valid**, so
-  "the previous Cert ID" is not a well-defined term until the portal is read.
+  "the previous Cert ID" is not well defined until the portal is read.
 
-Without that, a nominal "second rotation" could reason about the wrong
-predecessor, or retire one generation while an older one stays live and
-unaccounted for. **Steps 1c and 1d** added to
-`audit/ROTATION_EXECUTION_CHECKLIST.md`, both before any new Cert ID is
-generated: 1c records the portal's generation list, current/grace/expiry
-state, the generation to be superseded, and the applicable revocation route,
-**all without values**; 1d establishes **which generation Vercel holds** via
-the planned token exchange, where `pass` and `fail` are both informative and
-**unreachable is neither**.
+**Two corrections to my first draft of these steps, both narrowing what they
+can claim.**
+
+**1c cannot count history.** It records only what the portal **displays**. If
+expired generations are no longer listed, the total historical rotation count
+is **not obtainable** this way, and "at least the second" remains the whole
+claim.
+
+**1d as I first wrote it overclaimed.** I had a single token exchange
+identifying which generation Vercel holds. It does not. An exchange proves
+whether the **operator-supplied pair** is accepted. A **failure identifies
+nothing** — equally consistent with an expired credential, a mismatched pair,
+a transcription error, or another rejection cause. Even a pass identifies the
+Vercel generation only if the supplied Cert ID is first established to be
+exactly the stored value **and** mapped to a portal generation.
+
+**The corrected sequence** — identification and validity are now separate
+steps, in that order:
+
+| Step | What it does | What it establishes |
+|---|---|---|
+| **1c** | Record displayed generations, current/grace/expiry, **no values** | The **visible** generation set — not the historical count |
+| **1d** | `tools/compare-cert-generation.mjs` — local, no network, hidden prompts, prints matched label or `no match` | A **match** identifies the configured generation. **`no match`** rules out only the **displayed** ones; the configured generation stays **unknown** |
+| **1e** | One token exchange on that exact pair | **accepted** / **rejected** / **unreachable** — describes the **pair**, never a generation |
+| **1f** | Record the superseded generation and its revocation route | **Unknown** where 1d did not match or could not run |
+
+`EBAY_CERT_ID` is stored **`encrypted`, not `sensitive`**
+(`ROTATION_GATE_ANSWERED.md:71`), so owner readback for 1d is available. Where
+it is not, the configured generation stays unknown — the rotation may replace
+it regardless, and **the runbook must not claim 1d identified it**.
+
+`tools/compare-cert-generation.mjs` added: SHA-256 fixed-width comparison, no
+network, nothing echoed or written, result object carries no value.
+`tests/cert-generation-compare.mjs` — **15 passed, 0 failed**, with mutations:
+comparing on a 12-character prefix fails 2, leaking a label on `no match`
+fails 1.
+
+### The push gate — rationale retired, gate preserved
+
+`audit/DECISION_94dc777.md` gated the first push on "pushing before rotation
+publishes fragments of a live credential." Those fragments are the
+`EBAY_OAUTH_TICKET.md` literals introduced at `94dc777`, now established
+**synthetic**. **That rationale is retired** and must not be cited again.
+**The owner's gate stands on its own authority**, unchanged. **CH-1 remains
+independently established** and needs no premise from EXP-1 or from the
+unresolved session question.
