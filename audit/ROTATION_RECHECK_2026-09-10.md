@@ -481,3 +481,73 @@ from the portal any more than it can from the code. Both halves stay open.
 Vercel CLI, read-only: `vercel list --prod`, `vercel inspect`, `vercel env ls`.
 `www.cardresell.org` fetched over the network for the served bundle. Git read
 locally. **No credential value was printed, inspected, or written anywhere.**
+
+---
+
+## 11. Rotation basis re-checked after EXP-1 — and the generation gap (added 2026-09-10 23:40)
+
+### EXP-1 is not the basis, and never was
+
+EXP-1 resolved to synthetic fixtures, a non-secret App ID and self-masked
+fragments, so it supplies **no evidence of secret disclosure**. If the Cert ID
+rotation had been resting on it, it would now be unsupported. It was not.
+
+**The stated basis, which predates EXP-1 and survives it:**
+
+| | |
+|---|---|
+| Claim | The eBay **Cert ID** was **printed in plaintext in an earlier session** |
+| Recorded at | `audit/TODO_PHASE1.md:234` |
+| Credential identified by | `sha256[:12] = e3f0a0bc343d` — a fingerprint used throughout the corpus as a non-disclosing reference (`audit/d3/D3_STEP5_SECOND_REVIEW_RESPONSE.md:475`, which also records **0 published blobs**) |
+| Surface | A **conversation transcript**, not this repository |
+
+**Retained.** The exposure is a session disclosure, entirely independent of
+any repository literal, and EXP-1's collapse does not touch it. "0 published
+blobs" is consistent: the repository was never the exposure surface.
+
+**One ambiguity I cannot resolve, stated rather than smoothed over.**
+`TODO_PHASE1.md:234` reads "sha256[:12] `e3f0a0bc343d` was printed in
+plaintext." Two readings: the **credential** identified by that fingerprint
+was printed, or the **fingerprint itself** was. Only the first is an exposure
+— a truncated hash of a high-entropy secret discloses nothing. The first
+reading is the more natural one given the fingerprint is used purely as an
+identifier elsewhere, and I have adopted it. But I cannot verify it: the
+earlier session is not in this repository. **Will can settle it; until then
+the rotation proceeds on the exposure reading**, which is the safe direction.
+
+**CH-1 is unaffected and independent.** The published verification token is an
+established, repository-visible defect requiring rotation on its own evidence.
+It needs no premise from EXP-1 or from the session disclosure.
+
+### A consequence for the push gate — flagged, not acted on
+
+`audit/DECISION_94dc777.md` gates the first push on rotation because "pushing
+before rotation publishes fragments of a live credential." Those fragments are
+the `EBAY_OAUTH_TICKET.md` literals introduced at `94dc777` — now established
+as **synthetic**. The gate's stated rationale is therefore weaker than when it
+was written. **The gate stands**: it is the owner's decision, the session
+disclosure is untouched by this, and nothing here is a reason to push. Logged
+so the rationale is not cited later as stronger than it is.
+
+### The generation gap — new pre-steps 1c and 1d
+
+"At least the second rotation" is an inference from one documentary sentence.
+It fixes neither how many generations exist now, nor which one is live.
+
+- A prior rotation **attempt** is on record. Whether it completed, and whether
+  its generation is the one production uses, is **not established**.
+- The old `401` is evidence of **transport corruption** — a literal `\n` in
+  the stored value. It says **neither** that the fresh Cert ID was invalid,
+  **nor** that it is the credential currently configured.
+- eBay's grace model means **two generations can be simultaneously valid**, so
+  "the previous Cert ID" is not a well-defined term until the portal is read.
+
+Without that, a nominal "second rotation" could reason about the wrong
+predecessor, or retire one generation while an older one stays live and
+unaccounted for. **Steps 1c and 1d** added to
+`audit/ROTATION_EXECUTION_CHECKLIST.md`, both before any new Cert ID is
+generated: 1c records the portal's generation list, current/grace/expiry
+state, the generation to be superseded, and the applicable revocation route,
+**all without values**; 1d establishes **which generation Vercel holds** via
+the planned token exchange, where `pass` and `fail` are both informative and
+**unreachable is neither**.
