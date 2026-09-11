@@ -3,7 +3,7 @@
 identified as the TPL rotation rebuild, §3 recorded as a superseded plan, the
 non-KV count corrected from three to one. Extended 22:05 with §7 eBay token
 treatment and §8 verify-challenge operator requirements; §6 re-sorted so
-separately-tracked work is not listed as a rotation gate. **Re-check closed.**)*
+separately-tracked work is not listed as a rotation gate. **Re-check closed**; extended 22:20 with three wording corrections, the GET/POST distinction, and §9 token inventory.)*
 
 Preparation only. **No production action was taken and none is proposed here
 beyond what the existing runbooks already say.** Will performs the production
@@ -197,11 +197,21 @@ tokens created with the old one**, and that older tokens should be revoked
 *before the old Cert ID expires*
 ([Resetting your cert ID](https://developer.ebay.com/api-docs/static/gs_resetting-your-cert-id-new.html)).
 
-**Revocation capability dies with the old credential.** If the old Cert ID is
-allowed to expire first, tokens issued under it cannot be revoked through the
-new one afterwards. Any revocation of old tokens must happen **while the old
-Cert ID is still valid** — which is the opposite of the intuitive "retire the
+**The documented old-credential revocation route closes with the old Cert ID.**
+If it is allowed to expire first, tokens issued under it can no longer be
+revoked *through that route*. Any revocation by that means must happen **while
+the old Cert ID is still valid** — the opposite of the intuitive "retire the
 old thing, then clean up".
+
+*Narrowed 2026-09-10 22:20 — an earlier draft said "revocation capability
+dies", which is too absolute.* One documented route closes. eBay separately
+directs developers to **Developer Technical Support to revoke active tokens**
+when a Cert ID is breached
+([Credentials and token management](https://developer.ebay.com/api-docs/static/gs_credentials-and-token-management.html)),
+so a support-assisted path exists outside the old credential. Whether it is
+available for a **precautionary** rotation rather than a breach is
+**Unverified** — the page frames it around breach. Do not plan on it as the
+primary route; do not write it off either.
 
 ### The grace period is a choice made at generation time
 
@@ -212,8 +222,10 @@ Generating a new Cert ID sets a grace period for the old one, **0 days
 This is a decision Will makes **at step 1**, before anything else, and the
 runbook does not currently mention it:
 
-- **0 days** closes the exposure immediately, but also destroys the revocation
-  window in the same moment, and gives the redeploy no margin.
+- **0 days** ends the **old Cert ID's validity** immediately — which is not the
+  same as ending the exposure. Tokens already issued under it can survive it
+  (that is the finding above). It also closes the old-credential revocation
+  window in the same moment, and leaves the redeploy no margin.
 - **A short non-zero period** keeps the old credential alive — the thing being
   rotated away from — while leaving room to redeploy and revoke.
 
@@ -253,15 +265,22 @@ Read from the script and cross-checked against eBay's specification.
 - **A TTY is required for the hidden prompt.** It accepts piped stdin, but
   piping means the token passes through a shell — the exact exposure the hidden
   prompt exists to avoid. Type it.
-- **It warns on leading or trailing whitespace** before trimming. If that
-  warning fires, the value pasted into Vercel is wrong; fix it there, redeploy,
-  re-run. This is the `EBAY_VERIFICATION_TOKEN` trailing-newline defect.
+- **It warns on leading or trailing whitespace** in what **you typed at the
+  prompt**, before trimming. *Corrected 2026-09-10 22:20 — an earlier draft
+  read this as proof the Vercel value is wrong. It is not.* The warning is
+  about the operator's input and nothing else. **Fix your input and re-run
+  first.** Change Vercel and redeploy only if the endpoint comparison itself
+  establishes a stored-value mismatch — which is the next bullet's job, not
+  this one's.
 - **On failure it names the corruption shape** — trailing newline, CRLF,
   literal `\n`, wrapping quotes, trailing space. If none match, its own advice
   is that the redeploy has not picked up the variable or the domain is served
   by a different deployment.
-- **`FAIL — could not reach the endpoint` is not a failed verification.**
-  Unreachable is not wrong; retry.
+- **`FAIL — could not reach the endpoint` is not a failed verification — but
+  it is not a pass either.** Unreachable does not establish a wrong token, and
+  equally **cannot satisfy the verification step or license advancing past
+  it**. Verification is incomplete until the comparison actually runs. Retry;
+  do not proceed on "probably fine".
 
 **Verified against eBay's spec today.** eBay requires SHA-256 over
 `challengeCode + verificationToken + endpoint`, in that order, returned as hex
@@ -280,6 +299,71 @@ what our endpoint does.
 **And the endpoint string must match byte-for-byte.** The URL registered in
 eBay's portal must equal the hard-coded constant exactly, since the URL is an
 input to the hash. A trailing slash difference fails with a correct token.
+
+### What a challenge pass does and does not demonstrate
+
+eBay's endpoint contract has **two** halves: a **GET** carrying
+`challenge_code`, answered with the hash, and a **POST** carrying the actual
+account-deletion notification, answered `200`
+([Marketplace User Account Deletion](https://developer.ebay.com/develop/guides/sell/marketplace-user-account-deletion)).
+
+`verify-challenge.mjs` exercises **only the GET half**. A pass establishes that
+the deployed endpoint hashes the supplied token — endpoint ownership — and
+**nothing about notification processing**. The POST path is deliberately not
+gated on the token (`api/ebay-notifications.js:71-76`), so it is not even
+exercised by the same evidence. Do not read a green challenge as "notification
+handling verified"; that is a separate, unperformed check.
+
+## 9. eBay token inventory — grant types, issuance and storage paths
+
+Read from code today. No credential value was read, printed, or stored.
+
+| | |
+|---|---|
+| Grant type in use | **`client_credentials` only** — `api/_ebayAuth.js:149`, against `https://api.ebay.com/identity/v1/oauth2/token` (`:23`) |
+| Scope | `https://api.ebay.com/oauth/api_scope` (`:24`) — the default application scope |
+| Token kind | **Application access token.** `fetchEbayAppToken` reads `json.access_token` (`:189`) and `expires_in` (`:195`); no `refresh_token` is read anywhere. |
+| Authorization-code / user consent | **No path exists in the codebase.** No RuName, no `redirect_uri`, no `auth.ebay.com/oauth2/authorize`, no consent handler. `api/_ebayTaxonomy.js:8` states it in comment: written "before any OAuth consent flow exists". |
+| Callers | `api/_ebayTaxonomy.js`, `api/ebay-sold.js` |
+
+**Storage paths — two, both derived, neither a durable grant:**
+
+1. **Per-instance memory.** `let _memo` (`:34`), lost when the lambda instance
+   recycles.
+2. **Redis**, key **`ebay:app_token`** (`:25`), written with `SETEX`
+   (`kvSetEx :127`) at `TTL = expires_in − 120s` (`:222`), so **≈7080s / just
+   under two hours** on eBay's default `expires_in` of 7200.
+
+### What this establishes, and what it does not
+
+**Establishes:** the application uses one grant type. `client_credentials`
+issues an application token and **no refresh token**, so there is no refresh
+token for this application to survive a rotation — and there is **no code path
+by which a user token could be issued**. That is a stronger basis than the
+file-download argument I offered earlier, which was correctly rejected: a
+download workflow says nothing about what other paths exist.
+
+**Does not establish:** that no user token *exists*. Absence of an issuance
+path in this repository does not cover tokens issued **out of band** — the
+developer portal's own test tooling, sandbox experiments, any earlier manual
+OAuth consent, or another application on the same keyset. Those are account
+facts, not code facts, and only the eBay portal can answer them. **Unresolved.**
+
+### A concrete rotation consequence
+
+The cached application token in Redis under `ebay:app_token` was **minted with
+the old Cert ID and is unaffected by rotation**. It stays valid, and
+`getEbayAppToken` will keep serving it from cache (`:211-217`) for up to
+**≈2 hours** after the new credential is live. Two options, Will's choice:
+
+- **Delete the `ebay:app_token` key** in production Redis after the redeploy,
+  forcing an immediate re-mint under the new Cert ID. Cheap and immediate.
+- **Wait out the TTL.** Nothing breaks; the old-credential token simply keeps
+  being used until it expires.
+
+This matters for *verifying* the rotation as much as for exposure: a live API
+call succeeding right after the redeploy may be succeeding on the **old**
+token, and would prove nothing about the new credential.
 
 ## Method
 
