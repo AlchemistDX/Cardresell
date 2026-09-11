@@ -544,8 +544,8 @@ this is the sequence to run when you say so.
 | 1 | Generate the replacement key. **Leave the old key active.** | Five slots permitted, one in use — no outage |
 | 2 | Record the **new key's identifier (its Key #) and its initial `Last used` state** — empty, or its creation time. **Never the secret.** Note the account total as background. | This is the baseline the decisive check compares against |
 | 3 | In Vercel, **delete** `CARDSELL_TPL_KEY` and **re-add encrypted** with the new value | Cannot be converted in place |
-| 4 | **Redeploy `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`** (commit `9aaf326`) from that deployment's own entry | **Not** a branch deploy, **not** a push, **not** `--prod` from this tree |
-| 5 | **Capture the rebuild's own returned deployment ID and URL**, and confirm its commit is **`9aaf326`** | The redeploy produces a **new deployment**. `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` is the **source** to rebuild from, **not** the thing to test. Wrong commit → **stop** |
+| 4 | **Redeploy ~~`dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`~~ `dpl_BJuH3okrHAsHpM7vUhCZv85or225`** (commit `9aaf326`) from that deployment's own entry. **Corrected 2026-09-10 21:50:** `dpl_AuwggY9Y…` was itself rebuilt during the TPL rotation; its rebuild `dpl_BJuH3ok…` is what is live now, built from `main` at `9aaf326` per its build log. | **Not** a branch deploy, **not** a push, **not** `--prod` from this tree |
+| 5 | **Capture the rebuild's own returned deployment ID and URL**, and confirm its commit is **`9aaf326`** | The redeploy produces a **new deployment**. ~~`dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`~~ **`dpl_BJuH3okrHAsHpM7vUhCZv85or225`** is the **source** to rebuild from, **not** the thing to test. *(If `vercel inspect` shows no commit metadata, `vercel inspect <id> --logs` prints the `Cloning … (Branch: main, Commit: …)` line — that is how the current deployment's commit was read on 2026-09-10.)* Wrong commit → **stop** |
 | 6 | **One** request to the **new deployment's URL from step 5** for a card not looked up in the last 5 min; capture full response headers | Expect **`200`** and **`x-vercel-cache: MISS`/`BYPASS`**. `HIT`/`STALE` → change the card and retry |
 | 7 | Confirm **Vercel invocation logs** show `/api/tpl-proxy` on **that deployment** at that timestamp | Part of the pass criteria, not decoration |
 | 8 | **Re-read the new key's own `Last used`. It must have advanced.** | Not advanced → wait briefly and refresh; still not advanced → **stop, leave the old key active** |
@@ -1310,7 +1310,7 @@ seller session is measured; plan size has no bearing on whether 15 is right.
 
 **The rebuild's own deployment is the verification target.** My procedure said
 to test "the deployment's own URL", which reads as the **source** deployment.
-Redeploying `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT` **creates a new deployment with
+Redeploying the live production deployment (**`dpl_BJuH3okrHAsHpM7vUhCZv85or225`** as of 2026-09-10; this line originally named `dpl_AuwggY9YcPftJcqSnsztAw4qPfmT`) **creates a new deployment with
 its own ID and URL**; the old one keeps serving the old bundle and old env. Had
 I verified against the source URL I would have measured the deployment that
 does **not** carry the replacement key — a third variant of the same failure

@@ -144,14 +144,19 @@ a Preview, and named two routes. Both are needed; the question is order.
 **Chosen: disable automatic Preview deployment first, then build the separate
 non-production store, then re-enable.**
 
-> **NOT EXECUTED IN THIS ORDER — recorded 2026-09-10 21:30.** The separate
-> store was built and is disjoint; automatic Preview deployment was **never
-> disabled**, and pushes have created Previews repeatedly since. The exposure
-> this ordering targeted is closed for the draft keyspace by the store split,
-> so the outcome holds — but it was reached by the other route. Read the text
-> below as the decision taken, not as a description of what happened. Three
-> non-KV production resources remain reachable from Preview.
-> See `audit/ROTATION_RECHECK_2026-09-10.md` §4.
+> **SUPERSEDED PLAN — recorded 2026-09-10 21:30, re-characterised 21:50.** The
+> first half of this order was **invalidated by evidence, not skipped**: the
+> preview-only disable control was never established to exist with that scope
+> (`ROTATION_EXECUTION_CHECKLIST.md` §4 — what the project exposes is
+> `gitProviderOptions.createDeployments`, which appears to govern Git-triggered
+> deployments as a whole, production included). The **store split replaced that
+> approach** and is executed and disjoint. An earlier note here called this an
+> unexplained departure from the chosen order; that was wrong. Read the text
+> below as a superseded plan, retained because the rejected toggle is the
+> reason a store split became the remedy. One
+> non-KV production resource remains reachable from Preview: **Turnstile**,
+> tracked under D-RV-3. PriceCharting is now Production-only and Blob is closed
+> by D-RV-4. See `audit/ROTATION_RECHECK_2026-09-10.md` §4.
 
 - **Why this order.** The thing being unblocked is *pushing*. A push creates a
   Preview, and that Preview is the exposure. Disabling automatic Preview
