@@ -157,8 +157,9 @@ the new token.
 owner's dashboard readings. *(This read "Still blocking, but the mechanism is
 now ESTABLISHED" until 2026-09-10 18:05; neither item is blocking any more —
 RV-8 is closed for the draft keyspace, RV-10 executed and verified for KV. The
-three non-KV production resources reachable from Preview are tracked
-separately and are not RV-8.)* Both halves are settled
+non-KV production resource still reachable from Preview — **Turnstile**, one
+not three as of 2026-09-10 21:50 — is tracked separately under D-RV-3 and is
+not RV-8.)* Both halves are settled
 and neither is an inference.
 
 **Cause** *(as configured until the 2026-09-10 split; stated in the present
