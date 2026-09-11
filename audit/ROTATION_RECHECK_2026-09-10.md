@@ -1,7 +1,9 @@
 # Rotation runbook re-check — 2026-09-10 21:30 EDT
-*(corrected 21:50 after review: commit read from build logs, the 2026-09-09
-deployment identified as the TPL rotation rebuild, §3 recorded as a superseded
-plan, and the non-KV count corrected from three to one)*
+*(corrected 21:50: commit read from build logs, the 2026-09-09 deployment
+identified as the TPL rotation rebuild, §3 recorded as a superseded plan, the
+non-KV count corrected from three to one. Extended 22:05 with §7 eBay token
+treatment and §8 verify-challenge operator requirements; §6 re-sorted so
+separately-tracked work is not listed as a rotation gate. **Re-check closed.**)*
 
 Preparation only. **No production action was taken and none is proposed here
 beyond what the existing runbooks already say.** Will performs the production
@@ -145,43 +147,139 @@ Where an instruction concerns the current Preview:
 rotation targets Production. A Preview identifier appearing in a rotation step
 would be a defect, not an update.
 
-## 6. Unresolved prerequisites
+## 6. What is left, sorted by what it actually is
 
-1. **The redeploy source changed.** Execute from
-   `dpl_BJuH3okrHAsHpM7vUhCZv85or225`, not the retired `dpl_AuwggY9Y…`, and
-   confirm the rebuild reports commit `9aaf326` and that `www.cardresell.org`
-   resolves to it before any revocation.
-2. **Step 6a stays mandatory** — it verifies the *rebuild*, which does not
-   exist yet. The current deployment's commit is settled (§1); the next one's
-   is not.
-3. **`tools/verify-challenge.mjs` (step 6b) has not been run** and cannot be
-   from here; it needs the production endpoint and the operator's prompt.
-4. **eBay's treatment of already-issued tokens** (plan step 4) is still
-   unanswered. Retiring a Cert ID does not necessarily invalidate live tokens.
-5. **Turnstile** — Preview still shares the production configuration. Tracked
-   separately under **D-RV-3**, whose remedy is a distinct *test* credential
-   for Preview rather than narrowing to Production-only, and which changes
-   credential scope and so needs the owner's authorization.
-6. **Safeguard 2 remains open** — existing deployments and downloaded local
-   credentials retain old access.
+An earlier version listed six "unresolved prerequisites". That conflated three
+different kinds of thing, and the effect was to turn separately-tracked work
+into new gates on the eBay rotation. Corrected:
 
-### Withdrawn from this list
+### Execution steps — part of running the rotation, not prerequisites to it
 
-- **"An unexplained 2026-09-09 production deployment."** It is the TPL rotation
-  rebuild, documented at `TPL_ROTATION_RUNBOOK.md:507`. See §1. No question for
-  Will.
-- **"Three non-KV production resources remain reachable from Preview."**
-  **Stale as written**, and it is now one, not three. Re-read from the CLI
-  today, names and targets only:
-  - `PRICECHARTING_API_TOKEN` → **Production** only. Narrowed as decided
-    (D-RV-2 order, step 1); the "live leak" row at
-    `RELEASE_VALIDATION_QUEUE.md:2677` describes the pre-narrowing state.
-  - Blob → **closed by D-RV-4**: nothing reads either Blob variable and the
-    photo path is IndexedDB, so there is no production photo storage for
-    Preview to reach. Cleanup of the unused identifier and public key is
-    non-blocking.
-  - `TURNSTILE_SECRET_KEY` → still broader than Production. **This one is
-    real**, and is item 5 above.
+1. **Redeploy from `dpl_BJuH3okrHAsHpM7vUhCZv85or225`** (not the retired
+   `dpl_AuwggY9Y…`).
+2. **Verify the rebuild's commit** (step 6a) and that `www.cardresell.org`
+   resolves to it, before any revocation. `vercel inspect <id> --logs` prints
+   the `Cloning … (Branch: main, Commit: …)` line when ordinary inspection
+   shows no metadata.
+3. **Run `node tools/verify-challenge.mjs`** (step 6b) — see §8.
+
+### Open question — answered below
+
+4. **eBay's treatment of already-issued tokens** — resolved from eBay's own
+   documentation in §7, and it changes the step order.
+
+### Separately tracked — NOT gates on this rotation
+
+- **Turnstile** (`TURNSTILE_SECRET_KEY` broader than Production) — D-RV-3.
+- **Safeguard 2** — older deployments and downloaded local credentials retain
+  old access.
+
+Both are real and both stay open. Neither blocks the eBay rotation, and listing
+them among its prerequisites was my error.
+
+## 7. eBay's treatment of already-issued tokens — ANSWERED
+
+Plan step 4 asked what happens to live tokens when the Cert ID is retired. From
+eBay's own documentation:
+
+> "Creating a new Cert ID does not affect existing user tokens that have
+> already been created for the application."
+> — [Resetting your cert ID](https://developer.ebay.com/api-docs/static/gs_resetting-your-cert-id-new.html)
+
+**So the caution in the plan was correct: rotation does not invalidate live
+tokens.** A rotation can look complete while tokens issued under the old
+credential keep working.
+
+### The finding that changes the step order
+
+The same page states that **the new Cert ID cannot be used to revoke user
+tokens created with the old one**, and that older tokens should be revoked
+*before the old Cert ID expires*
+([Resetting your cert ID](https://developer.ebay.com/api-docs/static/gs_resetting-your-cert-id-new.html)).
+
+**Revocation capability dies with the old credential.** If the old Cert ID is
+allowed to expire first, tokens issued under it cannot be revoked through the
+new one afterwards. Any revocation of old tokens must happen **while the old
+Cert ID is still valid** — which is the opposite of the intuitive "retire the
+old thing, then clean up".
+
+### The grace period is a choice made at generation time
+
+Generating a new Cert ID sets a grace period for the old one, **0 days
+(immediate) to 4000 days**, typically 30–90, during which **both are valid**
+([Resetting your cert ID](https://developer.ebay.com/api-docs/static/gs_resetting-your-cert-id-new.html)).
+
+This is a decision Will makes **at step 1**, before anything else, and the
+runbook does not currently mention it:
+
+- **0 days** closes the exposure immediately, but also destroys the revocation
+  window in the same moment, and gives the redeploy no margin.
+- **A short non-zero period** keeps the old credential alive — the thing being
+  rotated away from — while leaving room to redeploy and revoke.
+
+I am not choosing this. It trades exposure time against revocation
+capability, and it is Will's call.
+
+### Explicitly unresolved before revocation
+
+- **Whether any user tokens exist to revoke.** Not established. The
+  Create-Drafts path is a file download, not an OAuth user grant, so there may
+  be none — but "probably none" is not a check.
+- **Application tokens and refresh tokens specifically.** The page addresses
+  "existing user tokens". It does **not** separately state the fate of OAuth
+  *application* tokens or *refresh* tokens, and
+  [Credentials and token management](https://developer.ebay.com/api-docs/static/gs_credentials-and-token-management.html)
+  says only that active tokens can persist "for a considerable period" after a
+  reset, and that a **breached** Cert ID means contacting eBay Developer
+  Technical Support to revoke active tokens. Unverified for our case.
+
+## 8. `tools/verify-challenge.mjs` — exact operator requirements
+
+Read from the script and cross-checked against eBay's specification.
+
+| | |
+|---|---|
+| Invocation | `node tools/verify-challenge.mjs` — no arguments |
+| Runtime | **Node 18+**. ESM with top-level `await` and global `fetch`. |
+| Dependencies | **None.** Only `node:crypto` and `node:readline`. No `NODE_PATH`, no install. |
+| Where | Any machine with **network access to `www.cardresell.org`**. Not sandbox-runnable in any meaningful sense — it tests production. |
+| Input | **Hidden prompt**, repainted so nothing is echoed. Never printed, never written to a file, never in `argv`. |
+| Target | **Hard-coded** `https://www.cardresell.org/api/ebay-notifications` (`tools/verify-challenge.mjs:21`). No flag to point it elsewhere. |
+| Exit | `0` = the deployed endpoint hashes exactly the supplied token. `1` = anything else. |
+| Timing | **After** the redeploy reports READY, **before** the token is saved in eBay's portal. |
+
+**Operator notes that matter:**
+
+- **A TTY is required for the hidden prompt.** It accepts piped stdin, but
+  piping means the token passes through a shell — the exact exposure the hidden
+  prompt exists to avoid. Type it.
+- **It warns on leading or trailing whitespace** before trimming. If that
+  warning fires, the value pasted into Vercel is wrong; fix it there, redeploy,
+  re-run. This is the `EBAY_VERIFICATION_TOKEN` trailing-newline defect.
+- **On failure it names the corruption shape** — trailing newline, CRLF,
+  literal `\n`, wrapping quotes, trailing space. If none match, its own advice
+  is that the redeploy has not picked up the variable or the domain is served
+  by a different deployment.
+- **`FAIL — could not reach the endpoint` is not a failed verification.**
+  Unreachable is not wrong; retry.
+
+**Verified against eBay's spec today.** eBay requires SHA-256 over
+`challengeCode + verificationToken + endpoint`, in that order, returned as hex
+in a `200` `application/json` body under `challengeResponse`
+([Marketplace User Account Deletion](https://developer.ebay.com/develop/guides/sell/marketplace-user-account-deletion)).
+Both the script (`:57-61`) and the deployed handler
+(`api/ebay-notifications.js:60-68`) hash in exactly that order and shape, and
+the handler supports GET and POST as eBay requires.
+
+**One constraint the runbook should carry, from the same page:** the
+verification token must be **32–80 characters, alphanumeric plus `_` and `-`
+only**. Step 3's "fresh random value" is under-specified — a generator that
+emits `+`, `/`, `=` or padding will be rejected by eBay's portal regardless of
+what our endpoint does.
+
+**And the endpoint string must match byte-for-byte.** The URL registered in
+eBay's portal must equal the hard-coded constant exactly, since the URL is an
+input to the hash. A trailing slash difference fails with a correct token.
 
 ## Method
 

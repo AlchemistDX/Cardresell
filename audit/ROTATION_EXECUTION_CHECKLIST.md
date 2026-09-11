@@ -208,8 +208,8 @@ the exact defect measured on 2026-09-08.
 
 | # | Action | Surface |
 | --- | --- | --- |
-| 2 | Generate a replacement **eBay Cert ID**. | eBay developer portal |
-| 3 | Generate a **fresh verification token** — a new random value, **not** the repo literal, **not** the literal with the newline removed. | operator's generator |
+| 2 | Generate a replacement **eBay Cert ID**. **Added 2026-09-10 22:05 — a grace period is chosen at this moment, 0–4000 days (typically 30–90), during which *both* Cert IDs are valid. It is not a default to accept without deciding: `0` closes the exposure at once but also ends the revocation window at once.** | eBay developer portal |
+| 3 | Generate a **fresh verification token** — a new random value, **not** the repo literal, **not** the literal with the newline removed. **Added 2026-09-10 22:05 — eBay requires 32–80 characters, alphanumeric plus `_` and `-` only. A base64 generator emitting `+`, `/` or `=` will be rejected by the portal whatever our endpoint does.** | operator's generator |
 | 4 | Set `EBAY_CERT_ID` and `EBAY_VERIFICATION_TOKEN`, **Production only**, **no whitespace**. Preview holds no eBay credential and must not gain one. | Vercel → Environment Variables |
 | 5 | **Redeploy the exact live commit `9aaf326e7`** (commit verification happens at 6a, once READY). | Vercel → Deployments → ~~`dpl_AuwggY9Y…`~~ **`dpl_BJuH3okrHAsHpM7vUhCZv85or225`** → Redeploy. **Corrected 2026-09-10 21:30:** `dpl_AuwggY9Y…` is no longer the production deployment; production is now `dpl_BJuH3ok…`, created 2026-09-09 17:03 UTC, serving `www.cardresell.org` with `js/core.569ff536.js`. Its commit is **`9aaf326`, branch `main`**, read from the build log via `vercel inspect <id> --logs` (ordinary `inspect` shows no commit metadata). It is the **TPL rotation rebuild** — `TPL_ROTATION_RUNBOOK.md:507`. 6a still applies, to the *rebuild this rotation produces*. See `audit/ROTATION_RECHECK_2026-09-10.md` §1. |
 | 6 | Wait for READY. **READY is not proof the replacement token is active** — it means the build finished. | — |
