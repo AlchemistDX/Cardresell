@@ -175,9 +175,25 @@ ok('compaction always returns both collections',
 /* ═══════════════════════════════════════════════════════════
    2. Multi-tab clobber (audit 5.3)
    ═══════════════════════════════════════════════════════════ */
+/* Lift a top-level `const NAME = ...;` declaration out of the shipped bundle.
+   grabFn brace-matches a function body and cannot extract a const, so this
+   harness used to hand-copy _PRICE_REFRESH_FIELDS as a literal. That copy went
+   stale the moment _commitPortfolioRefresh gained a second constant
+   (_PRICE_COUPLED_FIELDS, for valueSource): the extracted function threw
+   ReferenceError and the whole suite died before its completion marker.
+   
+   Reading the declarations from source instead means a future coupled field is
+   picked up automatically rather than silently breaking this file. */
+function grabConst(name) {
+  const m = new RegExp('^const ' + name + ' = .*?;$', 'm').exec(HTML);
+  if (!m) throw new Error('grabConst: no top-level declaration of ' + name + ' in the shipped bundle');
+  return m[0];
+}
+
 function makeCommitHarness(store) {
   const src = `
-    const _PRICE_REFRESH_FIELDS = ['currentValue','lastRefreshed','img','imageUrl','tcgplayerUrl'];
+    ${grabConst('_PRICE_REFRESH_FIELDS')}
+    ${grabConst('_PRICE_COUPLED_FIELDS')}
     ${grabFn('_commitPortfolioRefresh')}
     return _commitPortfolioRefresh;
   `;
