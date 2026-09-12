@@ -4431,6 +4431,20 @@ function confirmBulkCostSave() {
 }
 
 function _bulkSaveToCollection(successful, costs, skipPricing) {
+  /* Mint every id for the WHOLE batch up front.
+     
+     If the browser cannot mint securely, _crNewEntryId throws and nothing below
+     runs: no localStorage write, no scan rows cleared, no post-save bar, and the
+     seller's uploaded photographs are untouched, so the save can be retried as
+     it stands. Minting per-row inside the loop would still have written nothing
+     (savePortData runs after the loop) but it would have left the batch
+     half-built on a partial failure, and pre-minting makes the all-or-nothing
+     property obvious rather than incidental. */
+  const _total = (successful || []).reduce(
+    (n, r) => n + (r && r.qty && r.qty > 1 ? r.qty : 1), 0);
+  const _mintedIds = [];
+  let _mintCursor = 0;
+  if (!_crGuardMint(() => { for (let i = 0; i < _total; i++) _mintedIds.push(_crNewEntryId()); })) return;
   const port = loadPortData();
   const today = new Date().toISOString().slice(0,10);
   let added = 0;
@@ -4455,7 +4469,7 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
            copy to stay distinct, and the id is the lookup key everywhere, so a
            collision made "edit this copy" and "delete this copy" hit a sibling.
            Existing entries keep their ids; only new ones are minted this way. */
-        id: _crNewEntryId(),
+        id: _mintedIds[_mintCursor++],
         updatedAt: Date.now(),
         buyPrice,
         // 2026-09-04: `r.marketPrice || null` turned a legitimate $0.00 comp

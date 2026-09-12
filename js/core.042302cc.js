@@ -9990,8 +9990,13 @@ function saveFlipEntry() {
     const cardGroundedId = (selectedCard && (selectedCard.id || selectedCard.groundedId)) || '';
     const cardRarity = (selectedCard && selectedCard.rarity) || '';
     const cardIsJP = cardGame === 'pokemonjp';
+    /* Mint BEFORE building the row and return early on refusal, so the modal
+       stays open and every input the seller typed is still there. Nothing has
+       been written at this point. */
+    let _newPortId;
+    if (!_crGuardMint(() => { _newPortId = _crNewEntryId(); })) return;
     port.push({
-      id: _crNewEntryId(),
+      id: _newPortId,
       updatedAt: Date.now(), // beats any older tombstone for a re-added id
       card: cardName,
       set: setName,
@@ -10049,7 +10054,12 @@ function saveFlipEntry() {
       setTimeout(() => openPricingModal('flips_cap'), 200);
       return;
     }
-    flips.push({ id: _crNewEntryId(), updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, costMeta, profit, platform, date });
+    /* Mint BEFORE building the row and return early on refusal, so the modal
+       stays open and every input the seller typed is still there. Nothing has
+       been written at this point. */
+    let _newFlipId;
+    if (!_crGuardMint(() => { _newFlipId = _crNewEntryId(); })) return;
+    flips.push({ id: _newFlipId, updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, costMeta, profit, platform, date });
     if (!saveFlipsData(flips)) { _reportStorageFailure(); return; }
     // Warn free users when they're 1 flip away from the cap
     if (!window._isPro && flips.length === 9) {
@@ -10160,7 +10170,12 @@ function saveGradingEntry() {
     const idx = data.findIndex(e => _crIdEq(e.id, _gradingEditId));
     if (idx !== -1) data[idx] = { ...data[idx], card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice };
   } else {
-    data.push({ id: _crNewEntryId(), card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice });
+    /* Mint BEFORE building the row and return early on refusal, so the modal
+       stays open and every input the seller typed is still there. Nothing has
+       been written at this point. */
+    let _newGradingId;
+    if (!_crGuardMint(() => { _newGradingId = _crNewEntryId(); })) return;
+    data.push({ id: _newGradingId, card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice });
   }
   if (!saveGradingData(data)) { _reportStorageFailure(); return; }
   document.getElementById('gradingModal').classList.remove('open');
@@ -12084,8 +12099,12 @@ function confirmMarkSold() {
   const costMeta     = _cf.meta;
   const profit = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost, costMeta }).net;
   const date   = new Date().toISOString().slice(0,10);
+  /* Mint before mutating anything. A refusal here must leave the collection
+     row in place -- the card is not sold if the flip cannot be recorded. */
+  let _newSoldFlipId;
+  if (!_crGuardMint(() => { _newSoldFlipId = _crNewEntryId(); })) return;
   flips.push({
-    id: _crNewEntryId(),
+    id: _newSoldFlipId,
     updatedAt: Date.now(),
     card: p.card,
     set: p.set || '',
@@ -19646,23 +19665,82 @@ function _crNewEntryId() {
       return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
     }
   } catch (_) {}
-  /* Last resort only, for a browser with no crypto at all. Marked so it is
-     recognisable in data, and still far wider than the old 1000-value draw. */
-  return 'eid-' + Date.now().toString(36) + '-'
-       + Math.random().toString(36).slice(2, 10)
-       + Math.random().toString(36).slice(2, 10);
+  /* NO Math.random FALLBACK.
+     
+     An earlier version returned a marked `eid-<base36>` value here so a browser
+     with no crypto could still save. The owner's direction is to refuse instead:
+     an unsupported browser should not be writing entries whose identity cannot
+     be reasoned about, because the resulting rows are exactly the ones that
+     collide on a later merge -- the defect this whole change exists to remove.
+     
+     Refusing an unsafe write must not mean discarding the seller's work. This
+     function therefore throws a TAGGED error and writes NOTHING; every caller
+     is responsible for leaving the scan rows, the form inputs and the stored
+     photographs exactly as they were, so the save can be retried. The tag is
+     what callers match on -- not the message text, which is for the seller. */
+  const err = new Error(CR_NO_SECURE_ID_MSG);
+  err.crNoSecureId = true;
+  throw err;
+}
+
+/* One message, so the seller reads the same sentence wherever the refusal
+   surfaces, and one tag, so callers never have to match on prose. */
+const CR_NO_SECURE_ID_MSG =
+  'This browser cannot generate a secure card ID, so nothing was saved. '
+  + 'Your scan and photos are still here \u2014 try again, or open CardResell in '
+  + 'an up-to-date browser.';
+
+/* True only for the refusal above. Callers use this to tell "we declined to
+   write" apart from any other exception, which must keep propagating. */
+function _crIsNoSecureId(e) { return !!(e && e.crNoSecureId === true); }
+
+/* The refusal boundary every minting path shares.
+   
+   Runs `fn`. If minting refused, tells the seller once and returns false, having
+   written NOTHING -- the caller must then leave its form, its scan rows and its
+   stored photographs untouched so the save can be retried. Any OTHER exception
+   is re-thrown: swallowing unrelated errors here would turn a real bug into a
+   silent no-op, which is the failure mode Rule 2 names.
+   
+   One helper rather than five try/catch blocks, so "what happens when a browser
+   cannot mint an id" has exactly one answer. */
+function _crGuardMint(fn) {
+  try { fn(); return true; }
+  catch (e) {
+    if (_crIsNoSecureId(e)) {
+      try { showToast(CR_NO_SECURE_ID_MSG, 'error'); } catch (_) {}
+      return false;
+    }
+    throw e;
+  }
 }
 
 /* The ONE id comparison. Legacy ids are numbers, new ids are strings, and a
    round-trip through JSON or a DOM attribute turns a number into a numeric
    string -- so `123 === '123'` was false in code that meant "same entry".
    
-   Surveyed before converting: all five generators produced NUMBERS
-   (Date.now()-based), so no stored entry has ever had a numeric-STRING id of its
-   own. Comparing by string therefore only ever unifies a number with its own
-   string form; it cannot make two genuinely different entries compare equal.
-   The sync merge path already keyed on String(row.id), so this matches
-   behaviour that was already relied on there. */
+   What was actually established, and nothing more: the five INSPECTED
+   generators produced numbers (Date.now()-based), and the existing merge
+   function _unionById already normalises ids to strings when keying its map.
+   Aligning lookup with merge is what this function does.
+   
+   What was NOT established: that every id in every seller's stored history is
+   numeric. The generators are not the only way a row can arrive. Imports,
+   restores, cross-device sync, earlier versions of the app and manual edits to
+   localStorage could each have introduced a numeric STRING, and none of those
+   are visible from reading the generators. So the stronger claim -- that this
+   comparison "cannot make two genuinely different entries compare equal" --
+   is withdrawn.
+   
+   The residual case, 123 and "123" stored as two separate rows, is measured
+   rather than assumed in tests/entry-identity.mjs. Measured behaviour: this
+   function reports them as the same entry, a lookup resolves to whichever comes
+   first and shadows the other, and _unionById collapses the pair -- which it did
+   BEFORE this change, since it already keyed on String(row.id). Such a pair
+   therefore could not have survived a sync even previously.
+   
+   Nothing here repairs or renumbers such rows. Silently reconciling them would
+   destroy one of two records that a seller may believe are distinct. */
 function _crIdEq(a, b) {
   if (a == null || b == null) return false;
   return String(a) === String(b);
@@ -19670,6 +19748,10 @@ function _crIdEq(a, b) {
 
 window._crNewEntryId = _crNewEntryId;
 window._crIdEq = _crIdEq;
+window._crGuardMint = _crGuardMint;
+window._unionById = _unionById;
+window._crIsNoSecureId = _crIsNoSecureId;
+window.CR_NO_SECURE_ID_MSG = CR_NO_SECURE_ID_MSG;
 
 /* One delegated listener for every collection-entry action.
    
@@ -19726,6 +19808,13 @@ document.addEventListener('click', (ev) => {
   if (id == null || id === '') return;
   try { fn(id); } catch (e) { console.error('entry action failed', act, e); }
 });
+
+/* Exported for the compatibility matrix in tests/entry-identity.mjs, which
+   drives every declared action rather than a hand-picked few. Declared with
+   `const`, so this assignment MUST come after the declaration: an earlier
+   version put it above and the whole bundle died on a TDZ ReferenceError,
+   silently taking the delegated listener with it. */
+window._CR_ENTRY_ACTIONS = _CR_ENTRY_ACTIONS;
 
 function loadPortData() {
   try { return JSON.parse(localStorage.getItem(getUserKey('portfolio')) || '[]'); } catch(e) { return []; }

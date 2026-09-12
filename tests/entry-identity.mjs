@@ -337,6 +337,390 @@ await T.section('ACCEPTANCE — row actions reach the right entry, legacy and UU
     savePath.distinct === 4, JSON.stringify(savePath));
   T.check('and the save path uses the UUID generator, not a timestamp scheme',
     savePath.allStrings && savePath.uuidShaped, JSON.stringify(savePath));
+
+  /* ── THE DETERMINISTIC SAME-SAVE COLLISION ────────────────────────────────
+     
+     A previous version of this packet claimed the old scheme could not collide
+     WITHIN one save, because `added` increments per copy. That was wrong, and
+     the owner supplied the counterexample. For
+     
+         Date.now() + added + Math.floor(Math.random() * 1000)
+     
+     with the clock frozen at T, copy 0 draws added=0 and copy 1 draws added=1
+     (`added++` runs AFTER the id is minted, js/ui.*.js). So:
+     
+         copy 0: T + 0 + 1  = T+1
+         copy 1: T + 1 + 0  = T+1
+     
+     The offset does not guarantee uniqueness; it only shifts the draw. Any two
+     copies i<j collide whenever their random contributions differ by exactly
+     j-i, which for adjacent copies is a 999-in-a-million draw per pair -- rare,
+     not impossible, and it was reported as impossible.
+     
+     So this drives the REAL save with Math.random scripted to produce exactly
+     that pair. The assertion is DISTINCTNESS, not id format: reverting the
+     generator must fail this, and it must fail for the collision itself rather
+     than for the shape of the value. */
+  const deterministic = await page.evaluate(() => {
+    const key = window.getUserKey('portfolio');
+    localStorage.setItem(key, '[]');
+    const realNow = Date.now, realRandom = Math.random;
+    Date.now = () => 1757000000000;
+    // floor(0.001 * 1000) === 1, then floor(0.0 * 1000) === 0.
+    const draws = [0.001, 0.0];
+    let i = 0;
+    Math.random = () => (i < draws.length ? draws[i++] : 0);
+    try {
+      window._bulkSaveToCollection(
+        [{ name: 'Charizard', set: { name: 'Base Set' }, number: '4', qty: 2, marketPrice: 200 }],
+        [100], false,
+      );
+    } finally { Date.now = realNow; Math.random = realRandom; }
+    const rows = JSON.parse(localStorage.getItem(key));
+    const ids = rows.map(r => r.id);
+    return {
+      count: rows.length,
+      ids,
+      distinct: new Set(ids).size,
+      // What the OLD expression would have produced from these same draws.
+      wouldHaveBeen: [1757000000000 + 0 + 1, 1757000000000 + 1 + 0],
+    };
+  });
+  T.check('the deterministic collision pair writes two rows',
+    deterministic.count === 2, JSON.stringify(deterministic));
+  T.check('ACCEPTANCE — two copies saved at a frozen clock with the colliding random draws still get DISTINCT ids',
+    deterministic.distinct === 2, JSON.stringify(deterministic));
+  T.check('DEFECT MEASUREMENT — those same draws would have produced one id twice under the old expression',
+    deterministic.wouldHaveBeen[0] === deterministic.wouldHaveBeen[1],
+    JSON.stringify(deterministic.wouldHaveBeen));
+
+  /* ── REFUSAL, AND THE SELLER'S WORK ──────────────────────────────────────
+     
+     Owner direction (Q-ID-2): remove the permissive Math.random fallback. If
+     neither crypto method is available, stop the save with a clear error while
+     preserving the scan, form inputs and photographs for retry.
+     
+     So: crypto is removed entirely, a batch save is attempted, and the
+     assertions are that it REFUSED, that it wrote NOTHING, and that the inputs
+     it would have consumed are still present. */
+  const refusal = await page.evaluate(() => {
+    const key = window.getUserKey('portfolio');
+    const before = [{ id: 1757000000001, card: 'Pre-existing', buyPrice: 1, updatedAt: 1 }];
+    localStorage.setItem(key, JSON.stringify(before));
+
+    // Stand in for the seller's in-progress work.
+    window._bulkRows = [
+      { name: 'Charizard', set: { name: 'Base Set' }, number: '4', qty: 2, marketPrice: 200,
+        imageDataUrl: 'data:image/jpeg;base64,AAAA' },
+    ];
+    window._bulkSaved = false;
+    const toasts = [];
+    const realToast = window.showToast;
+    window.showToast = (m, k) => { toasts.push({ m: String(m), k }); };
+
+    // Remove BOTH crypto paths. `crypto` is non-writable on window in Chromium,
+    // so shadow it on the scope the bundle actually resolves through.
+    const realCrypto = window.crypto;
+    let removed = false;
+    try {
+      Object.defineProperty(window, 'crypto', { value: undefined, configurable: true });
+      removed = (typeof window.crypto === 'undefined');
+    } catch (_) { removed = false; }
+
+    let threw = null, returned;
+    try {
+      returned = window._bulkSaveToCollection(window._bulkRows, [100], false);
+    } catch (e) { threw = String(e && e.message || e); }
+
+    try { Object.defineProperty(window, 'crypto', { value: realCrypto, configurable: true }); } catch (_) {}
+    window.showToast = realToast;
+
+    const after = JSON.parse(localStorage.getItem(key) || '[]');
+    return {
+      removed,
+      threw,
+      rowsAfter: after.length,
+      idsAfter: after.map(r => r.id),
+      untouched: JSON.stringify(after) === JSON.stringify(before),
+      toasts,
+      // The seller's work, as it stands after the refusal.
+      scanRowsKept: Array.isArray(window._bulkRows) && window._bulkRows.length === 1,
+      photoBytesKept: !!(window._bulkRows && window._bulkRows[0]
+        && String(window._bulkRows[0].imageDataUrl || '').startsWith('data:')),
+      notMarkedSaved: window._bulkSaved === false,
+    };
+  });
+  T.check('the no-crypto condition was actually established (otherwise the rest proves nothing)',
+    refusal.removed === true, JSON.stringify(refusal));
+  T.check('ACCEPTANCE — a save with no secure id available writes NOTHING',
+    refusal.rowsAfter === 1 && refusal.untouched === true, JSON.stringify(refusal));
+  T.check('ACCEPTANCE — it does not throw at the seller; it reports and returns',
+    refusal.threw === null, JSON.stringify(refusal));
+  T.check('ACCEPTANCE — the seller is told, once, in one sentence',
+    refusal.toasts.length === 1 && refusal.toasts[0].k === 'error'
+      && /cannot generate a secure card ID/i.test(refusal.toasts[0].m),
+    JSON.stringify(refusal.toasts));
+  T.check('ACCEPTANCE — the scan rows and the photo bytes survive for retry',
+    refusal.scanRowsKept && refusal.photoBytesKept, JSON.stringify(refusal));
+  T.check('ACCEPTANCE — the batch is not marked saved, so the retry affordance stays',
+    refusal.notMarkedSaved === true, JSON.stringify(refusal));
+
+  /* And the refusal must be distinguishable from an unrelated bug. A guard that
+     swallows every exception turns a real defect into a silent no-op, which is
+     the failure mode Rule 2 names. */
+  const propagates = await page.evaluate(() => {
+    let sawOther = false;
+    try {
+      window._crGuardMint(() => { throw new Error('something else entirely'); });
+    } catch (e) { sawOther = /something else entirely/.test(String(e.message)); }
+    const refusedReturn = window._crGuardMint(() => {
+      const err = new Error('x'); err.crNoSecureId = true; throw err;
+    });
+    return { sawOther, refusedReturn };
+  });
+  T.check('ACCEPTANCE — an unrelated exception still propagates through the mint guard',
+    propagates.sawOther === true, JSON.stringify(propagates));
+  T.check('ACCEPTANCE — only the tagged refusal is converted into a false return',
+    propagates.refusedReturn === false, JSON.stringify(propagates));
+
+  /* No Math.random path may remain in the generator. The owner asked for the
+     fallback REMOVED, not narrowed, so its absence is asserted at source. */
+  const noFallback = await page.evaluate(async () => {
+    const names = Array.from(document.querySelectorAll('script[src]')).map(s => s.getAttribute('src'));
+    const texts = await Promise.all(names.map(n => fetch(n).then(r => r.text())));
+    const joined = texts.join('\n');
+    const i = joined.indexOf('function _crNewEntryId()');
+    // Brace-match the real body rather than slicing a fixed window, which
+    // spilled into neighbouring functions.
+    let body = '';
+    if (i !== -1) {
+      let depth = 0, j = joined.indexOf('{', i);
+      for (let k = j; k < joined.length; k++) {
+        if (joined[k] === '{') depth++;
+        else if (joined[k] === '}') { depth--; if (depth === 0) { body = joined.slice(i, k + 1); break; } }
+      }
+    }
+    /* Strip comments before asserting. The generator's comments DISCUSS
+       Math.random -- they are what explain why it is not used -- and an earlier
+       version of this check fired on that prose. The fix is to test code rather
+       than to special-case the wording: a detector that has to be taught to
+       ignore particular sentences is a detector that can be talked out of
+       firing. Stripping comments is a general transformation, not an exemption. */
+    const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    return {
+      found: i !== -1,
+      bodyChars: body.length,
+      codeChars: code.length,
+      usesMathRandom: /Math\.random/.test(code),
+      hasEidPrefix: /'eid-'|"eid-"/.test(code),
+      throwsTagged: /crNoSecureId\s*=\s*true/.test(code),
+    };
+  });
+  T.check('the generator carries no Math.random fallback and no eid- last resort',
+    noFallback.found && !noFallback.usesMathRandom && !noFallback.hasEidPrefix,
+    JSON.stringify(noFallback));
+  T.check('and it refuses with the tagged error instead',
+    noFallback.throwsTagged === true, JSON.stringify(noFallback));
+
+  /* ── 123 AND "123" AS SEPARATE ROWS ──────────────────────────────────────
+     
+     Owner correction 2. An earlier packet claimed no stored entry can have a
+     numeric-STRING id, reasoning from the five generators. That does not follow:
+     imports, restores, sync, earlier versions of the app and manual data edits
+     could all have introduced one, and none of those are visible from the
+     generators. The defensible claim is narrower and is what this file now
+     records:
+     
+       the inspected generators produced numeric ids, and the existing merge
+       function already normalises ids to strings.
+     
+     That supports aligning LOOKUP with MERGE, which is what _crIdEq does. It
+     does not establish a complete production-data history.
+     
+     So this scenario MEASURES what the shipped code does with such a pair
+     instead of asserting what it should. It does not repair the data. The
+     finding is documented in the packet, not fixed here, because collapsing or
+     renumbering these rows is exactly the silent renumbering the owner
+     prohibited. */
+  const mixed = await page.evaluate(() => {
+    const key = window.getUserKey('portfolio');
+    const rows = [
+      { id: 123,   card: 'Numeric row', buyPrice: 1, currentValue: 10, updatedAt: 1000 },
+      { id: '123', card: 'String row',  buyPrice: 2, currentValue: 20, updatedAt: 2000 },
+      { id: 999,   card: 'Bystander',   buyPrice: 3, currentValue: 30, updatedAt: 3000 },
+    ];
+    localStorage.setItem(key, JSON.stringify(rows));
+
+    const read = JSON.parse(localStorage.getItem(key));
+    // 1. Storage keeps both, with their types intact.
+    const bothStored = read.length === 3
+      && typeof read[0].id === 'number' && typeof read[1].id === 'string';
+
+    // 2. What does the ONE comparison say about them?
+    const eq = window._crIdEq(123, '123');
+
+    // 3. What does a lookup find? (`find` returns the FIRST match.)
+    const found = read.find(r => window._crIdEq(r.id, '123'));
+
+    // 4. What does the merge function -- which behaved this way BEFORE this
+    //    change -- do when the two rows meet?
+    const merged = window._unionById(read, []);
+
+    return {
+      bothStored,
+      idEqSaysSame: eq,
+      lookupFinds: found ? found.card : null,
+      mergedCount: merged.length,
+      mergedCards: merged.map(r => r.card),
+      survivor: merged.filter(r => window._crIdEq(r.id, 123)).map(r => r.card),
+    };
+  });
+  T.check('MEASUREMENT — storage holds 123 and "123" as two rows, types intact',
+    mixed.bothStored === true, JSON.stringify(mixed));
+  T.check('MEASUREMENT — _crIdEq treats 123 and "123" as the SAME entry',
+    mixed.idEqSaysSame === true, JSON.stringify(mixed));
+  T.check('MEASUREMENT — a lookup therefore resolves to the FIRST of the pair, shadowing the second',
+    mixed.lookupFinds === 'Numeric row', JSON.stringify(mixed));
+  T.check('MEASUREMENT — the pre-existing merge collapses the pair to one row (this predates _crIdEq)',
+    mixed.mergedCount === 2 && !mixed.mergedCards.includes('Numeric row')
+      && mixed.mergedCards.includes('String row'),
+    JSON.stringify(mixed));
+  T.check('MEASUREMENT — the unrelated row is unaffected either way',
+    mixed.mergedCards.includes('Bystander'), JSON.stringify(mixed));
+  T.check('and nothing in this scenario rewrote or renumbered the stored rows',
+    mixed.bothStored === true, JSON.stringify(mixed));
+
+  /* ── refreshSingleCardPrice, BEHAVIOURALLY, FOR BOTH ID SHAPES ────────────
+     
+     Owner correction 3. This exact action was the demonstrated coverage gap:
+     reverting its lookup to `x.id === id` left the suite green. The source-shape
+     guard added earlier catches the reintroduction, but a source check is not a
+     behaviour check, so the action is now driven for real.
+     
+     _fetchPriceForEntry is stubbed -- the point is which ROW the write lands on,
+     not whether the price feed works -- and the sibling is asserted unchanged. */
+  for (const shape of ['legacy-numeric', 'uuid']) {
+    const r = await page.evaluate(async (shape) => {
+      const key = window.getUserKey('portfolio');
+      const targetId = shape === 'legacy-numeric' ? 1757000000001
+        : 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+      const siblingId = shape === 'legacy-numeric' ? 1757000000002
+        : 'ffffffff-1111-4222-8333-444444444444';
+      localStorage.setItem(key, JSON.stringify([
+        { id: targetId,  card: 'Target',  buyPrice: 1, currentValue: 10, updatedAt: 1000 },
+        { id: siblingId, card: 'Sibling', buyPrice: 1, currentValue: 10, updatedAt: 1000 },
+      ]));
+
+      const realFetchPrice = window._fetchPriceForEntry;
+      const realRender = window.renderCollectionView;
+      const realToast = window.showToast;
+      let askedFor = null;
+      window._fetchPriceForEntry = async (entry) => { askedFor = entry && entry.card; return 77.5; };
+      window.renderCollectionView = () => {};
+      window.showToast = () => {};
+
+      // The row's button and value cell, as the renderer emits them.
+      const host = document.createElement('div');
+      host.innerHTML = '<button id="colRefreshRow_' + targetId + '"></button>'
+                     + '<span id="colVal_' + targetId + '"></span>';
+      document.body.appendChild(host);
+
+      // The id arrives as a STRING, exactly as a data attribute delivers it.
+      await window.refreshSingleCardPrice(String(targetId));
+
+      window._fetchPriceForEntry = realFetchPrice;
+      window.renderCollectionView = realRender;
+      window.showToast = realToast;
+      host.remove();
+
+      const after = JSON.parse(localStorage.getItem(key));
+      const t = after.find(x => window._crIdEq(x.id, targetId));
+      const sib = after.find(x => window._crIdEq(x.id, siblingId));
+      return {
+        askedFor,
+        targetValue: t && t.currentValue,
+        targetSource: t && t.valueSource,
+        targetIdType: t && typeof t.id,
+        siblingValue: sib && sib.currentValue,
+        siblingSource: sib && sib.valueSource,
+        siblingRefreshed: sib && sib.lastRefreshed,
+        rows: after.length,
+      };
+    }, shape);
+    T.check(`ACCEPTANCE — refreshSingleCardPrice resolves the ${shape} row and asks the feed for IT`,
+      r.askedFor === 'Target', JSON.stringify(r));
+    T.check(`ACCEPTANCE — the ${shape} target row receives the new price`,
+      r.targetValue === 77.5, JSON.stringify(r));
+    /* SEPARATE FINDING, deliberately measured rather than asserted.
+       
+       refreshSingleCardPrice sets `p.valueSource = 'comp'` (core :11026) with a
+       comment saying nothing else in the app may set that value -- but
+       _commitPortfolioRefresh grafts only _PRICE_REFRESH_FIELDS (core :10900),
+       which lists currentValue, lastRefreshed, img, imageUrl and tcgplayerUrl.
+       valueSource is not in that list, so the assignment is dropped and never
+       reaches storage. A silent omission, which Rule 2 names as the bug.
+       
+       This is NOT an id-compatibility defect and it is NOT fixed here: the
+       owner asked for the photo and id topics in separate reviewed commits, and
+       price provenance is a third topic. The behaviour is pinned so the packet
+       can report it and so a later fix has a failing assertion to flip. */
+    T.check(`DEFECT MEASUREMENT — valueSource:'comp' is dropped before storage on the ${shape} row (NOT fixed in this commit)`,
+      r.targetSource === undefined,
+      'observed valueSource=' + JSON.stringify(r.targetSource) + ' — see _PRICE_REFRESH_FIELDS');
+    T.check(`ACCEPTANCE — the ${shape} sibling is untouched`,
+      r.rows === 2 && r.siblingValue === 10 && !r.siblingSource && !r.siblingRefreshed,
+      JSON.stringify(r));
+    if (shape === 'legacy-numeric') {
+      T.check('and the legacy row\u2019s id is still a number after the write',
+        r.targetIdType === 'number', JSON.stringify(r));
+    }
+  }
+
+  /* ── THE NINE DISPATCHED ACTIONS, BOTH ID SHAPES ─────────────────────────
+     
+     A compact matrix rather than nine full scenarios: for each action the map
+     declares, a real click is dispatched on real markup for a legacy numeric id
+     and for a UUID, and the assertion is that the handler was reached with the
+     id INTACT as a string. Reaching the handler with the right id is the part
+     the compatibility change can break; what each handler then does is covered
+     by its own suite. */
+  const matrix = await page.evaluate(() => {
+    const acts = Object.keys(window._CR_ENTRY_ACTIONS || {});
+    const ids = { 'legacy-numeric': '1757000000001', 'uuid': 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' };
+    const out = [];
+    for (const act of acts) {
+      for (const [shape, id] of Object.entries(ids)) {
+        // Replace every handler the map routes to with a recorder.
+        const seen = [];
+        const saved = {};
+        const targets = ['openGradingModal','deleteGradingEntry','openMarkSoldModal',
+          'openCollectionCardDetail','refreshSingleCardPrice','deletePortEntry',
+          'openFlipDetail','deleteFlip','deletePort'];
+        for (const n of targets) { saved[n] = window[n]; window[n] = (x) => seen.push({ fn: n, arg: x }); }
+
+        const host = document.createElement('div');
+        host.innerHTML = '<button data-entry-act="' + act + '" data-entry-id="' + id + '">x</button>';
+        document.body.appendChild(host);
+        host.firstChild.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        host.remove();
+        for (const n of targets) window[n] = saved[n];
+
+        out.push({
+          act, shape,
+          reached: seen.length === 1,
+          fn: seen.length ? seen[0].fn : null,
+          argOk: seen.length === 1 && seen[0].arg === id,
+          argType: seen.length ? typeof seen[0].arg : null,
+        });
+      }
+    }
+    return { actionCount: acts.length, rows: out, bad: out.filter(r => !r.reached || !r.argOk) };
+  });
+  T.check('the dispatcher declares nine entry actions',
+    matrix.actionCount === 9, JSON.stringify({ n: matrix.actionCount }));
+  T.check('ACCEPTANCE — every one of the nine actions reaches its handler for BOTH id shapes, id intact as a string',
+    matrix.rows.length === 18 && matrix.bad.length === 0,
+    JSON.stringify(matrix.bad.slice(0, 6)));
   await ctx.close();
 });
 

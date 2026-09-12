@@ -656,6 +656,14 @@ const screenState = (page) => page.evaluate(() => ({
   const kept = (await tiles(page)).map(x => x.id);
   T.check('two photos are displayed before the failure', kept.length === 2);
 
+  /* Capture the draft's REAL id before the fault. `draft-ui-7` is the argument
+     openReview passes; the id on the loaded draft comes from the fixture body,
+     so comparing against the literal was the fixture's error, not the product's. */
+  const draftIdBefore = await page.evaluate(() =>
+    window._reviewState && window._reviewState.draft && window._reviewState.draft.draftId);
+  T.check('the draft under test has a real id to compare against',
+    typeof draftIdBefore === 'string' && draftIdBefore.length > 0, String(draftIdBefore));
+
   await page.evaluate(() => { window._photoStoreFaults = { abortBeforeCommit: true }; });
   await pick(page, [pngAt('doomed.png', 83)]);
   const st = await screenState(page);
@@ -680,6 +688,28 @@ const screenState = (page) => page.evaluate(() => ({
     !/private|incognito|blocked|probably|likely/i.test(st.status), st.status);
   T.check('the empty line is not shown — the collection was not cleared', !st.emptyShown);
 
+  /* Owner's photo-acceptance item 4 has TWO halves. The assertions above cover
+     the displayed collection; these cover the draft itself and the shape of the
+     retry, which were previously only implied. */
+  const draftAfterFailure = await page.evaluate(() => {
+    /* Read the surface the screen already exposes -- _reviewState is what the
+       review view renders from -- rather than adding a test-only global to
+       production, which the standing rules forbid. */
+    const rs = window._reviewState || {};
+    return {
+      present: !!rs.draft,
+      id: rs.draft && rs.draft.draftId,
+      loading: rs.loading,
+      errored: !!rs.error,
+    };
+  });
+  T.check('ACCEPTANCE — the draft survives the attachment failure and is still the open draft',
+    draftAfterFailure.present === true
+    && draftAfterFailure.id === draftIdBefore
+    && draftAfterFailure.loading === false
+    && draftAfterFailure.errored === false,
+    JSON.stringify(draftAfterFailure));
+
   await page.evaluate(() => { window._photoStoreFaults = null; });
   await pick(page, [pngAt('after.png', 84)]);
   T.check('the screen recovers and accepts the next add',
@@ -687,6 +717,19 @@ const screenState = (page) => page.evaluate(() => ({
   const rec = await screenState(page);
   T.check('the error line is replaced, not appended to',
     rec.statusKind === 'ok' && /added 1 photo/i.test(rec.status), JSON.stringify(rec));
+  /* This is the photo-only retry: the seller re-picks photos on the SAME draft
+     and the add succeeds. There is no separate "retry photos" button, and none
+     is claimed -- the affordance is that the picker stays available on the open
+     draft while the draft and its earlier photos are untouched. Asserting what
+     exists rather than what the wording might suggest. */
+  const retryShape = await page.evaluate((expectId) => ({
+    sameDraft: !!(window._reviewState && window._reviewState.draft
+      && window._reviewState.draft.draftId === expectId),
+    pickerAvailable: !!document.querySelector('[data-photo-block] input[type=file]'),
+  }), draftIdBefore);
+  T.check('ACCEPTANCE — the retry is photo-only: same draft, picker still available, no re-creation',
+    retryShape.sameDraft === true && retryShape.pickerAvailable === true,
+    JSON.stringify(retryShape));
   await ctx.close();
 }
 

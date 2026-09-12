@@ -305,10 +305,22 @@ const B = new Function(`
   /* _crNewEntryId is grabbed, not stubbed, for the same reason as
      _catalogueArtworkUrl above: 'every copy has a distinct id' below is the
      check that exposed the id-collision defect, and a stubbed counter would
-     make it pass no matter what the shipped generator does. crypto is not
-     defined in this Function scope, so the real function falls through to its
-     documented last-resort branch -- still the shipped code path. */
+     make it pass no matter what the shipped generator does.
+     
+     2026-09-12, CORRECTING THIS COMMENT: it used to say crypto is not defined in
+     this Function scope and the generator therefore falls through to its
+     last-resort branch. Both halves are now wrong. new Function bodies run in
+     GLOBAL scope, where Node exposes crypto.randomUUID, so the first branch
+     was always the one taken here; and the last-resort branch no longer exists
+     at all -- it was removed per Q-ID-2, and the generator now throws instead.
+     
+     _crGuardMint and _crIsNoSecureId are grabbed for the same reason: the guard
+     is what decides whether a failed mint discards the seller's work, and a
+     stub would be free to decide differently from the shipped one. */
+  const CR_NO_SECURE_ID_MSG = 'stand-in for the seller-facing sentence';
   ${grabFn('_crNewEntryId')}
+  ${grabFn('_crIsNoSecureId')}
+  ${grabFn('_crGuardMint')}
   ${grabFn('_bulkScanRowToCard')}
   ${grabFn('_bulkSaveToCollection')}
   return (rows, costs, skip) => { _bulkSaveToCollection(rows, costs, skip); return _saved; };

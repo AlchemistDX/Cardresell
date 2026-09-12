@@ -880,10 +880,51 @@ first two rows.
 
 ---
 
+## NAMED REQUIRED CHECKS — browser suites (added 2026-09-12, per Q-ID-1)
+
+Owner direction, verbatim: *"Add both browser suites as named required checks.
+Record tested commit, command, completion, exit status, and evidence. Exclusion
+from the offline runner must not mean exclusion from release acceptance."*
+
+Both suites below are **declared exclusions in `tests/test-registry.mjs`** — they
+need Playwright and a local HTTP server that `tests/run-all.sh` does not stand
+up. That is a statement about the runner, not about their standing. **Release
+acceptance requires all three of the checks in this section to be green on the
+commit being promoted.** A green `run-all.sh` alone does not satisfy this
+section.
+
+| # | required check | command | must report |
+|---|---|---|---|
+| RQ-1 | `tests/entry-identity.mjs` | `env NODE_PATH=/home/user/node_modules node tests/entry-identity.mjs` | `SUITE COMPLETE`, exit=0 |
+| RQ-2 | `tests/listing-export-e2e.mjs` | `env NODE_PATH=/home/user/node_modules node tests/listing-export-e2e.mjs` | `SUITE COMPLETE`, exit=0 |
+| RQ-3 | `tests/listing-photos.mjs` (= RV-7, restated here as a required check) | `env NODE_PATH=/home/user/node_modules node tests/listing-photos.mjs` | `SUITE COMPLETE`, exit=0 |
+
+A run with no `SUITE COMPLETE` marker is **not** a pass regardless of exit
+status — it means the suite died partway and the remaining assertions never ran.
+
+### Run record — commit `PENDING_COMMIT`, 2026-09-12
+
+| check | tested commit | command | completed | exit | evidence |
+|---|---|---|---|---|---|
+| RQ-1 `entry-identity.mjs` | `PENDING_COMMIT` | as above | `SUITE COMPLETE` | 0 | 62 passed, 0 failed — `/tmp/f1.log` |
+| RQ-2 `listing-export-e2e.mjs` | `PENDING_COMMIT` | as above | `SUITE COMPLETE` | 0 | 111 passed, 0 failed — `/tmp/f5.log` |
+| RQ-3 `listing-photos.mjs` | `PENDING_COMMIT` | as above | `SUITE COMPLETE` | 0 | 132 passed, 0 failed — `/tmp/f4.log` |
+
+These logs are sandbox-local and will not outlive the session. The durable
+record is this table plus the check counts; a promoter should re-run the three
+commands against the promotion commit rather than trust the counts.
+
+**What this section does not establish.** All three run in headless Chromium
+only. None of them exercises the deployed Preview or production; they run against
+the working tree over a local HTTP server. The eBay draft import remains separate
+owner-run acceptance and is not covered by any check here.
+
+---
+
 ## RV-7 — D7 listing photos, store and screen (added 2026-09-08)
 
-`tests/listing-photos.mjs`, **92 checks, 92 passing, run twice** on
-2026-09-08 against `js/core.3f83abec.js`. It is a **declared exclusion** in
+`tests/listing-photos.mjs`, **132 checks, 132 passing** as of 2026-09-12 (was 92 when first recorded) on
+2026-09-08 against `js/core.3f83abec.js` (that run's bundle; the live bundles are now `js/core.042302cc.js` + `js/ui.d3904de2.js`). It is a **declared exclusion** in
 `tests/test-registry.mjs`, not an offline slot, on the same grounds as
 `flip-completeness-e2e.mjs`: it needs Playwright and a local HTTP server the
 offline runner does not stand up.

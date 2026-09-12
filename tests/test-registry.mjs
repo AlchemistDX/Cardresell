@@ -144,12 +144,17 @@ const EXCLUDED = {
     'TWO PAGES sharing one origin\u2019s storage, which is a browser ' +
     'property rather than something a double can supply. Registering it as ' +
     'an offline slot would make the offline gate depend on an environment it ' +
-    'does not provide. Run by hand: node tests/entry-identity.mjs (32/32 as ' +
+    'does not provide. Run by hand: node tests/entry-identity.mjs (62/62 as ' +
     'of 2026-09-12). Its offline sibling IS registered: ' +
     'scan-hygiene-2026-09-04.mjs (the \'every copy has a distinct id\' ' +
-    'check), which now grabs the real _crNewEntryId rather than a stub, so ' +
-    'the generator itself is covered by the gate. NOT yet registered in ' +
-    'audit/RELEASE_VALIDATION_QUEUE.md -- recorded here as the open item.',
+    'check), which now grabs the real _crNewEntryId, _crIsNoSecureId and ' +
+    '_crGuardMint rather than stubs, so the generator and the refusal guard ' +
+    'are both covered by the offline gate. NOW REGISTERED for release ' +
+    'acceptance as required check RQ-1 in ' +
+    'audit/RELEASE_VALIDATION_QUEUE.md, alongside RQ-2 ' +
+    '(listing-export-e2e.mjs) and RQ-3 (listing-photos.mjs). Exclusion from ' +
+    'this offline runner is a statement about the runner, not a release ' +
+    'exemption -- all three are required green on the promotion commit.',
 };
 
 /* A stale exclusion is its own drift: it grants an exemption to a file that no
