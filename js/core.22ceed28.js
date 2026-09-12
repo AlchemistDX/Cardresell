@@ -19127,9 +19127,33 @@ function _photoId() {
 
 /* The manifest row, normalised. An absent row and an empty row are the same
    thing to every caller: no photos are available in this browser. */
+/* The manifest row carries an `order` AND a `sources` ledger.
+   
+   `sources` maps a stable source key -> { photoId, attachedAt, removedAt }.
+   It is an ATTACH LEDGER, not a photo list: an entry is written when an
+   automatic attachment happens and is NEVER deleted afterwards, not even when
+   the seller removes the photo. That permanence is the whole point. It is what
+   makes "retrying creation must not restore a photo the seller deleted" true,
+   because the retry finds the key present and declines.
+   
+   Old rows written before this field existed simply have no `sources`, and
+   normalize to an empty ledger. No version bump and no migration: the object
+   store's keyPath is unchanged and this is a plain field on an existing record. */
 function _photoManifestRow(row, draftId) {
   const order = row && Array.isArray(row.order) ? row.order.filter(x => typeof x === 'string') : [];
-  return { draftId, order };
+  const src = (row && row.sources && typeof row.sources === 'object') ? row.sources : {};
+  const sources = {};
+  for (const k of Object.keys(src)) {
+    const v = src[k];
+    if (v && typeof v === 'object') {
+      sources[k] = {
+        photoId:    typeof v.photoId === 'string' ? v.photoId : null,
+        attachedAt: Number(v.attachedAt) || 0,
+        removedAt:  Number(v.removedAt) || 0,
+      };
+    }
+  }
+  return { draftId, order, sources };
 }
 
 /* Add files to a draft. Manifest is read and rewritten inside the transaction,
@@ -19165,7 +19189,7 @@ function photosAdd(draftId, files) {
       throw e;
     }
     const order = row.order.concat(added);
-    await _photoReq(s.manifest.put({ draftId, order }));
+    await _photoReq(s.manifest.put({ draftId, order, sources: row.sources }));
     return { added, order, skipped: list.length - take.length };
   });
 }
@@ -19177,9 +19201,89 @@ function photosRemove(draftId, photoId) {
   return _photoTx('readwrite', async (tx, s) => {
     const row = _photoManifestRow(await _photoReq(s.manifest.get(draftId)), draftId);
     const order = row.order.filter(id => id !== photoId);
-    await _photoReq(s.manifest.put({ draftId, order }));
+    /* If this photo was placed by an automatic attachment, stamp the removal on
+       its ledger entry. The entry is NOT deleted -- a later retry of the same
+       creation must read "this source was attached once and the seller removed
+       it" and decline, rather than reading "never attached" and restoring a
+       photo the seller deliberately deleted. */
+    const sources = row.sources;
+    for (const k of Object.keys(sources)) {
+      if (sources[k].photoId === photoId && !sources[k].removedAt) {
+        sources[k] = { ...sources[k], removedAt: Date.now() };
+      }
+    }
+    await _photoReq(s.manifest.put({ draftId, order, sources }));
     await _photoReq(s.blobs.delete(photoId));
     return { order };
+  });
+}
+
+/* ── Automatic attachment of a scan photo ──────────────────────────────────
+   
+   ONE readwrite transaction does the duplicate check AND the insert.
+   
+   The earlier proposal was photosList() -> inspect -> photosAdd(), which is a
+   read-then-write race: two simultaneous retries both read an empty manifest and
+   both attach. Returning the same draftId does not prevent that, because the
+   duplicate check and the write were separate transactions.
+   
+   Here the check reads the ledger inside the same transaction that writes it.
+   IndexedDB serializes readwrite transactions whose scopes overlap -- including
+   across tabs on the same origin -- so the second attempt observes the first
+   attempt's committed ledger entry and declines. The suite provokes this with
+   genuinely concurrent calls rather than asserting the guarantee.
+   
+   `sourceKey` is a stable scan identity supplied by the caller, NOT a filename.
+   A filename is not an identity: two different cards can produce the same one,
+   and a name is cosmetic metadata a later change could reformat.
+   
+   Returns { attached, reason, photoId }. `attached: false` with a reason is a
+   normal outcome, never an error -- declining a duplicate is success. */
+function photosAttachScan(draftId, source) {
+  const key  = String((source && source.sourceKey) || '').trim();
+  const blob = source && source.blob;
+  if (!draftId) return Promise.reject(new Error('photosAttachScan requires a draftId'));
+  if (!key)     return Promise.reject(new Error('photosAttachScan requires a sourceKey'));
+  if (!blob)    return Promise.reject(new Error('photosAttachScan requires a blob'));
+
+  return _photoTx('readwrite', async (tx, s) => {
+    const row = _photoManifestRow(await _photoReq(s.manifest.get(draftId)), draftId);
+    const prior = row.sources[key];
+
+    /* Already attached and still present -> nothing to do. */
+    if (prior && prior.photoId && row.order.includes(prior.photoId)) {
+      return { attached: false, reason: 'ALREADY_ATTACHED', photoId: prior.photoId };
+    }
+    /* Attached once and removed by the seller -> stay removed. */
+    if (prior && prior.removedAt) {
+      return { attached: false, reason: 'REMOVED_BY_SELLER', photoId: null };
+    }
+    /* Ledger entry exists but the photo is gone with no removal stamp: the blob
+       was lost rather than deleted through the product. Do not silently
+       re-attach -- say so, so the seller can decide. */
+    if (prior && prior.photoId && !row.order.includes(prior.photoId)) {
+      return { attached: false, reason: 'PHOTO_MISSING', photoId: null };
+    }
+    if (row.order.length >= PHOTO_MAX_PER_DRAFT) {
+      return { attached: false, reason: 'PHOTO_LIMIT', photoId: null };
+    }
+
+    const id = _photoId();
+    /* The MIME type comes from the blob itself. Naming every image .png and
+       calling it image/png would misdescribe a JPEG the browser then fails to
+       decode. */
+    const type = (blob && blob.type) || (source && source.type) || '';
+    await _photoReq(s.blobs.put({
+      id, draftId, blob, type,
+      name: (source && source.name) || '',
+      origin: 'scan',
+      sourceKey: key,
+      addedAt: Date.now(),
+    }));
+    const order = row.order.concat([id]);
+    const sources = { ...row.sources, [key]: { photoId: id, attachedAt: Date.now(), removedAt: 0 } };
+    await _photoReq(s.manifest.put({ draftId, order, sources }));
+    return { attached: true, reason: null, photoId: id };
   });
 }
 
@@ -19203,7 +19307,7 @@ function photosMove(draftId, photoId, direction) {
     if (j < 0 || j >= order.length) return { order, moved: false };
     order[i] = order[j];
     order[j] = photoId;
-    await _photoReq(s.manifest.put({ draftId, order }));
+    await _photoReq(s.manifest.put({ draftId, order, sources: row.sources }));
     return { order, moved: true };
   });
 }
@@ -19220,10 +19324,11 @@ function photosList(draftId) {
     const out = [];
     for (const id of row.order) {
       const rec = await _photoReq(s.blobs.get(id));
-      if (rec && rec.blob) out.push({ id, blob: rec.blob, type: rec.type || '', name: rec.name || '', missing: false });
-      else out.push({ id, blob: null, type: '', name: '', missing: true });
+      if (rec && rec.blob) out.push({ id, blob: rec.blob, type: rec.type || '', name: rec.name || '',
+        origin: rec.origin === 'scan' ? 'scan' : 'seller', missing: false });
+      else out.push({ id, blob: null, type: '', name: '', origin: 'seller', missing: true });
     }
-    return { photos: out, order: row.order };
+    return { photos: out, order: row.order, sources: row.sources };
   });
 }
 
@@ -19258,6 +19363,146 @@ const PHOTO_MISSING_COPY = 'This photo is no longer available in this browser.';
 const PHOTO_BROWSER_LIMIT_COPY = 'Photos stay in the browser that added them. They are not uploaded, and they will not appear on your other devices or in another browser.';
 
 window.photosAdd = photosAdd;
+window.photosAttachScan = photosAttachScan;
+
+/* ── Scan photo: snapshot, convert, attach ─────────────────────────────────
+   
+   Why a SNAPSHOT and not a re-read of the row. The attachment runs after the
+   create round-trip returns, which is a window in which the seller can rescan
+   the row. Reading the row's image at attach time would then attach a DIFFERENT
+   card's photograph to a draft created for the first one. So the image and the
+   identity it belongs to are captured together, in one synchronous read, BEFORE
+   the create is attempted, and only that captured pair is ever attached.
+   
+   Bytes stay off the wire. This runs entirely in the page, after the POST has
+   already returned, and touches neither the request payload nor
+   `_crCreateAttempt[idemKey]`. Retry identity is unchanged. */
+
+/** Capture image + identity together. Returns null when the row has no image. */
+function _scanPhotoSnapshot(row, instanceId) {
+  if (!row || !instanceId) return null;
+  // Only a locally captured image qualifies. A catalogue https:// URL is
+  // reference artwork, not a photograph of the seller's card, and the standing
+  // rule is that it must never be silently substituted for one.
+  const dataUrl = typeof row.imageDataUrl === 'string' && /^data:image\//.test(row.imageDataUrl)
+    ? row.imageDataUrl : '';
+  if (!dataUrl) return null;
+  const m = /^data:([^;,]+)[;,]/.exec(dataUrl);
+  return {
+    // One automatic attachment per scan row per draft. Stable across retries,
+    // and unchanged by a rescan, so a rescan cannot smuggle in a second photo.
+    sourceKey: 'scan:' + String(instanceId),
+    dataUrl,
+    type: (m && m[1]) || '',
+    capturedAt: Date.now(),
+  };
+}
+
+/** data: URL -> Blob, preserving the declared MIME type. No network. */
+function _dataUrlToBlob(dataUrl) {
+  const m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(String(dataUrl || ''));
+  if (!m) throw new Error('SCAN_PHOTO_UNREADABLE');
+  const type = m[1] || 'application/octet-stream';
+  const body = m[3] || '';
+  let bytes;
+  if (m[2]) {
+    const bin = atob(body);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } else {
+    bytes = new TextEncoder().encode(decodeURIComponent(body));
+  }
+  // The type is carried through, so a JPEG is stored as image/jpeg rather than
+  // being named .png and mislabelled.
+  return new Blob([bytes], { type });
+}
+
+/* Snapshots held for retry, keyed by draftId. The draft is already saved; only
+   the photo failed, so a retry must reuse this and must NOT create a draft. */
+const _crScanPhotoPending = {};
+
+/* Snapshot per idempotency key, so a replay attaches the photograph captured at
+   the FIRST attempt -- the same rule the payload follows. Without this a retry
+   after a rescan could attach a different card's photo under the same key. */
+const _crScanPhotoAttempt = {};
+
+/**
+ * Attach a snapshot to a saved draft. Never throws for an expected outcome.
+ * Returns { attached, reason, message } -- and on failure the snapshot is
+ * retained so `retryScanPhotoAttachment(draftId)` can try again.
+ */
+async function attachScanPhotoToDraft(draftId, snap) {
+  if (!draftId || !snap) return { attached: false, reason: 'NO_SNAPSHOT', message: '' };
+  try {
+    const blob = _dataUrlToBlob(snap.dataUrl);
+    const res = await photosAttachScan(draftId, {
+      sourceKey: snap.sourceKey,
+      blob,
+      type: snap.type || blob.type || '',
+      name: 'scan-photo',
+    });
+    if (res.attached) delete _crScanPhotoPending[draftId];
+    else if (res.reason === 'ALREADY_ATTACHED' || res.reason === 'REMOVED_BY_SELLER') {
+      // Settled outcomes. Nothing to retry, so the snapshot is dropped.
+      delete _crScanPhotoPending[draftId];
+    }
+    return { attached: res.attached, reason: res.reason, message: '' };
+  } catch (err) {
+    /* A silent omission is the bug. The draft is saved and keeps its data; what
+       failed is the photo, and the seller is told exactly that and offered a
+       retry that does not create a second draft. */
+    _crScanPhotoPending[draftId] = snap;
+    return {
+      attached: false,
+      reason: 'ATTACH_FAILED',
+      message: 'Draft saved, but your scan photo could not be attached. '
+             + 'You can retry the photo, or add one yourself.',
+    };
+  }
+}
+
+/** Retry a failed attachment. Creates no draft and needs no new scan. */
+async function retryScanPhotoAttachment(draftId) {
+  const snap = _crScanPhotoPending[draftId];
+  if (!snap) return { attached: false, reason: 'NOTHING_PENDING', message: '' };
+  return attachScanPhotoToDraft(draftId, snap);
+}
+
+function scanPhotoRetryPending(draftId) {
+  return !!_crScanPhotoPending[draftId];
+}
+
+/* Seller photo bytes must never reach POST /api/drafts, and after this change
+   the create path handles image bytes deliberately, so the boundary enforces it
+   rather than trusting each caller to have stripped them first.
+   
+   `_bulkScanRowToCard` already avoids `imageDataUrl` (ui.js:3857 documents why),
+   and this does not replace that. It makes the guarantee structural: a future
+   caller that hands over a raw scan row cannot silently put base64 into the
+   request and then into KV. A reference https:// artwork URL is NOT bytes and is
+   left alone -- the server legitimately stores it.
+   
+   Discovered by an acceptance check on the recorded request body: the fixture
+   had passed a raw row, and the payload carried the image. The fixture was
+   unrealistic AND the boundary was undefended; both were fixed. */
+function _cardWithoutPhotoBytes(card) {
+  if (!card || typeof card !== 'object') return card;
+  let hit = false;
+  const out = {};
+  for (const k of Object.keys(card)) {
+    const v = card[k];
+    if (typeof v === 'string' && /^\s*(data:|blob:)/i.test(v)) { hit = true; continue; }
+    out[k] = v;
+  }
+  return hit ? out : card;
+}
+
+window._cardWithoutPhotoBytes = _cardWithoutPhotoBytes;
+window._scanPhotoSnapshot = _scanPhotoSnapshot;
+window._dataUrlToBlob = _dataUrlToBlob;
+window.attachScanPhotoToDraft = attachScanPhotoToDraft;
+window.retryScanPhotoAttachment = retryScanPhotoAttachment;
+window.scanPhotoRetryPending = scanPhotoRetryPending;
 window.photosList = photosList;
 window.photosRemove = photosRemove;
 window.photosMove = photosMove;
@@ -21460,7 +21705,18 @@ const _crCreateAttempt = Object.create(null);
    because opening a review screen in the middle of a batch abandons the rest of
    it. Single-card callers are unaffected: same `draftId|null`, same toasts, same
    adoption behaviour. */
-async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, source, batch }) {
+async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, source, batch, scanPhoto }) {
+  /* Captured HERE, before anything is awaited, so a rescan during the pending
+     create cannot change which photograph gets attached. The caller may pass a
+     snapshot explicitly; otherwise it is taken from the row state now. A replay
+     under the same idempotency key reuses the FIRST attempt's snapshot for the
+     same reason the payload is reused. */
+  const _photoSnap = scanPhoto
+    || _crScanPhotoAttempt[idemKey]
+    || _scanPhotoSnapshot(card, instanceId);
+  if (_photoSnap && idemKey && !_crScanPhotoAttempt[idemKey]) {
+    _crScanPhotoAttempt[idemKey] = _photoSnap;
+  }
   // One place per outcome, two shapes out. `say` is a no-op in batch mode and
   // `out` collapses to the legacy draftId|null for everyone else, so no return
   // point can accidentally serve one caller and not the other.
@@ -21486,7 +21742,8 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
         // The client says WHICH card. It does not say what the card is called
         // or what its SKU is — the server derives both, and refuses a
         // client-supplied title or sku outright.
-        card, instanceId, slot: CR_D1_SLOT, price, priceSource,
+        card: _cardWithoutPhotoBytes(card),
+        instanceId, slot: CR_D1_SLOT, price, priceSource,
         // Client-declared, and labelled as such by the server. Without this
         // the packet is built with no fee revision at all, which BLOCKS it
         // (MISSING_FEE_MODEL_REVISION) -- so every draft the app created
@@ -21567,12 +21824,27 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
       // The list must be navigated by id after a create, never by assuming the
       // new draft sits at the top of page 1 (audit/DRAFT_LIST_API_CONTRACT.md).
       if (j && j.draftId) window._crLastDraftId = j.draftId;
+
+      /* The scan photo is attached AFTER the draft is saved, locally, and its
+         outcome never changes whether the draft exists. `photosAttachScan` does
+         the duplicate check and the insert in one transaction, so a replay or a
+         second simultaneous attempt declines rather than attaching twice, and a
+         photo the seller removed stays removed. */
+      let photoOutcome = null;
+      if (_photoSnap && j && j.draftId) {
+        photoOutcome = await attachScanPhotoToDraft(j.draftId, _photoSnap);
+        if (photoOutcome.reason === 'ATTACH_FAILED' && !batch && photoOutcome.message) {
+          say(photoOutcome.message);
+        }
+      }
+
       return out({
         ok: true,
         draftId: (j && j.draftId) || null,
         existing,
         replayed: replay,
         status: r.status,
+        photo: photoOutcome,
       });
     }
 
@@ -25169,14 +25441,33 @@ function _photoBatchStatus(added, rejected, skipped) {
   return parts.join(' ');
 }
 
+/* Two labels, two meanings, deliberately not interchangeable:
+   
+     SCAN_PHOTO_LABEL       -- a photograph of the seller's own card, taken by
+                               the scanner and auto-attached. It IS a listing
+                               photo.
+     REVIEW_REFERENCE_LABEL -- catalogue artwork. NOT the seller's card, and it
+                               is never a listing photo.
+   
+   The seller has to be able to tell which is which before publishing, which is
+   why the scan-sourced tile is marked rather than blending in with photos the
+   seller uploaded. */
+const SCAN_PHOTO_LABEL = 'Scan photo';
+
 function _photoItemHtml(p, i, total) {
   const pos = i + 1;
   const first = i === 0, last = i === total - 1;
+  const isScan = p.origin === 'scan';
+  const alt = isScan ? `Scan photo ${pos}` : `Listing photo ${pos}`;
   const body = p.missing
     ? `<div class="photo-gone" data-photo-missing>${PHOTO_MISSING_COPY}</div>`
-    : `<img class="photo-thumb" alt="Listing photo ${pos}" src="${p.url}">`;
-  return `<li class="photo-item${p.missing ? ' is-gone' : ''}" data-photo-item="${p.id}">
+    : `<img class="photo-thumb" alt="${alt}" src="${p.url}">`;
+  const originTag = isScan
+    ? `<span class="photo-origin" data-photo-origin="scan">${SCAN_PHOTO_LABEL}</span>`
+    : '';
+  return `<li class="photo-item${p.missing ? ' is-gone' : ''}${isScan ? ' is-scan' : ''}" data-photo-item="${p.id}">
       <span class="photo-pos">${pos}</span>
+      ${originTag}
       ${body}
       <div class="photo-actions">
         <button type="button" class="photo-btn" data-photo-move="up" data-photo-id="${p.id}"
@@ -25674,6 +25965,7 @@ try {
      shipped function rather than a copy of it. */
   window._reviewReferenceImageHtml = _reviewReferenceImageHtml;
   window.REVIEW_REFERENCE_LABEL    = REVIEW_REFERENCE_LABEL;
+  window.SCAN_PHOTO_LABEL          = SCAN_PHOTO_LABEL;
   window.REVIEW_NO_IMAGE_COPY      = REVIEW_NO_IMAGE_COPY;
   window.REVIEW_CONDITION_OWED_COPY = REVIEW_CONDITION_OWED_COPY;
   // Nothing else is exported for the packet block, deliberately. A

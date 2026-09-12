@@ -4043,8 +4043,15 @@ function _bulkDraftOutcomeHtml(result) {
       const open = (o.draftId)
         ? ' <button onclick="openDraftReview(\'' + _esc(o.draftId) + '\')" style="background:none;border:none;padding:0;color:rgba(196,181,253,1);font-size:.66rem;font-weight:700;text-decoration:underline;cursor:pointer">Open draft</button>'
         : '';
+      /* Retry attaches the photo to the draft that already exists. It is a
+         data attribute read by a delegated listener, not an interpolated
+         onclick string. */
+      const retry = (o.photoFailed && o.draftId)
+        ? ' <button type="button" data-photo-retry="' + _esc(o.draftId) + '"'
+          + ' style="background:none;border:none;padding:0;color:rgba(196,181,253,1);font-size:.66rem;font-weight:700;text-decoration:underline;cursor:pointer">Retry photo attachment</button>'
+        : '';
       return '<div style="font-size:.66rem;color:' + c + ';line-height:1.35">' +
-             _esc(prefix + o.message) + open + '</div>';
+             _esc(prefix + o.message) + open + retry + '</div>';
     }).join('') +
     '</div>';
 }
@@ -4080,9 +4087,21 @@ function _bulkDraftClassify(out) {
   }
   if (out.existing || out.replayed) {
     return { state: 'replayed', draftId: out.draftId,
+             photoFailed: !!(out.photo && out.photo.reason === 'ATTACH_FAILED'),
              message: 'Already has a draft — reopened rather than duplicated.' };
   }
-  return { state: 'created', draftId: out.draftId, message: 'Draft created.' };
+  /* The draft was created. A photo failure does NOT downgrade that -- the draft
+     is saved and keeps its data -- but it is reported, because a silently
+     missing photo is exactly the omission this work exists to fix. */
+  const photoFailed = !!(out.photo && out.photo.reason === 'ATTACH_FAILED');
+  return {
+    state: 'created',
+    draftId: out.draftId,
+    photoFailed,
+    message: photoFailed
+      ? 'Draft created — scan photo could not be attached.'
+      : 'Draft created.',
+  };
 }
 
 /* ── Advisory headroom ───────────────────────────────────────────────────── */
@@ -4173,6 +4192,12 @@ async function bulkCreateSelectedDrafts() {
       _bulkDraftRecord(u, { state: 'working', message: 'Creating draft…' });
 
       const card = _bulkScanRowToCard(u.row);
+      /* Captured from the RAW row, not from `card`: the mapper deliberately
+         strips image bytes so none reach POST /api/drafts, and that is kept.
+         The snapshot is a separate, local-only value taken at this instant, so a
+         rescan while the create is in flight cannot change which photograph is
+         attached. */
+      const scanPhoto = _scanPhotoSnapshot(u.row, u.instanceId);
       const price = (typeof u.row.marketPrice === 'number') ? u.row.marketPrice : null;
       // Provenance is whatever the row recorded when the number was produced.
       // No default to 'comp': an unstamped price is the seller's own.
@@ -4187,6 +4212,7 @@ async function bulkCreateSelectedDrafts() {
           price,
           priceSource,
           source: 'bulk-scan',
+          scanPhoto,
           // Suppress the single-card toast/navigation ladder: forty toasts and
           // an auto-opened review screen mid-batch is not a usable surface.
           // The ladder itself is unchanged for the single-card callers.
@@ -4699,3 +4725,40 @@ function _esc(s) {
   }
 })();
 
+
+
+/* Retry a failed scan-photo attachment. Reuses the snapshot held for that
+   draftId, so it needs no new scan and -- critically -- creates no second
+   draft: it never touches the create path. */
+document.addEventListener('click', async (ev) => {
+  const btn = ev.target && ev.target.closest && ev.target.closest('[data-photo-retry]');
+  if (!btn) return;
+  ev.preventDefault();
+  const draftId = btn.getAttribute('data-photo-retry');
+  if (!draftId) return;
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = 'Attaching…';
+  try {
+    const res = await window.retryScanPhotoAttachment(draftId);
+    if (res && res.attached) {
+      btn.textContent = 'Photo attached';
+      const outs = window._bulkDraftOutcomes || {};
+      for (const uid of Object.keys(outs)) {
+        if (outs[uid] && outs[uid].draftId === draftId) {
+          outs[uid].photoFailed = false;
+          outs[uid].message = 'Draft created.';
+        }
+      }
+    } else if (res && res.reason === 'NOTHING_PENDING') {
+      btn.textContent = 'Add a photo in the draft';
+      btn.disabled = true;
+    } else {
+      btn.textContent = prev;
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = prev;
+    btn.disabled = false;
+  }
+});

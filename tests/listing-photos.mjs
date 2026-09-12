@@ -806,104 +806,266 @@ const screenState = (page) => page.evaluate(() => ({
   await ctx.close();
 }
 
-/* ── Scenario: scan image -> Create Draft -> local photo manifest ──────────
+/* ── ACCEPTANCE: scan image -> Create Draft -> photo attached ──────────────
    
-   2026-09-12, owner finding. Every scenario above SEEDS photos into a manifest
-   and then asserts the store keeps them. That proves storage works once photos
-   are there. It does NOT establish that creating a draft from a scan puts the
-   seller's scan image into that manifest -- a different claim, which nothing
-   had tested.
+   HISTORY, so the change of meaning is not lost. On 2026-09-12 this slot held a
+   MEASUREMENT: it asserted the manifest stayed EMPTY after a scan-created draft,
+   which documented the defect. Those assertions have now been inverted on
+   purpose, because the local attachment step has been built. A test that passes
+   by observing an empty manifest documents a defect; acceptance has to require
+   the CORRECT photo to be present. That is what follows.
    
-   This scenario tests that exact path in the real page, against the real
-   product functions, because a negative grep does not prove absence:
-   
-     a scan row carrying an image  ->  _crCreateDraft (the real batch path)
-                                   ->  photosList(draftId)
-                                   ->  reopen and read it again
-   
-   The assertions below record the MEASURED result. Read the header note in the
-   return packet before changing them: if a local-only attachment step is built
-   later, these invert deliberately, and inverting them is the signal that the
-   behaviour changed rather than that the test broke. */
+   Everything below drives the real product functions in the real page. */
 {
   const ctx = await ctxWith();
   const page = await pageIn(ctx);
 
-  /* Does any product function other than the file picker reach the store?
-     Asked IN THE PAGE, of the live objects, rather than by grepping source. */
-  const reach = await page.evaluate(() => ({
-    photosAddExists:    typeof window.photosAdd === 'function',
-    createDraftExists:  typeof window._crCreateDraft === 'function'
-                        || typeof _crCreateDraft === 'function',
-  }));
-  T.check('the photo store is reachable from the page (control)',
-    reach.photosAddExists, JSON.stringify(reach));
+  /* A 1x1 GIF, not a PNG. The MIME type must survive end to end, so the fixture
+     deliberately is not the format the code might default to. */
+  const GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const scanRow = (instanceId) => ({
+    cardName: 'Ivysaur', set: 'Mega Evolution', setCode: 'MEG',
+    number: '134', rarity: 'Illustration Rare', game: 'pokemon',
+    imageDataUrl: GIF, instanceId,
+  });
 
-  /* A draft id that a scan-created draft would own. The manifest for it must be
-     read through the product's own reader, not the raw store. */
-  const SCAN_DRAFT_ID = 'draft-from-scan-me1-134';
-
-  const beforeCreate = await list(page, SCAN_DRAFT_ID);
-  T.check('before any draft exists, that id has no manifest (control)',
-    beforeCreate.order.length === 0, JSON.stringify(beforeCreate.order));
-
-  /* Now the measurement. The scan row carries an image the way a real scanned
-     row does -- a data: URL thumbnail -- and we ask whether ANY code path moves
-     it into the manifest for the draft id. The server call is not made here: the
-     question is purely whether the client attaches bytes locally, and the owner's
-     standing rule is that image bytes stay OUT of the server request. */
-  const measured = await page.evaluate(async (draftId) => {
-    const row = {
-      cardName: 'Ivysaur', set: 'Mega Evolution', setCode: 'MEG',
-      number: '134', rarity: 'Illustration Rare', game: 'pokemon',
-      // What a scanned row actually holds for its captured image.
-      imageDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  /* Stub only the two edges the sandbox cannot provide -- the auth token and
+     the network. The create path itself, the snapshot, the conversion and the
+     attachment are the real ones. Every POST body is recorded so the standing
+     rule "seller photo bytes never reach the server" is checked against the
+     actual request rather than assumed. */
+  await page.evaluate(() => {
+    window.__posts = [];
+    window._crIdToken = async () => 'test-token';
+    window.__nextDraftId = 'draft-scan-A';
+    window.__failNetwork = false;
+    const realFetch = window.fetch;
+    window.fetch = async (url, opts) => {
+      const u = String(url || '');
+      if (u.includes('/api/drafts') && opts && opts.method === 'POST') {
+        window.__posts.push({ url: u, body: String(opts.body || '') });
+        if (window.__failNetwork) throw new Error('network down');
+        return new Response(
+          JSON.stringify({ draftId: window.__nextDraftId, generation: 1 }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } });
+      }
+      return realFetch(url, opts);
     };
-    // Ask the catalogue-artwork helper what it does with a scan photo. This is
-    // the ONLY helper in the create path that touches an image at all.
-    let artwork = null, artworkThrew = null;
+  });
+
+  const created = await page.evaluate(async (row) => {
+    const out = await window._crCreateDraft({
+      card: row, instanceId: row.instanceId, idemKey: 'idem-A',
+      price: 12.5, priceSource: 'comp', source: 'bulk-scan', batch: true,
+    });
+    const listed = await window.photosList('draft-scan-A');
+    const p = listed.photos[0] || null;
+    let bytes = null, type = null;
+    if (p && p.blob) {
+      type = p.blob.type;
+      const buf = new Uint8Array(await p.blob.arrayBuffer());
+      bytes = Array.from(buf.slice(0, 6)).map(b => String.fromCharCode(b)).join('');
+    }
+    return { ok: out.ok, draftId: out.draftId, photo: out.photo,
+             count: listed.order.length, origin: p && p.origin, type, bytes,
+             posts: window.__posts.length,
+             postBody: window.__posts[0] ? window.__posts[0].body : '' };
+  }, scanRow('inst-A'));
+
+  T.check('ACCEPTANCE: creating a draft from a scan attaches exactly one photo',
+    created.count === 1, JSON.stringify({ count: created.count, photo: created.photo }));
+  T.check('ACCEPTANCE: the attached photo is the scan image, byte-identical at the header',
+    created.bytes === 'GIF89a', `header=${JSON.stringify(created.bytes)}`);
+  T.check('ACCEPTANCE: the original MIME type is preserved (not renamed to png)',
+    created.type === 'image/gif', `type=${JSON.stringify(created.type)}`);
+  T.check('ACCEPTANCE: the photo is marked as scan-sourced, so the UI can label it',
+    created.origin === 'scan', `origin=${JSON.stringify(created.origin)}`);
+  T.check('the create call reported the attachment on its result',
+    created.photo && created.photo.attached === true, JSON.stringify(created.photo));
+
+  /* Payload trace, not an assumption: the recorded request body is searched for
+     the image itself. */
+  /* Payload trace, not an assumption: the recorded request body is searched for
+     the image itself.
+
+     NOTE on how this check was arrived at. It first FAILED, and the fixture was
+     the reason -- it handed `_crCreateDraft` a raw scan row, whereas the bulk
+     caller hands it `_bulkScanRowToCard(row)`, which drops image bytes on
+     purpose. Rather than only correcting the fixture, the boundary was defended
+     too, because the guarantee had rested entirely on each caller remembering to
+     strip. Both layers are now asserted separately below. */
+  T.check('seller photo bytes stay OUT of the POST /api/drafts body',
+    created.posts === 1
+      && !created.postBody.includes('R0lGODlh')
+      && !created.postBody.includes('data:image'),
+    `postBytes=${created.postBody.length} containsImage=${created.postBody.includes('R0lGODlh')}`);
+
+  /* Layer 1: the mapper the bulk path actually uses drops the bytes. */
+  const mapped = await page.evaluate((row) => {
+    const fn = window._bulkScanRowToCard;
+    if (typeof fn !== 'function') return { absent: true };
+    const c = fn(row);
+    return { absent: false, json: JSON.stringify(c) };
+  }, scanRow('inst-M'));
+  T.check('the bulk mapper does not carry image bytes into the card payload',
+    mapped.absent === true || !mapped.json.includes('R0lGODlh'),
+    JSON.stringify(mapped).slice(0, 300));
+
+  /* Layer 2: even a caller that forgets cannot put bytes on the wire. */
+  const stripped = await page.evaluate(() => {
+    const c = window._cardWithoutPhotoBytes({
+      card: 'Ivysaur',
+      imageDataUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAA',
+      blobRef: 'blob:https://x/y',
+      imageUrl: 'https://images.pokemontcg.io/me1/134.png',
+    });
+    return { json: JSON.stringify(c), keptUrl: c.imageUrl, name: c.card };
+  });
+  T.check('the request boundary strips data:/blob: values from the card',
+    !stripped.json.includes('R0lGODlh') && !stripped.json.includes('blob:'),
+    stripped.json);
+  T.check('and it keeps reference artwork URLs and ordinary fields intact',
+    stripped.keptUrl === 'https://images.pokemontcg.io/me1/134.png'
+      && stripped.name === 'Ivysaur', stripped.json);
+
+  /* ── Simultaneous attempts ───────────────────────────────────────────────
+     Two attachments of the same source fired without awaiting between them.
+     This is the case the earlier list-then-add proposal got wrong. */
+  const concurrent = await page.evaluate(async () => {
+    const blobOf = () => window._dataUrlToBlob(
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+    const src = () => ({ sourceKey: 'scan:inst-C', blob: blobOf(), name: 'scan-photo' });
+    const [a, b] = await Promise.all([
+      window.photosAttachScan('draft-scan-C', src()),
+      window.photosAttachScan('draft-scan-C', src()),
+    ]);
+    const listed = await window.photosList('draft-scan-C');
+    return { a, b, count: listed.order.length };
+  });
+  T.check('ACCEPTANCE: two simultaneous attachments produce exactly ONE photo',
+    concurrent.count === 1, JSON.stringify(concurrent));
+  T.check('exactly one of the two simultaneous attempts reports attaching',
+    (concurrent.a.attached ? 1 : 0) + (concurrent.b.attached ? 1 : 0) === 1,
+    JSON.stringify({ a: concurrent.a, b: concurrent.b }));
+  T.check('the attempt that declined says why, and is not an error',
+    (concurrent.a.attached ? concurrent.b.reason : concurrent.a.reason) === 'ALREADY_ATTACHED',
+    JSON.stringify({ a: concurrent.a, b: concurrent.b }));
+
+  /* ── Interrupted creation, then replay ───────────────────────────────────
+     The first attempt fails at the network. The second replays the same
+     idempotency key and succeeds. One photo must result, not two. */
+  const replay = await page.evaluate(async (row) => {
+    window.__nextDraftId = 'draft-scan-B';
+    window.__failNetwork = true;
+    let firstErr = null;
     try {
-      const fn = window._catalogueArtworkUrl
-        || (typeof _catalogueArtworkUrl === 'function' ? _catalogueArtworkUrl : null);
-      artwork = fn ? fn(row) : 'HELPER_ABSENT';
-    } catch (e) { artworkThrew = e.message; }
+      await window._crCreateDraft({ card: row, instanceId: row.instanceId, idemKey: 'idem-B',
+        price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
+    } catch (e) { firstErr = e.message; }
+    window.__failNetwork = false;
+    const second = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
+      idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
+    const third = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
+      idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
+    const listed = await window.photosList('draft-scan-B');
+    return { firstErr, second: second.photo, third: third.photo, count: listed.order.length };
+  }, scanRow('inst-B'));
+  T.check('ACCEPTANCE: interrupted creation then replay leaves exactly ONE photo',
+    replay.count === 1, JSON.stringify(replay));
+  T.check('a further replay declines rather than attaching a second copy',
+    replay.third && replay.third.attached === false
+      && replay.third.reason === 'ALREADY_ATTACHED', JSON.stringify(replay.third));
 
-    const after = await window.photosList(draftId);
-    return { artwork, artworkThrew, order: after.order, count: after.order.length };
-  }, SCAN_DRAFT_ID);
+  /* ── Deliberate removal survives a retry ─────────────────────────────────
+     The seller deletes the auto-attached photo. Retrying creation must not
+     bring it back. */
+  const removal = await page.evaluate(async (row) => {
+    const before = await window.photosList('draft-scan-B');
+    await window.photosRemove('draft-scan-B', before.order[0]);
+    const afterRemove = await window.photosList('draft-scan-B');
+    const retry = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
+      idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
+    const afterRetry = await window.photosList('draft-scan-B');
+    return { removed: afterRemove.order.length, retry: retry.photo,
+             after: afterRetry.order.length };
+  }, scanRow('inst-B'));
+  T.check('the seller can remove the auto-attached photo',
+    removal.removed === 0, JSON.stringify(removal));
+  T.check('ACCEPTANCE: retrying creation does NOT restore a photo the seller deleted',
+    removal.after === 0, JSON.stringify(removal));
+  T.check('and the retry says the seller removed it, rather than failing silently',
+    removal.retry && removal.retry.reason === 'REMOVED_BY_SELLER',
+    JSON.stringify(removal.retry));
 
-  /* MEASURED: the create path does not attach the scan image. */
-  T.check('MEASURED: creating a draft from a scan leaves the photo manifest EMPTY',
-    measured.count === 0,
-    `manifest = ${JSON.stringify(measured.order)}`);
+  /* The ledger must survive the OTHER manifest writers.
+     
+     Found by mutation, not by inspection: making `photosAdd` and `photosMove`
+     write `{draftId, order}` without the ledger left the whole suite green,
+     because nothing exercised an add or a move BETWEEN the removal and the
+     retry. That is the silent-omission class -- the removal record is quietly
+     erased and the next retry restores a photo the seller deleted. */
+  const ledgerSurvives = await page.evaluate(async (row) => {
+    // Seller deleted the scan photo above; now they add their own and reorder.
+     const f = new File([new Uint8Array([1, 2, 3])], 'mine.png', { type: 'image/png' });
+    const g = new File([new Uint8Array([4, 5, 6])], 'mine2.png', { type: 'image/png' });
+    await window.photosAdd('draft-scan-B', [f, g]);
+    await window.photosMove('draft-scan-B', (await window.photosList('draft-scan-B')).order[0], 'down');
+    const retry = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
+      idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
+    const listed = await window.photosList('draft-scan-B');
+    const origins = listed.photos.map(p => p.origin);
+    return { retry: retry.photo, count: listed.order.length, origins };
+  }, scanRow('inst-B'));
+  T.check('adding and reordering the seller\u2019s own photos does not erase the attach ledger',
+    ledgerSurvives.retry && ledgerSurvives.retry.reason === 'REMOVED_BY_SELLER',
+    JSON.stringify(ledgerSurvives));
+  T.check('so the deleted scan photo is still NOT restored, and only seller photos remain',
+    ledgerSurvives.count === 2 && !ledgerSurvives.origins.includes('scan'),
+    JSON.stringify(ledgerSurvives));
 
-  /* And the reason: the one image-aware helper in the path deliberately drops
-     data:/blob: URLs, so a scan thumbnail has nowhere to go. That drop is
-     CORRECT for its own purpose -- it is what keeps seller photo bytes out of
-     the POST /api/drafts request -- which is why the gap is a missing local
-     step and not a bug in this helper. */
-  T.check('the artwork helper drops the scan\u2019s data: URL (keeping bytes off the wire)',
-    measured.artwork === null || measured.artwork === '' || measured.artwork === 'HELPER_ABSENT',
-    `_catalogueArtworkUrl returned ${JSON.stringify(measured.artwork)}`
-    + (measured.artworkThrew ? ` threw=${measured.artworkThrew}` : ''));
-
-  /* Reopen: the emptiness is not a paint-timing artefact of one read. */
+  /* ── Reopening the correct draft ─────────────────────────────────────────
+     A fresh page load. Draft A still has its photo; the unrelated draft has
+     none. A photo attached to the wrong draft would show up here. */
   const page2 = await ctx.newPage();
   await page2.goto(page.url(), { waitUntil: 'domcontentloaded' });
   await page2.waitForFunction(() => typeof window.photosList === 'function', { timeout: 15000 });
-  const reopened = await list(page2, SCAN_DRAFT_ID);
-  T.check('reopening review still shows no photo for the scan-created draft',
-    reopened.order.length === 0, JSON.stringify(reopened.order));
+  const reopened = await page2.evaluate(async () => {
+    const a = await window.photosList('draft-scan-A');
+    const other = await window.photosList('draft-unrelated');
+    const pa = a.photos[0] || null;
+    return { a: a.order.length, aOrigin: pa && pa.origin, other: other.order.length };
+  });
+  T.check('ACCEPTANCE: reopening shows the scan photo on the draft that owns it',
+    reopened.a === 1 && reopened.aOrigin === 'scan', JSON.stringify(reopened));
+  T.check('and an unrelated draft did not receive it',
+    reopened.other === 0, JSON.stringify(reopened));
 
-  /* The contrast that makes the above meaningful: the SAME id accepts photos
-     when the picker path is used. So the manifest is not broken for this id --
-     nothing simply writes to it. */
-  const manual = await add(page2, SCAN_DRAFT_ID, ['seller-photo.png']);
-  T.check('the same draft id DOES accept a photo through the picker path',
-    manual.ok === true && manual.res.added.length === 1, JSON.stringify(manual));
-  const afterManual = await list(page2, SCAN_DRAFT_ID);
-  T.check('so the empty manifest is a missing transfer, not an unwritable store',
-    afterManual.order.length === 1, JSON.stringify(afterManual.order));
+  /* A rescan mid-create must not swap the photograph: the snapshot is taken
+     from the row at call time, so a later mutation of the row cannot reach it. */
+  const snapshotStable = await page2.evaluate(() => {
+    const row = { instanceId: 'inst-D', imageDataUrl:
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' };
+    const snap = window._scanPhotoSnapshot(row, 'inst-D');
+    row.imageDataUrl = 'data:image/png;base64,DIFFERENTCARD';
+    return { key: snap.sourceKey, type: snap.type,
+             stillOriginal: snap.dataUrl.includes('R0lGODlh') };
+  });
+  T.check('the snapshot holds image and identity together, immune to a later rescan',
+    snapshotStable.stillOriginal === true && snapshotStable.key === 'scan:inst-D'
+      && snapshotStable.type === 'image/gif', JSON.stringify(snapshotStable));
+
+  /* Catalogue artwork is still refused as a listing photo. */
+  const artwork = await page2.evaluate(() => {
+    const s = window._scanPhotoSnapshot(
+      { instanceId: 'inst-E', imageUrl: 'https://images.pokemontcg.io/me1/134.png' }, 'inst-E');
+    return { snap: s };
+  });
+  T.check('catalogue artwork is never snapshotted as the seller\u2019s photograph',
+    artwork.snap === null, JSON.stringify(artwork));
+
+  T.check('the scan-photo label is distinct from the reference-artwork label',
+    await page2.evaluate(() => window.SCAN_PHOTO_LABEL === 'Scan photo'
+      && window.SCAN_PHOTO_LABEL !== window.REVIEW_REFERENCE_LABEL), 'labels');
 
   await ctx.close();
 }
