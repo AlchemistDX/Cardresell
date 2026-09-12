@@ -113,7 +113,8 @@ await section('the formatter is not an identity function', () => {
    cannot quietly turn a cosmetic backfill into a re-identification of every
    card a seller owns. No backfill is performed here. */
 
-const { skuFor, normalizeNumber } = await import('../api/_cardIdentity.js');
+const { skuFor, normalizeNumber, identityAxes, identityString } =
+  await import('../api/_cardIdentity.js');
 
 await section('restoring leading zeros is SKU-neutral (measured)', () => {
   const base = { card: 'Ivysaur', set: 'Mega Evolution', setCode: 'MEG', game: 'pokemon', rarity: 'Illustration Rare' };
@@ -147,6 +148,61 @@ await section('restoring leading zeros is SKU-neutral (measured)', () => {
   ok('H2. zeros survive into the DISPLAY number (the reason to restore them)',
     fmt('007', 102) === '007/102',
     `fmt('007', 102) = ${JSON.stringify(fmt('007', 102))}`);
+});
+
+/* ── I. WHICH identity input actually moved the SKU ─────────────────────────
+   
+   2026-09-12, owner finding. A return packet claimed the exported SKU changed
+   "because the card number changed". That was wrong and it contradicted earlier
+   isolated tests, which had established that correcting the RARITY moved it
+   while the denominator stayed display-only. Both exports concern number 134.
+   
+   Rather than restate a cause, this section reproduces both observed SKUs from
+   their inputs. The two literals below are the SKUs actually observed in the
+   two exported files, so if the identity inputs ever change shape this section
+   fails instead of a document quietly going stale.
+   
+   The denominator assertion is the load-bearing one: it is why the corrected
+   export may ship without migrating any existing identity. */
+section('I. the SKU delta is attributable to rarity, not to the number', () => {
+  const base = {
+    game: 'pokemon', setCode: 'MEG', set: 'Mega Evolution',
+    number: '134', cardName: 'Ivysaur',
+  };
+  const OLD = { ...base, rarity: 'Shiny Rare' };          // the defective export
+  const NEW = { ...base, rarity: 'Illustration Rare' };   // the corrected export
+
+  const SKU_OBSERVED_OLD = 'v2-PKMMEG134-1dffa7b90107ea00';
+  const SKU_OBSERVED_NEW = 'v2-PKMMEG134-05c21861885b0ffd';
+
+  eq('I1. rarity alone reproduces the SKU of the defective export',
+    skuFor(OLD), SKU_OBSERVED_OLD);
+  eq('I2. rarity alone reproduces the SKU of the corrected export',
+    skuFor(NEW), SKU_OBSERVED_NEW);
+
+  // The number is the SAME in both. It cannot be what moved.
+  eq('I3. the normalized identity number is 134 in the defective export',
+    identityAxes(OLD).number, '134');
+  eq('I4. the normalized identity number is 134 in the corrected export',
+    identityAxes(NEW).number, '134');
+  ok('I5. so the number is NOT what moved the SKU',
+    identityAxes(OLD).number === identityAxes(NEW).number
+    && skuFor(OLD) !== skuFor(NEW));
+
+  /* The denominator is presentation. If this ever fails, correcting a display
+     number would silently re-key existing drafts, and the "no migration"
+     decision would no longer hold. */
+  eq('I6. adding printedTotal does not change the SKU',
+    skuFor({ ...NEW, printedTotal: 132 }), skuFor(NEW));
+  eq('I7. nor does setPrintedTotal',
+    skuFor({ ...NEW, setPrintedTotal: 132 }), skuFor(NEW));
+  ok('I8. and the denominator never reaches the hashed identity string',
+    !identityString({ ...NEW, printedTotal: 132 }).includes('132'),
+    identityString({ ...NEW, printedTotal: 132 }));
+
+  // Leading zeros are display-only for the same reason.
+  eq('I9. a zero-padded number hashes to the same identity as its bare form',
+    skuFor({ ...NEW, number: '007' }), skuFor({ ...NEW, number: '7' }));
 });
 
 T.done();

@@ -32,6 +32,7 @@
 // formatted again here: one card-condition-to-text implementation, not two.
 
 import { conditionHandoffLines } from './_conditionDescriptors.js';
+import { displayCollectorNumber } from './_listingTitle.js';
 
 export const DESCRIPTION_CODES = {
   DESCRIPTION_RAW_CONDITION_OMITTED: 'DESCRIPTION_RAW_CONDITION_OMITTED',
@@ -81,9 +82,37 @@ export function buildListingDescription(parts = {}) {
     return '';
   };
 
+  /* The Card Number line states the DISPLAY number, denominator included.
+     
+     2026-09-12. The exported description read "Card Number: 134" while the
+     heading immediately above it read "#134/132" -- the same field, two values,
+     in one block of text a buyer reads. The aspect bag is the wrong source for
+     this one line: buildOptionalAspects fills 'Card Number' from row.number,
+     which is the bare collector number, and the denominator lives on the row.
+     
+     So the value is routed through displayCollectorNumber, the SAME formatter
+     the title uses. Not a second implementation of the denominator rule and not
+     a local string concat -- it keeps the formatter's refusals, so a card with
+     no verified denominator still reads "134" rather than acquiring a
+     fabricated one, and "007/102" keeps its padding.
+     
+     The identity number is untouched. This is presentation only: normalizeNumber
+     strips leading zeros before hashing, so the SKU does not move. The aspect
+     bag is also left alone -- an eBay item aspect is a separate surface with its
+     own expected values, and changing it is not what the described defect was. */
+  const numberDisplay = (aspectValue) => {
+    const row = parts.row && typeof parts.row === 'object' ? parts.row : {};
+    const formatted = clean(displayCollectorNumber(
+      aspectValue,
+      row.printedTotal ?? row.setPrintedTotal,
+    ));
+    return formatted || aspectValue;
+  };
+
   const lines = [];
   for (const [aspectName, label] of FIELD_ORDER) {
-    const v = pick(aspectName);
+    let v = pick(aspectName);
+    if (v && aspectName === 'Card Number') v = numberDisplay(v);
     if (v) lines.push(`${label}: ${v}`);
   }
 

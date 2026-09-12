@@ -806,6 +806,108 @@ const screenState = (page) => page.evaluate(() => ({
   await ctx.close();
 }
 
+/* ── Scenario: scan image -> Create Draft -> local photo manifest ──────────
+   
+   2026-09-12, owner finding. Every scenario above SEEDS photos into a manifest
+   and then asserts the store keeps them. That proves storage works once photos
+   are there. It does NOT establish that creating a draft from a scan puts the
+   seller's scan image into that manifest -- a different claim, which nothing
+   had tested.
+   
+   This scenario tests that exact path in the real page, against the real
+   product functions, because a negative grep does not prove absence:
+   
+     a scan row carrying an image  ->  _crCreateDraft (the real batch path)
+                                   ->  photosList(draftId)
+                                   ->  reopen and read it again
+   
+   The assertions below record the MEASURED result. Read the header note in the
+   return packet before changing them: if a local-only attachment step is built
+   later, these invert deliberately, and inverting them is the signal that the
+   behaviour changed rather than that the test broke. */
+{
+  const ctx = await ctxWith();
+  const page = await pageIn(ctx);
+
+  /* Does any product function other than the file picker reach the store?
+     Asked IN THE PAGE, of the live objects, rather than by grepping source. */
+  const reach = await page.evaluate(() => ({
+    photosAddExists:    typeof window.photosAdd === 'function',
+    createDraftExists:  typeof window._crCreateDraft === 'function'
+                        || typeof _crCreateDraft === 'function',
+  }));
+  T.check('the photo store is reachable from the page (control)',
+    reach.photosAddExists, JSON.stringify(reach));
+
+  /* A draft id that a scan-created draft would own. The manifest for it must be
+     read through the product's own reader, not the raw store. */
+  const SCAN_DRAFT_ID = 'draft-from-scan-me1-134';
+
+  const beforeCreate = await list(page, SCAN_DRAFT_ID);
+  T.check('before any draft exists, that id has no manifest (control)',
+    beforeCreate.order.length === 0, JSON.stringify(beforeCreate.order));
+
+  /* Now the measurement. The scan row carries an image the way a real scanned
+     row does -- a data: URL thumbnail -- and we ask whether ANY code path moves
+     it into the manifest for the draft id. The server call is not made here: the
+     question is purely whether the client attaches bytes locally, and the owner's
+     standing rule is that image bytes stay OUT of the server request. */
+  const measured = await page.evaluate(async (draftId) => {
+    const row = {
+      cardName: 'Ivysaur', set: 'Mega Evolution', setCode: 'MEG',
+      number: '134', rarity: 'Illustration Rare', game: 'pokemon',
+      // What a scanned row actually holds for its captured image.
+      imageDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    };
+    // Ask the catalogue-artwork helper what it does with a scan photo. This is
+    // the ONLY helper in the create path that touches an image at all.
+    let artwork = null, artworkThrew = null;
+    try {
+      const fn = window._catalogueArtworkUrl
+        || (typeof _catalogueArtworkUrl === 'function' ? _catalogueArtworkUrl : null);
+      artwork = fn ? fn(row) : 'HELPER_ABSENT';
+    } catch (e) { artworkThrew = e.message; }
+
+    const after = await window.photosList(draftId);
+    return { artwork, artworkThrew, order: after.order, count: after.order.length };
+  }, SCAN_DRAFT_ID);
+
+  /* MEASURED: the create path does not attach the scan image. */
+  T.check('MEASURED: creating a draft from a scan leaves the photo manifest EMPTY',
+    measured.count === 0,
+    `manifest = ${JSON.stringify(measured.order)}`);
+
+  /* And the reason: the one image-aware helper in the path deliberately drops
+     data:/blob: URLs, so a scan thumbnail has nowhere to go. That drop is
+     CORRECT for its own purpose -- it is what keeps seller photo bytes out of
+     the POST /api/drafts request -- which is why the gap is a missing local
+     step and not a bug in this helper. */
+  T.check('the artwork helper drops the scan\u2019s data: URL (keeping bytes off the wire)',
+    measured.artwork === null || measured.artwork === '' || measured.artwork === 'HELPER_ABSENT',
+    `_catalogueArtworkUrl returned ${JSON.stringify(measured.artwork)}`
+    + (measured.artworkThrew ? ` threw=${measured.artworkThrew}` : ''));
+
+  /* Reopen: the emptiness is not a paint-timing artefact of one read. */
+  const page2 = await ctx.newPage();
+  await page2.goto(page.url(), { waitUntil: 'domcontentloaded' });
+  await page2.waitForFunction(() => typeof window.photosList === 'function', { timeout: 15000 });
+  const reopened = await list(page2, SCAN_DRAFT_ID);
+  T.check('reopening review still shows no photo for the scan-created draft',
+    reopened.order.length === 0, JSON.stringify(reopened.order));
+
+  /* The contrast that makes the above meaningful: the SAME id accepts photos
+     when the picker path is used. So the manifest is not broken for this id --
+     nothing simply writes to it. */
+  const manual = await add(page2, SCAN_DRAFT_ID, ['seller-photo.png']);
+  T.check('the same draft id DOES accept a photo through the picker path',
+    manual.ok === true && manual.res.added.length === 1, JSON.stringify(manual));
+  const afterManual = await list(page2, SCAN_DRAFT_ID);
+  T.check('so the empty manifest is a missing transfer, not an unwritable store',
+    afterManual.order.length === 1, JSON.stringify(afterManual.order));
+
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 T.done();

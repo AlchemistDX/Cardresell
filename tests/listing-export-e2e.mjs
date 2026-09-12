@@ -502,6 +502,50 @@ if (out) {
   ok('C12. the heading states the number once, so the description does not read \u201c#134 #134\u201d',
     (out.Description.split('<br>')[0].match(/134/g) || []).length <= 2,
     JSON.stringify(out.Description.split('<br>')[0]));
+
+  /* ── C13-C17. The Card Number FIELD, read out of the parsed CSV ──────────
+     
+     2026-09-12, owner finding. C11 above passed on a description whose body
+     read "Card Number: 134" while its heading read "#134/132", because C11 only
+     asked whether "134/132" appeared ANYWHERE in the description -- and the
+     heading alone satisfied that. The exported file disagreed with itself and
+     the suite reported green.
+     
+     So these assertions locate the "Card Number:" line inside the Description
+     column of the PARSED export and assert on that field's value. The heading is
+     explicitly excluded from what they read, so a correct heading can never
+     again cover for a wrong body. */
+  const descLines   = out.Description.split('<br>').map((l) => l.trim());
+  const bodyLines   = descLines.slice(1);                 // drop the heading
+  const numberLines = bodyLines.filter((l) => /^Card Number:/.test(l));
+
+  ok('C13. the exported description body has exactly one Card Number line',
+    numberLines.length === 1,
+    `body lines = ${JSON.stringify(bodyLines)}`);
+
+  const numberField = (numberLines[0] || '').replace(/^Card Number:\s*/, '');
+
+  ok('C14. the exported Card Number FIELD states the denominator (not just the heading)',
+    numberField === '134/132',
+    `Card Number field = ${JSON.stringify(numberField)} -- heading was `
+    + JSON.stringify(descLines[0]));
+
+  /* The point of the finding: heading and body must state the SAME number. */
+  const headingNumber = (descLines[0].match(/#(\S+)/) || [])[1] || '';
+  ok('C15. the heading and the Card Number field agree',
+    headingNumber === numberField,
+    `heading #${headingNumber} vs field ${JSON.stringify(numberField)}`);
+
+  ok('C16. the Card Number field is not the bare collector number',
+    numberField !== '134',
+    `Card Number field = ${JSON.stringify(numberField)}`);
+
+  /* Presentation only. The identity number must NOT have moved: the SKU is
+     asserted against its recorded value elsewhere, so here we simply confirm the
+     denominator did not leak into the SKU column. */
+  ok('C17. the denominator stayed out of the SKU (presentation only)',
+    !out['Custom label (SKU)'].includes('/') && !out['Custom label (SKU)'].includes('132'),
+    `SKU = ${JSON.stringify(out['Custom label (SKU)'])}`);
 }
 
 /* ── 7. retry stability is NOT SKU stability ─────────────────────────────── */
