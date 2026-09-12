@@ -56,6 +56,58 @@ That includes **26 API modules** — the entire Block D draft path
 
 ---
 
+## 1a. Merged-build verification — DONE, on the merge commit itself
+
+Matching frontend bundles do not verify the merged API code. Run on **`875204b`**
+(the merge), the commit being deployed.
+
+**First, what the merge actually changed.** `git diff --name-only 4aa02df..HEAD`
+returns **no `api/` and no `js/` file**. The differences are audit documents,
+plus tests and tools carried from my side (`tests/ebay-credential-check.mjs`,
+`tests/cert-generation-compare.mjs`, `tools/verify-ebay-credential.mjs`,
+`tools/verify-challenge.mjs`, and others). **The merged API and client code is
+byte-identical to the tested tip.** That is a useful fact, not a substitute for
+running the tests — so they were run.
+
+**9 suites, 1,511 assertions, 0 failures, every suite `SUITE COMPLETE, exit=0`:**
+
+| Suite | Result |
+|---|---|
+| `ebay-notify-token` (CH-2) | 22 passed, 0 failed |
+| `draft-lifecycle` | 83 passed, 0 failed |
+| `draft-store` | 147 passed, 0 failed |
+| `bulk-batch-draft` (batch drafting) | 93 passed, 0 failed |
+| `draft-crud-e2e` | 239 passed, 0 failed |
+| `draft-list-cap` | 130 passed, 0 failed |
+| `draft-index-recovery` | 265 passed, 0 failed |
+| `draft-review-screen` | 417 passed, 0 failed |
+| `draft-readiness` | 115 passed, 0 failed |
+
+Completion **and** exit status are recorded per suite, so a seeding crash cannot
+masquerade as a completed run.
+
+**`bulk-batch-draft` carries its own mutation check** — "MUTATION TOOK: only two
+drafts exist where three cards were selected", so the two-copies/two-drafts
+assertion is discriminating rather than merely green.
+
+**The CH-2 unset case is now verified, and §3 is satisfied without touching
+production.** `ebay-notify-token` exercises it in-process with the variable
+absent by construction: 503 with an explicit reason, **no `challengeResponse`
+at all**, `""` / `"   "` / `"\n"` / `'""'` all treated as unset rather than
+hashed, a missing `challenge_code` still 400 rather than 503, and a deletion
+notification acknowledged with the token both unset and set. **No production
+environment variable is to be unset.**
+
+**Deploy this exact commit — `875204b`** — and confirm that SHA in the build log.
+If any commit is added before pushing, **the suites above must be re-run on the
+new commit**; these results attach to `875204b` and to nothing else.
+
+**Not covered by these suites, and still open:** concurrency, the
+original-scan-row retry, RV-1, RV-3/RV-9, deployed Google authentication, R4
+activation. See §4 and §6.
+
+---
+
 ## 2. Deploy, then confirm the production commit
 
 - Push `phase1-block-d` to `main`; push auto-deploys.
