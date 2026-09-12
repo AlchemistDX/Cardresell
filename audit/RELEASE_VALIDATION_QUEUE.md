@@ -902,13 +902,13 @@ section.
 A run with no `SUITE COMPLETE` marker is **not** a pass regardless of exit
 status — it means the suite died partway and the remaining assertions never ran.
 
-### Run record — commit `PENDING_COMMIT`, 2026-09-12
+### Run record — commit `b2032d6`, 2026-09-12
 
 | check | tested commit | command | completed | exit | evidence |
 |---|---|---|---|---|---|
-| RQ-1 `entry-identity.mjs` | `PENDING_COMMIT` | as above | `SUITE COMPLETE` | 0 | 62 passed, 0 failed — `/tmp/f1.log` |
-| RQ-2 `listing-export-e2e.mjs` | `PENDING_COMMIT` | as above | `SUITE COMPLETE` | 0 | 111 passed, 0 failed — `/tmp/f5.log` |
-| RQ-3 `listing-photos.mjs` | `PENDING_COMMIT` | as above | `SUITE COMPLETE` | 0 | 132 passed, 0 failed — `/tmp/f4.log` |
+| RQ-1 `entry-identity.mjs` | `b2032d6` | as above | `SUITE COMPLETE` | 0 | 62 passed, 0 failed — `/tmp/f1.log` |
+| RQ-2 `listing-export-e2e.mjs` | `b2032d6` | as above | `SUITE COMPLETE` | 0 | 111 passed, 0 failed — `/tmp/f5.log` |
+| RQ-3 `listing-photos.mjs` | `b2032d6` | as above | `SUITE COMPLETE` | 0 | 132 passed, 0 failed — `/tmp/f4.log` |
 
 These logs are sandbox-local and will not outlive the session. The durable
 record is this table plus the check counts; a promoter should re-run the three
