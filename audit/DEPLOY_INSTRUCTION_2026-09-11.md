@@ -98,7 +98,21 @@ hashed, a missing `challenge_code` still 400 rather than 503, and a deletion
 notification acknowledged with the token both unset and set. **No production
 environment variable is to be unset.**
 
-**Deploy this exact commit — `ef98056`** — and confirm that SHA in the build log.
+**Which commit to deploy — stated as a test, not a SHA.**
+
+Naming a SHA here recurses: each commit that names one is itself a new commit.
+`875204b` named `ef98056`, `ef98056` named `7f80829`, and so on. I stopped the
+regress deliberately rather than chasing it. The durable form is a check the
+agent runs at push time:
+
+```
+git diff --name-only 875204b..HEAD | grep -vE '\.md$'
+```
+
+**Empty output ⇒ HEAD's code tree is identical to the tested tree, and HEAD is
+the commit to deploy.** Any `api/`, `js/`, `index.html`, or other non-markdown
+file in that output ⇒ **stop and re-run the nine suites on HEAD before pushing.**
+Confirm whichever SHA you push in the build log.
 
 The suites above were run on `875204b`. Writing this section then produced
 `ef98056`, so **my own re-run rule applied to me**: `ef98056` changes exactly one
