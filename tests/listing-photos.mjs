@@ -1113,6 +1113,133 @@ const screenState = (page) => page.evaluate(() => ({
   await ctx.close();
 }
 
+/* ── Q-PHOTO-1: the retry control on the review screen ─────────────────────────
+   
+   Owner direction, 2026-09-12: "Add 'Retry attaching scan photo' using the
+   retained snapshot and existing draft. The file picker is a manual recovery
+   option; it cannot necessarily recover a camera scan that was never saved as a
+   separate file."
+   
+   This drives the real review panel. An earlier version of this section only
+   called attachScanPhotoToDraft and read a label constant -- it passed while
+   establishing nothing about whether the control is ever rendered or does
+   anything. Rewritten to open the screen, look for the button, click it, and
+   check the photo actually landed. */
+await T.section('Retry attaching scan photo uses the retained snapshot and the existing draft', async () => {
+  const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  const btn = '[data-photo-retry]';
+
+  /* 1. No pending snapshot -> the control must NOT be offered, so the seller is
+        never shown a retry that would report NOTHING_PENDING. */
+  await openReview(page, DRAFT_ID);
+  const absentWhenNothingPending = await page.evaluate((sel) => !document.querySelector(sel), btn);
+
+  /* 2. Make the attachment fail the way it really fails, so the snapshot is
+        retained by the product rather than planted by the fixture.
+        
+        Ordering matters and is the real sequence: the attachment fails during
+        the bulk save, and the seller reaches the review screen afterwards. An
+        earlier version failed the attach while the screen was already open and
+        then called window._photoUiSync() to repaint -- but _photoUiSync is not
+        exported, so that call was a silent no-op and the panel never
+        repainted. Exporting it purely so a test could force a repaint would be
+        a test-only production global. Re-opening the screen is what a seller
+        actually does, and it needs no new export. */
+  const failed = await page.evaluate(async (DRAFT) => {
+    /* openFails, not abortBeforeCommit. The abortBeforeCommit seam sits inside
+       the picker's add transaction; photosAttachScan opens its own transaction
+       and never reaches it, so the first version of this fixture injected a
+       fault the code under test could not see -- the attach SUCCEEDED and no
+       snapshot was retained. The fixture was wrong, not the product. openFails
+       rejects the DB open, which every photo transaction goes through. */
+    window._photoStoreFaults = { openFails: true };
+    const res = await window.attachScanPhotoToDraft(DRAFT, {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      sourceKey: 'scan:retry-acceptance',
+      type: 'image/png',
+    });
+    return {
+      draftId: DRAFT,
+      attached: res.attached,
+      reason: res.reason,
+      tellsSeller: !!res.message,
+      pending: window.scanPhotoRetryPending(DRAFT),
+    };
+  }, DRAFT_ID);
+
+  /* 3. The seller opens the review screen. The control must be there. */
+  await page.evaluate(() => { window._photoStoreFaults = {}; });
+  await openReview(page, DRAFT_ID);
+  await page.waitForSelector(btn, { timeout: 10000 }).catch(() => {});
+  const dbg = await page.evaluate(() => ({
+    uiDraftId: window._photoUi && window._photoUi.draftId,
+    pendingNow: window.scanPhotoRetryPending
+      ? window.scanPhotoRetryPending(window._photoUi && window._photoUi.draftId) : 'no-fn',
+    loaded: window._photoUi && window._photoUi.loaded,
+    controlsHtml: (document.querySelector('.photo-controls') || {}).outerHTML || 'NO CONTROLS',
+  }));
+  console.log('    [dbg] ' + JSON.stringify(dbg).slice(0, 400));
+  const offered = await page.evaluate((sel) => {
+    const b = document.querySelector(sel);
+    return b ? { present: true, label: b.textContent.trim(), boundTo: b.getAttribute('data-photo-retry') } : { present: false };
+  }, btn);
+
+  /* 4. Clear the fault and click the REAL button. The retry must attach the
+        retained snapshot, and must not create a second draft: any POST to the
+        create path is recorded. */
+  const clicked = await page.evaluate(async (sel) => {
+    const posts = [];
+    const realFetch = window.fetch;
+    window.fetch = (u, o) => {
+      if (o && String(o.method || '').toUpperCase() === 'POST') posts.push(String(u));
+      return realFetch(u, o);
+    };
+    const before = (window._photoUi.photos || []).length;
+    document.querySelector(sel).click();
+    await new Promise(r => setTimeout(r, 600));
+    window.fetch = realFetch;
+    const photos = window._photoUi.photos || [];
+    return {
+      before,
+      after: photos.length,
+      hasScanPhoto: photos.some(p => p && p.origin === 'scan'),
+      /* The rendered DOM, not just state -- the origin tag is what tells the
+         seller this came from their scan. */
+      scanTagRendered: !!document.querySelector('[data-photo-origin="scan"]'),
+      scanTagText: (document.querySelector('[data-photo-origin="scan"]') || {}).textContent || '',
+      stillPending: window.scanPhotoRetryPending(window._photoUi.draftId),
+      controlGone: !document.querySelector(sel),
+      createPosts: posts.filter(u => /\/api\/drafts(\?|$)/.test(u)).length,
+      draftStillOne: window._reviewState && window._reviewState.draftId === window._photoUi.draftId,
+    };
+  }, btn);
+
+  T.check('the control is NOT offered when no snapshot is pending',
+    absentWhenNothingPending === true, JSON.stringify({ absentWhenNothingPending }));
+  T.check('a failed attachment reports rather than throwing, and tells the seller',
+    failed.attached === false && failed.reason === 'ATTACH_FAILED' && failed.tellsSeller === true,
+    JSON.stringify(failed));
+  T.check('ACCEPTANCE — the snapshot is retained after the failure',
+    failed.pending === true, JSON.stringify(failed));
+  T.check('ACCEPTANCE — the control is then rendered on the review screen, bound to this draft',
+    offered.present === true && offered.boundTo === failed.draftId, JSON.stringify(offered));
+  T.check('and it carries the owner\u2019s wording, naming the scan photo',
+    offered.label === 'Retry attaching scan photo', JSON.stringify(offered));
+  T.check('ACCEPTANCE — clicking it attaches the retained snapshot as a scan photo',
+    clicked.after === clicked.before + 1 && clicked.hasScanPhoto === true, JSON.stringify(clicked));
+  T.check('ACCEPTANCE — and it is LABELLED as a scan photo on screen, not shown as a seller pick',
+    clicked.scanTagRendered === true && clicked.scanTagText.trim() === 'Scan photo',
+    JSON.stringify({ scanTagRendered: clicked.scanTagRendered, scanTagText: clicked.scanTagText }));
+  T.check('ACCEPTANCE — the retry creates NO second draft: zero POSTs to the create path',
+    clicked.createPosts === 0 && clicked.draftStillOne === true, JSON.stringify(clicked));
+  T.check('and once attached, the snapshot is dropped and the control retires',
+    clicked.stillPending === false && clicked.controlGone === true, JSON.stringify(clicked));
+
+  await ctx.close();
+});
+
 await browser.close();
 server.close();
 T.done();

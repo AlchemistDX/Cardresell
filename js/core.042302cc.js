@@ -25974,6 +25974,12 @@ function _photoItemHtml(p, i, total) {
     </li>`;
 }
 
+/* Owner's wording, Q-PHOTO-1. Names the scan photo specifically, so it is not
+   read as a generic "try again" on the whole draft. Declared ABOVE its first
+   use: these are classic scripts, and a const referenced before its
+   declaration is a TDZ ReferenceError that kills the whole bundle. */
+const SCAN_PHOTO_RETRY_LABEL = 'Retry attaching scan photo';
+
 function _photoInnerHtml() {
   const s = _photoUi.status;
   const statusHtml = s
@@ -25983,8 +25989,31 @@ function _photoInnerHtml() {
   /* The limitation line sits OUTSIDE the grid/empty branch on purpose. If it
      lived inside either arm, one state would render without it. */
   const limit = `<p class="photo-limit" data-photo-limit>${PHOTO_BROWSER_LIMIT_COPY}</p>`;
+  /* Q-PHOTO-1, 2026-09-12. Owner direction: "Add 'Retry attaching scan photo'
+     using the retained snapshot and existing draft. The file picker is a manual
+     recovery option; it cannot necessarily recover a camera scan that was never
+     saved as a separate file."
+     
+     That distinction is the reason this control has to exist separately from
+     "Add photos". A camera scan is captured in-page; if the attachment failed,
+     there is no file on the device for the seller to re-pick. The only copy is
+     the snapshot retained in _crScanPhotoPending, so a retry is the ONLY path
+     that can recover it -- the picker is not a substitute.
+     
+     It renders only while a snapshot is actually pending for this draft, so the
+     seller is never offered a retry that would report NOTHING_PENDING. It reuses
+     the existing draft and never touches the create path, so retrying cannot
+     produce a second draft. Delegated listener + data attribute, per the
+     standing rule against interpolating ids into onclick strings. */
+  const retryPending = !!(_photoUi.draftId
+    && typeof scanPhotoRetryPending === 'function'
+    && scanPhotoRetryPending(_photoUi.draftId));
+  const retryBtn = retryPending
+    ? `<button type="button" class="photo-retry-btn" data-photo-retry="${esc(_photoUi.draftId)}" ${_photoUi.busy ? 'disabled' : ''}>${SCAN_PHOTO_RETRY_LABEL}</button>`
+    : '';
   const controls = `<div class="photo-controls">
       <button type="button" class="photo-add-btn" data-photo-add ${_photoUi.busy ? 'disabled' : ''}>Add photos</button>
+      ${retryBtn}
       <input type="file" id="photoPicker" data-photo-input accept="image/jpeg,image/png,image/webp" multiple hidden>
     </div>`;
   if (!_photoUi.loaded) {
@@ -26104,11 +26133,20 @@ async function _photoUiSync() {
   }
   if (_photoUi.draftId !== id) return; // another draft opened mid-read
   _photoRevokeUrls();
+  /* origin is carried through. It was dropped here, so _photoItemHtml's
+     `const isScan = p.origin === 'scan'` was ALWAYS false and the "Scan photo"
+     origin tag never rendered on the review screen -- a scan photo was
+     indistinguishable from one the seller picked. photosList returns the field;
+     only this projection lost it. Rule 2: the silent omission is the bug.
+     
+     Found while asserting the retry control attaches a SCAN photo. The one
+     existing test on this compared the two label constants to each other,
+     which passes whether or not either is ever shown. */
   _photoUi.photos = res.photos.map((p) => {
-    if (p.missing) return { id: p.id, missing: true, url: null };
+    if (p.missing) return { id: p.id, missing: true, url: null, origin: p.origin };
     const url = URL.createObjectURL(p.blob);
     _photoUi.urls.push(url);
-    return { id: p.id, missing: false, url };
+    return { id: p.id, missing: false, url, origin: p.origin };
   });
   _photoUi.loaded = true;
   _photoBlockPaint();
@@ -26180,6 +26218,46 @@ async function _photoMove(photoId, dir) {
     _photoUi.status = null;
     await _photoUiSync();
   } catch (e) {
+    _photoUi.status = { kind: 'error', text: photoStorageFailureMessage(e) };
+    _photoBlockPaint();
+  }
+}
+
+/* Q-PHOTO-1. Retry the scan-photo attachment for THIS draft, using the snapshot
+   retained when the attachment failed. It calls retryScanPhotoAttachment, which
+   reuses the existing draft and never enters the create path, so a retry cannot
+   produce a second draft. No new scan is needed and no file is requested from
+   the seller -- a camera scan was never a file on their device, which is why the
+   picker is not a substitute for this control. */
+async function _photoRetryScan(draftId) {
+  const id = draftId || _photoUi.draftId;
+  if (!id) return;
+  _photoUi.busy = true;
+  _photoUi.status = { kind: 'info', text: 'Attaching your scan photo\u2026' };
+  _photoBlockPaint();
+  try {
+    const res = await retryScanPhotoAttachment(id);
+    _photoUi.busy = false;
+    if (res && res.attached) {
+      _photoUi.status = null;
+      await _photoUiSync();
+      return;
+    }
+    if (res && res.reason === 'NOTHING_PENDING') {
+      /* The snapshot is gone -- already attached, or the seller removed it.
+         Re-reading storage is the honest response: it shows what is actually
+         there rather than asserting an outcome. */
+      _photoUi.status = null;
+      await _photoUiSync();
+      return;
+    }
+    /* Still failing. The snapshot is retained by attachScanPhotoToDraft, so the
+       control stays available and the seller is not told it succeeded. */
+    _photoUi.status = { kind: 'error', text: 'That still didn\u2019t attach. '
+      + 'Your draft is saved. You can try again, or add a photo yourself.' };
+    _photoBlockPaint();
+  } catch (e) {
+    _photoUi.busy = false;
     _photoUi.status = { kind: 'error', text: photoStorageFailureMessage(e) };
     _photoBlockPaint();
   }
@@ -26412,6 +26490,8 @@ function _reviewBindOnce() {
     if (mv) { _photoMove(mv.getAttribute('data-photo-id'), mv.getAttribute('data-photo-move')); return; }
     const rm = ev.target.closest && ev.target.closest('[data-photo-remove]');
     if (rm) { _photoRemove(rm.getAttribute('data-photo-remove')); return; }
+    const pretry = ev.target.closest && ev.target.closest('[data-photo-retry]');
+    if (pretry) { _photoRetryScan(pretry.getAttribute('data-photo-retry')); return; }
   });
   // The picker is replaced on every repaint, so the listener is delegated at
   // the wrapper rather than bound to the element.
@@ -26459,6 +26539,7 @@ try {
      shipped function rather than a copy of it. */
   window._reviewReferenceImageHtml = _reviewReferenceImageHtml;
   window.REVIEW_REFERENCE_LABEL    = REVIEW_REFERENCE_LABEL;
+  window.SCAN_PHOTO_RETRY_LABEL    = SCAN_PHOTO_RETRY_LABEL;
   window.SCAN_PHOTO_LABEL          = SCAN_PHOTO_LABEL;
   window.REVIEW_NO_IMAGE_COPY      = REVIEW_NO_IMAGE_COPY;
   window.REVIEW_CONDITION_OWED_COPY = REVIEW_CONDITION_OWED_COPY;

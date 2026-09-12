@@ -4048,7 +4048,7 @@ function _bulkDraftOutcomeHtml(result) {
          onclick string. */
       const retry = (o.photoFailed && o.draftId)
         ? ' <button type="button" data-photo-retry="' + _esc(o.draftId) + '"'
-          + ' style="background:none;border:none;padding:0;color:rgba(196,181,253,1);font-size:.66rem;font-weight:700;text-decoration:underline;cursor:pointer">Retry photo attachment</button>'
+          + ' style="background:none;border:none;padding:0;color:rgba(196,181,253,1);font-size:.66rem;font-weight:700;text-decoration:underline;cursor:pointer">' + (window.SCAN_PHOTO_RETRY_LABEL || 'Retry attaching scan photo') + '</button>'
         : '';
       return '<div style="font-size:.66rem;color:' + c + ';line-height:1.35">' +
              _esc(prefix + o.message) + open + retry + '</div>';
