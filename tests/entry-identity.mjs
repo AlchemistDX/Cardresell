@@ -673,12 +673,14 @@ await T.section('ACCEPTANCE — row actions reach the right entry, legacy and UU
        valueSource is not in that list, so the assignment is dropped and never
        reaches storage. A silent omission, which Rule 2 names as the bug.
        
-       This is NOT an id-compatibility defect and it is NOT fixed here: the
-       owner asked for the photo and id topics in separate reviewed commits, and
-       price provenance is a third topic. The behaviour is pinned so the packet
-       can report it and so a later fix has a failing assertion to flip. */
-    T.check(`DEFECT MEASUREMENT — valueSource:'comp' is dropped before storage on the ${shape} row (NOT fixed in this commit)`,
-      r.targetSource === undefined,
+       FLIPPED 2026-09-12 (Q-VS-1). This was pinned as a measurement while the
+       fix waited for its own commit, and it has now been made: valueSource is
+       grafted, coupled to currentValue. This assertion is the one the earlier
+       pinning existed to hand over, so it now asserts the fixed behaviour
+       instead of the defect. Kept in place rather than deleted so the flip is
+       visible in history. */
+    T.check(`ACCEPTANCE — valueSource:'comp' now reaches storage on the ${shape} row`,
+      r.targetSource === 'comp',
       'observed valueSource=' + JSON.stringify(r.targetSource) + ' — see _PRICE_REFRESH_FIELDS');
     T.check(`ACCEPTANCE — the ${shape} sibling is untouched`,
       r.rows === 2 && r.siblingValue === 10 && !r.siblingSource && !r.siblingRefreshed,
@@ -1738,6 +1740,99 @@ await T.section('the duplicate-id diagnostic reports ambiguity and changes nothi
   T.check('the stored ids still hold their original types after being inspected',
     JSON.stringify(r.storedTypes) === JSON.stringify(['number','string','number'])
     && r.unrelatedRowIntact === true, JSON.stringify(r));
+
+  await ctx.close();
+});
+
+/* ── Q-VS-1: valueSource reaches storage, and cannot mislabel a newer price ── */
+await T.section('valueSource is persisted with the price it describes', async () => {
+  const ctx = await ctxWith();
+  const page = await pageIn(ctx);
+
+  const r = await page.evaluate(async () => {
+    const pk = window.getUserKey('portfolio');
+    const out = {};
+
+    /* 1. The defect this replaces: a refreshed price must now carry its
+          provenance all the way into storage. */
+    localStorage.setItem(pk, JSON.stringify([
+      { id: 'vs-1', card: 'Charizard', currentValue: 100, valueSource: 'seller' },
+    ]));
+    window._fetchPriceForEntry = async () => 250;
+    await window.refreshSingleCardPrice('vs-1');
+    const a = JSON.parse(localStorage.getItem(pk) || '[]')[0] || {};
+    out.persisted = { currentValue: a.currentValue, valueSource: a.valueSource };
+
+    /* 2. The hazard the coupling exists for. A seller types a price in
+          another tab; the refresh in flight then commits a fetched comp that
+          happens to be the SAME number. currentValue does not graft (it
+          already matches), so valueSource must not graft either -- otherwise
+          the seller's own price gets relabelled 'comp'. */
+    localStorage.setItem(pk, JSON.stringify([
+      { id: 'vs-2', card: 'Blastoise', currentValue: 180, valueSource: 'seller' },
+    ]));
+    const res2 = window._commitPortfolioRefresh([
+      { id: 'vs-2', currentValue: 180, valueSource: 'comp',
+        lastRefreshed: undefined },
+    ]);
+    const b = JSON.parse(localStorage.getItem(pk) || '[]')[0] || {};
+    out.equalPrice = { ok: res2.ok, currentValue: b.currentValue, valueSource: b.valueSource };
+
+    /* 3. A refresh that fetched nothing must not stamp provenance either. */
+    localStorage.setItem(pk, JSON.stringify([
+      { id: 'vs-3', card: 'Machamp', currentValue: 20, valueSource: 'seller' },
+    ]));
+    window._commitPortfolioRefresh([{ id: 'vs-3', valueSource: 'comp' }]);
+    const c = JSON.parse(localStorage.getItem(pk) || '[]')[0] || {};
+    out.noPriceFetched = { currentValue: c.currentValue, valueSource: c.valueSource };
+
+    /* 4. A row deleted mid-refresh is still not resurrected, and a row added
+          mid-refresh is still left alone -- the coupling must not weaken the
+          merge-at-commit guarantee. */
+    localStorage.setItem(pk, JSON.stringify([
+      { id: 'vs-4', card: 'Alakazam', currentValue: 60, valueSource: 'seller' },
+    ]));
+    const res4 = window._commitPortfolioRefresh([
+      { id: 'vs-gone', currentValue: 500, valueSource: 'comp' },
+      { id: 'vs-4',    currentValue: 75,  valueSource: 'comp' },
+    ]);
+    const rows4 = JSON.parse(localStorage.getItem(pk) || '[]');
+    out.mergeAtCommit = {
+      count: rows4.length,
+      resurrected: rows4.some(x => x.id === 'vs-gone'),
+      dropped: res4.dropped,
+      targetPriced: rows4[0] && rows4[0].currentValue === 75,
+      targetSource: rows4[0] && rows4[0].valueSource,
+    };
+
+    /* 5. A manually entered price stays 'seller'. Standing rule: manual price
+          = seller, always. */
+    localStorage.setItem(pk, JSON.stringify([
+      { id: 'vs-5', card: 'Gyarados', currentValue: 30, valueSource: 'seller' },
+    ]));
+    window._commitPortfolioRefresh([{ id: 'vs-5', img: 'https://example.test/g.png' }]);
+    const e = JSON.parse(localStorage.getItem(pk) || '[]')[0] || {};
+    out.imageOnlyRefresh = { valueSource: e.valueSource, img: e.img, currentValue: e.currentValue };
+
+    return out;
+  });
+
+  T.check('ACCEPTANCE — a refreshed price now persists valueSource = comp',
+    r.persisted.currentValue === 250 && r.persisted.valueSource === 'comp',
+    JSON.stringify(r.persisted));
+  T.check('ACCEPTANCE — a fetched comp equal to the seller\u2019s price does NOT relabel it',
+    r.equalPrice.currentValue === 180 && r.equalPrice.valueSource === 'seller',
+    JSON.stringify(r.equalPrice));
+  T.check('ACCEPTANCE — a refresh that fetched no price stamps no provenance',
+    r.noPriceFetched.currentValue === 20 && r.noPriceFetched.valueSource === 'seller',
+    JSON.stringify(r.noPriceFetched));
+  T.check('merge-at-commit still holds: no row resurrected, the live row is priced',
+    r.mergeAtCommit.count === 1 && r.mergeAtCommit.resurrected === false
+    && r.mergeAtCommit.dropped === 1 && r.mergeAtCommit.targetPriced === true
+    && r.mergeAtCommit.targetSource === 'comp', JSON.stringify(r.mergeAtCommit));
+  T.check('an image-only refresh grafts the image and leaves the price seller-owned',
+    r.imageOnlyRefresh.valueSource === 'seller' && r.imageOnlyRefresh.currentValue === 30
+    && typeof r.imageOnlyRefresh.img === 'string', JSON.stringify(r.imageOnlyRefresh));
 
   await ctx.close();
 });

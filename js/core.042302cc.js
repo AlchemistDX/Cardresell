@@ -10921,6 +10921,27 @@ async function _fetchPriceForEntry(p) {
    reinsert an id that is no longer there. */
 const _PRICE_REFRESH_FIELDS = ['currentValue','lastRefreshed','img','imageUrl','tcgplayerUrl'];
 
+/* Q-VS-1, 2026-09-12. All three callers of _commitPortfolioRefresh
+   (refreshCollectionPrices :10986, refreshSingleCardPrice :11055,
+   _refetchCardMeta :11725) set p.valueSource = 'comp' beside p.currentValue,
+   but valueSource was not in the graft list, so it never reached storage. The
+   collection kept labelling a provider price as seller-entered.
+
+   Appending it to the list above would be wrong. The graft is per-field and
+   skips a field whose value already matches:
+
+     if (f[field] !== undefined && f[field] !== row[field]) ...
+
+   So when a fetched comp happens to EQUAL a price the seller typed in another
+   tab, currentValue would not be grafted while valueSource would -- relabelling
+   the seller's own number as a comp. That is precisely the mislabelling this
+   change is supposed to prevent, arrived at from the other direction.
+
+   valueSource therefore travels WITH the price it describes: it is grafted only
+   when currentValue is grafted in the same commit. A refresh that fetched
+   nothing leaves f.valueSource undefined and grafts neither. */
+const _PRICE_COUPLED_FIELDS = { valueSource: 'currentValue' };
+
 function _commitPortfolioRefresh(refreshedRows) {
   const fresh = new Map();
   for (const r of (refreshedRows || [])) if (r && r.id != null) fresh.set(String(r.id), r);
@@ -10932,8 +10953,17 @@ function _commitPortfolioRefresh(refreshedRows) {
     if (!f) return row; // added in another tab during the refresh — leave alone
     const out = Object.assign({}, row);
     let touched = false;
+    const graftedFields = new Set();
     for (const field of _PRICE_REFRESH_FIELDS) {
-      if (f[field] !== undefined && f[field] !== row[field]) { out[field] = f[field]; touched = true; }
+      if (f[field] !== undefined && f[field] !== row[field]) {
+        out[field] = f[field]; touched = true; graftedFields.add(field);
+      }
+    }
+    /* A dependent field only lands if the field it describes landed too. */
+    for (const [dep, requires] of Object.entries(_PRICE_COUPLED_FIELDS)) {
+      if (f[dep] !== undefined && f[dep] !== row[dep] && graftedFields.has(requires)) {
+        out[dep] = f[dep]; touched = true;
+      }
     }
     if (touched) { out.updatedAt = Date.now(); grafted++; }
     return out;
@@ -19883,6 +19913,9 @@ window._crMatchesById = _crMatchesById;
 window.CR_AMBIGUOUS_ID_MSG = CR_AMBIGUOUS_ID_MSG;
 window._crGuardMint = _crGuardMint;
 window._unionById = _unionById;
+window._commitPortfolioRefresh = _commitPortfolioRefresh;
+window._PRICE_REFRESH_FIELDS = _PRICE_REFRESH_FIELDS;
+window._PRICE_COUPLED_FIELDS = _PRICE_COUPLED_FIELDS;
 window._crDuplicateIdGroups = _crDuplicateIdGroups;
 window._crInspectDuplicateIds = _crInspectDuplicateIds;
 window._crIsNoSecureId = _crIsNoSecureId;
