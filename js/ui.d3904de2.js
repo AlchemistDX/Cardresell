@@ -4444,7 +4444,14 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     (n, r) => n + (r && r.qty && r.qty > 1 ? r.qty : 1), 0);
   const _mintedIds = [];
   let _mintCursor = 0;
-  if (!_crGuardMint(() => { for (let i = 0; i < _total; i++) _mintedIds.push(_crNewEntryId()); })) return;
+  /* Scan-screen wording: this is the ONE path where 'your scanned rows and
+     photos are still here' is established by test rather than assumed. The
+     other four minting sites use the generic sentence, which promises only
+     that the current entries remain on the page. */
+  if (!_crGuardMint(
+        () => { for (let i = 0; i < _total; i++) _mintedIds.push(_crNewEntryId()); },
+        (typeof window !== 'undefined' && window.CR_NO_SECURE_ID_MSG_SCAN) || undefined
+      )) return;
   const port = loadPortData();
   const today = new Date().toISOString().slice(0,10);
   let added = 0;

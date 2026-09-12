@@ -10110,7 +10110,12 @@ function openGradingModal(editId) {
 
   if (editId != null) {
     title.textContent = 'Edit Grading Entry';
-    const entry = loadGradingData().find(e => _crIdEq(e.id, editId));
+    /* Read-only prefill. It opens an EDIT form, so an ambiguous id must not
+       silently prefill from an arbitrary row -- the save that follows would
+       write to whichever one this picked. */
+    const _gRes = _crResolveEntry(loadGradingData(), editId);
+    if (_gRes.ambiguous && typeof showToast === 'function') showToast(CR_AMBIGUOUS_ID_MSG, 'error');
+    const entry = _gRes.row;
     if (entry) {
       document.getElementById('gmCard').value     = entry.card || '';
       document.getElementById('gmSet').value      = entry.set  || '';
@@ -10167,6 +10172,12 @@ function saveGradingEntry() {
 
   const data = loadGradingData();
   if (_gradingEditId != null) {
+    /* Ambiguity refuses: editing one of two rows that share an id could
+       overwrite the wrong card. Nothing is saved. */
+    if (_crMatchesById(data, _gradingEditId).length > 1) {
+      if (typeof showToast === 'function') showToast(CR_AMBIGUOUS_ID_MSG, 'error');
+      return;
+    }
     const idx = data.findIndex(e => _crIdEq(e.id, _gradingEditId));
     if (idx !== -1) data[idx] = { ...data[idx], card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice };
   } else {
@@ -10184,7 +10195,10 @@ function saveGradingEntry() {
 
 function deleteGradingEntry(id) {
   if (!confirm('Remove this grading entry?')) return;
-  saveGradingData(loadGradingData().filter(e => !_crIdEq(e.id, id)));
+  /* Refuse rather than delete both rows of an ambiguous id. */
+  const _gNext = _crRemoveById(loadGradingData(), id);
+  if (_gNext === null) return;
+  saveGradingData(_gNext);
   renderGradingLog();
 }
 
@@ -10317,7 +10331,10 @@ function renderGradingReport(data, reportWrap) {
 
 // ── Delete helpers ──
 function deleteFlip(id) {
-  const flips = loadFlipsData().filter(f => !_crIdEq(f.id, id));
+  /* Refuse BEFORE the tombstone: a tombstone for an ambiguous id would
+     propagate the deletion of both rows to every other device. */
+  const flips = _crRemoveById(loadFlipsData(), id);
+  if (flips === null) return;
   _addTombstones('flips', id); // before the save, so a failed write still records intent
   saveFlipsData(flips);
   renderFlipsView();
@@ -10330,7 +10347,11 @@ function deleteFlip(id) {
 window._fdmCurrentId = null;
 function openFlipDetail(flipId) {
   const flips = loadFlipsData();
-  const f = flips.find(x => _crIdEq(x.id, flipId));
+  /* Read-only detail view, but _fdmCurrentId below is what later edits and
+     deletes act on, so an ambiguous id must not seed it. */
+  const _fRes = _crResolveEntry(flips, flipId);
+  if (_fRes.ambiguous && typeof showToast === 'function') showToast(CR_AMBIGUOUS_ID_MSG, 'error');
+  const f = _fRes.row;
   if (!f) return;
   window._fdmCurrentId = flipId;
 
@@ -10422,7 +10443,8 @@ function _fdmDeleteFlip() {
   window._fdmCurrentId = null;
 }
 function deletePort(id) {
-  const port = loadPortData().filter(p => !_crIdEq(p.id, id));
+  const port = _crRemoveById(loadPortData(), id);
+  if (port === null) return; /* refuse before tombstoning an ambiguous id */
   _addTombstones('portfolio', id);
   savePortData(port);
   renderFlipsView();
@@ -11012,7 +11034,9 @@ function _crPriceSourceToLabel(prov) {
 
 async function refreshSingleCardPrice(id) {
   const port = loadPortData();
-  const p    = port.find(x => _crIdEq(x.id, id));
+  /* refreshSingleCardPrice writes a new price to the row, so ambiguity
+     refuses rather than repricing whichever row happened to be first. */
+  const p    = _crResolveForMutation(port, id);
   if (!p) return;
   const btn  = document.getElementById('colRefreshRow_' + id);
   if (btn) { btn.disabled = true; btn.textContent = '↻'; btn.style.opacity = '.4'; }
@@ -11057,7 +11081,11 @@ window._ccmCurrentId = null;
 
 function openCollectionCardDetail(entryId) {
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, entryId));
+  /* Read-only detail view, but _ccmCurrentId below is what the modal's edit,
+     remove and draft actions act on, so an ambiguous id must not seed it. */
+  const _cRes = _crResolveEntry(port, entryId);
+  if (_cRes.ambiguous && typeof showToast === 'function') showToast(CR_AMBIGUOUS_ID_MSG, 'error');
+  const p = _cRes.row;
   if (!p) return;
   window._ccmCurrentId = entryId;
 
@@ -11347,8 +11375,9 @@ function _ccmSaveIdentity() {
   if (numEl  && !num)  { show('Enter the card number.');               numEl.focus();  return; }
 
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, id));
-  if (!p) { show('That card is no longer in your collection.'); return; }
+  /* _ccmSaveIdentity writes to the row, so ambiguity refuses. */
+  const p = _crResolveForMutation(port, id);
+  if (!p) { if (_crMatchesById(port, id).length === 0) show('That card is no longer in your collection.'); return; }
 
   if (gameEl) {
     p.game = game;
@@ -11391,7 +11420,9 @@ function _ccmCreateDraft() {
   }
   // No stamp: the check failed or has not answered. Ask again.
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, id));
+  /* Gate display only; an ambiguous id leaves the gate untouched rather than
+     applying one row's entitlement to the other. */
+  const p = _crResolveEntry(port, id).row;
   if (p) _ccmApplySellGate(p);
 }
 
@@ -11424,7 +11455,7 @@ function _ccmInferGameFromSet(setStr) {
 function _ccmViewFullCard() {
   if (!window._ccmCurrentId) return;
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, window._ccmCurrentId));
+  const p = _crResolveEntry(port, window._ccmCurrentId).row;
   if (!p) return;
 
   // Close the collection modal so the lookup view is visible
@@ -11594,7 +11625,8 @@ function _ccmViewFullCard() {
 // a canonical image + price.
 async function _refetchCardMeta(entryId) {
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, entryId));
+  /* _refetchCardMeta writes img/price back to the row, so ambiguity refuses. */
+  const p = _crResolveForMutation(port, entryId);
   if (!p || !p.card) return false;
   // Skip if we already have a canonical card image (not a data: URL / blob:
   // scan photo) AND a positive market price. Nothing to fix.
@@ -11727,7 +11759,8 @@ function _ccmRemoveCard() {
     deletePortEntry(window._ccmCurrentId);
   } else {
     // Fallback if deletePortEntry isn't defined — handle inline.
-    const port = loadPortData().filter(x => !_crIdEq(x.id, window._ccmCurrentId));
+    const port = _crRemoveById(loadPortData(), window._ccmCurrentId);
+    if (port === null) return; /* refuse before tombstoning an ambiguous id */
     _addTombstones('portfolio', window._ccmCurrentId);
     savePortData(port);
     renderCollectionView();
@@ -11740,7 +11773,8 @@ function _ccmRemoveCard() {
 // but it was never defined — clicks were silent no-ops. Define it now.
 function deletePortEntry(entryId) {
   const port = loadPortData();
-  const next = port.filter(x => !_crIdEq(x.id, entryId));
+  const next = _crRemoveById(port, entryId);
+  if (next === null) return; /* ambiguous: refuse before tombstoning */
   if (next.length === port.length) return;
   _addTombstones('portfolio', entryId);
   savePortData(next);
@@ -11898,7 +11932,14 @@ window._markSoldEntryId = null; // the p.id we're marking as sold
 
 function openMarkSoldModal(entryId) {
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, entryId));
+  /* openMarkSoldModal seeds _markSoldEntryId, which confirmMarkSold acts on.
+     Refuse here too, so the seller is told before filling in a sold price. */
+  const _omRes = _crResolveEntry(port, entryId);
+  if (_omRes.ambiguous) {
+    if (typeof showToast === 'function') showToast(CR_AMBIGUOUS_ID_MSG, 'error');
+    return;
+  }
+  const p = _omRes.row;
   if (!p) {
     if (typeof showToast === 'function') showToast('Card not found in collection');
     return;
@@ -12057,7 +12098,15 @@ function confirmMarkSold() {
   const entryId = window._markSoldEntryId;
   if (!entryId) return;
   const port = loadPortData();
-  const p = port.find(x => _crIdEq(x.id, entryId));
+  /* Ambiguity refuses HERE, before the flip is built, so neither the flip log
+     nor the collection is touched. Gating at the top is what makes the
+     removal filter below safe: it can only ever match the one row. */
+  const _msMatches = _crMatchesById(port, entryId);
+  if (_msMatches.length > 1) {
+    if (typeof showToast === 'function') showToast(CR_AMBIGUOUS_ID_MSG, 'error');
+    return;
+  }
+  const p = _msMatches[0];
   if (!p) {
     if (typeof showToast === 'function') showToast('Card not found — refresh the page');
     document.getElementById('markSoldModal').classList.remove('open');
@@ -12132,6 +12181,8 @@ function confirmMarkSold() {
 
   // Remove from Collection.
   _addTombstones('portfolio', entryId); // sold cards must not sync back from another device
+  /* Safe to filter: the ambiguity gate at the top of this function already
+     returned if more than one row matched, so this removes exactly one. */
   if (!savePortData(port.filter(x => !_crIdEq(x.id, entryId)))) _reportStorageFailure();
 
   // Close modal + toast.
@@ -19685,10 +19736,25 @@ function _crNewEntryId() {
 
 /* One message, so the seller reads the same sentence wherever the refusal
    surfaces, and one tag, so callers never have to match on prose. */
+/* Refusal copy is per-surface, because the shared sentence was inaccurate on
+   four of the five paths. 'Your scan and photos are still here' is only true
+   on the scan screen; a grading-entry form or the flip log has neither. The
+   earlier wording also said to 'open CardResell in an up-to-date browser',
+   which implies the unsaved work would follow the seller there. It would not
+   -- it lives in this page's memory and this browser's storage. Owner
+   direction, 2026-09-12: use wording appropriate to each surface, and do not
+   suggest another browser will carry local work across automatically. */
 const CR_NO_SECURE_ID_MSG =
-  'This browser cannot generate a secure card ID, so nothing was saved. '
-  + 'Your scan and photos are still here \u2014 try again, or open CardResell in '
-  + 'an up-to-date browser.';
+  'This browser can\u2019t create a card ID, so this action wasn\u2019t saved. '
+  + 'Your current entries are still on this page. Keep it open while you '
+  + 'resolve the browser issue.';
+
+/* Scan-screen variant. Used ONLY where photo preservation is established by
+   test (the bulk scan save), never as the generic default. */
+const CR_NO_SECURE_ID_MSG_SCAN =
+  'This browser can\u2019t create a card ID, so nothing was saved. Your scanned '
+  + 'rows and photos are still on this page. Keep it open while you resolve '
+  + 'the browser issue.';
 
 /* True only for the refusal above. Callers use this to tell "we declined to
    write" apart from any other exception, which must keep propagating. */
@@ -19704,11 +19770,12 @@ function _crIsNoSecureId(e) { return !!(e && e.crNoSecureId === true); }
    
    One helper rather than five try/catch blocks, so "what happens when a browser
    cannot mint an id" has exactly one answer. */
-function _crGuardMint(fn) {
+function _crGuardMint(fn, msg) {
   try { fn(); return true; }
   catch (e) {
     if (_crIsNoSecureId(e)) {
-      try { showToast(CR_NO_SECURE_ID_MSG, 'error'); } catch (_) {}
+      /* One guard, one decision; only the sentence varies by surface. */
+      try { showToast(msg || CR_NO_SECURE_ID_MSG, 'error'); } catch (_) {}
       return false;
     }
     throw e;
@@ -19746,12 +19813,79 @@ function _crIdEq(a, b) {
   return String(a) === String(b);
 }
 
+/* Ambiguity is a refusal, not a tie to be broken.
+   ----------------------------------------------------
+   `_crIdEq` normalises both sides with String(), so a stored pair like the
+   number 123 and the string "123" compares equal to one id. That is a real
+   change in local lookup behaviour, not merely a newly visible pre-existing
+   hazard: before centralisation, strict === would have matched only one of
+   that pair, and now both match. Owner direction, 2026-09-12: where multiple
+   rows match the normalised id, report the ambiguity and refuse the mutation.
+   Do not choose the first row, and do not renumber anything.
+
+   Two rows sharing an identifier can be two genuinely different cards. A
+   newer updatedAt does not establish which card the seller meant, so there is
+   nothing here to resolve automatically -- picking either one risks editing,
+   repricing, or DELETING the wrong card. The delete paths make this sharpest:
+   they are written as .filter(row => !_crIdEq(row.id, id)), which on an
+   ambiguous id removes BOTH records rather than the one the seller clicked.
+
+   _crResolveEntry is the one place that decides. It returns the match count
+   so callers cannot accidentally treat 'ambiguous' as 'found'. */
+const CR_AMBIGUOUS_ID_MSG = 'Two saved entries share this card ID, so this action was stopped to avoid changing the wrong one. Nothing was altered.';
+
+function _crMatchesById(rows, id) {
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(row => row && _crIdEq(row.id, id));
+}
+
+/* Returns { ok, row, count, ambiguous }.
+   ok === true only for exactly one match. count === 0 is 'not found';
+   count > 1 is 'ambiguous' and ok is false with row null, so a caller that
+   forgets to check still cannot mutate a row it picked arbitrarily. */
+function _crResolveEntry(rows, id) {
+  const matches = _crMatchesById(rows, id);
+  if (matches.length === 1) return { ok: true, row: matches[0], count: 1, ambiguous: false };
+  return { ok: false, row: null, count: matches.length, ambiguous: matches.length > 1 };
+}
+
+/* For mutations. Reports the ambiguity to the seller and returns null so the
+   caller returns before touching storage. Deliberately says nothing when the
+   id simply isn't found: that is an ordinary miss and each caller already has
+   its own copy for it. */
+function _crResolveForMutation(rows, id) {
+  const r = _crResolveEntry(rows, id);
+  if (r.ambiguous) {
+    try { showToast(CR_AMBIGUOUS_ID_MSG, 'error'); } catch (_e) {}
+    return null;
+  }
+  return r.row;
+}
+
+/* The delete-by-filter shape needs its own guard, because 'remove everything
+   that matches' is exactly the wrong behaviour under ambiguity. Returns null
+   when the caller must refuse; otherwise the filtered array. */
+function _crRemoveById(rows, id) {
+  const r = _crResolveEntry(rows, id);
+  if (r.ambiguous) {
+    try { showToast(CR_AMBIGUOUS_ID_MSG, 'error'); } catch (_e) {}
+    return null;
+  }
+  return (Array.isArray(rows) ? rows : []).filter(row => !(row && _crIdEq(row.id, id)));
+}
+
 window._crNewEntryId = _crNewEntryId;
 window._crIdEq = _crIdEq;
+window._crResolveEntry = _crResolveEntry;
+window._crResolveForMutation = _crResolveForMutation;
+window._crRemoveById = _crRemoveById;
+window._crMatchesById = _crMatchesById;
+window.CR_AMBIGUOUS_ID_MSG = CR_AMBIGUOUS_ID_MSG;
 window._crGuardMint = _crGuardMint;
 window._unionById = _unionById;
 window._crIsNoSecureId = _crIsNoSecureId;
 window.CR_NO_SECURE_ID_MSG = CR_NO_SECURE_ID_MSG;
+window.CR_NO_SECURE_ID_MSG_SCAN = CR_NO_SECURE_ID_MSG_SCAN;
 
 /* One delegated listener for every collection-entry action.
    
@@ -22204,7 +22338,11 @@ async function hydrateCollectionSellButtons(rows) {
 // per-copy instance key — no intent token needed here.
 async function startListingDraftForEntry(entryId) {
   const port = loadPortData();
-  const p = port.find((x) => _crIdEq(x.id, entryId));
+  /* Starting a listing draft creates a record bound to this row, so an
+     ambiguous id refuses rather than drafting the wrong card. */
+  const _sdRes = _crResolveEntry(port, entryId);
+  if (_sdRes.ambiguous) { showToast(CR_AMBIGUOUS_ID_MSG, 'error'); return; }
+  const p = _sdRes.row;
   if (!p) { showToast('That card is no longer in your collection.'); return; }
 
   // As in the scan path: no value on file starts an unpriced draft rather

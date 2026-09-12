@@ -456,9 +456,22 @@ await T.section('ACCEPTANCE — row actions reach the right entry, legacy and UU
     refusal.rowsAfter === 1 && refusal.untouched === true, JSON.stringify(refusal));
   T.check('ACCEPTANCE — it does not throw at the seller; it reports and returns',
     refusal.threw === null, JSON.stringify(refusal));
+  /* Copy revised 2026-09-12 on owner direction: the scan screen is the ONE
+     surface where 'your scanned rows and photos are still here' is established
+     by test rather than assumed, so it gets its own sentence. The generic
+     sentence must NOT appear here, and neither may the withdrawn promise that
+     another browser would carry this work across. */
   T.check('ACCEPTANCE — the seller is told, once, in one sentence',
     refusal.toasts.length === 1 && refusal.toasts[0].k === 'error'
-      && /cannot generate a secure card ID/i.test(refusal.toasts[0].m),
+      && /can\u2019t create a card ID/i.test(refusal.toasts[0].m),
+    JSON.stringify(refusal.toasts));
+  T.check('ACCEPTANCE — the scan screen gets the scan-specific wording, naming rows and photos',
+    refusal.toasts.length === 1
+      && /scanned rows and photos are still on this page/i.test(refusal.toasts[0].m),
+    JSON.stringify(refusal.toasts));
+  T.check('and it does NOT promise another browser will carry the unsaved work across',
+    refusal.toasts.length === 1
+      && !/up-to-date browser|another browser|open CardResell in/i.test(refusal.toasts[0].m),
     JSON.stringify(refusal.toasts));
   T.check('ACCEPTANCE — the scan rows and the photo bytes survive for retry',
     refusal.scanRowsKept && refusal.photoBytesKept, JSON.stringify(refusal));
@@ -1036,6 +1049,595 @@ await T.section('ACCEPTANCE — multiple copies of one card stay independent', a
     JSON.stringify(siblings.remaining) === JSON.stringify([0, 1, 3])
       && JSON.stringify(siblings.pricesAfterDelete) === JSON.stringify([100, 999, 100]),
     JSON.stringify(siblings));
+  await ctx.close();
+});
+
+/* ── ACCEPTANCE: refusal on the four non-bulk minting paths ─────────────────
+   
+   Owner review, 2026-09-12: "The refusal evidence shown is strongest for bulk
+   save. For the other four paths, point to named tests proving the stated
+   preservation behaviour. Mark-as-sold particularly needs to demonstrate that
+   neither the collection record nor the flip log changes when ID creation
+   fails."
+   
+   That criticism was fair. The earlier packet asserted preservation on all
+   five by reading the code; only the bulk path was driven. Each path below is
+   now driven with both crypto methods removed, and each asserts what that
+   specific surface is supposed to keep -- not a shared claim about photos,
+   which four of these surfaces do not have. */
+await T.section('ACCEPTANCE — the other four minting paths refuse without losing work', async () => {
+  const ctx = await ctxWith();
+  const page = await pageIn(ctx);
+
+  const r = await page.evaluate(async () => {
+    const pKey = window.getUserKey('portfolio');
+    const fKey = window.getUserKey('flips');
+    const gKey = window.getUserKey('grading_log');
+
+    /* One existing collection row, so mark-as-sold has something real to act
+       on and we can prove it is still there afterwards. */
+    const seedPort = [{ id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', card: 'Blastoise',
+                        set: 'Base Set', number: '2', currentValue: 120, buyPrice: 50 }];
+    localStorage.setItem(pKey, JSON.stringify(seedPort));
+    localStorage.setItem(fKey, '[]');
+    localStorage.setItem(gKey, '[]');
+
+    const snap = () => ({
+      port: localStorage.getItem(pKey),
+      flips: localStorage.getItem(fKey),
+      grading: localStorage.getItem(gKey),
+    });
+
+    const toasts = [];
+    const realToast = window.showToast;
+    window.showToast = (m, k) => { toasts.push({ m: String(m), k }); };
+    const realConfirm = window.confirm;
+    window.confirm = () => true;
+
+    const realCrypto = window.crypto;
+    let removed = false;
+    try {
+      Object.defineProperty(window, 'crypto', { value: undefined, configurable: true });
+      removed = (typeof window.crypto === 'undefined');
+    } catch (_) { removed = false; }
+
+    const out = { removed, paths: {} };
+
+    /* Helper: run one path, capture storage before/after and what it threw. */
+    const drive = (name, setup, run, readWork) => {
+      const before = snap();
+      const tBefore = toasts.length;
+      let threw = null;
+      try { setup && setup(); } catch (e) { /* setup failures are reported below */ }
+      try { run(); } catch (e) { threw = String((e && e.message) || e); }
+      const after = snap();
+      out.paths[name] = {
+        threw,
+        portUnchanged: before.port === after.port,
+        flipsUnchanged: before.flips === after.flips,
+        gradingUnchanged: before.grading === after.grading,
+        toastsAdded: toasts.length - tBefore,
+        lastToast: toasts.length ? toasts[toasts.length - 1] : null,
+        work: (readWork && readWork()) || null,
+      };
+    };
+
+    /* --- 1. collection add (saveFlipEntry, port branch) ------------------- */
+    drive('collectionAdd',
+      () => {
+        /* _modalMode is a module-local `let`, not a window global, so the mode
+           is set through the real entry point rather than poked. Field ids are
+           the shipped ones (mCardName / mSetName / mBuyPrice), verified
+           against saveFlipEntry -- my first attempt invented fmCard etc, the
+           form stayed empty, and the save bailed on its own blank-name
+           validation BEFORE reaching the mint. Storage was unchanged for the
+           wrong reason, which is exactly the false pass this fixture exists to
+           avoid. */
+        window.openAddFlip('hold');
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        set('mCardName', 'Venusaur');
+        set('mSetName', 'Base Set');
+        set('mBuyPrice', '40');
+        set('mCurrentValue', '60');
+      },
+      () => { window.saveFlipEntry(); },
+      /* The seller's work on THIS surface is the typed form, not photos. */
+      () => {
+        const el = document.getElementById('mCardName');
+        const buy = document.getElementById('mBuyPrice');
+        const modal = document.getElementById('flipModal');
+        return {
+          typedCardKept: !!(el && el.value === 'Venusaur'),
+          typedBuyKept: !!(buy && buy.value === '40'),
+          modalStillOpen: !!(modal && modal.classList.contains('open')),
+        };
+      });
+
+    /* --- 2. flip log (saveFlipEntry, flip branch) ------------------------- */
+    drive('flipLog',
+      () => {
+        window.openAddFlip('flip');
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        set('mCardName', 'Machamp');
+        set('mSetName', 'Base Set');
+        set('mBuyPrice', '10');
+        set('mSellPrice', '35');
+      },
+      () => { window.saveFlipEntry(); },
+      () => {
+        const c = document.getElementById('mCardName');
+        const sell = document.getElementById('mSellPrice');
+        return {
+          typedCardKept: !!(c && c.value === 'Machamp'),
+          typedSellKept: !!(sell && sell.value === '35'),
+        };
+      });
+
+    /* --- 3. grading entry (saveGradingEntry) ------------------------------ */
+    drive('gradingEntry',
+      () => {
+        window._gradingEditId = null;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        set('gmCard', 'Alakazam');
+        set('gmSet', 'Base Set');
+        set('gmCost', '25');
+        set('gmGrader', 'psa');
+      },
+      () => { window.saveGradingEntry(); },
+      () => {
+        const c = document.getElementById('gmCard');
+        const cost = document.getElementById('gmCost');
+        return {
+          typedCardKept: !!(c && c.value === 'Alakazam'),
+          typedCostKept: !!(cost && cost.value === '25'),
+        };
+      });
+
+    /* --- 4. mark-as-sold (confirmMarkSold) -------------------------------- */
+    drive('markSold',
+      () => {
+        window._markSoldEntryId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        set('msSellPrice', '150');
+        set('msBuyPrice', '50');
+      },
+      () => { window.confirmMarkSold(); },
+      () => {
+        const port = JSON.parse(localStorage.getItem(pKey) || '[]');
+        const flips = JSON.parse(localStorage.getItem(fKey) || '[]');
+        const sell = document.getElementById('msSellPrice');
+        return {
+          collectionRowStillThere: port.length === 1
+            && port[0].id === 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          noFlipRecorded: flips.length === 0,
+          typedSellKept: !!(sell && sell.value === '150'),
+        };
+      });
+
+    try { Object.defineProperty(window, 'crypto', { value: realCrypto, configurable: true }); } catch (_) {}
+    window.showToast = realToast;
+    window.confirm = realConfirm;
+    out.allToasts = toasts;
+    return out;
+  });
+
+  T.check('the no-crypto condition was established for all four paths',
+    r.removed === true, JSON.stringify({ removed: r.removed }));
+
+  const P = r.paths || {};
+  const generic = /can\u2019t create a card ID/i;
+  const notScanCopy = (m) => !/scanned rows and photos/i.test(String(m || ''));
+
+  /* 1. collection add */
+  T.check('ACCEPTANCE — collection add: nothing is written on refusal',
+    P.collectionAdd && P.collectionAdd.portUnchanged && P.collectionAdd.flipsUnchanged,
+    JSON.stringify(P.collectionAdd));
+  T.check('ACCEPTANCE — collection add: the typed form survives for retry',
+    P.collectionAdd && P.collectionAdd.work
+      && P.collectionAdd.work.typedCardKept && P.collectionAdd.work.typedBuyKept,
+    JSON.stringify(P.collectionAdd));
+  T.check('ACCEPTANCE — collection add: it reports rather than throwing at the seller',
+    P.collectionAdd && P.collectionAdd.threw === null && P.collectionAdd.toastsAdded === 1,
+    JSON.stringify(P.collectionAdd));
+
+  /* 2. flip log */
+  T.check('ACCEPTANCE — flip log: nothing is written on refusal',
+    P.flipLog && P.flipLog.flipsUnchanged && P.flipLog.portUnchanged,
+    JSON.stringify(P.flipLog));
+  T.check('ACCEPTANCE — flip log: the typed form survives for retry',
+    P.flipLog && P.flipLog.work
+      && P.flipLog.work.typedCardKept && P.flipLog.work.typedSellKept,
+    JSON.stringify(P.flipLog));
+
+  /* 3. grading entry */
+  T.check('ACCEPTANCE — grading entry: nothing is written on refusal',
+    P.gradingEntry && P.gradingEntry.gradingUnchanged,
+    JSON.stringify(P.gradingEntry));
+  T.check('ACCEPTANCE — grading entry: the typed form survives for retry',
+    P.gradingEntry && P.gradingEntry.work
+      && P.gradingEntry.work.typedCardKept && P.gradingEntry.work.typedCostKept,
+    JSON.stringify(P.gradingEntry));
+
+  /* 4. mark-as-sold -- the specific demonstration the owner asked for. */
+  T.check('ACCEPTANCE — mark-as-sold: the COLLECTION RECORD does not change',
+    P.markSold && P.markSold.portUnchanged
+      && P.markSold.work && P.markSold.work.collectionRowStillThere,
+    JSON.stringify(P.markSold));
+  T.check('ACCEPTANCE — mark-as-sold: the FLIP LOG does not change either',
+    P.markSold && P.markSold.flipsUnchanged
+      && P.markSold.work && P.markSold.work.noFlipRecorded,
+    JSON.stringify(P.markSold));
+  T.check('ACCEPTANCE — mark-as-sold: the card is therefore neither sold nor lost',
+    P.markSold && P.markSold.portUnchanged && P.markSold.flipsUnchanged,
+    JSON.stringify(P.markSold));
+  T.check('ACCEPTANCE — mark-as-sold: the entered sold price survives for retry',
+    P.markSold && P.markSold.work && P.markSold.work.typedSellKept,
+    JSON.stringify(P.markSold));
+
+  /* Copy, per surface. None of these four may claim photos are preserved. */
+  ['collectionAdd', 'flipLog', 'gradingEntry', 'markSold'].forEach((k) => {
+    T.check('ACCEPTANCE — ' + k + ': uses the generic sentence, NOT the scan wording about photos',
+      P[k] && P[k].lastToast && generic.test(P[k].lastToast.m) && notScanCopy(P[k].lastToast.m),
+      JSON.stringify(P[k] && P[k].lastToast));
+  });
+  T.check('and no refusal on these four surfaces mentions scans or photographs at all',
+    ['collectionAdd', 'flipLog', 'gradingEntry', 'markSold'].every((k) =>
+      P[k] && P[k].lastToast && !/scan|photo/i.test(String(P[k].lastToast.m))),
+    JSON.stringify(Object.keys(P).map(k => (P[k].lastToast || {}).m)));
+
+  await ctx.close();
+});
+
+/* ── ACCEPTANCE: ambiguity refuses the mutation ─────────────────────────────
+   
+   Owner review, 2026-09-12: "Where multiple rows match the normalized ID, the
+   safe behaviour is to report ambiguity and refuse that mutation without
+   choosing the first row or renumbering anything."
+   
+   And the framing correction that prompted it, accepted: replacing strict
+   comparisons with _crIdEq CHANGED local lookup behaviour for an unsynced
+   123 / "123" pair. It is not merely a pre-existing hazard made visible, and a
+   detector would measure it without preventing a wrong-row action.
+   
+   The sharpest case is delete. The delete paths are written as
+   .filter(row => !_crIdEq(row.id, id)), so an ambiguous id removed BOTH
+   records -- and wrote a tombstone, propagating that loss to every other
+   device. */
+await T.section('ACCEPTANCE — an ambiguous id refuses the mutation and keeps both rows', async () => {
+  const ctx = await ctxWith();
+  const page = await pageIn(ctx);
+
+  const amb = await page.evaluate(async () => {
+    const pKey = window.getUserKey('portfolio');
+    const seed = () => localStorage.setItem(pKey, JSON.stringify([
+      { id: 123,   card: 'Charizard', set: 'Base Set', number: '4', currentValue: 200 },
+      { id: '123', card: 'Blastoise', set: 'Base Set', number: '2', currentValue: 120 },
+      { id: 999,   card: 'Venusaur',  set: 'Base Set', number: '15', currentValue: 90 },
+    ]));
+
+    const toasts = [];
+    const realToast = window.showToast;
+    window.showToast = (m, k) => { toasts.push({ m: String(m), k }); };
+    const realConfirm = window.confirm;
+    window.confirm = () => true;
+
+    const out = { resolver: {}, actions: {} };
+
+    /* The resolver itself, before any caller. */
+    seed();
+    const rows = JSON.parse(localStorage.getItem(pKey));
+    const one = window._crResolveEntry(rows, 999);
+    const two = window._crResolveEntry(rows, '123');
+    const none = window._crResolveEntry(rows, 'nope');
+    out.resolver = {
+      unique: { ok: one.ok, count: one.count, card: one.row && one.row.card },
+      ambiguous: { ok: two.ok, count: two.count, row: two.row, flagged: two.ambiguous },
+      missing: { ok: none.ok, count: none.count, flagged: none.ambiguous },
+    };
+
+    /* Each mutation, driven with the ambiguous id. */
+    const driveAction = (name, fn) => {
+      seed();
+      const before = localStorage.getItem(pKey);
+      const tBefore = toasts.length;
+      let threw = null;
+      try { fn(); } catch (e) { threw = String((e && e.message) || e); }
+      const after = localStorage.getItem(pKey);
+      const rowsAfter = JSON.parse(after || '[]');
+      out.actions[name] = {
+        threw,
+        unchanged: before === after,
+        rowCount: rowsAfter.length,
+        /* Both members of the pair must still be present, types intact. */
+        bothKept: rowsAfter.some(r => r.id === 123 && r.card === 'Charizard')
+               && rowsAfter.some(r => r.id === '123' && r.card === 'Blastoise'),
+        typesIntact: rowsAfter.some(r => typeof r.id === 'number' && r.id === 123)
+                  && rowsAfter.some(r => typeof r.id === 'string' && r.id === '123'),
+        toastsAdded: toasts.length - tBefore,
+        lastToast: toasts.length ? toasts[toasts.length - 1] : null,
+        tombstones: (() => {
+          try {
+            const t = JSON.parse(localStorage.getItem(window.getUserKey('tombstones')) || '{}');
+            const list = (t && t.portfolio) || [];
+            return Array.isArray(list) ? list.length : 0;
+          } catch (_) { return -1; }
+        })(),
+      };
+    };
+
+    /* Clear tombstones first so the counts below mean something. */
+    try { localStorage.removeItem(window.getUserKey('tombstones')); } catch (_) {}
+
+    driveAction('deletePortEntry', () => window.deletePortEntry('123'));
+    driveAction('deletePort',      () => window.deletePort('123'));
+
+    /* Price refresh: stub the feed so this measures WHICH row is written, not
+       whether the network works. */
+    const realFetchPrice = window._fetchPriceForEntry;
+    window._fetchPriceForEntry = async () => 77.5;
+    driveAction('refreshSingleCardPrice', () => window.refreshSingleCardPrice('123'));
+    window._fetchPriceForEntry = realFetchPrice;
+
+    driveAction('markSoldConfirm', () => {
+      window._markSoldEntryId = '123';
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('msSellPrice', '150');
+      set('msBuyPrice', '50');
+      window.confirmMarkSold();
+    });
+    out.flipsAfterMarkSold = JSON.parse(localStorage.getItem(window.getUserKey('flips')) || '[]').length;
+
+    driveAction('startListingDraft', () => {
+      if (typeof window.startListingDraftForEntry === 'function') window.startListingDraftForEntry('123');
+    });
+
+    /* And the unambiguous id must still work -- a refusal that blocks
+       everything is not a fix. */
+    seed();
+    const beforeOk = JSON.parse(localStorage.getItem(pKey)).length;
+    try { window.deletePortEntry(999); } catch (_) {}
+    const afterOk = JSON.parse(localStorage.getItem(pKey) || '[]');
+    out.unambiguousStillWorks = {
+      before: beforeOk,
+      after: afterOk.length,
+      venusaurGone: !afterOk.some(r => r.card === 'Venusaur'),
+      pairUntouched: afterOk.length === 2,
+    };
+
+    window.showToast = realToast;
+    window.confirm = realConfirm;
+    out.allToasts = toasts;
+    return out;
+  });
+
+  const R = amb.resolver || {};
+  T.check('the resolver returns exactly-one for an unambiguous id',
+    R.unique && R.unique.ok === true && R.unique.count === 1 && R.unique.card === 'Venusaur',
+    JSON.stringify(R.unique));
+  T.check('ACCEPTANCE — the resolver reports TWO matches for the 123 / "123" pair',
+    R.ambiguous && R.ambiguous.count === 2 && R.ambiguous.flagged === true,
+    JSON.stringify(R.ambiguous));
+  T.check('ACCEPTANCE — and it refuses to pick one: ok is false and no row is returned',
+    R.ambiguous && R.ambiguous.ok === false && R.ambiguous.row === null,
+    JSON.stringify(R.ambiguous));
+  T.check('a missing id is reported as not-found, NOT as ambiguous',
+    R.missing && R.missing.count === 0 && R.missing.flagged === false,
+    JSON.stringify(R.missing));
+
+  const A = amb.actions || {};
+  const names = ['deletePortEntry', 'deletePort', 'refreshSingleCardPrice',
+                 'markSoldConfirm', 'startListingDraft'];
+
+  names.forEach((n) => {
+    T.check('ACCEPTANCE — ' + n + ' on an ambiguous id changes NOTHING in storage',
+      A[n] && A[n].unchanged === true, JSON.stringify(A[n]));
+    T.check('ACCEPTANCE — ' + n + ': both members of the pair are still there, types intact',
+      A[n] && A[n].bothKept === true && A[n].typesIntact === true && A[n].rowCount === 3,
+      JSON.stringify(A[n]));
+    T.check('ACCEPTANCE — ' + n + ': the seller is told the id is ambiguous',
+      A[n] && A[n].toastsAdded >= 1 && A[n].lastToast
+        && /share this card ID/i.test(A[n].lastToast.m),
+      JSON.stringify(A[n] && A[n].lastToast));
+    T.check(n + ' refuses without throwing at the seller',
+      A[n] && A[n].threw === null, JSON.stringify(A[n]));
+  });
+
+  /* The tombstone is the part that would have travelled. */
+  T.check('ACCEPTANCE — a refused delete writes NO tombstone, so the loss cannot sync to other devices',
+    A.deletePortEntry && A.deletePortEntry.tombstones === 0
+      && A.deletePort && A.deletePort.tombstones === 0,
+    JSON.stringify({ a: A.deletePortEntry && A.deletePortEntry.tombstones,
+                     b: A.deletePort && A.deletePort.tombstones }));
+  T.check('ACCEPTANCE — a refused mark-as-sold records no flip either',
+    amb.flipsAfterMarkSold === 0, JSON.stringify({ flips: amb.flipsAfterMarkSold }));
+
+  /* A refusal that blocks everything would be a regression, not a fix. */
+  T.check('ACCEPTANCE — an UNAMBIGUOUS id still deletes, and leaves the ambiguous pair alone',
+    amb.unambiguousStillWorks && amb.unambiguousStillWorks.venusaurGone === true
+      && amb.unambiguousStillWorks.pairUntouched === true,
+    JSON.stringify(amb.unambiguousStillWorks));
+
+  /* Nothing anywhere in this scenario renumbered a stored row. */
+  T.check('and nothing in this scenario renumbered or rewrote either id',
+    names.every(n => A[n] && A[n].typesIntact === true),
+    JSON.stringify(names.map(n => A[n] && A[n].typesIntact)));
+
+  await ctx.close();
+});
+
+/* ── ACCEPTANCE: target-row and sibling preservation, where nothing else
+      established it ──────────────────────────────────────────────────────────
+   
+   Owner direction Q-C3-1, 2026-09-12: "Keep the dispatcher matrix. Reference
+   the existing behavioural tests for destructive actions and mark-as-sold; add
+   targeted coverage only where those tests do not establish target-row and
+   sibling preservation."
+   
+   Survey of what already exists, so this section adds nothing duplicative:
+   
+     deletePortEntry   -- BEHAVIOURAL already, both id shapes: 'clicking delete
+                          on a LEGACY numeric row removes exactly that row',
+                          'clicking delete on a UUID row removes exactly that
+                          row', and 'deleting one copy leaves the other three'.
+                          No gap.
+     refreshSingleCardPrice -- BEHAVIOURAL already (target priced, sibling
+                          untouched, both shapes). No gap.
+     deleteFlip / deletePort / deleteGradingEntry -- durability-tombstones
+                          covers these via stripComments(grabFn(...)) + regex.
+                          That is SOURCE SHAPE, not behaviour: it establishes
+                          that a tombstone call appears in the text, not that
+                          the right row was removed. GAP.
+     confirmMarkSold   -- durability-tombstones and majors-flip-and-pack both
+                          assert source shape only (_flipNetOf present, bails
+                          before deleting if the flip did not persist). No test
+                          drives a SUCCESSFUL sale and checks that the target
+                          left the collection, arrived in the flip log, and
+                          that a sibling was untouched. GAP.
+   
+   So four gaps, and only those four are covered below. */
+await T.section('ACCEPTANCE — target and siblings, for the four actions nothing else covered behaviourally', async () => {
+  const ctx = await ctxWith();
+  const page = await pageIn(ctx);
+
+  const r = await page.evaluate(async () => {
+    const out = {};
+    const realConfirm = window.confirm;
+    window.confirm = () => true;
+    const realToast = window.showToast;
+    window.showToast = () => {};
+
+    const TARGET = 1757000000001;                          // legacy numeric
+    const SIB    = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'; // UUID sibling
+
+    /* --- deleteFlip ------------------------------------------------------- */
+    {
+      const k = window.getUserKey('flips');
+      localStorage.setItem(k, JSON.stringify([
+        { id: TARGET, card: 'Charizard', sellPrice: 200, profit: 50 },
+        { id: SIB,    card: 'Blastoise', sellPrice: 120, profit: 30 },
+      ]));
+      window.deleteFlip(String(TARGET));   // string, as a data attribute delivers it
+      const after = JSON.parse(localStorage.getItem(k) || '[]');
+      out.deleteFlip = {
+        count: after.length,
+        targetGone: !after.some(f => String(f.id) === String(TARGET)),
+        siblingKept: after.some(f => f.id === SIB && f.card === 'Blastoise'),
+        siblingUnchanged: after.length === 1 && after[0].sellPrice === 120 && after[0].profit === 30,
+      };
+    }
+
+    /* --- deletePort ------------------------------------------------------- */
+    {
+      const k = window.getUserKey('portfolio');
+      localStorage.setItem(k, JSON.stringify([
+        { id: TARGET, card: 'Charizard', currentValue: 200 },
+        { id: SIB,    card: 'Blastoise', currentValue: 120 },
+      ]));
+      window.deletePort(String(TARGET));
+      const after = JSON.parse(localStorage.getItem(k) || '[]');
+      out.deletePort = {
+        count: after.length,
+        targetGone: !after.some(x => String(x.id) === String(TARGET)),
+        siblingKept: after.some(x => x.id === SIB && x.currentValue === 120),
+        siblingIdTypeIntact: after.length === 1 && typeof after[0].id === 'string',
+      };
+    }
+
+    /* --- deleteGradingEntry ---------------------------------------------- */
+    {
+      const k = window.getUserKey('grading_log');
+      localStorage.setItem(k, JSON.stringify([
+        { id: TARGET, card: 'Charizard', cost: 25, grader: 'psa' },
+        { id: SIB,    card: 'Blastoise', cost: 30, grader: 'cgc' },
+      ]));
+      window.deleteGradingEntry(String(TARGET));
+      const after = JSON.parse(localStorage.getItem(k) || '[]');
+      out.deleteGradingEntry = {
+        count: after.length,
+        targetGone: !after.some(e => String(e.id) === String(TARGET)),
+        siblingKept: after.some(e => e.id === SIB && e.cost === 30 && e.grader === 'cgc'),
+      };
+    }
+
+    /* --- confirmMarkSold, the SUCCESS path ------------------------------- */
+    {
+      const pk = window.getUserKey('portfolio');
+      const fk = window.getUserKey('flips');
+      localStorage.setItem(pk, JSON.stringify([
+        { id: TARGET, card: 'Charizard', set: 'Base Set', number: '4',
+          currentValue: 200, buyPrice: 50, img: 'https://example.test/charizard.png' },
+        { id: SIB,    card: 'Blastoise', set: 'Base Set', number: '2',
+          currentValue: 120, buyPrice: 40 },
+      ]));
+      localStorage.setItem(fk, '[]');
+      window._isPro = true;   // keep the free-plan cap out of this scenario
+      window._markSoldEntryId = String(TARGET);
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('msSellPrice', '175');
+      set('msBuyPrice', '50');
+      set('msFees', '');
+      set('msShipCost', '');
+      set('msGradingCost', '');
+      let threw = null;
+      try { window.confirmMarkSold(); } catch (e) { threw = String((e && e.message) || e); }
+      const port = JSON.parse(localStorage.getItem(pk) || '[]');
+      const flips = JSON.parse(localStorage.getItem(fk) || '[]');
+      out.markSoldSuccess = {
+        threw,
+        portCount: port.length,
+        targetLeftCollection: !port.some(x => String(x.id) === String(TARGET)),
+        siblingKept: port.some(x => x.id === SIB && x.currentValue === 120),
+        flipCount: flips.length,
+        flipIsTheTarget: flips.length === 1 && flips[0].card === 'Charizard',
+        flipSellPrice: flips.length === 1 ? flips[0].sellPrice : null,
+        /* The flip is a NEW record with its own id -- it must not reuse the
+           collection row's id, or the flip log and a synced collection row
+           could collide. */
+        flipHasOwnId: flips.length === 1 && String(flips[0].id) !== String(TARGET),
+        flipIdIsUuid: flips.length === 1
+          && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(flips[0].id)),
+        flipCarriedImage: flips.length === 1 && flips[0].img === 'https://example.test/charizard.png',
+      };
+    }
+
+    window.confirm = realConfirm;
+    window.showToast = realToast;
+    return out;
+  });
+
+  const D = r.deleteFlip || {};
+  T.check('ACCEPTANCE — deleteFlip removes exactly the target flip',
+    D.count === 1 && D.targetGone === true, JSON.stringify(D));
+  T.check('ACCEPTANCE — deleteFlip leaves the sibling flip byte-intact',
+    D.siblingKept === true && D.siblingUnchanged === true, JSON.stringify(D));
+
+  const P = r.deletePort || {};
+  T.check('ACCEPTANCE — deletePort removes exactly the target row',
+    P.count === 1 && P.targetGone === true, JSON.stringify(P));
+  T.check('ACCEPTANCE — deletePort leaves the sibling row and its id type intact',
+    P.siblingKept === true && P.siblingIdTypeIntact === true, JSON.stringify(P));
+
+  const G = r.deleteGradingEntry || {};
+  T.check('ACCEPTANCE — deleteGradingEntry removes exactly the target entry',
+    G.count === 1 && G.targetGone === true, JSON.stringify(G));
+  T.check('ACCEPTANCE — deleteGradingEntry leaves the sibling entry intact',
+    G.siblingKept === true, JSON.stringify(G));
+
+  const M = r.markSoldSuccess || {};
+  T.check('a successful mark-as-sold does not throw',
+    M.threw === null, JSON.stringify(M));
+  T.check('ACCEPTANCE — mark-as-sold moves the TARGET out of the collection',
+    M.targetLeftCollection === true && M.portCount === 1, JSON.stringify(M));
+  T.check('ACCEPTANCE — mark-as-sold leaves the SIBLING in the collection untouched',
+    M.siblingKept === true, JSON.stringify(M));
+  T.check('ACCEPTANCE — mark-as-sold records exactly one flip, and it is the target card',
+    M.flipCount === 1 && M.flipIsTheTarget === true && M.flipSellPrice === 175,
+    JSON.stringify(M));
+  T.check('ACCEPTANCE — the new flip gets its OWN uuid, not the collection row\u2019s id',
+    M.flipHasOwnId === true && M.flipIdIsUuid === true, JSON.stringify(M));
+  T.check('and the flip carries the collection row\u2019s image rather than losing it',
+    M.flipCarriedImage === true, JSON.stringify(M));
+
   await ctx.close();
 });
 
