@@ -1641,6 +1641,107 @@ await T.section('ACCEPTANCE — target and siblings, for the four actions nothin
   await ctx.close();
 });
 
+/* ── Q-C2-1: the duplicate-id diagnostic is read-only ──────────────────────── */
+await T.section('the duplicate-id diagnostic reports ambiguity and changes nothing', async () => {
+  const ctx = await ctxWith();
+  const page = await pageIn(ctx);
+
+  const r = await page.evaluate(async () => {
+    const pk = window.getUserKey('portfolio');
+    const fk = window.getUserKey('flips');
+    const gk = window.getUserKey('grading_log');
+
+    /* 123 / "123" -- the unsynced pair the refusal exists for -- plus a clean
+       row, plus a genuinely identical-id pair in the flip log. */
+    const seedPort = [
+      { id: 123,   card: 'Charizard', set: 'Base Set', number: '4',  currentValue: 400 },
+      { id: '123', card: 'Blastoise', set: 'Base Set', number: '2',  currentValue: 120 },
+      { id: 999,   card: 'Machamp',   set: 'Base Set', number: '8',  currentValue: 20  },
+    ];
+    const seedFlips = [
+      { id: 'dup-uuid', card: 'Alakazam', sellPrice: 60 },
+      { id: 'dup-uuid', card: 'Alakazam', sellPrice: 60 },
+    ];
+    const seedGrading = [{ id: 'g-1', card: 'Gyarados', cost: 25 }];
+    localStorage.setItem(pk, JSON.stringify(seedPort));
+    localStorage.setItem(fk, JSON.stringify(seedFlips));
+    localStorage.setItem(gk, JSON.stringify(seedGrading));
+
+    const beforePort = localStorage.getItem(pk);
+    const beforeFlips = localStorage.getItem(fk);
+    const beforeGrading = localStorage.getItem(gk);
+
+    /* Any network call at all would make this not-read-only. */
+    let fetchCalls = 0;
+    const realFetch = window.fetch;
+    window.fetch = (...a) => { fetchCalls++; return realFetch.apply(window, a); };
+    let syncScheduled = 0;
+    const realSync = window._scheduleUserDataSync;
+    if (typeof realSync === 'function') {
+      window._scheduleUserDataSync = () => { syncScheduled++; };
+    }
+
+    const report = window._crInspectDuplicateIds();
+
+    window.fetch = realFetch;
+    if (typeof realSync === 'function') window._scheduleUserDataSync = realSync;
+
+    const pg = (report.sets.portfolio.groups || [])[0] || null;
+    const afterPort = JSON.parse(localStorage.getItem(pk) || '[]');
+
+    return {
+      fetchCalls,
+      syncScheduled,
+      storageUntouched: localStorage.getItem(pk) === beforePort
+                     && localStorage.getItem(fk) === beforeFlips
+                     && localStorage.getItem(gk) === beforeGrading,
+      clean: report.clean,
+      totalGroups: report.totalGroups,
+      portGroupCount: (report.sets.portfolio.groups || []).length,
+      flipGroupCount: (report.sets.flips.groups || []).length,
+      gradingGroupCount: (report.sets.grading_log.groups || []).length,
+      portGroup: pg,
+      /* the two members must be reported with their ORIGINAL types */
+      memberTypes: pg ? pg.members.map(m => m.idType) : null,
+      memberIds: pg ? pg.members.map(m => m.id) : null,
+      memberCards: pg ? pg.members.map(m => m.card) : null,
+      mixedShapes: pg ? pg.mixedIdShapes : null,
+      flipMixedShapes: ((report.sets.flips.groups || [])[0] || {}).mixedIdShapes,
+      /* no card contents may leak into the report */
+      leakedFields: pg
+        ? pg.members.flatMap(m => Object.keys(m)
+            .filter(k => !['index','id','idType','card','set','number'].includes(k)))
+        : [],
+      /* stored rows still carry their own types after the read */
+      storedTypes: afterPort.map(x => typeof x.id),
+      unrelatedRowIntact: afterPort.some(x => x.id === 999 && x.currentValue === 20),
+    };
+  });
+
+  T.check('the diagnostic makes no network call and schedules no sync',
+    r.fetchCalls === 0 && r.syncScheduled === 0, JSON.stringify(r));
+  T.check('ACCEPTANCE — it writes nothing: all three record sets are byte-identical after',
+    r.storageUntouched === true, JSON.stringify(r));
+  T.check('it finds the ambiguous group rather than reporting clean',
+    r.clean === false && r.portGroupCount === 1, JSON.stringify(r));
+  T.check('ACCEPTANCE — the 123 / "123" pair is reported with BOTH id types preserved',
+    JSON.stringify(r.memberTypes) === JSON.stringify(['number','string'])
+    && JSON.stringify(r.memberIds) === JSON.stringify([123,'123']), JSON.stringify(r));
+  T.check('and it names both cards, so the seller can tell which is which',
+    JSON.stringify(r.memberCards) === JSON.stringify(['Charizard','Blastoise']), JSON.stringify(r));
+  T.check('it distinguishes a mixed-shape pair from a genuinely identical one',
+    r.mixedShapes === true && r.flipMixedShapes === false, JSON.stringify(r));
+  T.check('it reports the identical-id flip pair too, and finds nothing in a clean set',
+    r.flipGroupCount === 1 && r.gradingGroupCount === 0 && r.totalGroups === 2, JSON.stringify(r));
+  T.check('no field beyond the identifying ones travels out of the report',
+    Array.isArray(r.leakedFields) && r.leakedFields.length === 0, JSON.stringify(r));
+  T.check('the stored ids still hold their original types after being inspected',
+    JSON.stringify(r.storedTypes) === JSON.stringify(['number','string','number'])
+    && r.unrelatedRowIntact === true, JSON.stringify(r));
+
+  await ctx.close();
+});
+
 await browser.close();
 server.close();
 T.done();

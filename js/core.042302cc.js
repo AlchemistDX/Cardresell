@@ -19883,6 +19883,8 @@ window._crMatchesById = _crMatchesById;
 window.CR_AMBIGUOUS_ID_MSG = CR_AMBIGUOUS_ID_MSG;
 window._crGuardMint = _crGuardMint;
 window._unionById = _unionById;
+window._crDuplicateIdGroups = _crDuplicateIdGroups;
+window._crInspectDuplicateIds = _crInspectDuplicateIds;
 window._crIsNoSecureId = _crIsNoSecureId;
 window.CR_NO_SECURE_ID_MSG = CR_NO_SECURE_ID_MSG;
 window.CR_NO_SECURE_ID_MSG_SCAN = CR_NO_SECURE_ID_MSG_SCAN;
@@ -20039,6 +20041,20 @@ async function _pullUserData() {
     // Union by id — favours the local row if id collides (user just added
     // it on this device; the server copy may be older) — then subtract
     // anything either side has deleted. Union alone resurrected deleted rows.
+    /* Q-C2-1: inspect BEFORE the merge, because _unionById keys on
+       String(row.id) and collapses a 123 / "123" pair -- after the merge the
+       condition is gone and unmeasurable. This is read-only: the report is
+       held in memory for diagnosis and is neither written to storage nor
+       included in the sync payload. It does not gate the merge; changing merge
+       behaviour is a separate scope and is not authorised here. */
+    try {
+      window._crDupIdReport = {
+        checkedAt: new Date().toISOString(),
+        where: 'pre-merge',
+        portfolio: { local: _crDuplicateIdGroups(localPort),  remote: _crDuplicateIdGroups(remotePort) },
+        flips:     { local: _crDuplicateIdGroups(localFlips), remote: _crDuplicateIdGroups(remoteFlips) },
+      };
+    } catch(e) { /* diagnosis must never break sync */ }
     const mergedPort  = _applyTombstones(_unionById(remotePort,  localPort),  marks.portfolio);
     const mergedFlips = _applyTombstones(_unionById(remoteFlips, localFlips), marks.flips);
     _lsWrite(getUserKey('portfolio'), JSON.stringify(mergedPort));
@@ -20054,6 +20070,101 @@ async function _pullUserData() {
     }
   } catch(e) { /* silent — sync is best-effort */ }
 }
+/* ── Duplicate-id diagnostic (read-only) ──────────────────────────────────────
+   Owner direction Q-C2-1, 2026-09-12: "Add a read-only diagnostic, separately
+   scoped. Inspect records before merge, preserve ID types, and report
+   ambiguous groups without modifying or uploading their contents." And
+   Q-C2-2: "Do not choose automatically by updatedAt. Two different cards can
+   share an identifier; a newer timestamp does not establish which card should
+   survive. Preserve both for explicit resolution."
+
+   So this MEASURES and nothing else. It does not write localStorage, does not
+   call a sync, does not renumber, and does not drop a row. It is deliberately
+   not a repair: the refusal in _crResolveEntry is what prevents a wrong-row
+   mutation, and this only tells us how often the condition exists and in
+   which record sets.
+
+   Ids are compared with the same _crIdEq the lookups use, so what this counts
+   as ambiguous is exactly what a mutation would now refuse -- a detector using
+   its own comparison rule would measure a different thing than the product
+   does. Group keys are reported as String() for display only; the ORIGINAL id
+   value and its type are preserved on every reported member, because 123 and
+   "123" being distinguishable is the whole subject.
+
+   Card contents are not included. Only the fields needed to tell two rows
+   apart on screen travel out of here, so a diagnostic read cannot become a
+   quiet data export. */
+function _crDuplicateIdGroups(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const groups = [];
+  const seen = new Array(list.length).fill(false);
+  for (let i = 0; i < list.length; i++) {
+    if (seen[i]) continue;
+    const a = list[i];
+    if (!a || a.id == null) continue;
+    const members = [{ index: i, id: a.id, idType: typeof a.id }];
+    for (let j = i + 1; j < list.length; j++) {
+      if (seen[j]) continue;
+      const b = list[j];
+      if (!b || b.id == null) continue;
+      if (_crIdEq(a.id, b.id)) {
+        seen[j] = true;
+        members.push({ index: j, id: b.id, idType: typeof b.id });
+      }
+    }
+    if (members.length > 1) {
+      seen[i] = true;
+      groups.push({
+        key: String(a.id),
+        count: members.length,
+        /* True when the members differ in id TYPE or exact value -- the
+           123 / "123" case. A group of genuinely identical ids is a different
+           (and less surprising) condition, so it is labelled separately. */
+        mixedIdShapes: members.some(m => m.idType !== members[0].idType
+                                     || String(m.id) !== String(members[0].id)),
+        members: members.map(m => {
+          const row = list[m.index] || {};
+          return {
+            index: m.index,
+            id: m.id,            // original value, type preserved
+            idType: m.idType,
+            /* identifying fields only -- no prices, no photos, no notes */
+            card: typeof row.card === 'string' ? row.card : null,
+            set: typeof row.set === 'string' ? row.set : null,
+            number: row.number != null ? String(row.number) : null,
+          };
+        }),
+      });
+    }
+  }
+  return groups;
+}
+
+/* Inspects every local record set that carries entry ids. Read-only: the
+   caller gets a report and storage is untouched. */
+function _crInspectDuplicateIds() {
+  const read = (key) => {
+    try {
+      const v = JSON.parse(localStorage.getItem(getUserKey(key)) || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+  };
+  const sets = {
+    portfolio: read('portfolio'),
+    flips: read('flips'),
+    grading_log: read('grading_log'),
+  };
+  const report = { checkedAt: new Date().toISOString(), sets: {}, totalGroups: 0, totalRows: 0 };
+  for (const [name, rows] of Object.entries(sets)) {
+    const groups = _crDuplicateIdGroups(rows);
+    report.sets[name] = { rowCount: rows.length, groups };
+    report.totalGroups += groups.length;
+    report.totalRows += rows.length;
+  }
+  report.clean = report.totalGroups === 0;
+  return report;
+}
+
 function _unionById(a, b) {
   const map = new Map();
   for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), row);
