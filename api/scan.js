@@ -330,7 +330,11 @@ async function groundLorcanaCardInfo(cardInfo) {
 //   Tier 2: name:<nameNoSuffix> number:<num>      (strip ex/EX/VMAX/etc)
 //   Tier 3: name:<identifier> number:<num>        (last identifying word)
 //   Tier 4: name:<identifier>*                    (wildcard, filter by number+set)
-async function groundPokemonCardInfo(cardInfo) {
+/* Exported so the grounding rules can be tested directly against a stubbed
+   pokemontcg.io, rather than only through a full scan. This is a named module
+   export beside the default handler -- not a global, and not test-only
+   plumbing: the function's behaviour is the contract being fixed. */
+export async function groundPokemonCardInfo(cardInfo) {
   if (!cardInfo || cardInfo.card_type !== 'pokemon') return;
   // Note: pokemontcg.io DOES carry many recent JP sets (sv1a Triplet Beat, sv2a
   // 151, sv5k Wild Force, sv6a Night Wanderer, etc). We used to skip JP here
@@ -368,7 +372,22 @@ async function groundPokemonCardInfo(cardInfo) {
     if (cached.number)   cardInfo.card_number = String(cached.number);
     if (cached.set_name) cardInfo.set_name    = cached.set_name;
     if (cached.set_code) cardInfo.set_code    = cached.set_code;
-    if (cached.rarity && !cardInfo.rarity) cardInfo.rarity = cached.rarity;
+    /* GROUNDED RARITY IS AUTHORITATIVE.
+       This read `if (<src>.rarity && !cardInfo.rarity)`, which only filled a
+       rarity the vision model had left empty -- so a rarity the model INVENTED
+       survived grounding untouched. That is how an Ivysaur whose grounded
+       record says "Illustration Rare" exported as "Shiny Rare": the model
+       supplied it, the grounding pass declined to correct it, and nothing
+       downstream had any basis to doubt it. ("Shiny Rare" appears on 120
+       catalogue records but on none in this set.)
+       Every sibling field here -- name, number, set name, set code -- already
+       lets the grounded record win; rarity was the lone exception, and the
+       comment on the grounding pass already claimed it overrode rarity.
+       NOTE: rarity feeds the `variant` identity axis (api/_cardIdentity.js:322,
+       hashed at :342), so newly scanned cards will mint different SKUs than
+       this same scan would have minted before. Existing drafts are NOT
+       rewritten; no backfill is performed here. */
+    if (cached.rarity) cardInfo.rarity = cached.rarity;
     if (cached.hp     && !cardInfo.hp)     cardInfo.hp     = String(cached.hp);
     if (cached.year   && !cardInfo.year)   cardInfo.year   = cached.year;
     cardInfo._grounded_id = cached.id;
@@ -483,7 +502,22 @@ async function groundPokemonCardInfo(cardInfo) {
   if (best.set?.name)  cardInfo.set_name    = best.set.name;
   if (best.set?.ptcgoCode) cardInfo.set_code = best.set.ptcgoCode;
   else if (best.set?.id)   cardInfo.set_code = best.set.id;
-  if (best.rarity && !cardInfo.rarity) cardInfo.rarity = best.rarity;
+  /* GROUNDED RARITY IS AUTHORITATIVE.
+     This read `if (<src>.rarity && !cardInfo.rarity)`, which only filled a
+     rarity the vision model had left empty -- so a rarity the model INVENTED
+     survived grounding untouched. That is how an Ivysaur whose grounded
+     record says "Illustration Rare" exported as "Shiny Rare": the model
+     supplied it, the grounding pass declined to correct it, and nothing
+     downstream had any basis to doubt it. ("Shiny Rare" appears on 120
+     catalogue records but on none in this set.)
+     Every sibling field here -- name, number, set name, set code -- already
+     lets the grounded record win; rarity was the lone exception, and the
+     comment on the grounding pass already claimed it overrode rarity.
+     NOTE: rarity feeds the `variant` identity axis (api/_cardIdentity.js:322,
+     hashed at :342), so newly scanned cards will mint different SKUs than
+     this same scan would have minted before. Existing drafts are NOT
+     rewritten; no backfill is performed here. */
+  if (best.rarity) cardInfo.rarity = best.rarity;
   if (best.hp && !cardInfo.hp)         cardInfo.hp     = String(best.hp);
   if (best.set?.releaseDate && !cardInfo.year) {
     const yr = String(best.set.releaseDate).slice(0, 4);
@@ -1899,7 +1933,22 @@ Respond ONLY with valid JSON, no explanation:
 
         if (best) {
           cardInfo.set_name = best.set?.name || cardInfo.set_name || '';
-          if (!cardInfo.rarity && best.rarity) cardInfo.rarity = best.rarity;
+          /* GROUNDED RARITY IS AUTHORITATIVE.
+             This read `if (<src>.rarity && !cardInfo.rarity)`, which only filled a
+             rarity the vision model had left empty -- so a rarity the model INVENTED
+             survived grounding untouched. That is how an Ivysaur whose grounded
+             record says "Illustration Rare" exported as "Shiny Rare": the model
+             supplied it, the grounding pass declined to correct it, and nothing
+             downstream had any basis to doubt it. ("Shiny Rare" appears on 120
+             catalogue records but on none in this set.)
+             Every sibling field here -- name, number, set name, set code -- already
+             lets the grounded record win; rarity was the lone exception, and the
+             comment on the grounding pass already claimed it overrode rarity.
+             NOTE: rarity feeds the `variant` identity axis (api/_cardIdentity.js:322,
+             hashed at :342), so newly scanned cards will mint different SKUs than
+             this same scan would have minted before. Existing drafts are NOT
+             rewritten; no backfill is performed here. */
+          if (best.rarity) cardInfo.rarity = best.rarity;
           if (!cardInfo.hp && best.hp)         cardInfo.hp     = String(best.hp);
           if (best.name) cardInfo.card_name = best.name;
           if (best.number) cardInfo.card_number = String(best.number);

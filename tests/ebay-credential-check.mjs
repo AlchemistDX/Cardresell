@@ -151,6 +151,12 @@ console.log('\n— network failure whose message carries the header —');
   assertNoSecrets('leaky exception', res);
 }
 
-console.log(`\nebay-credential-check: ${pass} passed, ${fail} failed`);
-console.log(`suite completed: true; exiting ${fail === 0 ? 0 : 1}`);
+/* The runner (tests/run-all.sh) treats a missing 'SUITE COMPLETE' marker as a
+   FAILURE, deliberately: a suite that dies halfway prints a passing tally for
+   the assertions it reached, and without the marker that tally would be read as
+   a pass. This file was registered as slot 61/62 on 2026-09-12 but kept its own
+   older wording ("suite completed: true"), which the runner does not recognise
+   -- so it ran green and was reported red. The marker is emitted in the shared
+   shape now. The tallies and the exit status are unchanged. */
+console.log(`\nebay-credential-check: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail === 0 ? 0 : 1}`);
 process.exit(fail === 0 ? 0 : 1);

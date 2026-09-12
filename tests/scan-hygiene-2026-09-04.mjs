@@ -295,6 +295,13 @@ const B = new Function(`
   const localStorage = { getItem: () => JSON.stringify(_saved || []) };
   const window = {};
   const console = { warn(){} };
+  /* _bulkScanRowToCard gained a dependency on 2026-09-12: it now resolves the
+     catalogue artwork URL through _catalogueArtworkUrl instead of reading
+     r.imageUrl directly, so that a seller's data: photo can never be promoted
+     into the draft payload. Grabbing the REAL helper rather than stubbing one
+     keeps this suite exercising shipped code -- a stub here would let the
+     helper's own behaviour drift without any suite noticing. */
+  ${grabFn('_catalogueArtworkUrl')}
   ${grabFn('_bulkScanRowToCard')}
   ${grabFn('_bulkSaveToCollection')}
   return (rows, costs, skip) => { _bulkSaveToCollection(rows, costs, skip); return _saved; };

@@ -177,16 +177,57 @@ check('Bulk fetch has extracted helper _bulkFetchPokemonCards', INDEX.includes('
 check('Bulk fetch timeout bumped to 7s',                        INDEX.includes('setTimeout(() => ctrl.abort(), timeoutMs || 7000)'));
 check('Bulk fetch falls back to name-only query',               INDEX.includes('queries.push(`name:"${cleanName}"`)'));
 check('_bulkScanOne captures thumbnail data URL',               INDEX.includes("result.imageDataUrl = 'data:image/jpeg;base64,' + thumbBase64"));
-check('Bulk save uses user-photo thumbnail fallback',           INDEX.includes('const thumb = r.imageUrl || r.imageDataUrl || null'));
+// 2026-09-12, owner decision Q1. This asserted the literal line
+//   `const thumb = r.imageUrl || r.imageDataUrl || null`
+// which is exactly the behaviour that was removed, so it is REPLACED rather
+// than repaired. `imageDataUrl` is the seller's own photograph as base64. The
+// whole card object enters the draft request, so promoting it into `thumb` sent
+// a data:image/... payload to the backend to be stored in KV. The mapper now
+// resolves catalogue artwork only, through _catalogueArtworkUrl, and the local
+// photograph is looked up from IndexedDB at render time instead.
+check('Bulk save resolves its thumbnail through the catalogue-artwork helper',
+      INDEX.includes('const catalogUrl = _catalogueArtworkUrl(r)'));
+check('the catalogue-artwork helper exists to be resolved through',
+      INDEX.includes('function _catalogueArtworkUrl('));
+// This check must read EXECUTABLE lines only. As first written it grepped the
+// raw source and failed against the mapper's own comment, which quotes the
+// rejected one-liner verbatim under a "DO NOT DO THIS" marker. Deleting that
+// comment to make a grep pass would have removed the explanation of why the
+// obvious repair is wrong -- the comment is the point. So the assertion strips
+// comments instead. Line and block comments both, since the quote sits in a
+// block comment.
+const INDEX_CODE = INDEX
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+check('Bulk save does NOT promote the seller photo into the draft payload',
+      !/const\s+thumb\s*=\s*r\.image(Url\s*\|\|\s*r\.imageDataUrl|DataUrl)/.test(INDEX_CODE));
+// Guard the guard: if comment-stripping ever removed too much, the check above
+// would pass vacuously against an empty string.
+check('comment-stripping left the mapper\'s executable code intact',
+      INDEX_CODE.includes('const catalogUrl = _catalogueArtworkUrl(r)'));
+// And the seller's base64 photo must not reach the draft payload under ANY name.
+check('no image data URL is assigned into the mapped card payload',
+      !/^\s*(img|imageUrl|catalogImageUrl|thumb)\s*:\s*[^,\n]*imageDataUrl/m.test(INDEX_CODE));
 // 2026-09-11: this matched an exact indented two-line string. The bulk save
 // path now composes its collection entry through the shared
 // `_bulkScanRowToCard` mapper (so batch drafting and collection save cannot
 // drift apart), which re-indented those lines. Assert the pair is emitted from
 // one thumbnail value inside that mapper, which is what single-add compat
 // actually depends on.
-const bulkMapper = (INDEX.match(/function _bulkScanRowToCard\s*\([\s\S]{0,2500}?\n\}/) || [''])[0];
+// 2026-09-12: this locator was bounded at 2500 characters and broke when the
+// mapper grew past it -- a documentation comment was enough to silently empty
+// `bulkMapper`, which then failed the two checks below for a reason that had
+// nothing to do with the behaviour they name. A character budget is the wrong
+// bound for "one function", so it is raised well clear of the body AND the
+// locator now has its own assertion above the checks that depend on it, so a
+// future miss reports itself as a locator failure instead of a false regression.
+const bulkMapper = (INDEX.match(/function _bulkScanRowToCard\s*\([\s\S]{0,20000}?\n\}/) || [''])[0];
 check('the _bulkScanRowToCard mapper could be located for inspection',
       bulkMapper.length > 200);
+// The locator must have found the WHOLE function, not a prefix ending at the
+// first `\n}` inside it -- a truncated body would make the checks below vacuous.
+check('the located mapper body reaches its return statement',
+      /return\s*\{/.test(bulkMapper));
 check('Bulk save writes img field (single-add compat)',
       /img:\s*thumb\s*,/.test(bulkMapper) && /imageUrl:\s*thumb\s*,/.test(bulkMapper));
 check('Bulk save persists number field',                        INDEX.includes("number: r.cardNumber || ''"));

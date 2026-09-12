@@ -9,6 +9,7 @@ import { ERR as STORE_ERR, DRAFT_STATUS, PRICE_SOURCES, isSyntheticTestSub, isDr
 import { SLOT_RULES } from './_draftStore.js';
 import { skuFor, identityReadiness } from './_cardIdentity.js';
 import { buildListingTitle } from './_listingTitle.js';
+import { resolvePrintedTotal } from './_setPrintedTotals.js';
 import { buildListingPacket } from './_listingPacket.js';
 import { sellReasons } from './_sellEligibility.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
@@ -762,6 +763,59 @@ export function normalizeCreateInput(body) {
   const readiness = identityReadiness(card);
   if (!readiness.sufficient) {
     throw new Error(`DRAFT_FIELD_INVALID:card:${sellReasons(readiness).join(',')}`);
+  }
+
+  // ── The set's printed denominator, resolved SERVER-SIDE ─────────────────
+  //
+  // A collector reads "134/132", not "134". The denominator has to reach the
+  // title from both places a card can come from -- the live pokemontcg.io
+  // lookup, whose set object already carries printedTotal, and the local
+  // supplemental catalogue, which stores no denominator at all -- so it is
+  // resolved HERE rather than in either client path. Three consequences, all
+  // of them the reason for this placement:
+  //
+  //   * one implementation, not one per path (Rule 1);
+  //   * legacy drafts and re-exports of existing rows gain the denominator
+  //     without a schema migration or a catalogue backfill.
+  //
+  // CORRECTED 2026-09-12. This comment previously claimed "the client cannot
+  // supply it, so it cannot be spoofed". That was WRONG on both halves, and
+  // the code matched the wrong claim. The client CAN supply `printedTotal` in
+  // the card object, and running the resolver on the server does not make the
+  // resolver's INPUTS trustworthy either -- `groundedId` and `setCode` both
+  // originate in this same client request. Server-side placement buys one
+  // implementation and migration-free coverage; it does not buy authority.
+  //
+  // Authority comes from the rule below: for a set present in the verified
+  // mapping, the VERIFIED value wins over anything submitted. me1 is 132
+  // regardless of what a request says. This is listing integrity, not a
+  // security boundary -- a wrong denominator misdescribes a card to a buyer,
+  // which is a defect whether it arrived by malice or by a stale client.
+  //
+  // Unresolved is the COMMON case and prints the bare number. For a set NOT in
+  // the mapping there is no authoritative value to prefer, so a submitted one
+  // is left alone rather than discarded; that path is unverified by
+  // construction and the number simply prints bare if absent.
+  //
+  // It is never derived from the catalogue's record count or maximum card
+  // number: the set that exposed this bug has 188 records and a maximum number
+  // of 188 while its cards are printed /132.
+  const resolvedPrintedTotal = resolvePrintedTotal({
+    setId:   card.groundedId ? String(card.groundedId).split('-')[0] : '',
+    setCode: card.setCode || '',
+  });
+  if (resolvedPrintedTotal) {
+    // Recognized set: the verified mapping is authoritative and OVERRIDES a
+    // conflicting submitted denominator.
+    if (card.printedTotal && Number(card.printedTotal) !== Number(resolvedPrintedTotal)) {
+      console.warn('[drafts] printedTotal overridden by verified mapping:',
+        JSON.stringify({
+          setCode: card.setCode || '',
+          submitted: card.printedTotal,
+          verified: resolvedPrintedTotal,
+        }));
+    }
+    card.printedTotal = resolvedPrintedTotal;
   }
 
   // Title is built to the VENUE's limit, not to a generic maximum. Building

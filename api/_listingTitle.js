@@ -94,6 +94,52 @@ function yearSegment(row, ident) {
   return ident.game === 'sports' ? y : '';
 }
 
+/**
+ * The collector number as a seller would write it, with the set's printed
+ * denominator appended ONLY when that is both verified and applicable.
+ *
+ * Will's correction: "Simply appending a denominator could produce TG12/TG30/132.
+ * Preserve already-complete numbers, prefixes and zeros; append only verified,
+ * applicable denominators." Each guard below is one way a naive append is wrong:
+ *
+ *  1. ALREADY COMPLETE -- "125/197" carries its own denominator. Appending
+ *     would produce "125/197/165".
+ *  2. NON-NUMERIC PREFIX -- "TG12" belongs to the Trainer Gallery subset,
+ *     which is numbered against its OWN run (TG12/TG30), not against the main
+ *     set's printedTotal. "TG12/132" is a number that does not exist. Same for
+ *     "RC8", "SWSH001", "GG05". 1,620 records in card-index.json carry such a
+ *     prefix, so this is the common case, not an edge case.
+ *  3. UNVERIFIED DENOMINATOR -- absent, non-numeric, or non-positive
+ *     printedTotal appends nothing. It is never derived from the catalogue's
+ *     record count or maximum card number: Mega Evolution has 188 records and a
+ *     maximum number of 188, so both derivations give "134/188", and the
+ *     printed denominator is 132.
+ *
+ * Numbers ABOVE the printed total are appended deliberately: a secret rare is
+ * printed as "134/132", and that is how it is listed and searched.
+ *
+ * Leading zeros survive because the raw string is never re-parsed for output --
+ * "007" with printedTotal 102 gives "007/102", not "7/102".
+ */
+export function displayCollectorNumber(numberRaw, printedTotal) {
+  const raw = String(numberRaw == null ? '' : numberRaw).trim();
+  if (!raw) return '';
+  const bare = raw.startsWith('#') ? raw.slice(1).trim() : raw;
+  if (!bare) return '';
+
+  // (1) already carries a denominator
+  if (bare.includes('/')) return bare;
+
+  // (3) denominator must be a verified positive integer
+  const denom = Number(printedTotal);
+  if (!Number.isInteger(denom) || denom <= 0) return bare;
+
+  // (2) only a purely numeric collector number shares the set's denominator
+  if (!/^\d+$/.test(bare)) return bare;
+
+  return `${bare}/${denom}`;
+}
+
 export function titleSegments(row = {}, opts = {}) {
   const ident = cardIdentity(row);
   const graded = isSlab(row);
@@ -106,7 +152,9 @@ export function titleSegments(row = {}, opts = {}) {
     // Collectors write card numbers with a leading #. Keep the source's own
     // "125/197" form here — this is display, not identity, so do NOT feed it
     // through normalizeNumber and strip the zero padding printed on the card.
-    number:   numberRaw ? (numberRaw.startsWith('#') ? numberRaw : `#${numberRaw}`) : '',
+    number:   numberRaw
+      ? `#${displayCollectorNumber(numberRaw, row?.printedTotal ?? row?.setPrintedTotal)}`
+      : '',
     rarity:   clean(row?.rarity),
     language: canonicalLanguage(row) === 'ja' ? 'Japanese' : '',
     gradeTag: graded ? clean(`${canonicalGrader(row)} ${canonicalGrade(row)}`) : '',

@@ -3141,7 +3141,14 @@ async function _bulkScanOne(item, rowId, isRetry) {
   const listEl = document.getElementById('bulkResultsList');
   let result = {
     objectUrl: item.objectUrl, file: item.file, success: false, cardName: '', setName: '', cardNumber: '',
-    marketPrice: null, imageUrl: null, imageDataUrl: null, tcgplayerUrl: null, error: '', condition: 'NM',
+    marketPrice: null, imageUrl: null, imageDataUrl: null, tcgplayerUrl: null, error: '',
+    /* Condition starts UNSET, and whether the seller chose it is recorded
+       separately from the value. A single `condition: 'NM'` field cannot tell
+       "the seller inspected this card and said Near Mint" apart from "nobody
+       has touched this row", and the two must never export the same way:
+       `conditionChosen` is set true only by bulkSetCondition, the one place a
+       human picks. */
+    condition: '', conditionChosen: false,
     rowId, wasRetry: !!isRetry,
     // Carried from the queue item so a retry of this photo keeps the identity
     // its first attempt had. Minted here only as a floor, so that a row can
@@ -3244,7 +3251,12 @@ async function _bulkScanOne(item, rowId, isRetry) {
         result.sport      = data.sport       || ''; // sports cards only
         result.year       = data.year        || ''; // sports cards only (e.g. '2011')
         result.groundedId = data.grounded_id || ''; // 2026-08-17: exact-card ID from Ximilar for price fast-path
-        result.condition  = 'NM';
+        /* `result.condition = 'NM'` stood here. It was not a default -- it ran
+           unconditionally on every successful scan, so the field was ALWAYS
+           'NM' and `r.condition || ''` downstream could never be falsy. That
+           is how an untouched row exported as Near Mint, and on a retry it
+           also overwrote a condition the seller had already picked. A scan
+           reads a card's identity; it does not grade its surface. */
 
         const priceInfo = await _bulkFetchPrice(result.cardName, result.setName, result.cardNumber, result.cardType, result.isJapanese, result.groundedId, result.rarity);
         if (priceInfo) {
@@ -3447,7 +3459,12 @@ function _bulkUpdateRow(rowId, result) {
         ` <button onclick="bulkEditPrice('${rowId}')" title="Edit price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`
       : `<span style="color:rgba(255,255,255,.3)">${_esc(result.unavailableReason || 'Price unavailable')}</span> <button onclick="bulkEditPrice('${rowId}')" title="Enter price" style="background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;font-size:.68rem;padding:0 2px">✎</button>`;
     const setStr = [result.setName, result.cardNumber ? '#' + result.cardNumber : ''].filter(Boolean).join(' ');
-    const cond = result.condition || 'NM';
+    /* The chip shows what the seller chose, or asks. It must not display 'NM'
+       as a stand-in for an unanswered question -- the seller reads that chip as
+       a statement about their card, and would have no reason to correct a value
+       that already looks right. */
+    const condChosen = result.conditionChosen === true && !!result.condition;
+    const cond = condChosen ? result.condition : 'Set condition';
 
     row.innerHTML = `
       ${_bulkDraftCheckboxHtml(result)}
@@ -3503,7 +3520,9 @@ function bulkOpenConditionPicker(rowId) {
   const row = document.getElementById(rowId);
   if (!row) return;
   const result = _bulkFindResult(rowId);
-  const current = result ? (result.condition || 'NM') : 'NM';
+  // No pre-selection when nothing was chosen: a highlighted 'NM' invites the
+  // seller to confirm a value they never picked.
+  const current = (result && result.conditionChosen === true) ? (result.condition || '') : '';
 
   const picker = document.createElement('div');
   picker.id = 'bulkConditionPicker';
@@ -3531,7 +3550,9 @@ function _bulkCloseConditionPicker() {
 
 function bulkSetCondition(rowId, cond) {
   const result = _bulkFindResult(rowId);
-  if (result) result.condition = cond;
+  // The ONLY writer of conditionChosen. This function runs from the picker's
+  // buttons, so reaching it is the seller's explicit act.
+  if (result) { result.condition = cond; result.conditionChosen = true; }
   _bulkCloseConditionPicker();
   _bulkUpdateRow(rowId, result);
 }
@@ -3627,6 +3648,29 @@ async function bulkRetryRow(rowId) {
   // keeps the property true even if that constructor is reordered later.
   if (oldResult.scanUid) newResult.scanUid = oldResult.scanUid;
   if (Array.isArray(oldResult.copyUids) && oldResult.copyUids.length) newResult.copyUids = oldResult.copyUids.slice();
+
+  /* The seller's chosen condition survives the rescan.
+   *
+   * Owner requirement Q5 (2026-09-12): "a seller-selected condition must
+   * survive rescans, save and reopen". It did not. `_bulkScanOne` returns a
+   * NEW result object, and only scanUid/copyUids were copied forward, so a
+   * seller who graded a card and then retried the recognition silently lost
+   * their grade and the row fell back to asking for one again.
+   *
+   * Condition is a property of the PHYSICAL card in the seller's hand, not of
+   * the recognition attempt. The retry re-reads the same photo of the same
+   * card -- "same photo, same intent, same identity", as the identity carry
+   * above already says -- so re-asking would be asking about something that
+   * did not change.
+   *
+   * `conditionChosen` is carried with the value and ONLY when it is true, so
+   * this cannot manufacture provenance: a row the seller never touched arrives
+   * with conditionChosen false and stays that way. bulkSetCondition remains
+   * the only writer that SETS the flag. */
+  if (oldResult.conditionChosen === true && oldResult.condition) {
+    newResult.condition = oldResult.condition;
+    newResult.conditionChosen = true;
+  }
   window._bulkResults[idx] = newResult;
   _bulkUpdateRow(rowId, newResult);
 
@@ -3760,22 +3804,106 @@ function _bulkDraftUnits(r) {
    copies would drift, and the drift would be the ugly kind: a card that saves
    correctly but drafts as a different card, or vice versa.
 
-   `set` is the combined "Base Set · #4" string the Collection has always
-   stored, and `setName` is deliberately NOT also emitted. api/_cardIdentity.js
-   treats set/set_name/setName as aliases of one axis and REFUSES a card whose
-   aliases disagree, so adding the bare set name alongside the combined string
-   would turn every bulk row into a conflict refusal. */
+   `set` carries the set name ALONE. It used to carry a combined
+   "Base Set · #4" string, which is where the malformed export came from: the
+   number was already emitted separately as `number`, so every consumer that
+   renders both produced the number twice -- a title of
+   "Ivysaur Mega Evolution · #134 #134 Shiny Rare" and a description line of
+   "Set: Mega Evolution · #134". The repair is to stop fusing here rather than
+   to strip downstream, because the number was never missing.
+
+   `setName` is still deliberately NOT also emitted. api/_cardIdentity.js
+   treats set/set_name/setName as aliases of one axis (IDENTITY_ALIAS_GROUPS,
+   api/_cardIdentity.js:218) and REFUSES a card whose aliases disagree
+   (identityFieldConflicts, :231), so emitting both names -- even identical
+   ones -- adds a conflict surface for no gain. One field, one value.
+
+   This does not move the SKU for a row that knows its set code: the set axis
+   prefers normalizeNumber(row.setCode) over the display name
+   (api/_cardIdentity.js:320), so cleaning the label is SKU-neutral. That is
+   asserted against the seller's real issued SKU, not argued -- see S1 in
+   tests/listing-export-e2e.mjs. */
+/* Catalogue artwork URL for a scan row, with base64 refused at the boundary.
+ *
+ * Owner decision Q1 (2026-09-12): "Server draft: never receives base64 image
+ * bytes." A comment saying so is not a mechanism, so this is the mechanism.
+ * Anything that is not an http(s) URL is dropped rather than forwarded --
+ * `data:` and `blob:` both, since a blob URL is meaningless to the server and
+ * a data URL is the payload problem itself.
+ *
+ * Returns null when there is no usable reference URL. Null is correct: the
+ * review screen then shows a placeholder, which is honest, instead of a
+ * broken image.
+ */
+function _catalogueArtworkUrl(r) {
+  const candidates = [r && r.catalogImageUrl, r && r.imageUrl, r && r.img];
+  for (const c of candidates) {
+    if (typeof c !== 'string') continue;
+    const v = c.trim();
+    if (!v) continue;
+    if (/^https?:\/\//i.test(v)) return v;
+    /* Deliberately NOT forwarded: data: (base64 bytes), blob: (local handle).
+       Both would be useless or harmful in a stored draft. */
+  }
+  return null;
+}
+
 function _bulkScanRowToCard(r) {
-  const setStr = [r.setName, r.cardNumber ? '#' + r.cardNumber : ''].filter(Boolean).join(' · ');
-  const thumb = r.imageUrl || r.imageDataUrl || null;
+  /* CATALOGUE ARTWORK ONLY. Never the seller's own photograph.
+   *
+   * Owner decision Q1 (2026-09-12). The obvious repair for "the draft shows
+   * stock art instead of my card" was to swap the operands here:
+   *
+   *     const thumb = r.imageDataUrl || r.imageUrl || null;   // DO NOT DO THIS
+   *
+   * That was rejected, and correctly. This whole object is the body of the
+   * POST /api/drafts request, so preferring `imageDataUrl` would put a
+   * `data:image/...` base64 string into the request and then into KV --
+   * payload size, privacy, synchronisation and retention problems, all four
+   * at once, in exchange for a thumbnail.
+   *
+   * The fields stay separate instead:
+   *
+   *   catalogImageUrl  reference artwork, an https URL, safe to store
+   *   img / imageUrl   the same reference URL under the two names older read
+   *                    paths use (openCollectionCardDetail reads p.img)
+   *   seller photos    NOT here. They live in the IndexedDB manifest
+   *                    (cardresell-listing-photos) and the review screen
+   *                    reads them from there, newest-manifest-first, via a
+   *                    temporary object URL. See _reviewReferenceImageHtml().
+   *
+   * So the review screen prefers the seller's photograph WITHOUT that
+   * photograph ever entering a server payload. */
+  const catalogUrl = _catalogueArtworkUrl(r);
+  const thumb = catalogUrl;
   return {
     card: r.cardName,
-    set: setStr,
-    condition: r.condition || 'NM',
+    set: r.setName || '',
+    /* Emitted only when the seller actually chose. An earlier version of this
+       line read `r.condition || ''` and was INERT: the scan path assigned 'NM'
+       unconditionally, so the left side was never falsy and every draft still
+       carried Near Mint. The guard is on `conditionChosen`, not on the value.
+
+       Historic note, corrected: a comment here claimed "Bulk ID has no
+       condition picker". It does -- bulkOpenConditionPicker, reached from the
+       chip on each row. The problem was never a missing picker; it was that an
+       unused picker was indistinguishable from a used one.
+
+       Old text kept for context: no 'NM' fallback, because a default here
+       was indistinguishable from a seller's choice once stored, and it is the
+       reason an untouched draft exported as Near Mint. An absent condition is
+       reported as absent; the review screen asks for one. */
+    condition: (r.conditionChosen === true && r.condition) ? r.condition : '',
     // Save under BOTH field names — openCollectionCardDetail reads
     // p.img || p.imageUrl, and older code paths only look at p.img.
     img: thumb,
     imageUrl: thumb,
+    /* The SAME reference URL under an honest name. `img`/`imageUrl` are
+       ambiguous about provenance -- a reader cannot tell whether they hold
+       stock art or the seller's photograph, which is exactly how the review
+       screen came to show artwork without saying so. `catalogImageUrl` can
+       only ever be catalogue artwork, so the review screen can label it. */
+    catalogImageUrl: catalogUrl,
     number: r.cardNumber || '',
     tcgplayerUrl: r.tcgplayerUrl || '',
     game:       r.cardType === 'pokemonjp' ? 'pokemonjp' : (r.cardType || ''),

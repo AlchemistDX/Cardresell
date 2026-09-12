@@ -593,7 +593,19 @@ try {
     const EXPECTED_KEYS = ['id', 'updatedAt', 'card', 'set', 'buyPrice', 'currentValue',
       'condition', 'addedDate', 'source', 'img', 'imageUrl', 'number', 'tcgplayerUrl',
       'game', 'cardType', 'setCode', 'groundedId', 'rarity', 'isJapanese', 'grader',
-      'grade', 'sport', 'year', 'lastRefreshed'];
+      'grade', 'sport', 'year', 'lastRefreshed',
+      // Added 2026-09-12 for owner requirement Q1. The mapper now emits the
+      // catalogue artwork URL under its OWN name, so the seller's local
+      // photograph and the catalogue's stock image can never be confused for
+      // one another -- and so nothing has to infer which of `img`/`imageUrl`
+      // meant which. `img` and `imageUrl` are deliberately KEPT: the existing
+      // collection detail view reads `p.img`, and dropping them would have
+      // been exactly the silent omission Rule 2 is about.
+      //
+      // This entry is an ADDITION to the frozen union, not a relaxation of it.
+      // The assertion still demands an exact match, so the next unplanned
+      // field will fail here the same way this one did.
+      'catalogImageUrl'];
     const got = Object.keys(e).sort();
     eq('the saved entry carries exactly the committed key union',
        got.join(','), EXPECTED_KEYS.slice().sort().join(','));
@@ -601,8 +613,24 @@ try {
     // The name field is `card`, not `name` -- the Collection renderer reads
     // `card`, and emitting `name` instead would have been a silent rename.
     eq('the card name is carried under `card`', e.card, 'Umbreon VMAX');
-    ok('the set string still carries set and number together',
-       e.set === 'Evolving Skies · #215/203', JSON.stringify(e.set));
+    /* This assertion used to require `set` === 'Evolving Skies · #215/203',
+       freezing the fused string as intended behaviour. It was the defect: the
+       number was ALREADY carried separately as `number`, so every consumer
+       that rendered both -- the listing title, the CSV Title column, the
+       description's "Set:" line -- stated it twice. The seller's exported
+       title read "Ivysaur Mega Evolution · #134 #134 Shiny Rare".
+
+       The product is now right and this assertion was wrong, so it is
+       inverted rather than deleted: `set` is a set name, and `number` must
+       still be present, because "stop fusing" must not become "lose the
+       number". */
+    eq('the set field is the set name alone, not fused with the number',
+       e.set, 'Evolving Skies');
+    eq('the number is still carried separately, in its printed form',
+       e.number, '215/203');
+    ok('no fused remnant in the saved set field',
+       !String(e.set).includes('\u00b7') && !String(e.set).includes('#'),
+       JSON.stringify(e.set));
     ok('the entry does not carry a conflicting setName alias', e.setName === undefined, JSON.stringify(e));
     eq('a fetched comp price is saved as a number', typeof e.currentValue, 'number');
     eq('provenance is recorded', e.source, 'bulk-scan');

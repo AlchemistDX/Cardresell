@@ -95,7 +95,14 @@ def ptcg_get_all_sets() -> list[dict]:
             "https://api.pokemontcg.io/v2/sets"
             f"?pageSize=250&page={page}"
             "&orderBy=-releaseDate"
-            "&select=id,name,releaseDate,total,series,ptcgoCode"
+            # printedTotal is the denominator PRINTED on the card ("134/132").
+            # `total` is how many cards the set actually contains, including
+            # secret rares numbered above the printed total -- Mega Evolution
+            # is printedTotal 132, total 188. Selecting only `total` is why no
+            # seeded record could produce a correct "/132", so both are pulled:
+            # `total` still drives the completeness check below, printedTotal is
+            # recorded for display.
+            "&select=id,name,releaseDate,total,printedTotal,series,ptcgoCode"
         )
         d = http_get_json(url)
         chunk = d.get("data", []) or []
@@ -130,6 +137,48 @@ def ptcg_get_all_cards_in_set(set_id: str) -> list[dict]:
 def load_index() -> list[dict]:
     with open(INDEX_PATH) as f:
         return json.load(f)
+
+
+PRINTED_TOTALS_PATH = REPO / "data" / "set-printed-totals.json"
+
+
+def record_printed_total(set_id: str, set_obj: dict) -> None:
+    """Record a set's PRINTED denominator, from the API's own set object.
+
+    Only a positive integer supplied by the API is written. Nothing is inferred:
+    a denominator derived from the catalogue's record count or its highest card
+    number gives 188 for Mega Evolution, whose cards are printed /132, so an
+    absent value stays absent and the collector number prints bare.
+
+    This is forward-looking only. It does not repair sets already seeded -- that
+    is a separate, separately-authorised backfill -- and it never rewrites an
+    entry that is already present.
+    """
+    printed = set_obj.get("printedTotal")
+    if not isinstance(printed, int) or isinstance(printed, bool) or printed <= 0:
+        return
+    try:
+        with open(PRINTED_TOTALS_PATH) as f:
+            doc = json.load(f)
+    except Exception:
+        return
+    sets = doc.setdefault("sets", {})
+    if set_id in sets:
+        return
+    sets[set_id] = {
+        "name": set_obj.get("name") or "",
+        "ptcgoCode": set_obj.get("ptcgoCode") or "",
+        "printedTotal": printed,
+        "total": set_obj.get("total") if isinstance(set_obj.get("total"), int) else None,
+        "verifiedAt": time.strftime("%Y-%m-%d"),
+        "verifiedFrom": "https://api.pokemontcg.io/v2/sets/" + set_id,
+    }
+    tmp = PRINTED_TOTALS_PATH.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(doc, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, PRINTED_TOTALS_PATH)
+    print(f"[seed:{set_id}] recorded printedTotal={printed}", flush=True)
 
 
 def save_index(idx: list[dict]) -> None:
@@ -206,6 +255,47 @@ def rss_kb() -> int:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
 
+def build_card_record(c: dict, set_id: str, set_name: str,
+                      p, d, img_url: str) -> dict:
+    """Build one card-index record from an API card object.
+
+    Extracted from seed_one_set()'s loop on 2026-09-12 so the collector-number
+    handling is reachable offline. seed_one_set() calls THIS function, so a
+    test that drives it drives the shipped path rather than a reconstruction
+    of it. Image download and perceptual hashing stay in the caller; p, d and
+    img_url arrive already computed.
+    """
+    return {
+        "id": c["id"],
+        "n": c.get("name") or "",
+        "s": set_name or set_id,
+        "si": set_id,
+        "sc": (c.get("set") or {}).get("ptcgoCode") or set_id.upper(),
+        # Collector number, stored VERBATIM as the API printed it.
+        #
+        # This previously ran .lstrip("0") or "0", which destroyed the printed
+        # form: "007" became "7" and "000" became "0". Removed 2026-09-12 per
+        # the owner's Q3 decision - preserve leading zeros and prefixes going
+        # forward.
+        #
+        # Safe for identity: api/_cardIdentity.js normalizeNumber() strips
+        # leading zeros from every digit run BEFORE the number axis is hashed,
+        # so "007" and "7" produce the SAME SKU. Zeros are presentation here,
+        # not identity. Pinned by H/H0-H2 in tests/collector-number-format.mjs.
+        #
+        # NOT a licence to backfill: the already-stripped records cannot reveal
+        # which of them originally carried zeros, and padding them by guess
+        # would invent printed forms. A backfill must rebuild from
+        # authoritative source values. This only fixes new writes.
+        "nu": (c.get("number") or ""),
+        "r": c.get("rarity") or "Common",
+        "p": p,
+        "d": d,
+        "i": img_url,
+        "g": "pokemon",
+    }
+
+
 def seed_one_set(set_id: str, index: list[dict], max_cards: int | None = None) -> dict:
     """Seed one set. Mutates `index`. Returns stats."""
     print(f"[seed:{set_id}] fetching card list from pokemontcg.io...", flush=True)
@@ -233,7 +323,14 @@ def seed_one_set(set_id: str, index: list[dict], max_cards: int | None = None) -
             detail = http_get_json(
                 f"https://api.pokemontcg.io/v2/cards/{cards[0]['id']}"
             )
-            set_name = ((detail.get("data") or {}).get("set") or {}).get("name", "")
+            set_obj = (detail.get("data") or {}).get("set") or {}
+            set_name = set_obj.get("name", "")
+            # The same response already carries the printed denominator, so
+            # recording it costs no extra request. It goes in the reviewed
+            # metadata table rather than onto each record: it is a property of
+            # the SET, and duplicating it across ~200 records per set is how the
+            # two copies would later disagree.
+            record_printed_total(set_id, set_obj)
         except Exception:
             set_name = ""
 
@@ -266,19 +363,7 @@ def seed_one_set(set_id: str, index: list[dict], max_cards: int | None = None) -
             failed_details.append((cid, f"hash: {type(e).__name__}: {str(e)[:80]}"))
             continue
 
-        record = {
-            "id": cid,
-            "n": c.get("name") or "",
-            "s": set_name or set_id,
-            "si": set_id,
-            "sc": (c.get("set") or {}).get("ptcgoCode") or set_id.upper(),
-            "nu": (c.get("number") or "").lstrip("0") or "0",
-            "r": c.get("rarity") or "Common",
-            "p": p,
-            "d": d,
-            "i": img_url,
-            "g": "pokemon",
-        }
+        record = build_card_record(c, set_id, set_name, p, d, img_url)
         index.append(record)
         stats["added"] += 1
         since_ckpt += 1

@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Printed denominators for card sets, keyed by pokemontcg.io set id.",
+    "",
+    "WHY THIS FILE EXISTS. card-index.json (the supplemental catalogue) stores",
+    "no denominator under any name -- its record keys are exactly",
+    "['d','g','i','id','n','nu','p','r','s','sc','si'] and no record contains a",
+    "'/' in 'nu'. So a card resolved from the local catalogue had no way to",
+    "produce '134/132', and the seeder never collected one: tools/seed_set_v2.py",
+    "selects id,name,releaseDate,total,series,ptcgoCode and writes neither total",
+    "nor printedTotal onto records.",
+    "",
+    "WHY NOT DERIVED. The denominator must never come from the catalogue's",
+    "record count or its maximum card number. Mega Evolution holds 188 records",
+    "AND its highest number is 188, while the denominator printed on the cards",
+    "is 132. Both derivations give the wrong answer for exactly the card that",
+    "exposed this bug.",
+    "",
+    "WHY ONLY ONE SET. This is the deliberately small, reviewed metadata update",
+    "for the affected set, so the Ivysaur export demonstrates 134/132 today.",
+    "Changing the seeder alone would not fix already-seeded records. A broad",
+    "catalogue backfill is a separate, separately-authorised piece of work, and",
+    "existing drafts are NOT migrated by this file.",
+    "",
+    "HOW TO ADD A SET. Read printedTotal from the set object on",
+    "api.pokemontcg.io (GET /v2/cards/<setid>-<n> exposes it under .set, and",
+    "GET /v2/sets/<setid> returns it directly) and record the date it was",
+    "verified. Do not infer, round, or copy from a third-party listing.",
+    "An absent entry is correct behaviour: the formatter prints the bare",
+    "collector number rather than guessing a denominator."
+  ],
+  "sets": {
+    "me1": {
+      "name": "Mega Evolution",
+      "ptcgoCode": "MEG",
+      "printedTotal": 132,
+      "total": 188,
+      "verifiedAt": "2026-09-12",
+      "verifiedFrom": "https://api.pokemontcg.io/v2/cards/me1-134"
+    }
+  }
+}

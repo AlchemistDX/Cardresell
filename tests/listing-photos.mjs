@@ -726,6 +726,86 @@ const screenState = (page) => page.evaluate(() => ({
   await ctx.close();
 }
 
+/* -- 16. two drafts side by side, reopened -------------------------------
+ *
+ * Will's correction 3: "test whether seller-uploaded IndexedDB photos remain
+ * attached to the correct draft after reopening."
+ *
+ * Section 1 reloads with ONE draft in the store. That cannot detect a
+ * mis-attachment: with a single draft, "returns this draft's photos" and
+ * "returns every photo in the store" are the same answer, so an unfiltered
+ * read would pass it. This section keeps two drafts with different photos and
+ * asserts each reopen returns its OWN, by identity, by name and by bytes.
+ */
+{
+  console.log('\n16. two drafts, reopened, each keeps its own photos');
+  const ctx = await ctxWith();
+  let page = await pageIn(ctx);
+
+  const rA = await add(page, 'draft-mix-A', ['A1.png', 'A2.png']);
+  const rB = await add(page, 'draft-mix-B', ['B1.png', 'B2.png', 'B3.png']);
+  T.check('both drafts seeded', rA.ok && rB.ok, JSON.stringify({ rA, rB }));
+  const idsA = rA.ok ? rA.res.added : [];
+  const idsB = rB.ok ? rB.res.added : [];
+  T.check('the two drafts were issued DISTINCT photo ids',
+    idsA.length === 2 && idsB.length === 3 && !idsA.some(id => idsB.includes(id)),
+    JSON.stringify({ idsA, idsB }));
+
+  /* Reopen = a fresh page against the same origin storage, which is what the
+     seller does when they come back to a draft later. */
+  await page.close();
+  page = await pageIn(ctx);
+
+  const backA = await list(page, 'draft-mix-A');
+  const backB = await list(page, 'draft-mix-B');
+
+  T.check('A reopens with exactly its own two photos',
+    JSON.stringify(backA.order) === JSON.stringify(idsA),
+    JSON.stringify(backA.order) + ' vs ' + JSON.stringify(idsA));
+  T.check('B reopens with exactly its own three photos',
+    JSON.stringify(backB.order) === JSON.stringify(idsB),
+    JSON.stringify(backB.order) + ' vs ' + JSON.stringify(idsB));
+  T.check('A did NOT pick up B\u2019s photos',
+    !backA.order.some(id => idsB.includes(id)), JSON.stringify(backA.order));
+  T.check('B did NOT pick up A\u2019s photos',
+    !backB.order.some(id => idsA.includes(id)), JSON.stringify(backB.order));
+  T.check('A\u2019s filenames came back to A',
+    backA.photos.map(p => p.name).join(',') === 'A1.png,A2.png',
+    backA.photos.map(p => p.name).join(','));
+  T.check('B\u2019s filenames came back to B',
+    backB.photos.map(p => p.name).join(',') === 'B1.png,B2.png,B3.png',
+    backB.photos.map(p => p.name).join(','));
+  /* Names could match while the BYTES were swapped, so the blobs are checked
+     too. Each file is built with a distinct trailing byte. */
+  T.check('every reopened photo carries real bytes, not an empty shell',
+    backA.photos.every(p => !p.missing && p.bytes > 0)
+    && backB.photos.every(p => !p.missing && p.bytes > 0),
+    JSON.stringify({ a: backA.photos, b: backB.photos }));
+
+  /* A draft the seller never added to must come back EMPTY, not holding
+     someone else's photos. This is the unfiltered-read check. */
+  const backC = await list(page, 'draft-mix-C-never-touched');
+  T.check('an untouched draft reopens EMPTY, not with the store\u2019s contents',
+    backC.order.length === 0, JSON.stringify(backC.order));
+
+  /* Removal must stay scoped too: deleting from A must not disturb B. */
+  await page.evaluate(async (pid) => await window.photosRemove('draft-mix-A', pid), idsA[0]);
+  const afterA = await list(page, 'draft-mix-A');
+  const afterB = await list(page, 'draft-mix-B');
+  T.check('removal from A left A with one photo', afterA.order.length === 1, JSON.stringify(afterA.order));
+  T.check('removal from A did not touch B',
+    JSON.stringify(afterB.order) === JSON.stringify(idsB), JSON.stringify(afterB.order));
+
+  const raw = await rawCounts(page);
+  T.check('the raw store holds both drafts as separate manifests',
+    raw.manifest.length === 2
+    && raw.manifest.some(m => m.draftId === 'draft-mix-A')
+    && raw.manifest.some(m => m.draftId === 'draft-mix-B'),
+    JSON.stringify(raw.manifest.map(m => m.draftId)));
+
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 T.done();

@@ -9811,7 +9811,13 @@ function addCurrentCardToCollection() {
   document.getElementById('mDate').value = new Date().toISOString().slice(0,10);
   // Pre-fill card info
   document.getElementById('mCardName').value = selectedCard.name || '';
-  document.getElementById('mSetName').value = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
+  /* Set name only. This prefill used to append the number ("Mega Evolution ·
+     134"), and because the input's value is stored verbatim as `set`
+     (saveFlipEntry, :9989) while the number is persisted separately as
+     `number` (:9998), every manually added card carried its number twice.
+     Unlike fusion site A this form used no '#', so the defensive strippers
+     downstream never caught it. */
+  document.getElementById('mSetName').value = selectedCard.setName || '';
   const price = getEffectivePrice();
   window._ccPrefilledValue = price ? price.toFixed(2) : '';
   if (price) document.getElementById('mCurrentValue').value = price.toFixed(2);
@@ -9886,7 +9892,9 @@ function openAddFlip(mode) {
   if (selectedCard && selectedCard.name) {
     document.getElementById('mCardName').value = selectedCard.name;
     // If we have a pending grade scan result, tag set/notes with "PSA X Est."
-    const baseSet = [selectedCard.setName, selectedCard.number].filter(Boolean).join(' · ');
+    /* Set name only -- same reason as the prefill above. The PSA-estimate
+       prefix below is a deliberate annotation and is left untouched. */
+    const baseSet = selectedCard.setName || '';
     if (mode === 'hold' && window._lastScanEstGrade && window._lastScanCardName &&
         selectedCard.name.toLowerCase().includes(window._lastScanCardName.toLowerCase().split(' ')[0])) {
       document.getElementById('mSetName').value = `PSA ${window._lastScanEstGrade} Est. · ${baseSet}`;
@@ -10369,8 +10377,11 @@ function openFlipDetail(flipId) {
 
   // Research links — build search queries from card + number so the user
   // can quickly check current comps if they want to flip the same card again.
-  const numMatch = (f.set || '').match(/#(\S+)/);
-  const cardNum = numMatch ? numMatch[1] : (f.number || '');
+  /* `f.number` FIRST. This used to read the number out of the fused
+     "Set · #134" label and only fall back to the stored field, which broke the
+     moment the mapper stopped fusing (js/ui.823136c3.js:3782). Legacy entries
+     that only have the fused label still work via the fallback. */
+  const cardNum = f.number || ((f.set || '').match(/#(\S+)/) || [])[1] || '';
   const q = [f.card, cardNum].filter(Boolean).join(' ');
   const ebayBtn = document.getElementById('fdmEbayBtn');
   const tcgBtn  = document.getElementById('fdmTcgBtn');
@@ -10789,8 +10800,10 @@ async function _fetchEbayPriceForEntry(p) {
   // via the _fetchPriceForEntry dispatcher below; this stays the raw path.
   if (p && p.grader && p.grade) return null;
   // Build query: card name + card number (stripped from set field like "Charizard · #4")
-  const numMatch = (p.set || '').match(/#(\S+)/);
-  const cardNum  = numMatch ? numMatch[1].replace(/^0+/, '') : '';
+  /* `p.number` FIRST, fused label only as a legacy fallback -- see the note at
+     the Research-links site above. Reading the fused label alone silently
+     produced a name-only comp query for every newly saved card. */
+  const cardNum  = String(p.number || ((p.set || '').match(/#(\S+)/) || [])[1] || '').replace(/^0+/, '');
   const queryParts = [p.card, cardNum].filter(Boolean);
   const query    = queryParts.join(' ');
   const res      = await fetch('/api/ebay-sold?q=' + encodeURIComponent(query));
@@ -24063,9 +24076,24 @@ function _reviewPacketRows() {
   if (pk.category && pk.category.label) {
     rows.push({ key: 'category', label: 'Category', value: String(pk.category.label) });
   }
-  if (pk.condition && pk.condition.conditionLabel) {
-    rows.push({ key: 'condition', label: 'Condition', value: String(pk.condition.conditionLabel) });
-  }
+  /* Condition is ALWAYS a row, even when unset.
+   *
+   * Owner requirement Q5 (2026-09-12): "readiness must visibly say 'Select
+   * condition'". The previous code omitted the row entirely when no condition
+   * had been chosen -- Rule 2, a silent omission is the bug. A seller saw a
+   * field list with no Condition line at all and had nothing to act on, which
+   * is indistinguishable from a listing that does not need one.
+   *
+   * The value is NOT defaulted to a condition. Fabricating Near Mint is the
+   * defect this whole change removes; the row states the action owed instead,
+   * and `data-packet-needs="condition"` marks it for the readiness assertions
+   * so "visibly says" is measurable rather than claimed. */
+  const condLabel = (pk.condition && pk.condition.conditionLabel)
+    ? String(pk.condition.conditionLabel) : '';
+  rows.push(condLabel
+    ? { key: 'condition', label: 'Condition', value: condLabel }
+    : { key: 'condition', label: 'Condition', value: REVIEW_CONDITION_OWED_COPY,
+        needs: 'condition' });
   const asp = pk.aspects && typeof pk.aspects === 'object' ? pk.aspects : null;
   if (asp) {
     for (const bag of ['required', 'optional']) {
@@ -24560,7 +24588,7 @@ function _reviewPacketHtml() {
   // below the thing it is about, which is where a seller stops reading.
   const guidanceHtml = _reviewConditionGuidanceHtml();
   const rowHtml = rows.map((r) => `
-        <div class="review-field" data-packet-field="${_reviewEsc(r.key)}"${r.required ? ' data-packet-required=""' : ''}>
+        <div class="review-field${r.needs ? ' review-field-owed' : ''}" data-packet-field="${_reviewEsc(r.key)}"${r.required ? ' data-packet-required=""' : ''}${r.needs ? ` data-packet-needs="${_reviewEsc(r.needs)}"` : ''}>
           <div class="review-field-label">${_reviewEsc(r.label)}</div>
           <div class="review-field-value">${_reviewEsc(r.value)}</div>
         </div>${r.key === 'condition' ? guidanceHtml : ''}`).join('');
@@ -25182,13 +25210,90 @@ function _photoInnerHtml() {
     /* Not "none were added" -- a bucket is cleared in its entirety, so an
        absent manifest is not evidence of an empty history. */
     : `<p class="photo-empty" data-photo-empty>${PHOTO_EMPTY_COPY}</p>`;
-  return `${limit}${controls}${statusHtml}${list}`;
+  /* The reference/own-photo figure is INSIDE this block, not beside it, so it
+     repaints on the same _photoBlockPaint() that follows every manifest read
+     and mutation. Rendered outside, it would keep showing catalogue artwork
+     after the seller added their first photo until something else redrew. */
+  return `${_reviewReferenceImageHtml()}${limit}${controls}${statusHtml}${list}`;
 }
 
 function _photoBlockPaint() {
   const host = document.querySelector('[data-photo-block]');
   if (!host) return;
   host.innerHTML = _photoInnerHtml();
+}
+
+/* The card image shown on the review screen, in the owner's stated order:
+ *
+ *   1. the seller's own photograph from the IndexedDB manifest, when this
+ *      browser has one for this draft;
+ *   2. catalogue artwork, CLEARLY LABELLED as reference;
+ *   3. a placeholder when neither exists.
+ *
+ * Owner decision Q1 (2026-09-12). The rejected alternative was to reorder
+ * `r.imageUrl || r.imageDataUrl` in the scan mapper, which would have sent
+ * base64 bytes to the server. Preference is expressed HERE, at render time,
+ * against the local manifest -- so the seller sees their own card while the
+ * stored draft still carries nothing but an https reference URL.
+ *
+ * `_photoUi.photos[0].url` is the temporary object URL _photoUiSync() already
+ * created and already revokes in _photoRevokeUrls(); this reads it rather than
+ * creating a second URL for the same blob, so there is one lifetime to manage
+ * and not two.
+ */
+/* The exact words the owner asked the readiness surface to show. Held as a
+   constant so the screen and its assertions cannot drift apart. */
+const REVIEW_CONDITION_OWED_COPY = 'Select condition';
+
+/* The owner's exact wording, quoted verbatim from the Q1 decision rather than
+   restyled to the spaced em dash used elsewhere in this file. */
+const REVIEW_REFERENCE_LABEL = 'Reference image\u2014not your listing photo.';
+const REVIEW_NO_IMAGE_COPY = 'No image for this card yet.';
+
+function _reviewReferenceImageHtml() {
+  const d = _reviewState.draft || {};
+  const card = (d && typeof d.card === 'object' && d.card) ? d.card : {};
+
+  /* Reference artwork only. `catalogImageUrl` is the unambiguous field; the
+     older `img`/`imageUrl` names are read as a fallback for drafts created
+     before it existed, which is why legacy drafts keep rendering. A data: URL
+     is refused even if an old record somehow carries one -- it would be the
+     very payload this design keeps out. */
+  const rawRef = card.catalogImageUrl || card.imageUrl || card.img || '';
+  const ref = (typeof rawRef === 'string' && /^https?:\/\//i.test(rawRef.trim()))
+    ? rawRef.trim() : '';
+
+  /* Seller's own photograph, first in the manifest order they arranged. */
+  const own = (_photoUi.loaded && Array.isArray(_photoUi.photos))
+    ? _photoUi.photos.find((p) => p && !p.missing && p.url)
+    : null;
+
+  if (own) {
+    return `<figure class="review-cardimg" data-review-img="own">
+        <img class="review-cardimg-img" alt="Your photo of this card" src="${own.url}">
+        <figcaption class="review-cardimg-cap" data-review-img-cap>Your photo.</figcaption>
+      </figure>`;
+  }
+
+  /* Still reading the store: say so rather than flashing catalogue artwork and
+     then replacing it, which would show the seller a stock image for their
+     card for as long as the read takes. */
+  if (!_photoUi.loaded) {
+    return `<figure class="review-cardimg is-loading" data-review-img="loading">
+        <figcaption class="review-cardimg-cap" data-review-img-cap>Checking this browser for your photos\u2026</figcaption>
+      </figure>`;
+  }
+
+  if (ref) {
+    return `<figure class="review-cardimg is-reference" data-review-img="catalog">
+        <img class="review-cardimg-img" alt="Catalogue reference artwork for this card" src="${_reviewEsc(ref)}">
+        <figcaption class="review-cardimg-cap" data-review-img-cap>${REVIEW_REFERENCE_LABEL}</figcaption>
+      </figure>`;
+  }
+
+  return `<figure class="review-cardimg is-empty" data-review-img="none">
+      <figcaption class="review-cardimg-cap" data-review-img-cap>${REVIEW_NO_IMAGE_COPY}</figcaption>
+    </figure>`;
 }
 
 function _reviewPhotosHtml() {
@@ -25565,6 +25670,12 @@ try {
   window.loadDraftReview  = loadDraftReview;
   window._reviewState     = _reviewState;
   window._photoUi         = _photoUi;
+  /* Exported so the review-image preference order can be asserted against the
+     shipped function rather than a copy of it. */
+  window._reviewReferenceImageHtml = _reviewReferenceImageHtml;
+  window.REVIEW_REFERENCE_LABEL    = REVIEW_REFERENCE_LABEL;
+  window.REVIEW_NO_IMAGE_COPY      = REVIEW_NO_IMAGE_COPY;
+  window.REVIEW_CONDITION_OWED_COPY = REVIEW_CONDITION_OWED_COPY;
   // Nothing else is exported for the packet block, deliberately. A
   // `window._reviewCopyPayload` would have made the copy assertions a one-line
   // call, and it would have been a production global that exists only because

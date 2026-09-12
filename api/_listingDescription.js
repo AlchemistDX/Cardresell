@@ -126,6 +126,19 @@ export function buildListingDescription(parts = {}) {
     });
   }
 
+  /* The heading restates the listing title above the structured lines.
+     
+     It IS redundant when the lines carry the identity, and a change removing it
+     was written and then reverted on 2026-09-12 at the owner's direction: the
+     reported defect was the fused, duplicated title ("#134 #134"), and the
+     heading was not part of it. With the title corrected the heading reads
+     "Ivysaur Mega Evolution #134/132 Illustration Rare" followed by the
+     structured lines, which is repetitive but not awkward -- judged on the real
+     post-fix export (ivysaur-post-fix.csv), not on a prediction of it.
+     
+     Presentation behaviour the defect did not require is left alone. If the
+     redundancy is worth removing later it is its own change with its own
+     before/after, not a passenger on an identity fix. */
   const heading = clean(parts.title && parts.title.text);
   const text = (heading ? [heading, '', ...lines] : lines).join('\n');
 

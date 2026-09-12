@@ -117,6 +117,21 @@ const EXCLUDED = {
     'make the offline gate depend on an environment it does not provide. ' +
     'Run by hand: node tests/listing-photos.mjs (92/92 as of 2026-09-08). ' +
     'Tracked as RV-7 in RELEASE_VALIDATION_QUEUE.md.',
+  'listing-export-e2e.mjs':
+    'Added 2026-09-12 (listing-export defects). Drives the REAL ' +
+    '_bulkScanRowToCard -> POST /api/drafts -> GET -> _ebayDraftCsv path in a ' +
+    'real browser and asserts against tests/fixtures/ebay-draft-3.csv, the ' +
+    'file the seller actually downloaded. Excluded for the SAME reason as ' +
+    'listing-photos.mjs and flip-completeness-e2e.mjs, and on that precedent, ' +
+    'not as a fresh judgement: the shipped mapper and CSV builder are only ' +
+    'reachable as window globals from index.html, which needs Playwright and ' +
+    'a local HTTP server this offline runner does not stand up. Registering ' +
+    'it as an offline slot would make the offline gate depend on an ' +
+    'environment it does not provide. Run by hand: node ' +
+    'tests/listing-export-e2e.mjs (59/59 as of 2026-09-12). Its offline ' +
+    'siblings ARE registered: collector-number-format.mjs (slot 59) and ' +
+    'scan-rarity-grounding.mjs (slot 60), so the number formatter and the ' +
+    'rarity grounding rule are both covered by the gate itself.',
 };
 
 /* A stale exclusion is its own drift: it grants an exemption to a file that no
