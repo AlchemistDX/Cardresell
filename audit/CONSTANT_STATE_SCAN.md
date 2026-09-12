@@ -13,7 +13,10 @@ Two questions per candidate:
 
 1. What is the complete set of values the **production** client can cause? Not what the type
    allows, and not what a test can construct — what `_crCreateDraft` actually sends
-   (`js/core.7f9c03ad.js:18381-18400`) plus whatever server paths exist to change it later.
+   (`js/core.2db046e6.js:21450-21469`; re-stamped from generation 7f9c03ad lines
+   18381-18400, where this scan first read it. The function gained a `batch` parameter
+   on 2026-09-11 for batch drafting; the create BODY below is unchanged) plus whatever
+   server paths exist to change it later.
 2. If that set has one element, does anything downstream present it as though it were
    informative?
 

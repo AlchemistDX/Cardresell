@@ -170,6 +170,22 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify({ deleted: hit }));
   }
+  // Write a raw string key. Dev harness only, and it exists for ONE reason:
+  // the draft cap refuses at 500, and the honest way to observe that refusal is
+  // to put the seller's quota counter at the cap rather than to lower the cap
+  // for the test. Lowering the cap would exercise a number the product does not
+  // ship. Seeding `draftquota:<sub>` alone is not enough either -- the periodic
+  // verify would re-derive it from the (empty) index on the next create -- so
+  // `draftquotafresh:<sub>` has to be set alongside it, exactly as it would be
+  // in the hour after a real verify.
+  if (u.pathname === '/__kvset') {
+    const k = u.searchParams.get('key') || '';
+    const v = u.searchParams.get('value');
+    if (!k || v === null) { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'key and value required' })); }
+    store.set(k, String(v));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ set: k, value: String(v) }));
+  }
   if (u.pathname === '/__kvget') {
     const pre = u.searchParams.get('prefix') || '';
     const out = {};

@@ -1,87 +1,123 @@
-# Requirement — Batch drafting from Bulk Scan and Rapid Scan (2026-09-11)
+# Requirement — Batch drafting from Bulk Scan and Rapid Scan
 
-Recorded as a **requirement with a size**, not as work started. It is **new
-scope**: it was not in the Phase 1 release-candidate list, so the ~95% figure
-cannot absorb it. Sizing is at the end.
+Recorded 2026-09-11. Originally written as a requirement with a size and no work
+started; **the owner has since folded it into Phase 1** as the one approved
+addition to the standing "no further feature expansion" instruction. This file
+is now both the requirement and the as-built record, with the requirement's own
+errors corrected in place rather than quietly dropped.
 
-## Scope correction accepted first
+## Scope correction, carried forward
 
-The earlier wording **"create eBay drafts"** was too broad and I should not have
-carried it forward. **Corrected:** this creates **CardResell listing drafts**
-through the **existing review/export handoff**. It does **not** talk to eBay, and
-nothing about it implies direct eBay integration. The venue-neutral position
-holds: eBay is the first integration, not the destination.
+The earlier wording **"create eBay drafts"** was too broad. **Corrected:** this
+creates **CardResell listing drafts** through the existing review/export
+handoff. It does **not** talk to eBay. The venue-neutral position holds: eBay is
+the first integration, not the destination.
 
 ## Behaviour required
 
 Both **Bulk Scan** and **Rapid Scan** result screens:
 
 1. **Per-row selection** — a control on each result row.
-2. **Select All** — with a visible selected count, and a clear partial state.
+2. **Select All** — with a visible selected count and a clear partial state.
 3. **Create Selected Drafts** — one action, operating on the selection.
 4. **Per-card results** — every selected card reports its own outcome. A batch
-   of 40 in which 3 fail must show **which 3** and why, using the existing
-   review-screen error vocabulary. **A batch-level "some failed" is not
-   acceptable** — a silent omission is the bug (Rule 2).
-5. **Duplicate protection** — reuses the existing per-row create identity, not a
-   new one. Today's key is
-   `_crIdemKey('sell', 'col-<entryId>', slot, 'g'+generation)`
-   (`js/core.ebc21977.js:21177-21178`), and an unresolved attempt's payload is
-   held verbatim in `_crCreateAttempt` (`:21446`) so a retry cannot carry a
-   generation the seller never attempted. **Batch must reuse both mechanisms
-   per card.** Re-running Create Selected on a partially-succeeded batch must
-   replay, not duplicate. **410 stays explicit:** a stale generation shows the
-   deleted state and requires a fresh deliberate Create — no automatic refresh
-   and retry.
-6. **Draft-cap handling** — the cap is `DRAFT_CAP = 500`
-   (`api/_draftQuota.js:69`) and the server refuses with `AT_CAP: 'at-cap'`
-   (`:96`). **Two problems to solve, and the first is a defect that already
-   exists:** the cap is never surfaced in the client — a grep of the live bundle
-   for `at-cap` / `AT_CAP` returns **zero** hits, so today a refusal has no
-   seller-facing sentence. Batch must (a) give `AT_CAP` a sentence, and (b)
-   check remaining headroom **before** submitting a batch that would cross the
-   cap, so the seller is told "you can create 12 of these 40" rather than
-   discovering it 12 cards in.
+   of 40 in which 3 fail must show **which 3** and why, in the existing
+   review-screen error vocabulary. A batch-level "some failed" is not
+   acceptable; a silent omission is the bug.
+5. **Duplicate protection** — reuses the existing per-row create identity and
+   the verbatim held payload, per card. Re-running Create Selected on a
+   partially-succeeded batch must replay, not duplicate. **410 stays explicit:**
+   a stale generation shows the deleted state and requires a fresh deliberate
+   Create — no automatic refresh and retry.
+6. **Draft-cap handling** — see the corrected finding below. Batch shows
+   remaining headroom before submitting, and surfaces each server refusal on the
+   row it belongs to.
 7. **No automatic publishing.** Nothing is submitted anywhere. The end state is
-   drafts in the existing Drafts view, reachable through the existing review /
-   export path.
+   drafts in the existing Drafts view.
 
-## What already exists, and what does not
+## Four owner corrections, and how each was answered
+
+**1. Scan identity — `col-<entryId>` assumes a collection entry exists.**
+Correct, and it was the wrong basis. Bulk and Rapid Scan rows are unsaved; there
+is no entry id to key on, and a positional index is not stable across a re-sort
+or a removal. Each scan row is now stamped with a `scan_<hex>` identity **at
+capture**, before any lookup. Retrying one row reuses its identity, so a retry
+replays rather than duplicating. Two physical copies of the same card carry two
+identities and stay distinct — they draft as "Copy 1" and "Copy 2".
+
+**2. Cap handling — available space can change during the batch.**
+Correct. The pre-flight headroom read is a **planning aid only**. It never trims
+the batch and it is never treated as permission — the server's refusal is the
+only thing that decides.
+
+**Precisely what the batch does, because an earlier wording of this paragraph
+was self-contradictory.** It submits cards one at a time. It does **not** submit
+every selected card unconditionally: the first `AT_CAP` refusal **stops further
+submission**, and every remaining card is labelled "Not attempted — the draft
+limit was reached earlier in this batch." So a refused batch produces exactly
+one refusal from the server plus N labelled rows, not N refusals. The claim that
+"every card is still submitted" was wrong and contradicted the behaviour in the
+same breath as describing it.
+
+What the headroom read does **not** do is the point: it never causes a card to
+be withheld. Cards are withheld only after the **server** has refused one, never
+on the strength of the advisory number.
+
+**3. Cap-message evidence — zero `at-cap` matches does not establish that no
+message appears.** The owner was right, and the original requirement's claim was
+**wrong**. `'at-cap'` is only the internal `QUOTA.AT_CAP` string and never goes
+on the wire, so grepping the bundle for it could not have found anything. The
+shipped client at `e75700c` **did** handle the refusal — `if (r.status === 409
+&& /CAP/i.test(...))` — and showed "You've reached the draft limit. Finish or
+discard a draft to start another." **There was no missing-message defect.** The
+row in the table below is corrected accordingly.
+
+What was genuinely worth changing: the server sends its own sentence
+(`"You have reached the maximum of 500 saved drafts. Finish or delete one to
+save another."`, `api/drafts.js:97-105`, HTTP 409, `code: DRAFT_CAP_REACHED`).
+A batch row now shows **the server's sentence** rather than a client paraphrase
+of it. The single-card toast copy is unchanged.
+
+**4. Support draft still contained the two claims.** Fixed in the message body,
+not only in the note below it — see `audit/EBAY_SUPPORT_QUESTION.md`.
+
+## What already existed, and what did not
 
 | Piece | State | Evidence |
 |---|---|---|
-| Single-card create | **Exists** | `POST /api/drafts`, `js/core.ebc21977.js:21469` |
-| Retry identity + payload preservation | **Exists** | `:21137` `_crIdemKey`, `:21446` `_crCreateAttempt` |
-| 410 / explicit-new-Create | **Exists** | server `api/_draftService.js:338` |
-| Cap enforcement server-side | **Exists** | `api/_draftQuota.js:69, :96` |
-| Cap message client-side | **MISSING** | zero `at-cap` hits in the live bundle |
-| Bulk Scan overlay shell | **Exists** | `:20119` `bulkScanOverlay` |
-| Row selection / Select All | **Does not exist** | no selection controls on scan results |
-| Batch orchestration | **Does not exist** | — |
-| Per-card result reporting | **Does not exist** | — |
+| Single-card create | Exists | `POST /api/drafts` |
+| Retry identity + payload preservation | Exists | `_crIdemKey`, `_crCreateAttempt` |
+| 410 / explicit-new-Create | Exists | `api/_draftService.js` |
+| Cap enforcement server-side | Exists | `api/_draftQuota.js` (`DRAFT_CAP = 500`) |
+| Cap message client-side | **Exists — earlier "MISSING" was wrong** | `/CAP/i` branch present at `e75700c`; the grep looked for a string that is never on the wire |
+| Bulk Scan overlay shell | Exists | `bulkScanOverlay` |
+| Row selection / Select All | Built here | — |
+| Batch orchestration | Built here | — |
+| Per-card result reporting | Built here | — |
 
-## Sizing
+## A real bug this work surfaced
 
-**Estimate: 4 units of work, 1 of them a pre-existing defect.**
+`bulkMergeDuplicates` incremented `qty` **before** concatenating `copyUids`. The
+short uid list was then repaired by minting a filler uid, which pushed the real
+second copy's uid past the `slice(0, qty)` in `_bulkDraftUnits`. Result: **two
+cards in hand, one draft, no error.** Fixed by making the uid list
+authoritative — each side is sliced to its own qty, `qty = uids.length`, and
+both are set together before any render.
 
-1. **Selection UI on both screens** — per-row control, Select All with partial
-   state, selected count. Two screens, shared component. *Small.*
-2. **Batch orchestrator** — sequences per-card creates reusing the existing
-   identity and retry rules, holds per-card state across a partial failure, and
-   makes re-running replay rather than duplicate. **This is the hard part**:
-   concurrency, ordering, and the interaction with generation preconditions. It
-   is also where a wrong turn produces duplicate drafts, so it needs a mutation
-   test, not just a passing suite. *Medium-large.*
-3. **Per-card result surface** — an outcome per row in the existing error
-   vocabulary. *Small-medium.*
-4. **Cap headroom + `AT_CAP` sentence** — the missing client message, plus a
-   pre-flight headroom read. *Small, and it fixes an existing gap.*
+## Verification
 
-**Effect on the estimate.** Phase 1 was ~95% against a scope that did not
-include this. Adding it, the honest statement is: **the previously scoped Phase
-1 work remains ~95% complete; this requirement is additional and not started.**
-I am not restating a single blended percentage, because that would either hide
-the new work or falsely discount the finished work. **Which side of the Phase 1
-line this sits on is your call** — it is a plausible Phase 1.5 / Phase 2 item,
-and the standing instruction is no further feature expansion, so nothing here
-gets built without your say.
+`tests/bulk-batch-draft.mjs` — real browser, real `api/drafts.js`, real store;
+only `/api/scan`, the card API, `/api/tcg-price`, JWKS and Upstash are doubled.
+Nine groups covering identity at capture, opt-in selection and tri-state select
+all, one draft per row, replay on re-run, retry reusing its identity, two copies
+producing distinct drafts, the at-cap refusal, the frozen collection-save shape,
+and two **mutation checks** that fail the suite if the retry and copy logic is
+broken — so the passing result is not self-confirming. Registered as slot 58 in
+`tests/run-all.sh`.
+
+## Still owed at the time of writing
+
+The cap refusal has been exercised against the real handler locally; the owner
+asked for it on the **Preview build**, which is outstanding until the branch is
+deployed. Signed-in Preview draft/lifecycle checks (RV-4, Q-D8-6) are likewise
+outstanding. Production deployment remains a separate approval.
