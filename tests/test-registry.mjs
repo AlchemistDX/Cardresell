@@ -132,6 +132,24 @@ const EXCLUDED = {
     'siblings ARE registered: collector-number-format.mjs (slot 59) and ' +
     'scan-rarity-grounding.mjs (slot 60), so the number formatter and the ' +
     'rarity grounding rule are both covered by the gate itself.',
+  'entry-identity.mjs':
+    'Added 2026-09-12 (collection-id integrity). Drives the REAL delegated ' +
+    'click dispatcher, the REAL _bulkSaveToCollection, _unionById and the ' +
+    'tombstone filter in a real browser, and dispatches real clicks on the ' +
+    'markup the renderer emits -- the handler conversion it covers is only ' +
+    'observable through actual DOM events. Excluded for the SAME reason as ' +
+    'listing-photos.mjs and listing-export-e2e.mjs, and on that precedent, ' +
+    'not as a fresh judgement: it needs Playwright and a local HTTP server ' +
+    'this offline runner does not stand up, and two of its scenarios need ' +
+    'TWO PAGES sharing one origin\u2019s storage, which is a browser ' +
+    'property rather than something a double can supply. Registering it as ' +
+    'an offline slot would make the offline gate depend on an environment it ' +
+    'does not provide. Run by hand: node tests/entry-identity.mjs (32/32 as ' +
+    'of 2026-09-12). Its offline sibling IS registered: ' +
+    'scan-hygiene-2026-09-04.mjs (the \'every copy has a distinct id\' ' +
+    'check), which now grabs the real _crNewEntryId rather than a stub, so ' +
+    'the generator itself is covered by the gate. NOT yet registered in ' +
+    'audit/RELEASE_VALIDATION_QUEUE.md -- recorded here as the open item.',
 };
 
 /* A stale exclusion is its own drift: it grants an exemption to a file that no

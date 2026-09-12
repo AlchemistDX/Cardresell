@@ -157,9 +157,19 @@ check('the thumbnail img gains no attribute the renderer did not write',
 check('the card-name div gains no attribute the renderer did not write',
       Array.isArray(A.nameAttrs) && A.nameAttrs.join(',') === ['class', 'title'].sort().join(','),
       'attributes: ' + JSON.stringify(A.nameAttrs));
+/* 2026-09-12: `onclick` left this list and did not come back. The button used to
+   carry `onclick="event.stopPropagation();openMarkSoldModal(${p.id})"`, which
+   interpolated an entry id into executable source; it now carries the id as
+   inert data on data-entry-act / data-entry-id and a delegated listener
+   dispatches it. The expectation is updated rather than relaxed, and the ABSENCE
+   of onclick is asserted separately below, so a reintroduction fails here even
+   if someone later adds an attribute to this list. */
 check('the Sold button gains no attribute the renderer did not write',
       Array.isArray(A.soldAttrs)
-        && A.soldAttrs.join(',') === ['type', 'onclick', 'title', 'style'].sort().join(','),
+        && A.soldAttrs.join(',') === ['type', 'data-entry-act', 'data-entry-id', 'title', 'style'].sort().join(','),
+      'attributes: ' + JSON.stringify(A.soldAttrs));
+check('and it carries no inline event handler at all',
+      Array.isArray(A.soldAttrs) && !A.soldAttrs.some(n => /^on/i.test(n)),
       'attributes: ' + JSON.stringify(A.soldAttrs));
 check('no event-handler attribute appears anywhere the renderer never wrote one',
       shot.strayHandlerAttrs.length === 0,

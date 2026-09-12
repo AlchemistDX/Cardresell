@@ -4450,7 +4450,12 @@ function _bulkSaveToCollection(successful, costs, skipPricing) {
     // about this SAVE (cost basis, dates, provenance), not about the card.
     for (let q = 0; q < qty; q++) {
       port.push(Object.assign(_bulkScanRowToCard(r), {
-        id: Date.now() + added + Math.floor(Math.random() * 1000),
+        /* Was `Date.now() + added + Math.floor(Math.random() * 1000)`. Saving
+           several copies within one millisecond leaned on a 1-in-1000 draw per
+           copy to stay distinct, and the id is the lookup key everywhere, so a
+           collision made "edit this copy" and "delete this copy" hit a sibling.
+           Existing entries keep their ids; only new ones are minted this way. */
+        id: _crNewEntryId(),
         updatedAt: Date.now(),
         buyPrice,
         // 2026-09-04: `r.marketPrice || null` turned a legitimate $0.00 comp

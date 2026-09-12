@@ -9991,7 +9991,7 @@ function saveFlipEntry() {
     const cardRarity = (selectedCard && selectedCard.rarity) || '';
     const cardIsJP = cardGame === 'pokemonjp';
     port.push({
-      id: Date.now(),
+      id: _crNewEntryId(),
       updatedAt: Date.now(), // beats any older tombstone for a re-added id
       card: cardName,
       set: setName,
@@ -10049,7 +10049,7 @@ function saveFlipEntry() {
       setTimeout(() => openPricingModal('flips_cap'), 200);
       return;
     }
-    flips.push({ id: Date.now(), updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, costMeta, profit, platform, date });
+    flips.push({ id: _crNewEntryId(), updatedAt: Date.now(), card: cardName, set: setName, buyPrice, sellPrice, fees, shippingCost, gradingCost, costMeta, profit, platform, date });
     if (!saveFlipsData(flips)) { _reportStorageFailure(); return; }
     // Warn free users when they're 1 flip away from the cap
     if (!window._isPro && flips.length === 9) {
@@ -10100,7 +10100,7 @@ function openGradingModal(editId) {
 
   if (editId != null) {
     title.textContent = 'Edit Grading Entry';
-    const entry = loadGradingData().find(e => e.id === editId);
+    const entry = loadGradingData().find(e => _crIdEq(e.id, editId));
     if (entry) {
       document.getElementById('gmCard').value     = entry.card || '';
       document.getElementById('gmSet').value      = entry.set  || '';
@@ -10157,10 +10157,10 @@ function saveGradingEntry() {
 
   const data = loadGradingData();
   if (_gradingEditId != null) {
-    const idx = data.findIndex(e => e.id === _gradingEditId);
+    const idx = data.findIndex(e => _crIdEq(e.id, _gradingEditId));
     if (idx !== -1) data[idx] = { ...data[idx], card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice };
   } else {
-    data.push({ id: Date.now(), card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice });
+    data.push({ id: _crNewEntryId(), card, set, cost, rawVal, dateSent, grader, fees, hasGrade, gradeGrader, grade, salePrice });
   }
   if (!saveGradingData(data)) { _reportStorageFailure(); return; }
   document.getElementById('gradingModal').classList.remove('open');
@@ -10169,7 +10169,7 @@ function saveGradingEntry() {
 
 function deleteGradingEntry(id) {
   if (!confirm('Remove this grading entry?')) return;
-  saveGradingData(loadGradingData().filter(e => e.id !== id));
+  saveGradingData(loadGradingData().filter(e => !_crIdEq(e.id, id)));
   renderGradingLog();
 }
 
@@ -10226,8 +10226,8 @@ function renderGradingLog() {
             <td class="ft-mono">${e.salePrice ? '$'+e.salePrice.toFixed(2) : '<span style="color:var(--text-muted)">—</span>'}</td>
             <td>${roi}</td>
             <td><div style="display:flex;gap:.3rem">
-              <button class="ft-delete" onclick="openGradingModal(${e.id})" title="Edit" style="color:var(--gold-text)">✎</button>
-              <button class="ft-delete" onclick="deleteGradingEntry(${e.id})" title="Delete">✕</button>
+              <button class="ft-delete" data-entry-act="grading-edit" data-entry-id="${esc(String(e.id))}" title="Edit" style="color:var(--gold-text)">✎</button>
+              <button class="ft-delete" data-entry-act="grading-delete" data-entry-id="${esc(String(e.id))}" title="Delete">✕</button>
             </div></td>
           </tr>`;
         }).join('')}</tbody>
@@ -10302,7 +10302,7 @@ function renderGradingReport(data, reportWrap) {
 
 // ── Delete helpers ──
 function deleteFlip(id) {
-  const flips = loadFlipsData().filter(f => f.id !== id);
+  const flips = loadFlipsData().filter(f => !_crIdEq(f.id, id));
   _addTombstones('flips', id); // before the save, so a failed write still records intent
   saveFlipsData(flips);
   renderFlipsView();
@@ -10315,7 +10315,7 @@ function deleteFlip(id) {
 window._fdmCurrentId = null;
 function openFlipDetail(flipId) {
   const flips = loadFlipsData();
-  const f = flips.find(x => x.id === flipId);
+  const f = flips.find(x => _crIdEq(x.id, flipId));
   if (!f) return;
   window._fdmCurrentId = flipId;
 
@@ -10407,7 +10407,7 @@ function _fdmDeleteFlip() {
   window._fdmCurrentId = null;
 }
 function deletePort(id) {
-  const port = loadPortData().filter(p => p.id !== id);
+  const port = loadPortData().filter(p => !_crIdEq(p.id, id));
   _addTombstones('portfolio', id);
   savePortData(port);
   renderFlipsView();
@@ -10761,12 +10761,12 @@ function renderCollectionView() {
           // server's answer, so the slot goes out empty and
           // hydrateCollectionSellButtons() fills every row in one request.
           const crSellSlot = `<span id="crSellCell_${p.id}"></span>`;
-          const sellCell = `<button type="button" onclick="event.stopPropagation();openMarkSoldModal(${p.id})" title="Log sale of ${esc(p.card)} and move to Flips" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:8px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">🎉 Sold</button>`;
+          const sellCell = `<button type="button" data-entry-act="mark-sold" data-entry-id="${esc(String(p.id))}" title="Log sale of ${esc(p.card)} and move to Flips" style="display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .6rem;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border:none;border-radius:8px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap">🎉 Sold</button>`;
           // The whole row (except the action buttons) is a tap target that
           // opens the card-detail modal — addresses "lack of at least a link
           // to the card saved in your collection". Buttons inside the row
           // stopPropagation so refresh/remove don't also fire the modal.
-          return `<tr class="col-row" onclick="openCollectionCardDetail(${p.id})" style="cursor:pointer">
+          return `<tr class="col-row" data-entry-act="open-card" data-entry-id="${esc(String(p.id))}" style="cursor:pointer">
             <td class="col-thumb">${thumbCell}</td>
             <td data-label="Card"><div class="ft-card" title="${esc(p.card)}${_hasGrade ? ' — ' + esc(_gradeLabel) : ''}">${cardNameHtml}</div></td>
             <td class="ft-set" data-label="Set">${esc(p.set||'—')}</td>
@@ -10776,8 +10776,8 @@ function renderCollectionView() {
             <td data-label="P/L %" style="font-size:.72rem;color:${color};font-weight:700">${gainPct>=0?'+':''}${gainPct.toFixed(1)}%</td>
             <td class="col-actions" onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center;flex-wrap:nowrap">${crSellSlot}${sellCell}</div></td>
             <td class="col-actions col-actions-end" onclick="event.stopPropagation()"><div style="display:flex;gap:.3rem;align-items:center">
-              <button class="ft-delete" id="colRefreshRow_${p.id}" onclick="event.stopPropagation();refreshSingleCardPrice(${p.id})" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
-              <button class="ft-delete" onclick="event.stopPropagation();deletePortEntry(${p.id})" title="Remove">✕</button>
+              <button class="ft-delete" id="colRefreshRow_${esc(String(p.id))}" data-entry-act="refresh-price" data-entry-id="${esc(String(p.id))}" title="Refresh price" style="color:var(--text-muted);font-size:.75rem">↻</button>
+              <button class="ft-delete" data-entry-act="port-delete" data-entry-id="${esc(String(p.id))}" title="Remove">✕</button>
             </div></td>
           </tr>`;
         }).join('')}</tbody>
@@ -10997,7 +10997,7 @@ function _crPriceSourceToLabel(prov) {
 
 async function refreshSingleCardPrice(id) {
   const port = loadPortData();
-  const p    = port.find(x => x.id === id);
+  const p    = port.find(x => _crIdEq(x.id, id));
   if (!p) return;
   const btn  = document.getElementById('colRefreshRow_' + id);
   if (btn) { btn.disabled = true; btn.textContent = '↻'; btn.style.opacity = '.4'; }
@@ -11042,7 +11042,7 @@ window._ccmCurrentId = null;
 
 function openCollectionCardDetail(entryId) {
   const port = loadPortData();
-  const p = port.find(x => x.id === entryId);
+  const p = port.find(x => _crIdEq(x.id, entryId));
   if (!p) return;
   window._ccmCurrentId = entryId;
 
@@ -11332,7 +11332,7 @@ function _ccmSaveIdentity() {
   if (numEl  && !num)  { show('Enter the card number.');               numEl.focus();  return; }
 
   const port = loadPortData();
-  const p = port.find(x => x.id === id);
+  const p = port.find(x => _crIdEq(x.id, id));
   if (!p) { show('That card is no longer in your collection.'); return; }
 
   if (gameEl) {
@@ -11376,7 +11376,7 @@ function _ccmCreateDraft() {
   }
   // No stamp: the check failed or has not answered. Ask again.
   const port = loadPortData();
-  const p = port.find(x => x.id === id);
+  const p = port.find(x => _crIdEq(x.id, id));
   if (p) _ccmApplySellGate(p);
 }
 
@@ -11409,7 +11409,7 @@ function _ccmInferGameFromSet(setStr) {
 function _ccmViewFullCard() {
   if (!window._ccmCurrentId) return;
   const port = loadPortData();
-  const p = port.find(x => x.id === window._ccmCurrentId);
+  const p = port.find(x => _crIdEq(x.id, window._ccmCurrentId));
   if (!p) return;
 
   // Close the collection modal so the lookup view is visible
@@ -11579,7 +11579,7 @@ function _ccmViewFullCard() {
 // a canonical image + price.
 async function _refetchCardMeta(entryId) {
   const port = loadPortData();
-  const p = port.find(x => x.id === entryId);
+  const p = port.find(x => _crIdEq(x.id, entryId));
   if (!p || !p.card) return false;
   // Skip if we already have a canonical card image (not a data: URL / blob:
   // scan photo) AND a positive market price. Nothing to fix.
@@ -11712,7 +11712,7 @@ function _ccmRemoveCard() {
     deletePortEntry(window._ccmCurrentId);
   } else {
     // Fallback if deletePortEntry isn't defined — handle inline.
-    const port = loadPortData().filter(x => x.id !== window._ccmCurrentId);
+    const port = loadPortData().filter(x => !_crIdEq(x.id, window._ccmCurrentId));
     _addTombstones('portfolio', window._ccmCurrentId);
     savePortData(port);
     renderCollectionView();
@@ -11725,7 +11725,7 @@ function _ccmRemoveCard() {
 // but it was never defined — clicks were silent no-ops. Define it now.
 function deletePortEntry(entryId) {
   const port = loadPortData();
-  const next = port.filter(x => x.id !== entryId);
+  const next = port.filter(x => !_crIdEq(x.id, entryId));
   if (next.length === port.length) return;
   _addTombstones('portfolio', entryId);
   savePortData(next);
@@ -11883,7 +11883,7 @@ window._markSoldEntryId = null; // the p.id we're marking as sold
 
 function openMarkSoldModal(entryId) {
   const port = loadPortData();
-  const p = port.find(x => x.id === entryId);
+  const p = port.find(x => _crIdEq(x.id, entryId));
   if (!p) {
     if (typeof showToast === 'function') showToast('Card not found in collection');
     return;
@@ -12042,7 +12042,7 @@ function confirmMarkSold() {
   const entryId = window._markSoldEntryId;
   if (!entryId) return;
   const port = loadPortData();
-  const p = port.find(x => x.id === entryId);
+  const p = port.find(x => _crIdEq(x.id, entryId));
   if (!p) {
     if (typeof showToast === 'function') showToast('Card not found — refresh the page');
     document.getElementById('markSoldModal').classList.remove('open');
@@ -12085,7 +12085,7 @@ function confirmMarkSold() {
   const profit = _flipNetOf({ sellPrice, buyPrice, fees, shippingCost, gradingCost, costMeta }).net;
   const date   = new Date().toISOString().slice(0,10);
   flips.push({
-    id: Date.now(),
+    id: _crNewEntryId(),
     updatedAt: Date.now(),
     card: p.card,
     set: p.set || '',
@@ -12113,7 +12113,7 @@ function confirmMarkSold() {
 
   // Remove from Collection.
   _addTombstones('portfolio', entryId); // sold cards must not sync back from another device
-  if (!savePortData(port.filter(x => x.id !== entryId))) _reportStorageFailure();
+  if (!savePortData(port.filter(x => !_crIdEq(x.id, entryId)))) _reportStorageFailure();
 
   // Close modal + toast.
   document.getElementById('markSoldModal').classList.remove('open');
@@ -12345,7 +12345,7 @@ function renderFlipsView() {
         const dateCaption = f.date ? `<div style="font-size:.62rem;color:var(--text-faint);font-weight:400;margin-top:.1rem">Sold ${esc(f.date)}</div>` : '';
         // Whole row is tap-to-open (mirrors Collection). Delete button
          // stops propagation so it doesn't also open the detail modal.
-        return `<tr class="col-row" onclick="openFlipDetail(${f.id})" style="cursor:pointer">
+        return `<tr class="col-row" data-entry-act="open-flip" data-entry-id="${esc(String(f.id))}" style="cursor:pointer">
           <td>${thumbCell}</td>
           <td><div class="ft-card" title="${esc(f.card)}${_hasGrade ? ' — ' + esc(_gradeLabel) : ''}">${cardNameHtml}</div>${dateCaption}</td>
           <td style="font-size:.72rem;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.set||'—')}</td>
@@ -12354,7 +12354,7 @@ function renderFlipsView() {
           <td class="ft-mono" style="color:${roiColor};font-weight:700">${pr>=0?'+':''}$${Math.abs(pr).toFixed(2)}</td>
           <td style="font-size:.72rem;color:${hasCost?roiColor:'var(--text-faint)'};font-weight:700">${hasCost?`${roi>=0?'+':''}${roi.toFixed(1)}%`:'—'}</td>
           <td style="font-size:.72rem">${esc(f.platform || '—')}</td>
-          <td onclick="event.stopPropagation()"><button class="ft-delete" onclick="deleteFlip(${f.id})" title="Delete flip">✕</button></td>
+          <td onclick="event.stopPropagation()"><button class="ft-delete" data-entry-act="flip-delete" data-entry-id="${esc(String(f.id))}" title="Delete flip">✕</button></td>
         </tr>`;
       }).join('') +
     '</tbody></table></div>';
@@ -12383,7 +12383,7 @@ function renderFlipsView() {
           <td class="ft-mono">$${buy.toFixed(2)}</td>
           <td class="ft-mono">$${cur.toFixed(2)}</td>
           <td><span class="pt-gain ${gain >= 0 ? 'pos' : 'neg'}">${gain >= 0 ? '+' : ''}$${Math.abs(gain).toFixed(2)}</span></td>
-          <td><button class="ft-delete" onclick="deletePort(${p.id})" title="Remove">✕</button></td>
+          <td><button class="ft-delete" data-entry-act="port-delete-row" data-entry-id="${esc(String(p.id))}" title="Remove">✕</button></td>
         </tr>`;
       }).join('') +
     '</tbody></table></div>';
@@ -19604,6 +19604,129 @@ function saveFlipsData(data) {
   _scheduleUserDataSync(); // 2026-08-19: propagate to cloud so other devices see it
   return ok;
 }
+/* ── Entry identity ────────────────────────────────────────────────────────
+   
+   THE DEFECT. Every collection entry id was minted as
+   `Date.now() + added + Math.floor(Math.random() * 1000)`. Saving several copies
+   inside the same millisecond relies on a 1-in-1000 draw per copy to stay
+   distinct, so duplicate ids happen. Because the id is the lookup key in dozens
+   of places, a collision means editing one copy edits another and deleting one
+   deletes the wrong row. That is a data-integrity defect, not a flaky test;
+   passing reruns do not resolve it.
+   
+   WHY NOT max(existing id) + 1. It looks tidy and is wrong here. Two devices
+   holding the same synced collection compute the SAME next id deterministically,
+   so the merge that is supposed to combine them silently collapses two different
+   cards into one. Two tabs on one device race the same way, and deleting the
+   highest id frees that number for reuse unless allocation history is kept
+   forever. The inline-handler work below is real compatibility work, but it does
+   not make a counter reliable.
+   
+   SO: UUIDs for new entries. Existing ids are left exactly as they are -- never
+   renumbered, silently or otherwise -- because renumbering would break every
+   stored reference and every synced peer at once. The two shapes therefore
+   coexist forever, which is why comparison is centralised in `_crIdEq` rather
+   than converted ad hoc at each of the call sites.
+   
+   UUIDs make accidental collision negligible. They do NOT by themselves make
+   merging correct, so merge behaviour is tested separately rather than assumed. */
+
+function _crNewEntryId() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      // RFC 4122 v4 from real entropy. Not Math.random: this is the value the
+      // whole integrity fix rests on.
+      const b = crypto.getRandomValues(new Uint8Array(16));
+      b[6] = (b[6] & 0x0f) | 0x40;
+      b[8] = (b[8] & 0x3f) | 0x80;
+      const h = Array.from(b, x => x.toString(16).padStart(2, '0'));
+      return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10).join('')}`;
+    }
+  } catch (_) {}
+  /* Last resort only, for a browser with no crypto at all. Marked so it is
+     recognisable in data, and still far wider than the old 1000-value draw. */
+  return 'eid-' + Date.now().toString(36) + '-'
+       + Math.random().toString(36).slice(2, 10)
+       + Math.random().toString(36).slice(2, 10);
+}
+
+/* The ONE id comparison. Legacy ids are numbers, new ids are strings, and a
+   round-trip through JSON or a DOM attribute turns a number into a numeric
+   string -- so `123 === '123'` was false in code that meant "same entry".
+   
+   Surveyed before converting: all five generators produced NUMBERS
+   (Date.now()-based), so no stored entry has ever had a numeric-STRING id of its
+   own. Comparing by string therefore only ever unifies a number with its own
+   string form; it cannot make two genuinely different entries compare equal.
+   The sync merge path already keyed on String(row.id), so this matches
+   behaviour that was already relied on there. */
+function _crIdEq(a, b) {
+  if (a == null || b == null) return false;
+  return String(a) === String(b);
+}
+
+window._crNewEntryId = _crNewEntryId;
+window._crIdEq = _crIdEq;
+
+/* One delegated listener for every collection-entry action.
+   
+   These were nine inline handlers that interpolated an entry id
+   directly into an onclick attribute string. Interpolating an id
+   into executable source only worked because ids were bare integers: a UUID
+   dropped in unquoted is a syntax error, and quoting alone would have broken
+   every legacy row, because the handler would then receive '123' while the
+   stored entry holds the number 123. Both problems disappear once the id
+   travels as DATA in an attribute and never as code -- which is also why an id
+   containing a quote or an angle bracket cannot do anything here.
+   
+   The id is handed on as the STRING the attribute holds. Lookups go through
+   `_crIdEq`, so a legacy numeric entry is still found by its string form. */
+const _CR_ENTRY_ACTIONS = {
+  'grading-edit':    (id) => window.openGradingModal(id),
+  'grading-delete':  (id) => window.deleteGradingEntry(id),
+  'mark-sold':       (id) => window.openMarkSoldModal(id),
+  'open-card':       (id) => window.openCollectionCardDetail(id),
+  'refresh-price':   (id) => window.refreshSingleCardPrice(id),
+  'port-delete':     (id) => window.deletePortEntry(id),
+  'open-flip':       (id) => window.openFlipDetail(id),
+  'flip-delete':     (id) => window.deleteFlip(id),
+  'port-delete-row': (id) => window.deletePort(id),
+};
+
+/* NO stopPropagation SET HERE, deliberately.
+   
+   The replaced markup needed an inline `event.stopPropagation()` on every
+   button sitting inside a clickable row, because the button and the row each
+   carried their OWN handler and a click ran both -- deleting the row and
+   opening its detail view.
+   
+   With one delegated listener that is structurally impossible: the event is
+   handled once, and `closest('[data-entry-act]')` resolves to the INNERMOST
+   match, so a click on the button dispatches the button's action and the row's
+   action is never reached. There is nothing left to stop.
+   
+   A guard was written here first and a mutation removing it changed no
+   observable behaviour -- it was dead code shaped like a safety property, which
+   is worse than no guard, because it invites the belief that the guarantee is
+   enforced there. The guarantee comes from `closest`, and the nested-click
+   scenario in tests/entry-identity.mjs asserts it. */
+
+document.addEventListener('click', (ev) => {
+  const el = ev.target && ev.target.closest && ev.target.closest('[data-entry-act]');
+  if (!el) return;
+  const act = el.getAttribute('data-entry-act');
+  const fn = _CR_ENTRY_ACTIONS[act];
+  if (!fn) return;
+  // `closest` returns the INNERMOST match, so a button inside a row dispatches
+  // the button's action and not the row's.
+  const id = el.getAttribute('data-entry-id');
+  if (id == null || id === '') return;
+  try { fn(id); } catch (e) { console.error('entry action failed', act, e); }
+});
+
 function loadPortData() {
   try { return JSON.parse(localStorage.getItem(getUserKey('portfolio')) || '[]'); } catch(e) { return []; }
 }
@@ -21992,7 +22115,7 @@ async function hydrateCollectionSellButtons(rows) {
 // per-copy instance key — no intent token needed here.
 async function startListingDraftForEntry(entryId) {
   const port = loadPortData();
-  const p = port.find((x) => x.id === entryId);
+  const p = port.find((x) => _crIdEq(x.id, entryId));
   if (!p) { showToast('That card is no longer in your collection.'); return; }
 
   // As in the scan path: no value on file starts an unpriced draft rather

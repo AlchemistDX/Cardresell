@@ -302,6 +302,13 @@ const B = new Function(`
      keeps this suite exercising shipped code -- a stub here would let the
      helper's own behaviour drift without any suite noticing. */
   ${grabFn('_catalogueArtworkUrl')}
+  /* _crNewEntryId is grabbed, not stubbed, for the same reason as
+     _catalogueArtworkUrl above: 'every copy has a distinct id' below is the
+     check that exposed the id-collision defect, and a stubbed counter would
+     make it pass no matter what the shipped generator does. crypto is not
+     defined in this Function scope, so the real function falls through to its
+     documented last-resort branch -- still the shipped code path. */
+  ${grabFn('_crNewEntryId')}
   ${grabFn('_bulkScanRowToCard')}
   ${grabFn('_bulkSaveToCollection')}
   return (rows, costs, skip) => { _bulkSaveToCollection(rows, costs, skip); return _saved; };
@@ -363,6 +370,10 @@ const B = new Function(`
   eq('a qty-3 row writes three entries', saved.length, 3);
   ok('every copy carries the identity', saved.every(r => r.groundedId === 'g9' && r.cardType === 'mtg'));
   ok('every copy carries the same per-slot cost', saved.every(r => r.buyPrice === 4));
+  /* THE CHECK THAT EXPOSED THE DEFECT. It was flaky against the old
+     `Date.now() + added + Math.floor(Math.random() * 1000)` generator: three
+     copies in one millisecond stayed distinct only on a lucky draw. It is no
+     longer probabilistic -- ids now come from _crNewEntryId. */
   ok('every copy has a distinct id', new Set(saved.map(r => r.id)).size === 3);
 }
 {
