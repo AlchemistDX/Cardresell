@@ -1,17 +1,39 @@
-# Preview checks to run in your own browser — RV-4, Q-D8-6, and the cap refusal
+# Preview checks to run in your own browser — RV-4 and Q-D8-6
 
-Written to be run without opening any other file. Everything you need — URLs,
+Written to be run without opening any other file. Everything you need — URL,
 key names, exact strings to look for, and what a failure looks like — is here.
 
-**Build under test:** commit `46a5a4e` on `phase1-block-d`.
-**Preview URL:** https://cardresell-mc1yik7d1-willsep200-9430s-projects.vercel.app
+**Preview URL:** https://cardresell-8x9mr2o1h-willsep200-9430s-projects.vercel.app
+
+**Build under test:** commit `a311137`, the tip of `phase1-block-d`.
+
+**On the two commit numbers you spotted.** You were right to stop on that. The
+report named `a311137` and an earlier copy of this sheet named `46a5a4e`, and
+"they probably only differ by docs" is not something you should have to take on
+faith. Established: `46a5a4e..a311137` is **two lines in this file and nothing
+else**, and the combined digest of `index.html` plus everything under `js/` is
+byte-identical across `be49e0a`, `46a5a4e`, and `a311137` (`8fca2bf6fdcfcf63`
+for all three). The application code under test never changed across those
+commits; only audit documents did. To remove the ambiguity rather than explain
+it, the URL above is a **fresh deployment made from the tip**, so the deployed
+build and the branch tip name the same commit. The two older Preview URLs are
+superseded — ignore them.
+
+One residual honesty note so this does not become the same problem again: the
+deployment above was made from a clean tree at `a311137`. **This sheet was then
+revised** (cap step deferred, concurrency gap stated) and committed on top, so
+the branch tip is now ahead of the deployed build **by documentation only** —
+`index.html` and `js/` are untouched, same `8fca2bf6fdcfcf63` digest. Step 0
+below verifies the build you are actually looking at from the browser, which
+does not depend on trusting any of this.
+
 **Not production.** Nothing here touches `www.cardresell.org`, and nothing here
 is a production approval.
 
 Preview has deployment protection on, so the URL only opens in a browser already
-signed in to your Vercel account. That is why these three checks are yours to
-run rather than mine: I have no signed-in Vercel session and no Firebase
-identity, and I did not create one in your project.
+signed in to your Vercel account. That is why these checks are yours to run
+rather than mine: I have no signed-in Vercel session and no Firebase identity,
+and I did not create one in your project.
 
 ---
 
@@ -143,54 +165,62 @@ the same store.
 
 ---
 
-## Step 3 — the draft-cap refusal on Preview
+## Step 3 — the draft-cap refusal: DEFERRED, do not run today
 
-You asked me not to call the cap message a confirmed defect without exercising
-it on a Preview build. I have to report a correction rather than a confirmation.
+**Do not run a cap test by hand-editing quota keys.** The earlier version of
+this sheet told you to overwrite `draftquota:SUB` and `draftquotafresh:SUB` in
+the Data Browser and delete them afterwards. That procedure was not safe enough
+to put in front of you, for a reason I understated: **deleting a key is not the
+same as restoring it.**
 
-**The earlier claim was wrong.** The requirement said the client had no cap
-message, on the strength of a bundle grep for `at-cap` returning zero hits.
-`'at-cap'` is an internal server constant that never goes over the wire, so that
-grep could not have found anything either way. The shipped build already had the
-handler — `if (r.status === 409 && /CAP/i.test(...))` — showing "You've reached
-the draft limit. Finish or discard a draft to start another." **There was no
-missing-message defect.** What this change actually does is show the server's
-own sentence on the row that was refused, instead of a client paraphrase.
+- `draftquotafresh:SUB` is written by the server with a TTL
+  (`set … EX <interval>`). If it already exists, it has a *remaining* lifetime.
+  Overwriting it discards that, and no delete-afterwards step brings it back.
+- `draftquota:SUB` may hold a legitimate count. Writing `500` over it and then
+  deleting it leaves the next call to re-seed from a recount — which is probably
+  fine, and "probably fine" is not a restore procedure.
+- Neither key's pre-existing value or remaining TTL is captured anywhere before
+  the overwrite, so if the recount path misbehaved there would be nothing to
+  restore *to*.
 
-I exercised the refusal locally against the real `api/drafts.js` handler and saw
-the server sentence on screen. If you want it on Preview too, here is a
-reversible way to do it without lowering the shipped cap:
+So this step is on hold until it has one of:
 
-1. In **`aureolin-door`** Data Browser, create these two keys:
-   - `draftquota:SUB` = `500`
-   - `draftquotafresh:SUB` = `1`
-   The second one matters: without it the server recounts your real drafts on the
-   next call and overwrites the 500.
-2. On Preview, select two cards and press Create.
-3. **Expect:** the first row is refused with the server's sentence, containing
-   the phrase **"maximum of 500 saved drafts"**, and the second row reads
-   **"Not attempted — the draft limit was reached earlier in this batch."**
-   Also expect a note above the button reading "Room for 0 more drafts (500 of
-   500 used) — 2 selected. Cards past the limit will say so on their own row."
-4. **Delete both keys afterwards.** On the next create the server recounts from
-   your real draft set and the true number returns. Leaving them in place would
-   leave your Preview account permanently at a fake cap.
+1. **A precise capture-and-restore procedure** — read and record both values and
+   the remaining TTL on the fresh key (`TTL draftquotafresh:SUB`) *before*
+   touching anything, and restore both value and expiry afterwards rather than
+   deleting; or
+2. **An isolated test account** whose quota keys nobody cares about, which is
+   the cleaner option and removes the restore problem entirely.
 
-The headroom note is advisory only. It never trims the batch, and the server's
-refusal is the only thing that decides. That was your second point and it is
-built that way deliberately: a stale headroom number that refused cards the
-server had room for would be worse than a refusal on the row.
+Neither is needed to complete Steps 1 and 2, which is why the cap test is now
+separated from them rather than sitting at the end of the same sheet.
 
----
+**What the cap evidence currently rests on, stated precisely.** The refusal has
+been exercised against the real `api/drafts.js` handler locally, with the quota
+seeded at the shipped cap of 500 in a throwaway local store, and the server's
+sentence containing "maximum of 500 saved drafts" was observed on screen. That
+is local evidence against real server code, not Preview evidence, and I am not
+upgrading it. Separately, the original "client has no cap message" claim was
+**wrong** and has been withdrawn — it came from grepping the bundle for
+`at-cap`, a server-internal constant that never goes over the wire. The shipped
+build already had the handler (`if (r.status === 409 && /CAP/i.test(...))`) and
+its own sentence. There was no missing-message defect. What this change does is
+show the server's wording on the refused row instead of a client paraphrase.
 
 ## What I could not check, stated plainly
 
 - **Anything requiring a signed-in session on Preview.** No Vercel session, no
   Firebase identity. I declined to create a test user in your Firebase project
   without your approval.
-- **The live-store suite** (`tests/draft-kv-live.mjs`) stays skipped. Running it
-  means pulling nonproduction store credentials into this sandbox, and the
-  deployed round-trip in Step 1 is stronger evidence than the suite would be.
-  Not worth broadening credential exposure for weaker proof.
-- **Application-level concurrency and URL-size limits** remain unestablished, per
-  your note. The REST results stand only for the commands and sizes tested.
+- **Concurrency.** One successful draft round-trip in Step 1 proves the Preview
+  store boundary and the create/reopen path. It says **nothing** about
+  concurrent behaviour — interleaved creates, simultaneous claims on the same
+  revision, or the quota INCR under parallel load — and it is not a substitute
+  for the live suite's concurrency checks. Those remain unrun. `DRAFT_KV_LIVE`
+  stays skipped by choice, and that choice leaves this gap open rather than
+  closing it.
+- **Application-level concurrency and URL-size limits** remain unestablished,
+  per your earlier note. The REST results stand only for the commands and sizes
+  tested.
+- **The draft cap on Preview**, deferred above pending a restore procedure or a
+  test account.

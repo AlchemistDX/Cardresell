@@ -47,10 +47,21 @@ identities and stay distinct — they draft as "Copy 1" and "Copy 2".
 
 **2. Cap handling — available space can change during the batch.**
 Correct. The pre-flight headroom read is a **planning aid only**. It never trims
-the batch and it is never treated as permission: every card is still submitted
-and the server's refusal is authoritative. A refusal is shown on the row that
-was refused, and the remaining unattempted rows are marked "Not attempted"
-rather than silently dropped.
+the batch and it is never treated as permission — the server's refusal is the
+only thing that decides.
+
+**Precisely what the batch does, because an earlier wording of this paragraph
+was self-contradictory.** It submits cards one at a time. It does **not** submit
+every selected card unconditionally: the first `AT_CAP` refusal **stops further
+submission**, and every remaining card is labelled "Not attempted — the draft
+limit was reached earlier in this batch." So a refused batch produces exactly
+one refusal from the server plus N labelled rows, not N refusals. The claim that
+"every card is still submitted" was wrong and contradicted the behaviour in the
+same breath as describing it.
+
+What the headroom read does **not** do is the point: it never causes a card to
+be withheld. Cards are withheld only after the **server** has refused one, never
+on the strength of the advisory number.
 
 **3. Cap-message evidence — zero `at-cap` matches does not establish that no
 message appears.** The owner was right, and the original requirement's claim was
