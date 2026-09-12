@@ -98,9 +98,18 @@ hashed, a missing `challenge_code` still 400 rather than 503, and a deletion
 notification acknowledged with the token both unset and set. **No production
 environment variable is to be unset.**
 
-**Deploy this exact commit — `875204b`** — and confirm that SHA in the build log.
-If any commit is added before pushing, **the suites above must be re-run on the
-new commit**; these results attach to `875204b` and to nothing else.
+**Deploy this exact commit — `ef98056`** — and confirm that SHA in the build log.
+
+The suites above were run on `875204b`. Writing this section then produced
+`ef98056`, so **my own re-run rule applied to me**: `ef98056` changes exactly one
+file against `875204b` — `audit/DEPLOY_INSTRUCTION_2026-09-11.md`, doc-only, no
+`api/` or `js/` file — and the three suites that bear on the release path were
+**re-run on `ef98056` itself**: `ebay-notify-token` 22/0, `bulk-batch-draft` 93/0,
+`draft-lifecycle` 83/0, all `SUITE COMPLETE, exit=0`. The six others attach to
+`875204b`, whose code tree is identical to `ef98056`'s.
+
+If any further commit is added before pushing, **re-run the suites on that commit
+too.** Results attach to a SHA, not to a branch.
 
 **Not covered by these suites, and still open:** concurrency, the
 original-scan-row retry, RV-1, RV-3/RV-9, deployed Google authentication, R4
