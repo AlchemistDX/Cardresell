@@ -3,8 +3,8 @@
 Written to be run without opening any other file. Everything you need — URLs,
 key names, exact strings to look for, and what a failure looks like — is here.
 
-**Build under test:** commit `be49e0a` on `phase1-block-d`.
-**Preview URL:** https://cardresell-7y548u96z-willsep200-9430s-projects.vercel.app
+**Build under test:** commit `46a5a4e` on `phase1-block-d`.
+**Preview URL:** https://cardresell-mc1yik7d1-willsep200-9430s-projects.vercel.app
 **Not production.** Nothing here touches `www.cardresell.org`, and nothing here
 is a production approval.
 
