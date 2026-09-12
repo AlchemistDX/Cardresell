@@ -165,6 +165,31 @@ token test is needed. Never print, echo, or validate a credential value.
 
 ---
 
+## 3a. Credential access is a boundary, not an obstacle
+
+**Never copy a secret out of Vercel to complete a test.** Not into a shell, not
+into a file, not into a test fixture, not into this record. A check that needs a
+production credential I cannot reach safely is reported **NOT RUN**, with the
+access it would require named. An unrun check is an honest result; an extracted
+secret is a new exposure, and this project has already spent a rotation window on
+one.
+
+`vercel env pull` is not a way around this. It writes real values to disk. It was
+used once for the Preview REST compatibility work and the file was deleted
+immediately; **it is not to be used for production values at all.**
+
+Classify every check before running it:
+
+- **Safe here** — public HTTP against the deployed site, response contracts,
+  bundle identity, positive CH-2 behaviour through the deployed function, draft
+  create/reopen/delete through a signed-in session.
+- **NOT RUN** — anything requiring production eBay credentials to be read,
+  exported, or handed to a local harness. **RV-3 / RV-9's 20 checks fall here**
+  unless they can run entirely inside the deployed environment. Say so; do not
+  improvise a workaround.
+
+---
+
 ## 4. Live checks — report each failure individually
 
 **Report per check. A count or a fraction is not a result.** The eBay harness
