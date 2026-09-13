@@ -1240,6 +1240,82 @@ await T.section('Retry attaching scan photo uses the retained snapshot and the e
   await ctx.close();
 });
 
+/* ── Snapshot lifetime: what recovery is actually available ────────────────────
+   
+   Owner, 2026-09-12: "reopening the review screen does not prove a pending
+   snapshot survives a full page reload or browser termination. State its actual
+   lifetime so sellers know what recovery is available."
+   
+   Correct. The retry section re-opens the review screen, which is a same-page
+   view switch -- it establishes nothing about a reload. This section reloads the
+   page for real and reports the measured boundary, so the packet states a
+   tested lifetime rather than an inferred one.
+   
+   This is a MEASUREMENT of the current design, not an acceptance criterion for
+   persisting the snapshot. No requirement to survive a reload has been stated. */
+await T.section('MEASUREMENT — pending scan snapshot does not survive a page reload; attached photos do', async () => {
+  const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, DRAFT_ID);
+
+  /* Fail an attachment so a snapshot is genuinely retained. */
+  const failed = await page.evaluate(async (DRAFT) => {
+    window._photoStoreFaults = { openFails: true };
+    const res = await window.attachScanPhotoToDraft(DRAFT, {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      sourceKey: 'scan:lifetime-probe',
+      type: 'image/png',
+    });
+    return { attached: res.attached, pending: window.scanPhotoRetryPending(DRAFT) };
+  }, DRAFT_ID);
+
+  T.check('precondition — a snapshot is pending before the reload',
+    failed.attached === false && failed.pending === true, JSON.stringify(failed));
+
+  /* A REAL reload, not a view switch. */
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+  await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; window._photoStoreFaults = {}; });
+  await openReview(page, DRAFT_ID);
+
+  const afterReload = await page.evaluate((DRAFT) => ({
+    pending: window.scanPhotoRetryPending(DRAFT),
+    controlOffered: !!document.querySelector('[data-photo-retry]'),
+  }), DRAFT_ID);
+
+  T.check('MEASUREMENT — the pending snapshot is GONE after a reload (in-memory only)',
+    afterReload.pending === false, JSON.stringify(afterReload));
+  T.check('MEASUREMENT — and the retry control is correctly not offered, rather than offered and broken',
+    afterReload.controlOffered === false, JSON.stringify(afterReload));
+
+  /* The contrast that matters to a seller: a photo that DID attach is in
+     IndexedDB and survives the same reload. Only the unattached snapshot is
+     volatile. */
+  const persisted = await page.evaluate(async (DRAFT) => {
+    const r = await window.attachScanPhotoToDraft(DRAFT, {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      sourceKey: 'scan:lifetime-persisted',
+      type: 'image/png',
+    });
+    return { attached: r.attached };
+  }, DRAFT_ID);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
+  await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+  await openReview(page, DRAFT_ID);
+  const stillThere = await page.evaluate(() => ({
+    count: (window._photoUi.photos || []).length,
+    scanTag: !!document.querySelector('[data-photo-origin="scan"]'),
+  }));
+
+  T.check('MEASUREMENT — an ATTACHED scan photo survives the reload and stays labelled',
+    persisted.attached === true && stillThere.count >= 1 && stillThere.scanTag === true,
+    JSON.stringify({ persisted, stillThere }));
+
+  await ctx.close();
+});
+
 await browser.close();
 server.close();
 T.done();

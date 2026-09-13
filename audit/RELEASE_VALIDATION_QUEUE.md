@@ -914,6 +914,44 @@ These logs are sandbox-local and will not outlive the session. The durable
 record is this table plus the check counts; a promoter should re-run the three
 commands against the promotion commit rather than trust the counts.
 
+### Run record — commit `56bac47`, 2026-09-12
+
+Canonical IDs, per the table above. An earlier packet reported these three under
+swapped numbers; the mapping here is authoritative.
+
+| check | tested commit | command | completed | exit | evidence |
+|---|---|---|---|---|---|
+| RQ-1 `entry-identity.mjs` | `56bac47` | as above | `SUITE COMPLETE` | 0 | 135 passed, 0 failed |
+| RQ-2 `listing-export-e2e.mjs` | `56bac47` | as above | `SUITE COMPLETE` | 0 | 111 passed, 0 failed |
+| RQ-3 `listing-photos.mjs` | `56bac47` | as above | `SUITE COMPLETE` | 0 | 145 passed, 0 failed |
+
+Full `run-all.sh` on the same commit: 64 slots, 0 failures, exit=0, with the two
+environment-gated skips (slot 24 `DRAFT_KV_LIVE=1`, slot 26
+`COND_PILLS_BROWSER=1`) intact.
+
+RQ-1's growth from 62 to 135 assertions across `b2032d6` → `56bac47` is the
+ambiguous-id and mark-as-sold coverage added in `c82c0fa`, not a change of
+scope. See the commit list in the Q-PHOTO-1 return packet.
+
+### Maintenance task — extraction helpers must fail loudly (recorded, not actioned)
+
+Raised by the `_PRICE_COUPLED_FIELDS` break in `durability-tombstones-2026-09-04.mjs`
+(fixed in `56bac47`). Owner direction 2026-09-12: record a separate maintenance
+task, do not expand this release into a testing-framework refactor.
+
+Six suites define a local `grabFn`. **Two return `''` silently when the
+signature is not found**, so a renamed or removed function yields an empty
+extraction rather than an error:
+
+- `tests/bulk-bulbasaur-qualifier-2026-09-04.mjs`
+- `tests/bulk-minun-misfire-2026-09-04.mjs`
+
+The other four throw. The new `grabConst` in
+`tests/durability-tombstones-2026-09-04.mjs` throws with the constant name.
+
+Scope when actioned: make every extraction helper throw naming what it could not
+locate. Not started; no code changed for this item.
+
 **What this section does not establish.** All three run in headless Chromium
 only. None of them exercises the deployed Preview or production; they run against
 the working tree over a local HTTP server. The eBay draft import remains separate
