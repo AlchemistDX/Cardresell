@@ -344,8 +344,8 @@ await T.section('FAILURE (the field bug): manifest has a photo but the blob is u
     shape.orderLen === 1, JSON.stringify(shape));
   T.check('the blob record really is unreadable',
     shape.missing === 1 && shape.usable === 0, JSON.stringify(shape));
-  T.check('ensureExportablePhotos reports NONE with localCount>0 and missingCount>0',
-    shape.report.reason === 'NONE'
+  T.check('ensureExportablePhotos reports MISSING_BLOB with localCount>0 and missingCount>0',
+    shape.report.reason === 'MISSING_BLOB'
     && shape.report.localCount === 1
     && shape.report.missingCount === 1
     && shape.report.urls.length === 0,
@@ -424,6 +424,207 @@ await T.section('NO LOCAL PHOTOS + hosting off: CSV still builds with a blank co
   const cell = photoCellFromCsv(out.savedBytes);
   T.check('and the photo cell is blank (nothing to host, and said so)',
     cell === '', JSON.stringify({ cell }));
+});
+
+await T.section('MIXED AVAILABILITY: 2 usable hosted + 1 missing → NO CSV (Will\u2019s exact counts)', async () => {
+  // localCount=2, hostedCount=1, missingCount=1, failedCount=0 is the shape
+  // Will called out. The old gate `hostedCount === 0 || failedCount > 0`
+  // evaluates to (false || false) and lets the export through, referencing 1
+  // of 2 seller photos. This section asserts the new gate refuses.
+  mode = 'ok';
+  await page.evaluate(async (id) => {
+    // Reset the store for this section.
+    const l0 = await window.photosList(id).catch(() => ({ order: [] }));
+    for (const pid of (l0.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
+  }, DRAFT_ID);
+  // Two usable photos.
+  await seedOneUsablePhoto();
+  await seedOneUsablePhoto();
+  // A third named in the manifest whose blob record we then delete: this is
+  // the intended-vs-hosted gap. Do it in the page so we hit the same DB the
+  // product opens.
+  await page.evaluate(async (id) => {
+    const bytes = new Uint8Array([137,80,78,71,13,10,26,10, 0,0,0,13,73,72,68,82,
+      0,0,0,1, 0,0,0,1, 8, 6, 0,0,0, 31, 21, 196, 137,
+      0,0,0,10,73,68,65,84, 120,156, 99, 0,1,0,0, 5, 0,1, 13,10,45,180,
+      0,0,0,0,73,69,78,68, 174, 66, 96, 130]);
+    const f = new File([bytes], 'ghost.png', { type: 'image/png' });
+    await window.photosAdd(id, [f]);
+  }, DRAFT_ID);
+
+  const preList = await page.evaluate(async (id) => {
+    return await window.photosList(id);
+  }, DRAFT_ID);
+  T.check('setup: manifest holds three photos before we make one unreadable',
+    Array.isArray(preList.order) && preList.order.length === 3,
+    JSON.stringify({ order: preList.order }));
+  const ghostId = preList.order[preList.order.length - 1];
+
+  // Kill the blob record for the last one only.
+  await page.evaluate(async ({ id, pid }) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const err = await new Promise((resolve) => {
+        let req;
+        try { req = indexedDB.open('cardresell-listing-photos'); } catch (e) { return resolve(String(e)); }
+        req.onerror = () => resolve(String(req.error && req.error.message));
+        req.onblocked = () => resolve(new Error('open blocked'));
+        req.onsuccess = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('blobs')) { db.close(); resolve(new Error('no blobs store')); return; }
+          // Primary key of the blobs store is the photoId itself, not draftId/photoId.
+          const tx = db.transaction('blobs', 'readwrite');
+          tx.objectStore('blobs').delete(pid);
+          tx.oncomplete = () => { db.close(); resolve(null); };
+          tx.onerror = () => { db.close(); resolve(tx.error || new Error('tx err')); };
+          tx.onabort = () => { db.close(); resolve(tx.error || new Error('tx abort')); };
+        };
+      });
+      if (!err) return;
+      await new Promise((r) => setTimeout(r, 100));
+      if (attempt === 4) throw err;
+    }
+  }, { id: DRAFT_ID, pid: ghostId });
+
+  const report = await page.evaluate(async (id) => {
+    return await window.ensureExportablePhotos(id);
+  }, DRAFT_ID);
+  T.check('ensureExportablePhotos returns intendedIds and hostedIds',
+    Array.isArray(report.intendedIds) && Array.isArray(report.hostedIds),
+    JSON.stringify({ intended: report.intendedIds, hosted: report.hostedIds }));
+  T.check('\uD83D\uDD34 intendedIds.length (' + report.intendedIds.length
+    + ') > hostedIds.length (' + report.hostedIds.length + ') \u2014 the mixed case',
+    report.intendedIds.length === 3 && report.hostedIds.length === 2,
+    JSON.stringify({ intended: report.intendedIds.length, hosted: report.hostedIds.length,
+                     localCount: report.localCount, missingCount: report.missingCount,
+                     failed: report.failed.length }));
+  T.check('the ghost photo id is the one NOT in hostedIds',
+    report.hostedIds.indexOf(ghostId) === -1,
+    JSON.stringify({ ghost: ghostId, hosted: report.hostedIds }));
+
+  const out = await driveDownloadButton();
+  T.check('\uD83D\uDD34 NO CSV was downloaded \u2014 mixed availability is refused',
+    out.saved === null && out.savedBytes === null,
+    JSON.stringify({ saved: out.saved, bytes: out.savedBytes && out.savedBytes.slice(0, 200) }));
+  T.check('the seller is told nothing was exported',
+    /nothing was exported/i.test(out.error), out.error);
+  T.check('the error names \u201C2 of 3 listing photos landed\u201D so mixed availability is transparent',
+    /2 of 3 listing photos landed/.test(out.error), out.error);
+  T.check('the error tells the seller a photo is no longer available in this browser',
+    /no longer available in this browser/.test(out.error), out.error);
+  T.check('the retry panel points the seller at the review screen',
+    out.retryLabel === 'Open review screen', out.retryLabel);
+
+  // Clean up the two remaining usable photos for the next section.
+  await page.evaluate(async (id) => {
+    const l = await window.photosList(id).catch(() => ({ order: [] }));
+    for (const pid of (l.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
+  }, DRAFT_ID);
+});
+
+await T.section('MANIFEST_UNAVAILABLE: store-read failure is an error, never an empty photo list', async () => {
+  // photosList throws \u2192 old code fell through to reason: NONE which then
+  // looked identical to \u201Cno photos here\u201D. New code: MANIFEST_UNAVAILABLE
+  // and a hard refusal. Draft is untouched.
+  mode = 'ok';
+  // Force photosList to throw for one call, then restore.
+  const report = await page.evaluate(async (id) => {
+    const real = window.photosList;
+    let thrownReported = null;
+    try {
+      window.photosList = async () => { throw new Error('quota exceeded'); };
+      const r = await window.ensureExportablePhotos(id);
+      thrownReported = r;
+    } finally {
+      window.photosList = real;
+    }
+    return thrownReported;
+  }, DRAFT_ID);
+  T.check('\uD83D\uDD34 ensureExportablePhotos reports MANIFEST_UNAVAILABLE when photosList throws',
+    report && report.reason === 'MANIFEST_UNAVAILABLE',
+    JSON.stringify(report));
+  T.check('the report says ok:false with zero URLs',
+    report && report.ok === false && Array.isArray(report.urls) && report.urls.length === 0,
+    JSON.stringify({ ok: report.ok, urls: report.urls }));
+
+  // Now drive the button under the same failure.
+  const out = await page.evaluate(async (id) => {
+    const real = window.photosList;
+    window.photosList = async () => { throw new Error('quota exceeded'); };
+    // Same interception scaffolding as driveDownloadButton, inline so we can
+    // scope the override to a single call.
+    let saved = null; let savedBytes = null;
+    const createReal = URL.createObjectURL.bind(URL);
+    const blobByUrl = new Map();
+    URL.createObjectURL = function (b) { const u = createReal(b); blobByUrl.set(u, b); return u; };
+    const clickReal = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.download) {
+        saved = this.download;
+        const b = blobByUrl.get(this.href);
+        if (b) savedBytes = b.text().then((t) => { savedBytes = t; return t; });
+      }
+      return clickReal.apply(this, arguments);
+    };
+    window._draftsState.rows = [{ draftId: id, summary: { title: 'x', sku: 'SKU' } }];
+    try {
+      await window._draftDownloadGo(id);
+    } finally {
+      HTMLAnchorElement.prototype.click = clickReal;
+      URL.createObjectURL = createReal;
+      window.photosList = real;
+    }
+    if (savedBytes && typeof savedBytes.then === 'function') savedBytes = await savedBytes;
+    const d = window._draftsState.dl || {};
+    return { saved, savedBytes, error: d.error || '',
+             retryLabel: (d.photoRetry && d.photoRetry.label) || '' };
+  }, DRAFT_ID);
+  T.check('\uD83D\uDD34 NO CSV was downloaded when the store cannot be opened',
+    out.saved === null && out.savedBytes === null,
+    JSON.stringify({ saved: out.saved }));
+  T.check('the error names the local photo store, not \u201Cno photos\u201D',
+    /local photo store/i.test(out.error) && !/no listing photos/i.test(out.error),
+    out.error);
+  T.check('retry label offers Try again',
+    out.retryLabel === 'Try again', out.retryLabel);
+});
+
+await T.section('UPLOAD stage tag: a failed upload records which round trip failed', async () => {
+  // The failed[] entries must carry a `stage` so diagnostics can distinguish
+  // ticket / put / complete without logging URLs, headers, tokens, or bytes.
+  // Simulate a 500 on the ticket endpoint for this section.
+  mode = 'ok';
+  await page.evaluate(async (id) => {
+    const l = await window.photosList(id).catch(() => ({ order: [] }));
+    for (const pid of (l.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
+  }, DRAFT_ID);
+  await seedOneUsablePhoto();
+  // Override the ticket fetch to a 500 with no body.
+  const report = await page.evaluate(async (id) => {
+    const realFetch = window.fetch.bind(window);
+    window.fetch = async (u, init) => {
+      if (String(u).endsWith('/api/photo-upload-ticket')) {
+        return new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return realFetch(u, init);
+    };
+    try {
+      return await window.ensureExportablePhotos(id);
+    } finally {
+      window.fetch = realFetch;
+    }
+  }, DRAFT_ID);
+  T.check('\uD83D\uDD34 failed[] carries a `stage` field naming which round trip failed',
+    Array.isArray(report.failed) && report.failed.length === 1
+      && report.failed[0].stage === 'ticket',
+    JSON.stringify(report.failed));
+  T.check('the reason is HTTP-specific, not a generic NETWORK',
+    report.failed[0].reason === 'TICKET_HTTP_500', JSON.stringify(report.failed));
+
+  // Clean up.
+  await page.evaluate(async (id) => {
+    const l = await window.photosList(id).catch(() => ({ order: [] }));
+    for (const pid of (l.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
+  }, DRAFT_ID);
 });
 
 await browser.close();

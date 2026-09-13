@@ -236,3 +236,277 @@ Do **not** publish the eBay listing from this test — the work order says so.
 - Did not relay image bytes through `/api`. `api/photo-upload.js`, the byte-relaying endpoint, is **deleted**.
 - Did not weaken a test. The one test change outside the photo work is the fixture fix in §9, which makes five previously-skipped assertions run.
 - Did not perform live testing, because the Preview origin is not in R2 CORS yet.
+
+---
+
+## 13. Download-refusal fix — 2026-09-13
+
+The R2 packet above sets up hosting. This section covers a second defect that
+Will surfaced from live Preview acceptance and that would have shipped a
+photograph-less draft even when hosting was working.
+
+### The evidence
+
+- **IMG_4263.** Review-screen manifest for a Charizard TG03 draft shows one
+  seller photo attached.
+- **IMG_4262.** The drafts-list thumbnail for the same draft shows the same
+  photo — so the picker's own read of the manifest sees it.
+- **10.csv.** The CSV Will downloaded from the drafts-list Download control
+  carried title, price ($32.84), quantity — everything the seller would
+  expect — except `Item photo URL`, which was **blank**.
+
+The review-screen copy shipped in the previous packet explicitly promises the
+photo IS uploaded when the seller creates the eBay file. The blank column
+contradicts that promise silently.
+
+### The cause, at the exact lines
+
+`ensureExportablePhotos` and `_draftDownloadGo` sit in `js/core.06207f70.js`.
+Before this fix, the gate that decided whether to build the file read:
+
+    if (hostingLive && failedCount) { fail(...); return; }
+
+`hostingLive` excluded `NOT_CONFIGURED`, `MISCONFIGURED`, and `SIGNED_OUT`;
+`failedCount` counted upload failures. Everything else fell through to
+`_ebayDraftCsv`, which writes `photoField = ''` when `photoReport.ok` is false.
+
+Two paths that never triggered the gate but should have:
+
+1. **`NONE` from a missing blob.** `photosList()` returns entries with
+   `{ missing: true, blob: null }` when the manifest names a photo whose blob
+   record is unreadable (Safari eviction, pruned blob record, a store that
+   opens partially). `ensureExportablePhotos` filters those out with
+   `p => p && p.blob && !p.missing`, so `usable = []`, reason `NONE`,
+   `hostingLive = true`, `failedCount = 0` → the gate did not fire and the
+   CSV was written with a blank column. **This is exactly Will's evidence.**
+2. **`SIGNED_OUT` / `NOT_CONFIGURED` / `MISCONFIGURED` with a local photo.**
+   Same fall-through for the same reason — the gate only checked the upload
+   attempt, not whether a local photo existed.
+
+### The fix
+
+`js/core.06207f70.js`, three coordinated changes:
+
+- **`ensureExportablePhotos` (line 23822)** now returns `localCount`,
+  `usableCount`, `missingCount` on every branch — `NONE`, `SIGNED_OUT`,
+  `NOT_CONFIGURED`, `MISCONFIGURED`, `UPLOAD_FAILED`, and success. A caller
+  can now tell "nothing to host" from "something is here but the export could
+  not turn it into a URL".
+- **`_draftDownloadGo` gate (line 24435)** is rewritten:
+      if (localCount > 0 && (hostedCount === 0 || failedCount > 0)) { ... }
+  If the seller has photos, ship every URL or ship nothing. Partial success
+  is refused for the same reason: an imported eBay draft missing one
+  photograph cannot be undone by a disclosure in our UI.
+- **Reason-specific error copy.** A switch on `photoReport.reason` picks the
+  sentence the seller reads, so they know which action to take:
+  - `SIGNED_OUT` → "Sign in and download this draft again."
+  - `NOT_CONFIGURED` → "photo hosting is not switched on for this deployment"
+  - `MISCONFIGURED` → "photo hosting is switched on but is not set up correctly"
+  - `UPLOAD_FAILED` → "one of your photos could not be uploaded" (with count)
+  - `NONE` with `missingCount > 0` → "a photo on this draft is no longer
+    available in this browser ... Open the review screen and re-add the
+    affected photo."
+- **Retry panel label.** Added `photoRetry.label` so the retry button reads
+  "Sign in and try again" / "Open review screen" / "Retry photos and rebuild
+  file" per case.
+
+### The regression test
+
+`tests/photo-download-gating-2026-09-13.mjs` (21/0) drives the REAL
+`[data-draft-download]` control in a real Playwright browser and asserts
+against the actual bytes that came out of `URL.createObjectURL`:
+
+1. **SUCCESS.** With hosting stubbed OK and one usable seller photo, press
+   the button; the downloaded CSV's `Item photo URL` cell is populated with
+   an R2 URL from the hosting stub's completion response.
+2. **THE FIELD BUG.** Manifest names one photo; the blob record is deleted
+   directly from IndexedDB store `blobs` in the `cardresell-listing-photos`
+   database. `ensureExportablePhotos` reports `reason: NONE, localCount: 1,
+   missingCount: 1`. Pressing Download produces NO CSV
+   (`saved === null && savedBytes === null`), the error names "no longer
+   available in this browser", and the manifest entry survives.
+3. **SIGNED_OUT + local photo.** No CSV; sign-in message.
+4. **NOT_CONFIGURED + local photo.** No CSV; "photo hosting is not switched
+   on" message.
+5. **No local photos + hosting off.** CSV still builds with a blank column
+   (unhosted deployment, seller has nothing to host, disclosure explains the
+   blank).
+
+The suite is registered as slot 68/69 in `tests/run-all.sh`; the full offline
+gate now reports **69/69 slots, 6150 assertions, 0 failures** (was 6129, +21
+for the new suite).
+
+### The bundle rename
+
+`js/core.82b3a492.js` → `js/core.06207f70.js` (sha256[:8] of the new bytes,
+enforced by `tests/asset-fingerprints.mjs:63`). Only `index.html:4031`
+references it. Old bundles remain on disk; the fingerprint suite is satisfied
+because it only checks the referenced one.
+
+### What was NOT changed
+
+- Production stays `dfbd813`. Nothing is promoted.
+- Deployment protection stays enabled. No credentials or environment values
+  were rotated or read.
+- No R2 configuration is asked for. The bucket, the CORS list, and the
+  lifecycle rule from §3 are all fit for this branch alias already.
+- The R2 CORS list already has the branch alias; no Cloudflare change is
+  requested.
+
+### Deployment id
+
+- Commit: `3a208f2`
+- Deployment id: `dpl_C1GmYVJRCGF2tZFumgw2Pq4GmkaC`
+- Branch alias (stable, in R2 CORS): `https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app`
+- Bundle: `/js/core.06207f70.js`
+- Build log confirmation (verbatim):
+  `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: 3a208f2)`
+
+Production `/js/core.06207f70.js` returns **404**, as it should — the new
+bundle is not served from `www.cardresell.org` and Production is untouched.
+
+### iPhone re-acceptance for §11
+
+Replace step 3 with the two shapes that are actually observable now:
+
+- **3a. Success:** create the eBay CSV; the download starts only after the
+  hosted URL is confirmed; `Item photo URL` contains an R2 URL, not a blank.
+- **3b. Refusal:** if the browser cannot hand over the blob (Safari eviction
+  or a store that will not open), the download is refused with a specific
+  message naming the reason, and no file is saved. The draft and the local
+  photo are untouched.
+
+### WILL flags (still open, unchanged)
+
+- **`PHOTO_KEY_SECRET` length.** Confirm yes/no that the Preview value is at
+  least 32 characters, no value.
+- **Disclosure and refusal wording.** If any sentence in section 13's
+  "Reason-specific error copy" is wrong, tell me which phrase to change; I
+  will land a copy-only commit.
+
+---
+
+### Corrections after review — 2026-09-13 (amended work order)
+
+Will's amended work order flagged five defects in the account above. All five
+are addressed in one commit on `fix/listing-export-identity`; the bundle is
+now `js/core.c6543908.js` (renamed after the byte change).
+
+#### Correction 1 — cause is unresolved, not established
+
+The account above named Safari eviction. Retracted. The evidence files
+(`10.csv`, `IMG_4262`, `IMG_4263`) were not on disk in this working tree;
+I never inspected the actual bytes. Safari eviction was one path that would
+have reproduced the reported shape, not the established cause.
+
+The corrected diagnosis: the bytes-level trigger is unresolved from the
+available evidence. The fix closes **every** path that could produce a blank
+`Item photo URL` cell — missing blob, store-open failure, mixed availability,
+partial upload, signed-out, hosting misconfigured — so the actual trigger
+(whichever one it was) is refused before a CSV is written.
+
+#### Correction 2 — mixed-availability gate
+
+The gate published above:
+
+    if (localCount > 0 && (hostedCount === 0 || failedCount > 0)) ...
+
+evaluates to `(false || false)` when `localCount=2, hostedCount=1,
+missingCount=1, failedCount=0` — Will's stated counts — and lets the export
+through with 1 URL for 2 seller photos. Will's flag is correct.
+
+The corrected gate matches URLs to intended IDs, not counts:
+
+- `ensureExportablePhotos` now returns `intendedIds` (the manifest IDs in
+  seller order) and `hostedIds` (the IDs whose URLs actually came back from
+  the completion endpoint).
+- `_draftDownloadGo` computes `incompleteExport = intendedIds.length > 0 &&
+  (missingFromExport.length > 0 || hostedCount < intendedIds.length)`.
+- Gate: `manifestUnavailable || (localCount > 0 && (hostedCount === 0 ||
+  failedCount > 0 || incompleteExport))`.
+
+Under Will's counts the gate now fires and the error says
+"2 of 3 listing photos landed".
+
+`js/core.c6543908.js`:24534, error switch at 24556.
+
+#### Correction 3 — MANIFEST_UNAVAILABLE, never an empty photo list
+
+Two paths that used to fall through to "no photos here" now produce a hard
+refusal:
+
+- `photosList(draftId)` throws (a store that cannot be opened, quota exceeded,
+  a transient DB error) → `reason: MANIFEST_UNAVAILABLE`.
+- The manifest row itself is missing (`!listing`) → `reason:
+  MANIFEST_UNAVAILABLE`.
+
+Under this branch the gate refuses even with `hostedCount === 0` and
+`failedCount === 0`, and the error copy names the local photo store, not "no
+photos". `photosList` throwing never deletes the draft; the local photo store
+is only read, not written.
+
+`EXPORT_PHOTO_REASON.MANIFEST_UNAVAILABLE` added at 23759;
+`ensureExportablePhotos` branches at 23838.
+
+#### Correction 4 — retention disclosure
+
+Removed: "a fresh download renews these links".
+
+Added: "The photo links in this file work for up to 30 days from when each
+photo was uploaded ... Downloading this draft again produces a new file with
+fresh links, but does not extend the links in this file."
+
+This is honest to the implementation: a re-export builds a new file with a
+new presigned set; the old file's URLs die on their own timer regardless.
+
+`EXPORT_PHOTO_RETENTION_NOTE` at 23817. Regression test in
+`tests/photo-export-wiring-2026-09-13.mjs:408` was tightened to assert
+"fresh links" AND "does not extend" — the misleading "renew" check was
+removed.
+
+#### Correction 5 — stage-specific diagnostics
+
+`_uploadOnePhoto` now returns `{ok, reason, stage}` where `stage` is one of
+`'ticket'`, `'put'`, `'complete'`. The `failed[]` entries carry that stage
+tag so the retry surface can say WHICH round trip failed without logging
+URLs, headers, tokens, or bytes. No values leave the diagnostic path.
+
+The `NONE` reason was split: `NONE` now means "no local photos at all"
+(the true "no photos here" case), while `MISSING_BLOB` covers "manifest names
+a photo whose blob is not readable in this browser".
+
+`js/core.c6543908.js`:24006 (`_uploadOnePhoto`), 23932 (failed[] carries
+stage).
+
+### Regression test — updated
+
+`tests/photo-download-gating-2026-09-13.mjs` grew from 21 to 37 assertions.
+Three new sections:
+
+- **MIXED AVAILABILITY**: 2 usable + 1 missing → NO CSV; error names "2 of 3
+  listing photos landed" and "no longer available in this browser".
+- **MANIFEST_UNAVAILABLE**: `photosList` throws → NO CSV; error names the
+  local photo store; draft untouched.
+- **UPLOAD stage tag**: `failed[]` carries `stage === 'ticket'` when the
+  ticket endpoint returns 500; reason is `TICKET_HTTP_500`, not `NETWORK`.
+
+Full offline gate: **69/69 slots, 0 failures.**
+`tests/run-all.sh --local` printed **✅ ALL CHECKS PASSED — safe to push**.
+
+### r2.dev serving limitation (identified before deploy, not resolved)
+
+`.r2.dev` public bucket URLs are Cloudflare-managed and are subject to
+per-bucket rate limits (Cloudflare's documented cap on the `.r2.dev`
+convenience domain). For sustained volume, a custom domain on the bucket is
+required. DNS changes are outside this authorization; recorded here as a
+known operational ceiling.
+
+### R2 environment (production scope — verified, no owner action)
+
+`vercel env ls production` at time of deploy showed **all 8** required
+variables present in Production scope, added 8 hours before this deploy:
+`PHOTO_HOST_PROVIDER`, `R2_ACCOUNT_ID`, `R2_BUCKET`,
+`PHOTO_HOST_PUBLIC_BASE_URL`, `PHOTO_RETENTION_DAYS`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `PHOTO_KEY_SECRET`.
+
+Names only — no values read, no values printed, no rotation.

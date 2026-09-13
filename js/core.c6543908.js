@@ -23757,11 +23757,13 @@ const _EBAY_TEMPLATE_PREAMBLE = [
  * that returns an empty `urls` while reporting success.
  */
 const EXPORT_PHOTO_REASON = {
-  NOT_CONFIGURED: 'NOT_CONFIGURED',
-  SIGNED_OUT:     'SIGNED_OUT',
-  NONE:           'NONE',
-  UPLOAD_FAILED:  'UPLOAD_FAILED',
-  MISCONFIGURED:  'MISCONFIGURED',
+  NOT_CONFIGURED:       'NOT_CONFIGURED',
+  SIGNED_OUT:           'SIGNED_OUT',
+  NONE:                 'NONE',
+  UPLOAD_FAILED:        'UPLOAD_FAILED',
+  MISCONFIGURED:        'MISCONFIGURED',
+  MANIFEST_UNAVAILABLE: 'MANIFEST_UNAVAILABLE',
+  MISSING_BLOB:         'MISSING_BLOB',
 };
 
 /* The seller-facing sentence for each outcome. An "export without photos"
@@ -23778,6 +23780,14 @@ const EXPORT_PHOTO_COPY = {
   NONE:
     'No listing photos are available in this browser, so the photo column in '
     + 'this file is blank.',
+  MISSING_BLOB:
+    'A listing photo named on this draft could not be read back from this '
+    + 'browser, so the photo column in this file is blank. Open the review '
+    + 'screen and re-add the photo, then download again.',
+  MANIFEST_UNAVAILABLE:
+    'This browser could not open the local photo store, so the photo column '
+    + 'in this file is blank. Your draft is untouched. Try again in a minute; '
+    + 'if it keeps failing, close and reopen the tab and download once more.',
   UPLOAD_FAILED:
     'Some photos couldn\u2019t be uploaded, so they are not in this file. The ones '
     + 'that did upload are included.',
@@ -23797,13 +23807,19 @@ const EXPORT_PHOTO_COPY = {
    the links inside it do not live forever, and deleting the source draft
    deletes the photographs an unimported file still points at. Both facts are
    consequences the seller can only avoid if they are told before they put the
-   file aside. */
+   file aside.
+
+   Wording is deliberately careful about "renewal": a re-download re-hosts the
+   underlying photograph, so the NEXT file the seller downloads carries fresh
+   URLs -- but the file they already saved still points at the OLD URLs, which
+   die on their own timer regardless of what a later export does. */
 const EXPORT_PHOTO_RETENTION_DAYS = 30;
 const EXPORT_PHOTO_RETENTION_NOTE =
-  'The photo links in this file work for ' + EXPORT_PHOTO_RETENTION_DAYS + ' days. '
-  + 'Downloading this draft again renews them. Deleting the photos or the draft '
-  + 'removes them straight away, which leaves an unimported file pointing at '
-  + 'nothing \u2014 so upload it to eBay before then.';
+  'The photo links in this file work for up to ' + EXPORT_PHOTO_RETENTION_DAYS + ' days '
+  + 'from when each photo was uploaded. Upload the file to eBay before then. '
+  + 'Downloading this draft again produces a new file with fresh links, but does '
+  + 'not extend the links in this file. Deleting the photos or the draft removes '
+  + 'them straight away, which leaves an unimported file pointing at nothing.';
 
 /* Mirrors api/_photoHost.js UPLOAD_CONTENT_TYPES. Kept as one map so the
    client refuses locally what the server would refuse anyway, rather than
@@ -23827,23 +23843,44 @@ async function ensureExportablePhotos(draftId) {
      produce a blank photo column. `usableCount` is the subset with a readable
      blob, i.e. the photos that were actually eligible to upload. */
   const empty = { ok: false, urls: [], uploaded: 0, failed: [], skipped: [],
+                  intendedIds: [], hostedIds: [],
                   localCount: 0, usableCount: 0, missingCount: 0, reason: '' };
   if (!draftId) return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
 
+  /* Manifest read is a separate failure mode from "the store is empty": a
+     store that will not open (locked, quota-exceeded, deleted while we were
+     reading) is NOT evidence that the seller has no photos. The old code
+     collapsed both into `NONE`, which let a draft with a broken store export
+     with a blank photo column when it should have refused. */
   let listing = null;
   try {
     listing = await photosList(draftId);
   } catch (_) {
-    // A store that will not open is not an empty store. Reported as such.
-    return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
+    return { ...empty, reason: EXPORT_PHOTO_REASON.MANIFEST_UNAVAILABLE };
+  }
+  if (!listing) {
+    return { ...empty, reason: EXPORT_PHOTO_REASON.MANIFEST_UNAVAILABLE };
   }
   const photos = (listing && listing.photos) ? listing.photos : [];
   const usable = photos.filter((p) => p && p.blob && !p.missing);
   const localCount = photos.length;
   const usableCount = usable.length;
   const missingCount = localCount - usableCount;
+  /* `intendedIds` is the SET of photograph identities the seller believes are
+     on this draft (the manifest, in seller order). The caller uses it to test
+     that every intended photo landed as a URL -- a length-only check misses
+     the case where hostedCount === usableCount but the manifest also names a
+     photo whose blob is missing, so the URLs in the file are a proper subset
+     of the seller's photos. */
+  const intendedIds = photos.map((p) => p && p.id).filter(Boolean);
+  /* If the manifest names photos but none has a readable blob, that is not
+     "no photos here" -- it is "the store lost the bytes for a photo the
+     seller still sees in the picker". Reported as MISSING_BLOB so the caller
+     can tell the seller which action to take. */
   if (!usable.length) return { ...empty, localCount, usableCount, missingCount,
-    reason: EXPORT_PHOTO_REASON.NONE };
+    intendedIds,
+    reason: localCount > 0 ? EXPORT_PHOTO_REASON.MISSING_BLOB
+                            : EXPORT_PHOTO_REASON.NONE };
 
   let token = '';
   try { token = await _crIdToken(); } catch (_) { token = ''; }
@@ -23852,6 +23889,7 @@ async function ensureExportablePhotos(draftId) {
 
   const hostedNow = (listing && listing.hosted) ? listing.hosted : {};
   const urls = [];
+  const hostedIds = [];
   const failed = [];
   const skipped = [];
   const fresh = [];        // records to persist, from 201s only
@@ -23876,6 +23914,7 @@ async function ensureExportablePhotos(draftId) {
     const plan = _hostedPlan(hostedNow[p.id], sha);
     if (plan === 'keep') {
       urls.push(hostedNow[p.id].publicUrl);
+      hostedIds.push(p.id);
       reused++;
       continue;
     }
@@ -23890,9 +23929,10 @@ async function ensureExportablePhotos(draftId) {
     if (step.reason === 'SIGNED_OUT') return { ...empty, localCount, usableCount, missingCount,
       reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
 
-    if (!step.ok) { failed.push({ id: p.id, reason: step.reason }); continue; }
+    if (!step.ok) { failed.push({ id: p.id, reason: step.reason, stage: step.stage || '' }); continue; }
 
     urls.push(step.hosted.publicUrl);
+    hostedIds.push(p.id);
     fresh.push(step.hosted);
     if (plan === 'renew') renewed++;
   }
@@ -23906,15 +23946,17 @@ async function ensureExportablePhotos(draftId) {
   }
 
   if (notConfigured) return { ...empty, localCount, usableCount, missingCount,
-    reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
+    intendedIds, reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
   if (misconfigured) return { ...empty, localCount, usableCount, missingCount,
-    reason: EXPORT_PHOTO_REASON.MISCONFIGURED };
+    intendedIds, reason: EXPORT_PHOTO_REASON.MISCONFIGURED };
   if (!urls.length) {
     return { ok: false, urls: [], uploaded: 0, failed, skipped, reused: 0, renewed: 0,
+             intendedIds, hostedIds: [],
              localCount, usableCount, missingCount,
              reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : EXPORT_PHOTO_REASON.NONE };
   }
   return { ok: true, urls, uploaded: fresh.length, failed, skipped, reused, renewed,
+           intendedIds, hostedIds,
            localCount, usableCount, missingCount,
            reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : '' };
 }
@@ -23962,7 +24004,13 @@ function _hostedPlan(hosted, sha256, nowMs, days) {
  * assembled here. A client-built URL is a claim; that response follows a real
  * HEAD against the bucket. */
 async function _uploadOnePhoto({ draftId, photo, type, sha256, token }) {
-  const bad = (reason) => ({ ok: false, reason });
+  /* `stage` is one of 'ticket' | 'put' | 'complete' and lets the caller
+     record which of the three round trips failed WITHOUT logging URLs,
+     bodies, headers, tokens, or bytes. This is the seller-visible seam
+     between 'the upload was refused before it left this browser' (ticket),
+     'the upload was rejected by storage' (put), and 'storage accepted the
+     upload but our server would not record it' (complete). */
+  const bad = (reason, stage) => ({ ok: false, reason, stage });
 
   let ticket = null;
   try {
@@ -23983,18 +24031,18 @@ async function _uploadOnePhoto({ draftId, photo, type, sha256, token }) {
     });
     let body = {};
     try { body = await r.json(); } catch (_) { body = {}; }
-    if (r.status === 501 || (body && body.code === 'PHOTO_HOST_NOT_CONFIGURED')) return bad('NOT_CONFIGURED');
-    if (body && body.code === 'PHOTO_HOST_MISCONFIGURED') return bad('MISCONFIGURED');
-    if (r.status === 401) return bad('SIGNED_OUT');
+    if (r.status === 501 || (body && body.code === 'PHOTO_HOST_NOT_CONFIGURED')) return bad('NOT_CONFIGURED', 'ticket');
+    if (body && body.code === 'PHOTO_HOST_MISCONFIGURED') return bad('MISCONFIGURED', 'ticket');
+    if (r.status === 401) return bad('SIGNED_OUT', 'ticket');
     /* `uploadReceipt` is required, not optional. Without it the completion
        call cannot succeed, so a ticket lacking one is a failed ticket and must
        be reported here rather than as a confusing later 400. */
     if (r.status !== 200 || !body || !body.putUrl || !body.objectKey || !body.uploadReceipt) {
-      return bad((body && body.code) || ('TICKET_HTTP_' + r.status));
+      return bad((body && body.code) || ('TICKET_HTTP_' + r.status), 'ticket');
     }
     ticket = body;
   } catch (_) {
-    return bad('NETWORK');
+    return bad('NETWORK', 'ticket');
   }
 
   /* The PUT goes to the storage provider. A CORS failure surfaces here as a
@@ -24019,9 +24067,9 @@ async function _uploadOnePhoto({ draftId, photo, type, sha256, token }) {
       headers: putHeaders,
       body: photo.blob,
     });
-    if (!up.ok) return bad('PUT_HTTP_' + up.status);
+    if (!up.ok) return bad('PUT_HTTP_' + up.status, 'put');
   } catch (_) {
-    return bad('PUT_BLOCKED');
+    return bad('PUT_BLOCKED', 'put');
   }
 
   try {
@@ -24039,13 +24087,13 @@ async function _uploadOnePhoto({ draftId, photo, type, sha256, token }) {
     });
     let body = {};
     try { body = await r.json(); } catch (_) { body = {}; }
-    if (r.status === 401) return bad('SIGNED_OUT');
+    if (r.status === 401) return bad('SIGNED_OUT', 'complete');
     if (r.status !== 201 || !body || !body.hosted || !body.hosted.publicUrl) {
-      return bad((body && body.code) || ('COMPLETE_HTTP_' + r.status));
+      return bad((body && body.code) || ('COMPLETE_HTTP_' + r.status), 'complete');
     }
-    return { ok: true, reason: '', hosted: body.hosted };
+    return { ok: true, reason: '', stage: 'complete', hosted: body.hosted };
   } catch (_) {
-    return bad('NETWORK');
+    return bad('NETWORK', 'complete');
   }
 }
 
@@ -24462,13 +24510,34 @@ async function _draftDownloadGo(draftId) {
     ? photoReport.failed.length : 0;
   const missingCount = Number.isFinite(photoReport && photoReport.missingCount)
     ? photoReport.missingCount : 0;
+  const intendedIds = (photoReport && Array.isArray(photoReport.intendedIds))
+    ? photoReport.intendedIds : [];
+  const hostedIds = (photoReport && Array.isArray(photoReport.hostedIds))
+    ? photoReport.hostedIds : [];
+  /* Manifest-read failure is a hard stop regardless of counts. `NONE` from a
+     store that would not open used to look identical to "no photos here";
+     the new `MANIFEST_UNAVAILABLE` reason lets us refuse before we invent an
+     empty photo list from thin air. */
+  const manifestUnavailable = photoReport && photoReport.reason
+    === EXPORT_PHOTO_REASON.MANIFEST_UNAVAILABLE;
+
+  /* Compare intended IDs against hosted IDs, not counts. `hostedCount ===
+     localCount` misses the case where the manifest names two photos, one has
+     a readable blob and one does not, and the store returns the readable one
+     as a URL -- counts read 1/2 and the length check would let that through.
+     A set comparison also catches out-of-order hosting bugs before they can
+     produce a CSV that references someone else\u2019s photograph. */
+  const missingFromExport = intendedIds.filter((id) => hostedIds.indexOf(id) === -1);
+  const incompleteExport = intendedIds.length > 0
+    && (missingFromExport.length > 0 || hostedCount < intendedIds.length);
 
   /* Also stop when SOME uploads failed while others succeeded. An imported
      eBay draft missing one photograph cannot be undone by a disclosure in our
      UI, so partial success is not an export either -- ship every photo, or
-     ship nothing. `failedCount > 0` covers this case; the `hostedCount === 0`
-     clause above covers the field bug where nothing landed at all. */
-  if (localCount > 0 && (hostedCount === 0 || failedCount > 0)) {
+     ship nothing. `incompleteExport` covers mixed availability from any
+     source (missing blob, failed upload, or a subset of hosted URLs matched
+     to intended IDs); `manifestUnavailable` covers the store-open failure. */
+  if (manifestUnavailable || (localCount > 0 && (hostedCount === 0 || failedCount > 0 || incompleteExport))) {
     /* Sentence selection follows the report's `reason`. Every one of these
        ends the same way -- no file was built, nothing was exported, draft and
        photos are unchanged -- so a seller who mis-clicks does not lose work. */
@@ -24490,16 +24559,34 @@ async function _draftDownloadGo(draftId) {
           ? 'No file was created, because one of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.'
           : 'No file was created, because ' + failedCount + ' of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.';
         break;
+      case EXPORT_PHOTO_REASON.MANIFEST_UNAVAILABLE:
+        msg = 'No file was created, because this browser could not open your local photo store. Nothing was exported. Your draft is unchanged. Try again in a minute; if it keeps failing, close and reopen the tab and download once more.';
+        retryLabel = 'Try again';
+        break;
+      case EXPORT_PHOTO_REASON.MISSING_BLOB:
       case EXPORT_PHOTO_REASON.NONE:
-      default:
-        // Local photo(s) named in the manifest but none had a readable blob
-        // -- Safari eviction, a store that could not open, or a manifest that
-        // still points at a blob record that has been pruned.
-        msg = missingCount === 1
-          ? 'No file was created, because a photo on this draft is no longer available in this browser. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photo.'
-          : missingCount + ' photos on this draft are no longer available in this browser, so no file was created. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photos.';
+      default: {
+        /* Local photo(s) named in the manifest but the export could not turn
+           every one of them into a URL: a missing blob (browser eviction, a
+           pruned blob record, a partial store), OR a mixed-availability case
+           where some photos hosted and others did not. Both surface here so
+           the seller sees the same shape of message either way. */
+        const gap = missingFromExport.length > 0
+          ? missingFromExport.length
+          : (missingCount > 0 ? missingCount : localCount - hostedCount);
+        const gapCount = gap > 0 ? gap : 1;
+        if (hostedCount > 0 && intendedIds.length > 0) {
+          msg = gapCount === 1
+            ? 'No file was created, because ' + hostedCount + ' of ' + intendedIds.length + ' listing photos landed and one photo on this draft is no longer available in this browser. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photo.'
+            : 'No file was created, because ' + hostedCount + ' of ' + intendedIds.length + ' listing photos landed and ' + gapCount + ' photos on this draft are no longer available in this browser. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photos.';
+        } else {
+          msg = gapCount === 1
+            ? 'No file was created, because a photo on this draft is no longer available in this browser. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photo.'
+            : gapCount + ' photos on this draft are no longer available in this browser, so no file was created. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photos.';
+        }
         retryLabel = 'Open review screen';
         break;
+      }
     }
     const d0 = _draftsState.dl;
     if (d0 && d0.draftId === draftId) {
@@ -24510,6 +24597,7 @@ async function _draftDownloadGo(draftId) {
          available (SIGNED_OUT/NOT_CONFIGURED/MISCONFIGURED before the loop
          runs) we fall back to `localCount` so the count is never 0. */
       const count = failedCount > 0 ? failedCount
+                   : missingFromExport.length > 0 ? missingFromExport.length
                    : missingCount > 0 ? missingCount
                    : localCount;
       d0.photoRetry = { count, text: msg, label: retryLabel };

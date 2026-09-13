@@ -405,8 +405,9 @@ await T.section('hosted photos land in the photo column, in the seller\u2019s or
     `photos are in the file, yet the disclosure still says: ${JSON.stringify(nag)}`);
   T.check('\ud83d\udd34 the 30-day life of the links is stated on the branch that hosted them',
     (notes || []).some((n) => /30 days/.test(n)), JSON.stringify(notes));
-  T.check('and the note says a fresh download renews them',
-    (notes || []).some((n) => /renew/i.test(n)), JSON.stringify(notes));
+  T.check('and the note is honest: a fresh download makes a NEW file with fresh links, but does not extend the links in THIS file',
+    (notes || []).some((n) => /fresh links/i.test(n) && /does not extend/i.test(n)),
+    JSON.stringify(notes));
   T.check('and that deleting the draft or photos invalidates the file',
     (notes || []).some((n) => /delet/i.test(n)), JSON.stringify(notes));
 });
