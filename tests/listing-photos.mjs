@@ -1379,6 +1379,104 @@ await T.section('ATTACH_FAILED copy warns against refreshing, and the retry stay
   await ctx.close();
 });
 
+/* ── The SECOND failure carries the same warning ───────────────────────────────
+
+   Owner, 2026-09-12: "the second message needs the same warning because the
+   retained snapshot has the same short lifetime."
+
+   This drives the real second-failure path: a genuine failed attach, then a
+   real click on the review-screen retry control while storage is still
+   refusing. The message is read from the RENDERED DOM, not from a constant, so
+   a reworded or unwired string cannot leave this passing.
+
+   Apostrophe note: the rendered copy uses the typographic apostrophe that the
+   seller-facing copy in this bundle uses throughout. The assertions normalise
+   U+2019 to a straight quote and then apply the owner's exact strings, so they
+   bind to the disclosure rather than to a glyph choice. */
+await T.section('the second failure repeats the refresh warning, and creates no draft', async () => {
+  const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+
+  /* Count create requests across the whole scenario. A retry must reuse the
+     saved draft, never POST a new one. */
+  await page.evaluate(() => {
+    window.__createPosts = [];
+    const orig = window.fetch;
+    window.fetch = function (url, opts) {
+      const u = String(url || '');
+      const method = String((opts && opts.method) || 'GET').toUpperCase();
+      if (u.includes('/api/drafts') && method === 'POST') window.__createPosts.push(u);
+      return orig.apply(this, arguments);
+    };
+  });
+
+  await openReview(page, DRAFT_ID);
+
+  /* First failure — genuine, via the DB-open fault every photo write passes. */
+  const first = await page.evaluate(async (DRAFT) => {
+    window._photoStoreFaults = { openFails: true };
+    const res = await window.attachScanPhotoToDraft(DRAFT, {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      sourceKey: 'scan:second-failure',
+      type: 'image/png',
+    });
+    return { reason: res.reason, pending: window.scanPhotoRetryPending(DRAFT) };
+  }, DRAFT_ID);
+
+  T.check('precondition — first attach failed and a snapshot is pending',
+    first.reason === 'ATTACH_FAILED' && first.pending === true, JSON.stringify(first));
+
+  /* Re-open so the control is painted, then click it with storage STILL
+     refusing. This is the real second-failure path. */
+  await openReview(page, DRAFT_ID);
+  const clicked = await page.evaluate(() => {
+    const btn = document.querySelector('[data-photo-retry]');
+    if (!btn) return { clicked: false };
+    btn.click();
+    return { clicked: true };
+  });
+  T.check('the retry control was present to click', clicked.clicked === true, JSON.stringify(clicked));
+
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-photo-status][data-photo-status-kind="error"]');
+    return !!el && /still/i.test(el.textContent || '');
+  }, { timeout: 15000 });
+
+  const after = await page.evaluate((DRAFT) => {
+    const el = document.querySelector('[data-photo-status]');
+    const btn = document.querySelector('[data-photo-retry]');
+    return {
+      rendered: el ? el.textContent : '',
+      pending: window.scanPhotoRetryPending(DRAFT),
+      retryStillOffered: !!btn,
+      boundTo: btn ? btn.getAttribute('data-photo-retry') : null,
+      createPosts: window.__createPosts.length,
+    };
+  }, DRAFT_ID);
+
+  const m = (after.rendered || '').replace(/\u2019/g, "'");
+
+  T.check('the second message says it still did not attach',
+    m.includes("still didn't attach"), after.rendered);
+  T.check('the second message states the draft is saved',
+    m.includes('draft is saved'), after.rendered);
+  T.check('the second message warns to retry BEFORE refreshing or closing the page',
+    m.includes('before refreshing or closing this page'), after.rendered);
+  T.check('the second message offers the manual alternative',
+    m.includes('add a photo manually'), after.rendered);
+
+  T.check('the snapshot is still pending, so the warning describes something real',
+    after.pending === true, JSON.stringify(after.pending));
+  T.check('the review screen still offers the retry control for THIS draft',
+    after.retryStillOffered === true && after.boundTo === DRAFT_ID, JSON.stringify(after));
+
+  T.check('the retry created NO draft — zero POSTs to /api/drafts',
+    after.createPosts === 0, JSON.stringify({ createPosts: after.createPosts }));
+
+  await ctx.close();
+});
+
 await browser.close();
 server.close();
 T.done();

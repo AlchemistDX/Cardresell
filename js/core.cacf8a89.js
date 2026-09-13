@@ -19527,9 +19527,18 @@ const _crScanPhotoPending = {};
    this release, so it must be DISCLOSED -- a seller who refreshes before
    retrying loses the photograph with no warning otherwise. Declared here,
    above its use in the ATTACH_FAILED path below. */
+const SCAN_PHOTO_RETRY_INSTRUCTION =
+  'Retry before refreshing or closing this page, or add a photo manually.';
 const SCAN_PHOTO_ATTACH_FAILED_MESSAGE =
   'Your draft was saved, but the scan photo was not attached. ' +
-  'Retry before refreshing or closing this page, or add a photo manually.';
+  SCAN_PHOTO_RETRY_INSTRUCTION;
+/* The second failure carries the SAME warning, because the snapshot it retains
+   has the same short lifetime. Shared instruction so the two cannot drift.
+   The apostrophe stays typographic, matching the seller-facing copy elsewhere
+   in this bundle. */
+const SCAN_PHOTO_RETRY_FAILED_MESSAGE =
+  'That still didn\u2019t attach. Your draft is saved. ' +
+  SCAN_PHOTO_RETRY_INSTRUCTION;
 
 /* Snapshot per idempotency key, so a replay attaches the photograph captured at
    the FIRST attempt -- the same rule the payload follows. Without this a retry
@@ -26262,8 +26271,7 @@ async function _photoRetryScan(draftId) {
     }
     /* Still failing. The snapshot is retained by attachScanPhotoToDraft, so the
        control stays available and the seller is not told it succeeded. */
-    _photoUi.status = { kind: 'error', text: 'That still didn\u2019t attach. '
-      + 'Your draft is saved. You can try again, or add a photo yourself.' };
+    _photoUi.status = { kind: 'error', text: SCAN_PHOTO_RETRY_FAILED_MESSAGE };
     _photoBlockPaint();
   } catch (e) {
     _photoUi.busy = false;
