@@ -19,13 +19,12 @@ Before this work, a seller's photograph of their card never left their browser. 
 | Item | Value |
 |---|---|
 | Branch | `fix/listing-export-identity` (**main was not pushed**) |
-| Commit | **`968a007`** on `fix/listing-export-identity` |
-| Build log says | `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: 968a007)` — a git build, not an archive upload |
-| Deployment ID | **`dpl_6ZDobNuuKys7Ms8gezbbbkkDCQoX`**, target `preview`, status Ready |
-| Preview URL | **https://cardresell-dqvbti55i-willsep200-9430s-projects.vercel.app** — this is the deployment that built commit `968a007`. Note that adding this very file to the repository is itself a push, so a later deployment of the same code may exist with a different one-off URL; the alias below always points at the newest build of this branch, and the delivery message names the final deployment. |
-| Stable branch alias | **https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app** — Vercel does provide one, and it follows the branch, so adding *this* origin to R2 CORS survives future pushes to the branch |
+| Commit | code: **`968a007`** · current branch head, adding this document: **`c541c6e`** |
+| Build log says | `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: c541c6e)` — read from the build log, not a dashboard summary, and a git build rather than an archive upload |
+| Deployment ID | **`dpl_5dEJiUiCkLGznGFLZdYRarQESd77`**, target `preview`, status Ready — this is the current build, of `c541c6e`. The code-carrying build of `968a007` was `dpl_6ZDobNuuKys7Ms8gezbbbkkDCQoX`; `c541c6e` adds only this document. |
+| Preview URL to use | **https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app** — the branch alias. Use this one, not a per-deployment URL: the alias always serves the newest build of this branch, so it does not go stale when the branch is pushed again, and it is the origin to put in R2 CORS. The per-deployment URL for the build below is `https://cardresell-i104uotbt-willsep200-9430s-projects.vercel.app`. |
 | Production | **unchanged at `dfbd813`** — not promoted, not touched. `https://www.cardresell.org/js/core.b5c0553e.js` returns **404**, which is the measured proof the new bundle is not live |
-| Preview protection | **left enabled** — both URLs above answer `302` to the SSO challenge, measured |
+| Preview protection | **left enabled** — the Preview URL and the branch alias both answer `302` to the SSO challenge, measured after the final build |
 | Bundle | `js/core.b5c0553e.js` — renamed from `core.b1e86a0a.js` because the bytes changed |
 | Fingerprint rule | filename is `sha256[:8]` of the file's own bytes; enforced by `tests/asset-fingerprints.mjs:63` and verified green |
 | Live reference | `index.html:4031` |
