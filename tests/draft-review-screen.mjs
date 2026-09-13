@@ -2873,6 +2873,24 @@ try {
       window._ovAutoFilled = true;
     }, u);
 
+    /* A scan-panel create now ENDS on the review screen -- that is the
+       sequence the seller asked for: create, attach the scan photo, then land
+       on review. `openDraftReview` calls `switchView('review')`, which hides
+       `lookupView` and with it `#crSellBtn`, so a case that drives the panel
+       button a second time has to navigate back first. The product is right
+       here; the earlier fixture simply assumed the panel stayed on screen.
+       This is a NAVIGATION step, not a behaviour override: nothing about the
+       create path is stubbed. */
+    const backToPanel = async () => {
+      await page.evaluate((A) => {
+        try { switchView('lookup'); } catch (_) {}
+        window._crSellApproved = A;
+        const row = document.getElementById('crSellRow');
+        if (row) row.style.display = '';
+      }, CARD_A);
+      await page.waitForSelector('#crSellBtn', { state: 'visible', timeout: 10000 });
+    };
+
     // ── 1. The panel path: card B priced, then card A loaded, no new read.
     await priceCardB(FOREIGN);
     const switched = await page.evaluate((A) => {
@@ -2971,6 +2989,7 @@ try {
       window.__basisAtPost = null;
       window.__basisClears = [];
     }, CARD_A);
+    await backToPanel();   // the previous create left us on the review screen
     await page.click('#crSellBtn');
     T.check('setup: the legitimate create went out',
       await waitPost(isPanelCreateA) === true, postLogDump());
@@ -3009,6 +3028,7 @@ try {
         retrievedAt: '2026-09-08T20:45:00.000Z' };
       window._crSellApproved = A;
     }, CARD_A);
+    await backToPanel();   // the previous create left us on the review screen
     await page.click('#crSellBtn');
     T.check('setup: the unbound-basis create went out',
       await waitPost(isPanelCreateA) === true, postLogDump());

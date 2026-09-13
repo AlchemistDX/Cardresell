@@ -22316,13 +22316,6 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
       }
       say(existing ? 'Opened your saved draft'
                    : (replay ? 'You already have a draft for this card.' : 'Listing draft started.'));
-      // Adoption OPENS the draft. Its saved content is preserved -- nothing
-      // here writes to it -- and no second draft is made beside it. In a batch
-      // it is reported on the row with an "Open draft" link instead: navigating
-      // away mid-batch would abandon the cards after this one.
-      if (existing && !batch && j && j.draftId) {
-        try { openDraftReview(j.draftId); } catch (_) {}
-      }
       // What the row now knows: it holds a draft, at this generation.
       _crNoteRowState(instanceId, {
         presence: 'live',
@@ -22344,6 +22337,33 @@ async function _crCreateDraft({ card, instanceId, idemKey, price, priceSource, s
         if (photoOutcome.reason === 'ATTACH_FAILED' && !batch && photoOutcome.message) {
           say(photoOutcome.message);
         }
+      }
+
+      /* ── The review screen opens HERE, after the attachment ────────────────
+         Adoption OPENS the draft. Its saved content is preserved -- nothing
+         here writes to it -- and no second draft is made beside it. In a batch
+         it is reported on the row with an "Open draft" link instead: navigating
+         away mid-batch would abandon the cards after this one.
+
+         A draft created FROM A SCAN also opens, which it previously did not:
+         the seller tapped Create Draft, got a toast, and then had to find and
+         tap the button a second time to see the card they had just scanned.
+         One tap on a successful scan now reaches a review screen carrying the
+         photograph and the verified details.
+
+         AFTER the attach, not before, and that ordering is the point. The
+         review screen reads the photo store when it paints (_photoUiSync), so
+         opening first would paint a review with no photograph and then need a
+         repaint to show one. Awaiting the attachment first means the seller's
+         own image is on screen the moment the screen appears.
+
+         The scan path only. A create from the collection view is left exactly
+         as it was -- that screen has its own navigation and this is not the
+         place to change it. An ATTACH_FAILED still opens: the draft is saved
+         and real, the failure was the photo alone, and the review screen is
+         where the photo-only retry control lives. */
+      if (!batch && j && j.draftId && (existing || source === 'scan')) {
+        try { openDraftReview(j.draftId); } catch (_) {}
       }
 
       return out({
@@ -23627,6 +23647,196 @@ const _EBAY_TEMPLATE_PREAMBLE = [
   '#INFO,,,,,,,,,,'
 ];
 
+/* ── Exportable photos ───────────────────────────────────────────────────────
+ *
+ * WHY THIS EXISTS. Will imported a production CSV into eBay Drafts on
+ * 2026-09-12: title, description, price, quantity and SKU all transferred; the
+ * photographs did not, because `Item photo URL` was blank. eBay's importer
+ * FETCHES photos from URLs -- "Pictures can be self-hosted, hosted by a third
+ * party, or hosted by eBay Picture Services"
+ * (https://pages.ebay.com/sh/reports/help/create-listings-bulk/) -- and a
+ * photograph living in this browser's IndexedDB has no URL for eBay to fetch.
+ * So a photo only reaches a listing if it is first uploaded somewhere eBay can
+ * reach.
+ *
+ * WHAT IT UPLOADS, AND WHAT IT REFUSES TO. Seller photographs only. A scan
+ * photograph the seller took of their own card counts -- `origin:'scan'` here
+ * means "captured on the scan screen", and `_scanPhotoSnapshot` already
+ * refuses catalogue artwork by accepting only `data:image/` URLs. Catalogue
+ * artwork must never become a seller listing photo, and the store this reads
+ * cannot contain any.
+ *
+ * WHAT IT RETURNS. Always a report, never a bare array, and never a silent
+ * omission -- a blank photo column that nobody was told about is the exact bug
+ * this replaces:
+ *
+ *   { ok, urls, uploaded, failed, skipped, reason }
+ *
+ *   ok:false reason:'NOT_CONFIGURED'  no photo host is set up yet (today's
+ *                                     case -- the server answers 501)
+ *   ok:false reason:'SIGNED_OUT'      no token, so nothing was attempted
+ *   ok:false reason:'NONE'            this browser holds no photos for it
+ *   ok:true  with failed.length > 0   some uploaded, some did not
+ *
+ * The caller must render `reason` and `failed`. There is no code path here
+ * that returns an empty `urls` while reporting success.
+ */
+const EXPORT_PHOTO_REASON = {
+  NOT_CONFIGURED: 'NOT_CONFIGURED',
+  SIGNED_OUT:     'SIGNED_OUT',
+  NONE:           'NONE',
+  UPLOAD_FAILED:  'UPLOAD_FAILED',
+};
+
+/* The seller-facing sentence for each outcome. An "export without photos"
+   fallback must say so clearly, so every one of these states plainly that the
+   photo column is blank and what to do instead. */
+const EXPORT_PHOTO_COPY = {
+  NOT_CONFIGURED:
+    'Photo hosting isn\u2019t switched on yet, so the photo column in this file is '
+    + 'blank. Your photos are still here \u2014 add them to the draft in eBay from '
+    + 'this device, or use Download listing photos and upload them there.',
+  SIGNED_OUT:
+    'You\u2019re signed out, so your photos couldn\u2019t be uploaded and the photo '
+    + 'column in this file is blank. Sign in and download the file again.',
+  NONE:
+    'No listing photos are available in this browser, so the photo column in '
+    + 'this file is blank.',
+  UPLOAD_FAILED:
+    'Some photos couldn\u2019t be uploaded, so they are not in this file. The ones '
+    + 'that did upload are included.',
+};
+
+/** Blob -> bare base64, no data: prefix. */
+function _photoBlobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('READ_FAILED'));
+    fr.onload = () => {
+      const s = String(fr.result || '');
+      const comma = s.indexOf(',');
+      resolve(comma >= 0 ? s.slice(comma + 1) : '');
+    };
+    fr.readAsDataURL(blob);
+  });
+}
+
+/* Mirrors api/_photoHost.js UPLOAD_CONTENT_TYPES. Kept as one map so the
+   client refuses locally what the server would refuse anyway, rather than
+   uploading 20MB of HEIC to be told 415. */
+const _EXPORT_PHOTO_TYPES = { 'image/jpeg': true, 'image/jpg': true, 'image/png': true };
+
+/**
+ * ensureExportablePhotos(draftId) -> report (see the block comment above).
+ *
+ * Reads the ORDERED seller-photo manifest, uploads each photo through the
+ * authenticated endpoint, and returns importer-accessible URLs in that same
+ * order. Order is the seller's -- eBay treats the first URL as the gallery
+ * image, so re-ordering them here would silently change which photograph
+ * buyers see first.
+ */
+async function ensureExportablePhotos(draftId) {
+  const empty = { ok: false, urls: [], uploaded: 0, failed: [], skipped: [], reason: '' };
+  if (!draftId) return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
+
+  let listing = null;
+  try {
+    listing = await photosList(draftId);
+  } catch (_) {
+    // A store that will not open is not an empty store. Reported as such.
+    return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
+  }
+  const photos = (listing && listing.photos) ? listing.photos : [];
+  const usable = photos.filter((p) => p && p.blob && !p.missing);
+  if (!usable.length) return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
+
+  let token = '';
+  try { token = await _crIdToken(); } catch (_) { token = ''; }
+  if (!token) return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
+
+  const urls = [];
+  const failed = [];
+  const skipped = [];
+  let notConfigured = false;
+
+  for (const p of usable) {
+    if (urls.length >= PHOTO_MAX_PER_DRAFT) { skipped.push(p.id); continue; }
+    const type = String(p.type || (p.blob && p.blob.type) || '').toLowerCase();
+    if (!_EXPORT_PHOTO_TYPES[type]) { failed.push({ id: p.id, reason: 'UNSUPPORTED_TYPE' }); continue; }
+
+    let b64 = '';
+    try { b64 = await _photoBlobToBase64(p.blob); } catch (_) { b64 = ''; }
+    if (!b64) { failed.push({ id: p.id, reason: 'READ_FAILED' }); continue; }
+
+    let r = null, body = {};
+    try {
+      r = await fetch('/api/photo-upload?' + new URLSearchParams({ id: draftId }).toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ photoId: p.id, contentType: type, dataBase64: b64 }),
+      });
+      try { body = await r.json(); } catch (_) { body = {}; }
+    } catch (_) {
+      failed.push({ id: p.id, reason: 'NETWORK' });
+      continue;
+    }
+
+    /* 501 is the whole-operation answer, not this photo's: no host exists, so
+       no later photo can succeed either. Reported once, honestly. */
+    if (r.status === 501 || (body && body.code === 'PHOTO_HOST_NOT_CONFIGURED')) {
+      notConfigured = true;
+      break;
+    }
+    if (r.status === 401) return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
+    if (r.status !== 201 || !body || !body.url) {
+      failed.push({ id: p.id, reason: (body && body.code) || ('HTTP_' + r.status) });
+      continue;
+    }
+    urls.push(body.url);
+  }
+
+  if (notConfigured) {
+    return { ...empty, reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
+  }
+  if (!urls.length) {
+    return { ok: false, urls: [], uploaded: 0, failed, skipped,
+             reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : EXPORT_PHOTO_REASON.NONE };
+  }
+  return { ok: true, urls, uploaded: urls.length, failed, skipped,
+           reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : '' };
+}
+
+/* eBay's documented photo-column rules, from the bulk-listing help page:
+   pipe-separated, up to 12 images, max 2048 characters for the field, https
+   with a real file extension, and blank spaces percent-encoded or "the image
+   will not appear in the listing". This is the client-side twin of
+   joinPhotoUrls in api/_photoHost.js; both are needed because the field is
+   assembled here and validated there. */
+const EBAY_PHOTO_MAX_CLIENT = 12;
+const EBAY_PHOTO_URL_MAX_CLIENT = 2048;
+
+function _exportPhotoField(urls) {
+  const kept = [];
+  const dropped = [];
+  for (const raw of (urls || [])) {
+    if (kept.length >= EBAY_PHOTO_MAX_CLIENT) { dropped.push({ url: raw, why: 'OVER_12' }); continue; }
+    const u = String(raw || '');
+    if (!/^https:\/\//i.test(u)) { dropped.push({ url: u, why: 'NOT_HTTPS' }); continue; }
+    if (u.includes('|')) { dropped.push({ url: u, why: 'EMBEDDED_SEPARATOR' }); continue; }
+    // A raw space breaks the fetch silently, per eBay's own note.
+    const enc = u.replace(/ /g, '%20');
+    if (!/\.(jpe?g|png)$/i.test(enc.split('?')[0])) { dropped.push({ url: u, why: 'NO_EXTENSION' }); continue; }
+    kept.push(enc);
+  }
+  let field = kept.join('|');
+  while (field.length > EBAY_PHOTO_URL_MAX_CLIENT && kept.length) {
+    const gone = kept.pop();
+    dropped.push({ url: gone, why: 'FIELD_OVER_2048' });
+    field = kept.join('|');
+  }
+  return { field, kept, dropped };
+}
+
 /** eBay's documented cap on one title. */
 const _EBAY_TITLE_MAX = 80;
 
@@ -23677,7 +23887,7 @@ function _csvField(v) {
  * Returns `{ csv, owed }`. `owed` is the list of things eBay will require that
  * this file does not carry; it is rendered, not swallowed.
  */
-function _ebayDraftCsv(draft, packet) {
+function _ebayDraftCsv(draft, packet, photoReport) {
   const owed = [];
 
   const cat = (packet && packet.category && packet.category.id != null)
@@ -23704,7 +23914,42 @@ function _ebayDraftCsv(draft, packet) {
 
   const qty = Number.isInteger(draft.quantity) && draft.quantity > 0 ? draft.quantity : 1;
 
-  owed.push('the photos \u2014 the column is present but left blank, so attach them from this device in eBay\u2019s Drafts folder');
+  /* THE PHOTO COLUMN. This used to be a hardcoded sentence claiming the column
+     was "present but left blank" -- which was true only while nothing could
+     ever fill it. Once photos are hosted, that sentence is a lie, and Will's
+     rule is explicit: do not silently export blank photo fields while claiming
+     photos are included, and an intentional export-without-photos fallback
+     must say so clearly. So the line is now DERIVED from the report.
+
+     No report at all (a caller that did not attempt hosting) is treated as the
+     blank case and says so, rather than defaulting to the cheerful branch. */
+  const photoJoin = (photoReport && photoReport.ok && photoReport.urls && photoReport.urls.length)
+    ? _exportPhotoField(photoReport.urls)
+    : { field: '', kept: [], dropped: [] };
+  const photoField = photoJoin.field;
+
+  if (photoField) {
+    if (photoJoin.dropped.length) {
+      owed.push(photoJoin.dropped.length + ' of your photos \u2014 '
+        + (photoJoin.kept.length === 1 ? '1 photo is' : photoJoin.kept.length + ' photos are')
+        + ' in this file, and the rest were left out because eBay could not have used their links');
+    }
+    if (photoReport && photoReport.failed && photoReport.failed.length) {
+      owed.push(photoReport.failed.length + ' photo'
+        + (photoReport.failed.length === 1 ? '' : 's')
+        + ' that could not be uploaded \u2014 add '
+        + (photoReport.failed.length === 1 ? 'it' : 'them')
+        + ' to the draft in eBay from this device');
+    }
+    // Nothing is owed for the photos that ARE in the column. Saying otherwise
+    // would send the seller to re-attach photographs eBay already has.
+  } else {
+    const why = (photoReport && photoReport.reason
+                 && EXPORT_PHOTO_COPY[photoReport.reason])
+      ? EXPORT_PHOTO_COPY[photoReport.reason]
+      : EXPORT_PHOTO_COPY.NOT_CONFIGURED;
+    owed.push('the photos \u2014 ' + why);
+  }
   owed.push('the condition (and, for a slab, grader/grade/cert) \u2014 the column is present but left blank, so pick it from eBay\u2019s own dropdowns');
   owed.push('any required item specifics eBay asks for in that category');
   owed.push('location, shipping, returns and payment \u2014 your account settings, which this app never collects');
@@ -23717,8 +23962,11 @@ function _ebayDraftCsv(draft, packet) {
      change bytes eBay wrote. The trailing commas pad each row to the header's
      11 fields, which is how eBay's own file is shaped. */
   const cols = ['Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8),Custom label (SKU),Category ID,Title,UPC,Price,Quantity,Item photo URL,Condition ID,Description,Format'];
+  /* Index 7 is `Item photo URL`. It was the empty string in every export
+     before this, which is why Will's 2026-09-12 import carried everything
+     except the photographs. */
   const row  = ['Draft', String(draft.sku || ''), cat, title, '', price,
-                String(qty), '', '', desc, 'FixedPrice'];
+                String(qty), photoField, '', desc, 'FixedPrice'];
 
   /* CRLF: eBay documents that a Unix-created CSV "must be converted from Unix
      format to DOS format before upload". */
@@ -23749,6 +23997,85 @@ const _DRAFT_DL_ACCESS_HTML =
   'business sellers in automatically; private sellers need at least one sale ' +
   'before the Reports tab appears.</p>';
 
+/* ── Download listing photos (the interim path) ──────────────────────────────
+ *
+ * Will's ask, verbatim in intent: until hosted photos exist, "a Download
+ * listing photos button so you can upload them to eBay manually." That is the
+ * whole scope of this function. It does not upload anything and does not touch
+ * the CSV; it hands the seller the image files off their own device so they can
+ * attach them in eBay's draft editor.
+ *
+ * Each photo is saved as its own file, numbered in the seller's own order, so
+ * "1" is the gallery image if they upload them in order.
+ *
+ * UNVERIFIED: whether iOS Safari saves more than one file from a sequence of
+ * programmatic link clicks. It is not claimed to work there. The count of
+ * files actually triggered is reported back, and the copy does not promise a
+ * result on a device this has not been run on.
+ */
+async function downloadListingPhotos(draftId) {
+  const out = { ok: false, saved: 0, total: 0, failed: [], reason: '' };
+  if (!draftId) { out.reason = 'NONE'; return out; }
+
+  let listing = null;
+  try { listing = await photosList(draftId); }
+  catch (_) { out.reason = 'STORE_UNAVAILABLE'; return out; }
+
+  const photos = ((listing && listing.photos) ? listing.photos : []).filter(
+    (p) => p && p.blob && !p.missing);
+  out.total = photos.length;
+  if (!photos.length) { out.reason = 'NONE'; return out; }
+
+  const base = String(draftId).replace(/[^A-Za-z0-9._-]+/g, '-');
+  for (let i = 0; i < photos.length; i++) {
+    const p = photos[i];
+    const type = String(p.type || (p.blob && p.blob.type) || '').toLowerCase();
+    const ext = (type === 'image/png') ? '.png' : '.jpg';
+    const name = base + '-photo-' + String(i + 1) + ext;
+    let url = '';
+    try {
+      url = URL.createObjectURL(p.blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      out.saved += 1;
+    } catch (_) {
+      out.failed.push(p.id);
+    }
+    if (url) {
+      // Revoked on a timer: some browsers have not read the blob when
+      // click() returns.
+      setTimeout(((u) => () => { try { URL.revokeObjectURL(u); } catch (_) {} })(url), 30000);
+    }
+  }
+  out.ok = out.saved > 0;
+  if (!out.ok) out.reason = 'SAVE_FAILED';
+  return out;
+}
+
+/* Copy for the interim button's outcomes. Says what happened -- a count -- and
+   never asserts the files reached the device's photo library, which this code
+   cannot observe. */
+function downloadListingPhotosMessage(res) {
+  if (!res) return '';
+  if (res.reason === 'NONE') return PHOTO_EMPTY_COPY;
+  if (res.reason === 'STORE_UNAVAILABLE') {
+    return 'Your photos could not be read in this browser, so nothing was saved.';
+  }
+  if (!res.ok) {
+    return 'This browser wouldn\u2019t save your photos. Try opening this draft on another device.';
+  }
+  const n = res.saved;
+  return 'Started saving ' + n + ' photo' + (n === 1 ? '' : 's')
+    + ', numbered in listing order. Upload '
+    + (n === 1 ? 'it' : 'them') + ' to the draft in eBay, first photo first.'
+    + (res.failed.length
+        ? ' ' + res.failed.length + ' could not be saved.'
+        : '');
+}
+
 function _draftDownloadPanelHtml(row) {
   const d = _draftsState.dl;
   if (!d || d.draftId !== row.draftId) return '';
@@ -23767,7 +24094,9 @@ function _draftDownloadPanelHtml(row) {
         ${body}
         ${owed}
         ${_DRAFT_DL_ACCESS_HTML}
+        ${d.photoNote ? `<p class="draft-dl-msg" data-dl-photos-note="1">${_draftsEsc(d.photoNote)}</p>` : ''}
         <div class="draft-dl-foot">
+          <button type="button" class="draft-act" data-dl-photos="${_draftsEsc(row.draftId)}">Download listing photos</button>
           <button type="button" class="draft-act" data-dl-close="1">Close</button>
         </div>
       </div>`;
@@ -23819,7 +24148,20 @@ async function _draftDownloadGo(draftId) {
   // `packet` is null when the read gate withholds a stale one. That is not a
   // failure to hide: without it there is no category, and the file says so.
   const packet = resp.body.packet || null;
-  const { csv, owed } = _ebayDraftCsv(draft, packet);
+  /* Photos are hosted BEFORE the file is built, because the URLs have to be
+     in the bytes the seller downloads -- there is no second pass over a file
+     that has already been saved. A failure here does not abort the export:
+     the file is still worth having, and the disclosure says the column is
+     blank and why. */
+  let photoReport = null;
+  try {
+    photoReport = await ensureExportablePhotos(draftId);
+  } catch (_) {
+    photoReport = { ok: false, urls: [], uploaded: 0, failed: [], skipped: [],
+                    reason: EXPORT_PHOTO_REASON.UPLOAD_FAILED };
+  }
+
+  const { csv, owed } = _ebayDraftCsv(draft, packet, photoReport);
 
   const name = 'ebay-draft-' + String(draft.sku || draftId).replace(/[^A-Za-z0-9._-]+/g, '-') + '.csv';
   let ok = false;
@@ -23875,6 +24217,24 @@ function _draftsBindOnce() {
     if (eCancel) { _draftEditCancel(); return; }
     const wBtn = ev.target.closest && ev.target.closest('[data-draft-download]');
     if (wBtn) { _draftDownloadGo(wBtn.getAttribute('data-draft-download')); return; }
+    const dlPhotos = ev.target.closest && ev.target.closest('[data-dl-photos]');
+    if (dlPhotos) {
+      /* A data attribute read off the element, not an id interpolated into an
+         onclick string. */
+      const pid = dlPhotos.getAttribute('data-dl-photos');
+      downloadListingPhotos(pid).then((res) => {
+        const d = _draftsState.dl;
+        if (!d || d.draftId !== pid) return;
+        d.photoNote = downloadListingPhotosMessage(res);
+        _draftsPaint();
+      }).catch(() => {
+        const d = _draftsState.dl;
+        if (!d || d.draftId !== pid) return;
+        d.photoNote = downloadListingPhotosMessage(null) || 'Your photos could not be saved.';
+        _draftsPaint();
+      });
+      return;
+    }
     const wNo = ev.target.closest && ev.target.closest('[data-dl-close]');
     if (wNo) { _draftDownloadClose(); return; }
     const dBtn = ev.target.closest && ev.target.closest('[data-draft-delete]');
