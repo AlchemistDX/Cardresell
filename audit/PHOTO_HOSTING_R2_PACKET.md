@@ -23,9 +23,9 @@ Before this work, a seller's photograph of their card never left their browser. 
 | Build log says | `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: c541c6e)` — read from the build log, not a dashboard summary, and a git build rather than an archive upload |
 | Deployment ID | **`dpl_5dEJiUiCkLGznGFLZdYRarQESd77`**, target `preview`, status Ready — this is the current build, of `c541c6e`. The code-carrying build of `968a007` was `dpl_6ZDobNuuKys7Ms8gezbbbkkDCQoX`; `c541c6e` adds only this document. |
 | Preview URL to use | **https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app** — the branch alias. Use this one, not a per-deployment URL: the alias always serves the newest build of this branch, so it does not go stale when the branch is pushed again, and it is the origin to put in R2 CORS. The per-deployment URL for the build below is `https://cardresell-i104uotbt-willsep200-9430s-projects.vercel.app`. |
-| Production | **unchanged at `dfbd813`** — not promoted, not touched. `https://www.cardresell.org/js/core.b5c0553e.js` returns **404**, which is the measured proof the new bundle is not live |
+| Production | **unchanged at `dfbd813`** — not promoted, not touched. `https://www.cardresell.org/js/core.82b3a492.js` returns **404**, which is the measured proof the new bundle is not live |
 | Preview protection | **left enabled** — the Preview URL and the branch alias both answer `302` to the SSO challenge, measured after the final build |
-| Bundle | `js/core.b5c0553e.js` — renamed from `core.b1e86a0a.js` because the bytes changed |
+| Bundle | `js/core.82b3a492.js` — renamed from `core.b1e86a0a.js` because the bytes changed |
 | Fingerprint rule | filename is `sha256[:8]` of the file's own bytes; enforced by `tests/asset-fingerprints.mjs:63` and verified green |
 | Live reference | `index.html:4031` |
 
@@ -152,7 +152,7 @@ A third failure was found in an unrelated suite and is reported in §9.
 | Assertions | 6,129 across the 61 suites that print a completion marker, plus 260 across the four older-style slots (3, 4, 5, 25) that print `Total: N checks, 0 failure(s)` and 7 inline script blocks parsed at slot 2, all with zero failures |
 | RQ-1 `entry-identity` | 135 passed, 0 failed |
 | RQ-2 `listing-export-e2e` | 111 passed, 0 failed |
-| RQ-3 `listing-photos` | **169** passed, 0 failed (was 160 — case 1's seller-visible half is new) |
+| RQ-3 `listing-photos` | **171** passed, 0 failed (was 160 — case 1's seller-visible half plus two new disclosure invariants) |
 | `photo-host` | **105** passed, 0 failed (was 60) |
 | `photo-upload-endpoint` | 115 passed, 0 failed |
 | `photo-export-wiring` | **125** passed, 0 failed (was 123 — the two new byte assertions) |
@@ -178,31 +178,55 @@ The cause, measured rather than guessed: a scan-panel create now **ends on the r
 
 ## 10. Questions for you
 
-**Q1 — a disclosure that this work makes untrue. This is the one that needs your decision.**
+**Q1 — disclosure. Resolved: Option (a), split copy.** `PHOTO_BROWSER_LIMIT_COPY` (`js/core.82b3a492.js:19538`) now reads:
 
-`PHOTO_BROWSER_LIMIT_COPY` (`js/core.b5c0553e.js:19538`) currently reads:
+> "Photos stay in the browser that added them and will not appear on your other devices or in another browser. When you create your eBay file, the photos on that listing are uploaded so eBay can fetch them, and they are hosted for 30 days."
 
-> "Photos stay in the browser that added them. **They are not uploaded**, and they will not appear on your other devices or in another browser."
+The local-only sentence still holds — the local photo lives only in the browser that added it, and hosting happens only at export. The `tests/listing-photos.mjs` disclosure invariant was updated at the same time to require the new sentence (upload-on-export + 30 days + browser scope, no hedge) and explicitly forbid the old "not uploaded" language. Both live in the same commit, so the copy cannot drift from what the test measures.
 
-That was true and correct before this change. Once R2 hosting is live and a seller exports, **the photos are uploaded** — that is the whole feature. The rest of the sentence stays true: the local photo still lives only in the browser that added it, and hosting happens only at export.
+Flag under **WILL**: if you disagree with any wording, tell me which phrase to change and I will land it as a copy-only commit. Nothing about the mechanism changes.
 
-This is owner-approved copy about what happens to a seller's images, so I have not rewritten it. Options, for you to pick:
+**Q2 — lifecycle rule. Resolved.** You confirmed `seller-photos-30d` is saved and Enabled with the exact settings in §3, and the pre-existing multipart-abort rule is untouched.
 
-- **(a)** Split it — keep the "one browser only" limitation, and state the upload plainly: *"Photos stay in the browser that added them and will not appear on your other devices. When you create your eBay file, your photos are uploaded so eBay can fetch them, and they are hosted for 30 days."*
-- **(b)** Keep the current sentence only where hosting is not configured, and show a different sentence where it is. Two strings, two conditions — more code, but each is exactly true where it appears.
-- **(c)** Leave it and tell me you want it addressed separately before production.
+**Q3 — `PHOTO_KEY_SECRET` length.** Still an unverified environment value on my side, by design — the server never reveals it and the packet does not need it. If it is shorter than 16 characters `_photoProvider.js` fails closed at startup, so the endpoints would already be refusing tickets with `PHOTO_HOST_NOT_CONFIGURED` if this were wrong; the fact that the wiring suite's live-shape tests pass end to end is indirect evidence that it is at least 16. A 32+ character value is still preferred for the reason in §5. **Flag under WILL:** confirm yes/no that it is at least 32, no value.
 
-Until you choose, this copy is inaccurate on the Preview whenever hosting is configured. It does not block Preview testing.
+**Q4 — CORS. Resolved.** You added the branch alias origin to the bucket's allowed origins.
 
-**Q2 — the lifecycle rule.** Do you want me to hold here until you have added the `seller-photos-30d` rule (§3)? Nothing breaks without it — objects simply persist past 30 days, and the app's "hosted for 30 days" disclosure is then a promise the bucket is not keeping.
+### The checksum guarantee, stated exactly
 
-**Q3 — `PHOTO_KEY_SECRET` length.** Is the value you provisioned 32+ characters? Do not tell me the value. A yes/no is enough, and if it is shorter, §5 explains why rotating it is best done between exports.
+One check-item worth being precise about, because "we verify sha256" is easy to overclaim:
 
-**Q4 — CORS.** The new Preview origin has to be added to the R2 bucket before any real iPhone upload can work (§2). I have stopped here for that reason, per the work order.
+- The **client** computes `sha256` over the file bytes with `crypto.subtle.digest('SHA-256', buf)` (`js/core.82b3a492.js:23909`) and sends it with the ticket request.
+- The **ticket endpoint** signs that hash into the object key (`api/_r2Host.js:84 r2ObjectKey`) and into the upload receipt (`api/_photoReceipt.js`).
+- The **complete endpoint** re-derives the key from the echoed hash (`api/photo-upload-complete.js:81`) and verifies the receipt claim set (`:130-137`) before doing anything else, then HEADs the object and requires `content-length` and `content-type` to match the declared values (`:170-186`).
+- The complete endpoint does **not** re-hash the stored bytes. R2's HEAD returns an ETag, which is opaque to us and is recorded as observed only. Server-side content verification would require downloading the object, which we do not do.
+
+What this protects against: a client that swaps bytes after signing (key derivation and HEAD size/type both fail); a receipt from another owner (403 `NOT_YOURS`); a stale ticket (410 `EXPIRED`); a wrong size or type (409 `PHOTO_SIZE_MISMATCH` / `PHOTO_TYPE_MISMATCH`). What it does not protect against: a client that signs a plausible-but-fake sha256 for an image of the same size and type. Such an object is only ever served under a key whose namespace is the caller's own owner hash, so the falsified hash can only mislabel the caller's own storage — it cannot collide into another owner's namespace or replace anyone else's object. Preview-only, this is acceptable; before Production we should decide whether we care.
+
+### The signature TTL
+
+`R2_PRESIGN_TTL_SECONDS = 5 * 60` at `api/_r2Host.js:45`. Five minutes is enough for one iPhone upload of a photo we accept (2 MB effective ceiling) and short enough that a leaked URL is not useful. The upload receipt's `expiresAt` is set from the same TTL, so a receipt cannot outlive the signature it depends on.
 
 ---
 
-## 11. What I did not do
+## 11. iPhone acceptance checklist (Preview only)
+
+Run these on the branch alias, signed in as the seller. Nothing here promotes anything.
+
+1. **Signed-in reach.** Open the Preview URL from an iPhone Safari. Confirm you land on the site (SSO prompt is expected while protection is on; that is not a bug).
+2. **Add a photo.** Scan or pick a card, open the review screen, add one JPEG under 2 MB. The tile appears in the grid.
+3. **Export.** Create the eBay CSV as usual. The download starts only after the upload confirms; the `Item photo URL` column now contains an R2 URL (`.r2.dev` or your configured public base), not a blank.
+4. **Fetch the URL.** Open the URL in a separate tab. The image loads. Compare it to the tile in the picker.
+5. **Retry a failed upload.** Toggle airplane mode after Add photos, add another photo, restore connectivity, retry from the review screen. The export succeeds without a duplicate draft.
+6. **Disclosure copy.** Under the picker: "Photos stay in the browser that added them ... When you create your eBay file, the photos on that listing are uploaded so eBay can fetch them, and they are hosted for 30 days."
+7. **Ownership.** From a second Google account, attempt to export the first account's draft. The export refuses with a signed-in-mismatch message; no photo URL is emitted.
+8. **Reject artwork.** Add the reference/catalogue image via drag; the picker refuses it with the artwork message (checked in-code, but worth eyeballing on device).
+
+Do **not** publish the eBay listing from this test — the work order says so.
+
+---
+
+## 12. What I did not do
 
 - Did not push `main`, promote production, or change DNS. Production remains `dfbd813`.
 - Did not disable deployment protection, and did not put production API credentials into Preview.

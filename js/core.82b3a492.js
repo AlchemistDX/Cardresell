@@ -19535,7 +19535,7 @@ function photoStorageFailureMessage(err) {
    absent manifest is not evidence of an empty history (D7 gate §6.1). */
 const PHOTO_EMPTY_COPY = 'No listing photos are available in this browser.';
 const PHOTO_MISSING_COPY = 'This photo is no longer available in this browser.';
-const PHOTO_BROWSER_LIMIT_COPY = 'Photos stay in the browser that added them. They are not uploaded, and they will not appear on your other devices or in another browser.';
+const PHOTO_BROWSER_LIMIT_COPY = 'Photos stay in the browser that added them and will not appear on your other devices or in another browser. When you create your eBay file, the photos on that listing are uploaded so eBay can fetch them, and they are hosted for 30 days.';
 
 window.photosAdd = photosAdd;
 window.photosAttachScan = photosAttachScan;

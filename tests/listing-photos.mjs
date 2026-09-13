@@ -279,9 +279,20 @@ const dropBlob = (page, photoId) => page.evaluate((pid) => new Promise((resolve,
   const limit = await page.evaluate(() => window.PHOTO_BROWSER_LIMIT_COPY);
   T.check('the limitation copy is browser-scoped, not device-scoped',
     /browser/i.test(limit), limit);
-  T.check('the limitation copy states no upload happens', /not uploaded/i.test(limit), limit);
+  /* Before R2 hosting the copy said "not uploaded". That sentence is no longer
+     true: creating the eBay file uploads the photos on that listing so eBay can
+     fetch them. The invariant is now that the copy states the upload happens on
+     export and the 30-day retention that goes with it, and that it still says
+     the local photo lives only in the browser that added it. */
+  T.check('the limitation copy states the upload happens on export',
+    /uploaded/i.test(limit) && /(create your ebay file|eBay file|when you create)/i.test(limit),
+    limit);
+  T.check('the limitation copy states the 30-day hosting window',
+    /30 days/i.test(limit), limit);
   T.check('the limitation copy is unconditional — no "if"/"when applicable" hedge',
     !/\bif you\b|when applicable|may not/i.test(limit), limit);
+  T.check('the limitation copy does not falsely claim no upload happens',
+    !/not uploaded/i.test(limit), limit);
   await ctx.close();
 }
 
