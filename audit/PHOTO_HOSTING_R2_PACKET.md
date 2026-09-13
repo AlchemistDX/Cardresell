@@ -19,10 +19,10 @@ Before this work, a seller's photograph of their card never left their browser. 
 | Item | Value |
 |---|---|
 | Branch | `fix/listing-export-identity` (**main was not pushed**) |
-| Commit | code: **`968a007`** · current branch head, adding this document: **`c541c6e`** |
-| Build log says | `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: c541c6e)` — read from the build log, not a dashboard summary, and a git build rather than an archive upload |
-| Deployment ID | **`dpl_5dEJiUiCkLGznGFLZdYRarQESd77`**, target `preview`, status Ready — this is the current build, of `c541c6e`. The code-carrying build of `968a007` was `dpl_6ZDobNuuKys7Ms8gezbbbkkDCQoX`; `c541c6e` adds only this document. |
-| Preview URL to use | **https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app** — the branch alias. Use this one, not a per-deployment URL: the alias always serves the newest build of this branch, so it does not go stale when the branch is pushed again, and it is the origin to put in R2 CORS. The per-deployment URL for the build below is `https://cardresell-i104uotbt-willsep200-9430s-projects.vercel.app`. |
+| Commit | **`c9b50ad`** on `fix/listing-export-identity` — one commit carries the R2 mechanism, the disclosure fix, the invariant update, and the bundle rename |
+| Build log says | `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: c9b50ad)` — read from the build log, not a dashboard summary, and a git build rather than an archive upload |
+| Deployment ID | **`dpl_AFqdiQAX1fysF33MZEfrDwES6mKs`**, target `preview`, status Ready |
+| Preview URL to use | **https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app** — the branch alias, which now serves `c9b50ad` and is the origin already in R2 CORS. The per-deployment URL for this build is `https://cardresell-801ba95av-willsep200-9430s-projects.vercel.app`. |
 | Production | **unchanged at `dfbd813`** — not promoted, not touched. `https://www.cardresell.org/js/core.82b3a492.js` returns **404**, which is the measured proof the new bundle is not live |
 | Preview protection | **left enabled** — the Preview URL and the branch alias both answer `302` to the SSO challenge, measured after the final build |
 | Bundle | `js/core.82b3a492.js` — renamed from `core.b1e86a0a.js` because the bytes changed |
