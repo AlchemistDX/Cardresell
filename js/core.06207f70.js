@@ -23820,7 +23820,14 @@ const _EXPORT_PHOTO_TYPES = { 'image/jpeg': true, 'image/jpg': true, 'image/png'
  * buyers see first.
  */
 async function ensureExportablePhotos(draftId) {
-  const empty = { ok: false, urls: [], uploaded: 0, failed: [], skipped: [], reason: '' };
+  /* `localCount` counts photos the seller's manifest names, whether or not
+     the blob record is currently readable. It is what the caller uses to tell
+     "nothing to host" from "a photo is present but the export could not turn
+     it into a URL" -- the second case must stop the download, not silently
+     produce a blank photo column. `usableCount` is the subset with a readable
+     blob, i.e. the photos that were actually eligible to upload. */
+  const empty = { ok: false, urls: [], uploaded: 0, failed: [], skipped: [],
+                  localCount: 0, usableCount: 0, missingCount: 0, reason: '' };
   if (!draftId) return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
 
   let listing = null;
@@ -23832,11 +23839,16 @@ async function ensureExportablePhotos(draftId) {
   }
   const photos = (listing && listing.photos) ? listing.photos : [];
   const usable = photos.filter((p) => p && p.blob && !p.missing);
-  if (!usable.length) return { ...empty, reason: EXPORT_PHOTO_REASON.NONE };
+  const localCount = photos.length;
+  const usableCount = usable.length;
+  const missingCount = localCount - usableCount;
+  if (!usable.length) return { ...empty, localCount, usableCount, missingCount,
+    reason: EXPORT_PHOTO_REASON.NONE };
 
   let token = '';
   try { token = await _crIdToken(); } catch (_) { token = ''; }
-  if (!token) return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
+  if (!token) return { ...empty, localCount, usableCount, missingCount,
+    reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
 
   const hostedNow = (listing && listing.hosted) ? listing.hosted : {};
   const urls = [];
@@ -23875,7 +23887,8 @@ async function ensureExportablePhotos(draftId) {
        state is reported once rather than as N identical per-photo failures. */
     if (step.reason === 'NOT_CONFIGURED') { notConfigured = true; break; }
     if (step.reason === 'MISCONFIGURED') { misconfigured = true; break; }
-    if (step.reason === 'SIGNED_OUT') return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
+    if (step.reason === 'SIGNED_OUT') return { ...empty, localCount, usableCount, missingCount,
+      reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
 
     if (!step.ok) { failed.push({ id: p.id, reason: step.reason }); continue; }
 
@@ -23892,13 +23905,17 @@ async function ensureExportablePhotos(draftId) {
     try { await photosSetHosted(draftId, fresh); } catch (_) {}
   }
 
-  if (notConfigured) return { ...empty, reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
-  if (misconfigured) return { ...empty, reason: EXPORT_PHOTO_REASON.MISCONFIGURED };
+  if (notConfigured) return { ...empty, localCount, usableCount, missingCount,
+    reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
+  if (misconfigured) return { ...empty, localCount, usableCount, missingCount,
+    reason: EXPORT_PHOTO_REASON.MISCONFIGURED };
   if (!urls.length) {
     return { ok: false, urls: [], uploaded: 0, failed, skipped, reused: 0, renewed: 0,
+             localCount, usableCount, missingCount,
              reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : EXPORT_PHOTO_REASON.NONE };
   }
   return { ok: true, urls, uploaded: fresh.length, failed, skipped, reused, renewed,
+           localCount, usableCount, missingCount,
            reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : '' };
 }
 
@@ -24339,7 +24356,7 @@ function _draftDownloadPanelHtml(row) {
   const photoRetry = (d.photoRetry && !d.busy)
     ? `<div class="draft-dl-photo-retry" data-dl-photo-retry-row="1">
          <p class="draft-dl-msg">${_draftsEsc(d.photoRetry.text)}</p>
-         <button type="button" class="draft-act" data-dl-photo-retry="${_draftsEsc(row.draftId)}">Retry photos and rebuild file</button>
+         <button type="button" class="draft-act" data-dl-photo-retry="${_draftsEsc(row.draftId)}">${_draftsEsc(d.photoRetry.label || 'Retry photos and rebuild file')}</button>
        </div>`
     : '';
   return `
@@ -24415,44 +24432,89 @@ async function _draftDownloadGo(draftId) {
                     reason: EXPORT_PHOTO_REASON.UPLOAD_FAILED };
   }
 
-  /* ── WHEN HOSTING IS WORKING, A FAILED UPLOAD STOPS THE FILE ──────────────
-     This used to build the file anyway and disclose the shortfall. That was
-     the wrong trade once hosting actually works. The seller's next action is
-     to import this file into eBay, and an imported draft with two of three
-     photographs is not something a disclosure in our UI can undo -- they have
-     to notice, delete the draft, and start again. Refusing to produce the file
-     keeps the only cheap moment to fix it.
+  /* ── LOCAL PHOTO PRESENT BUT NO URL SHIPPED = STOP THE DOWNLOAD ───────────
+     Will's evidence 2026-09-13: one seller photo is in the review-screen
+     manifest, that photo appears in the draft's thumbnail, and yet the CSV
+     downloaded from the drafts panel had a blank `Item photo URL`. The old
+     rule stopped the download only when hosting was configured AND the upload
+     failed (`hostingLive && failedCount`); it fell through to a blank column
+     in every other "nothing landed" state, including `NONE` from a missing
+     blob, `SIGNED_OUT` from a stale token on the ticket call, and hosting
+     that reported itself unconfigured while the manifest still held a photo.
+     Any of those, when a real local photo exists, silently exports a draft
+     the seller then imports into eBay with no photograph -- which the review
+     copy has now explicitly promised will not happen.
                                                                        ~
-     It stops ONLY when hosting is configured and an upload of a photo the
-     seller actually has failed. The states where nothing could have uploaded
-     -- hosting not set up, misconfigured, signed out, no photos at all -- keep
-     their existing behaviour: the file is built and the disclosure says the
-     photo column is blank and why. Withholding the file there would leave a
-     seller with no export at all on a deployment where hosting was never
-     switched on.
+     The rule is now `localCount > 0 && urls.length === 0`: if the seller has
+     photos, we ship URLs or we ship nothing. The `reason` selects the
+     sentence so the seller knows which action to take -- retry, sign in,
+     re-attach a missing photo, wait for hosting to be switched on.
                                                                        ~
-     The draft and every local photo are untouched, and the retry control is
-     offered on this same panel. */
-  const hostingLive = photoReport
-    && photoReport.reason !== EXPORT_PHOTO_REASON.NOT_CONFIGURED
-    && photoReport.reason !== EXPORT_PHOTO_REASON.MISCONFIGURED
-    && photoReport.reason !== EXPORT_PHOTO_REASON.SIGNED_OUT;
+     The state with no local photos at all keeps building the file: on a
+     deployment where hosting is never turned on and the seller has no local
+     photos either, they still need an export. The draft and every local
+     photo are untouched. */
+  const localCount = Number.isFinite(photoReport && photoReport.localCount)
+    ? photoReport.localCount : 0;
+  const hostedCount = (photoReport && Array.isArray(photoReport.urls))
+    ? photoReport.urls.length : 0;
   const failedCount = (photoReport && Array.isArray(photoReport.failed))
     ? photoReport.failed.length : 0;
+  const missingCount = Number.isFinite(photoReport && photoReport.missingCount)
+    ? photoReport.missingCount : 0;
 
-  if (hostingLive && failedCount) {
+  /* Also stop when SOME uploads failed while others succeeded. An imported
+     eBay draft missing one photograph cannot be undone by a disclosure in our
+     UI, so partial success is not an export either -- ship every photo, or
+     ship nothing. `failedCount > 0` covers this case; the `hostedCount === 0`
+     clause above covers the field bug where nothing landed at all. */
+  if (localCount > 0 && (hostedCount === 0 || failedCount > 0)) {
+    /* Sentence selection follows the report's `reason`. Every one of these
+       ends the same way -- no file was built, nothing was exported, draft and
+       photos are unchanged -- so a seller who mis-clicks does not lose work. */
+    let msg;
+    let retryLabel = 'Retry photos and rebuild file';
+    switch (photoReport && photoReport.reason) {
+      case EXPORT_PHOTO_REASON.SIGNED_OUT:
+        msg = 'No file was created, because you were signed out before your photo could be uploaded. Sign in and download this draft again. Nothing was exported. Your draft and your photos are unchanged.';
+        retryLabel = 'Sign in and try again';
+        break;
+      case EXPORT_PHOTO_REASON.NOT_CONFIGURED:
+        msg = 'No file was created, because photo hosting is not switched on for this deployment and you have a local photo on this draft. Nothing was exported. Your draft and your photos are unchanged. Use Download listing photos and add them in eBay by hand until hosting is switched on.';
+        break;
+      case EXPORT_PHOTO_REASON.MISCONFIGURED:
+        msg = 'No file was created, because photo hosting is switched on but is not set up correctly. Nothing was exported. Your draft and your photos are unchanged. Use Download listing photos and add them in eBay by hand while this is fixed.';
+        break;
+      case EXPORT_PHOTO_REASON.UPLOAD_FAILED:
+        msg = failedCount === 1
+          ? 'No file was created, because one of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.'
+          : 'No file was created, because ' + failedCount + ' of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.';
+        break;
+      case EXPORT_PHOTO_REASON.NONE:
+      default:
+        // Local photo(s) named in the manifest but none had a readable blob
+        // -- Safari eviction, a store that could not open, or a manifest that
+        // still points at a blob record that has been pruned.
+        msg = missingCount === 1
+          ? 'No file was created, because a photo on this draft is no longer available in this browser. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photo.'
+          : missingCount + ' photos on this draft are no longer available in this browser, so no file was created. Nothing was exported. Your draft is unchanged. Open the review screen and re-add the affected photos.';
+        retryLabel = 'Open review screen';
+        break;
+    }
     const d0 = _draftsState.dl;
     if (d0 && d0.draftId === draftId) {
-      d0.photoRetry = {
-        count: failedCount,
-        text: failedCount === 1
-          ? 'One photo could not be uploaded, so nothing was exported. Your draft and your photos are unchanged.'
-          : failedCount + ' photos could not be uploaded, so nothing was exported. Your draft and your photos are unchanged.',
-      };
+      /* `count` is the number the seller reads back on the retry panel. It is
+         the count of what went wrong -- not the fleet size -- so a partial
+         upload where 1 of 3 failed shows 1, and a manifest naming a photo
+         with a missing blob shows the missing count. When neither is
+         available (SIGNED_OUT/NOT_CONFIGURED/MISCONFIGURED before the loop
+         runs) we fall back to `localCount` so the count is never 0. */
+      const count = failedCount > 0 ? failedCount
+                   : missingCount > 0 ? missingCount
+                   : localCount;
+      d0.photoRetry = { count, text: msg, label: retryLabel };
     }
-    fail(failedCount === 1
-      ? 'No file was created, because one of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.'
-      : 'No file was created, because ' + failedCount + ' of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.');
+    fail(msg);
     return;
   }
 
