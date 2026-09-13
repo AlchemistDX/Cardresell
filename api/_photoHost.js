@@ -210,29 +210,11 @@ export function makeFakePhotoHost({ baseUrl = 'https://photos.test.invalid', fai
   };
 }
 
-/**
- * Resolve the configured host, or null.
- *
- * NULL IS A SUPPORTED ANSWER and the current one. No provider is registered,
- * because choosing one commits to paid storage and that decision is the
- * seller's to take on a costed proposal. Every caller must therefore handle
- * null by SAYING photos were not hosted -- which is the whole point of
- * returning null rather than a stub that yields unreachable URLs.
- *
- * When a provider is chosen, it is registered here by name and selected with
- * PHOTO_HOST_PROVIDER; nothing else in the codebase changes.
- */
-export function photoHostFromEnv(env = process.env) {
-  const provider = String((env && env.PHOTO_HOST_PROVIDER) || '').trim().toLowerCase();
-  if (!provider) return null;
-  if (provider === 'fake') {
-    // Reachable only where the base URL is also supplied, so a stray value in
-    // a real environment cannot silently route seller photographs to a fake.
-    const baseUrl = String((env && env.PHOTO_HOST_BASE_URL) || '').trim();
-    if (!baseUrl) return null;
-    return makeFakePhotoHost({ baseUrl });
-  }
-  // Unknown name: null, not a throw. An environment typo must degrade to
-  // "photos were not hosted, and we said so" rather than 500 the export.
-  return null;
-}
+/* RESOLUTION LIVES IN `_photoProvider.js`.
+
+   There used to be a `photoHostFromEnv` here. When the R2 provider arrived it
+   had to import this file's export contract, which would have made the two
+   modules circular, so resolution moved up into its own module. It is NOT
+   duplicated here: a second resolver is exactly the two-answers-to-one-
+   question shape this codebase forbids, and the one that stayed behind would
+   be the one that never learned about R2. */

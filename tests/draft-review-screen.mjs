@@ -2881,14 +2881,58 @@ try {
        here; the earlier fixture simply assumed the panel stayed on screen.
        This is a NAVIGATION step, not a behaviour override: nothing about the
        create path is stubbed. */
+    /* FIXTURE RACE, found 2026-09-13 and recorded rather than papered over.
+       This helper switched straight back to the lookup view. But the create it
+       is recovering from ends by LANDING ON REVIEW, and that landing is
+       asynchronous: `openDraftReview` awaits the draft read and only then
+       calls `switchView('review')`. So `backToPanel` could run, show the
+       button, and then have the still-in-flight landing hide `lookupView`
+       underneath it -- after which `page.click('#crSellBtn')` waited out its
+       full timeout on an element that was visible a moment earlier.
+
+       Measured, not guessed: with the wait shortened, the failure MOVED from
+       the `waitForSelector` inside this helper to the `click` after it, which
+       is only possible if the button became visible and was then hidden again.
+       Every ancestor computed to a visible display at that instant
+       (core.b5c0553e.js:9723 removes .hidden from lookupView), so this was
+       never a styling problem.
+
+       The fixture was wrong, not the product: a seller cannot race the
+       navigation, because they cannot press a button that is not on screen
+       yet. So the helper now waits for the landing to SETTLE before it
+       navigates back, and re-asserts visibility after a beat to catch a
+       landing that settles late. No assertion was removed or relaxed. */
     const backToPanel = async () => {
-      await page.evaluate((A) => {
-        try { switchView('lookup'); } catch (_) {}
-        window._crSellApproved = A;
-        const row = document.getElementById('crSellRow');
-        if (row) row.style.display = '';
+      /* The settle is done INSIDE the page, in one call, so no round trip
+         between "show it" and "check it" can hide the middle. Each tick
+         re-asserts the lookup view and the sell row, then requires the button
+         to have measured visible for several consecutive ticks. A landing
+         that settles late therefore extends the loop instead of defeating a
+         one-shot check. Nothing about the create path is stubbed and no
+         assertion is relaxed: this is navigation, and it either reaches a
+         stably visible button or it throws. */
+      await page.evaluate(async (A) => {
+        const NEEDED = 5, TICK = 40, DEADLINE = Date.now() + 10000;
+        let stable = 0;
+        while (Date.now() < DEADLINE) {
+          const lv = document.getElementById('lookupView');
+          if (!lv || lv.classList.contains('hidden')) { try { switchView('lookup'); } catch (_) {} }
+          window._crSellApproved = A;
+          const row = document.getElementById('crSellRow');
+          if (row) row.style.display = '';
+          const b = document.getElementById('crSellBtn');
+          const r = b ? b.getBoundingClientRect() : null;
+          const shown = !!(r && r.width > 0 && r.height > 0
+            && getComputedStyle(b).visibility !== 'hidden');
+          stable = shown ? stable + 1 : 0;
+          if (stable >= NEEDED) return;
+          await new Promise((res) => setTimeout(res, TICK));
+        }
+        throw new Error('backToPanel: #crSellBtn never stayed visible; data-view='
+          + document.body.getAttribute('data-view'));
       }, CARD_A);
-      await page.waitForSelector('#crSellBtn', { state: 'visible', timeout: 10000 });
+      /* And Playwright's own definition of visible, from outside the page. */
+      await page.waitForSelector('#crSellBtn', { state: 'visible', timeout: 5000 });
     };
 
     // ── 1. The panel path: card B priced, then card A loaded, no new read.

@@ -27,8 +27,12 @@ import {
   checkUploadable,
   photoObjectKey,
   makeFakePhotoHost,
-  photoHostFromEnv,
 } from '../api/_photoHost.js';
+/* Resolution moved to its own module when R2 arrived, to keep exactly one
+   resolver. The assertions below are unchanged in meaning: they still ask
+   what the app resolves from an environment, only now of the module that
+   actually answers that question. */
+import { photoHostFromEnv } from '../api/_photoProvider.js';
 
 const T = harness('photo hosting contract');
 
@@ -251,5 +255,194 @@ await T.section('no host is configured, and that is reported rather than faked',
   });
   T.check('provider=fake with a base url resolves the fake', h && h.name === 'fake');
 });
+
+// ── the resolver refuses a present-but-wrong setting ─────────────────────────
+
+await T.section('a malformed setting fails closed, and says which one without echoing it', async () => {
+  const { r2HostFromEnv } = await import('../api/_r2Host.js');
+
+  /* A configuration that IS valid, so every refusal below is attributable to
+     the one field it changes. These are shapes, not credentials: the account
+     id is 32 hex because Cloudflare account ids are, and the keys are the
+     right lengths. */
+  const GOOD = {
+    R2_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
+    R2_ACCESS_KEY_ID: '0f1e2d3c4b5a69788796a5b4c3d2e1f0',
+    R2_SECRET_ACCESS_KEY: 'f'.repeat(64),
+    R2_BUCKET: 'cardresell-ebay-photos',
+    PHOTO_HOST_PUBLIC_BASE_URL: 'https://photos.example.org',
+    PHOTO_KEY_SECRET: 'a-photo-key-secret-not-a-real-one',
+  };
+  const good = r2HostFromEnv(GOOD, async () => ({ ok: true, status: 200, headers: { get: () => null } }));
+  T.check('the valid configuration resolves', good.ok === true && good.host.name === 'r2',
+    JSON.stringify(good.missing || good.invalid || 'ok'));
+
+  /* Each row is a value that cannot possibly be right. A present-but-wrong
+     setting is worse than an absent one: it produces signed URLs nothing
+     accepts, or public URLs eBay cannot fetch, and the seller watches
+     photographs silently not arrive. */
+  const bad = [
+    ['R2_ACCOUNT_ID', 'acct-test', 'a placeholder rather than the 32-hex account id'],
+    ['R2_ACCOUNT_ID', '0123456789abcdef', 'the right alphabet but the wrong length'],
+    ['R2_BUCKET', 'Cardresell_Photos', 'capitals and an underscore, which R2 will not accept'],
+    ['R2_BUCKET', 'a', 'too short to be a bucket name'],
+    ['PHOTO_HOST_PUBLIC_BASE_URL', 'http://photos.example.org', 'plain http, which eBay will not fetch'],
+    ['PHOTO_HOST_PUBLIC_BASE_URL', 'photos.example.org', 'no scheme at all'],
+    ['PHOTO_KEY_SECRET', 'changeme', 'a placeholder secret'],
+    ['R2_ACCESS_KEY_ID', 'ak-test', 'a placeholder access key id'],
+    ['R2_SECRET_ACCESS_KEY', 'sk-test', 'a placeholder secret access key'],
+  ];
+  for (const [field, value, why] of bad) {
+    const r = r2HostFromEnv({ ...GOOD, [field]: value });
+    T.check(`🔴 ${field} = ${why} is refused`,
+      r.ok === false && Array.isArray(r.invalid) && r.invalid.includes(field),
+      JSON.stringify({ ok: r.ok, missing: r.missing, invalid: r.invalid }));
+    /* The refusal names the setting. It must never carry the value, because
+       three of these fields are credentials and this array is rendered into a
+       500 response body. Checked against the reported NAMES rather than the
+       whole object: `JSON.stringify(r)` contains the word "false", so a
+       one-character test value like "a" made this pass-or-fail by accident
+       rather than by substance. */
+    if (value.length > 3) {
+      T.check(`and the refusal does not echo the ${field} value`,
+        !JSON.stringify({ missing: r.missing, invalid: r.invalid }).includes(value),
+        JSON.stringify({ missing: r.missing, invalid: r.invalid }));
+    }
+    T.check(`no host is handed back for a bad ${field}`, !r.host, String(!!r.host));
+  }
+
+  /* Absent is still reported, through the same channel, so a caller that
+     already renders `missing` keeps working. */
+  const gone = r2HostFromEnv({ ...GOOD, R2_BUCKET: '' });
+  T.check('an absent setting is reported as missing, not as invalid',
+    gone.ok === false && gone.missing.includes('bucket') && !gone.invalid,
+    JSON.stringify(gone));
+
+  /* And the secret floor is 16, deliberately not 32 -- a working deployment's
+     provisioned secret must not be rejected by a rule this code cannot even
+     print the value to justify. */
+  const sixteen = r2HostFromEnv({ ...GOOD, PHOTO_KEY_SECRET: 'x'.repeat(16) });
+  T.check('a sixteen-character secret is accepted', sixteen.ok === true, JSON.stringify(sixteen));
+  const fifteen = r2HostFromEnv({ ...GOOD, PHOTO_KEY_SECRET: 'x'.repeat(15) });
+  T.check('fifteen is not', fifteen.ok === false && fifteen.invalid.includes('PHOTO_KEY_SECRET'),
+    JSON.stringify(fifteen));
+});
+
+await T.section('the HEAD reports the provider ETag as an opaque identity', async () => {
+  const { makeR2Host } = await import('../api/_r2Host.js');
+  const calls = [];
+  const host = makeR2Host({
+    accountId: '0123456789abcdef0123456789abcdef',
+    accessKeyId: '0f1e2d3c4b5a69788796a5b4c3d2e1f0',
+    secretAccessKey: 'f'.repeat(64),
+    bucket: 'cardresell-ebay-photos',
+    publicBaseUrl: 'https://photos.example.org',
+    keySecret: 'a-photo-key-secret-not-a-real-one',
+    fetchImpl: async (url, opts = {}) => {
+      calls.push({ url: String(url), method: opts.method });
+      return {
+        ok: true, status: 200,
+        headers: {
+          get: (h) => ({ 'content-length': '70', 'content-type': 'image/png',
+                         etag: '"9f8e7d6c5b4a39281706a5b4c3d2e1f0"' })[String(h).toLowerCase()] ?? null,
+        },
+      };
+    },
+  });
+
+  const head = await host.head('seller-photos/ns/drf/x.png');
+  T.check('the object is reported present', head.exists === true, JSON.stringify(head));
+  T.check('the size and type come back', head.byteLength === 70 && head.contentType === 'image/png',
+    JSON.stringify(head));
+  T.check('🔴 the ETag is returned with the provider quotes stripped',
+    head.etag === '9f8e7d6c5b4a39281706a5b4c3d2e1f0', String(head.etag));
+  T.check('the request really was a HEAD, so presence is measured', calls[0].method === 'HEAD',
+    JSON.stringify(calls[0].method));
+  T.check('and it was signed', /X-Amz-Signature=/.test(calls[0].url), calls[0].url.slice(0, 60));
+
+  /* A weak ETag, which R2 returns for multipart objects. It must still be
+     recorded rather than dropped or mistaken for a hash. */
+  const weak = makeR2Host({
+    accountId: '0123456789abcdef0123456789abcdef',
+    accessKeyId: '0f1e2d3c4b5a69788796a5b4c3d2e1f0',
+    secretAccessKey: 'f'.repeat(64),
+    bucket: 'b', publicBaseUrl: 'https://photos.example.org',
+    keySecret: 'a-photo-key-secret-not-a-real-one',
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => ({ 'content-length': '70', 'content-type': 'image/png',
+                                etag: 'W/"abc-1"' })[String(h).toLowerCase()] ?? null },
+    }),
+  });
+  const w = await weak.head('seller-photos/ns/drf/x.png');
+  T.check('a weak ETag is kept rather than dropped', typeof w.etag === 'string' && w.etag.length > 0,
+    String(w.etag));
+
+  /* An absent ETag is not a failure. The object exists; only the provider's
+     label for it is missing. */
+  const none = makeR2Host({
+    accountId: '0123456789abcdef0123456789abcdef',
+    accessKeyId: '0f1e2d3c4b5a69788796a5b4c3d2e1f0',
+    secretAccessKey: 'f'.repeat(64),
+    bucket: 'b', publicBaseUrl: 'https://photos.example.org',
+    keySecret: 'a-photo-key-secret-not-a-real-one',
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => ({ 'content-length': '70', 'content-type': 'image/png' })[String(h).toLowerCase()] ?? null },
+    }),
+  });
+  const n = await none.head('seller-photos/ns/drf/x.png');
+  T.check('a missing ETag still reports the object as present',
+    n.exists === true && !n.etag, JSON.stringify(n));
+});
+
+await T.section('the presigned PUT pins the content type and the five-minute window', async () => {
+  const { makeR2Host, R2_PRESIGN_TTL_SECONDS } = await import('../api/_r2Host.js');
+  const host = makeR2Host({
+    accountId: '0123456789abcdef0123456789abcdef',
+    accessKeyId: '0f1e2d3c4b5a69788796a5b4c3d2e1f0',
+    secretAccessKey: 'f'.repeat(64),
+    bucket: 'cardresell-ebay-photos',
+    publicBaseUrl: 'https://photos.example.org',
+    keySecret: 'a-photo-key-secret-not-a-real-one',
+    fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => null } }),
+  });
+
+  const t = host.presignPut('seller-photos/ns/drf/x.png', { contentType: 'image/png' });
+  const q = new URL(t.url).searchParams;
+  T.check('the window is five minutes', R2_PRESIGN_TTL_SECONDS === 300,
+    String(R2_PRESIGN_TTL_SECONDS));
+  T.check('and the signature says so', q.get('X-Amz-Expires') === '300', String(q.get('X-Amz-Expires')));
+  T.check('🔴 content-type is inside the signature',
+    q.get('X-Amz-SignedHeaders') === 'content-type;host', String(q.get('X-Amz-SignedHeaders')));
+  T.check('the exact headers to send are returned rather than left to convention',
+    t.requiredHeaders && t.requiredHeaders['Content-Type'] === 'image/png',
+    JSON.stringify(t.requiredHeaders));
+  /* The payload is unsigned -- the server never holds the bytes, so it cannot
+     hash them. In query-string SigV4 that literal lives in the canonical
+     request, NOT in the url, so it is not observable here; an earlier version
+     of this assertion looked for it in the query string and failed for that
+     reason rather than because signing was wrong. What IS observable is that
+     no body hash is demanded of the browser. That the signature really was
+     computed over UNSIGNED-PAYLOAD was established separately by reproducing
+     this exact signature with an independent SigV4 implementation. */
+  T.check('no body hash is demanded of the browser',
+    !q.get('X-Amz-Content-Sha256'),
+    'a signed payload would require the server to have read the file');
+  T.check('the credential scope is the R2 region and the s3 service',
+    /\/auto\/s3\/aws4_request/.test(decodeURIComponent(q.get('X-Amz-Credential') || '')),
+    String(q.get('X-Amz-Credential')));
+  T.check('🔴 the secret access key never appears in the url',
+    !t.url.includes('f'.repeat(40)), 'a leaked key in a presigned url is a public write handle');
+
+  /* A different content type must produce a different signature: if it did
+     not, pinning the type would be decoration. */
+  const jpg = host.presignPut('seller-photos/ns/drf/x.png', { contentType: 'image/jpeg' });
+  T.check('🔴 signing a different content type produces a different signature',
+    new URL(jpg.url).searchParams.get('X-Amz-Signature')
+      !== q.get('X-Amz-Signature'),
+    'the type would not be pinned if it did not change the signature');
+});
+
 
 T.done();

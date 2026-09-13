@@ -1125,6 +1125,120 @@ const screenState = (page) => page.evaluate(() => ({
    establishing nothing about whether the control is ever rendered or does
    anything. Rewritten to open the screen, look for the button, click it, and
    check the photo actually landed. */
+/* ── ACCEPTANCE (case 1, the part the seller actually sees) ─────────────────
+   
+   The section above proves the scan photo reaches the photo STORE with the
+   right bytes, type and origin. That is necessary and it is not case 1: the
+   requirement is that the photo "appears automatically", and a photo in
+   IndexedDB that the review screen never renders has not appeared. So this
+   section carries the same real create path into the real review screen and
+   reads the rendered panel.
+   
+   Nothing about the photo is seeded here. The only stubs are the auth token
+   and the draft read/create network edges, exactly as in the section above. */
+await T.section('ACCEPTANCE case 1 — the scan photo is already on the review screen, unasked', async () => {
+  const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
+  const GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+
+  /* Start from a genuinely empty manifest, so a rendered tile cannot be a
+     leftover from another section. */
+  const before = await page.evaluate(async (id) => {
+    const l = await window.photosList(id);
+    for (const pid of (l.order || []).slice()) await window.photosRemove(id, pid);
+    return (await window.photosList(id)).order.length;
+  }, DRAFT_ID);
+  T.check('precondition — the draft has no photos before the scan', before === 0, String(before));
+
+  /* The real create path, with only the POST stubbed to name the draft. */
+  const created = await page.evaluate(async ({ id, gif }) => {
+    const realFetch = window.fetch;
+    const posts = [];
+    window.fetch = async (url, opts) => {
+      const u = String(url || '');
+      if (u.includes('/api/drafts') && opts && String(opts.method).toUpperCase() === 'POST') {
+        posts.push(String(opts.body || ''));
+        return new Response(JSON.stringify({ draftId: id, generation: 1 }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } });
+      }
+      return realFetch(url, opts);
+    };
+    try {
+      const out = await window._crCreateDraft({
+        card: { cardName: 'Ivysaur', set: 'Mega Evolution', setCode: 'MEG', number: '134',
+                rarity: 'Illustration Rare', game: 'pokemon', imageDataUrl: gif,
+                instanceId: 'inst-case1' },
+        instanceId: 'inst-case1', idemKey: 'idem-case1',
+        price: 12.5, priceSource: 'comp', source: 'bulk-scan', batch: true,
+      });
+      return { ok: out.ok, draftId: out.draftId, attached: !!(out.photo && out.photo.attached),
+               postCount: posts.length,
+               postCarriedBytes: posts.some((b) => b.includes('R0lGODlh') || b.includes('data:image')) };
+    } finally { window.fetch = realFetch; }
+  }, { id: DRAFT_ID, gif: GIF });
+
+  T.check('the scan-created draft reports its photo attached',
+    created.ok === true && created.attached === true, JSON.stringify(created));
+  T.check('and the create request still carried no image bytes',
+    created.postCount === 1 && created.postCarriedBytes === false, JSON.stringify(created));
+
+  /* THE SELLER'S VIEW. Opened the way a seller reaches it, and read off the
+     DOM rather than off _photoUi state, because state the panel does not
+     render is not something the seller can see. */
+  await openReview(page, DRAFT_ID);
+  /* SELECTOR NOTE, recorded because the first version of this read looked like
+     a product failure and was not. It counted `[data-photo-id]`, which is on
+     the per-tile MOVE BUTTONS (core.b5c0553e.js:26655,26657) -- so one photo
+     reported "2 tiles". The tile itself is `[data-photo-item]`
+     (core.b5c0553e.js:26650). The fixture was wrong; nothing was changed in
+     the product to make this pass. */
+  const seen = await page.evaluate(() => {
+    const block = document.querySelector('[data-photo-block]');
+    const tiles = Array.from(document.querySelectorAll('[data-photo-item]'));
+    const imgs = tiles.map((t) => t.querySelector('img.photo-thumb')).filter(Boolean);
+    return {
+      blockPresent: !!block,
+      tiles: tiles.length,
+      /* The thumbnail is a blob: url made from the stored bytes. A tile with
+         no src would be an empty frame, which is not a photograph appearing. */
+      srcs: imgs.map((i) => String(i.getAttribute('src') || '').slice(0, 5)),
+      scanLabelled: !!document.querySelector('[data-photo-origin="scan"]'),
+      /* The empty-state paragraph, which is what the panel shows when there is
+         nothing to see. Its ABSENCE is the assertion; searching the whole
+         panel text for "add photos" matched the picker's own button label. */
+      emptyState: !!document.querySelector('[data-photo-empty]'),
+      missingTile: !!document.querySelector('[data-photo-missing]'),
+      text: (block ? block.textContent : '').replace(/\s+/g, ' ').trim().slice(0, 400),
+    };
+  });
+
+  T.check('🔴 ACCEPTANCE — exactly one photo tile is rendered without the seller adding anything',
+    seen.tiles === 1, JSON.stringify(seen));
+  T.check('🔴 the tile shows the stored image rather than an empty frame',
+    seen.srcs.length === 1 && seen.srcs[0] === 'blob:', JSON.stringify(seen.srcs));
+  T.check('the photo is labelled as scan-sourced on screen, so its provenance is visible',
+    seen.scanLabelled === true, seen.text);
+  T.check('🔴 and the panel does not still show its empty state',
+    seen.emptyState === false, seen.text);
+  T.check('the tile is a real thumbnail, not the missing-bytes placeholder',
+    seen.missingTile === false, seen.text);
+
+  /* The store agrees with the screen -- one photo, scan-sourced. If these
+     ever disagree, the tile is decoration. */
+  const stored = await page.evaluate(async (id) => {
+    const l = await window.photosList(id);
+    return { count: l.order.length, origin: (l.photos[0] || {}).origin,
+             type: ((l.photos[0] || {}).blob || {}).type };
+  }, DRAFT_ID);
+  T.check('the rendered tile corresponds to one scan-sourced photo in the store',
+    stored.count === 1 && stored.origin === 'scan' && stored.type === 'image/gif',
+    JSON.stringify(stored));
+
+  await ctx.close();
+});
+
+
 await T.section('Retry attaching scan photo uses the retained snapshot and the existing draft', async () => {
   const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
   const ctx = await ctxWith();

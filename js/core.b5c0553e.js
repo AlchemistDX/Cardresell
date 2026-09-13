@@ -19238,7 +19238,19 @@ function _photoId() {
    
    Old rows written before this field existed simply have no `sources`, and
    normalize to an empty ledger. No version bump and no migration: the object
-   store's keyPath is unchanged and this is a plain field on an existing record. */
+   store's keyPath is unchanged and this is a plain field on an existing record.
+
+   `hosted` is a THIRD field, added the same way and for the same reason.
+   It maps photoId -> the hosted record returned by /api/photo-upload-complete
+   { objectKey, publicUrl, sha256, contentType, byteLength, uploadedAt,
+   expiresAt }. It is what makes a repeated export reuse an unchanged photo
+   instead of uploading it again: the sha256 in the record is compared against
+   the photo's current bytes, so identical bytes skip the upload and changed
+   bytes force a new one.
+
+   NO IMAGE BYTES LIVE HERE, and no client-invented URL: every value in a
+   hosted record came from the server, which built it from the bucket's own
+   configured public base after a real HEAD confirmed the object exists. */
 function _photoManifestRow(row, draftId) {
   const order = row && Array.isArray(row.order) ? row.order.filter(x => typeof x === 'string') : [];
   const src = (row && row.sources && typeof row.sources === 'object') ? row.sources : {};
@@ -19253,7 +19265,24 @@ function _photoManifestRow(row, draftId) {
       };
     }
   }
-  return { draftId, order, sources };
+  const host = (row && row.hosted && typeof row.hosted === 'object') ? row.hosted : {};
+  const hosted = {};
+  for (const k of Object.keys(host)) {
+    const v = host[k];
+    if (v && typeof v === 'object' && typeof v.objectKey === 'string' && typeof v.publicUrl === 'string') {
+      hosted[k] = {
+        photoId:     typeof v.photoId === 'string' ? v.photoId : k,
+        objectKey:   v.objectKey,
+        publicUrl:   v.publicUrl,
+        sha256:      typeof v.sha256 === 'string' ? v.sha256 : '',
+        contentType: typeof v.contentType === 'string' ? v.contentType : '',
+        byteLength:  Number(v.byteLength) || 0,
+        uploadedAt:  typeof v.uploadedAt === 'string' ? v.uploadedAt : '',
+        expiresAt:   typeof v.expiresAt === 'string' ? v.expiresAt : '',
+      };
+    }
+  }
+  return { draftId, order, sources, hosted };
 }
 
 /* Add files to a draft. Manifest is read and rewritten inside the transaction,
@@ -19289,7 +19318,7 @@ function photosAdd(draftId, files) {
       throw e;
     }
     const order = row.order.concat(added);
-    await _photoReq(s.manifest.put({ draftId, order, sources: row.sources }));
+    await _photoReq(s.manifest.put({ draftId, order, sources: row.sources, hosted: row.hosted }));
     return { added, order, skipped: list.length - take.length };
   });
 }
@@ -19312,9 +19341,18 @@ function photosRemove(draftId, photoId) {
         sources[k] = { ...sources[k], removedAt: Date.now() };
       }
     }
-    await _photoReq(s.manifest.put({ draftId, order, sources }));
+    /* The hosted record leaves the manifest, and its key is RETURNED so the
+       caller can request immediate deletion of the hosted copy. Dropping the
+       record without handing back the key would orphan the object in storage:
+       nothing would know to delete it, and the seller's photograph would stay
+       publicly reachable after they removed it. The retention policy makes
+       removal an immediate-deletion trigger, so this is the trigger point. */
+    const hosted = { ...row.hosted };
+    const orphaned = hosted[photoId] ? { ...hosted[photoId] } : null;
+    delete hosted[photoId];
+    await _photoReq(s.manifest.put({ draftId, order, sources, hosted }));
     await _photoReq(s.blobs.delete(photoId));
-    return { order };
+    return { order, orphaned };
   });
 }
 
@@ -19382,7 +19420,7 @@ function photosAttachScan(draftId, source) {
     }));
     const order = row.order.concat([id]);
     const sources = { ...row.sources, [key]: { photoId: id, attachedAt: Date.now(), removedAt: 0 } };
-    await _photoReq(s.manifest.put({ draftId, order, sources }));
+    await _photoReq(s.manifest.put({ draftId, order, sources, hosted: row.hosted }));
     return { attached: true, reason: null, photoId: id };
   });
 }
@@ -19407,7 +19445,10 @@ function photosMove(draftId, photoId, direction) {
     if (j < 0 || j >= order.length) return { order, moved: false };
     order[i] = order[j];
     order[j] = photoId;
-    await _photoReq(s.manifest.put({ draftId, order, sources: row.sources }));
+    /* Reordering changes which photograph eBay treats as the gallery image,
+       but not the bytes, so every hosted record stays valid and no photo is
+       re-uploaded on the next export. */
+    await _photoReq(s.manifest.put({ draftId, order, sources: row.sources, hosted: row.hosted }));
     return { order, moved: true };
   });
 }
@@ -19428,7 +19469,41 @@ function photosList(draftId) {
         origin: rec.origin === 'scan' ? 'scan' : 'seller', missing: false });
       else out.push({ id, blob: null, type: '', name: '', origin: 'seller', missing: true });
     }
-    return { photos: out, order: row.order, sources: row.sources };
+    return { photos: out, order: row.order, sources: row.sources, hosted: row.hosted };
+  });
+}
+
+/* Record what the SERVER confirmed about a hosted photo.
+
+   Called only with the body of a 201 from /api/photo-upload-complete, which
+   the server emitted after a real HEAD against the bucket. Nothing here is
+   client-derived: passing in a URL the browser built would make the export
+   column a claim rather than a fact.
+
+   Written inside the transaction that reads the manifest, so a concurrent
+   addition in another tab is merged rather than overwritten -- the same
+   property photosAdd needs. */
+function photosSetHosted(draftId, records) {
+  return _photoTx('readwrite', async (tx, s) => {
+    const row = _photoManifestRow(await _photoReq(s.manifest.get(draftId)), draftId);
+    const hosted = { ...row.hosted };
+    for (const rec of (records || [])) {
+      if (rec && rec.photoId && rec.objectKey && rec.publicUrl) hosted[rec.photoId] = rec;
+    }
+    await _photoReq(s.manifest.put({ draftId, order: row.order, sources: row.sources, hosted }));
+    return { hosted };
+  });
+}
+
+/* Drop hosted records whose objects have been deleted, so the next export
+   uploads afresh instead of writing a dead URL into a listing. */
+function photosDropHosted(draftId, photoIds) {
+  return _photoTx('readwrite', async (tx, s) => {
+    const row = _photoManifestRow(await _photoReq(s.manifest.get(draftId)), draftId);
+    const hosted = { ...row.hosted };
+    for (const id of (photoIds || [])) delete hosted[id];
+    await _photoReq(s.manifest.put({ draftId, order: row.order, sources: row.sources, hosted }));
+    return { hosted };
   });
 }
 
@@ -23686,6 +23761,7 @@ const EXPORT_PHOTO_REASON = {
   SIGNED_OUT:     'SIGNED_OUT',
   NONE:           'NONE',
   UPLOAD_FAILED:  'UPLOAD_FAILED',
+  MISCONFIGURED:  'MISCONFIGURED',
 };
 
 /* The seller-facing sentence for each outcome. An "export without photos"
@@ -23705,21 +23781,29 @@ const EXPORT_PHOTO_COPY = {
   UPLOAD_FAILED:
     'Some photos couldn\u2019t be uploaded, so they are not in this file. The ones '
     + 'that did upload are included.',
+  /* Hosting is switched on but incompletely configured. Distinct from
+     NOT_CONFIGURED on purpose: that one is a state the seller can work around,
+     this one is a fault on our side and saying "not switched on yet" would
+     send them chasing a setting that is already set. */
+  MISCONFIGURED:
+    'Photo hosting is switched on but isn\u2019t set up correctly, so the photo '
+    + 'column in this file is blank. Your photos are still here. Use Download '
+    + 'listing photos and add them in eBay while this is fixed.',
 };
 
-/** Blob -> bare base64, no data: prefix. */
-function _photoBlobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onerror = () => reject(new Error('READ_FAILED'));
-    fr.onload = () => {
-      const s = String(fr.result || '');
-      const comma = s.indexOf(',');
-      resolve(comma >= 0 ? s.slice(comma + 1) : '');
-    };
-    fr.readAsDataURL(blob);
-  });
-}
+/* What the seller is told when photo links DID go into the file.
+
+   Stated because the hosted copies are temporary. The seller keeps the CSV;
+   the links inside it do not live forever, and deleting the source draft
+   deletes the photographs an unimported file still points at. Both facts are
+   consequences the seller can only avoid if they are told before they put the
+   file aside. */
+const EXPORT_PHOTO_RETENTION_DAYS = 30;
+const EXPORT_PHOTO_RETENTION_NOTE =
+  'The photo links in this file work for ' + EXPORT_PHOTO_RETENTION_DAYS + ' days. '
+  + 'Downloading this draft again renews them. Deleting the photos or the draft '
+  + 'removes them straight away, which leaves an unimported file pointing at '
+  + 'nothing \u2014 so upload it to eBay before then.';
 
 /* Mirrors api/_photoHost.js UPLOAD_CONTENT_TYPES. Kept as one map so the
    client refuses locally what the server would refuse anyway, rather than
@@ -23754,56 +23838,198 @@ async function ensureExportablePhotos(draftId) {
   try { token = await _crIdToken(); } catch (_) { token = ''; }
   if (!token) return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
 
+  const hostedNow = (listing && listing.hosted) ? listing.hosted : {};
   const urls = [];
   const failed = [];
   const skipped = [];
+  const fresh = [];        // records to persist, from 201s only
   let notConfigured = false;
+  let misconfigured = false;
+  let reused = 0;
+  let renewed = 0;
 
   for (const p of usable) {
     if (urls.length >= PHOTO_MAX_PER_DRAFT) { skipped.push(p.id); continue; }
     const type = String(p.type || (p.blob && p.blob.type) || '').toLowerCase();
     if (!_EXPORT_PHOTO_TYPES[type]) { failed.push({ id: p.id, reason: 'UNSUPPORTED_TYPE' }); continue; }
 
-    let b64 = '';
-    try { b64 = await _photoBlobToBase64(p.blob); } catch (_) { b64 = ''; }
-    if (!b64) { failed.push({ id: p.id, reason: 'READ_FAILED' }); continue; }
+    /* The content hash decides everything below. Identical bytes hash to the
+       same value, which produces the same object key, which is why an
+       unchanged photo is reused rather than re-uploaded -- and why replacing a
+       photo changes the next export without any extra bookkeeping. */
+    let sha = '';
+    try { sha = await _photoSha256Hex(p.blob); } catch (_) { sha = ''; }
+    if (!sha) { failed.push({ id: p.id, reason: 'READ_FAILED' }); continue; }
 
-    let r = null, body = {};
-    try {
-      r = await fetch('/api/photo-upload?' + new URLSearchParams({ id: draftId }).toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ photoId: p.id, contentType: type, dataBase64: b64 }),
-      });
-      try { body = await r.json(); } catch (_) { body = {}; }
-    } catch (_) {
-      failed.push({ id: p.id, reason: 'NETWORK' });
+    const plan = _hostedPlan(hostedNow[p.id], sha);
+    if (plan === 'keep') {
+      urls.push(hostedNow[p.id].publicUrl);
+      reused++;
       continue;
     }
 
-    /* 501 is the whole-operation answer, not this photo's: no host exists, so
-       no later photo can succeed either. Reported once, honestly. */
-    if (r.status === 501 || (body && body.code === 'PHOTO_HOST_NOT_CONFIGURED')) {
-      notConfigured = true;
-      break;
-    }
-    if (r.status === 401) return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
-    if (r.status !== 201 || !body || !body.url) {
-      failed.push({ id: p.id, reason: (body && body.code) || ('HTTP_' + r.status) });
-      continue;
-    }
-    urls.push(body.url);
+    const step = await _uploadOnePhoto({ draftId, photo: p, type, sha256: sha, token });
+
+    /* 501 and a misconfiguration are WHOLE-OPERATION answers, not this
+       photo's: no later photo can succeed either, so the loop stops and the
+       state is reported once rather than as N identical per-photo failures. */
+    if (step.reason === 'NOT_CONFIGURED') { notConfigured = true; break; }
+    if (step.reason === 'MISCONFIGURED') { misconfigured = true; break; }
+    if (step.reason === 'SIGNED_OUT') return { ...empty, reason: EXPORT_PHOTO_REASON.SIGNED_OUT };
+
+    if (!step.ok) { failed.push({ id: p.id, reason: step.reason }); continue; }
+
+    urls.push(step.hosted.publicUrl);
+    fresh.push(step.hosted);
+    if (plan === 'renew') renewed++;
   }
 
-  if (notConfigured) {
-    return { ...empty, reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
+  /* Persist before returning, so a reload does not lose the knowledge that
+     these objects exist -- losing it would re-upload them on the next export
+     and orphan the first copies. Failure to persist does NOT fail the export:
+     the URLs are live either way; the cost is a redundant upload later. */
+  if (fresh.length) {
+    try { await photosSetHosted(draftId, fresh); } catch (_) {}
   }
+
+  if (notConfigured) return { ...empty, reason: EXPORT_PHOTO_REASON.NOT_CONFIGURED };
+  if (misconfigured) return { ...empty, reason: EXPORT_PHOTO_REASON.MISCONFIGURED };
   if (!urls.length) {
-    return { ok: false, urls: [], uploaded: 0, failed, skipped,
+    return { ok: false, urls: [], uploaded: 0, failed, skipped, reused: 0, renewed: 0,
              reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : EXPORT_PHOTO_REASON.NONE };
   }
-  return { ok: true, urls, uploaded: urls.length, failed, skipped,
+  return { ok: true, urls, uploaded: fresh.length, failed, skipped, reused, renewed,
            reason: failed.length ? EXPORT_PHOTO_REASON.UPLOAD_FAILED : '' };
+}
+
+/* SHA-256 of a blob, lowercase hex, via WebCrypto. No dependency, and the
+   same digest the server names the object with. */
+async function _photoSha256Hex(blob) {
+  const buf = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* Upload / renew / keep, decided from the hosted record and the current hash.
+   The client-side twin of planForPhoto in api/_photoRetention.js: the browser
+   needs the decision to avoid a pointless upload, and the server needs it to
+   set the expiry. Both read the same two facts -- the hash and expiresAt.
+
+   An absent, hash-mismatched, unparseable or lapsed expiry all mean 'upload'.
+   Treating an unknown expiry as live is how a listing ships with a dead URL. */
+const _PHOTO_RENEW_FRACTION = 1 / 3;
+function _hostedPlan(hosted, sha256, nowMs, days) {
+  const now = Number(nowMs) || Date.now();
+  const window = (Number(days) || 30) * 86400000;
+  if (!hosted || !hosted.objectKey || !hosted.publicUrl) return 'upload';
+  if (String(hosted.sha256 || '') !== String(sha256 || '')) return 'upload';
+  const t = Date.parse(hosted.expiresAt || '');
+  if (!Number.isFinite(t) || t <= now) return 'upload';
+  if ((t - now) < window * _PHOTO_RENEW_FRACTION) return 'renew';
+  return 'keep';
+}
+
+/* One photograph, in three steps: ticket, direct PUT, completion.
+ *
+ * WHY THE BYTES DO NOT GO THROUGH OUR API. A 2.5 MB iPhone photograph becomes
+ * ~3.4 MB as base64, which can exceed the platform request-body limit BEFORE
+ * any application validation runs -- the seller would get an opaque platform
+ * error instead of our own wording, and the byte gate would never execute. So
+ * the function signs a short-lived PUT and the blob goes straight to storage.
+ *
+ * The Authorization header is on our two calls and NOT on the PUT: the
+ * presigned URL carries its own signature, and attaching a CardResell token to
+ * a third-party request would leak it to the storage provider.
+ *
+ * The returned URL is the SERVER's, from the completion response -- never one
+ * assembled here. A client-built URL is a claim; that response follows a real
+ * HEAD against the bucket. */
+async function _uploadOnePhoto({ draftId, photo, type, sha256, token }) {
+  const bad = (reason) => ({ ok: false, reason });
+
+  let ticket = null;
+  try {
+    const r = await fetch('/api/photo-upload-ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        draftId, photoId: photo.id, contentType: type,
+        byteLength: photo.blob.size, sha256,
+        /* Declared so the server can refuse anything that is not a photograph
+           taken on this device. Both values are local captures: 'scan' is the
+           frame from the scanner, 'seller' a photo the seller attached. No
+           source URL is ever sent, because catalogue artwork must never
+           become a listing photo -- and a request naming a URL to fetch is
+           refused outright at the endpoint. */
+        origin: String(photo.origin || 'seller').toLowerCase(),
+      }),
+    });
+    let body = {};
+    try { body = await r.json(); } catch (_) { body = {}; }
+    if (r.status === 501 || (body && body.code === 'PHOTO_HOST_NOT_CONFIGURED')) return bad('NOT_CONFIGURED');
+    if (body && body.code === 'PHOTO_HOST_MISCONFIGURED') return bad('MISCONFIGURED');
+    if (r.status === 401) return bad('SIGNED_OUT');
+    /* `uploadReceipt` is required, not optional. Without it the completion
+       call cannot succeed, so a ticket lacking one is a failed ticket and must
+       be reported here rather than as a confusing later 400. */
+    if (r.status !== 200 || !body || !body.putUrl || !body.objectKey || !body.uploadReceipt) {
+      return bad((body && body.code) || ('TICKET_HTTP_' + r.status));
+    }
+    ticket = body;
+  } catch (_) {
+    return bad('NETWORK');
+  }
+
+  /* The PUT goes to the storage provider. A CORS failure surfaces here as a
+     thrown TypeError with no status -- reported as its own reason, because
+     "the browser was not allowed to upload" and "the upload was rejected" need
+     different fixes and must not read identically. */
+  /* EXACTLY THE HEADERS THE SIGNATURE COVERS -- taken from the ticket, not
+     rebuilt here. Content-Type is inside the presigned signature now, so a
+     header this side invented, omitted or spelled differently is refused by
+     the storage provider before any of our code runs. Copying the server's
+     list is what keeps the two sides from drifting; hardcoding
+     `{'Content-Type': type}` again would be a second implementation of the
+     same decision. */
+  const putHeaders = {};
+  const required = (ticket.requiredHeaders && typeof ticket.requiredHeaders === 'object')
+    ? ticket.requiredHeaders : {};
+  for (const k of Object.keys(required)) putHeaders[k] = String(required[k]);
+
+  try {
+    const up = await fetch(ticket.putUrl, {
+      method: 'PUT',
+      headers: putHeaders,
+      body: photo.blob,
+    });
+    if (!up.ok) return bad('PUT_HTTP_' + up.status);
+  } catch (_) {
+    return bad('PUT_BLOCKED');
+  }
+
+  try {
+    const r = await fetch('/api/photo-upload-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        draftId, photoId: photo.id, objectKey: ticket.objectKey, sha256: ticket.sha256,
+        contentType: type, byteLength: photo.blob.size,
+        /* Returned unmodified. It is the ticket endpoint's own signed record
+           of what it authorised; editing any part of it makes it fail to
+           verify, which is the point. */
+        uploadReceipt: ticket.uploadReceipt,
+      }),
+    });
+    let body = {};
+    try { body = await r.json(); } catch (_) { body = {}; }
+    if (r.status === 401) return bad('SIGNED_OUT');
+    if (r.status !== 201 || !body || !body.hosted || !body.hosted.publicUrl) {
+      return bad((body && body.code) || ('COMPLETE_HTTP_' + r.status));
+    }
+    return { ok: true, reason: '', hosted: body.hosted };
+  } catch (_) {
+    return bad('NETWORK');
+  }
 }
 
 /* eBay's documented photo-column rules, from the bulk-listing help page:
@@ -23889,6 +24115,11 @@ function _csvField(v) {
  */
 function _ebayDraftCsv(draft, packet, photoReport) {
   const owed = [];
+  /* `notes` is deliberately NOT `owed`. Owed items are work eBay still needs
+     from the seller; a note is a fact about the file they are holding. Mixing
+     them would tell the seller to go re-attach photographs that are already
+     in the column. */
+  const notes = [];
 
   const cat = (packet && packet.category && packet.category.id != null)
     ? String(packet.category.id) : '';
@@ -23941,8 +24172,14 @@ function _ebayDraftCsv(draft, packet, photoReport) {
         + (photoReport.failed.length === 1 ? 'it' : 'them')
         + ' to the draft in eBay from this device');
     }
-    // Nothing is owed for the photos that ARE in the column. Saying otherwise
-    // would send the seller to re-attach photographs eBay already has.
+    /* The retention window is stated HERE, on the branch where photo links
+       actually went into the file, because it is only meaningful when there
+       are links to expire. A seller who exports today, deletes the draft, and
+       imports the file next month would otherwise get broken photographs with
+       no way to know why. This is not an "owed" item -- nothing is owed for
+       photos eBay already has, and listing it as owed would send the seller to
+       re-attach photographs that are present. */
+    notes.push(EXPORT_PHOTO_RETENTION_NOTE);
   } else {
     const why = (photoReport && photoReport.reason
                  && EXPORT_PHOTO_COPY[photoReport.reason])
@@ -23973,7 +24210,7 @@ function _ebayDraftCsv(draft, packet, photoReport) {
   const csv = _EBAY_TEMPLATE_PREAMBLE.map((l) => l + '\r\n').join('')
             + cols.join(',') + '\r\n'
             + row.map(_csvField).join(',') + '\r\n';
-  return { csv, owed };
+  return { csv, owed, notes };
 }
 
 /**
@@ -24088,13 +24325,32 @@ function _draftDownloadPanelHtml(row) {
     ? `<p class="draft-dl-owed-h">eBay will still need, in its Drafts folder:</p>
          <ul class="draft-dl-owed">${d.owed.map((o) => `<li>${_draftsEsc(o)}</li>`).join('')}</ul>`
     : '';
+  /* Rendered separately from `owed`, under its own heading, so a fact about
+     the file is not read as another task. */
+  const notes = (d.notes && d.notes.length)
+    ? `<ul class="draft-dl-notes" data-draft-dl-notes="1">${d.notes.map((n) => `<li>${_draftsEsc(n)}</li>`).join('')}</ul>`
+    : '';
+  /* A retry for the PHOTOS alone, offered only when individual photos failed
+     to upload. It is deliberately not offered for NOT_CONFIGURED or
+     MISCONFIGURED: nothing about pressing it again would differ, and a control
+     that cannot work reads as the seller's fault. Photos that DID upload are
+     reused by hash on the next pass, so this retries the failures rather than
+     re-sending everything. */
+  const photoRetry = (d.photoRetry && !d.busy)
+    ? `<div class="draft-dl-photo-retry" data-dl-photo-retry-row="1">
+         <p class="draft-dl-msg">${_draftsEsc(d.photoRetry.text)}</p>
+         <button type="button" class="draft-act" data-dl-photo-retry="${_draftsEsc(row.draftId)}">Retry photos and rebuild file</button>
+       </div>`
+    : '';
   return `
       <div class="draft-dl" data-draft-dl="1">
         <p class="draft-dl-head">eBay bulk-upload file</p>
         ${body}
+        ${notes}
         ${owed}
         ${_DRAFT_DL_ACCESS_HTML}
         ${d.photoNote ? `<p class="draft-dl-msg" data-dl-photos-note="1">${_draftsEsc(d.photoNote)}</p>` : ''}
+        ${photoRetry}
         <div class="draft-dl-foot">
           <button type="button" class="draft-act" data-dl-photos="${_draftsEsc(row.draftId)}">Download listing photos</button>
           <button type="button" class="draft-act" data-dl-close="1">Close</button>
@@ -24150,9 +24406,7 @@ async function _draftDownloadGo(draftId) {
   const packet = resp.body.packet || null;
   /* Photos are hosted BEFORE the file is built, because the URLs have to be
      in the bytes the seller downloads -- there is no second pass over a file
-     that has already been saved. A failure here does not abort the export:
-     the file is still worth having, and the disclosure says the column is
-     blank and why. */
+     that has already been saved. */
   let photoReport = null;
   try {
     photoReport = await ensureExportablePhotos(draftId);
@@ -24161,7 +24415,48 @@ async function _draftDownloadGo(draftId) {
                     reason: EXPORT_PHOTO_REASON.UPLOAD_FAILED };
   }
 
-  const { csv, owed } = _ebayDraftCsv(draft, packet, photoReport);
+  /* ── WHEN HOSTING IS WORKING, A FAILED UPLOAD STOPS THE FILE ──────────────
+     This used to build the file anyway and disclose the shortfall. That was
+     the wrong trade once hosting actually works. The seller's next action is
+     to import this file into eBay, and an imported draft with two of three
+     photographs is not something a disclosure in our UI can undo -- they have
+     to notice, delete the draft, and start again. Refusing to produce the file
+     keeps the only cheap moment to fix it.
+                                                                       ~
+     It stops ONLY when hosting is configured and an upload of a photo the
+     seller actually has failed. The states where nothing could have uploaded
+     -- hosting not set up, misconfigured, signed out, no photos at all -- keep
+     their existing behaviour: the file is built and the disclosure says the
+     photo column is blank and why. Withholding the file there would leave a
+     seller with no export at all on a deployment where hosting was never
+     switched on.
+                                                                       ~
+     The draft and every local photo are untouched, and the retry control is
+     offered on this same panel. */
+  const hostingLive = photoReport
+    && photoReport.reason !== EXPORT_PHOTO_REASON.NOT_CONFIGURED
+    && photoReport.reason !== EXPORT_PHOTO_REASON.MISCONFIGURED
+    && photoReport.reason !== EXPORT_PHOTO_REASON.SIGNED_OUT;
+  const failedCount = (photoReport && Array.isArray(photoReport.failed))
+    ? photoReport.failed.length : 0;
+
+  if (hostingLive && failedCount) {
+    const d0 = _draftsState.dl;
+    if (d0 && d0.draftId === draftId) {
+      d0.photoRetry = {
+        count: failedCount,
+        text: failedCount === 1
+          ? 'One photo could not be uploaded, so nothing was exported. Your draft and your photos are unchanged.'
+          : failedCount + ' photos could not be uploaded, so nothing was exported. Your draft and your photos are unchanged.',
+      };
+    }
+    fail(failedCount === 1
+      ? 'No file was created, because one of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.'
+      : 'No file was created, because ' + failedCount + ' of your photos could not be uploaded. Nothing was exported. Your draft and your photos are unchanged.');
+    return;
+  }
+
+  const { csv, owed, notes } = _ebayDraftCsv(draft, packet, photoReport);
 
   const name = 'ebay-draft-' + String(draft.sku || draftId).replace(/[^A-Za-z0-9._-]+/g, '-') + '.csv';
   let ok = false;
@@ -24192,6 +24487,15 @@ async function _draftDownloadGo(draftId) {
   d.note = 'Saved ' + name + '. In eBay, go to Seller Hub \u203a Reports \u203a Upload and upload it \u2014 it creates a draft listing, not a live one.'
          + (packet ? '' : ' We could not read this draft\u2019s saved listing details, so the category column is empty.');
   d.owed = owed;
+  d.notes = notes;
+  /* No retry is offered on a file that was actually produced, and there is
+     nothing left to retry: reaching here means either every photo uploaded, or
+     hosting was never available and the disclosure already says the column is
+     blank. The only state that offers the retry is the abort above, which is
+     also the only state a failed upload can now reach -- keeping a second
+     assignment here would be a second implementation of one decision, and it
+     would be unreachable, which is worse. */
+  d.photoRetry = null;
   _draftsPaint();
 }
 
@@ -24217,6 +24521,12 @@ function _draftsBindOnce() {
     if (eCancel) { _draftEditCancel(); return; }
     const wBtn = ev.target.closest && ev.target.closest('[data-draft-download]');
     if (wBtn) { _draftDownloadGo(wBtn.getAttribute('data-draft-download')); return; }
+    const dlRetry = ev.target.closest && ev.target.closest('[data-dl-photo-retry]');
+    if (dlRetry) {
+      /* Read off a data attribute, not interpolated into an onclick string. */
+      _draftDownloadGo(dlRetry.getAttribute('data-dl-photo-retry'));
+      return;
+    }
     const dlPhotos = ev.target.closest && ev.target.closest('[data-dl-photos]');
     if (dlPhotos) {
       /* A data attribute read off the element, not an id interpolated into an
@@ -26643,12 +26953,50 @@ async function _photoRetryScan(draftId) {
 async function _photoRemove(photoId) {
   const id = _photoUi.draftId;
   try {
-    await photosRemove(id, photoId);
+    const res = await photosRemove(id, photoId);
     _photoUi.status = null;
+    /* Removal is an IMMEDIATE-DELETION trigger for the hosted copy, not just
+       a local one. Leaving the object in place would keep the seller's
+       photograph publicly reachable after they deleted it, for up to the
+       retention window.
+
+       Deliberately NOT awaited before the screen updates, and deliberately
+       unable to fail the removal: the photo is already gone from this device
+       and re-showing it because a network call failed would be a lie. A
+       failed deletion stays queued server-side as pending cleanup, which is
+       where an unreachable object is accounted for. */
+    if (res && res.orphaned && res.orphaned.objectKey) {
+      _requestHostedPhotoDeletion(id, [res.orphaned.objectKey]);
+    }
     await _photoUiSync();
   } catch (e) {
     _photoUi.status = { kind: 'error', text: photoStorageFailureMessage(e) };
     _photoBlockPaint();
+  }
+}
+
+/* Ask the server to delete hosted objects now.
+
+   Fire-and-forget on purpose -- see _photoRemove. The server queues each key
+   BEFORE attempting the delete, so a failure here leaves a visible pending
+   cleanup rather than an object nobody remembers. Returns the response for
+   callers that want it (the tests do); callers in the UI ignore it. */
+async function _requestHostedPhotoDeletion(draftId, objectKeys) {
+  if (!draftId || !objectKeys || !objectKeys.length) return { ok: false, reason: 'NOTHING' };
+  const token = await _crIdToken();
+  if (!token) return { ok: false, reason: 'SIGNED_OUT' };
+  try {
+    const r = await fetch('/api/photo-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ draftId, objectKeys }),
+    });
+    let body = {};
+    try { body = await r.json(); } catch (_) { body = {}; }
+    if (r.status !== 200) return { ok: false, reason: (body && body.code) || ('HTTP_' + r.status) };
+    return { ok: true, deleted: body.deleted || [], pending: body.pending || [] };
+  } catch (_) {
+    return { ok: false, reason: 'NETWORK' };
   }
 }
 
@@ -26748,6 +27096,17 @@ async function _draftDeleteRun({ draftId, rev, instanceId, ui }) {
 
   const finishGone = (body) => {
     const b = body || {};
+    /* Deleting the draft deletes its hosted photographs immediately -- the
+       same trigger as removing a single photo, applied to all of them. This
+       sits in finishGone rather than beside the 200 branch because 410 is
+       also "this draft is over": a draft deleted in another tab must not
+       leave its seller's photographs publicly reachable just because this tab
+       learned about it a second later.
+
+       Not awaited, and it cannot fail the deletion: the draft is gone either
+       way, and a queued cleanup is the server's account of an object it could
+       not reach. */
+    _deleteHostedForDraft(draftId);
     if (instanceId) _crNoteRowGone(instanceId, b);
     ui.gone(b);
   };
@@ -26816,6 +27175,28 @@ async function _draftDeleteRun({ draftId, rev, instanceId, ui }) {
   // Anything else: the draft is preserved and the server's own reason is shown
   // rather than one invented here.
   ui.error((body && (body.error || body.code)) || "Couldn't delete this draft. It's still here.");
+}
+
+/* Every hosted object this draft owns, deleted now.
+
+   Reads the keys from the local manifest, which is the only place they are
+   recorded. If this device never hosted anything for the draft there is
+   nothing to ask for and no request is made -- an empty request would be a
+   round trip that cannot change anything. */
+async function _deleteHostedForDraft(draftId) {
+  let keys = [];
+  try {
+    const listing = await photosList(draftId);
+    const hosted = (listing && listing.hosted) || {};
+    keys = Object.keys(hosted).map((k) => hosted[k].objectKey).filter(Boolean);
+  } catch (_) {
+    /* The manifest is unreadable, so which objects exist is UNKNOWN. Nothing
+       is claimed and nothing is deleted here; the retention window remains
+       the backstop. */
+    return { ok: false, reason: 'STORE_UNREADABLE' };
+  }
+  if (!keys.length) return { ok: false, reason: 'NOTHING' };
+  return _requestHostedPhotoDeletion(draftId, keys);
 }
 
 /** The review screen's adapter onto _draftDeleteRun. */
