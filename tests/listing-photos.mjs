@@ -1316,6 +1316,69 @@ await T.section('MEASUREMENT — pending scan snapshot does not survive a page r
   await ctx.close();
 });
 
+/* ── ATTACH_FAILED copy discloses the snapshot's real lifetime ─────────────────
+
+   Owner, 2026-09-12: "the failure message must warn that refreshing or closing
+   the page destroys the retry snapshot."
+
+   The snapshot is in-memory only (measured in the section above: a reload
+   discards it). This release does not persist it, so the message has to say so
+   -- otherwise a seller refreshes before retrying and loses the photograph with
+   no warning.
+
+   The message is read from the REAL ATTACH_FAILED return of
+   attachScanPhotoToDraft, not from a literal copied into the test, so a
+   reworded constant cannot leave this passing vacuously. */
+await T.section('ATTACH_FAILED copy warns against refreshing, and the retry stays offered', async () => {
+  const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
+  const ctx = await ctxWith();
+  const page = await reviewPage(ctx);
+  await openReview(page, DRAFT_ID);
+
+  const failed = await page.evaluate(async (DRAFT) => {
+    window._photoStoreFaults = { openFails: true };
+    const res = await window.attachScanPhotoToDraft(DRAFT, {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      sourceKey: 'scan:copy-disclosure',
+      type: 'image/png',
+    });
+    return {
+      attached: res.attached,
+      reason: res.reason,
+      message: res.message || '',
+      pending: window.scanPhotoRetryPending(DRAFT),
+    };
+  }, DRAFT_ID);
+
+  T.check('precondition — the attach really failed via ATTACH_FAILED',
+    failed.attached === false && failed.reason === 'ATTACH_FAILED',
+    JSON.stringify({ attached: failed.attached, reason: failed.reason }));
+
+  const m = failed.message;
+  T.check('the message states the draft was saved',
+    m.includes('draft was saved'), m);
+  T.check('the message states the photo was not attached',
+    m.includes('not attached'), m);
+  T.check('the message warns to retry BEFORE refreshing or closing the page',
+    m.includes('before refreshing or closing this page'), m);
+
+  /* The warning would be a lie if the retry were not actually available. */
+  T.check('a snapshot is pending, so the warning describes something real',
+    failed.pending === true, JSON.stringify(failed.pending));
+
+  await page.evaluate(() => { window._photoStoreFaults = {}; });
+  await openReview(page, DRAFT_ID);
+  const offered = await page.evaluate((DRAFT) => {
+    const btn = document.querySelector('[data-photo-retry]');
+    return { present: !!btn, boundTo: btn ? btn.getAttribute('data-photo-retry') : null };
+  }, DRAFT_ID);
+
+  T.check('the review screen offers the retry control for THIS draft',
+    offered.present === true && offered.boundTo === DRAFT_ID, JSON.stringify(offered));
+
+  await ctx.close();
+});
+
 await browser.close();
 server.close();
 T.done();

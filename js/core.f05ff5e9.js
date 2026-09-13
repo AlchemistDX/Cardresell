@@ -19521,6 +19521,16 @@ function _dataUrlToBlob(dataUrl) {
    the photo failed, so a retry must reuse this and must NOT create a draft. */
 const _crScanPhotoPending = {};
 
+/* The snapshot above lives only in memory, so the retry it enables lives only
+   as long as this page session. Measured: a full reload discards it, and the
+   control then correctly stops being offered. That limitation is not fixed in
+   this release, so it must be DISCLOSED -- a seller who refreshes before
+   retrying loses the photograph with no warning otherwise. Declared here,
+   above its use in the ATTACH_FAILED path below. */
+const SCAN_PHOTO_ATTACH_FAILED_MESSAGE =
+  'Your draft was saved, but the scan photo was not attached. ' +
+  'Retry before refreshing or closing this page, or add a photo manually.';
+
 /* Snapshot per idempotency key, so a replay attaches the photograph captured at
    the FIRST attempt -- the same rule the payload follows. Without this a retry
    after a rescan could attach a different card's photo under the same key. */
@@ -19555,8 +19565,7 @@ async function attachScanPhotoToDraft(draftId, snap) {
     return {
       attached: false,
       reason: 'ATTACH_FAILED',
-      message: 'Draft saved, but your scan photo could not be attached. '
-             + 'You can retry the photo, or add one yourself.',
+      message: SCAN_PHOTO_ATTACH_FAILED_MESSAGE,
     };
   }
 }
