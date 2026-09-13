@@ -19,16 +19,26 @@ Before this work, a seller's photograph of their card never left their browser. 
 | Item | Value |
 |---|---|
 | Branch | `fix/listing-export-identity` (**main was not pushed**) |
-| Commit | recorded in the delivery message alongside this file |
-| Production | **unchanged at `dfbd813`** — not promoted, not touched |
-| Preview protection | **left enabled** |
+| Commit | **`968a007`** on `fix/listing-export-identity` |
+| Build log says | `Cloning github.com/AlchemistDX/Cardresell (Branch: fix/listing-export-identity, Commit: 968a007)` — a git build, not an archive upload |
+| Deployment ID | **`dpl_6ZDobNuuKys7Ms8gezbbbkkDCQoX`**, target `preview`, status Ready |
+| Preview URL | **https://cardresell-dqvbti55i-willsep200-9430s-projects.vercel.app** — this is the deployment that built commit `968a007`. Note that adding this very file to the repository is itself a push, so a later deployment of the same code may exist with a different one-off URL; the alias below always points at the newest build of this branch, and the delivery message names the final deployment. |
+| Stable branch alias | **https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app** — Vercel does provide one, and it follows the branch, so adding *this* origin to R2 CORS survives future pushes to the branch |
+| Production | **unchanged at `dfbd813`** — not promoted, not touched. `https://www.cardresell.org/js/core.b5c0553e.js` returns **404**, which is the measured proof the new bundle is not live |
+| Preview protection | **left enabled** — both URLs above answer `302` to the SSO challenge, measured |
 | Bundle | `js/core.b5c0553e.js` — renamed from `core.b1e86a0a.js` because the bytes changed |
 | Fingerprint rule | filename is `sha256[:8]` of the file's own bytes; enforced by `tests/asset-fingerprints.mjs:63` and verified green |
 | Live reference | `index.html:4031` |
 
 ### CORS — the one thing that blocks live testing
 
-R2 CORS currently allows `cardresell.org`, `www.cardresell.org`, and the **old** `ae759f3` Preview origin. A new Preview gets a new hostname, and the browser PUT goes directly to R2, so **the new exact Preview origin must be added to the R2 bucket's CORS allowed origins before an iPhone upload can succeed.** Until then a real upload fails at the PUT with a CORS error — which the app reports as `PUT_BLOCKED` and treats as a failed upload, preserving the draft and the photo and offering retry. That is correct behaviour, not a bug to chase.
+R2 CORS currently allows `cardresell.org`, `www.cardresell.org`, and the **old** `ae759f3` Preview origin. A new Preview gets a new hostname, and the browser PUT goes directly to R2, so **an exact new origin must be added to the R2 bucket's CORS allowed origins before an iPhone upload can succeed.** Add the branch alias rather than the one-off deployment URL, so it keeps working on the next push:
+
+```
+https://cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app
+```
+
+Allowed methods must include `PUT`, and allowed headers must include `Content-Type` — that is the only header the browser sends, and it is the header the signature covers. Until then a real upload fails at the PUT with a CORS error — which the app reports as `PUT_BLOCKED` and treats as a failed upload, preserving the draft and the photo and offering retry. That is correct behaviour, not a bug to chase.
 
 ---
 
