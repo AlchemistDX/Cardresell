@@ -8,7 +8,8 @@
  * This file imports the actual default export of api/scan.js and drives it with
  * a fake req/res. External services are stubbed via tests/loader-stubs.mjs
  * (token verification, Ximilar, tier). The identity resolver is NOT stubbed.
- * KV is left unconfigured, so the credit path runs in its no-KV mode.
+ * Legacy identity cases run in no-KV mode. The billing cases below configure a
+ * structural in-memory REST KV and run BOTH real scan/debit handlers.
  *
  * Run: node tests/scan-handler-integration.mjs
  *      (node --import ./tests/register-stubs.mjs tests/scan-handler-integration.mjs
@@ -137,7 +138,7 @@ await t('an ambiguous Pokemon scan is UNCONDITIONALLY a confirmation, not an aut
   assert.equal(p.identified, false, 'ambiguity must never be reported as identified');
   assert.equal(p.needs_confirmation, true, 'the seller must be asked');
   assert.equal(p.end_state, 'NEEDS_CONFIRMATION');
-  assert.equal(p.printing ?? null, null, 'no printing may be claimed');
+  assert.equal(p.printing, null, 'no printing may be claimed');
   assert.ok(p.identity_resolution, 'provenance must be present');
 });
 await t('the response carries resolver provenance, so identity is auditable', async () => {
@@ -226,6 +227,86 @@ await t('REGRESSION: an absent candidate locator does not become an automatic id
   assert.notEqual(res.payload.identified, true,
     'a candidate whose locator is merely absent must not produce an exact match');
 });
+
+console.log('\nstructural KV billing through real handlers (no no-KV escape hatch)');
+const { billingHarness, ambiguous, exact, catalogue } = await import('./_scanBillingHarness.mjs');
+for (const bucket of ['paid', 'free']) {
+  await t(`${bucket}: confirmation refunds to net zero before success records or stats`, async () => {
+    const h = billingHarness({ bucket });
+    try {
+      const r = await h.scan(ambiguous());
+      assert.equal(r.statusCode, 200);
+      assert.equal(r.payload.end_state, 'NEEDS_CONFIRMATION');
+      assert.equal(r.payload.identified, false);
+      assert.equal(r.payload.needs_confirmation, true);
+      assert.equal(r.payload.grounded, false);
+      assert.equal(r.payload.grounded_id, null);
+      assert.equal(r.payload.printing, null);
+      assert.equal(r.payload.scan_id, undefined, 'no claimable successful scan id');
+      assert.equal(r.payload.identity_resolution.all_candidates.length, 9);
+      assert.equal(h.net(), 0, 'the initial credit was actually restored');
+      assert.ok(h.commands.some(c => c.cmd === (bucket === 'paid' ? 'decr' : 'incr')),
+        'must exercise a real credit mutation, not no-KV mode');
+      assert.ok(h.commands.some(c => c.cmd === 'set' && c.key.startsWith('scans:')),
+        'refund must actually write the restored balance');
+      assert.equal(h.commands.filter(c => c.key.startsWith('scan:')).length, 0);
+      assert.equal(h.commands.filter(c => c.key.startsWith('stats:searches:')).length, 0);
+      assert.equal(h.selections.length, 0);
+      assert.deepEqual(h.outbound, []);
+    } finally { h.restore(); }
+  });
+  await t(`${bucket}: cancel/abandon confirmation is net zero with no selection`, async () => {
+    const h = billingHarness({ bucket });
+    try {
+      const r = await h.scan();
+      assert.equal(r.payload.end_state, 'NEEDS_CONFIRMATION');
+      // Cancel has no server endpoint: no pick request follows this response.
+      assert.equal(h.net(), 0);
+      assert.equal(h.selections.length, 0);
+      assert.ok(![...h.store.keys()].some(k => /^(scan:|stats:searches:|draft)/.test(k)));
+      assert.deepEqual(h.outbound, []);
+    } finally { h.restore(); }
+  });
+  await t(`${bucket}: exact match costs one and writes one successful scan plus stats`, async () => {
+    const h = billingHarness({ bucket });
+    try {
+      const r = await h.scan(exact());
+      assert.equal(r.statusCode, 200);
+      assert.equal(r.payload.end_state, 'EXACT_MATCH');
+      assert.equal(r.payload.identified, true);
+      assert.equal(r.payload.needs_confirmation, false);
+      assert.equal(h.net(), 1);
+      const records = h.commands.filter(c => c.cmd === 'set' && c.key.startsWith('scan:'));
+      assert.equal(records.length, 1);
+      assert.equal(records[0].key, `scan:${r.payload.scan_id}`);
+      assert.equal(records[0].ex, '3600');
+      const record = JSON.parse(records[0].value);
+      assert.equal(record.consumed_amount, 1);
+      assert.equal(record.consumed_from, bucket === 'paid' ? 'id_paid_left' : 'id_free');
+      const stats = h.commands.filter(c => c.key.startsWith('stats:searches:'));
+      assert.equal(stats.length, 2);
+      assert.ok(stats.every(c => c.cmd === 'incr'));
+      assert.deepEqual(h.outbound, []);
+    } finally { h.restore(); }
+  });
+}
+await t('confirmation then seventh-candidate selection costs ONE across both real handlers', async () => {
+  const h = billingHarness();
+  try {
+    const r = await h.scan();
+    assert.equal(r.payload.end_state, 'NEEDS_CONFIRMATION');
+    assert.equal(h.net(), 0);
+    const seventh = r.payload.identity_resolution.all_candidates[6];
+    assert.equal(seventh.set, catalogue[6].set.id);
+    const picked = await h.pick({ card_name: seventh.name, card_number: seventh.number, set_name: seventh.set });
+    assert.equal(picked.statusCode, 200);
+    assert.equal(picked.payload.ok, true);
+    assert.equal(h.selections.length, 1);
+    assert.equal(h.net(), 1, 'not double charged');
+    assert.deepEqual(h.outbound, []);
+  } finally { h.restore(); }
+});
+globalThis.fetch = realFetch;
 
 /* The push gate judges an .mjs suite on THREE things: zero reported
  * failures, exit 0, AND this completion marker. A suite that dies before

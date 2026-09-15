@@ -96,7 +96,9 @@ const EXCLUDED = {
     'and a local HTTP server, none of which this offline runner provides, and ' +
     'the repo has no package.json to depend on Playwright from. Same treatment ' +
     'as flip-completeness-e2e.mjs and for the same reason. Run by hand: ' +
-    'node tests/identity-confirmation-browser.mjs (16/16 as of 2026-09-14).',
+    'node tests/identity-confirmation-browser.mjs. Extended for billing: real ' +
+    'picker and debit handler, structural KV, seventh-card final DOM, cancel, ' +
+    'debit errors and rapid double taps; Chromium iPhone-sized emulation.',
   'register-stubs.mjs':
     'Not a suite. A two-line --import shim that installs the ESM stub loader ' +
     'for suites invoked with that flag. Running it asserts nothing.',

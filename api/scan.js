@@ -1366,6 +1366,23 @@ export default async function handler(req, res) {
         }
       }
 
+      // Resolver ambiguity is not a completed identification, even when Ximilar
+      // returned one confident candidate. Refund before either the legacy picker
+      // or the success path can log a claimable scan / increment search stats.
+      const identity = identityResponseFields(cardInfo);
+      if (identity.needs_confirmation) {
+        await refundCredits();
+        return res.status(200).json({
+          success: true, mode: 'identify',
+          card_name: cardInfo.card_name || '',
+          card_number: cardInfo.card_number || '',
+          card_type: cardInfo.card_type || 'pokemon',
+          grounded: false, grounded_id: null, printing: null,
+          source: 'ximilar',
+          ...identity,
+        });
+      }
+
       // Multi-candidate picker path
       if (xim.needsPicker && Array.isArray(xim.candidates) && xim.candidates.length >= 2) {
         await refundCredits();
