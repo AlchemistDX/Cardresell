@@ -87,6 +87,14 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'preview-id-billing-acceptance.mjs':
+    'Temporary Stage1 Preview MODULE harness, not authenticated-handler or ' +
+    'HTTP-response-loss proof. Run explicitly alongside the complete offline ' +
+    'gate before its temporary Preview deployment: ' +
+    'node tests/preview-id-billing-acceptance.mjs. Requires private local Redis; ' +
+    'all outbound calls intercepted. Tests strict guards, one-shot control, ' +
+    'absolute expiry, six real-module cases, cleanup recovery and redaction. ' +
+    'Remove this registration together with the temporary route and suite.',
   'identity-confirmation-browser.mjs':
     'Added 2026-09-14 (blocker 5). Drives the shipped bundle in a real browser ' +
     'to prove the seller can reach and select a candidate BEYOND the top three ' +

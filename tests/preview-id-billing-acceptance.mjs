@@ -1,0 +1,293 @@
+// Temporary Stage1 MODULE harness verification; all network is intercepted.
+// Exact unchanged production billing Lua executes in isolated private Redis.
+import { harness } from './_assert.mjs';
+import { redisRest, redisStore, redisCommand } from './_idRedis.mjs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import handler from '../api/preview-id-billing-acceptance.js';
+const t = harness('preview-id-billing-acceptance');
+const BASE = '1e4122d021a81670a6659aaae7eb828d6f5d1eca';
+const PATH = '/api/preview-id-billing-acceptance';
+const HOST = 'synthetic-preview-acceptance.vercel.app';
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
+const END = Date.parse('2026-09-16T18:00:00Z');
+const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
+const CANARY = 'SYNTHETIC_ONLY_CREDENTIAL_CANARY_DO_NOT_OUTPUT';
+let store, commands, outside, fault, now;
+const originalNow = Date.now, originalFetch = globalThis.fetch;
+Date.now = () => now;
+const defaults = () => {
+  store = redisStore(); commands = []; outside = []; fault = {};
+  now = Date.parse('2026-09-15T16:00:00Z');
+  process.env.VERCEL_ENV = 'preview';
+  process.env.VERCEL_GIT_COMMIT_REF = 'fix/listing-export-identity';
+  process.env.VERCEL_URL = HOST;
+  process.env.KV_REST_API_URL = 'https://synthetic-isolated.upstash.io';
+  process.env.KV_REST_API_TOKEN = 'offline-placeholder-not-a-credential';
+};
+globalThis.fetch = async (url, init = {}) => {
+  if (String(url) !== process.env.KV_REST_API_URL) {
+    outside.push(String(url)); throw new Error(CANARY);
+  }
+  const args = JSON.parse(init.body);
+  const isBilling = args[0] === 'EVAL' && args[2] === 3;
+  if (fault.setup && args[0] === 'MSET') throw new Error(CANARY);
+  if (fault.cleanup && args[0] === 'DEL') throw new Error(CANARY);
+  if (fault.finish && args[0] === 'EVAL' && args[4] === 'finish') throw new Error(CANARY);
+  if (fault.billing && isBilling && args[6] === fault.billing) {
+    if (fault.billingAfter) {
+      await redisRest(url, init, commands);
+      throw new Error(CANARY);
+    }
+    throw new Error(CANARY);
+  }
+  if (fault.advance && isBilling) now += 26000;
+  const response = await redisRest(url, init, commands);
+  if (fault.claimAfter && args[0] === 'EVAL' && args[4] === 'claim') {
+    fault.claimAfter = false; throw new Error(CANARY);
+  }
+  return response;
+};
+async function invoke(method = 'POST', body = { operation: 'run' }, over = {}) {
+  const req = { method, body: method === 'GET' ? undefined : body, url: PATH, query: {},
+    headers: { host: HOST, origin: `https://${HOST}`, 'sec-fetch-site': 'same-origin',
+      'content-type': 'application/x-www-form-urlencoded' }, ...over };
+  if (over.headers) req.headers = { host: HOST, origin: `https://${HOST}`,
+    'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded', ...over.headers };
+  const res = { statusCode: 200, headers: {}, body: undefined,
+    setHeader(k, v) { this.headers[k] = v; return this; },
+    status(n) { this.statusCode = n; return this; },
+    end() { return this; }, json(v) { this.body = v; return this; }, send(v) { this.body = v; return this; } };
+  await handler(req, res);
+  return res;
+}
+const dataKeys = () => store.keys().filter(k => k !== CONTROL);
+const billingCalls = () => commands.filter(c => c.cmd === 'eval' && c.args[2] === 3);
+function safeOutput(value) {
+  const str = JSON.stringify(value);
+  return ![CANARY, 'Authorization', 'upstash.io', 'preview-id-', 'id_billing:',
+    'namespace', 'receipt', 'worker', 'stack', 'pickedCard'].some(s => str.includes(s));
+}
+function schema(body) {
+  const rowKeys = ['test', 'start', 'end', 'expectedDelta', 'actualDelta', 'counts', 'status'].sort().join();
+  return body && Object.keys(body).sort().join() === 'counts,tests'
+    && body.tests.every(r => Object.keys(r).sort().join() === rowKeys
+      && ['PASS', 'FAIL'].includes(r.status)
+      && ['start', 'end', 'expectedDelta', 'actualDelta'].every(k =>
+        Object.keys(r[k]).sort().join() === 'free,paid'
+        && Object.values(r[k]).every(v => v === null || Number.isSafeInteger(v))));
+}
+
+try {
+  for (const [name, change] of [
+    ['Production env', () => { process.env.VERCEL_ENV = 'production'; }],
+    ['missing env', () => { delete process.env.VERCEL_ENV; }],
+    ['wrong branch', () => { process.env.VERCEL_GIT_COMMIT_REF = 'main'; }],
+    ['missing branch', () => { delete process.env.VERCEL_GIT_COMMIT_REF; }],
+    ['missing host identity', () => { delete process.env.VERCEL_URL; }],
+    ['missing KV', () => { delete process.env.KV_REST_API_TOKEN; }],
+    ['unsafe KV scheme', () => { process.env.KV_REST_API_URL = 'http://synthetic-isolated.upstash.io'; }],
+    ['arbitrary KV host', () => { process.env.KV_REST_API_URL = 'https://example.invalid'; }],
+    ['KV URL embeds credentials', () => { process.env.KV_REST_API_URL = 'https://user:placeholder@synthetic-isolated.upstash.io'; }],
+    ['KV URL path', () => { process.env.KV_REST_API_URL += '/get/customer'; }],
+    ['absolute recovery expiry', () => { now = RECOVERY_END; }],
+  ]) {
+    defaults(); change();
+    const r = await invoke();
+    t.check(`${name}:404 before any request or write`, r.statusCode === 404 && commands.length === 0 && dataKeys().length === 0);
+  }
+  for (const [name, method, body, over] of [
+    ['wrong host', 'POST', { operation: 'run' }, { headers: { host: 'foreign.vercel.app' } }],
+    ['wrong path', 'POST', { operation: 'run' }, { url: PATH + '/arbitrary' }],
+    ['query URL', 'POST', { operation: 'run' }, { url: PATH + '?key=customer' }],
+    ['parsed query', 'POST', { operation: 'run' }, { query: { key: 'customer' } }],
+    ['cross-site origin', 'POST', { operation: 'run' }, { headers: { origin: 'https://foreign.invalid' } }],
+    ['missing origin', 'POST', { operation: 'run' }, { headers: { origin: undefined } }],
+    ['cross-site metadata', 'POST', { operation: 'run' }, { headers: { 'sec-fetch-site': 'cross-site' } }],
+    ['missing metadata', 'POST', { operation: 'run' }, { headers: { 'sec-fetch-site': undefined } }],
+    ['invalid content type', 'POST', { operation: 'run' }, { headers: { 'content-type': 'text/plain' } }],
+    ['arbitrary command', 'POST', { operation: 'run', command: 'GET' }, {}],
+    ['arbitrary key', 'POST', { operation: 'run', key: 'customer' }, {}],
+    ['arbitrary identity', 'POST', { operation: 'run', uid: 'customer' }, {}],
+    ['arbitrary value', 'POST', { operation: 'run', value: 100 }, {}],
+    ['arbitrary operation', 'POST', { operation: 'eval' }, {}],
+    ['array body', 'POST', ['run'], {}],
+    ['string body', 'POST', 'run', {}],
+    ['HEAD', 'HEAD', undefined, {}],
+    ['DELETE', 'DELETE', undefined, {}],
+    ['GET with body', 'GET', undefined, { body: { operation: 'run' } }],
+  ]) {
+    defaults();
+    const r = await invoke(method, body, over);
+    t.check(`${name}: refuses before KV`, r.statusCode >= 400 && commands.length === 0);
+  }
+  defaults();
+  const get = await invoke('GET');
+  t.check('GET only reads the fixed control marker', get.statusCode === 200
+    && commands.length === 1 && commands[0].cmd === 'get' && commands[0].key === CONTROL);
+  t.check('GET presents explicit fixed POST button, not automatic execution',
+    get.body.includes('method="POST"') && get.body.includes('value="run"')
+    && !get.body.includes('<script') && dataKeys().length === 0 && store.get(CONTROL) === null);
+  t.check('GET has no-store and restrictive CSP', get.headers['Cache-Control'] === 'no-store'
+    && get.headers['Content-Security-Policy'].includes("frame-ancestors 'none'"));
+
+  defaults(); now = END;
+  const expired = await invoke();
+  t.check('absolute run expiry rejects before any KV access', expired.statusCode === 410 && commands.length === 0);
+  const expiredPage = await invoke('GET');
+  t.check('expired GET cannot offer execution', !expiredPage.body.includes('value="run"') && billingCalls().length === 0);
+
+  defaults();
+  const run = await invoke();
+  t.check('all six MODULE cases and ordinary cleanup PASS', run.statusCode === 200
+    && run.body.tests.length === 7 && run.body.counts.pass === 7 && run.body.counts.fail === 0);
+  const expected = [[1, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 0],
+    [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]];
+  for (let i = 0; i < 6; i++) {
+    const r = run.body.tests[i], e = expected[i];
+    t.check(`MODULE case${i + 1}: exact synthetic start/end`, r.start.free === e[0] && r.start.paid === e[1]
+      && r.end.free === e[2] && r.end.paid === e[3]);
+  }
+  t.check('concurrent module case makes six real accepts', run.body.tests[4].counts.attempts === 6
+    && run.body.tests[4].counts.acceptedResponses === 6);
+  t.check('response counts are not confused with accepted records', run.body.tests[4].counts.acceptedJournals === 1
+    && run.body.tests.every(r => r.counts.successfulScanRecords === null || r.counts.successfulScanRecords === 0)
+    && run.body.tests[1].counts.acceptedJournals === 0);
+  t.check('discarded module-result case is accurately labelled, two real calls',
+    run.body.tests[5].test.includes('MODULE discarded committed result') && run.body.tests[5].counts.attempts === 2);
+  t.check('cleanup addresses exactly24 possible synthetic data keys including scan records', dataKeys().length === 0
+    && commands.find(c => c.cmd === 'del').args.length === 25);
+  const marker = JSON.parse(store.get(CONTROL));
+  t.check('durable consumed guard retained with no TTL', marker.consumed === true && marker.state === 'complete'
+    && await redisCommand(['TTL', CONTROL]) === -1);
+  t.check('no actual user/tier/Stripe/provider requests', outside.length === 0
+    && commands.every(c => c.key === CONTROL || String(c.key).startsWith('scans:preview-id-')
+      || String(c.key).startsWith('id_billing:') || String(c.key).startsWith('scan:preview-')));
+  t.check('output is allowlisted and redacted', schema(run.body) && safeOutput(run.body));
+  const originalCount = billingCalls().length;
+  const duplicate = await invoke();
+  t.check('second POST replays sanitized results without rerunning', JSON.stringify(duplicate.body) === JSON.stringify(run.body)
+    && billingCalls().length === originalCount);
+  const again = await invoke('GET');
+  t.check('completed GET is read-only and does not expose synthetic keys', !again.body.includes('value="run"')
+    && again.body.includes('value="recover"') && safeOutput(again.body));
+  const recovered = await invoke('POST', { operation: 'recover' });
+  t.check('explicit cleanup recovery never invokes billing or erases run guard', recovered.body.counts.fail === 0
+    && billingCalls().length === originalCount && JSON.parse(store.get(CONTROL)).consumed === true && dataKeys().length === 0);
+  await invoke();
+  t.check('cleanup cannot re-enable suite execution', billingCalls().length === originalCount);
+  const successful = run.body;
+
+  // Corrupted control/result data cannot become arbitrary cleanup keys or
+  // leak upstream diagnostic strings into the protected HTML/JSON response.
+  const poisoned = JSON.parse(store.get(CONTROL));
+  poisoned.results = [{ test: CANARY, start: { free: CANARY }, namespace: CANARY,
+    counts: { acceptedResponses: CANARY }, status: 'PASS', error: CANARY }];
+  store.set(CONTROL, JSON.stringify(poisoned));
+  const redacted = await invoke();
+  t.check('stored-result canaries are projected away, unknown test cannot PASS',
+    safeOutput(redacted.body) && schema(redacted.body) && redacted.body.tests[0].status === 'FAIL');
+  const redactedPage = await invoke('GET');
+  t.check('stored-result canaries cannot reach HTML', safeOutput(redactedPage.body));
+  poisoned.namespace = 'customer-key';
+  store.set(CONTROL, JSON.stringify(poisoned));
+  const delBefore = commands.filter(c => c.cmd === 'del').length;
+  const badManifest = await invoke('POST', { operation: 'recover' });
+  t.check('invalid manifest fails closed without arbitrary cleanup', badManifest.statusCode === 503
+    && commands.filter(c => c.cmd === 'del').length === delBefore && safeOutput(badManifest.body));
+  const badRepeat = await invoke();
+  t.check('invalid control cannot be replaced to rerun tests', badRepeat.statusCode === 503
+    && billingCalls().length === originalCount);
+
+  defaults();
+  const concurrent = await Promise.all([invoke(), invoke(), invoke()]);
+  t.check('concurrent POST claims at most once', commands.filter(c => c.cmd === 'mset').length === 6
+    && concurrent.every(r => r.statusCode === 200) && dataKeys().length === 0);
+
+  for (const mode of ['setup', 'debit-before', 'debit-after', 'accept-before', 'accept-after', 'cleanup', 'finish', 'deadline']) {
+    defaults();
+    if (mode === 'setup') fault.setup = true;
+    if (mode.startsWith('debit') || mode.startsWith('accept')) {
+      fault.billing = mode.split('-')[0]; fault.billingAfter = mode.endsWith('after');
+    }
+    if (mode === 'cleanup') fault.cleanup = true;
+    if (mode === 'finish') fault.finish = true;
+    if (mode === 'deadline') fault.advance = true;
+    const failed = await invoke();
+    t.check(`${mode}: failure is reported without sensitive payload`, failed.body.counts.fail > 0
+      && schema(failed.body) && safeOutput(failed.body));
+    t.check(`${mode}: one-shot remains consumed`, JSON.parse(store.get(CONTROL)).consumed === true);
+    if (!['cleanup', 'finish'].includes(mode)) t.check(`${mode}: all six case rows retained, unrun counted explicitly`,
+      failed.body.tests.filter(r => r.test.startsWith('MODULE ') && r.test !== 'MODULE execution').length === 6
+      && failed.body.counts.unrun === 5 && failed.body.tests[1].counts.executed === 0
+      && failed.body.tests[1].counts.attempts === 0);
+    if (mode !== 'cleanup') t.check(`${mode}: finally clears synthetic data`, dataKeys().length === 0);
+    fault = {};
+    // Model expired lease after interruption; fixture-only local Redis edit.
+    const interrupted = JSON.parse(store.get(CONTROL)); interrupted.lease = 0;
+    store.set(CONTROL, JSON.stringify(interrupted));
+    const before = billingCalls().length;
+    const repair = await invoke('POST', { operation: 'recover' });
+    t.check(`${mode}: recovery clears only synthetic data and never reruns`, repair.statusCode === 200
+      && dataKeys().length === 0 && billingCalls().length === before && JSON.parse(store.get(CONTROL)).consumed === true);
+  }
+  defaults(); fault.claimAfter = true;
+  const uncertain = await invoke();
+  t.check('lost claim response fails closed before setup', uncertain.statusCode === 503
+    && dataKeys().length === 0 && JSON.parse(store.get(CONTROL)).consumed === true);
+  const activeRecovery = await invoke('POST', { operation: 'recover' });
+  t.check('recovery cannot race active lease', activeRecovery.body.tests[0].test === 'Single-use guard'
+    && !commands.some(c => c.cmd === 'del'));
+  const old = JSON.parse(store.get(CONTROL)); old.lease = 0;
+  store.set(CONTROL, JSON.stringify(old)); now = END + 1;
+  const afterWindow = await invoke('POST', { operation: 'recover' });
+  t.check('expired execution still permits only bounded cleanup recovery', afterWindow.statusCode === 200
+    && afterWindow.body.tests.some(r => r.test === 'Recovery cleanup' && r.status === 'PASS') && billingCalls().length === 0);
+  const repeatExpired = await invoke();
+  t.check('recovery after expiry cannot enable execution', repeatExpired.statusCode === 410 && billingCalls().length === 0);
+
+  // TTL observation is deliberately separate from acceptance correctness:
+  // production MSET discards counter TTLs. Recovery, not a claimed TTL guarantee,
+  // is the cleanup path for an interrupted harness.
+  defaults();
+  const savedFetch = globalThis.fetch;
+  let observedTTL = false;
+  globalThis.fetch = async (url, init) => {
+    const args = JSON.parse(init.body);
+    if (args[0] === 'MSET') {
+      const response = await savedFetch(url, init);
+      await redisCommand(['EXPIRE', args[1], 300]);
+      await redisCommand(['EXPIRE', args[3], 300]);
+      return response;
+    }
+    const response = await savedFetch(url, init);
+    if (args[0] === 'EVAL' && args[2] === 3 && args[6] === 'debit') {
+      const result = JSON.parse((await response.clone().json()).result);
+      const key = result.bucket === 'id_free' ? args[4] : args[5];
+      observedTTL = observedTTL || (await redisCommand(['TTL', key])) === -1;
+    }
+    return response;
+  };
+  const ttlRun = await invoke();
+  globalThis.fetch = savedFetch;
+  t.check('MSET TTL reset observed separately, not disguised as billing failure', observedTTL && ttlRun.body.counts.fail === 0);
+  t.check('explicit ordinary cleanup removes counters despite TTL reset', dataKeys().length === 0);
+
+  for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/_tier.js', 'api/_verifyToken.js']) {
+    const current = readFileSync(new URL('../' + file, import.meta.url));
+    const baseline = execFileSync('git', ['show', `${BASE}:${file}`], { cwd: new URL('..', import.meta.url) });
+    t.check(`${file}: byte-identical to1e4122d`, current.equals(baseline));
+  }
+  const source = readFileSync(new URL('../api/preview-id-billing-acceptance.js', import.meta.url), 'utf8');
+  t.check('live harness never monkeypatches fetch or imports auth/scan handlers',
+    !/(?:globalThis|global|window)\.fetch\s*=/.test(source) && !/from ['"].*(?:scan\.js|scan-debit-id|_verifyToken)/.test(source));
+  writeFileSync('/home/user/workspace/preview_stage1_module_offline_evidence_20260915.json',
+    JSON.stringify({ stage: 'MODULE only; authenticated handlers and HTTP interruption UNRUN',
+      sourceSha256: createHash('sha256').update(source).digest('hex'), successful,
+      baseline: BASE, managedRedisRun: 'UNRUN', productionRequests: 0 }, null, 2));
+} finally {
+  globalThis.fetch = originalFetch;
+  Date.now = originalNow;
+}
+t.done();
