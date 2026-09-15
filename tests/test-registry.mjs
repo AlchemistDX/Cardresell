@@ -87,6 +87,12 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'preview-id-billing-reproduction.mjs':
+    'Temporary protected v4 synthetic MODULE journal byte reproduction, not ' +
+    'authenticated-handler evidence. Run explicitly before temporary Preview ' +
+    'deployment: node tests/preview-id-billing-reproduction.mjs. Uses isolated ' +
+    'local Redis only; verifies exact byte capture, guards, one-shot, artifact ' +
+    'preservation and recovery. Remove with temporary route after diagnosis.',
   'preview-id-billing-acceptance.mjs':
     'Temporary Stage1 Preview MODULE harness, not authenticated-handler or ' +
     'HTTP-response-loss proof. Run explicitly alongside the complete offline ' +
