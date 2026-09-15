@@ -3,7 +3,7 @@
 // Neither env/branch checks nor this route can prove those platform settings.
 // No auth handler, tier lookup, provider, Stripe, or customer data is exercised.
 import { randomBytes, createHash } from 'node:crypto';
-import { idBilling, offerIdConfirmation, candidateHash, IdBillingError } from './_idBilling.js';
+import { idBilling, offerIdConfirmation, candidateHash, canonicalPick, IdBillingError } from './_idBilling.js';
 
 export const config = { maxDuration: 60 };
 const PATH = '/api/preview-id-billing-acceptance';
@@ -12,9 +12,9 @@ const BRANCH = 'fix/listing-export-identity';
 // a separate bounded window; it cannot invoke billing or clear the run guard.
 const RUN_END = Date.parse('2026-09-16T18:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
-// v1 evidence/control is intentionally untouched. Its immutable deployed URL
-// retains its fixed recovery operation; v2 cannot read/delete/reuse that marker.
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
+// v1/v2 evidence/control is intentionally untouched. Each immutable deployed URL
+// retains its fixed recovery operation; v3 cannot read/delete/reuse those markers.
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v3';
 const LEASE_MS = 60000;
 const RUN_MS = 25000; // last billing call may take8s; reserve time for finally.
 const hex = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
@@ -42,6 +42,54 @@ const categoryOf = error => error instanceof DiagnosticError && CATEGORIES.inclu
   ? error.category : error instanceof IdBillingError ? 'billing_unavailable' : 'internal';
 const CANDIDATES = [{ name: 'Synthetic fixture A', number: '1', set: 'Synthetic set A' },
   { name: 'Synthetic fixture B', number: '2', set: 'Synthetic set B' }];
+const JOURNAL_CHECKS = ['serverOuterJson', 'serverNestedJson', 'serverBinding',
+  'serverState', 'serverResult', 'sameJournalBytes', 'serverWithinLimit',
+  'restOuterJson', 'restNestedJson', 'restBinding', 'restResult'];
+const JOURNAL_LIMIT = 32768;
+
+// Diagnostic only: fixed read-only projection of this case's own synthetic
+// journal. No bytes, identifiers, error text or customer keys leave the script.
+// This is NOT a replacement for the original strict REST GET/JSON assertion.
+const JOURNAL_SCRIPT = `
+local out={-1,-1,-1,-1,-1,-1,0}
+local raw=redis.call('GET',KEYS[1])
+if type(raw)~='string' or #raw>32768 then return out end
+out[7]=1
+local p=cjson.decode(ARGV[1])
+if type(p.rest_sha1)=='string' then out[6]=redis.sha1hex(raw)==p.rest_sha1 and 1 or 0 end
+out[1]=0
+local ok,r=pcall(cjson.decode,raw)
+if not ok or type(r)~='table' then return out end
+out[1]=1
+local function same(a,b)
+  if type(a)~=type(b) then return false end
+  if type(a)~='table' then return a==b end
+  for k,v in pairs(a) do if not same(v,b[k]) then return false end end
+  for k,_ in pairs(b) do if a[k]==nil then return false end end
+  return true
+end
+local binding=r.owner==p.owner and r.scan==p.scan and r.mode=='identify'
+  and r.candidate_set==p.candidate_set and same(r.candidates,p.candidates)
+if p.state=='accepted' then binding=binding and r.selected==p.candidate end
+out[3]=binding and 1 or 0
+out[4]=r.state==p.state and 1 or 0
+if p.state=='accepted' then
+  local nestedOK,nested=false,nil
+  if type(r.result_json)=='string' then nestedOK,nested=pcall(cjson.decode,r.result_json) end
+  nestedOK=nestedOK and type(nested)=='table'
+  out[2]=nestedOK and 1 or 0
+  out[5]=nestedOK and same(nested,r.result) and same(nested,p.result) and 1 or 0
+end
+return out
+`;
+function same(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object'
+      || Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length
+    && keys.every(k => Object.hasOwn(b, k) && same(a[k], b[k]));
+}
 
 // A fixed control operation, never caller-supplied Lua/keys/values. Consumed is
 // durable with NO expiry. Cleanup keeps namespace so later recovery can address
@@ -126,6 +174,9 @@ function cleanRow(row) {
     failedStage: STAGES.includes(row?.failedStage) ? row.failedStage : null,
     lastCompletedStage: STAGES.includes(row?.lastCompletedStage) ? row.lastCompletedStage : 'not_started',
     diagnosticCategory: CATEGORIES.includes(row?.diagnosticCategory) ? row.diagnosticCategory : null,
+    journalDiagnosticCategory: CATEGORIES.includes(row?.journalDiagnosticCategory) ? row.journalDiagnosticCategory : null,
+    journalChecks: Object.fromEntries(JOURNAL_CHECKS.map(k =>
+      [k, typeof row?.journalChecks?.[k] === 'boolean' ? row.journalChecks[k] : null])),
     counts: { executed: number(row?.counts?.executed), attempts: number(row?.counts?.attempts),
       acceptedResponses: number(row?.counts?.acceptedResponses),
       acceptedJournals: number(row?.counts?.acceptedJournals),
@@ -217,11 +268,55 @@ async function caseRun(r, i, deadline) {
     row.end = await step('end_balances', () => balances(r, i));
     row.actualDelta = { free: row.end.free - row.start.free, paid: row.end.paid - row.start.paid };
     const journal = await step('journal', async () => {
-      const raw = await kv(['GET', keys[2]]);
-      if (typeof raw !== 'string') throw new DiagnosticError('result_shape');
-      let value;
-      try { value = JSON.parse(raw); } catch (_) { throw new DiagnosticError('result_json'); }
-      if (!value || !['accepted', 'pending'].includes(value.state)) throw new DiagnosticError('result_shape');
+      row.journalChecks = {};
+      const expected = { owner: ctx.owner, scan: ctx.scan, ...selection,
+        candidates: CANDIDATES.map(c => ({ hash: candidateHash(c), card: canonicalPick(c) })),
+        state: spec.kind === 'cancel' ? 'pending' : 'accepted',
+        // Independent fixed fixture expectation, not an echo of the module reply.
+        result: { ok: true, bucket: spec.free ? 'id_free' : 'id_paid_left', remaining: 0,
+          free_remaining: spec.free + spec.delta[0], paid_remaining: spec.paid + spec.delta[1],
+          pickedCard: canonicalPick(CANDIDATES[1]), scan_id: ctx.scan } };
+      let value, restError, serverError;
+      try {
+        const raw = await kv(['GET', keys[2]]);
+        if (typeof raw !== 'string' || Buffer.byteLength(raw) > JOURNAL_LIMIT)
+          throw new DiagnosticError('result_shape');
+        expected.rest_sha1 = createHash('sha1').update(raw, 'utf8').digest('hex');
+        try { value = JSON.parse(raw); row.journalChecks.restOuterJson = true; }
+        catch (_) { row.journalChecks.restOuterJson = false; throw new DiagnosticError('result_json'); }
+        if (!value || typeof value !== 'object') throw new DiagnosticError('result_shape');
+        row.journalChecks.restBinding = value.owner === ctx.owner && value.scan === ctx.scan
+          && value.mode === 'identify' && value.candidate_set === selection.candidate_set
+          && Array.isArray(value.candidates) && same(value.candidates, expected.candidates)
+          && (spec.kind === 'cancel' || value.selected === selection.candidate);
+        if (spec.kind !== 'cancel') {
+          if (typeof value.result_json !== 'string') throw new DiagnosticError('result_shape');
+          let nested;
+          try { nested = JSON.parse(value.result_json); row.journalChecks.restNestedJson = true; }
+          catch (_) { row.journalChecks.restNestedJson = false; throw new DiagnosticError('result_json'); }
+          row.journalChecks.restResult = same(nested, value.result) && same(nested, expected.result);
+        }
+        if (value.state !== expected.state || !row.journalChecks.restBinding
+            || (spec.kind !== 'cancel' && !row.journalChecks.restResult))
+          throw new DiagnosticError('assertion_mismatch');
+      } catch (error) { restError = error; }
+      // Run even after strict GET parsing fails, retaining that primary failure.
+      // An inspector failure is separately sanitized, never promoted to PASS.
+      try {
+        checkTime();
+        const projection = await kv(['EVAL', JOURNAL_SCRIPT, 1, keys[2], JSON.stringify(expected)]);
+        if (!Array.isArray(projection) || projection.length !== 7
+            || projection.some(v => ![-1, 0, 1].includes(v))) throw new DiagnosticError('result_shape');
+        JOURNAL_CHECKS.slice(0, 7).forEach((k, j) => {
+          row.journalChecks[k] = projection[j] === -1 ? null : projection[j] === 1;
+        });
+        const wanted = spec.kind === 'cancel' ? [1, -1, 1, 1, -1, 1, 1] : [1, 1, 1, 1, 1, 1, 1];
+        if (!same(projection, wanted)) throw new DiagnosticError('assertion_mismatch');
+      } catch (error) {
+        serverError = error; row.journalDiagnosticCategory = categoryOf(error);
+      }
+      if (restError) throw restError;
+      if (serverError) throw serverError;
       return value;
     });
     row.counts.acceptedJournals = journal.state === 'accepted' ? 1 : 0;

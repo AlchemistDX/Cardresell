@@ -10,16 +10,18 @@ const t = harness('preview-id-billing-acceptance');
 const BASE = '1e4122d021a81670a6659aaae7eb828d6f5d1eca';
 const PATH = '/api/preview-id-billing-acceptance';
 const HOST = 'synthetic-preview-acceptance.vercel.app';
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v3';
 const V1_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
+const V2_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
 const END = Date.parse('2026-09-16T18:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
 const CANARY = 'SYNTHETIC_ONLY_CREDENTIAL_CANARY_DO_NOT_OUTPUT';
-let store, commands, outside, fault, now;
+let store, commands, outside, fault, now, probeObservations, contractObservations;
 const originalNow = Date.now, originalFetch = globalThis.fetch;
 Date.now = () => now;
 const defaults = () => {
   store = redisStore(); commands = []; outside = []; fault = {};
+  probeObservations = []; contractObservations = [];
   now = Date.parse('2026-09-15T16:00:00Z');
   process.env.VERCEL_ENV = 'preview';
   process.env.VERCEL_GIT_COMMIT_REF = 'fix/listing-export-identity';
@@ -33,6 +35,29 @@ globalThis.fetch = async (url, init = {}) => {
   }
   const args = JSON.parse(init.body);
   const isBilling = args[0] === 'EVAL' && args[2] === 3;
+  const isProbe = args[0] === 'EVAL' && args[2] === 1 && args[3].startsWith('id_billing:');
+  if (isProbe && fault.probe === 'unavailable') throw new Error(CANARY);
+  if (isProbe && fault.probe === 'shape') return Response.json({ result: CANARY });
+  if (args[0] === 'GET' && args[1].startsWith('id_billing:') && fault.storage) {
+    let journal = JSON.parse(await redisCommand(args));
+    switch (fault.storage) {
+      case 'outer': journal = '{' + CANARY; break;
+      case 'oversized': journal = ' '.repeat(32769); break;
+      case 'non-json-number': journal = JSON.stringify(journal).replace(/"remaining":0/, '"remaining":NaN'); break;
+      case 'nested': journal.result_json = '{' + CANARY; break;
+      case 'owner': journal.owner = CANARY; break;
+      case 'scan': journal.scan = CANARY; break;
+      case 'mode': journal.mode = 'grade'; break;
+      case 'state': journal.state = 'pending'; break;
+      case 'candidate-set': journal.candidate_set = CANARY; break;
+      case 'candidate': journal.selected = CANARY; break;
+      case 'candidate-card': journal.candidates[0].card.card_name = CANARY; break;
+      case 'bucket': journal.result.bucket = 'id_retry'; journal.result_json = JSON.stringify(journal.result); break;
+      case 'numeric': journal.result.remaining = 99; journal.result_json = JSON.stringify(journal.result); break;
+      case 'canonical': journal.result.pickedCard.card_name = CANARY; journal.result_json = JSON.stringify(journal.result); break;
+    }
+    await redisCommand(['SET', args[1], typeof journal === 'string' ? journal : JSON.stringify(journal), 'KEEPTTL']);
+  }
   if (fault.setup && args[0] === 'MSET') throw new Error(CANARY);
   if (fault.cleanup && args[0] === 'DEL') throw new Error(CANARY);
   if (fault.finish && args[0] === 'EVAL' && args[4] === 'finish') throw new Error(CANARY);
@@ -44,7 +69,26 @@ globalThis.fetch = async (url, init = {}) => {
     throw new Error(CANARY);
   }
   if (fault.advance && isBilling) now += 26000;
+  let before;
+  if (isProbe) {
+    const p = JSON.parse(args[4]), marker = JSON.parse(store.get(CONTROL));
+    const keys = [args[3], `scans:${p.owner}:id_free_used_${marker.stamp}`, `scans:${p.owner}:id_paid_left`];
+    before = { keys, bytes: await redisCommand(['MGET', ...keys]), ttl: await redisCommand(['PTTL', args[3]]) };
+  }
   const response = await redisRest(url, init, commands);
+  if (isProbe) {
+    const after = await redisCommand(['MGET', ...before.keys]), ttl = await redisCommand(['PTTL', args[3]]);
+    probeObservations.push({ bytesAndBalancesUnchanged: JSON.stringify(after) === JSON.stringify(before.bytes),
+      ttlNotRenewedOrRemoved: ttl > 0 && before.ttl >= ttl && before.ttl - ttl < 1000,
+      readOnlyCommands: [...args[1].matchAll(/redis\.call\('([^']+)'/g)].every(m => m[1] === 'GET') });
+  }
+  if (args[0] === 'GET' && args[1].startsWith('id_billing:') && !fault.storage) {
+    const outer = await response.clone().json(), stored = await redisCommand(args);
+    const journal = JSON.parse(outer.result);
+    contractObservations.push({ exactStoredStringPreserved: typeof outer.result === 'string' && stored === outer.result,
+      nestedStringParses: journal.state !== 'accepted' || (typeof journal.result_json === 'string'
+        && JSON.parse(journal.result_json).ok === true) });
+  }
   if (fault.claimAfter && args[0] === 'EVAL' && args[4] === 'claim') {
     fault.claimAfter = false; throw new Error(CANARY);
   }
@@ -87,14 +131,16 @@ const billingCalls = () => commands.filter(c => c.cmd === 'eval' && c.args[2] ==
 function safeOutput(value) {
   const str = JSON.stringify(value);
   return ![CANARY, 'Authorization', 'upstash.io', 'preview-id-', 'id_billing:',
-    'namespace', 'receipt', 'worker', 'stack', 'pickedCard'].some(s => str.includes(s));
+    'namespace', 'receipt', 'worker', 'stack', 'pickedCard', 'rest_sha1'].some(s => str.includes(s))
+    && !/[a-f0-9]{40}/.test(str);
 }
 function schema(body) {
   const rowKeys = ['test', 'start', 'end', 'expectedDelta', 'actualDelta', 'counts', 'status',
-    'failedStage', 'lastCompletedStage', 'diagnosticCategory'].sort().join();
+    'failedStage', 'lastCompletedStage', 'diagnosticCategory', 'journalDiagnosticCategory', 'journalChecks'].sort().join();
   return body && Object.keys(body).sort().join() === 'counts,tests'
     && body.tests.every(r => Object.keys(r).sort().join() === rowKeys
       && ['PASS', 'FAIL', 'UNRUN'].includes(r.status)
+      && Object.values(r.journalChecks).every(v => v === null || typeof v === 'boolean')
       && ['start', 'end', 'expectedDelta', 'actualDelta'].every(k =>
         Object.keys(r[k]).sort().join() === 'free,paid'
         && Object.values(r[k]).every(v => v === null || Number.isSafeInteger(v))));
@@ -163,6 +209,13 @@ try {
   const run = await invoke();
   t.check('all six MODULE cases and ordinary cleanup PASS', run.statusCode === 200
     && run.body.tests.length === 7 && run.body.counts.pass === 7 && run.body.counts.fail === 0);
+  t.check('actual Lua journal raw REST string and nested result_json contract roundtrip', contractObservations.length === 6
+    && contractObservations.every(c => c.exactStoredStringPreserved && c.nestedStringParses));
+  t.check('fixed server diagnostics preserve exact journal bytes, balances and TTL', probeObservations.length === 6
+    && probeObservations.every(c => c.bytesAndBalancesUnchanged && c.ttlNotRenewedOrRemoved && c.readOnlyCommands));
+  t.check('server and REST journal assertions both mandatory and passing', run.body.tests.slice(0, 6).every(r =>
+    Object.entries(r.journalChecks).every(([k, v]) => v === true
+      || (r.counts.attempts === 0 && ['serverNestedJson', 'serverResult', 'restNestedJson', 'restResult'].includes(k) && v === null))));
   const expected = [[1, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 0],
     [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]];
   for (let i = 0; i < 6; i++) {
@@ -206,6 +259,8 @@ try {
   poisoned.results = [{ test: CANARY, start: { free: CANARY }, namespace: CANARY,
     counts: { acceptedResponses: CANARY }, status: 'PASS', error: CANARY,
     failedStage: CANARY, lastCompletedStage: CANARY, diagnosticCategory: CANARY }];
+  poisoned.results[0].journalChecks = { serverOuterJson: CANARY, sameJournalBytes: CANARY, arbitrary: CANARY };
+  poisoned.results[0].journalDiagnosticCategory = CANARY;
   store.set(CONTROL, JSON.stringify(poisoned));
   const redacted = await invoke();
   t.check('stored-result canaries are projected away, unknown test cannot PASS',
@@ -335,19 +390,67 @@ try {
       first.start.free === 1 && first.start.paid === 1 && first.end.free === 0 && first.end.paid === 1
       && first.actualDelta.free === -1 && first.actualDelta.paid === 0
       && first.counts.attempts === 1 && first.counts.acceptedResponses === 1);
+    if (shape === 'journal-json') t.check('altered REST representation: valid stored journal cannot override failed GET parse',
+      first.journalChecks.restOuterJson === false && first.journalChecks.serverOuterJson === true
+      && first.journalChecks.serverNestedJson === true && first.journalChecks.serverResult === true
+      && first.journalChecks.sameJournalBytes === false && first.status === 'FAIL');
     shapeEvidence.push({ injectedOfflineHypothesis: shape, first, counts: r.body.counts });
   }
   defaults();
   const v1Evidence = JSON.stringify({ preservedOriginalEvidence: true, consumed: true });
   store.set(V1_CONTROL, v1Evidence);
-  const v2Run = await invoke();
+  const v2Evidence = JSON.stringify({ preservedOriginalEvidence: true, consumed: true, version: 2 });
+  store.set(V2_CONTROL, v2Evidence);
+  const v3Run = await invoke();
   await invoke('POST', { operation: 'recover' });
-  t.check('v2 uses new guard and fresh namespace, never addresses v1 evidence',
-    v2Run.body.counts.fail === 0 && JSON.parse(store.get(CONTROL)).consumed === true
+  t.check('v3 uses new guard and fresh namespace, never addresses v1/v2 evidence',
+    v3Run.body.counts.fail === 0 && JSON.parse(store.get(CONTROL)).consumed === true
     && /^[a-f0-9]{64}$/.test(JSON.parse(store.get(CONTROL)).namespace)
-    && store.get(V1_CONTROL) === v1Evidence && !commands.some(c => c.args.includes(V1_CONTROL)));
+    && store.get(V1_CONTROL) === v1Evidence && store.get(V2_CONTROL) === v2Evidence
+    && !commands.some(c => c.args.includes(V1_CONTROL) || c.args.includes(V2_CONTROL)));
 
-  for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/_tier.js', 'api/_verifyToken.js']) {
+  const journalEvidence = [];
+  for (const storage of ['outer', 'nested', 'owner', 'scan', 'mode', 'state', 'candidate-set',
+    'candidate', 'candidate-card', 'bucket', 'numeric', 'canonical', 'oversized', 'non-json-number']) {
+    defaults(); fault.storage = storage;
+    const r = await invoke(), first = r.body.tests[0], checks = first.journalChecks;
+    t.check(`stored ${storage}: strict journal failure, observations and cleanup retained`,
+      first.status === 'FAIL' && first.failedStage === 'journal' && first.end.free === 0 && first.end.paid === 1
+      && first.actualDelta.free === -1 && first.counts.acceptedResponses === 1
+      && r.body.counts.unrun === 5 && dataKeys().length === 0 && safeOutput(r.body));
+    if (storage === 'outer') t.check('invalid stored outer JSON: both decoders reject identical bytes',
+      checks.restOuterJson === false && checks.serverOuterJson === false && checks.sameJournalBytes === true);
+    else if (storage === 'nested') t.check('invalid stored nested JSON: both decoders reject nested field',
+      checks.restOuterJson === true && checks.serverOuterJson === true && checks.restNestedJson === false
+      && checks.serverNestedJson === false && checks.sameJournalBytes === true);
+    else if (storage === 'oversized') t.check('oversized journal: bounded diagnostics reject without decoding',
+      checks.serverWithinLimit === false && checks.serverOuterJson === null && checks.sameJournalBytes === null);
+    else if (storage === 'non-json-number') t.check('decoder disagreement is not transport proof when exact bytes agree',
+      checks.restOuterJson === false && checks.serverOuterJson === true && checks.sameJournalBytes === true
+      && checks.serverResult === false && first.status === 'FAIL');
+    else t.check(`stored ${storage}: independent server fixture check rejects`,
+      checks.sameJournalBytes === true && [checks.serverBinding, checks.serverState, checks.serverResult].includes(false));
+    journalEvidence.push({ injectedOfflineStorageFault: storage, first });
+  }
+  for (const probe of ['unavailable', 'shape']) {
+    defaults(); fault.probe = probe;
+    const r = await invoke(), first = r.body.tests[0];
+    t.check(`probe ${probe}: unknown not success, strict GET observations retained`,
+      first.status === 'FAIL' && first.failedStage === 'journal' && first.journalChecks.restOuterJson === true
+      && first.journalChecks.restNestedJson === true && first.journalChecks.serverOuterJson === null
+      && first.journalChecks.sameJournalBytes === null
+      && first.journalDiagnosticCategory === (probe === 'unavailable' ? 'transport' : 'result_shape')
+      && dataKeys().length === 0 && safeOutput(r.body));
+  }
+  defaults(); fault.probe = 'unavailable'; fault.shape = 'journal-json';
+  const bothFailed = await invoke(), bothFirst = bothFailed.body.tests[0];
+  t.check('probe loss never erases primary GET parse failure or invents byte equality',
+    bothFirst.failedStage === 'journal' && bothFirst.diagnosticCategory === 'result_json'
+    && bothFirst.journalDiagnosticCategory === 'transport' && bothFirst.journalChecks.sameJournalBytes === null
+    && bothFirst.journalChecks.serverOuterJson === null && bothFirst.journalChecks.restOuterJson === false
+    && bothFirst.end.free === 0 && bothFirst.end.paid === 1 && dataKeys().length === 0);
+
+  for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/scan-refund.js', 'api/_tier.js', 'api/_verifyToken.js']) {
     const current = readFileSync(new URL('../' + file, import.meta.url));
     const baseline = execFileSync('git', ['show', `${BASE}:${file}`], { cwd: new URL('..', import.meta.url) });
     t.check(`${file}: byte-identical to1e4122d`, current.equals(baseline));
@@ -355,11 +458,11 @@ try {
   const source = readFileSync(new URL('../api/preview-id-billing-acceptance.js', import.meta.url), 'utf8');
   t.check('live harness never monkeypatches fetch or imports auth/scan handlers',
     !/(?:globalThis|global|window)\.fetch\s*=/.test(source) && !/from ['"].*(?:scan\.js|scan-debit-id|_verifyToken)/.test(source));
-  writeFileSync('/home/user/workspace/preview_stage1_v2_module_offline_evidence_20260915.json',
+  writeFileSync('/home/user/workspace/preview_stage1_v3_module_offline_evidence_20260915.json',
     JSON.stringify({ stage: 'MODULE only; authenticated handlers and HTTP interruption UNRUN',
       sourceSha256: createHash('sha256').update(source).digest('hex'), successful,
-      baseline: BASE, managedRedisRun: 'UNRUN', productionRequests: 0, shapeEvidence,
-      rootCauseOfV1ManagedFailure: 'UNDETERMINED; shape hypotheses are injected offline, not observed provider behavior' }, null, 2));
+      baseline: BASE, managedRedisRun: 'UNRUN', productionRequests: 0, shapeEvidence, journalEvidence,
+      rootCauseOfV2ManagedFailure: 'UNDETERMINED; local raw REST/nested journal contract passes; injected faults are not observed provider behavior' }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
   Date.now = originalNow;
