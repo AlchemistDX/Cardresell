@@ -67,7 +67,7 @@ process.on('exit', shutdown);
  * nine consistent printings, short list of three, complete set of nine.
  * The target sits at index 6 — the seventh candidate. */
 const TARGET_SET = 'set6';
-let h = billingHarness();
+let h = billingHarness({ bucket: 'free' });
 const PAYLOAD = (await h.scan()).payload;
 check('real handler confirmation is net zero', h.net() === 0);
 check('real handler emits explicit null printing', PAYLOAD.printing === null);
@@ -92,7 +92,9 @@ await ctx.route('**/*', async route => {
     if (debitMode === 'network') return route.abort('failed');
     if (debitMode === 'error') return json({ ok: false, error: 'test debit unavailable' }, 503);
     if (debitMode === 'denied') return json({ ok: false, error: 'test debit denied' });
-    const r = await h.pick(req.postDataJSON().pickedCard);
+    const r = await h.pick(req.postDataJSON());
+    // Actual handler has committed. Discard only its outgoing response.
+    if (debitMode === 'lost-after-commit') return route.abort('failed');
     return json(r.payload, r.statusCode);
   }
   if (u.hostname === 'api.pokemontcg.io') return json({ data: catalogue });
@@ -201,7 +203,8 @@ await targetElement.evaluate(button => button.click());
 await page.waitForFunction(() => window._scanCandidateDebitPending === true);
 await new Promise(resolve => setTimeout(resolve, 100));
 check('one debit request for rapid double click', debitRequests.length === 1);
-check('debit receives the seventh printing', debitRequests[0]?.pickedCard.set_name === TARGET_SET);
+check('debit receives seventh raw printing and issued receipt',
+  debitRequests[0]?.candidate.set === TARGET_SET && debitRequests[0]?.confirmation_id === PAYLOAD.confirmation_id);
 check('pending debit has no identified UI or draft', await page.evaluate(() =>
   !document.getElementById('scanStatus').textContent.includes('✓') &&
   !window._pendingIdScanCard && !window._lastIdentifiedCard &&
@@ -215,6 +218,7 @@ check('actual final selected-card DOM is candidate seven, not candidate one',
   await page.locator('#cardNameEl').isVisible() &&
   /set6.*#58/.test(await page.locator('#cardMetaEl').textContent()));
 check('one total net credit across scan plus real debit handler', h.net() === 1 && h.selections.length === 1);
+check('browser confirmation used monthly free, never paid', h.store.get(PAID_KEY) === '5');
 check('real picker was never replaced', await page.evaluate(() => String(window._pickScanCandidate)) === pickerSource);
 check('selection did not create a draft', draftWrites.length === 0);
 await page.locator('#cardNameBlock').scrollIntoViewIfNeeded();
@@ -222,10 +226,32 @@ await page.screenshot({ path: path.join(EVIDENCE, '03-selected-seventh-card.png'
 const successEvidence = { net: h.net(), requests: debitRequests, commands: h.commands,
   title: await page.locator('#cardNameEl').textContent(), meta: await page.locator('#cardMetaEl').textContent() };
 
+// A second tab has no first-tab click guard. It reuses the receipt and same
+// seventh choice through the unmodified shipped picker and real handler.
+const secondTab = await ctx.newPage();
+await secondTab.goto(B, { waitUntil: 'domcontentloaded' });
+await secondTab.waitForFunction(() => typeof window._renderIdentityConfirmation === 'function');
+await secondTab.evaluate(payload => {
+  window.googleUser = { sub: 'offline-browser-seller', email: 'seller@example.test' };
+  window._googleIdToken = 'x'.repeat(40);
+  document.getElementById('scanOverlay').style.display = 'flex';
+  _renderIdentityConfirmation(payload, document.getElementById('scanStatus'), document.getElementById('scanResult'), null);
+}, PAYLOAD);
+await secondTab.getByTestId('identity-more').click();
+releaseDebit = null;
+await secondTab.locator('[data-candidate-set="set6"]').click();
+while (!releaseDebit) await new Promise(resolve => setTimeout(resolve, 10));
+releaseDebit();
+await secondTab.waitForFunction(() => window._scanCandidateDebitPending === false);
+check('second-tab real picker replay charges zero additional credits', h.net() === 1 && h.selections.length === 2);
+check('second-tab replay returns same printing', await secondTab.evaluate(() =>
+  window._pendingIdScanCard?.setName === 'set6' || document.getElementById('cardMetaEl').textContent.includes('set6')));
+await secondTab.close();
+
 // Each failure/cancel starts with an empty isolated page; no real account or
 // user storage is touched. Only endpoint responses differ; app functions remain real.
 const failureEvidence = [];
-for (const mode of ['cancel', 'error', 'denied', 'network', 'insufficient']) {
+for (const mode of ['cancel', 'error', 'denied', 'network', 'insufficient', 'lost-after-commit']) {
   h.restore();
   h = billingHarness();
   const payload = (await h.scan()).payload;
@@ -284,12 +310,27 @@ for (const mode of ['cancel', 'error', 'denied', 'network', 'insufficient']) {
     JSON.stringify(state));
   check(`${mode}: expected debit request count`, debitRequests.length === (mode === 'cancel' ? 0 : 1));
   check(`${mode}: no successful record or stats`, !h.commands.some(c => /^(scan:|stats:searches:)/.test(c.key)));
-  check(`${mode}: no credit lost`, mode === 'insufficient' ? Number(h.store.get(PAID_KEY)) === 0 : h.net() === 0);
+  check(`${mode}: billing matches actual commit`, mode === 'insufficient' ? Number(h.store.get(PAID_KEY)) === 0 : h.net() === (mode === 'lost-after-commit' ? 1 : 0));
   if (mode === 'cancel') check('cancel: no selection handler request', h.selections.length === 0);
   if (mode === 'error' || mode === 'denied') check(`${mode}: debit failure is visible`, /Could not debit/.test(state.error));
   if (mode === 'network') check('network failure is visible', /Network error/.test(state.error));
   await page.screenshot({ path: path.join(EVIDENCE, `04-${mode}.png`) });
   failureEvidence.push({ mode, state, debitRequests, commands: h.commands });
+  if (mode === 'lost-after-commit') {
+    check('post-commit loss displays real retry button', await page.getByTestId('identity-retry').isVisible());
+    debitMode = 'success';
+    releaseDebit = null;
+    await page.getByTestId('identity-retry').click();
+    while (!releaseDebit) await new Promise(resolve => setTimeout(resolve, 10));
+    releaseDebit();
+    await page.waitForFunction(() =>
+      document.getElementById('scanOverlay').style.display === 'none' &&
+      document.getElementById('cardMetaEl').textContent.includes('set6'), null, { timeout: 20000 });
+    check('visible retry preserves byte-equivalent receipt and candidate', JSON.stringify(debitRequests[0]) === JSON.stringify(debitRequests[1]));
+    check('post-commit retry has one lifetime debit and final seventh printing', h.net() === 1 && h.selections.length === 2
+      && /set6.*#58/.test(await page.locator('#cardMetaEl').textContent()));
+    await page.screenshot({ path: path.join(EVIDENCE, '05-commit-lost-retry.png') });
+  }
 }
 
 // ── an exact match must NOT render a confirmation ───────────────────────────

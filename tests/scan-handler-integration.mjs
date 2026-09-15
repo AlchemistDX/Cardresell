@@ -8,8 +8,8 @@
  * This file imports the actual default export of api/scan.js and drives it with
  * a fake req/res. External services are stubbed via tests/loader-stubs.mjs
  * (token verification, Ximilar, tier). The identity resolver is NOT stubbed.
- * Legacy identity cases run in no-KV mode. The billing cases below configure a
- * structural in-memory REST KV and run BOTH real scan/debit handlers.
+ * All cases use isolated local Redis via an offline REST boundary. Both real
+ * handlers and the exact production Lua execute, without live credentials.
  *
  * Run: node tests/scan-handler-integration.mjs
  *      (node --import ./tests/register-stubs.mjs tests/scan-handler-integration.mjs
@@ -24,14 +24,16 @@
  * inside the gate.
  */
 import assert from 'node:assert/strict';
+import { redisStore, redisRest } from './_idRedis.mjs';
 
 /* The handler bails to 503 when XIMILAR_API_TOKEN is unset, which would make
  * every test below pass for the wrong reason. Set a placeholder: the Ximilar
  * client is stubbed, so the value is never used and no request leaves the box.
  * KV is deliberately left unconfigured so the credit path runs in no-KV mode. */
 process.env.XIMILAR_API_TOKEN = 'test-placeholder-not-a-credential';
-delete process.env.KV_REST_API_URL;
-delete process.env.KV_REST_API_TOKEN;
+process.env.KV_REST_API_URL = 'https://scan-billing.test.invalid';
+process.env.KV_REST_API_TOKEN = 'test-kv-not-a-credential';
+const initialStore = redisStore();
 
 let pass = 0, fail = 0;
 const t = async (name, fn) => {
@@ -77,6 +79,7 @@ function mkReq(body = {}, headers = {}) {
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
   const u = String(url && url.url ? url.url : url);
+  if (new URL(u).origin === process.env.KV_REST_API_URL) return redisRest(url, init);
   const stub = globalThis.__STUB || {};
   if (u.includes('api.pokemontcg.io')) {
     if (stub.catalogError) {
@@ -92,6 +95,7 @@ globalThis.fetch = async (url, init) => {
 
 async function run(stub, body = {}, headers = {}) {
   globalThis.__STUB = stub;
+  initialStore.set(`scans:${stub.token?.uid || 'test-uid-1'}:id_paid_left`, '100');
   const res = mkRes();
   await handler(mkReq(body, headers), res);
   return res;
@@ -242,12 +246,12 @@ for (const bucket of ['paid', 'free']) {
       assert.equal(r.payload.grounded, false);
       assert.equal(r.payload.grounded_id, null);
       assert.equal(r.payload.printing, null);
-      assert.equal(r.payload.scan_id, undefined, 'no claimable successful scan id');
+      assert.equal(h.store.get(`scan:${r.payload.scan_id}`), null, 'correlation scan id has no claimable successful record');
       assert.equal(r.payload.identity_resolution.all_candidates.length, 9);
       assert.equal(h.net(), 0, 'the initial credit was actually restored');
-      assert.ok(h.commands.some(c => c.cmd === (bucket === 'paid' ? 'decr' : 'incr')),
+      assert.ok(h.commands.some(c => c.cmd === 'eval' && c.action === 'debit'),
         'must exercise a real credit mutation, not no-KV mode');
-      assert.ok(h.commands.some(c => c.cmd === 'set' && c.key.startsWith('scans:')),
+      assert.ok(h.commands.some(c => c.cmd === 'eval' && c.action === 'offer'),
         'refund must actually write the restored balance');
       assert.equal(h.commands.filter(c => c.key.startsWith('scan:')).length, 0);
       assert.equal(h.commands.filter(c => c.key.startsWith('stats:searches:')).length, 0);
@@ -298,7 +302,7 @@ await t('confirmation then seventh-candidate selection costs ONE across both rea
     assert.equal(h.net(), 0);
     const seventh = r.payload.identity_resolution.all_candidates[6];
     assert.equal(seventh.set, catalogue[6].set.id);
-    const picked = await h.pick({ card_name: seventh.name, card_number: seventh.number, set_name: seventh.set });
+    const picked = await h.pick(h.body(seventh));
     assert.equal(picked.statusCode, 200);
     assert.equal(picked.payload.ok, true);
     assert.equal(h.selections.length, 1);

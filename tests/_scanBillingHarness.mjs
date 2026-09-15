@@ -2,6 +2,7 @@
  * selection-debit handler are REAL. Only auth/tier/vision and catalogue/KV
  * boundaries are doubled. Never reads .env or calls a live service. */
 import { register } from 'node:module';
+import { redisStore, redisRest } from './_idRedis.mjs';
 
 process.env.XIMILAR_API_TOKEN = 'test-placeholder-not-a-credential';
 process.env.KV_REST_API_URL = 'https://scan-billing.test.invalid';
@@ -12,6 +13,7 @@ if (!globalThis.__crStubsRegistered) {
 }
 const scan = (await import('../api/scan.js')).default;
 const debit = (await import('../api/scan-debit-id.js')).default;
+const refundHandler = (await import('../api/scan-refund.js')).default;
 const { TIER_BENEFITS } = await import('./stubs/_tier.js');
 
 export const UID = 'test-confirmation-billing';
@@ -38,8 +40,11 @@ export const exact = () => {
 };
 
 export function billingHarness({ bucket = 'paid', balance = 5 } = {}) {
-  const store = new Map([[PAID_KEY, String(balance)], [freeKey(), '0']]);
+  const store = redisStore();
+  store.set(PAID_KEY, String(balance));
+  store.set(freeKey(), '0');
   const commands = [], outbound = [], selections = [];
+  const faults = {};
   const originalFetch = globalThis.fetch;
   // Explicit benefits, unlike the legacy no-KV suite's empty tier fixture.
   const originalBenefits = TIER_BENEFITS.pro;
@@ -47,21 +52,7 @@ export function billingHarness({ bucket = 'paid', balance = 5 } = {}) {
   globalThis.fetch = async (input, init = {}) => {
     const u = new URL(String(input?.url || input));
     if (u.origin === process.env.KV_REST_API_URL) {
-      // Split BEFORE decoding: SET values can contain URL-encoded slashes.
-      const [cmd, key, value, extra] = u.pathname.slice(1).split('/').map(decodeURIComponent);
-      commands.push({ cmd, key, value, ex: u.searchParams.get('EX') });
-      let result;
-      switch (cmd) {
-        case 'get': result = store.get(key) ?? null; break;
-        case 'set': store.set(key, value); result = 'OK'; break;
-        case 'setex': store.set(key, extra); result = 'OK'; break;
-        case 'incr':
-        case 'decr':
-          result = Number(store.get(key) || 0) + (cmd === 'incr' ? 1 : -1);
-          store.set(key, String(result)); break;
-        default: outbound.push(`unknown KV command: ${cmd}`); throw new Error(outbound.at(-1));
-      }
-      return Response.json({ result });
+      return redisRest(input, init, commands, faults);
     }
     if (u.hostname === 'api.pokemontcg.io') {
       return Response.json({ data: globalThis.__STUB.catalog || [] });
@@ -74,7 +65,13 @@ export function billingHarness({ bucket = 'paid', balance = 5 } = {}) {
       statusCode: 200, payload: null,
       setHeader() { return this; },
       status(code) { this.statusCode = code; return this; },
-      json(payload) { this.payload = payload; return this; },
+      json(payload) {
+        if (faults.throwResponse && payload.identified === true) {
+          faults.throwResponse = false;
+          throw new Error('injected response failure after successful scan record');
+        }
+        this.payload = payload; return this;
+      },
     };
     await handler({
       method: 'POST', headers: { authorization: 'Bearer ' + 'x'.repeat(40) }, body,
@@ -83,18 +80,26 @@ export function billingHarness({ bucket = 'paid', balance = 5 } = {}) {
     await new Promise(resolve => setImmediate(resolve));
     return res;
   }
+  let lastPayload;
   return {
-    store, commands, outbound, selections,
+    store, commands, outbound, selections, faults,
     net: () => balance - Number(store.get(PAID_KEY)) + Number(store.get(freeKey())),
-    scan: async (stub = ambiguous()) => {
+    scan: async (stub = ambiguous(), extraBody = {}) => {
       globalThis.__STUB = stub;
-      return invoke(scan, { imageBase64: Buffer.from('fake-jpeg').toString('base64'),
-        mimeType: 'image/jpeg', mode: 'identify' });
+      const result = await invoke(scan, { imageBase64: Buffer.from('fake-jpeg').toString('base64'),
+        mimeType: 'image/jpeg', mode: 'identify', ...extraBody });
+      lastPayload = result.payload;
+      return result;
     },
-    pick: async (pickedCard) => {
-      selections.push(pickedCard);
-      return invoke(debit, { pickedCard });
+    body: candidate => ({ confirmation_id: lastPayload.confirmation_id,
+      scan_id: lastPayload.scan_id, candidate_set: lastPayload.candidate_set,
+      mode: 'identify', candidate }),
+    pick: async (body) => {
+      selections.push(body);
+      return invoke(debit, body);
     },
+    invokeScan: body => invoke(scan, body),
+    refund: scan_id => invoke(refundHandler, { scan_id, reason: 'wrong_card' }),
     restore() {
       globalThis.fetch = originalFetch;
       TIER_BENEFITS.pro = originalBenefits;

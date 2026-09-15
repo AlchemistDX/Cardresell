@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'acorn';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const index = readAppSource();
@@ -160,8 +161,17 @@ console.log('\n[Sol remediation 2026-09-04]');
         gate({ ...base, retryOf: '' }) === false);
 
   // ---- the shipped source must contain each of those gates ----
-  const block = scanApi.slice(scanApi.indexOf('const retryOf ='),
-                              scanApi.indexOf('if (hasKV && !freeRetry)'));
+  // Inspect actual top-level branch boundaries, not a substring that can
+  // silently slice to -1 after ID/grade billing is split.
+  const ast = parse(scanApi, { ecmaVersion: 'latest', sourceType: 'module' });
+  const handler = ast.body.find(n => n.type === 'ExportDefaultDeclaration').declaration;
+  const branchFor = condition => handler.body.body.find(n => n.type === 'IfStatement'
+    && scanApi.slice(n.test.start, n.test.end).replace(/\s/g, '') === condition);
+  const idBranch = branchFor('hasKV&&!freeRetry&&isIdentifyMode');
+  const gradeBranch = branchFor('hasKV&&!freeRetry&&!isIdentifyMode');
+  check('ID debit has its own KV, free-retry and identify-mode guard', !!idBranch);
+  check('grade debit has its own KV, free-retry and non-identify guard', !!gradeBranch);
+  const block = idBranch ? scanApi.slice(scanApi.indexOf('const retryOf ='), idBranch.start) : '';
   check('server reads the prior scan record', /getKVJson\(kvUrl, kvToken, `scan:\$\{retryOf\}`\)/.test(block));
   check('server enforces ownership', /prior\.uid === key/.test(block));
   check('server enforces one free retry per scan', /!prior\.retry_used/.test(block));
@@ -171,9 +181,13 @@ console.log('\n[Sol remediation 2026-09-04]');
   check('server burns the entitlement before proceeding',
         /prior\.retry_used = true;[\s\S]{0,200}setKVWithTTL\(kvUrl, kvToken, `scan:\$\{retryOf\}`/.test(block));
 
-  // The debit block must be the thing that gets skipped.
-  check('the credit debit is skipped for a granted free retry',
-        /if \(hasKV && !freeRetry\) \{/.test(scanApi));
+  // Each guarded body must contain the real operation it claims to protect.
+  // Runtime replay/waiver coverage is in id-confirmation-atomic against Redis.
+  check('shared ID debit is inside the branch skipped for a free retry',
+        !!idBranch && /await idBilling\('debit'/.test(scanApi.slice(idBranch.consequent.start, idBranch.consequent.end)));
+  check('both grade bucket mutations are inside the branch skipped for a free retry',
+        !!gradeBranch && /await incrKV\(/.test(scanApi.slice(gradeBranch.consequent.start, gradeBranch.consequent.end))
+        && /await decrByKV\(/.test(scanApi.slice(gradeBranch.consequent.start, gradeBranch.consequent.end)));
   check('the debit block is no longer unconditional on hasKV alone',
         !/\n  if \(hasKV\) \{\n    const tier\s+= await getUserTier/.test(scanApi));
 
