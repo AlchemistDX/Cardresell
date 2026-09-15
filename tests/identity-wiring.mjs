@@ -117,5 +117,10 @@ t('an outage is never reported as a card the seller could accept',()=>{
   assert.equal(r.endState,E.SOURCE_UNAVAILABLE,
     'a partial result during an outage must not be presented as an identification');
 });
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail?1:0);
+/* The push gate judges an .mjs suite on THREE things: zero reported
+ * failures, exit 0, AND this completion marker. A suite that dies before
+ * its last assertion can still print a clean-looking count and exit 0, and
+ * without the marker the runner records it as a failure rather than a pass.
+ * Registering a suite in tests/run-all.sh therefore requires emitting it. */
+console.log(`\nidentity-wiring: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
+process.exit(fail ? 1 : 0);

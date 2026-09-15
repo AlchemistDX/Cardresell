@@ -15689,6 +15689,114 @@ function _affiliateLinks() {
 
 // Low-confidence scan picker: server gave us 2–3 candidates and refunded the credit.
 // Show a chooser — user taps the correct card; we debit 1 ID credit and set it as the scan result.
+/* ── Identity confirmation (resolver contract) ─────────────────────────────────
+ * Consumes the NEEDS_CONFIRMATION end state from api/scan.js. Until this
+ * existed, the server serialized candidates and `all_candidates` but no client
+ * code read them, so the guarantee "show the seller a short list when the image
+ * cannot distinguish between printings" was not reachable in the product.
+ *
+ * The seller sees the three-item short list first, and can open the COMPLETE
+ * candidate set — top-3 is a benchmark metric, not a limit on what is reachable.
+ */
+
+// The resolver projects candidates differently per stage. Normalize to the
+// shape the picker and the debit endpoint already use.
+function _normalizeIdentityCandidate(c) {
+  if (!c || typeof c !== 'object') return null;
+  return {
+    card_name:   c.card_name || c.name || '',
+    card_number: c.card_number || c.number || c.id || '',
+    set_name:    c.set_name || c.set || c.setName || c.setCode || c.set_code || '',
+    rarity:      c.rarity || c.set_rarity || '',
+    hp:          c.hp || '',
+    _raw: c,
+  };
+}
+
+function _identityCandidateList(ir, opts) {
+  if (!ir) return [];
+  const showAll = !!(opts && opts.showAll);
+  const src = showAll
+    ? (Array.isArray(ir.all_candidates) && ir.all_candidates.length ? ir.all_candidates : ir.candidates)
+    : ir.candidates;
+  return (Array.isArray(src) ? src : []).map(_normalizeIdentityCandidate).filter(Boolean);
+}
+
+function _renderIdentityConfirmation(data, statusEl, resultEl, objectUrl, opts) {
+  const ir = data && data.identity_resolution;
+  if (!ir) return false;
+  const showAll = !!(opts && opts.showAll);
+  const list = _identityCandidateList(ir, { showAll: showAll });
+  if (!list.length) return false;
+
+  const total = (typeof ir.candidate_count === 'number') ? ir.candidate_count : list.length;
+  const hidden = Math.max(0, total - list.length);
+
+  statusEl.innerHTML =
+    '<span style="color:#facc15;font-weight:800" data-testid="confirm-heading">' +
+    '\u26A0 More than one printing matches \u2014 pick the right one</span>' +
+    '<br><span style="font-size:.72rem;opacity:.6" data-testid="confirm-subhead">' +
+    'No credit is charged until you pick. If none match, tap Cancel.</span>';
+
+  const rows = list.map(function (c, i) {
+    const parts = [
+      c.set_name || '',
+      c.card_number ? '#' + c.card_number : '',
+      c.rarity || '',
+    ].filter(Boolean).join(' \u00b7 ');
+    return '<button type="button" data-testid="identity-candidate" ' +
+      'data-candidate-index="' + i + '" ' +
+      'data-candidate-set="' + String(c.set_name || '').replace(/"/g, '&quot;') + '" ' +
+      'onclick="_pickScanCandidate(' + i + ')" ' +
+      'style="display:block;width:100%;text-align:left;padding:.7rem .8rem;margin-bottom:.4rem;' +
+      'background:#151515;border:1px solid #2a2a2a;border-radius:10px;color:#fff;cursor:pointer;font-size:.85rem">' +
+      '<div style="font-weight:800">' + (c.card_name || 'Unknown') + '</div>' +
+      (parts ? '<div style="font-size:.72rem;opacity:.6;margin-top:.15rem">' + parts + '</div>' : '') +
+      '</button>';
+  }).join('');
+
+  // "More matches": the rest of the candidate set, reachable rather than discarded.
+  const moreBtn = (!showAll && (ir.more_available === true || hidden > 0))
+    ? '<button type="button" data-testid="identity-more" onclick="_showAllIdentityCandidates()" ' +
+      'style="display:block;width:100%;padding:.55rem;margin-top:.1rem;margin-bottom:.3rem;background:transparent;' +
+      'border:1px solid #3a3a3a;border-radius:10px;color:var(--gold,#facc15);font-size:.78rem;cursor:pointer;font-weight:700">' +
+      'Show all ' + total + ' matches' + (hidden ? ' (' + hidden + ' more)' : '') + '</button>'
+    : '';
+
+  const countLine =
+    '<div data-testid="identity-count" data-total="' + total + '" data-shown="' + list.length + '" ' +
+    'style="font-size:.68rem;opacity:.5;margin-bottom:.35rem">' +
+    'Showing ' + list.length + ' of ' + total + ' possible printings</div>';
+
+  resultEl.innerHTML =
+    '<div style="margin-top:.4rem" data-testid="identity-confirmation">' + countLine + rows + moreBtn +
+    '<button type="button" data-testid="identity-cancel" onclick="cancelScan()" ' +
+    'style="display:block;width:100%;padding:.55rem;margin-top:.3rem;background:transparent;border:1px solid #333;' +
+    'border-radius:10px;color:#aaa;font-size:.78rem;cursor:pointer">None of these \u2014 cancel</button>' +
+    '</div>';
+
+  // The picker handler and the debit endpoint read this list.
+  window._pendingScanCandidates = list;
+  window._pendingScanObjectUrl  = objectUrl;
+  window._pendingIdentityData   = data;
+  return true;
+}
+
+function _showAllIdentityCandidates() {
+  const data = window._pendingIdentityData;
+  const statusEl = document.getElementById('scanStatus');
+  const resultEl = document.getElementById('scanResult');
+  if (!data || !statusEl || !resultEl) return;
+  _renderIdentityConfirmation(data, statusEl, resultEl, window._pendingScanObjectUrl, { showAll: true });
+}
+
+try {
+  window._renderIdentityConfirmation   = _renderIdentityConfirmation;
+  window._showAllIdentityCandidates    = _showAllIdentityCandidates;
+  window._normalizeIdentityCandidate   = _normalizeIdentityCandidate;
+  window._identityCandidateList        = _identityCandidateList;
+} catch (e) {}
+
 function _renderScanCandidatesPicker(candidates, statusEl, resultEl, objectUrl) {
   if (!candidates || candidates.length < 2) return;
   const topGuess = candidates[0];
@@ -16176,6 +16284,13 @@ async function processScanImage(input) {
     // the low-confidence response, but selecting a candidate consumes the identification.
     // To keep credit math consistent with intent ("credits only debit after user selection"),
     // we re-deduct 1 ID credit locally via a lightweight decrement endpoint AFTER the user picks.
+    // Resolver contract: the server could not distinguish between printings.
+    // This must be asked, never guessed, so it is checked BEFORE any path that
+    // would render a single card as identified.
+    if (data.needs_confirmation === true || data.end_state === 'NEEDS_CONFIRMATION') {
+      if (_renderIdentityConfirmation(data, statusEl, resultEl, objectUrl)) return;
+    }
+
     if (data.needsPicker && Array.isArray(data.candidates) && data.candidates.length >= 2) {
       _renderScanCandidatesPicker(data.candidates, statusEl, resultEl, objectUrl);
       return;

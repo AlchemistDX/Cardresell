@@ -42,15 +42,60 @@ const MAX_CONFIRMATION_CANDIDATES = 3;
 const EVIDENCE_FIELDS = ['name', 'number', 'setCode'];
 const LOCATOR_FIELDS = ['number', 'setCode'];
 
-function observedEvidence(observed) {
+/* Two different questions, two different sufficiency rules.
+ *
+ * CARD identity ("which card is this?") needs a name plus a locator: a bare
+ * number repeats across sets (F3 = 11.13%) and a bare YGO set_code is reused
+ * across 3,879 DIFFERENT cards.
+ *
+ * PRINTING identity ("which printing of this already-identified card?") is asked
+ * only after the card is fixed, and the candidate list is that one card's own
+ * printings. A card name is not a discriminator there — every candidate shares
+ * it — so demanding one would force EVERY YGO scan into confirmation, which is a
+ * behaviour regression rather than added safety. What must discriminate is a
+ * locator, and the candidate must positively agree on it.
+ *
+ * The profile is passed explicitly by the caller. It is never inferred, so a
+ * caller cannot accidentally obtain the weaker rule for a card-identity question.
+ */
+const EVIDENCE_PROFILES = {
+  card: { requireName: true, minLocators: 1 },
+  printing: { requireName: false, minLocators: 1 },
+};
+
+function observedEvidence(observed, profileName = 'card') {
+  const profile = EVIDENCE_PROFILES[profileName] || EVIDENCE_PROFILES.card;
   const present = EVIDENCE_FIELDS.filter((f) => normText(observed[f]) != null);
   const locators = LOCATOR_FIELDS.filter((f) => normText(observed[f]) != null);
   return {
     present,
     locators,
-    // Sufficient for an automatic, unconfirmed identity claim.
-    sufficientForExact: present.includes('name') && locators.length >= 1,
+    profile: profileName,
+    // Necessary but NOT sufficient: this describes only what was read off the
+    // card. The candidate must separately AGREE — see candidateAgreementSuffices.
+    sufficientForExact:
+      (!profile.requireName || present.includes('name')) && locators.length >= profile.minLocators,
   };
+}
+
+/* Positive agreement on the CANDIDATE side.
+ *
+ * The observed-side gate above was only half the rule, and the missing half was
+ * a real defect: resolveIdentity({name:'Charizard', setCode:'base1'},
+ * [{name:'Charizard'}]) returned EXACT_MATCH. The candidate never agreed with
+ * base1 — its setCode was merely ABSENT, so the consistency check found no
+ * conflict and treated silence as compatibility.
+ *
+ * An exact result is a positive claim, so it requires the selected candidate to
+ * positively agree on the name AND on at least one locator. A field the provider
+ * left blank contributes nothing. This is the same principle already enforced in
+ * the scorer: silence is not agreement.
+ */
+function candidateAgreementSuffices(agreements, profileName = 'card') {
+  const profile = EVIDENCE_PROFILES[profileName] || EVIDENCE_PROFILES.card;
+  const set = new Set(agreements || []);
+  if (profile.requireName && !set.has('name')) return false;
+  return LOCATOR_FIELDS.filter((f) => set.has(f)).length >= profile.minLocators;
 }
 
 /* ---------- printed-identifier consistency ---------------------------------
@@ -102,6 +147,40 @@ function stripEditorial(v) {
     .trim();
 }
 
+/**
+ * Compare the set locator, which is the one printed identifier with more than
+ * one legitimate spelling.
+ *
+ * WHY ALIASES ARE REQUIRED. The observed set locator and the candidate's set
+ * locator routinely come from DIFFERENT vocabularies. The vision model reads the
+ * PTCGO code printed on a modern Pokémon card ("MEG"), while the pokemontcg.io
+ * candidate carries the API set id ("me1"). A plain string comparison calls that
+ * a CONFLICT, every candidate is rejected, and a card that is squarely in the
+ * catalogue is reported as UNKNOWN_CARD and the scan refunded. Measured against
+ * the real handler: Ivysaur me1-134 with an observed set_code of "MEG" resolved
+ * to UNKNOWN_CARD, so its rarity was never corrected. Lorcana had the same shape
+ * — observed set NAME against the candidate's `Set_ID`.
+ *
+ * This is the same failure mode the rarity note below describes, and it gets the
+ * same treatment: a cross-vocabulary comparison must not manufacture a conflict.
+ * The remedy is NOT to stop comparing set codes — that would drop a locator the
+ * evidence rule depends on. It is for the caller to declare every spelling the
+ * candidate itself legitimately answers to, and to agree on any one of them.
+ *
+ * Agreement still requires positive equality against a value the CANDIDATE
+ * actually carries, so this does not reopen the missing-locator hole: an absent
+ * or empty alias list is 'unknown', never agreement.
+ */
+function compareSetCode(observed, candidate) {
+  const o = normText(observed);
+  if (o == null) return 'unknown';
+  const values = [candidate.setCode, ...(candidate.setCodeAliases || [])]
+    .map(normText)
+    .filter((v) => v != null);
+  if (!values.length) return 'unknown';
+  return values.includes(o) ? 'agree' : 'conflict';
+}
+
 /** Compare one printed identifier. Returns 'agree' | 'conflict' | 'unknown'. */
 function compareField(observed, candidate, kind) {
   if (kind === 'number') {
@@ -136,7 +215,7 @@ function checkCandidate(observed, candidate, opts = {}) {
   const checks = {
     number: compareField(observed.number, candidate.number, 'number'),
     name: compareField(observed.name, candidate.name, 'name'),
-    setCode: compareField(observed.setCode, candidate.setCode, 'text'),
+    setCode: compareSetCode(observed.setCode, candidate),
   };
   if (opts.rarityComparable) {
     checks.rarity = compareField(observed.rarity, candidate.rarity, 'text');
@@ -186,7 +265,7 @@ function resolveIdentity(observed = {}, candidates = [], opts = {}) {
     return mk(END.UNKNOWN_CARD, null, [], 'no candidate printings returned by source', { observed });
   }
 
-  const ev = observedEvidence(observed);
+  const ev = observedEvidence(observed, opts.evidenceProfile);
   const scored = list.map((c) => ({
     candidate: c,
     ...checkCandidate(observed, c, { rarityComparable: opts.rarityComparable }),
@@ -244,6 +323,22 @@ function resolveIdentity(observed = {}, candidates = [], opts = {}) {
 
   if (consistent.length === 1) {
     const only = consistent[0];
+    // The observed side is sufficient; the candidate must also positively agree.
+    if (!candidateAgreementSuffices(only.agreements, opts.evidenceProfile)) {
+      return mk(
+        END.NEEDS_CONFIRMATION, null, shortList,
+        `the only consistent candidate does not positively agree on a name plus a locator `
+        + `(agreed on: ${only.agreements.length ? only.agreements.join(', ') : 'nothing'}); `
+        + `absent candidate metadata is not evidence`,
+        {
+          observed, evidence: ev, checks: only.checks, agreements: only.agreements,
+          consistentCount: consistent.length,
+          allCandidates,
+          moreAvailable: allCandidates.length > shortList.length,
+          insufficientCandidateAgreement: true,
+        }
+      );
+    }
     return mk(END.EXACT_MATCH, only.candidate, [], 'exactly one candidate is consistent with sufficient printed identifiers', {
       observed, evidence: ev, checks: only.checks, agreements: only.agreements,
     });

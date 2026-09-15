@@ -28,7 +28,7 @@
  * assertion, never assumed around it.
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { harness } from './_assert.mjs';
@@ -43,6 +43,23 @@ const runner = readFileSync(join(HERE, 'run-all.sh'), 'utf8');
 
 const invoked = new Set(
   [...runner.matchAll(/\$ROOT\/tests\/([\w.-]+)/g)].map(m => m[1]));
+
+/* Suites that live outside tests/. The runner may register a suite from
+   tools/ — the migration collision planner's tests sit next to the planner
+   they cover — and the slot-count invariant below compares labels against
+   invoked FILES, so an out-of-tree invocation has to be counted or the
+   arithmetic reports a phantom missing suite. Disk coverage below stays
+   scoped to tests/: this set records what the runner invokes, not what any
+   other directory is obliged to contain. */
+const invokedOutOfTree = new Set(
+  [...runner.matchAll(/\$ROOT\/(?!tests\/)((?:[\w.-]+\/)+[\w.-]+\.m?js)/g)].map(m => m[1]));
+const invokedAll = new Set([...invoked, ...invokedOutOfTree]);
+
+for (const rel of invokedOutOfTree) {
+  T.check(`out-of-tree suite ${rel} exists on disk`,
+    existsSync(join(HERE, '..', rel)),
+    `run-all.sh invokes ${rel} but the file is not there`);
+}
 
 T.check(`runner: parsed ${invoked.size} invocations from run-all.sh (floor 20)`,
   invoked.size >= 20,
@@ -70,6 +87,22 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'identity-confirmation-browser.mjs':
+    'Added 2026-09-14 (blocker 5). Drives the shipped bundle in a real browser ' +
+    'to prove the seller can reach and select a candidate BEYOND the top three ' +
+    'when the image cannot distinguish between printings — the surface a ' +
+    'source-level assertion cannot speak for, since a renderer that merely ' +
+    'mentions all_candidates would satisfy one. Needs Playwright plus Chromium ' +
+    'and a local HTTP server, none of which this offline runner provides, and ' +
+    'the repo has no package.json to depend on Playwright from. Same treatment ' +
+    'as flip-completeness-e2e.mjs and for the same reason. Run by hand: ' +
+    'node tests/identity-confirmation-browser.mjs (16/16 as of 2026-09-14).',
+  'register-stubs.mjs':
+    'Not a suite. A two-line --import shim that installs the ESM stub loader ' +
+    'for suites invoked with that flag. Running it asserts nothing.',
+  'loader-stubs.mjs':
+    'Not a suite. The ESM resolve/load hook itself, loaded by Node in a ' +
+    'separate module thread. Running it directly asserts nothing.',
   'ebay-live.mjs':
     'Hits api.ebay.com for real and needs EBAY_LIVE=1 plus live credentials. ' +
     'It is the push-gate check, run deliberately by hand, never in the ' +
@@ -226,9 +259,9 @@ T.check('no slot number is printed more than twice (run + SKIPPED branch)',
 
 /* The declared total must also equal the number of distinct invoked files, or a
    label exists with no test behind it. */
-T.check(`the declared total (${declaredTotal}) equals the number of invoked files (${invoked.size})`,
-  declaredTotal === invoked.size,
-  `${declaredTotal} labels against ${invoked.size} invoked files -- a slot ` +
+T.check(`the declared total (${declaredTotal}) equals the number of invoked files (${invokedAll.size})`,
+  declaredTotal === invokedAll.size,
+  `${declaredTotal} labels against ${invokedAll.size} invoked files -- a slot ` +
   `label with no suite behind it, or a suite invoked without a label`);
 
 T.done();

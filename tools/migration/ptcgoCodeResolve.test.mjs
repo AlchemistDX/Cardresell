@@ -148,5 +148,79 @@ t('the summary separates will-modify from quarantined and collided', () => {
   assert.equal(s.total, 3);
 });
 
-console.log(`\n${pass} passed, ${fail} failed`);
+console.log('\nBLOCKER 4: a collision blocks BOTH sides, never just the later record');
+
+t('both members of a colliding pair keep their quantities and are NOT modified', () => {
+  // Two records that resolve onto the SAME canonical identity. The old
+  // single-pass plan marked only the second COLLISION and still modified the
+  // first. Both must now be blocked.
+  const recs = [
+    { instanceId: 'A', game: 'pokemon', ptcgoCode: 'ASR', number: '1', quantity: 3 },
+    { instanceId: 'B', game: 'pokemon', ptcgoCode: 'ASR', number: '1', quantity: 7 },
+  ];
+  const plan = P.planResolve(recs, { trustedSetIdByInstance: new Map([['A','swsh10'],['B','swsh10']]) });
+  const A = plan.rows.find(r => r.instanceId === 'A');
+  const B = plan.rows.find(r => r.instanceId === 'B');
+  assert.equal(A.outcome, P.OUTCOME.COLLISION, 'the FIRST record must also be blocked');
+  assert.equal(B.outcome, P.OUTCOME.COLLISION);
+  assert.equal(A.after, null, 'a blocked row carries no `after`');
+  assert.equal(B.after, null);
+  // Neither may appear in inverse (nothing to roll back, because nothing changed).
+  assert.ok(!plan.inverse.some(i => i.instanceId === 'A'), 'A must not enter inverse');
+  assert.ok(!plan.inverse.some(i => i.instanceId === 'B'), 'B must not enter inverse');
+  // applyResolve must not touch either, and quantities must be intact.
+  const out = P.applyResolve(recs, plan);
+  const oa = out.find(r => r.instanceId === 'A');
+  const ob = out.find(r => r.instanceId === 'B');
+  assert.equal(oa.quantity, 3, "A's quantity is unchanged");
+  assert.equal(ob.quantity, 7, "B's quantity is unchanged");
+  assert.equal(oa.ptcgoCode, 'ASR', 'A was not modified');
+  assert.equal(ob.ptcgoCode, 'ASR', 'B was not modified');
+  assert.equal(oa.setId, undefined, 'A did not receive a setId');
+  assert.equal(ob.setId, undefined, 'B did not receive a setId');
+  assert.equal(3 + 7, oa.quantity + ob.quantity, 'quantities were never summed into one row');
+});
+
+t('a resolved record is blocked by an UNTOUCHED record already on that identity', () => {
+  // C is already canonical (no ptcgoCode to repair) and occupies the target
+  // identity. D would resolve onto exactly that SKU. The old plan never compared
+  // against untouched records at all, so D would have overwritten the identity.
+  const canonical = { instanceId: 'C', game: 'pokemon', setId: 'swsh10', number: '1', quantity: 5 };
+  const recs = [
+    canonical,
+    { instanceId: 'D', game: 'pokemon', ptcgoCode: 'ASR', number: '1', quantity: 2 },
+  ];
+  const plan = P.planResolve(recs, { trustedSetIdByInstance: new Map([['D','swsh10']]) });
+  const D = plan.rows.find(r => r.instanceId === 'D');
+  assert.equal(D.outcome, P.OUTCOME.COLLISION, 'an untouched canonical record must block the resolve');
+  assert.equal(D.after, null);
+  assert.ok(D.collidesWith.instanceIds.includes('C'), 'the untouched record is named in the collision');
+  assert.ok(D.collidesWith.untouchedCanonical.includes('C'),
+    'and is identified as untouched-canonical');
+  assert.ok(!plan.inverse.some(i => i.instanceId === 'D'));
+  const out = P.applyResolve(recs, plan);
+  assert.equal(out.find(r => r.instanceId === 'C').quantity, 5);
+  assert.equal(out.find(r => r.instanceId === 'D').quantity, 2);
+  assert.equal(out.find(r => r.instanceId === 'D').setId, undefined);
+});
+
+t('the collision key is the production-generated SKU, not a reimplemented string', () => {
+  const recs = [
+    { instanceId: 'A', game: 'pokemon', ptcgoCode: 'ASR', number: '1', quantity: 1 },
+    { instanceId: 'B', game: 'pokemon', ptcgoCode: 'ASR', number: '1', quantity: 1 },
+  ];
+  const plan = P.planResolve(recs, { trustedSetIdByInstance: new Map([['A','swsh10'],['B','swsh10']]) });
+  const row = plan.rows.find(r => r.outcome === P.OUTCOME.COLLISION);
+  assert.ok(row.collidesWith.sku, 'the contested SKU is reported');
+  // skuFor() emits the v2- form; a hand-rolled pipe-delimited key would not.
+  assert.match(row.collidesWith.sku, /^v2-/,
+    'the grouping key is the real skuFor() output, so the plan cannot diverge from production');
+});
+
+/* The push gate judges an .mjs suite on THREE things: zero reported
+ * failures, exit 0, AND this completion marker. A suite that dies before
+ * its last assertion can still print a clean-looking count and exit 0, and
+ * without the marker the runner records it as a failure rather than a pass.
+ * Registering a suite in tests/run-all.sh therefore requires emitting it. */
+console.log(`\nptcgoCodeResolve: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);

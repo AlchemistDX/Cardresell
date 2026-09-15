@@ -110,10 +110,8 @@ async function groundYugiohCardInfo(cardInfo) {
           j.data.map(c => ({ name: c.name, number: c.id, _raw: c }))
         );
         if (cardRes.endState !== END_STATES.EXACT_MATCH) {
-          cardInfo.identity_resolution = {
-            stage: 'ygo_card', endState: cardRes.endState, reason: cardRes.reason,
-            candidates: cardRes.candidates.map(c => ({ name: c.name, id: c.number })),
-          };
+          cardInfo.identity_resolution = identityResolutionRecord(
+            'ygo_card', cardRes, c => ({ name: c.name, id: c.number }));
           if (cardRes.endState !== END_STATES.NEEDS_CONFIRMATION) return;
         }
         let card = (cardRes.printing && cardRes.printing._raw)
@@ -127,21 +125,27 @@ async function groundYugiohCardInfo(cardInfo) {
           // vocabulary, so it is passed for evidence but rarityComparable is
           // deliberately NOT set: these collisions must reach the seller as a
           // confirmation, not be broken by an inadmissible string compare.
+          // `name` here is the SET name, not the card name. Passing it as
+          // `name` meant the resolver compared a SET name against an observed
+          // CARD name — different things in the same field. It is passed as
+          // setName, which the printed-identifier check does not treat as a card
+          // name. The printing profile is requested explicitly: the card is
+          // already fixed, so the locator discriminates, not the name.
           const printRes = resolveIdentity(
             { setCode: cardInfo.set_code, rarity: cardInfo.rarity },
             card.card_sets.map(s => ({
-              setCode: s.set_code, rarity: s.set_rarity, name: s.set_name, _raw: s,
-            }))
+              setCode: s.set_code, rarity: s.set_rarity, setName: s.set_name, _raw: s,
+            })),
+            { evidenceProfile: 'printing' }
           );
           if (printRes.endState === END_STATES.EXACT_MATCH) {
             printing = printRes.printing._raw;
           } else {
             // Do NOT fall back to card_sets[0]. Record the ambiguity and leave
             // the printing unset so downstream cannot present a guess as fact.
-            cardInfo.identity_resolution = {
-              stage: 'ygo_printing', endState: printRes.endState, reason: printRes.reason,
-              candidates: printRes.candidates.map(c => ({ set_code: c.setCode, set_rarity: c.rarity, set_name: c.name })),
-            };
+            cardInfo.identity_resolution = identityResolutionRecord(
+              'ygo_printing', printRes,
+              c => ({ set_code: c.setCode, set_rarity: c.rarity, set_name: c.setName }));
             printing = null;
           }
         }
@@ -330,13 +334,17 @@ async function groundLorcanaCardInfo(cardInfo) {
   // F8: was `hits[0]`. Resolve against the printed identifiers instead.
   const lorRes = resolveIdentity(
     { name: cleanName, number: cardInfo.card_number, setCode: rawSet },
-    hits.map(h => ({ name: h.Name, number: h.Card_Num, setCode: h.Set_ID, _raw: h }))
+    // Observed here is the model's set text, which is typically the set NAME
+    // ("The First Chapter") while the candidate carries `Set_ID` ("TFC").
+    hits.map(h => ({
+      name: h.Name, number: h.Card_Num, setCode: h.Set_ID,
+      setCodeAliases: [h.Set_Name, h.Set_Num].filter(Boolean),
+      _raw: h,
+    }))
   );
   if (lorRes.endState !== END_STATES.EXACT_MATCH) {
-    cardInfo.identity_resolution = {
-      stage: 'lorcana', endState: lorRes.endState, reason: lorRes.reason,
-      candidates: lorRes.candidates.map(c => ({ name: c.name, number: c.number, set: c.setCode })),
-    };
+    cardInfo.identity_resolution = identityResolutionRecord(
+      'lorcana', lorRes, c => ({ name: c.name, number: c.number, set: c.setCode }));
     console.log(`[scan] Lorcana grounding: ${lorRes.endState} for "${cleanName}" — ${lorRes.reason}`);
     return;
   }
@@ -520,19 +528,27 @@ export async function groundPokemonCardInfo(cardInfo) {
       const res = resolveIdentity(
         { name: cleanName, number: cardInfo.card_number, setCode: cardInfo.set_code },
         ranked.map(c => ({
-          name: c.name, number: c.number, setCode: c.set?.id, _raw: c,
+          name: c.name, number: c.number, setCode: c.set?.id,
+          // The observed set locator is whatever the vision model read off the
+          // card — usually the printed PTCGO code ("MEG"), not the API set id
+          // ("me1"). Both are this candidate's own spellings of one set, so
+          // both are declared and either one is agreement.
+          setCodeAliases: [c.set?.ptcgoCode, c.set?.name].filter(Boolean),
+          _raw: c,
         }))
       );
       if (res.endState === END_STATES.EXACT_MATCH) {
         best = res.printing._raw;
         // A later query resolving cleanly must not leave an earlier query's
-        // ambiguity record attached to the result.
-        delete cardInfo.identity_resolution;
+        // ambiguity record attached to the result — but deleting it outright
+        // left `end_state` UNDEFINED on the success path, i.e. absent exactly
+        // when identification worked. Every scan reports one of the six declared
+        // end states, so the record is REPLACED with the exact match, not removed.
+        cardInfo.identity_resolution = identityResolutionRecord(
+          'pokemon_rank', res, c => ({ name: c.name, number: c.number, set: c.setCode }));
       } else {
-        cardInfo.identity_resolution = {
-          stage: 'pokemon_rank', endState: res.endState, reason: res.reason,
-          candidates: res.candidates.map(c => ({ name: c.name, number: c.number, set: c.setCode })),
-        };
+        cardInfo.identity_resolution = identityResolutionRecord(
+          'pokemon_rank', res, c => ({ name: c.name, number: c.number, set: c.setCode }));
         best = null;
       }
       if (best) break;
@@ -737,6 +753,39 @@ async function groundCardInfoByGame(cardInfo) {
 // POST { imageBase64, mimeType, email, googleSub }
 // Authorization: Bearer <google_id_token>
 // Returns: { card_name, card_number, set_name, hp, card_type, rarity, success: true }
+
+/* One serializer for every resolver call site.
+ *
+ * Each of the four sites previously hand-built cardInfo.identity_resolution and
+ * copied ONLY the three-item `candidates` short list. evidence.allCandidates was
+ * dropped on the floor, so identityResponseFields() could not find it and fell
+ * back to the short list — candidates four onward were unreachable even though
+ * the resolver had returned them and the packet claimed otherwise.
+ *
+ * Every site now goes through this function, so the complete set cannot be lost
+ * by one site forgetting to copy it.
+ */
+function identityResolutionRecord(stage, res, project) {
+  const shape = typeof project === 'function' ? project : (c) => c;
+  const all = (res.evidence && Array.isArray(res.evidence.allCandidates))
+    ? res.evidence.allCandidates
+    : res.candidates;
+  return {
+    stage,
+    endState: res.endState,
+    reason: res.reason,
+    candidates: (res.candidates || []).map(shape),
+    // The COMPLETE unresolved set, not the short list.
+    allCandidates: (all || []).map(shape),
+    evidence: {
+      allCandidates: (all || []).map(shape),
+      moreAvailable: (all || []).length > (res.candidates || []).length,
+      insufficientEvidence: !!(res.evidence && res.evidence.insufficientEvidence),
+      insufficientCandidateAgreement: !!(res.evidence && res.evidence.insufficientCandidateAgreement),
+      consistentCount: res.evidence ? res.evidence.consistentCount : undefined,
+    },
+  };
+}
 
 /* Identity provenance on the wire.
  *

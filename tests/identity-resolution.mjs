@@ -292,5 +292,155 @@ t('pre-correction cache entries cannot be served', () => {
   assert.equal(R.isCurrentCacheEntry(R.stampCacheEntry({ name: 'Ivysaur' })), true);
 });
 
-console.log(`\n${pass} passed, ${fail} failed`);
+console.log('\nBLOCKER 1: an EXACT_MATCH requires POSITIVE candidate agreement');
+
+t('the reviewer counterexample: an absent set code is not agreement with base1', () => {
+  // Reported verbatim:
+  //   resolveIdentity({name:'Charizard', setCode:'base1'}, [{name:'Charizard'}])
+  // returned EXACT_MATCH. The candidate never agreed with base1 — its locator was
+  // merely ABSENT, so the consistency check found no conflict and read silence as
+  // compatibility. The observed-side gate passed (name + a locator were read),
+  // which was only half the rule.
+  const out = R.resolveIdentity({ name: 'Charizard', setCode: 'base1' }, [{ name: 'Charizard' }]);
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(out.printing, null, 'no printing may be claimed');
+  assert.equal(out.evidence.insufficientCandidateAgreement, true);
+  assert.match(out.reason, /does not positively agree/);
+});
+
+t('a missing candidate NUMBER is not agreement either', () => {
+  const out = R.resolveIdentity({ name: 'Charizard', number: '4' }, [{ name: 'Charizard' }]);
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(out.printing, null);
+  assert.equal(out.evidence.insufficientCandidateAgreement, true);
+});
+
+t('a candidate agreeing on name + number IS an exact match', () => {
+  const out = R.resolveIdentity(
+    { name: 'Charizard', number: '4' },
+    [{ name: 'Charizard', number: '4', setCode: 'base1' }]);
+  assert.equal(out.endState, 'EXACT_MATCH', 'positive agreement still resolves');
+  assert.ok(out.evidence.agreements.includes('name'));
+  assert.ok(out.evidence.agreements.includes('number'));
+});
+
+t('a candidate agreeing on name + setCode IS an exact match', () => {
+  const out = R.resolveIdentity(
+    { name: 'Charizard', setCode: 'base1' },
+    [{ name: 'Charizard', setCode: 'base1' }]);
+  assert.equal(out.endState, 'EXACT_MATCH');
+  assert.ok(out.evidence.agreements.includes('setCode'));
+});
+
+t('agreement on NAME ALONE is not sufficient, even as the only candidate', () => {
+  const out = R.resolveIdentity(
+    { name: 'Charizard', number: '4', setCode: 'base1' },
+    [{ name: 'Charizard' }]);
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION');
+});
+
+console.log('\nBLOCKER 2: the complete candidate set is never discarded');
+
+t('a target in position SEVEN is retained in allCandidates', () => {
+  const candidates = Array.from({ length: 9 }, (_, i) =>
+    ({ name: 'Pikachu', number: '58', setCode: 'set' + i }));
+  const out = R.resolveIdentity({ name: 'Pikachu', number: '58' }, candidates);
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(out.candidates.length, 3, 'the short list stays three');
+  assert.equal(out.evidence.allCandidates.length, 9, 'nothing is discarded');
+  assert.equal(out.evidence.moreAvailable, true);
+  const seventh = out.evidence.allCandidates.find((c) => c.setCode === 'set6');
+  assert.ok(seventh, 'the seventh candidate is reachable');
+  assert.ok(!out.candidates.some((c) => c.setCode === 'set6'),
+    'and is genuinely beyond the short list');
+});
+
+t('the insufficient-evidence path also retains every candidate', () => {
+  const candidates = Array.from({ length: 8 }, (_, i) => ({ name: 'X', setCode: 's' + i }));
+  const out = R.resolveIdentity({}, candidates);   // nothing readable
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(out.evidence.allCandidates.length, 8);
+  assert.equal(out.evidence.moreAvailable, true);
+});
+
+console.log('\nYGO printing selection uses an explicit, weaker-by-design profile');
+
+t('printing selection does not require a card name (it is already fixed)', () => {
+  // Every candidate printing shares the card name, so a name cannot discriminate
+  // there. Requiring one would force EVERY YGO scan into confirmation.
+  const out = R.resolveIdentity(
+    { setCode: 'RA04-EN087' },
+    [{ setCode: 'RA04-EN087', rarity: 'Secret Rare' }],
+    { evidenceProfile: 'printing' });
+  assert.equal(out.endState, 'EXACT_MATCH');
+});
+
+t('the printing profile still requires the candidate to AGREE on the locator', () => {
+  const out = R.resolveIdentity(
+    { setCode: 'RA04-EN087' }, [{ rarity: 'Secret Rare' }], { evidenceProfile: 'printing' });
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION', 'an absent set code is still not agreement');
+});
+
+t('two printings sharing a set code reach confirmation, not a guess', () => {
+  const out = R.resolveIdentity(
+    { setCode: 'RA04-EN087' },
+    [{ setCode: 'RA04-EN087', rarity: 'Secret Rare' }, { setCode: 'RA04-EN087', rarity: 'Ultra Rare' }],
+    { evidenceProfile: 'printing' });
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION');
+});
+
+t('the weaker printing profile can NOT be obtained by accident', () => {
+  // A card-identity question with no profile must get the strict rule.
+  const out = R.resolveIdentity({ setCode: 'LOB-EN001' }, [{ setCode: 'LOB-EN001' }]);
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION',
+    'a bare YGO set_code is reused across 3,879 different cards');
+  const bogus = R.resolveIdentity({ setCode: 'LOB-EN001' }, [{ setCode: 'LOB-EN001' }],
+    { evidenceProfile: 'not-a-profile' });
+  assert.equal(bogus.endState, 'NEEDS_CONFIRMATION', 'an unknown profile falls back to strict');
+});
+
+console.log('\nCROSS-VOCABULARY set locators must not manufacture a conflict');
+
+t('a PTCGO code observed against an API set id is NOT a conflict', () => {
+  // Found 2026-09-14 by tests/scan-rarity-grounding.mjs: the vision model reads
+  // "MEG" off the card, pokemontcg.io calls the same set "me1". A plain string
+  // comparison rejected every candidate, so Ivysaur me1-134 — squarely in the
+  // catalogue — resolved to UNKNOWN_CARD and the scan was refunded.
+  const out = R.resolveIdentity(
+    { name: 'Ivysaur', number: '134', setCode: 'MEG' },
+    [{ name: 'Ivysaur', number: '134', setCode: 'me1', setCodeAliases: ['MEG', 'Mega Evolution'] }]);
+  assert.equal(out.endState, 'EXACT_MATCH', out.reason);
+  assert.ok(out.evidence.agreements.includes('setCode'), 'the alias is positive agreement');
+});
+
+t('an alias list does NOT make a missing locator into agreement', () => {
+  const out = R.resolveIdentity(
+    { name: 'Ivysaur', setCode: 'MEG' },
+    [{ name: 'Ivysaur', setCodeAliases: [] }]);
+  assert.equal(out.endState, 'NEEDS_CONFIRMATION',
+    'an empty alias list is unknown, never agreement');
+  assert.equal(out.evidence.insufficientCandidateAgreement, true);
+});
+
+t('a genuinely wrong set code still conflicts', () => {
+  const out = R.resolveIdentity(
+    { name: 'Ivysaur', number: '134', setCode: 'BASE' },
+    [{ name: 'Ivysaur', number: '134', setCode: 'me1', setCodeAliases: ['MEG'] }]);
+  assert.notEqual(out.endState, 'EXACT_MATCH',
+    'aliases widen the vocabulary, they do not stop set codes discriminating');
+});
+
+t('the set NAME is an acceptable spelling of the set locator', () => {
+  const out = R.resolveIdentity(
+    { name: 'Ivysaur', number: '134', setCode: 'Mega Evolution' },
+    [{ name: 'Ivysaur', number: '134', setCode: 'me1', setCodeAliases: ['MEG', 'Mega Evolution'] }]);
+  assert.equal(out.endState, 'EXACT_MATCH');
+});
+
+/* The push gate judges an .mjs suite on THREE things: zero reported
+ * failures, exit 0, AND this completion marker. A suite that dies before
+ * its last assertion can still print a clean-looking count and exit 0, and
+ * without the marker the runner records it as a failure rather than a pass.
+ * Registering a suite in tests/run-all.sh therefore requires emitting it. */
+console.log(`\nidentity-resolution: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);

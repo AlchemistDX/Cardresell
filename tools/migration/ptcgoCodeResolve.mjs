@@ -126,45 +126,97 @@ export function resolveOne(record, opts = {}) {
  * Plan the whole set. Dry run only: returns rows, an inverse for rollback, and
  * a summary. Never mutates its input, never merges quantities.
  */
+/* Two-pass plan.
+ *
+ * The single-pass version inserted the first resolved record into a map and
+ * marked only LATER records COLLISION. The first record stayed RESOLVED, kept its
+ * `after`, entered `inverse`, and applyResolve() modified it — so a detected
+ * collision still mutated one side of the pair. It also compared a REIMPLEMENTED
+ * identity string rather than the SKU production actually generates, and never
+ * checked a resolved record against an untouched record that already occupies the
+ * target identity.
+ *
+ * Now: compute every record's proposed final identity, group on the real
+ * generated `after.sku`, and block EVERY proposed modification that shares a
+ * final SKU with any other record — including an untouched canonical one. A
+ * blocked row carries no `after`, never enters `inverse`, and is not modified by
+ * applyResolve(). Quantities are never summed on either side.
+ */
 export function planResolve(records, opts = {}) {
-  const rows = [];
-  const inverse = [];
-  const byIdentity = new Map();
+  const input = Array.isArray(records) ? records : [];
 
-  for (const r of Array.isArray(records) ? records : []) {
+  // ---- Pass 1: proposed final identity for EVERY record, touched or not.
+  const proposals = input.map((r) => {
     const before = { ...r };
     const d = resolveOne(r, opts);
-
     if (d.outcome !== OUTCOME.RESOLVED) {
-      rows.push({ instanceId: r.instanceId, outcome: d.outcome, before, after: null, evidence: d.evidence, candidates: d.candidates });
-      continue;
+      // Untouched: it keeps its CURRENT identity, and that identity still
+      // occupies space that a resolved record must not collide with.
+      return {
+        record: r, before, decision: d, willModify: false,
+        finalSku: skuFor(r),
+      };
     }
-
     const after = { ...before, setId: d.setId, sku: skuFor({ ...r, setId: d.setId }) };
-    const key = `${after.game ?? 'pokemon'}|${after.setId}|${after.number}|${after.variant ?? ''}|${after.grader ?? 'raw'}|${after.grade ?? ''}`;
-    if (byIdentity.has(key)) {
-      const other = byIdentity.get(key);
+    return { record: r, before, decision: d, willModify: true, after, finalSku: after.sku };
+  });
+
+  // ---- Pass 2: group on the production-generated SKU.
+  const bySku = new Map();
+  for (const p of proposals) {
+    if (!bySku.has(p.finalSku)) bySku.set(p.finalSku, []);
+    bySku.get(p.finalSku).push(p);
+  }
+
+  // ---- Pass 3: emit. A contested SKU blocks every modification in its group.
+  const rows = [];
+  const inverse = [];
+  for (const p of proposals) {
+    const group = bySku.get(p.finalSku);
+    const contested = group.length > 1;
+
+    if (!p.willModify) {
       rows.push({
-        instanceId: r.instanceId, outcome: OUTCOME.COLLISION, before, after: null,
-        evidence: 'resolving this record would collide with another record on the same canonical identity',
-        collidesWith: {
-          instanceIds: [other.instanceId, r.instanceId],
-          quantities: [other.quantity ?? null, r.quantity ?? null],
-        },
-        note: 'Quantities are NOT summed. This needs an explicit human decision.',
+        instanceId: p.record.instanceId, outcome: p.decision.outcome,
+        before: p.before, after: null,
+        evidence: p.decision.evidence, candidates: p.decision.candidates,
       });
       continue;
     }
-    byIdentity.set(key, r);
 
-    // Record field PRESENCE, not just value, so rollback cannot invent a field
-    // the original record never had.
+    if (contested) {
+      const others = group.filter((g) => g !== p);
+      rows.push({
+        instanceId: p.record.instanceId,
+        outcome: OUTCOME.COLLISION,
+        before: p.before,
+        after: null,                      // blocked: nothing will be written
+        evidence:
+          'resolving this record would place it on a canonical identity (SKU) that '
+          + 'another record also occupies, so the modification is blocked on BOTH sides',
+        collidesWith: {
+          sku: p.finalSku,
+          instanceIds: group.map((g) => g.record.instanceId),
+          quantities: group.map((g) => g.record.quantity ?? null),
+          untouchedCanonical: others.filter((g) => !g.willModify).map((g) => g.record.instanceId),
+        },
+        note: 'Quantities are NOT summed and NO member is modified. This needs an explicit human decision.',
+      });
+      continue;
+    }
+
     inverse.push({
-      instanceId: r.instanceId,
-      restore: { setId: before.setId, sku: before.sku },
-      had: { setId: Object.prototype.hasOwnProperty.call(before, 'setId'), sku: Object.prototype.hasOwnProperty.call(before, 'sku') },
+      instanceId: p.record.instanceId,
+      restore: { setId: p.before.setId, sku: p.before.sku },
+      had: {
+        setId: Object.prototype.hasOwnProperty.call(p.before, 'setId'),
+        sku: Object.prototype.hasOwnProperty.call(p.before, 'sku'),
+      },
     });
-    rows.push({ instanceId: r.instanceId, outcome: OUTCOME.RESOLVED, before, after, evidence: d.evidence });
+    rows.push({
+      instanceId: p.record.instanceId, outcome: OUTCOME.RESOLVED,
+      before: p.before, after: p.after, evidence: p.decision.evidence,
+    });
   }
 
   const counts = {};
