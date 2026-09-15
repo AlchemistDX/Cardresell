@@ -10,7 +10,8 @@ const t = harness('preview-id-billing-acceptance');
 const BASE = '1e4122d021a81670a6659aaae7eb828d6f5d1eca';
 const PATH = '/api/preview-id-billing-acceptance';
 const HOST = 'synthetic-preview-acceptance.vercel.app';
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
+const V1_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
 const END = Date.parse('2026-09-16T18:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
 const CANARY = 'SYNTHETIC_ONLY_CREDENTIAL_CANARY_DO_NOT_OUTPUT';
@@ -47,6 +48,25 @@ globalThis.fetch = async (url, init = {}) => {
   if (fault.claimAfter && args[0] === 'EVAL' && args[4] === 'claim') {
     fault.claimAfter = false; throw new Error(CANARY);
   }
+  if (fault.shape) {
+    const data = await response.json();
+    if (args[0] === 'MGET') {
+      fault.mgets = (fault.mgets || 0) + 1;
+      if (fault.shape === 'upstream-status') return Response.json({ error: CANARY }, { status: 503 });
+      if (fault.shape === 'response-json') return new Response(CANARY);
+      if (fault.shape === 'missing-result') return Response.json({});
+      if (fault.shape === 'upstream-error') return Response.json({ error: CANARY });
+      const nth = { 'initial-numbers': 1, 'pending-numbers': 2, 'end-numbers': 3 }[fault.shape];
+      if (fault.mgets === nth) data.result = data.result.map(Number);
+    }
+    if (args[0] === 'GET' && args[1].startsWith('id_billing:')) {
+      if (fault.shape === 'journal-object') data.result = JSON.parse(data.result);
+      if (fault.shape === 'journal-json') data.result = '{' + CANARY;
+    }
+    if (fault.shape === 'module-result-object' && isBilling && args[6] === 'debit')
+      data.result = JSON.parse(data.result);
+    return Response.json(data);
+  }
   return response;
 };
 async function invoke(method = 'POST', body = { operation: 'run' }, over = {}) {
@@ -70,10 +90,11 @@ function safeOutput(value) {
     'namespace', 'receipt', 'worker', 'stack', 'pickedCard'].some(s => str.includes(s));
 }
 function schema(body) {
-  const rowKeys = ['test', 'start', 'end', 'expectedDelta', 'actualDelta', 'counts', 'status'].sort().join();
+  const rowKeys = ['test', 'start', 'end', 'expectedDelta', 'actualDelta', 'counts', 'status',
+    'failedStage', 'lastCompletedStage', 'diagnosticCategory'].sort().join();
   return body && Object.keys(body).sort().join() === 'counts,tests'
     && body.tests.every(r => Object.keys(r).sort().join() === rowKeys
-      && ['PASS', 'FAIL'].includes(r.status)
+      && ['PASS', 'FAIL', 'UNRUN'].includes(r.status)
       && ['start', 'end', 'expectedDelta', 'actualDelta'].every(k =>
         Object.keys(r[k]).sort().join() === 'free,paid'
         && Object.values(r[k]).every(v => v === null || Number.isSafeInteger(v))));
@@ -183,7 +204,8 @@ try {
   // leak upstream diagnostic strings into the protected HTML/JSON response.
   const poisoned = JSON.parse(store.get(CONTROL));
   poisoned.results = [{ test: CANARY, start: { free: CANARY }, namespace: CANARY,
-    counts: { acceptedResponses: CANARY }, status: 'PASS', error: CANARY }];
+    counts: { acceptedResponses: CANARY }, status: 'PASS', error: CANARY,
+    failedStage: CANARY, lastCompletedStage: CANARY, diagnosticCategory: CANARY }];
   store.set(CONTROL, JSON.stringify(poisoned));
   const redacted = await invoke();
   t.check('stored-result canaries are projected away, unknown test cannot PASS',
@@ -205,10 +227,11 @@ try {
   t.check('concurrent POST claims at most once', commands.filter(c => c.cmd === 'mset').length === 6
     && concurrent.every(r => r.statusCode === 200) && dataKeys().length === 0);
 
-  for (const mode of ['setup', 'debit-before', 'debit-after', 'accept-before', 'accept-after', 'cleanup', 'finish', 'deadline']) {
+  for (const mode of ['setup', 'debit-before', 'debit-after', 'offer-before', 'offer-after',
+    'accept-before', 'accept-after', 'cleanup', 'finish', 'deadline']) {
     defaults();
     if (mode === 'setup') fault.setup = true;
-    if (mode.startsWith('debit') || mode.startsWith('accept')) {
+    if (mode.startsWith('debit') || mode.startsWith('offer') || mode.startsWith('accept')) {
       fault.billing = mode.split('-')[0]; fault.billingAfter = mode.endsWith('after');
     }
     if (mode === 'cleanup') fault.cleanup = true;
@@ -221,7 +244,19 @@ try {
     if (!['cleanup', 'finish'].includes(mode)) t.check(`${mode}: all six case rows retained, unrun counted explicitly`,
       failed.body.tests.filter(r => r.test.startsWith('MODULE ') && r.test !== 'MODULE execution').length === 6
       && failed.body.counts.unrun === 5 && failed.body.tests[1].counts.executed === 0
-      && failed.body.tests[1].counts.attempts === 0);
+      && failed.body.tests[1].counts.attempts === 0 && failed.body.tests[1].status === 'UNRUN'
+      && failed.body.counts.fail === 1);
+    if (!['cleanup', 'finish'].includes(mode)) {
+      const first = failed.body.tests[0];
+      const expectedStage = mode === 'setup' ? 'seed' : mode === 'deadline' ? 'offer' : mode.split('-')[0];
+      const expectedCategory = mode === 'setup' ? 'transport' : mode === 'deadline' ? 'deadline' : 'billing_unavailable';
+      t.check(`${mode}: allowlisted failing stage/category retained`,
+        first.failedStage === expectedStage && first.diagnosticCategory === expectedCategory);
+      t.check(`${mode}: expectations and observed start/attempts survive failure`,
+        first.expectedDelta.free === -1 && first.expectedDelta.paid === 0
+        && (mode === 'setup' ? first.start.free === null : first.start.free === 1 && first.start.paid === 1)
+        && first.counts.attempts === (mode.startsWith('accept') ? 1 : 0));
+    }
     if (mode !== 'cleanup') t.check(`${mode}: finally clears synthetic data`, dataKeys().length === 0);
     fault = {};
     // Model expired lease after interruption; fixture-only local Redis edit.
@@ -274,6 +309,44 @@ try {
   t.check('MSET TTL reset observed separately, not disguised as billing failure', observedTTL && ttlRun.body.counts.fail === 0);
   t.check('explicit ordinary cleanup removes counters despite TTL reset', dataKeys().length === 0);
 
+  const shapeEvidence = [];
+  for (const [shape, stage, category, previous] of [
+    ['initial-numbers', 'start_balances', 'result_shape', 'seed'],
+    ['pending-numbers', 'pending_balances', 'result_shape', 'offer'],
+    ['end-numbers', 'end_balances', 'result_shape', 'accept'],
+    ['journal-object', 'journal', 'result_shape', 'end_balances'],
+    ['journal-json', 'journal', 'result_json', 'end_balances'],
+    ['module-result-object', 'debit', 'billing_unavailable', 'start_balances'],
+    ['upstream-status', 'start_balances', 'upstream_status', 'seed'],
+    ['response-json', 'start_balances', 'response_json', 'seed'],
+    ['missing-result', 'start_balances', 'result_shape', 'seed'],
+    ['upstream-error', 'start_balances', 'upstream_error', 'seed'],
+  ]) {
+    defaults(); fault.shape = shape;
+    const r = await invoke(), first = r.body.tests[0];
+    t.check(`${shape}: diagnoses without normalizing unknown responses`,
+      first.status === 'FAIL' && first.failedStage === stage
+      && first.diagnosticCategory === category && first.lastCompletedStage === previous);
+    t.check(`${shape}: redaction, UNRUN and ordinary cleanup preserved`,
+      safeOutput(r.body) && schema(r.body) && r.body.counts.unrun === 5
+      && r.body.tests.slice(1, 6).every(row => row.status === 'UNRUN')
+      && dataKeys().length === 0 && JSON.parse(store.get(CONTROL)).consumed === true);
+    if (stage === 'journal') t.check(`${shape}: already observed end/delta/attempt counts retained`,
+      first.start.free === 1 && first.start.paid === 1 && first.end.free === 0 && first.end.paid === 1
+      && first.actualDelta.free === -1 && first.actualDelta.paid === 0
+      && first.counts.attempts === 1 && first.counts.acceptedResponses === 1);
+    shapeEvidence.push({ injectedOfflineHypothesis: shape, first, counts: r.body.counts });
+  }
+  defaults();
+  const v1Evidence = JSON.stringify({ preservedOriginalEvidence: true, consumed: true });
+  store.set(V1_CONTROL, v1Evidence);
+  const v2Run = await invoke();
+  await invoke('POST', { operation: 'recover' });
+  t.check('v2 uses new guard and fresh namespace, never addresses v1 evidence',
+    v2Run.body.counts.fail === 0 && JSON.parse(store.get(CONTROL)).consumed === true
+    && /^[a-f0-9]{64}$/.test(JSON.parse(store.get(CONTROL)).namespace)
+    && store.get(V1_CONTROL) === v1Evidence && !commands.some(c => c.args.includes(V1_CONTROL)));
+
   for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/_tier.js', 'api/_verifyToken.js']) {
     const current = readFileSync(new URL('../' + file, import.meta.url));
     const baseline = execFileSync('git', ['show', `${BASE}:${file}`], { cwd: new URL('..', import.meta.url) });
@@ -282,10 +355,11 @@ try {
   const source = readFileSync(new URL('../api/preview-id-billing-acceptance.js', import.meta.url), 'utf8');
   t.check('live harness never monkeypatches fetch or imports auth/scan handlers',
     !/(?:globalThis|global|window)\.fetch\s*=/.test(source) && !/from ['"].*(?:scan\.js|scan-debit-id|_verifyToken)/.test(source));
-  writeFileSync('/home/user/workspace/preview_stage1_module_offline_evidence_20260915.json',
+  writeFileSync('/home/user/workspace/preview_stage1_v2_module_offline_evidence_20260915.json',
     JSON.stringify({ stage: 'MODULE only; authenticated handlers and HTTP interruption UNRUN',
       sourceSha256: createHash('sha256').update(source).digest('hex'), successful,
-      baseline: BASE, managedRedisRun: 'UNRUN', productionRequests: 0 }, null, 2));
+      baseline: BASE, managedRedisRun: 'UNRUN', productionRequests: 0, shapeEvidence,
+      rootCauseOfV1ManagedFailure: 'UNDETERMINED; shape hypotheses are injected offline, not observed provider behavior' }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
   Date.now = originalNow;

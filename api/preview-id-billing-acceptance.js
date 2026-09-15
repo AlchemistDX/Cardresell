@@ -3,7 +3,7 @@
 // Neither env/branch checks nor this route can prove those platform settings.
 // No auth handler, tier lookup, provider, Stripe, or customer data is exercised.
 import { randomBytes, createHash } from 'node:crypto';
-import { idBilling, offerIdConfirmation, candidateHash } from './_idBilling.js';
+import { idBilling, offerIdConfirmation, candidateHash, IdBillingError } from './_idBilling.js';
 
 export const config = { maxDuration: 60 };
 const PATH = '/api/preview-id-billing-acceptance';
@@ -12,7 +12,9 @@ const BRANCH = 'fix/listing-export-identity';
 // a separate bounded window; it cannot invoke billing or clear the run guard.
 const RUN_END = Date.parse('2026-09-16T18:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
+// v1 evidence/control is intentionally untouched. Its immutable deployed URL
+// retains its fixed recovery operation; v2 cannot read/delete/reuse that marker.
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
 const LEASE_MS = 60000;
 const RUN_MS = 25000; // last billing call may take8s; reserve time for finally.
 const hex = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
@@ -27,6 +29,17 @@ const CASES = [
   { name: 'MODULE discarded committed result then retry', free: 0, paid: 1, delta: [0, -1], kind: 'discard' },
 ];
 const OTHER = ['MODULE execution', 'Synthetic cleanup', 'Recovery cleanup', 'Single-use guard'];
+const STAGES = ['not_started', 'seed', 'start_balances', 'debit', 'offer', 'pending_balances',
+  'accept', 'accept_replay', 'accept_concurrent', 'discarded_commit', 'end_balances',
+  'journal', 'scan_records', 'assertions', 'complete', 'cleanup', 'control'];
+const CATEGORIES = ['transport', 'upstream_status', 'upstream_error', 'response_json',
+  'result_shape', 'result_json', 'billing_unavailable', 'billing_rejected',
+  'deadline', 'assertion_mismatch', 'internal', 'not_executed'];
+class DiagnosticError extends Error {
+  constructor(category) { super('diagnostic'); this.category = category; }
+}
+const categoryOf = error => error instanceof DiagnosticError && CATEGORIES.includes(error.category)
+  ? error.category : error instanceof IdBillingError ? 'billing_unavailable' : 'internal';
 const CANDIDATES = [{ name: 'Synthetic fixture A', number: '1', set: 'Synthetic set A' },
   { name: 'Synthetic fixture B', number: '2', set: 'Synthetic set B' }];
 
@@ -59,14 +72,20 @@ return 1
 
 async function kv(args) {
   // Internal injected configuration only. No values are returned or logged.
-  const response = await fetch(process.env.KV_REST_API_URL, {
-    method: 'POST', redirect: 'error',
-    headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(args), signal: AbortSignal.timeout(3000),
-  });
-  if (!response.ok) throw new Error('unavailable');
-  const data = await response.json();
-  if (data.error || data.result === undefined) throw new Error('unavailable');
+  let response, data;
+  try {
+    response = await fetch(process.env.KV_REST_API_URL, {
+      method: 'POST', redirect: 'error',
+      headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(args), signal: AbortSignal.timeout(3000),
+    });
+  } catch (_) { throw new DiagnosticError('transport'); }
+  if (!response.ok) throw new DiagnosticError('upstream_status');
+  try { data = await response.json(); } catch (_) { throw new DiagnosticError('response_json'); }
+  if (!data || typeof data !== 'object' || Array.isArray(data))
+    throw new DiagnosticError('result_shape');
+  if (data.error) throw new DiagnosticError('upstream_error');
+  if (data.result === undefined) throw new DiagnosticError('result_shape');
   return data.result;
 }
 function validRecord(r) {
@@ -104,21 +123,26 @@ function cleanRow(row) {
     end: { free: number(row?.end?.free), paid: number(row?.end?.paid) },
     expectedDelta: { free: number(row?.expectedDelta?.free), paid: number(row?.expectedDelta?.paid) },
     actualDelta: { free: number(row?.actualDelta?.free), paid: number(row?.actualDelta?.paid) },
+    failedStage: STAGES.includes(row?.failedStage) ? row.failedStage : null,
+    lastCompletedStage: STAGES.includes(row?.lastCompletedStage) ? row.lastCompletedStage : 'not_started',
+    diagnosticCategory: CATEGORIES.includes(row?.diagnosticCategory) ? row.diagnosticCategory : null,
     counts: { executed: number(row?.counts?.executed), attempts: number(row?.counts?.attempts),
       acceptedResponses: number(row?.counts?.acceptedResponses),
       acceptedJournals: number(row?.counts?.acceptedJournals),
       successfulScanRecords: number(row?.counts?.successfulScanRecords),
       deleted: number(row?.counts?.deleted), remaining: number(row?.counts?.remaining) },
-    status: names.includes(row?.test) && row?.status === 'PASS' ? 'PASS' : 'FAIL',
+    status: CASES.some(c => c.name === row?.test) && row?.counts?.executed === 0 ? 'UNRUN'
+      : names.includes(row?.test) && row?.status === 'PASS' ? 'PASS' : 'FAIL',
   };
 }
 function envelope(rows) {
   const tests = rows.slice(0, 10).map(cleanRow);
   return { tests, counts: { total: tests.length, pass: tests.filter(r => r.status === 'PASS').length,
     fail: tests.filter(r => r.status === 'FAIL').length,
-    unrun: tests.filter(r => r.counts.executed === 0).length } };
+    unrun: tests.filter(r => r.status === 'UNRUN').length } };
 }
-const failRow = test => cleanRow({ test, status: 'FAIL' });
+const failRow = (test, error, stage = 'control') => cleanRow({ test, status: 'FAIL',
+  failedStage: stage, diagnosticCategory: error ? categoryOf(error) : 'internal' });
 async function cleanup(r, name) {
   // No KEYS/SCAN. Every possible data key is known before any setup write.
   // MSET in the unchanged billing Lua clears counter TTLs: explicitly DEL data,
@@ -129,68 +153,97 @@ async function cleanup(r, name) {
     const remaining = await kv(['EXISTS', ...keys]);
     return cleanRow({ test: name, counts: { deleted, remaining },
       status: Number.isSafeInteger(deleted) && remaining === 0 ? 'PASS' : 'FAIL' });
-  } catch (_) { return failRow(name); }
+  } catch (error) { return failRow(name, error, 'cleanup'); }
 }
 async function balances(r, i) {
   const values = await kv(['MGET', ...keysFor(r, i).slice(0, 2)]);
   if (!Array.isArray(values) || values.length !== 2
-      || values.some(v => typeof v !== 'string' || !/^\d+$/.test(v))) throw new Error('unavailable');
+      || values.some(v => typeof v !== 'string' || !/^\d+$/.test(v))) throw new DiagnosticError('result_shape');
   const used = Number(values[0]), paid = Number(values[1]);
-  if (![used, paid].every(Number.isSafeInteger)) throw new Error('unavailable');
+  if (![used, paid].every(Number.isSafeInteger)) throw new DiagnosticError('result_shape');
   return { free: 1 - used, paid };
 }
 async function caseRun(r, i, deadline) {
   const spec = CASES[i], ctx = context(r, i), keys = keysFor(r, i);
-  const checkTime = () => { if (Date.now() >= deadline || Date.now() >= RUN_END) throw new Error('expired'); };
-  let attempts = 0;
+  const row = { test: spec.name, expectedDelta: { free: spec.delta[0], paid: spec.delta[1] },
+    counts: { executed: 1, attempts: 0, acceptedResponses: 0 },
+    status: 'FAIL', lastCompletedStage: 'not_started' };
+  let stage = 'not_started';
+  const checkTime = () => {
+    if (Date.now() >= deadline || Date.now() >= RUN_END) throw new DiagnosticError('deadline');
+  };
+  const step = async (name, operation) => {
+    stage = name; checkTime();
+    const result = await operation();
+    row.lastCompletedStage = name;
+    return result;
+  };
   const call = async (action, extra = {}) => {
     checkTime();
     const result = await idBilling(action, { ...ctx, ...extra });
-    if (!result.ok) throw new Error('billing failed');
+    if (!result.ok) throw new DiagnosticError('billing_rejected');
     return result;
   };
-  checkTime();
-  // These keys belong solely to this unpredictable namespace.
-  await kv(['MSET', keys[0], String(1 - spec.free), keys[1], String(spec.paid)]);
-  const start = await balances(r, i);
-  await call('debit');
-  checkTime();
-  const offered = await offerIdConfirmation(ctx, CANDIDATES);
-  const pending = await balances(r, i);
-  const selection = { candidate_set: offered.candidate_set, candidate: candidateHash(CANDIDATES[1]) };
-  const accept = async () => { attempts++; return call('accept', selection); };
-  let replies = [], committedWithoutResponse = false;
-  if (spec.kind === 'concurrent') {
-    // Wait for every attempt before finally cleanup, including failed calls.
-    const settled = await Promise.allSettled(Array.from({ length: 6 }, () => accept()));
-    if (settled.some(s => s.status !== 'fulfilled')) throw new Error('billing failed');
-    replies = settled.map(s => s.value);
-  } else if (spec.kind === 'discard') {
-    await accept(); // Real module commit; deliberately do not retain the result.
-    committedWithoutResponse = true; // NOT an HTTP-response interruption test.
-    replies = [await accept()];
-  } else if (spec.kind !== 'cancel') {
-    replies = [await accept()];
-    if (spec.kind === 'replay') replies.push(await accept());
+  try {
+    // Do not normalize unknown provider response shapes; diagnose and fail closed.
+    await step('seed', () => kv(['MSET', keys[0], String(1 - spec.free), keys[1], String(spec.paid)]));
+    row.start = await step('start_balances', () => balances(r, i));
+    await step('debit', () => call('debit'));
+    const offered = await step('offer', () => offerIdConfirmation(ctx, CANDIDATES));
+    const pending = await step('pending_balances', () => balances(r, i));
+    const selection = { candidate_set: offered.candidate_set, candidate: candidateHash(CANDIDATES[1]) };
+    const accept = async () => {
+      row.counts.attempts++;
+      const result = await call('accept', selection);
+      row.counts.acceptedResponses++;
+      return result;
+    };
+    let replies = [], committedWithoutResponse = false;
+    if (spec.kind === 'concurrent') {
+      replies = await step('accept_concurrent', async () => {
+        const settled = await Promise.allSettled(Array.from({ length: 6 }, () => accept()));
+        const failed = settled.find(s => s.status !== 'fulfilled');
+        if (failed) throw failed.reason;
+        return settled.map(s => s.value);
+      });
+    } else if (spec.kind === 'discard') {
+      await step('discarded_commit', accept); // MODULE result, NOT HTTP interruption.
+      committedWithoutResponse = true;
+      replies = [await step('accept_replay', accept)];
+    } else if (spec.kind !== 'cancel') {
+      replies = [await step('accept', accept)];
+      if (spec.kind === 'replay') replies.push(await step('accept_replay', accept));
+    }
+    row.end = await step('end_balances', () => balances(r, i));
+    row.actualDelta = { free: row.end.free - row.start.free, paid: row.end.paid - row.start.paid };
+    const journal = await step('journal', async () => {
+      const raw = await kv(['GET', keys[2]]);
+      if (typeof raw !== 'string') throw new DiagnosticError('result_shape');
+      let value;
+      try { value = JSON.parse(raw); } catch (_) { throw new DiagnosticError('result_json'); }
+      if (!value || !['accepted', 'pending'].includes(value.state)) throw new DiagnosticError('result_shape');
+      return value;
+    });
+    row.counts.acceptedJournals = journal.state === 'accepted' ? 1 : 0;
+    row.counts.successfulScanRecords = await step('scan_records', () => kv(['EXISTS', keys[3]]));
+    await step('assertions', async () => {
+      const equal = replies.every(v => JSON.stringify(v) === JSON.stringify(replies[0]));
+      const correct = replies.every(v => v.pickedCard?.card_name === CANDIDATES[1].name
+        && v.bucket === (spec.free ? 'id_free' : 'id_paid_left'));
+      if (!(row.start.free === spec.free && row.start.paid === spec.paid
+          && pending.free === spec.free && pending.paid === spec.paid
+          && row.actualDelta.free === spec.delta[0] && row.actualDelta.paid === spec.delta[1] && equal && correct
+          && row.counts.acceptedJournals === (spec.kind === 'cancel' ? 0 : 1)
+          && row.counts.successfulScanRecords === 0 && (spec.kind !== 'discard' || committedWithoutResponse)))
+        throw new DiagnosticError('assertion_mismatch');
+    });
+    row.status = 'PASS'; row.lastCompletedStage = 'complete';
+  } catch (error) {
+    row.failedStage = stage;
+    row.diagnosticCategory = categoryOf(error);
   }
-  const end = await balances(r, i);
-  const journal = JSON.parse(await kv(['GET', keys[2]]));
-  const acceptedJournals = journal.state === 'accepted' ? 1 : 0;
-  const successfulScanRecords = await kv(['EXISTS', keys[3]]);
-  const delta = { free: end.free - start.free, paid: end.paid - start.paid };
-  const equal = replies.every(v => JSON.stringify(v) === JSON.stringify(replies[0]));
-  const correct = replies.every(v => v.pickedCard?.card_name === CANDIDATES[1].name
-    && v.bucket === (spec.free ? 'id_free' : 'id_paid_left'));
-  const pass = start.free === spec.free && start.paid === spec.paid
-    && pending.free === spec.free && pending.paid === spec.paid
-    && delta.free === spec.delta[0] && delta.paid === spec.delta[1] && equal && correct
-    && acceptedJournals === (spec.kind === 'cancel' ? 0 : 1) && successfulScanRecords === 0
-    && (spec.kind !== 'discard' || committedWithoutResponse);
-  return cleanRow({ test: spec.name, start, end, expectedDelta: { free: spec.delta[0], paid: spec.delta[1] },
-    actualDelta: delta, counts: { executed: 1, attempts,
-      acceptedResponses: replies.length + (committedWithoutResponse ? 1 : 0),
-      acceptedJournals, successfulScanRecords },
-    status: pass ? 'PASS' : 'FAIL' });
+  // Already observed values/counts survive errors; never fabricate missing data.
+  return cleanRow(row);
 }
 async function finish(worker, rows) {
   const safe = envelope(rows).tests;
@@ -213,20 +266,19 @@ async function runOnce() {
   const deadline = Date.now() + RUN_MS, rows = [];
   try {
     for (let i = 0; i < CASES.length; i++) {
-      try { rows.push(await caseRun(r, i, deadline)); }
-      catch (_) {
-        rows.push(cleanRow({ test: CASES[i].name, status: 'FAIL', counts: { executed: 1 } }));
-        // Output remains PASS/FAIL only, but explicitly count unexecuted cases.
-        // Report these rows as UNRUN outside this deliberately narrow schema.
+      rows.push(await caseRun(r, i, deadline));
+      if (rows[i].status !== 'PASS') {
         for (let j = i + 1; j < CASES.length; j++) rows.push(cleanRow({ test: CASES[j].name,
-          status: 'FAIL', counts: { executed: 0, attempts: 0, acceptedResponses: 0 } }));
+          status: 'UNRUN', expectedDelta: { free: CASES[j].delta[0], paid: CASES[j].delta[1] },
+          diagnosticCategory: 'not_executed',
+          counts: { executed: 0, attempts: 0, acceptedResponses: 0 } }));
         break;
       }
     }
   } finally {
     rows.push(await cleanup(r, 'Synthetic cleanup'));
     try { if (await finish(worker, rows) !== 1) rows.push(failRow('Single-use guard')); }
-    catch (_) { rows.push(failRow('Single-use guard')); }
+    catch (error) { rows.push(failRow('Single-use guard', error)); }
   }
   return envelope(rows);
 }
@@ -239,7 +291,7 @@ async function recover() {
   const rows = r.results.length ? r.results.filter(v => v.test !== 'Recovery cleanup') : [failRow('MODULE execution')];
   rows.push(await cleanup(r, 'Recovery cleanup'));
   try { if (await finish(worker, rows) !== 1) rows.push(failRow('Single-use guard')); }
-  catch (_) { rows.push(failRow('Single-use guard')); }
+  catch (error) { rows.push(failRow('Single-use guard', error)); }
   return envelope(rows);
 }
 function permitted(req) {
@@ -283,8 +335,8 @@ export default async function handler(req, res) {
         || Object.keys(body).length !== 1 || !['run', 'recover'].includes(body.operation)) return res.status(400).end();
     if (body.operation === 'run' && Date.now() >= RUN_END) return res.status(410).json(envelope([failRow('Single-use guard')]));
     return res.status(200).json(body.operation === 'run' ? await runOnce() : await recover());
-  } catch (_) {
+  } catch (error) {
     // Never print or return exception messages, upstream results or credentials.
-    return res.status(503).json(envelope([failRow('MODULE execution')]));
+    return res.status(503).json(envelope([failRow('MODULE execution', error)]));
   }
 }
