@@ -2,6 +2,7 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
+import { resolveIdentity, END_STATES } from './_identityResolution.js';
 
 // ── YGOProDeck grounding (extracted helper) ──
 // Mutates cardInfo in place. Returns nothing.
@@ -101,17 +102,48 @@ async function groundYugiohCardInfo(cardInfo) {
       }
       clearTimeout(tt);
       if (j?.data?.length) {
-        let card = ygoHit?.name
-          ? j.data.find(c => c.name === ygoHit.name) || j.data[0]
-          : j.data[0];
+        // F2: card selection. Previously `find(name) || j.data[0]` — an
+        // arbitrary pick when the name did not match. Now resolved, or the
+        // ambiguity is surfaced instead of guessed.
+        const cardRes = resolveIdentity(
+          { name: ygoHit?.name || cardInfo.card_name, number: cardInfo.card_number },
+          j.data.map(c => ({ name: c.name, number: c.id, _raw: c }))
+        );
+        if (cardRes.endState !== END_STATES.EXACT_MATCH) {
+          cardInfo.identity_resolution = {
+            stage: 'ygo_card', endState: cardRes.endState, reason: cardRes.reason,
+            candidates: cardRes.candidates.map(c => ({ name: c.name, id: c.number })),
+          };
+          if (cardRes.endState !== END_STATES.NEEDS_CONFIRMATION) return;
+        }
+        let card = (cardRes.printing && cardRes.printing._raw)
+          || (cardRes.candidates[0] && cardRes.candidates[0]._raw)
+          || j.data[0];
         let printing = null;
         if (card.card_sets && card.card_sets.length) {
-          if (cardInfo.set_code) {
-            printing = card.card_sets.find(s =>
-              String(s.set_code || '').toUpperCase() === String(cardInfo.set_code).toUpperCase()
-            );
+          // Item 5 measured that set_rarity resolves 3,872/3,872 colliding
+          // (passcode, set_code) pairs WITHIN YGOProDeck's own vocabulary.
+          // The rarity we hold here is a vision-model guess in a DIFFERENT
+          // vocabulary, so it is passed for evidence but rarityComparable is
+          // deliberately NOT set: these collisions must reach the seller as a
+          // confirmation, not be broken by an inadmissible string compare.
+          const printRes = resolveIdentity(
+            { setCode: cardInfo.set_code, rarity: cardInfo.rarity },
+            card.card_sets.map(s => ({
+              setCode: s.set_code, rarity: s.set_rarity, name: s.set_name, _raw: s,
+            }))
+          );
+          if (printRes.endState === END_STATES.EXACT_MATCH) {
+            printing = printRes.printing._raw;
+          } else {
+            // Do NOT fall back to card_sets[0]. Record the ambiguity and leave
+            // the printing unset so downstream cannot present a guess as fact.
+            cardInfo.identity_resolution = {
+              stage: 'ygo_printing', endState: printRes.endState, reason: printRes.reason,
+              candidates: printRes.candidates.map(c => ({ set_code: c.setCode, set_rarity: c.rarity, set_name: c.name })),
+            };
+            printing = null;
           }
-          printing = printing || card.card_sets[0];
         }
         if (!ygoHit) ygoHit = { source: 'name' };
         ygoHit.id       = ygoHit.id       || card.id;
@@ -295,7 +327,20 @@ async function groundLorcanaCardInfo(cardInfo) {
     return;
   }
 
-  const card = hits[0];
+  // F8: was `hits[0]`. Resolve against the printed identifiers instead.
+  const lorRes = resolveIdentity(
+    { name: cleanName, number: cardInfo.card_number, setCode: rawSet },
+    hits.map(h => ({ name: h.Name, number: h.Card_Num, setCode: h.Set_ID, _raw: h }))
+  );
+  if (lorRes.endState !== END_STATES.EXACT_MATCH) {
+    cardInfo.identity_resolution = {
+      stage: 'lorcana', endState: lorRes.endState, reason: lorRes.reason,
+      candidates: lorRes.candidates.map(c => ({ name: c.name, number: c.number, set: c.setCode })),
+    };
+    console.log(`[scan] Lorcana grounding: ${lorRes.endState} for "${cleanName}" — ${lorRes.reason}`);
+    return;
+  }
+  const card = lorRes.printing._raw;
   const before = { name: cardInfo.card_name, set: cardInfo.set_name };
   cardInfo.card_name   = card.Name        || cardInfo.card_name;
   cardInfo.set_code    = card.Set_ID      || cardInfo.set_code;
@@ -469,7 +514,27 @@ export async function groundPokemonCardInfo(cardInfo) {
           return { c, score: hit };
         }).sort((a,b) => b.score - a.score).map(x => x.c);
       }
-      best = ranked[0];
+      // F3: was `ranked[0]` — token-overlap ranking then blind first pick,
+      // the measured 11.13% exposure path (1,039 keys / 2,279 records).
+      // Ranking may order candidates, but it may not decide identity.
+      const res = resolveIdentity(
+        { name: cleanName, number: cardInfo.card_number, setCode: cardInfo.set_code },
+        ranked.map(c => ({
+          name: c.name, number: c.number, setCode: c.set?.id, _raw: c,
+        }))
+      );
+      if (res.endState === END_STATES.EXACT_MATCH) {
+        best = res.printing._raw;
+        // A later query resolving cleanly must not leave an earlier query's
+        // ambiguity record attached to the result.
+        delete cardInfo.identity_resolution;
+      } else {
+        cardInfo.identity_resolution = {
+          stage: 'pokemon_rank', endState: res.endState, reason: res.reason,
+          candidates: res.candidates.map(c => ({ name: c.name, number: c.number, set: c.setCode })),
+        };
+        best = null;
+      }
       if (best) break;
     } catch(_) { /* try next query */ }
   }
