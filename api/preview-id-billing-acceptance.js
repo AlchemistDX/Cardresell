@@ -12,9 +12,9 @@ const BRANCH = 'fix/listing-export-identity';
 // a separate bounded window; it cannot invoke billing or clear the run guard.
 const RUN_END = Date.parse('2026-09-16T18:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
-// v1/v2 evidence/control is intentionally untouched. Each immutable deployed URL
-// retains its fixed recovery operation; v3 cannot read/delete/reuse those markers.
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v3';
+// v1/v2/v3 acceptance controls and the separate v4 reproduction control stay
+// untouched. v5 authorizes one fresh run with pre-MSET serialization validation.
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v5';
 const LEASE_MS = 60000;
 const RUN_MS = 25000; // last billing call may take8s; reserve time for finally.
 const hex = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);

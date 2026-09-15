@@ -33,10 +33,30 @@ export function canonicalPick(c, cardType) {
 export const ID_BILLING_SCRIPT = `
 local action = ARGV[1]
 local p = cjson.decode(ARGV[2])
-local function answer(v) return cjson.encode(v) end
+-- Some encoders return nil/error instead of throwing. Never turn that into
+-- tostring(nil), or commit a charge whose response/journal cannot be replayed.
+local function same(a,b)
+  if type(a)~=type(b) then return false end
+  if type(a)~='table' then return a==b end
+  for k,v in pairs(a) do if not same(v,b[k]) then return false end end
+  for k,_ in pairs(b) do if a[k]==nil then return false end end
+  return true
+end
+local function answer(v)
+  local ok,encoded=pcall(cjson.encode,v)
+  if not ok or type(encoded)~='string' then error('invalid ID encoding') end
+  local decodedOK,decoded=pcall(cjson.decode,encoded)
+  if not decodedOK or not same(v,decoded) then error('invalid ID encoding') end
+  return encoded
+end
 local function fail(code) return answer({ok=false,code=code}) end
 local raw = redis.call('GET', KEYS[1])
-local rec = raw and cjson.decode(raw) or nil
+local rec = nil
+if raw then
+  local ok,decoded=pcall(cjson.decode,raw)
+  if not ok or type(decoded)~='table' then error('invalid ID journal') end
+  rec=decoded
+end
 local now = tonumber(redis.call('TIME')[1])
 if rec and (rec.owner ~= p.owner or rec.scan ~= p.scan or rec.mode ~= 'identify') then
   return fail('binding_mismatch')
@@ -53,6 +73,9 @@ local function counter(key)
   return n
 end
 local function write(key, val)
+  if type(key)~='string' or (type(val)~='string' and type(val)~='number') then
+    error('invalid ID write')
+  end
   table.insert(writes, key); table.insert(writes, tostring(val))
 end
 local function debit()
@@ -163,7 +186,7 @@ elseif action == 'accept' then
 else return fail('invalid_action') end
 local encoded = answer(result)
 if action == 'accept' then rec.result_json = encoded end
-write(KEYS[1], cjson.encode(rec))
+write(KEYS[1], answer(rec))
 redis.call('MSET', unpack(writes))
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
 if action == 'manual_refund' then

@@ -1,4 +1,4 @@
-// Synthetic only: real unchanged billing Lua and fixed byte-capture Lua execute
+// Synthetic only: real current billing Lua and fixed byte-capture Lua execute
 // on private Unix-socket Redis. No external requests or managed credentials.
 import { harness } from './_assert.mjs';
 import { redisRest, redisStore, redisCommand } from './_idRedis.mjs';
@@ -9,6 +9,7 @@ import handler from '../api/preview-id-billing-reproduction.js';
 const t = harness('preview-id-billing-reproduction');
 const PATH = '/api/preview-id-billing-reproduction', HOST = 'synthetic-reproduction.vercel.app';
 const CONTROL = 'preview_id_billing_reproduction:1e4122d:v4';
+const BILLING_GUARD_SHA256 = '9e8464edcdfc5819f039b525135405cd9401fa34d40396575d364d2476bda520';
 const OLD = [1, 2, 3].map(v => `preview_id_billing_acceptance:1e4122d:stage1:v${v}`);
 const CANARY = 'FOREIGN_SECRET_CANARY_NOT_SYNTHETIC';
 const END = Date.parse('2026-09-16T18:00:00Z'), RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
@@ -264,14 +265,16 @@ try {
     (await invoke('recover')).statusCode === 503 && dataKeys().length === originalKeys);
   for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/scan-refund.js', 'api/_tier.js', 'api/_verifyToken.js']) {
     const bytes = readFileSync(new URL('../' + file, import.meta.url));
-    t.check(`${file}:unchanged1e4122d`, bytes.equals(execFileSync('git', ['show', `1e4122d:${file}`],
-      { cwd: new URL('..', import.meta.url) })));
+    t.check(`${file}:${file === 'api/_idBilling.js' ? 'pinned serialization guard' : 'unchanged1e4122d'}`,
+      file === 'api/_idBilling.js' ? createHash('sha256').update(bytes).digest('hex') === BILLING_GUARD_SHA256
+        : bytes.equals(execFileSync('git', ['show', `1e4122d:${file}`], { cwd: new URL('..', import.meta.url) })));
   }
   const source = readFileSync(new URL('../api/preview-id-billing-reproduction.js', import.meta.url), 'utf8');
   t.check('live route never patches fetch or imports auth handlers', !/globalThis\.fetch\s*=/.test(source)
     && !/from ['"].*(?:scan\.js|scan-debit-id|_verifyToken)/.test(source));
-  writeFileSync('/home/user/workspace/preview_v4_reproduction_offline_evidence_20260915.json',
+  writeFileSync('/home/user/workspace/preview_v4_serialization_guard_evidence_20260915.json',
     JSON.stringify({ sourceSha256: createHash('sha256').update(source).digest('hex'),
+      billingGuardSha256: BILLING_GUARD_SHA256,
       scope: 'Local synthetic injected faults; NOT managed data or root-cause proof', evidence }, null, 2));
 } finally { globalThis.fetch = originalFetch; Date.now = originalNow; }
 t.done();

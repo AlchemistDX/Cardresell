@@ -526,5 +526,106 @@ for (const after of [false, true]) {
   t.check('oversized offer is rejected whole, then original debit restored', rejected && h.net() === 0);
   h.restore();
 }
+// Fault injection at the serializer boundary, not a claim about the provider's
+// underlying trigger. Real handlers execute real Lua on isolated Redis.
+// A nil outer encoding previously reached tostring(nil), committed literal
+// "nil" plus the charge, and still returned an accepted response.
+evidence.encodingFaults = [];
+for (const bucket of ['free', 'paid']) for (const fault of [
+  'outer-nil', 'outer-false', 'outer-malformed', 'outer-wrong-record',
+  'outer-throws', 'result-nil', 'result-false', 'result-malformed', 'result-wrong-record', 'result-throws',
+  'decode-nil', 'decode-wrong-record',
+]) {
+  const h = billingHarness({ bucket, balance: 4 });
+  try {
+    const offered = await h.scan(ambiguous()), body = h.body(candidate(offered.payload));
+    const beforeJournal = h.store.get(recordKey(body));
+    const beforeFree = h.store.get(freeKey()), beforePaid = h.store.get(PAID_KEY);
+    const savedFetch = globalThis.fetch;
+    const target = fault.startsWith('outer') ? "v.state=='accepted'" : "v.ok==true and v.pickedCard~=nil";
+    const value = fault.endsWith('nil') ? 'nil' : fault.endsWith('false') ? 'false'
+      : fault.endsWith('malformed') ? "'nil'" : fault.endsWith('throws') ? "error('injected encoder exception')" : "'{}'";
+    globalThis.fetch = async (url, init = {}) => {
+      if (String(url) === process.env.KV_REST_API_URL && init.body) {
+        const args = JSON.parse(init.body);
+        if (args[0] === 'EVAL' && args[2] === 3 && args[6] === 'accept') {
+          const injected = fault.startsWith('decode')
+            ? `local real_cjson=cjson\nlocal cjson={encode=real_cjson.encode,decode=function(s)\n`
+              + `local v=real_cjson.decode(s)\nif type(v)=='table' and v.state=='accepted' then return ${fault === 'decode-nil' ? 'nil' : '{}'} end\nreturn v end}\n`
+            : `local real_cjson=cjson\nlocal cjson={decode=real_cjson.decode,encode=function(v)\n`
+              + `if type(v)=='table' and (${target}) then return ${value},'injected encoding failure' end\n`
+              + `return real_cjson.encode(v) end}\n`;
+          args[1] = injected + args[1];
+          return savedFetch(url, { ...init, body: JSON.stringify(args) });
+        }
+      }
+      return savedFetch(url, init);
+    };
+    const attempts = fault === 'outer-nil' ? await Promise.all(Array.from({ length: 5 }, () => h.pick(body)))
+      : [await h.pick(body)];
+    const failed = attempts[0];
+    globalThis.fetch = savedFetch;
+    const unchanged = h.store.get(recordKey(body)) === beforeJournal
+      && h.store.get(freeKey()) === beforeFree && h.store.get(PAID_KEY) === beforePaid;
+    const storedJournalIsLiteralNil = h.store.get(recordKey(body)) === 'nil';
+    t.check(`${bucket}/${fault}:encoding failure503, no accepted identity`,
+      failed.statusCode === 503 && !failed.payload.pickedCard);
+    t.check(`${bucket}/${fault}:pending bytes and both counters unchanged before MSET`, unchanged);
+    if (fault === 'outer-nil') t.check(`${bucket}:concurrent encoder failures cannot charge or consume authority`,
+      attempts.every(r => r.statusCode === 503) && unchanged);
+    if (unchanged) {
+      const retry = await h.pick(body), replay = await h.pick(body);
+      t.check(`${bucket}/${fault}:retry after encoder recovery accepts once and replays`,
+        retry.statusCode === 200 && replay.statusCode === 200
+        && retry.payload.bucket === (bucket === 'free' ? 'id_free' : 'id_paid_left')
+        && JSON.stringify(retry.payload) === JSON.stringify(replay.payload) && h.net() === 1);
+    } else t.check(`${bucket}/${fault}:retry recovery requires intact pending authority`, false);
+    evidence.encodingFaults.push({ bucket, fault, status: failed.statusCode,
+      pendingAndBalancesUnchanged: unchanged, storedJournalIsLiteralNil });
+  } finally { h.restore(); }
+}
+{
+  const h = billingHarness();
+  try {
+    const offered = await h.scan(ambiguous()), body = h.body(candidate(offered.payload));
+    h.store.set(recordKey(body), 'nil'); // historical corruption, not an empty receipt
+    const free = h.store.get(freeKey()), paid = h.store.get(PAID_KEY);
+    const refused = await h.pick(body);
+    t.check('literal nil journal fails closed, never treated as empty/new debit authority',
+      refused.statusCode === 503 && h.store.get(recordKey(body)) === 'nil'
+      && h.store.get(freeKey()) === free && h.store.get(PAID_KEY) === paid);
+  } finally { h.restore(); }
+}
 writeFileSync('/home/user/workspace/partA_atomic_test_evidence.json', JSON.stringify(evidence, null, 2));
+for (const operation of ['debit', 'refund', 'accept', 'replay']) {
+  const h = billingHarness();
+  try {
+    const offered = await h.scan(ambiguous()), body = h.body(candidate(offered.payload));
+    if (operation === 'replay') await h.pick(body);
+    h.store.set(recordKey(body), 'nil');
+    const beforeFree = h.store.get(freeKey()), beforePaid = h.store.get(PAID_KEY);
+    const savedFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init = {}) => {
+      if (String(url) === process.env.KV_REST_API_URL && init.body) {
+        const args = JSON.parse(init.body);
+        if (args[0] === 'EVAL' && args[2] === 3) {
+          args[1] = "local original=cjson\nlocal cjson={encode=original.encode,decode=function(s) "
+            + "if s=='nil' then return nil,'injected decoder failure' end return original.decode(s) end}\n" + args[1];
+          return savedFetch(url, { ...init, body: JSON.stringify(args) });
+        }
+      }
+      return savedFetch(url, init);
+    };
+    let rejected;
+    if (operation === 'debit' || operation === 'refund') {
+      try {
+        await idBilling(operation, { receipt: body.confirmation_id, owner: UID, scan: body.scan_id, grant: 0 });
+        rejected = false;
+      } catch (e) { rejected = e.code === 'billing_unavailable'; }
+    } else rejected = (await h.pick(body)).statusCode === 503;
+    t.check(`silent decode nil/${operation}:existing raw journal never treated as absent`,
+      rejected && h.store.get(recordKey(body)) === 'nil'
+      && h.store.get(freeKey()) === beforeFree && h.store.get(PAID_KEY) === beforePaid);
+  } finally { h.restore(); }
+}
 t.done();

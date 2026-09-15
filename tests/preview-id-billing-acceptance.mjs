@@ -1,5 +1,5 @@
 // Temporary Stage1 MODULE harness verification; all network is intercepted.
-// Exact unchanged production billing Lua executes in isolated private Redis.
+// Exact current billing Lua executes in isolated private Redis.
 import { harness } from './_assert.mjs';
 import { redisRest, redisStore, redisCommand } from './_idRedis.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -8,11 +8,15 @@ import { createHash } from 'node:crypto';
 import handler from '../api/preview-id-billing-acceptance.js';
 const t = harness('preview-id-billing-acceptance');
 const BASE = '1e4122d021a81670a6659aaae7eb828d6f5d1eca';
+// Sole authorized product delta from BASE: pre-MSET serialization validation.
+const BILLING_GUARD_SHA256 = '9e8464edcdfc5819f039b525135405cd9401fa34d40396575d364d2476bda520';
 const PATH = '/api/preview-id-billing-acceptance';
 const HOST = 'synthetic-preview-acceptance.vercel.app';
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v3';
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v5';
 const V1_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
 const V2_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
+const V3_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v3';
+const V4_CONTROL = 'preview_id_billing_reproduction:1e4122d:v4';
 const END = Date.parse('2026-09-16T18:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
 const CANARY = 'SYNTHETIC_ONLY_CREDENTIAL_CANARY_DO_NOT_OUTPUT';
@@ -69,6 +73,11 @@ globalThis.fetch = async (url, init = {}) => {
     throw new Error(CANARY);
   }
   if (fault.advance && isBilling) now += 26000;
+  if (fault.encoderNil && isBilling && args[6] === 'accept') {
+    args[1] = "local original=cjson\nlocal cjson={decode=original.decode,encode=function(v) "
+      + "if type(v)=='table' and v.state=='accepted' then return nil end return original.encode(v) end}\n" + args[1];
+    init = { ...init, body: JSON.stringify(args) };
+  }
   let before;
   if (isProbe) {
     const p = JSON.parse(args[4]), marker = JSON.parse(store.get(CONTROL));
@@ -76,6 +85,10 @@ globalThis.fetch = async (url, init = {}) => {
     before = { keys, bytes: await redisCommand(['MGET', ...keys]), ttl: await redisCommand(['PTTL', args[3]]) };
   }
   const response = await redisRest(url, init, commands);
+  if (fault.encoderNil && isBilling && args[6] === 'accept') {
+    fault.encoderObservation = { state: JSON.parse(await redisCommand(['GET', args[3]])).state,
+      freeUsed: await redisCommand(['GET', args[4]]), paid: await redisCommand(['GET', args[5]]) };
+  }
   if (isProbe) {
     const after = await redisCommand(['MGET', ...before.keys]), ttl = await redisCommand(['PTTL', args[3]]);
     probeObservations.push({ bytesAndBalancesUnchanged: JSON.stringify(after) === JSON.stringify(before.bytes),
@@ -401,13 +414,16 @@ try {
   store.set(V1_CONTROL, v1Evidence);
   const v2Evidence = JSON.stringify({ preservedOriginalEvidence: true, consumed: true, version: 2 });
   store.set(V2_CONTROL, v2Evidence);
-  const v3Run = await invoke();
+  const retained = [V3_CONTROL, V4_CONTROL];
+  retained.forEach(k => store.set(k, 'preserved-previous-evidence'));
+  const v5Run = await invoke();
   await invoke('POST', { operation: 'recover' });
-  t.check('v3 uses new guard and fresh namespace, never addresses v1/v2 evidence',
-    v3Run.body.counts.fail === 0 && JSON.parse(store.get(CONTROL)).consumed === true
+  t.check('v5 uses new guard and fresh namespace, never addresses v1/v2/v3/v4 evidence',
+    v5Run.body.counts.fail === 0 && JSON.parse(store.get(CONTROL)).consumed === true
     && /^[a-f0-9]{64}$/.test(JSON.parse(store.get(CONTROL)).namespace)
     && store.get(V1_CONTROL) === v1Evidence && store.get(V2_CONTROL) === v2Evidence
-    && !commands.some(c => c.args.includes(V1_CONTROL) || c.args.includes(V2_CONTROL)));
+    && retained.every(k => store.get(k) === 'preserved-previous-evidence')
+    && !commands.some(c => [V1_CONTROL, V2_CONTROL, ...retained].some(k => c.args.includes(k))));
 
   const journalEvidence = [];
   for (const storage of ['outer', 'nested', 'owner', 'scan', 'mode', 'state', 'candidate-set',
@@ -449,19 +465,30 @@ try {
     && bothFirst.journalDiagnosticCategory === 'transport' && bothFirst.journalChecks.sameJournalBytes === null
     && bothFirst.journalChecks.serverOuterJson === null && bothFirst.journalChecks.restOuterJson === false
     && bothFirst.end.free === 0 && bothFirst.end.paid === 1 && dataKeys().length === 0);
+  defaults(); fault.encoderNil = true;
+  const encoderFailure = await invoke(), encoderFirst = encoderFailure.body.tests[0];
+  t.check('v5 serializer nil fails first case closed, later five UNRUN rather than false acceptance',
+    encoderFirst.status === 'FAIL' && encoderFirst.failedStage === 'accept'
+    && encoderFirst.diagnosticCategory === 'billing_unavailable' && encoderFailure.body.counts.unrun === 5
+    && encoderFirst.counts.acceptedResponses === 0);
+  t.check('v5 serializer nil preserves pending authority and free1/paid1 before ordinary cleanup',
+    fault.encoderObservation.state === 'pending' && fault.encoderObservation.freeUsed === '0'
+    && fault.encoderObservation.paid === '1' && dataKeys().length === 0
+    && encoderFailure.body.tests.at(-1).status === 'PASS');
 
   for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/scan-refund.js', 'api/_tier.js', 'api/_verifyToken.js']) {
     const current = readFileSync(new URL('../' + file, import.meta.url));
     const baseline = execFileSync('git', ['show', `${BASE}:${file}`], { cwd: new URL('..', import.meta.url) });
-    t.check(`${file}: byte-identical to1e4122d`, current.equals(baseline));
+    t.check(`${file}: ${file === 'api/_idBilling.js' ? 'pinned serialization guard' : 'byte-identical to1e4122d'}`,
+      file === 'api/_idBilling.js' ? createHash('sha256').update(current).digest('hex') === BILLING_GUARD_SHA256 : current.equals(baseline));
   }
   const source = readFileSync(new URL('../api/preview-id-billing-acceptance.js', import.meta.url), 'utf8');
   t.check('live harness never monkeypatches fetch or imports auth/scan handlers',
     !/(?:globalThis|global|window)\.fetch\s*=/.test(source) && !/from ['"].*(?:scan\.js|scan-debit-id|_verifyToken)/.test(source));
-  writeFileSync('/home/user/workspace/preview_stage1_v3_module_offline_evidence_20260915.json',
+  writeFileSync('/home/user/workspace/preview_stage1_v5_serialization_guard_evidence_20260915.json',
     JSON.stringify({ stage: 'MODULE only; authenticated handlers and HTTP interruption UNRUN',
       sourceSha256: createHash('sha256').update(source).digest('hex'), successful,
-      baseline: BASE, managedRedisRun: 'UNRUN', productionRequests: 0, shapeEvidence, journalEvidence,
+      baseline: BASE, billingGuardSha256: BILLING_GUARD_SHA256, managedRedisRun: 'UNRUN', productionRequests: 0, shapeEvidence, journalEvidence,
       rootCauseOfV2ManagedFailure: 'UNDETERMINED; local raw REST/nested journal contract passes; injected faults are not observed provider behavior' }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
