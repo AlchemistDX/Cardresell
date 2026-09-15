@@ -28,6 +28,31 @@ const END = {
 
 const MAX_CONFIRMATION_CANDIDATES = 3;
 
+/* Evidence sufficiency ------------------------------------------------------
+ * An EXACT_MATCH is a positive claim about which printing the seller holds.
+ * "Nothing contradicted this candidate" is not such a claim: with no readable
+ * identifiers, every candidate is trivially consistent. Previously
+ * resolveIdentity({}, [c]) returned EXACT_MATCH for exactly that reason.
+ *
+ * A number alone is also insufficient — card numbers repeat across sets
+ * (measured: `weedle #1` and `caterpie #1` each appear in 8 sets, F3 = 11.13%).
+ * So an automatic match requires a NAME plus at least one locator, where the
+ * locator is a set code or a card number.
+ */
+const EVIDENCE_FIELDS = ['name', 'number', 'setCode'];
+const LOCATOR_FIELDS = ['number', 'setCode'];
+
+function observedEvidence(observed) {
+  const present = EVIDENCE_FIELDS.filter((f) => normText(observed[f]) != null);
+  const locators = LOCATOR_FIELDS.filter((f) => normText(observed[f]) != null);
+  return {
+    present,
+    locators,
+    // Sufficient for an automatic, unconfirmed identity claim.
+    sufficientForExact: present.includes('name') && locators.length >= 1,
+  };
+}
+
 /* ---------- printed-identifier consistency ---------------------------------
  * Only identifiers actually printed on the card may be used to accept a
  * candidate. Editorial catalogue text (parentheticals such as
@@ -161,7 +186,11 @@ function resolveIdentity(observed = {}, candidates = [], opts = {}) {
     return mk(END.UNKNOWN_CARD, null, [], 'no candidate printings returned by source', { observed });
   }
 
-  const scored = list.map((c) => ({ candidate: c, ...checkCandidate(observed, c, { rarityComparable: opts.rarityComparable }) }));
+  const ev = observedEvidence(observed);
+  const scored = list.map((c) => ({
+    candidate: c,
+    ...checkCandidate(observed, c, { rarityComparable: opts.rarityComparable }),
+  }));
   const consistent = scored.filter((s) => s.consistent);
 
   // Everything the source offered conflicts with the card in hand. Reporting
@@ -170,40 +199,69 @@ function resolveIdentity(observed = {}, candidates = [], opts = {}) {
     return mk(
       END.UNKNOWN_CARD, null, [],
       'every candidate conflicts with a printed identifier read off the card',
-      { observed, rejected: scored.map((s) => ({ candidate: s.candidate, conflicts: s.conflicts })) }
+      { observed, evidence: ev, rejected: scored.map((s) => ({ candidate: s.candidate, conflicts: s.conflicts })) }
+    );
+  }
+
+  // Rank by supported evidence: agreements first, then how completely the
+  // candidate is specified on the axes we could actually read. Ranking only
+  // ORDERS the list — it never decides identity on its own.
+  const ranked = [...consistent].sort((a, b) => {
+    if (b.agreements.length !== a.agreements.length) return b.agreements.length - a.agreements.length;
+    const spec = (x) => ev.present.filter((f) => normText(x.candidate[f]) != null).length;
+    return spec(b) - spec(a);
+  });
+  const allCandidates = ranked.map((s) => s.candidate);
+  const shortList = allCandidates.slice(0, MAX_CONFIRMATION_CANDIDATES);
+
+  /* An automatic identity claim requires BOTH:
+   *   (a) enough readable evidence to make a positive claim at all, and
+   *   (b) exactly one candidate consistent with that evidence.
+   *
+   * Condition (b) previously had a second branch that accepted a "strictly
+   * dominant" candidate — the one agreeing on the most fields. That branch is
+   * REMOVED. Agreement count is a function of how complete a candidate's
+   * catalogue metadata is, so it promoted the better-documented printing over
+   * an equally plausible competitor whose set code the provider simply had not
+   * filled in. Incomplete metadata is a property of the record, not evidence
+   * about the card in hand. Ranking still uses it; identity no longer does.
+   */
+  if (!ev.sufficientForExact) {
+    return mk(
+      END.NEEDS_CONFIRMATION, null, shortList,
+      ev.present.length === 0
+        ? 'no identifying text was read off the card, so no printing can be claimed'
+        : `evidence read off the card (${ev.present.join(', ')}) is not sufficient to claim a printing automatically`,
+      {
+        observed, evidence: ev,
+        consistentCount: consistent.length,
+        allCandidates,
+        moreAvailable: allCandidates.length > shortList.length,
+        insufficientEvidence: true,
+      }
     );
   }
 
   if (consistent.length === 1) {
     const only = consistent[0];
-    return mk(END.EXACT_MATCH, only.candidate, [], 'exactly one candidate is consistent with the printed identifiers', {
-      observed, checks: only.checks, agreements: only.agreements,
+    return mk(END.EXACT_MATCH, only.candidate, [], 'exactly one candidate is consistent with sufficient printed identifiers', {
+      observed, evidence: ev, checks: only.checks, agreements: only.agreements,
     });
   }
 
-  // More than one candidate survives. Prefer a strictly dominant candidate:
-  // one that agrees on strictly more printed identifiers than every other.
-  const maxAgree = Math.max(...consistent.map((s) => s.agreements.length));
-  const top = consistent.filter((s) => s.agreements.length === maxAgree);
-  if (top.length === 1 && maxAgree > 0) {
-    return mk(END.EXACT_MATCH, top[0].candidate, [], 'one candidate agrees on strictly more printed identifiers than any other', {
-      observed, checks: top[0].checks, agreements: top[0].agreements,
-      runnersUp: consistent.filter((s) => s !== top[0]).length,
-    });
-  }
-
-  // Genuinely ambiguous on readable evidence -> short list, never a guess.
-  // Capped at three: a "short list" longer than that is not a short list, and
-  // the top-3 metric is defined over exactly three candidates.
-  const shortList = consistent.slice(0, MAX_CONFIRMATION_CANDIDATES).map((s) => s.candidate);
+  // Genuinely ambiguous on readable evidence -> confirmation, never a guess.
+  // shortList is the top-3 benchmark view; allCandidates is the complete set so
+  // the seller can refine or ask for more matches. Nothing is discarded.
   return mk(
     END.NEEDS_CONFIRMATION, null, shortList,
     `${consistent.length} candidates are equally consistent with the printed identifiers`,
     {
       observed,
+      evidence: ev,
       consistentCount: consistent.length,
-      truncated: consistent.length > MAX_CONFIRMATION_CANDIDATES,
-      tiedOnAgreements: maxAgree,
+      allCandidates,
+      moreAvailable: allCandidates.length > shortList.length,
+      tiedOnAgreements: ranked[0].agreements.length,
     }
   );
 }

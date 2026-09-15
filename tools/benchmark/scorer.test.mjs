@@ -16,7 +16,7 @@ const t = (name, fn) => {
 };
 
 const label = { game: 'pokemon', setCode: 'base1', number: '2/102', name: 'Ivysaur' };
-const rec = { photoPath: 'a.jpg', label };
+const rec = { photoPath: 'a.jpg', label, expectedEndState: 'EXACT_MATCH' };
 
 console.log('Unicode preservation (the defect that inflated Japanese accuracy)');
 t('two different Japanese names do NOT compare equal', () => {
@@ -26,7 +26,7 @@ t('two different Japanese names do NOT compare equal', () => {
 });
 t('a wrong Japanese card is graded WRONG, not correct', () => {
   const jp = { game: 'pokemon', setCode: 'sv2a', number: '001/165', name: 'リーフィア' };
-  const out = S.scoreOne({ photoPath: 'x.jpg', label: jp }, {
+  const out = S.scoreOne({ photoPath: 'x.jpg', label: jp, expectedEndState: 'EXACT_MATCH' }, {
     endState: 'EXACT_MATCH',
     printing: { ...jp, name: 'サンダース' }, // different card
   });
@@ -123,13 +123,13 @@ t('infrastructure failures are excluded from accuracy denominators', () => {
 
 console.log('\nincomplete labels are unscoreable, never free passes');
 t('missing setCode in the label makes the row unscoreable', () => {
-  const out = S.scoreOne({ photoPath: 'a.jpg', label: { game: 'pokemon', number: '2/102', name: 'Ivysaur' } },
+  const out = S.scoreOne({ photoPath: 'a.jpg', label: { game: 'pokemon', number: '2/102', name: 'Ivysaur' }, expectedEndState: 'EXACT_MATCH' },
     { endState: 'EXACT_MATCH', printing: label });
   assert.equal(out.verdict, S.VERDICT.UNSCOREABLE_LABEL);
   assert.deepEqual(out.evidence.missing, ['setCode']);
 });
 t('unscoreable rows do not inflate accuracy', () => {
-  const a = S.aggregate([S.scoreOne({ photoPath: 'a.jpg', label: { name: 'Ivysaur' } }, { endState: 'EXACT_MATCH', printing: label })]);
+  const a = S.aggregate([S.scoreOne({ photoPath: 'a.jpg', label: { name: 'Ivysaur' }, expectedEndState: 'EXACT_MATCH' }, { endState: 'EXACT_MATCH', printing: label })]);
   assert.equal(a.identifiableScans, 0);
   assert.equal(a.top1Accuracy, null, 'no denominator means no accuracy claim');
 });
@@ -173,7 +173,7 @@ t('missing records array is rejected', () => {
   assert.equal(S.validateManifest({}).ok, false);
 });
 t('manifest with an incomplete label is rejected', () => {
-  const r = S.validateManifest({ records: [{ photoPath: 'a.jpg', label: { name: 'Ivysaur' } }] });
+  const r = S.validateManifest({ records: [{ photoPath: 'a.jpg', label: { name: 'Ivysaur' }, expectedEndState: 'EXACT_MATCH' }] });
   assert.equal(r.ok, false);
   assert.ok(r.errors.some((e) => /incomplete label/.test(e)));
 });
@@ -199,11 +199,97 @@ t('a scanner that returns the same card for everything scores ~0, not ~1', () =>
     { game: 'pokemon', setCode: 'sv2a', number: '001/165', name: 'リーフィア' },
     { game: 'lorcana', setCode: 'TFC', number: '1/204', name: 'Ariel' },
   ];
-  const scored = cards.map((c) => S.scoreOne({ photoPath: 'x', label: c },
+  const scored = cards.map((c) => S.scoreOne({ photoPath: 'x', label: c, expectedEndState: 'EXACT_MATCH' },
     { endState: 'EXACT_MATCH', printing: cards[0] })); // always answers Ivysaur
   const a = S.aggregate(scored);
   assert.equal(a.top1Accuracy, 0.25, 'only the one genuine match counts');
   assert.equal(a.wrongHighConfidenceCount, 3);
+});
+
+
+console.log('\nprinting identity beyond name/set/number (reviewer counterexample 3)');
+const jpLabel = { game:'pokemon', setCode:'sv1', number:'25', name:'Pikachu',
+                  language:'ja', edition:'1st', finish:'reverse_holo', variant:'promo' };
+t('wrong LANGUAGE with identical name/set/number is WRONG, not correct', () => {
+  const out = S.scoreOne({ photoPath:'x', label: jpLabel, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { ...jpLabel, language:'en' } });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT);
+  assert.equal(out.evidence.printingAxes.language.agrees, false);
+});
+t('wrong FINISH is WRONG (reverse holo vs normal is a real price gap)', () => {
+  const out = S.scoreOne({ photoPath:'x', label: jpLabel, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { ...jpLabel, finish:'normal' } });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT);
+});
+t('wrong EDITION is WRONG (1st edition vs unlimited)', () => {
+  const out = S.scoreOne({ photoPath:'x', label: jpLabel, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { ...jpLabel, edition:'unlimited' } });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT);
+});
+t('wrong VARIANT is WRONG', () => {
+  const out = S.scoreOne({ photoPath:'x', label: jpLabel, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { ...jpLabel, variant:'regular' } });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT);
+});
+t('wrong printingId is WRONG even when every text axis agrees', () => {
+  const out = S.scoreOne({ photoPath:'x', label: { ...jpLabel, printingId:'p-123' }, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { ...jpLabel, printingId:'p-999' } });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT);
+});
+t('OMITTING a printing axis the label specifies is not agreement', () => {
+  // The scanner returns no language at all. It has not matched a Japanese card.
+  const out = S.scoreOne({ photoPath:'x', label: jpLabel, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { game:'pokemon', setCode:'sv1', number:'25', name:'Pikachu' } });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT, 'silence on language/finish is not a match');
+});
+t('a label that does not constrain finish does not demand one', () => {
+  const plain = { game:'pokemon', setCode:'base1', number:'2/102', name:'Ivysaur' };
+  const out = S.scoreOne({ photoPath:'x', label: plain, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', printing: { ...plain, finish:'holo' } });
+  assert.equal(out.verdict, S.VERDICT.CORRECT_EXACT, 'unconstrained axes stay unconstrained');
+});
+
+console.log('\ndecision policy (reviewer counterexample 4)');
+t('auto-answering a confirmation label FAILS even when it names the labelled card', () => {
+  const out = S.scoreOne(
+    { photoPath:'x', label, expectedEndState:'NEEDS_CONFIRMATION' },
+    { endState:'EXACT_MATCH', printing: label });   // the RIGHT card
+  assert.equal(out.verdict, S.VERDICT.POLICY_AUTO_OVER_CONFIRM);
+  assert.equal(out.evidence.namedLabelledCard, true, 'it did pick the right card');
+  assert.equal(out.evidence.policyViolation, true, 'and that does not redeem the decision');
+});
+t('a policy failure counts as incorrect in top-1, not excluded', () => {
+  const a = S.aggregate([S.scoreOne(
+    { photoPath:'x', label, expectedEndState:'NEEDS_CONFIRMATION' },
+    { endState:'EXACT_MATCH', printing: label })]);
+  assert.equal(a.policyAutoOverConfirm, 1);
+  assert.equal(a.identifiableScans, 1, 'it is in the denominator');
+  assert.equal(a.top1Accuracy, 0, 'over-claiming must not raise the score');
+});
+t('confirming a confirmation label is correct', () => {
+  const out = S.scoreOne(
+    { photoPath:'x', label, expectedEndState:'NEEDS_CONFIRMATION' },
+    { endState:'NEEDS_CONFIRMATION', candidates: [label, { ...label, setCode:'other' }] });
+  assert.equal(out.verdict, S.VERDICT.CORRECT_IN_SHORTLIST);
+});
+t('a label with no expectedEndState is unscoreable, not assumed EXACT_MATCH', () => {
+  const out = S.scoreOne({ photoPath:'x', label }, { endState:'EXACT_MATCH', printing: label });
+  assert.equal(out.verdict, S.VERDICT.UNSCOREABLE_POLICY);
+  assert.equal(out.isRecognition, false, 'it cannot enter a denominator');
+});
+
+console.log('\nresponse field contract');
+t('the runner field name `identity` is read, not silently missed', () => {
+  // The runner sent `identity`; this scorer read `printing`. A perfect scan
+  // graded wrong_exact, and two undefineds could compare equal.
+  const out = S.scoreOne({ photoPath:'x', label, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH', identity: label });
+  assert.equal(out.verdict, S.VERDICT.CORRECT_EXACT);
+});
+t('a response carrying NEITHER field is not a match', () => {
+  const out = S.scoreOne({ photoPath:'x', label, expectedEndState:'EXACT_MATCH' },
+    { endState:'EXACT_MATCH' });
+  assert.equal(out.verdict, S.VERDICT.WRONG_EXACT);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

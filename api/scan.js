@@ -738,6 +738,45 @@ async function groundCardInfoByGame(cardInfo) {
 // Authorization: Bearer <google_id_token>
 // Returns: { card_name, card_number, set_name, hp, card_type, rarity, success: true }
 
+/* Identity provenance on the wire.
+ *
+ * resolveIdentity() records how the printing was chosen on
+ * cardInfo.identity_resolution, but both success responses were assembled from
+ * an explicit field list that omitted it. The provenance therefore never left
+ * the server: the client could not tell an automatically resolved identity from
+ * one the seller still needs to confirm, and could not offer "more matches"
+ * because it never received the unresolved candidates.
+ *
+ * `identified` is reported explicitly rather than inferred by the client from
+ * the presence of a card name.
+ */
+export function identityResponseFields(cardInfo) {
+  const r = (cardInfo && cardInfo.identity_resolution) || null;
+  if (!r) {
+    return { identified: !!(cardInfo && cardInfo.card_name), identity_resolution: null };
+  }
+  const cands = Array.isArray(r.candidates) ? r.candidates : [];
+  const all = (r.evidence && Array.isArray(r.evidence.allCandidates)) ? r.evidence.allCandidates : cands;
+  return {
+    identified: r.endState === 'EXACT_MATCH',
+    needs_confirmation: r.endState === 'NEEDS_CONFIRMATION',
+    end_state: r.endState,
+    identity_resolution: {
+      stage: r.stage || null,
+      end_state: r.endState,
+      reason: r.reason || null,
+      // The three-candidate short list the seller is shown first...
+      candidates: cands,
+      // ...and the complete unresolved set, so a candidate is never unreachable
+      // merely because of provider ordering. Top-3 is a benchmark metric, not a
+      // licence to discard the rest.
+      candidate_count: all.length,
+      more_available: all.length > cands.length,
+      all_candidates: all,
+    },
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -1303,6 +1342,7 @@ export default async function handler(req, res) {
           image_small: cardInfo.image_small || null,
           source: 'ximilar',
           ygo_grounded_by: cardInfo._ygo_grounded_by || null,
+          ...identityResponseFields(cardInfo),
         });
       }
 
@@ -1335,6 +1375,7 @@ export default async function handler(req, res) {
         image_small: cardInfo.image_small || null,
         source: 'ximilar',
         ygo_grounded_by: cardInfo._ygo_grounded_by || null,
+        ...identityResponseFields(cardInfo),
       });
     }
   }

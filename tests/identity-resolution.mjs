@@ -69,25 +69,83 @@ t('REGRESSION: ambiguity no longer resolves to candidates[0]', () => {
   assert.notEqual(r.printing, cands[0]);
 });
 
-t('short list is capped at three candidates and marked truncated', () => {
+t('short list is three, but every unresolved candidate stays reachable', () => {
   const many = Array.from({ length: 8 }, (_, i) => ({ name: 'Pikachu', number: '58/102', setCode: `s${i}` }));
   const r = R.resolveIdentity({ name: 'Pikachu', number: '58/102' }, many);
   assert.equal(r.endState, 'NEEDS_CONFIRMATION');
-  assert.equal(r.candidates.length, 3, 'top-3 is defined over exactly three candidates');
-  assert.equal(r.evidence.truncated, true);
+  assert.equal(r.candidates.length, 3, 'top-3 is the benchmark view');
+  assert.equal(r.evidence.moreAvailable, true);
+  assert.equal(r.evidence.allCandidates.length, 8, 'no candidate is discarded by provider order');
   assert.equal(r.evidence.consistentCount, 8, 'true count is still reported');
 });
 
-t('strictly dominant candidate wins without confirmation', () => {
+t('the correct printing is not hidden by provider order', () => {
+  // The right answer is last in the provider's list. slice(0,3) used to drop it
+  // outright; it must remain reachable for refinement / "more matches".
+  const cands = Array.from({ length: 6 }, (_, i) => ({ name: 'Pikachu', number: '58/102', setCode: `s${i}` }));
+  cands.push({ name: 'Pikachu', number: '58/102', setCode: 'TARGET' });
+  const r = R.resolveIdentity({ name: 'Pikachu', number: '58/102' }, cands);
+  assert.equal(r.endState, 'NEEDS_CONFIRMATION');
+  assert.ok(
+    r.evidence.allCandidates.some((c) => c.setCode === 'TARGET'),
+    'a candidate must not be unreachable merely because it was returned seventh'
+  );
+});
+
+t('REGRESSION: incomplete competitor metadata does not create an EXACT_MATCH', () => {
+  // Previously a "strictly dominant" branch accepted whichever candidate agreed
+  // on the most fields. Agreement count tracks how completely the PROVIDER
+  // documented the record, not evidence about the card in hand, so the
+  // better-documented printing beat an equally plausible competitor whose set
+  // code was simply absent. Both are plausible; this must be confirmed.
   const r = R.resolveIdentity(
     { name: 'Charizard', number: '4/102', setCode: 'base1' },
     [
       { name: 'Charizard', number: '004/102', setCode: 'base1' }, // agrees on 3
-      { name: 'Charizard', number: '004/102' },                   // agrees on 2
+      { name: 'Charizard', number: '004/102' },                   // agrees on 2, conflicts on none
     ]
   );
+  assert.equal(r.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(r.printing, null, 'no printing may be claimed');
+  assert.equal(r.evidence.allCandidates.length, 2, 'the incomplete competitor survives');
+});
+
+t('a genuinely unique candidate still resolves automatically', () => {
+  const r = R.resolveIdentity(
+    { name: 'Charizard', number: '4/102', setCode: 'base1' },
+    [{ name: 'Charizard', number: '004/102', setCode: 'base1' },
+     { name: 'Blastoise', number: '2/102', setCode: 'base1' }]
+  );
   assert.equal(r.endState, 'EXACT_MATCH');
-  assert.equal(r.printing.setCode, 'base1');
+  assert.equal(r.printing.name, 'Charizard');
+});
+
+/* --- evidence sufficiency (reviewer counterexample 1) -------------------- */
+
+t('REGRESSION: no observed evidence + one candidate is NOT an EXACT_MATCH', () => {
+  const r = R.resolveIdentity({}, [{ name: 'Charizard', setCode: 'base1', number: '4' }]);
+  assert.equal(r.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(r.printing, null, 'absence of contradiction is not proof of identity');
+  assert.equal(r.evidence.insufficientEvidence, true);
+});
+
+t('a number alone is insufficient — numbers repeat across sets', () => {
+  // Measured: `weedle #1` and `caterpie #1` each occur in 8 different sets.
+  const r = R.resolveIdentity({ number: '1' }, [{ name: 'Weedle', number: '1', setCode: 'base1' }]);
+  assert.equal(r.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(r.evidence.insufficientEvidence, true);
+});
+
+t('a name alone is insufficient without any locator', () => {
+  const r = R.resolveIdentity({ name: 'Pikachu' }, [{ name: 'Pikachu', number: '58', setCode: 'base1' }]);
+  assert.equal(r.endState, 'NEEDS_CONFIRMATION');
+  assert.equal(r.evidence.insufficientEvidence, true);
+});
+
+t('name plus one locator is sufficient evidence', () => {
+  const r = R.resolveIdentity({ name: 'Pikachu', number: '58' }, [{ name: 'Pikachu', number: '58', setCode: 'base1' }]);
+  assert.equal(r.endState, 'EXACT_MATCH');
+  assert.equal(r.evidence.evidence.sufficientForExact, true);
 });
 
 t('all candidates conflicting yields UNKNOWN_CARD, not nearest neighbour', () => {

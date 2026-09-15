@@ -47,14 +47,41 @@ export function normNumber(v) {
  */
 export const IDENTITY_AXES = ['game', 'setCode', 'number', 'name'];
 
+/* Axes that distinguish PRINTINGS of the same card. A Japanese 1st-edition
+ * reverse-holo Pikachu and an English unlimited normal Pikachu share game, set,
+ * number and name — comparing only those four graded them identical, which is
+ * exactly the substitution the guarantee forbids and a large real price gap.
+ *
+ * These are scored "when applicable": if the LABEL specifies the axis, the
+ * response must agree. A label that does not specify `finish` does not demand
+ * one. But a response that OMITS an axis the label specifies cannot be credited
+ * with matching it — silence is not agreement.
+ */
+export const PRINTING_AXES = ['language', 'edition', 'finish', 'variant', 'printingId'];
+export const ALL_IDENTITY_AXES = [...IDENTITY_AXES, ...PRINTING_AXES];
+
 export function identityKey(o) {
   if (!o) return null;
-  return {
+  const k = {
     game: normIdent(o.game),
     setCode: normIdent(o.setCode),
     number: normNumber(o.number),
     name: normIdent(o.name),
   };
+  for (const a of PRINTING_AXES) k[a] = normIdent(o[a]);
+  return k;
+}
+
+/** Printing axes the label specifies, and how the response compares on each. */
+export function printingAxisReport(label, got) {
+  const L = identityKey(label) || {};
+  const G = identityKey(got) || {};
+  const report = {};
+  for (const a of PRINTING_AXES) {
+    if (L[a] == null) continue;            // label does not constrain this axis
+    report[a] = { expected: L[a], returned: G[a], agrees: G[a] != null && G[a] === L[a] };
+  }
+  return report;
 }
 
 export function labelIsComplete(label) {
@@ -69,7 +96,13 @@ export function identityMatches(label, actual) {
   const b = identityKey(actual);
   if (!a || !b) return false;
   if (!IDENTITY_AXES.every((x) => a[x] != null)) return false;
-  return IDENTITY_AXES.every((x) => a[x] === b[x]);
+  if (!IDENTITY_AXES.every((x) => a[x] === b[x])) return false;
+  // Every printing axis the label constrains must be positively agreed.
+  for (const x of PRINTING_AXES) {
+    if (a[x] == null) continue;
+    if (b[x] !== a[x]) return false;       // includes b[x] == null: silence is not agreement
+  }
+  return true;
 }
 
 /* ---------- verdicts ------------------------------------------------------ */
@@ -87,11 +120,20 @@ export const VERDICT = {
   AUTH_FAILURE: 'auth_failure',
   UNSCOREABLE_LABEL: 'unscoreable_label',
   UNEXPECTED_STATE: 'unexpected_state',
+  // decision-policy failure: the response chose an automatic identity where the
+  // label says the image cannot distinguish the printings. Choosing the labelled
+  // card by luck is still a policy failure — the seller was never asked.
+  POLICY_AUTO_OVER_CONFIRM: 'policy_auto_over_confirm',
+  // the label does not say what the correct decision was, so policy is unscoreable
+  UNSCOREABLE_POLICY: 'unscoreable_policy',
 };
 
 const RECOGNITION_VERDICTS = new Set([
   VERDICT.CORRECT_EXACT, VERDICT.WRONG_EXACT, VERDICT.CORRECT_IN_SHORTLIST,
   VERDICT.WRONG_SHORTLIST, VERDICT.CORRECT_REFUSAL, VERDICT.WRONG_REFUSAL,
+  // A policy failure IS a recognition outcome and belongs in the denominator:
+  // excluding it would let a scanner improve its score by over-claiming.
+  VERDICT.POLICY_AUTO_OVER_CONFIRM,
 ]);
 
 const REFUSAL_STATES = new Set(['UNKNOWN_CARD', 'UNSUPPORTED_CARD', 'UNREADABLE_IMAGE']);
@@ -104,6 +146,10 @@ const MAX_SHORTLIST = 3;
  */
 export function scoreOne(record, response) {
   const r = response || {};
+  // Response identity field. The runner sent `identity` while this scorer read
+  // `printing`, so a PERFECT scan graded wrong_exact and a wrong one could grade
+  // correct by both being undefined. Accept either name, explicitly.
+  const got = r.printing !== undefined ? r.printing : r.identity;
 
   // Infrastructure and auth first: these are not recognition results and must
   // never be graded as correct or incorrect identification.
@@ -139,18 +185,41 @@ export function scoreOne(record, response) {
   switch (r.endState) {
     case 'EXACT_MATCH': {
       if (expectRefusal) {
-        return v(VERDICT.WRONG_EXACT, 'named a printing for a card that should have been refused', { returned: r.printing });
+        return v(VERDICT.WRONG_EXACT, 'named a printing for a card that should have been refused', { returned: got });
       }
-      const ok = identityMatches(label, r.printing);
+      // Decision-policy check. If the label records that the image cannot
+      // distinguish the printings, an automatic answer is wrong REGARDLESS of
+      // which card it named: the seller was never given the choice. Picking the
+      // labelled card by luck does not redeem the decision.
+      if (record && record.expectedEndState === 'NEEDS_CONFIRMATION') {
+        return v(VERDICT.POLICY_AUTO_OVER_CONFIRM,
+          'answered automatically where the label requires seller confirmation', {
+            namedLabelledCard: identityMatches(label, got),
+            returned: identityKey(got),
+            policyViolation: true,
+          });
+      }
+      if (!record || !record.expectedEndState) {
+        return v(VERDICT.UNSCOREABLE_POLICY,
+          'label does not state the expected decision, so an automatic answer cannot be judged', {
+            hint: 'set expectedEndState to EXACT_MATCH or NEEDS_CONFIRMATION on every label',
+          });
+      }
+      const ok = identityMatches(label, got);
       return ok
         ? v(VERDICT.CORRECT_EXACT, 'automatic exact match on the labelled printing', {})
         : v(VERDICT.WRONG_EXACT, 'automatic exact match on the WRONG printing', {
-            expected: identityKey(label), returned: identityKey(r.printing),
+            expected: identityKey(label), returned: identityKey(got),
+            printingAxes: printingAxisReport(label, got),
           });
     }
     case 'NEEDS_CONFIRMATION': {
       if (expectRefusal) {
         return v(VERDICT.WRONG_SHORTLIST, 'offered candidates for a card that should have been refused', {});
+      }
+      if (!record || !record.expectedEndState) {
+        return v(VERDICT.UNSCOREABLE_POLICY,
+          'label does not state the expected decision, so confirmation cannot be judged', {});
       }
       const cands = Array.isArray(r.candidates) ? r.candidates : [];
       // top-3 is defined over exactly three candidates; anything beyond is not
@@ -234,6 +303,7 @@ export function aggregate(scored) {
   const top1 = counts[VERDICT.CORRECT_EXACT] || 0;
   const inList = counts[VERDICT.CORRECT_IN_SHORTLIST] || 0;
   const wrongExact = counts[VERDICT.WRONG_EXACT] || 0;
+  const policyAuto = counts[VERDICT.POLICY_AUTO_OVER_CONFIRM] || 0;
 
   const den = identifiable.length;
   return {
@@ -245,6 +315,11 @@ export function aggregate(scored) {
     authFailures: counts[VERDICT.AUTH_FAILURE] || 0,
     unscoreableLabels: counts[VERDICT.UNSCOREABLE_LABEL] || 0,
     unexpectedStates: counts[VERDICT.UNEXPECTED_STATE] || 0,
+    unscoreablePolicy: counts[VERDICT.UNSCOREABLE_POLICY] || 0,
+    // Automatic answers where the label required confirmation. Counted as
+    // incorrect in top-1/top-3 and reported in its own right.
+    policyAutoOverConfirm: policyAuto,
+    policyAutoOverConfirmRate: den ? policyAuto / den : null,
     top1Accuracy: den ? top1 / den : null,
     top3Accuracy: den ? (top1 + inList) / den : null,
     // Every incorrect automatic exact match, counted. This is the guarantee-
@@ -254,6 +329,6 @@ export function aggregate(scored) {
     wrongRefusals: counts[VERDICT.WRONG_REFUSAL] || 0,
     correctRefusals: counts[VERDICT.CORRECT_REFUSAL] || 0,
     countsByVerdict: counts,
-    denominatorNote: 'Accuracy denominators exclude infrastructure failures, auth failures and unscoreable labels. Refusal-expected rows are excluded from top-1/top-3 and scored separately.',
+    denominatorNote: 'Denominators are counted over EXPECTED LABELS: every row whose label states an identifiable expected decision. Accuracy denominators exclude infrastructure failures, auth failures and unscoreable labels. Refusal-expected rows are excluded from top-1/top-3 and scored separately.',
   };
 }

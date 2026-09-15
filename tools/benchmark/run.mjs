@@ -102,12 +102,28 @@ async function scanOne(record, idx, total) {
         setCode: record.expectedSetCode,
         number: record.expectedCollectorNumber,
         name: record.expectedName,
+        // Printing axes. A label that leaves one undefined does not constrain
+        // it; a label that states one requires positive agreement from the
+        // scanner. Carrying them is what makes a wrong-language or wrong-finish
+        // answer scoreable at all.
+        language: record.expectedLanguage,
+        edition: record.expectedEdition,
+        finish: record.expectedFinish,
+        variant: record.expectedVariant,
+        printingId: record.expectedPrintingId,
       },
       expectedEndState: record.expectedEndState,
     },
     {
       endState: actualEndState,
-      identity: { game: json?.cardInfo?.game, setCode: actualSetCode, number: actualNumber, name: actualName },
+      printing: {
+        game: json?.cardInfo?.game, setCode: actualSetCode, number: actualNumber, name: actualName,
+        language: json?.cardInfo?.language ?? (json?.is_japanese ? 'ja' : undefined),
+        edition: json?.cardInfo?.edition,
+        finish: json?.cardInfo?.finish,
+        variant: json?.cardInfo?.variant,
+        printingId: json?.cardInfo?.grounded_id || json?.cardInfo?._grounded_id || undefined,
+      },
       candidates: candidateList,
       error: errorMessage || undefined,
     },
@@ -174,7 +190,12 @@ async function main() {
         expectedSetCode: r.label.setCode,
         expectedCollectorNumber: r.label.number,
         expectedName: r.label.name,
-        expectedEndState: r.expectedEndState ?? 'EXACT_MATCH',
+        // No default. An unlabelled record must NOT be assumed to be an
+        // EXACT_MATCH: that silently converted every missing label into a
+        // demand for an automatic answer, which is the exact over-claiming
+        // the decision-policy check exists to catch. The scorer reports a
+        // record with no expectedEndState as UNSCOREABLE_POLICY.
+        expectedEndState: r.expectedEndState,
       };
     }
     return r;

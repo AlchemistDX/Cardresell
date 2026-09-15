@@ -18,6 +18,8 @@
  * `pgo`->`swsh10.5`, which share no derivable pattern with `sv1`->`sv01`.
  */
 
+import { skuFor } from '../../api/_cardIdentity.js';
+
 'use strict';
 
 export const MIGRATION_VERSION = 1;
@@ -120,7 +122,7 @@ function planOne(r, ctx) {
         reason: `remap table says ${oldSetId}->${mapped} but stored cardId ${r.cardId} belongs to ${ev}; conflicting evidence`,
         evidence: { tableTarget: mapped, cardIdTarget: ev } };
     }
-    const after = { ...before, setId: mapped, sku: mintSku({ ...r, setId: mapped }) };
+    const after = { ...before, setId: mapped, sku: skuFor({ ...r, setId: mapped }) };
     return { ...base, outcome: OUTCOME.REMAPPED, after,
       reason: `explicit remap table: ${oldSetId} -> ${mapped}`,
       ...(ev ? { evidence: { confirmedByCardId: r.cardId } } : {}) };
@@ -129,7 +131,7 @@ function planOne(r, ctx) {
   // Not in the table. Try stored card-id evidence before giving up.
   const ev = r.cardId != null ? ctx.cardEvidence.get(String(r.cardId)) : undefined;
   if (ev) {
-    const after = { ...before, setId: ev, sku: mintSku({ ...r, setId: ev }) };
+    const after = { ...before, setId: ev, sku: skuFor({ ...r, setId: ev }) };
     return { ...base, outcome: OUTCOME.RESOLVED_BY_EVIDENCE, after,
       reason: `setId ${oldSetId} absent from remap table; resolved to ${ev} from stored cardId ${r.cardId}`,
       evidence: { cardId: r.cardId, resolvedSetId: ev } };
@@ -146,17 +148,27 @@ function snapshot(r) {
     number: r.number ?? null,
     name: r.name ?? null,
     quantity: r.quantity ?? null,
-    sku: r.sku ?? mintSku(r),
+    sku: r.sku ?? skuFor(r),
   };
 }
 
 /** Deterministic identity string. Mirrors the SKU axes; the real minting lives
  *  in api/_cardIdentity.js and must be used in the applier. */
-export function mintSku(r) {
-  return [
-    'CR', r.game ?? 'pokemon', r.language ?? 'en', r.setId ?? '', r.number ?? '',
-    r.variant ?? 'base', r.grader ?? 'raw', r.grade ?? '',
-  ].join('|');
+/* REMOVED — this was a re-implementation of the SKU format, and it was wrong.
+ *
+ * It emitted `CR|pokemon|en|base1|4|base|raw|` while the real generator
+ * (api/_cardIdentity.js skuFor) emits `v2-<head>-<sha256 prefix>` built from
+ * identityString(). A migration minting SKUs with this function would have
+ * rewritten every touched record into a format no other part of the system
+ * recognises — silently detaching drafts, packets and portfolio rows from their
+ * cards. The migration now calls the production generator directly, so a change
+ * to the SKU format cannot drift away from the migration.
+ */
+export function mintSku() {
+  throw new Error(
+    'mintSku was a wrong re-implementation of the SKU format and has been removed. ' +
+    'Use skuFor from api/_cardIdentity.js — the production generator.'
+  );
 }
 
 function summarize(rows) {

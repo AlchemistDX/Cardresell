@@ -1,6 +1,7 @@
 /* Tests for the set-identity migration dry run — work-order item 4.
  * Run: node tools/migration/setIdRemap.test.mjs */
 import assert from 'node:assert/strict';
+import { skuFor } from '../../api/_cardIdentity.js';
 import * as M from './setIdRemap.mjs';
 
 let pass=0, fail=0;
@@ -161,6 +162,26 @@ t('summary separates will-modify from quarantined and collided',()=>{
   assert.equal(p.summary.quarantined,2);
   assert.equal(p.summary.total,4);
 });
+
+
+console.log('\nSKU generation uses the production generator (reviewer item 5)');
+t('the migration mints SKUs in the real v2- format, not a re-implementation', () => {
+  const rows = [{ instanceId: 'i1', setId: 'base6', number: '4', name: 'Charizard', game: 'pokemon', quantity: 1 }];
+  const out = M.planMigration(rows, { renameMap: { base6: "lc" }, knownTargetSetIds: new Set(["lc"]) });
+  const after = out.rows[0].after;
+  assert.ok(/^v2-/.test(after.sku), 'expected the production v2- SKU format, got: ' + after.sku);
+  assert.ok(!after.sku.startsWith('CR|'), 'the CR| re-implementation must not reappear');
+});
+t('mintSku is removed and throws if anything still calls it', () => {
+  assert.throws(() => M.mintSku({}), /removed|production generator/i);
+});
+t('the minted SKU equals what the production generator produces', () => {
+  const row = { instanceId: 'i1', setId: 'base6', number: '4', name: 'Charizard', game: 'pokemon', quantity: 1 };
+  const out = M.planMigration([row], { renameMap: { base6: "lc" }, knownTargetSetIds: new Set(["lc"]) });
+  assert.equal(out.rows[0].after.sku, skuFor({ ...row, setId: 'lc' }),
+    'migration SKU must be identical to the production generator output');
+});
+
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
