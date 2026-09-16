@@ -284,16 +284,18 @@ function permitted(req) {
 }
 const escapeHtml = value => String(value).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error = null } = {}) {
+function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error = null, canRun = false } = {}) {
   const token = nonce();
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline');
   res.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${token}'; style-src 'nonce-${token}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`);
   const messages = {
-    NOT_CONSUMED: 'No consumed run was found. Stop here: no experiment has been requested by this page. There are no saved results to retrieve.',
+    NOT_CONSUMED: canRun
+      ? 'No consumed run was found. Opening this page did not execute the experiment. The button below starts the authorized one-time comparison.'
+      : 'No consumed run was found. Stop here: the execution deadline has passed. There are no saved results to retrieve.',
     CONSUMED_SAVED: 'The one-use control is consumed. Preserved results are shown below; reading or copying them does not rerun the experiment.',
     CONSUMED_NO_RESULTS: 'The one-use control is consumed, but no preserved results are available. Stop here: do not run the experiment again. Reading this page does not perform cleanup.',
-    RESPONSE_ONLY: 'This is the response from the requested operation. Reload this page to check the preserved copy; reloading does not rerun the experiment.',
+    RESPONSE_ONLY: 'This is the response from the requested operation. Open the saved-results view to check the preserved copy without resubmitting this form.',
     UNAVAILABLE: 'The protected comparison or its saved state is unavailable. No experiment was started by opening this page. Use the exact protected Preview URL and normal Vercel sign-in.',
   };
   const message = messages[state] || messages.UNAVAILABLE;
@@ -303,7 +305,12 @@ function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error
     + `<style nonce="${token}">body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#f6f7f9;color:#192433}main{max-width:850px;margin:auto;padding:24px 18px}h1{font-size:26px;line-height:1.2}button{font:inherit;min-height:44px;padding:10px 14px;margin:8px 0;border:1px solid #526271;border-radius:6px;background:white;color:#192433}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;padding:16px;background:white;border:1px solid #d4dbe2;border-radius:6px;font-size:13px}small{display:block}form{display:inline-block;margin-right:10px}</style></head><body><main>`
     + '<h1>Synthetic encoder comparison</h1><p>Controlled encoder evidence only. No billing acceptance, authenticated-client or HTTP-loss proof.</p>'
     + `<p id="run-state" data-state="${Object.hasOwn(messages, state) ? state : 'UNAVAILABLE'}">${message}</p>`
+    + (state === 'RESPONSE_ONLY' ? `<p><a href="${PATH}">Open saved results (read-only)</a></p>` : '')
     + (error && CODES.includes(error) ? `<p id="error">Status: ${error}</p>` : '')
+    + (canRun && state === 'NOT_CONSUMED'
+      ? `<form method="POST" action="${PATH}"><button name="operation" value="run">Run comparison once</button></form>`
+        + '<p>This performs only the fixed synthetic native-encoder comparison. Content and table-identity checks run before encoding; no billing transaction or Redis fixture writes occur.</p>'
+      : '')
     + (evidence ? '<h2>Sanitized results</h2><p>No download is required. You may select the JSON text manually.</p>'
       + '<button id="copy-results" type="button">Copy results</button><span id="copy-status" role="status" aria-live="polite"></span>'
       + '<button id="download-results" type="button">Optional: download displayed .json</button>'
@@ -333,7 +340,8 @@ export default async function handler(req, res) {
       if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length)) return html(res, { status: 400 });
       const old = await record();
       return html(res, { evidence: old?.artifact ? artifact(old) : null,
-        state: old ? old.artifact ? 'CONSUMED_SAVED' : 'CONSUMED_NO_RESULTS' : 'NOT_CONSUMED' });
+        state: old ? old.artifact ? 'CONSUMED_SAVED' : 'CONSUMED_NO_RESULTS' : 'NOT_CONSUMED',
+        canRun: !old && Date.now() < END });
     }
     const body = req.body;
     if (req.headers.origin !== `https://${process.env.VERCEL_URL}` || req.headers['sec-fetch-site'] !== 'same-origin'

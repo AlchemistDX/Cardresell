@@ -109,14 +109,20 @@ try {
     t.check(`${name}:refused without any Redis request`, r.statusCode >= 400 && commands.length === 0);
   }
   reset(); const page = await invoke(null, { method: 'GET', body: undefined });
-  t.check('GET only reads fixed control; no run/recovery form or auto execution', commands.length === 1
-    && commands[0].cmd === 'get' && commands[0].key === CONTROL && !page.body.includes('<form')
-    && page.body.includes('NOT_CONSUMED') && page.body.includes('Stop here')
+  t.check('GET only reads fixed control; authorized unconsumed state exposes one explicit run form without execution', commands.length === 1
+    && commands[0].cmd === 'get' && commands[0].key === CONTROL
+    && page.body.includes(`<form method="POST" action="${PATH}">`) && page.body.includes('value="run"')
+    && page.body.includes('NOT_CONSUMED') && !store.get(CONTROL)
     && !page.body.includes('<script') && page.headers['Cache-Control'] === 'no-store'
     && page.headers['Content-Type'] === 'text/html; charset=utf-8'
     && page.headers['Content-Disposition'] === 'inline');
   reset(); now = Date.parse('2026-09-16T18:00:00Z');
   t.check('absolute run expiry blocks new action before Redis', (await invoke()).statusCode === 410 && commands.length === 0);
+  const expiredPage = await invoke(null, { method: 'GET', body: undefined });
+  t.check('unconsumed GET after execution expiry offers no run form and does not claim control',
+    expiredPage.body.includes('NOT_CONSUMED') && expiredPage.body.includes('deadline has passed')
+    && !expiredPage.body.includes('<form') && !store.get(CONTROL)
+    && commands.every(c => c.cmd === 'get' && c.key === CONTROL));
   for (const scenario of ['normal', 'shared-nil', 'shared-false', 'shared-throw', 'both-nil',
     'result-nil', 'mutation', 'malformed', 'roundtrip', 'order', 'transport', 'lost', 'shape', 'finish']) {
     reset(); fault = scenario; OLD.forEach(k => store.set(k, 'preserved'));
@@ -308,7 +314,53 @@ try {
     unavailable.statusCode === 404 && unavailable.headers['Content-Type'].startsWith('text/html')
     && unavailable.headers['Content-Disposition'] === 'inline' && unavailable.body.length > 0
     && unavailable.body.includes('UNAVAILABLE') && !unavailable.body.includes('wrong') && commands.length === count);
-  writeFileSync('/home/user/workspace/preview_v7_html_retrieval_offline_evidence_20260916.json',
+  // Actual form submission, not a JavaScript synthetic click-handler substitute.
+  reset();
+  const formBrowser = await chromium.launch();
+  try {
+    const ctx = await formBrowser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+    const methods = [];
+    await ctx.route('**/*', async route => {
+      const request = route.request(), url = new URL(request.url());
+      if (url.origin !== `https://${HOST}` || url.pathname !== PATH) return route.abort();
+      methods.push(request.method());
+      const body = request.method() === 'POST' ? Object.fromEntries(new URLSearchParams(request.postData())) : undefined;
+      const response = await invoke(null, { method: request.method(), url: url.pathname,
+        body, headers: request.headers() });
+      await route.fulfill({ status: response.statusCode, headers: response.headers, body: response.body });
+    });
+    const view = await ctx.newPage();
+    await view.goto(`https://${HOST}${PATH}`);
+    t.check('mobile browser sees Run once before any claim or comparison',
+      await view.getByRole('button', { name: 'Run comparison once', exact: true }).count() === 1
+      && !store.get(CONTROL) && comparisonCalls().length === 0);
+    const [posted] = await Promise.all([
+      view.waitForNavigation(),
+      view.getByRole('button', { name: 'Run comparison once', exact: true }).click(),
+    ]);
+    const inline = JSON.parse(await view.locator('#evidence').textContent());
+    t.check('native form POST executes once and displays sanitized results inline, no required attachment',
+      methods.join() === 'GET,POST' && comparisonCalls().length === 1
+      && posted.status() === 200 && posted.headers()['content-disposition'] === 'inline'
+      && inline.status === 'CAPTURED' && inline.acceptance === 'NOT_EVALUATED'
+      && await view.getByRole('button', { name: 'Copy results', exact: true }).count() === 1
+      && await view.getByRole('button', { name: 'Run comparison once', exact: true }).count() === 0);
+    const savedBytes = store.get(CONTROL);
+    // Open the offered saved GET view before reload: native browsers may offer
+    // form-resubmission on reloading a POST document. Even explicit POST replay
+    // is separately asserted not to execute the comparison again.
+    await Promise.all([view.waitForNavigation(),
+      view.getByRole('link', { name: 'Open saved results (read-only)', exact: true }).click()]);
+    await view.reload();
+    t.check('saved-result GET and refresh make no new comparison/claim and never show Run once',
+      comparisonCalls().length === 1 && store.get(CONTROL) === savedBytes
+      && methods.join() === 'GET,POST,GET,GET'
+      && await view.getByRole('button', { name: 'Run comparison once', exact: true }).count() === 0
+      && JSON.stringify(JSON.parse(await view.locator('#evidence').textContent())) === JSON.stringify(inline));
+    await view.screenshot({ path: '/home/user/workspace/preview_v7_run_once_mobile_chromium_20260916.png', fullPage: true });
+    await ctx.close();
+  } finally { await formBrowser.close(); }
+  writeFileSync('/home/user/workspace/preview_v7_run_once_offline_evidence_20260916.json',
     JSON.stringify({ sourceSha256: createHash('sha256').update(source).digest('hex'),
       scope: 'LOCAL ONLY: native local Redis and injected hypotheses; no managed encoder result claimed', evidence }, null, 2));
 } finally { globalThis.fetch = originalFetch; Date.now = originalNow; }
