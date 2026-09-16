@@ -87,6 +87,12 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'preview-id-serialization-comparison.mjs':
+    'Temporary protected v7 in-memory encoder-only alias comparison; not billing ' +
+    'acceptance. Explicit gate: node tests/preview-id-serialization-comparison.mjs. ' +
+    'Uses private local Redis, opposite-order fresh pairs, identity/content ' +
+    'invariants, native serializer fault categories and durable one-shot evidence. ' +
+    'Remove with temporary route after diagnosis.',
   'preview-id-billing-reproduction.mjs':
     'Temporary protected v4 synthetic MODULE journal byte reproduction, not ' +
     'authenticated-handler evidence. Run explicitly before temporary Preview ' +
