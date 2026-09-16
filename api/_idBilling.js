@@ -42,6 +42,14 @@ local function same(a,b)
   for k,_ in pairs(b) do if a[k]==nil then return false end end
   return true
 end
+-- Keep the accepted result independent of the candidate graph, including
+-- nested tables. Some encoders reject repeated references without a cycle.
+local function copy(v)
+  if type(v)~='table' then return v end
+  local out={}
+  for k,x in pairs(v) do out[k]=copy(x) end
+  return out
+end
 local function answer(v)
   local ok,encoded=pcall(cjson.encode,v)
   if not ok or type(encoded)~='string' then error('invalid ID encoding') end
@@ -179,7 +187,7 @@ elseif action == 'accept' then
   if p.grant == nil and not rec.zero_cost then return fail('entitlement_required') end
   result = rec.zero_cost and {ok=true,bucket='id_retry',charged=0} or debit()
   if not result.ok then return answer(result) end
-  result.pickedCard = selected
+  result.pickedCard = copy(selected)
   result.scan_id = rec.scan
   rec.state = 'accepted'; rec.selected = p.candidate; rec.result = result
   rec.free_key = KEYS[2]; rec.replay_expires = now + tonumber(ARGV[3])

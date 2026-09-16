@@ -10,11 +10,11 @@ const PATH = '/api/preview-id-billing-acceptance';
 const BRANCH = 'fix/listing-export-identity';
 // Absolute deadlines also fence old immutable deployments. Recovery only has
 // a separate bounded window; it cannot invoke billing or clear the run guard.
-const RUN_END = Date.parse('2026-09-16T18:00:00Z');
+const RUN_END = Date.parse('2026-09-19T00:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
-// v1/v2/v3 acceptance controls and the separate v4 reproduction control stay
-// untouched. v5 authorizes one fresh run with pre-MSET serialization validation.
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v5';
+// All previous controls/evidence stay untouched. This fixed repair-specific
+// marker authorizes one new normal-module run with structural-copy repair.
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v8_structural_copy';
 const LEASE_MS = 60000;
 const RUN_MS = 25000; // last billing call may take8s; reserve time for finally.
 const hex = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
@@ -34,7 +34,7 @@ const STAGES = ['not_started', 'seed', 'start_balances', 'debit', 'offer', 'pend
   'journal', 'scan_records', 'assertions', 'complete', 'cleanup', 'control'];
 const CATEGORIES = ['transport', 'upstream_status', 'upstream_error', 'response_json',
   'result_shape', 'result_json', 'billing_unavailable', 'billing_rejected',
-  'deadline', 'assertion_mismatch', 'internal', 'not_executed'];
+  'deadline', 'assertion_mismatch', 'internal', 'not_executed', 'invalid_stored_state'];
 class DiagnosticError extends Error {
   constructor(category) { super('diagnostic'); this.category = category; }
 }
@@ -145,8 +145,9 @@ function validRecord(r) {
 async function record() {
   const raw = await kv(['GET', CONTROL]);
   if (raw === null) return null;
-  const r = JSON.parse(raw);
-  if (!validRecord(r)) throw new Error('unavailable');
+  let r;
+  try { r = JSON.parse(raw); } catch (_) { throw new DiagnosticError('invalid_stored_state'); }
+  if (!validRecord(r)) throw new DiagnosticError('invalid_stored_state');
   return r;
 }
 function context(r, i) {
@@ -389,49 +390,81 @@ async function recover() {
   catch (error) { rows.push(failRow('Single-use guard', error)); }
   return envelope(rows);
 }
-function permitted(req) {
-  if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !== BRANCH
-      || Date.now() >= RECOVERY_END) return false;
+function deniedReason(req) {
+  if (process.env.VERCEL_ENV !== 'preview') return 'guard_preview_environment';
+  if (process.env.VERCEL_GIT_COMMIT_REF !== BRANCH) return 'guard_feature_branch';
+  if (Date.now() >= RECOVERY_END) return 'guard_recovery_deadline';
   const host = process.env.VERCEL_URL;
-  if (!host || !/^[a-z0-9-]+\.vercel\.app$/.test(host) || req.headers.host !== host
-      || req.url !== PATH || Object.keys(req.query || {}).length) return false;
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return false;
+  if (!host || !/^[a-z0-9-]+\.vercel\.app$/.test(host)) return 'guard_host_configuration';
+  if (req.headers.host !== host) return 'guard_host_mismatch';
+  if (req.url !== PATH) return typeof req.url === 'string' && req.url.startsWith(PATH + '?')
+    ? 'guard_request_query' : 'guard_request_path';
+  if (Object.keys(req.query || {}).length) return 'guard_request_query';
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return 'guard_kv_missing';
   try {
     const u = new URL(process.env.KV_REST_API_URL);
     if (u.protocol !== 'https:' || !u.hostname.endsWith('.upstash.io')
-        || u.username || u.password || u.port || u.search || u.hash || u.pathname !== '/') return false;
-  } catch (_) { return false; }
-  return true;
+        || u.username || u.password || u.port || u.search || u.hash || u.pathname !== '/') return 'guard_kv_url_shape';
+  } catch (_) { return 'guard_kv_url_parse'; }
+  return null;
+}
+const REASONS = ['guard_preview_environment', 'guard_feature_branch', 'guard_recovery_deadline',
+  'guard_host_configuration', 'guard_host_mismatch', 'guard_request_query', 'guard_request_path',
+  'guard_kv_missing', 'guard_kv_url_shape', 'guard_kv_url_parse', 'request_method', 'request_get_body',
+  'request_origin', 'request_fetch_site', 'request_content_type', 'request_body_shape', 'request_operation',
+  'run_deadline', 'state_read_failed', 'operation_failed'];
+const escapeHtml = text => String(text).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function html(res, { status = 200, data = null, state = 'UNAVAILABLE', reason = null, canRun = false, canRecover = false } = {}) {
+  const token = nonce();
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${token}'; style-src 'nonce-${token}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`);
+  return res.status(status).send('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<title>Stage1 MODULE acceptance</title>'
+    + `<style nonce="${token}">body{font:16px/1.5 system-ui;margin:24px;color:#192433}main{max-width:850px;margin:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f7f9;padding:16px}button{font:inherit;min-height:44px;margin:8px;padding:10px}form{display:inline-block}</style></head><body><main>`
+    + '<h1>Stage1 MODULE acceptance</h1><p>Six normal billing-module cases only. Not authenticated-handler, actual HTTP-interruption or physical iPhone billing acceptance.</p>'
+    + '<p>Execution deadline: September 18, 2026 at 8:00 PM EDT (UTC−04:00; September 19, 2026 00:00 UTC). Recovery deadline: September 23, 2026 at 2:00 PM EDT (UTC−04:00; 18:00 UTC). A consumed run is never reset.</p>'
+    + `<p id="run-state">${['NOT_CONSUMED', 'CONSUMED', 'RESPONSE_ONLY'].includes(state) ? state : 'UNAVAILABLE'}</p>`
+    + (REASONS.includes(reason) ? `<p id="denied-reason">Diagnostic: ${reason}. HTTP ${status}. Stop; do not retry the experiment.</p>` : '')
+    + (canRun && state === 'NOT_CONSUMED' ? `<form method="POST" action="${PATH}"><button name="operation" value="run">Run MODULE acceptance once</button></form>` : '')
+    + (canRecover ? `<form method="POST" action="${PATH}"><button name="operation" value="recover">Recover synthetic cleanup</button></form>` : '')
+    + (state === 'RESPONSE_ONLY' ? `<p><a href="${PATH}">Open saved results (read-only)</a></p>` : '')
+    + (data ? '<p>Results below are sanitized. Copy/download use only displayed text; neither executes tests.</p><button id="copy" type="button">Copy results</button><span id="copy-status" role="status"></span><button id="download" type="button">Optional: download displayed .json</button>'
+      + `<pre id="evidence" tabindex="0">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`
+      + `<script nonce="${token}">const output=document.getElementById('evidence');document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(output.textContent);document.getElementById('copy-status').textContent='Copied';}catch(_){const r=document.createRange();r.selectNodeContents(output);const s=window.getSelection();s.removeAllRanges();s.addRange(r);document.getElementById('copy-status').textContent='Select and copy manually';}};document.getElementById('download').onclick=()=>{const u=URL.createObjectURL(new Blob([output.textContent],{type:'application/json;charset=utf-8'})),a=document.createElement('a');a.href=u;a.download='cardresell-module-acceptance.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),30000);};</script>` : '')
+    + '</main></body></html>');
 }
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
-  if (!permitted(req)) return res.status(404).end();
-  if (!['GET', 'POST'].includes(req.method)) return res.status(405).end();
+  const denied = deniedReason(req);
+  if (denied) return html(res, { status: 404, reason: denied });
+  if (!['GET', 'POST'].includes(req.method)) return html(res, { status: 405, reason: 'request_method' });
+  let failureStage = 'operation_failed';
   try {
     if (req.method === 'GET') {
-      if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length)) return res.status(400).end();
+      if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length))
+        return html(res, { status: 400, reason: 'request_get_body' });
+      failureStage = 'state_read_failed';
       const old = await record(); // strictly read-only; no cookie, claim or seed
       const data = envelope(old?.results || []);
-      const button = !old && Date.now() < RUN_END
-        ? '<form method="POST"><button name="operation" value="run">Run MODULE acceptance once</button></form>' : '';
-      const recovery = old ? '<form method="POST"><button name="operation" value="recover">Recover synthetic cleanup</button></form>' : '';
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send('<!doctype html><meta charset="utf-8"><title>Stage1 MODULE acceptance</title>'
-        + '<h1>Stage1 MODULE acceptance</h1>' + button + recovery
-        + '<pre>' + JSON.stringify(data, null, 2) + '</pre>');
+      return html(res, { data: old ? data : null, state: old ? 'CONSUMED' : 'NOT_CONSUMED',
+        canRun: !old && Date.now() < RUN_END, canRecover: !!old });
     }
     const body = req.body;
-    if (req.headers.origin !== `https://${process.env.VERCEL_URL}`
-        || req.headers['sec-fetch-site'] !== 'same-origin'
-        || !['application/x-www-form-urlencoded', 'application/json'].includes((req.headers['content-type'] || '').split(';')[0])
-        || !body || typeof body !== 'object' || Array.isArray(body)
-        || Object.keys(body).length !== 1 || !['run', 'recover'].includes(body.operation)) return res.status(400).end();
-    if (body.operation === 'run' && Date.now() >= RUN_END) return res.status(410).json(envelope([failRow('Single-use guard')]));
-    return res.status(200).json(body.operation === 'run' ? await runOnce() : await recover());
+    if (req.headers.origin !== `https://${process.env.VERCEL_URL}`) return html(res, { status: 400, reason: 'request_origin' });
+    if (req.headers['sec-fetch-site'] !== 'same-origin') return html(res, { status: 400, reason: 'request_fetch_site' });
+    if (!['application/x-www-form-urlencoded', 'application/json'].includes((req.headers['content-type'] || '').split(';')[0]))
+      return html(res, { status: 400, reason: 'request_content_type' });
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1)
+      return html(res, { status: 400, reason: 'request_body_shape' });
+    if (!['run', 'recover'].includes(body.operation)) return html(res, { status: 400, reason: 'request_operation' });
+    if (body.operation === 'run' && Date.now() >= RUN_END) return html(res, { status: 410, reason: 'run_deadline', data: envelope([failRow('Single-use guard')]) });
+    return html(res, { state: 'RESPONSE_ONLY', data: body.operation === 'run' ? await runOnce() : await recover() });
   } catch (error) {
     // Never print or return exception messages, upstream results or credentials.
-    return res.status(503).json(envelope([failRow('MODULE execution', error)]));
+    return html(res, { status: 503, reason: failureStage, data: envelope([failRow('MODULE execution', error)]) });
   }
 }

@@ -10,7 +10,7 @@ import { ID_BILLING_SCRIPT, idBilling } from '../api/_idBilling.js';
 const t = harness('preview-id-billing-reproduction');
 const PATH = '/api/preview-id-billing-reproduction', HOST = 'synthetic-reproduction.vercel.app';
 const CONTROL = 'preview_id_billing_reproduction:1e4122d:v6';
-const BILLING_GUARD_SHA256 = '9e8464edcdfc5819f039b525135405cd9401fa34d40396575d364d2476bda520';
+const BILLING_GUARD_SHA256 = '8421956233263237dbb941e154b8a8ab315db49bd3ee16c089ccb6d894238a1a';
 const OLD = [...[1, 2, 3, 5].map(v => `preview_id_billing_acceptance:1e4122d:stage1:v${v}`),
   'preview_id_billing_reproduction:1e4122d:v4'];
 const CANARY = 'FOREIGN_SECRET_CANARY_NOT_SYNTHETIC';
@@ -428,7 +428,7 @@ try {
   t.check('separate reconstruction removed; tracing does not rewrite billing source',
     !source.includes('SERIALIZER_PROBE') && source.includes('` + ID_BILLING_SCRIPT + `')
     && !/ID_BILLING_SCRIPT\.replace/.test(source));
-  writeFileSync('/home/user/workspace/preview_v6_direct_instrumentation_evidence_20260915.json',
+  writeFileSync('/home/user/workspace/structural_copy_v6_instrumentation_regression_20260916.json',
     JSON.stringify({ sourceSha256: createHash('sha256').update(source).digest('hex'),
       billingGuardSha256: BILLING_GUARD_SHA256,
       scope: 'Local synthetic injected faults; NOT managed data or root-cause proof', evidence }, null, 2));

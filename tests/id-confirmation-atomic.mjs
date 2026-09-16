@@ -4,7 +4,8 @@ import { billingHarness, ambiguous, exact, UID, PAID_KEY, freeKey } from './_sca
 import { redisCommand } from './_idRedis.mjs';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-const { ID_BILLING_SCRIPT, idBilling, idEntitlement, newIdReceipt, offerIdConfirmation, claimIdRetry } = await import('../api/_idBilling.js');
+import { execFileSync } from 'node:child_process';
+const { ID_BILLING_SCRIPT, idBilling, idEntitlement, newIdReceipt, offerIdConfirmation, claimIdRetry, canonicalPick, candidateHash } = await import('../api/_idBilling.js');
 const { TIER_BENEFITS } = await import('./stubs/_tier.js');
 const t = harness('id-confirmation-atomic');
 const evidence = { script_sha256: createHash('sha256').update(ID_BILLING_SCRIPT).digest('hex'),
@@ -526,6 +527,93 @@ for (const after of [false, true]) {
   t.check('oversized offer is rejected whole, then original debit restored', rejected && h.net() === 0);
   h.restore();
 }
+// User-reported managed V7: both orders reject shared references with nil and
+// accept independent equal-value structures. This local shim models that
+// behavior; it is NOT another managed run or a downloaded provider artifact.
+const beforeCopySource = execFileSync('git', ['show', '12d45c2:api/_idBilling.js'], { encoding: 'utf8' });
+const beforeCopyScript = /export const ID_BILLING_SCRIPT = `([\s\S]*?)`;/m.exec(beforeCopySource)[1];
+const referenceSensitive = `
+local native=cjson
+local function repeated(v,seen)
+  if type(v)~='table' then return false end
+  if seen[v] then return true end
+  seen[v]=true
+  for _,x in pairs(v) do if repeated(x,seen) then return true end end
+  return false
+end
+local cjson={decode=native.decode,encode=function(v)
+  if type(v)=='table' and v.state=='accepted' and repeated(v,{}) then
+    return nil,'injected repeated-reference encoder limitation'
+  end
+  return native.encode(v)
+end}
+`;
+const copyEvidence = [];
+for (const bucket of ['free', 'paid']) for (const variant of ['original', 'shallow', 'recursive', 'native']) {
+  const h = billingHarness({ bucket, balance: 4 });
+  try {
+    const context = { receipt: newIdReceipt(), owner: UID, scan: `synthetic-copy-${bucket}-${variant}`,
+      grant: bucket === 'free' ? 1 : 0 };
+    const cards = [
+      { name: 'Other synthetic card', number: '1', set: 'Synthetic set' },
+      { name: 'Selected synthetic card', number: '2', set: 'Synthetic set',
+        metadata: { flags: [true, false, null], amount: 0, label: '',
+          printing: { language: 'ja', versions: [{ finish: 'foil', count: 2 }, { finish: 'plain', count: 1 }] } },
+        images: { large: 'synthetic-image', sizes: [10, 20] } },
+    ];
+    await idBilling('debit', context);
+    const offer = await offerIdConfirmation(context, cards);
+    const key = `id_billing:${context.receipt}`, pendingBytes = h.store.get(key);
+    const pending = JSON.parse(pendingBytes), freeBefore = h.store.get(freeKey()), paidBefore = h.store.get(PAID_KEY);
+    const savedFetch = globalThis.fetch;
+    let acceptCalls = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      if (String(url) === process.env.KV_REST_API_URL && init.body) {
+        const args = JSON.parse(init.body);
+        if (args[0] === 'EVAL' && args[2] === 3 && args[6] === 'accept') {
+          acceptCalls++;
+          const script = variant === 'original' ? beforeCopyScript
+            : variant === 'shallow' ? ID_BILLING_SCRIPT.replace('out[k]=copy(x)', 'out[k]=x') : ID_BILLING_SCRIPT;
+          args[1] = (variant === 'native' ? '' : referenceSensitive) + script;
+          return savedFetch(url, { ...init, body: JSON.stringify(args) });
+        }
+      }
+      return savedFetch(url, init);
+    };
+    const accept = () => idBilling('accept', { ...context, candidate_set: offer.candidate_set,
+      candidate: candidateHash(cards[1]) });
+    let result, error;
+    try { result = await accept(); } catch (e) { error = e.code; }
+    const rejected = ['original', 'shallow'].includes(variant);
+    if (rejected) {
+      t.check(`${bucket}/${variant}:reference-sensitive encoder fails actual acceptance before financial write`,
+        error === 'billing_unavailable' && !result && h.store.get(key) === pendingBytes
+        && h.store.get(freeKey()) === freeBefore && h.store.get(PAID_KEY) === paidBefore);
+    } else {
+      const completedBytes = h.store.get(key), journal = JSON.parse(completedBytes);
+      t.check(`${bucket}/${variant}:recursive independent selected card preserves every nested value and type`,
+        result?.ok === true && candidateHash(result.pickedCard) === candidateHash(canonicalPick(cards[1]))
+        && candidateHash(journal.candidates) === candidateHash(pending.candidates)
+        && journal.selected === candidateHash(cards[1]) && journal.candidate_set === pending.candidate_set
+        && candidateHash(JSON.parse(journal.result_json)) === candidateHash(result));
+      t.check(`${bucket}/${variant}:one correct bucket changes and valid accepted journal commits together`,
+        journal.state === 'accepted' && result.bucket === (bucket === 'free' ? 'id_free' : 'id_paid_left')
+        && Number(h.store.get(freeKey())) === Number(freeBefore) + (bucket === 'free' ? 1 : 0)
+        && Number(h.store.get(PAID_KEY)) === Number(paidBefore) - (bucket === 'paid' ? 1 : 0));
+      const replays = await Promise.all(Array.from({ length: 8 }, accept));
+      t.check(`${bucket}/${variant}:concurrent replay returns recorded identity without rewriting or charging`,
+        replays.every(r => candidateHash(r) === candidateHash(result)) && h.store.get(key) === completedBytes
+        && acceptCalls === 9 && h.net() === 1);
+    }
+    copyEvidence.push({ bucket, variant, accepted: !!result?.ok, error: error || null,
+      pendingPreservedOnFailure: rejected ? h.store.get(key) === pendingBytes : null });
+  } finally { h.restore(); }
+}
+writeFileSync('/home/user/workspace/id_structural_copy_regression_20260916.json',
+  JSON.stringify({ scope: 'LOCAL actual production modules/Lua plus explicit reference-sensitive encoder fault injection',
+    originalScriptSha256: createHash('sha256').update(beforeCopyScript).digest('hex'),
+    repairedScriptSha256: evidence.script_sha256, cases: copyEvidence }, null, 2));
+
 // Fault injection at the serializer boundary, not a claim about the provider's
 // underlying trigger. Real handlers execute real Lua on isolated Redis.
 // A nil outer encoding previously reached tostring(nil), committed literal

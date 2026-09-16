@@ -247,8 +247,10 @@ try {
   t.check('poisoned evidence does not reopen comparison during recovery', (await invoke('recover')).statusCode === 200
     && comparisonCalls().length === 1);
   for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/scan-refund.js', 'api/_tier.js', 'api/_verifyToken.js']) {
-    t.check(`${file}:byte-identical product393b504`, readFileSync(new URL('../' + file, import.meta.url))
-      .equals(execFileSync('git', ['show', `393b504:${file}`], { cwd: new URL('..', import.meta.url) })));
+    const bytes = readFileSync(new URL('../' + file, import.meta.url));
+    t.check(`${file}:pinned structural-copy repair or unchanged product393b504`, file === 'api/_idBilling.js'
+      ? createHash('sha256').update(bytes).digest('hex') === '8421956233263237dbb941e154b8a8ab315db49bd3ee16c089ccb6d894238a1a'
+      : bytes.equals(execFileSync('git', ['show', `393b504:${file}`], { cwd: new URL('..', import.meta.url) })));
   }
   t.check('V6 route and evidence behavior preserved byte-identical5289043', readFileSync(new URL('../api/preview-id-billing-reproduction.js', import.meta.url))
     .equals(execFileSync('git', ['show', '5289043:api/preview-id-billing-reproduction.js'], { cwd: new URL('..', import.meta.url) })));
@@ -484,7 +486,7 @@ try {
     await view.screenshot({ path: '/home/user/workspace/preview_v7_extended_guard_run_once_mobile_chromium_20260916.png', fullPage: true });
     await ctx.close();
   } finally { await formBrowser.close(); }
-  writeFileSync('/home/user/workspace/preview_v7_extended_guard_diagnostics_offline_evidence_20260916.json',
+  writeFileSync('/home/user/workspace/structural_copy_v7_comparison_regression_20260916.json',
     JSON.stringify({ sourceSha256: createHash('sha256').update(source).digest('hex'),
       scope: 'LOCAL ONLY: native local Redis and injected hypotheses; no managed encoder result claimed', evidence }, null, 2));
 } finally { globalThis.fetch = originalFetch; Date.now = originalNow; }

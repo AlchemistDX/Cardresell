@@ -8,16 +8,17 @@ import { createHash } from 'node:crypto';
 import handler from '../api/preview-id-billing-acceptance.js';
 const t = harness('preview-id-billing-acceptance');
 const BASE = '1e4122d021a81670a6659aaae7eb828d6f5d1eca';
-// Sole authorized product delta from BASE: pre-MSET serialization validation.
-const BILLING_GUARD_SHA256 = '9e8464edcdfc5819f039b525135405cd9401fa34d40396575d364d2476bda520';
+// Authorized product deltas: pre-MSET guards plus selected-card structural copy.
+const BILLING_GUARD_SHA256 = '8421956233263237dbb941e154b8a8ab315db49bd3ee16c089ccb6d894238a1a';
 const PATH = '/api/preview-id-billing-acceptance';
 const HOST = 'synthetic-preview-acceptance.vercel.app';
-const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v5';
+const CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v8_structural_copy';
+const V5_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v5';
 const V1_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v1';
 const V2_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v2';
 const V3_CONTROL = 'preview_id_billing_acceptance:1e4122d:stage1:v3';
 const V4_CONTROL = 'preview_id_billing_reproduction:1e4122d:v4';
-const END = Date.parse('2026-09-16T18:00:00Z');
+const END = Date.parse('2026-09-19T00:00:00Z');
 const RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
 const CANARY = 'SYNTHETIC_ONLY_CREDENTIAL_CANARY_DO_NOT_OUTPUT';
 let store, commands, outside, fault, now, probeObservations, contractObservations;
@@ -76,6 +77,21 @@ globalThis.fetch = async (url, init = {}) => {
   if (fault.encoderNil && isBilling && args[6] === 'accept') {
     args[1] = "local original=cjson\nlocal cjson={decode=original.decode,encode=function(v) "
       + "if type(v)=='table' and v.state=='accepted' then return nil end return original.encode(v) end}\n" + args[1];
+    init = { ...init, body: JSON.stringify(args) };
+  }
+  if (fault.referenceSensitive && isBilling && args[6] === 'accept') {
+    args[1] = `local native=cjson
+local function repeated(v,seen)
+ if type(v)~='table' then return false end
+ if seen[v] then return true end
+ seen[v]=true;for _,x in pairs(v) do if repeated(x,seen) then return true end end
+ return false
+end
+local cjson={decode=native.decode,encode=function(v)
+ if type(v)=='table' and v.state=='accepted' and repeated(v,{}) then return nil end
+ return native.encode(v)
+end}
+` + args[1];
     init = { ...init, body: JSON.stringify(args) };
   }
   let before;
@@ -137,6 +153,13 @@ async function invoke(method = 'POST', body = { operation: 'run' }, over = {}) {
     status(n) { this.statusCode = n; return this; },
     end() { return this; }, json(v) { this.body = v; return this; }, send(v) { this.body = v; return this; } };
   await handler(req, res);
+  res.html = typeof res.body === 'string' ? res.body : null;
+  if (res.html) {
+    const pre = /<pre id="evidence"[^>]*>([\s\S]*?)<\/pre>/.exec(res.html);
+    if (pre) res.evidence = JSON.parse(pre[1].replace(/&(?:amp|lt|gt|quot);/g,
+      entity => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"' })[entity]));
+    if (method === 'POST' && pre) res.body = res.evidence;
+  }
   return res;
 }
 const dataKeys = () => store.keys().filter(k => k !== CONTROL);
@@ -258,7 +281,7 @@ try {
     && billingCalls().length === originalCount);
   const again = await invoke('GET');
   t.check('completed GET is read-only and does not expose synthetic keys', !again.body.includes('value="run"')
-    && again.body.includes('value="recover"') && safeOutput(again.body));
+    && again.body.includes('value="recover"') && safeOutput(again.evidence) && !again.html.includes(CANARY));
   const recovered = await invoke('POST', { operation: 'recover' });
   t.check('explicit cleanup recovery never invokes billing or erases run guard', recovered.body.counts.fail === 0
     && billingCalls().length === originalCount && JSON.parse(store.get(CONTROL)).consumed === true && dataKeys().length === 0);
@@ -279,7 +302,7 @@ try {
   t.check('stored-result canaries are projected away, unknown test cannot PASS',
     safeOutput(redacted.body) && schema(redacted.body) && redacted.body.tests[0].status === 'FAIL');
   const redactedPage = await invoke('GET');
-  t.check('stored-result canaries cannot reach HTML', safeOutput(redactedPage.body));
+  t.check('stored-result canaries cannot reach HTML', safeOutput(redactedPage.evidence) && !redactedPage.html.includes(CANARY));
   poisoned.namespace = 'customer-key';
   store.set(CONTROL, JSON.stringify(poisoned));
   const delBefore = commands.filter(c => c.cmd === 'del').length;
@@ -414,11 +437,12 @@ try {
   store.set(V1_CONTROL, v1Evidence);
   const v2Evidence = JSON.stringify({ preservedOriginalEvidence: true, consumed: true, version: 2 });
   store.set(V2_CONTROL, v2Evidence);
-  const retained = [V3_CONTROL, V4_CONTROL];
+  const retained = [V3_CONTROL, V4_CONTROL, V5_CONTROL,
+    'preview_id_encoder_comparison:1e4122d:v7', 'preview_id_billing_reproduction:1e4122d:v6'];
   retained.forEach(k => store.set(k, 'preserved-previous-evidence'));
   const v5Run = await invoke();
   await invoke('POST', { operation: 'recover' });
-  t.check('v5 uses new guard and fresh namespace, never addresses v1/v2/v3/v4 evidence',
+  t.check('repair-specific guard uses fresh namespace, never addresses any previous acceptance or diagnostic evidence',
     v5Run.body.counts.fail === 0 && JSON.parse(store.get(CONTROL)).consumed === true
     && /^[a-f0-9]{64}$/.test(JSON.parse(store.get(CONTROL)).namespace)
     && store.get(V1_CONTROL) === v1Evidence && store.get(V2_CONTROL) === v2Evidence
@@ -476,6 +500,90 @@ try {
     && fault.encoderObservation.paid === '1' && dataKeys().length === 0
     && encoderFailure.body.tests.at(-1).status === 'PASS');
 
+  defaults(); fault.referenceSensitive = true;
+  const referenceRun = await invoke();
+  t.check('all six actual normal-module cases pass modeled reference-sensitive encoder with cleanup and one-shot replay',
+    referenceRun.body.tests.slice(0, 6).every(row => row.status === 'PASS')
+    && referenceRun.body.counts.fail === 0 && dataKeys().length === 0);
+  const referenceCalls = billingCalls().length;
+  const referenceReplay = await invoke();
+  t.check('reference-sensitive normal-module suite replay preserves all results without additional financial calls',
+    JSON.stringify(referenceReplay.body) === JSON.stringify(referenceRun.body) && billingCalls().length === referenceCalls);
+
+  for (const [reason, over] of [
+    ['guard_host_mismatch', { headers: { host: 'foreign.vercel.app' } }],
+    ['guard_request_path', { url: PATH + '.js' }],
+    ['guard_request_query', { url: PATH + '?x=1' }],
+    ['guard_request_query', { query: { x: '1' } }],
+  ]) {
+    defaults(); const denied = await invoke('GET', undefined, over);
+    t.check(`${reason}:readable fixed denial before any Redis operation`,
+      denied.statusCode === 404 && denied.html.includes(`Diagnostic: ${reason}`)
+      && !denied.html.includes('<form') && !denied.html.includes(CANARY) && commands.length === 0);
+  }
+  defaults(); store.set(CONTROL, CANARY);
+  const invalidControl = await invoke('GET');
+  t.check('invalid stored control has readable state failure and specific sanitized category without mutation',
+    invalidControl.statusCode === 503 && invalidControl.html.includes('Diagnostic: state_read_failed')
+    && invalidControl.evidence.tests[0].diagnosticCategory === 'invalid_stored_state'
+    && !invalidControl.html.includes(CANARY) && !invalidControl.html.includes('<form')
+    && store.get(CONTROL) === CANARY && billingCalls().length === 0);
+  defaults(); delete process.env.KV_REST_API_TOKEN;
+  const missingConfig = await invoke('GET');
+  t.check('missing configuration displays only fixed category and never reads state',
+    missingConfig.statusCode === 404 && missingConfig.html.includes('Diagnostic: guard_kv_missing')
+    && commands.length === 0 && !missingConfig.html.includes('<form'));
+  // Browser requests never leave interception: actual route + private Redis.
+  defaults(); now = Date.parse('2026-09-18T19:00:00Z');
+  const { chromium, devices } = (await import('/home/user/node_modules/playwright/index.js')).default;
+  const browser = await chromium.launch();
+  try {
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `https://${HOST}` });
+    const methods = [];
+    await ctx.route('**/*', async route => {
+      const req = route.request(), url = new URL(req.url());
+      if (url.origin !== `https://${HOST}` || url.pathname !== PATH) return route.abort();
+      methods.push(req.method());
+      const body = req.method() === 'POST' ? Object.fromEntries(new URLSearchParams(req.postData())) : undefined;
+      const r = await invoke(req.method(), body, { headers: req.headers() });
+      await route.fulfill({ status: r.statusCode, headers: r.headers, body: r.html });
+    });
+    const page = await ctx.newPage();
+    await page.goto(`https://${HOST}${PATH}`);
+    t.check('mobile GET offers explicit normal-module run without claiming or billing',
+      await page.getByRole('button', { name: 'Run MODULE acceptance once', exact: true }).count() === 1
+      && !store.get(CONTROL) && billingCalls().length === 0);
+    const [response] = await Promise.all([page.waitForNavigation(),
+      page.getByRole('button', { name: 'Run MODULE acceptance once', exact: true }).click()]);
+    const displayed = await page.locator('#evidence').textContent(), markerBytes = store.get(CONTROL);
+    const financialCalls = billingCalls().length;
+    t.check('mobile native POST renders all six normal-module successes inline, not required download',
+      response.status() === 200 && response.headers()['content-disposition'] === 'inline'
+      && JSON.parse(displayed).tests.slice(0, 6).every(r => r.status === 'PASS')
+      && methods.join() === 'GET,POST' && dataKeys().length === 0);
+    await page.getByRole('button', { name: 'Copy results', exact: true }).click();
+    t.check('module Copy is exact displayed text without new request or billing',
+      await page.evaluate(() => navigator.clipboard.readText()) === displayed && methods.length === 2);
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Optional: download displayed .json', exact: true }).click();
+    const download = await downloadPromise;
+    const downloadPath = '/home/user/workspace/structural_copy_module_local_download_20260916.json';
+    await download.saveAs(downloadPath);
+    t.check('module optional local download preserves complete sanitized evidence without server execution',
+      readFileSync(downloadPath, 'utf8') === displayed && methods.length === 2
+      && download.suggestedFilename() === 'cardresell-module-acceptance.json');
+    await Promise.all([page.waitForNavigation(),
+      page.getByRole('link', { name: 'Open saved results (read-only)' }).click()]);
+    await page.reload();
+    t.check('module saved GET/refresh preserves consumed bytes, shows no Run and makes no financial retry',
+      store.get(CONTROL) === markerBytes && billingCalls().length === financialCalls
+      && await page.getByRole('button', { name: 'Run MODULE acceptance once', exact: true }).count() === 0
+      && await page.locator('#evidence').textContent() === displayed && methods.join() === 'GET,POST,GET,GET');
+    await page.screenshot({ path: '/home/user/workspace/structural_copy_module_mobile_20260916.png', fullPage: true });
+    await ctx.close();
+  } finally { await browser.close(); }
+
   for (const file of ['api/_idBilling.js', 'api/scan.js', 'api/scan-debit-id.js', 'api/scan-refund.js', 'api/_tier.js', 'api/_verifyToken.js']) {
     const current = readFileSync(new URL('../' + file, import.meta.url));
     const baseline = execFileSync('git', ['show', `${BASE}:${file}`], { cwd: new URL('..', import.meta.url) });
@@ -485,7 +593,7 @@ try {
   const source = readFileSync(new URL('../api/preview-id-billing-acceptance.js', import.meta.url), 'utf8');
   t.check('live harness never monkeypatches fetch or imports auth/scan handlers',
     !/(?:globalThis|global|window)\.fetch\s*=/.test(source) && !/from ['"].*(?:scan\.js|scan-debit-id|_verifyToken)/.test(source));
-  writeFileSync('/home/user/workspace/preview_stage1_v5_serialization_guard_evidence_20260915.json',
+  writeFileSync('/home/user/workspace/preview_stage1_v8_structural_copy_evidence_20260916.json',
     JSON.stringify({ stage: 'MODULE only; authenticated handlers and HTTP interruption UNRUN',
       sourceSha256: createHash('sha256').update(source).digest('hex'), successful,
       baseline: BASE, billingGuardSha256: BILLING_GUARD_SHA256, managedRedisRun: 'UNRUN', productionRequests: 0, shapeEvidence, journalEvidence,
