@@ -25,6 +25,7 @@ Date.now = () => now;
 globalThis.fetch = async (url, init) => {
   if (String(url) !== process.env.KV_REST_API_URL) throw new Error('external request forbidden');
   const a = JSON.parse(init.body), comparison = a[0] === 'EVAL' && a[2] === 0;
+  if (fault === 'control-read' && a[0] === 'GET' && a[1] === CONTROL) throw new Error(CANARY);
   if (fault === 'finish' && a[4] === 'finish') throw new Error(CANARY);
   if (fault === 'transport' && comparison) throw new Error(CANARY);
   if (comparison && ['shared-nil', 'shared-false', 'shared-throw', 'both-nil', 'result-nil', 'mutation',
@@ -59,7 +60,12 @@ async function invoke(operation = 'run', overrides = {}) {
     setHeader(k, v) { this.headers[k] = v; return this; }, status(n) { this.statusCode = n; return this; },
     json(v) { this.body = v; return this; }, send(v) { this.body = v; return this; }, end() { return this; } };
   await handler(req, res);
-  if (res.headers['Content-Disposition']) res.evidence = JSON.parse(res.body);
+  if (res.headers['Content-Disposition']?.startsWith('attachment')) res.evidence = JSON.parse(res.body);
+  else if (typeof res.body === 'string') {
+    const match = /<pre id="evidence"[^>]*>([\s\S]*?)<\/pre>/.exec(res.body);
+    if (match) res.evidence = JSON.parse(match[1].replace(/&(?:amp|lt|gt|quot);/g,
+      entity => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"' })[entity]));
+  }
   return res;
 }
 const comparisonCalls = () => commands.filter(c => c.cmd === 'eval' && c.args[2] === 0);
@@ -103,9 +109,12 @@ try {
     t.check(`${name}:refused without any Redis request`, r.statusCode >= 400 && commands.length === 0);
   }
   reset(); const page = await invoke(null, { method: 'GET', body: undefined });
-  t.check('GET only reads fixed control; explicit POST buttons, no auto execution', commands.length === 1
-    && commands[0].cmd === 'get' && commands[0].key === CONTROL && page.body.includes('method="POST"')
-    && !page.body.includes('<script') && page.headers['Cache-Control'] === 'no-store');
+  t.check('GET only reads fixed control; no run/recovery form or auto execution', commands.length === 1
+    && commands[0].cmd === 'get' && commands[0].key === CONTROL && !page.body.includes('<form')
+    && page.body.includes('NOT_CONSUMED') && page.body.includes('Stop here')
+    && !page.body.includes('<script') && page.headers['Cache-Control'] === 'no-store'
+    && page.headers['Content-Type'] === 'text/html; charset=utf-8'
+    && page.headers['Content-Disposition'] === 'inline');
   reset(); now = Date.parse('2026-09-16T18:00:00Z');
   t.check('absolute run expiry blocks new action before Redis', (await invoke()).statusCode === 410 && commands.length === 0);
   for (const scenario of ['normal', 'shared-nil', 'shared-false', 'shared-throw', 'both-nil',
@@ -155,7 +164,8 @@ try {
     const n = comparisonCalls().length;
     fault = null; const downloaded = await invoke('download'), replay = await invoke();
     if (scenario !== 'finish') t.check(`${scenario}:durable evidence replay with no new encoder experiment`,
-      downloaded.body === res.body && replay.body === res.body && comparisonCalls().length === n);
+      JSON.stringify(downloaded.evidence) === JSON.stringify(res.evidence)
+      && JSON.stringify(replay.evidence) === JSON.stringify(res.evidence) && comparisonCalls().length === n);
     else t.check('lost finish cannot reopen run marker', replay.statusCode === 503 && comparisonCalls().length === n);
     const marker = JSON.parse(store.get(CONTROL)); marker.lease = 0; store.set(CONTROL, JSON.stringify(marker));
     const recovery = await invoke('recover');
@@ -184,6 +194,10 @@ try {
     .equals(execFileSync('git', ['show', '5289043:api/preview-id-billing-reproduction.js'], { cwd: new URL('..', import.meta.url) })));
   const source = readFileSync(new URL('../api/preview-id-serialization-comparison.js', import.meta.url), 'utf8');
   const comparison = comparisonCalls()[0].args[1];
+  const originalRoute = execFileSync('git', ['show', '0b72bd0:api/preview-id-serialization-comparison.js'],
+    { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
+  t.check('same v7 control, comparison Lua, fixture, one-shot logic, projection and guards remain byte-identical',
+    source.split('const escapeHtml =')[0] === originalRoute.split('export default async function handler')[0]);
   t.check('comparison is in-memory only; no Redis commands, encoder config, JSON clone or global fetch patch',
     !/redis\.(call|pcall)|KEYS\[/.test(comparison) && !/encode_(?:sparse|invalid|keep|number|max)/.test(comparison)
     && source.includes('out[k]=copy(x)') && !/globalThis\.fetch\s*=/.test(source));
@@ -204,7 +218,97 @@ try {
     && candidateHash({ ...actual, expires: base.expires, replay_expires: base.replay_expires, result_json: undefined })
       === candidateHash(base));
   await redisCommand(['DEL', ...localKeys]);
-  writeFileSync('/home/user/workspace/preview_v7_comparison_offline_evidence_20260916.json',
+  // Retrieval-only UI: actual browser + actual handler + private Redis. Every
+  // browser request is intercepted; no managed endpoint or live DNS is used.
+  reset(); const seeded = (await invoke()).evidence;
+  const consumedBytes = store.get(CONTROL); commands = [];
+  const readable = await invoke(null, { method: 'GET', body: undefined });
+  t.check('consumed GET renders exact sanitized saved JSON with no server action forms',
+    JSON.stringify(readable.evidence) === JSON.stringify(seeded) && readable.body.includes('CONSUMED_SAVED')
+    && readable.body.includes('copy-results') && readable.body.includes('download-results')
+    && !readable.body.includes('<form') && readable.headers['Content-Disposition'] === 'inline'
+    && store.get(CONTROL) === consumedBytes && comparisonCalls().length === 0
+    && commands.every(c => c.cmd === 'get' && c.key === CONTROL));
+  const unfinished = JSON.parse(consumedBytes); unfinished.artifact = '';
+  store.set(CONTROL, JSON.stringify(unfinished)); const unfinishedBytes = store.get(CONTROL);
+  const noResults = await invoke(null, { method: 'GET', body: undefined });
+  t.check('consumed without results reports STOP and never offers run, recovery or empty download',
+    noResults.body.includes('CONSUMED_NO_RESULTS') && noResults.body.includes('Stop here')
+    && !noResults.body.includes('<button') && !noResults.body.includes('<form')
+    && store.get(CONTROL) === unfinishedBytes && comparisonCalls().length === 0);
+  store.set(CONTROL, consumedBytes);
+  fault = 'control-read';
+  const readFailure = await invoke(null, { method: 'GET', body: undefined });
+  t.check('unavailable saved-state read remains UNKNOWN with no run/copy/download/cleanup action',
+    readFailure.statusCode === 503 && readFailure.body.includes('UNAVAILABLE')
+    && !readFailure.body.includes('<button') && !readFailure.body.includes('<form')
+    && !readFailure.body.includes(CANARY) && store.get(CONTROL) === consumedBytes);
+  fault = null;
+  const malicious = JSON.parse(consumedBytes), polluted = JSON.parse(Buffer.from(malicious.artifact, 'base64').toString());
+  polluted.scope = '</pre><script>window.INJECTED=true</script>';
+  malicious.artifact = Buffer.from(JSON.stringify(polluted)).toString('base64'); store.set(CONTROL, JSON.stringify(malicious));
+  const safePage = await invoke(null, { method: 'GET', body: undefined });
+  t.check('HTML uses sanitized projection, never stored metadata or injected markup',
+    !safePage.body.includes('window.INJECTED') && safePage.headers['Content-Security-Policy'].includes("script-src 'nonce-")
+    && !safePage.headers['Content-Security-Policy'].includes("'unsafe-inline'"));
+  store.set(CONTROL, consumedBytes);
+  const { chromium, devices } = (await import('/home/user/node_modules/playwright/index.js')).default;
+  const browser = await chromium.launch();
+  try {
+    const ctx = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `https://${HOST}` });
+    const requests = [];
+    await ctx.route('**/*', async route => {
+      const request = route.request(), url = new URL(request.url());
+      requests.push({ method: request.method(), path: url.pathname });
+      if (url.origin !== `https://${HOST}` || url.pathname !== PATH) return route.abort();
+      const response = await invoke(null, { method: request.method(), url: url.pathname,
+        body: undefined, headers: request.headers() });
+      await route.fulfill({ status: response.statusCode, headers: response.headers, body: response.body });
+    });
+    const browserPage = await ctx.newPage();
+    const response = await browserPage.goto(`https://${HOST}${PATH}`);
+    const displayed = await browserPage.locator('#evidence').textContent();
+    t.check('mobile Chromium GET200 renders nonempty HTML inline without required download',
+      response.status() === 200 && response.headers()['content-type'].startsWith('text/html')
+      && response.headers()['content-disposition'] === 'inline'
+      && JSON.stringify(JSON.parse(displayed)) === JSON.stringify(seeded));
+    await browserPage.getByRole('button', { name: 'Copy results', exact: true }).click();
+    const copied = await browserPage.evaluate(() => navigator.clipboard.readText());
+    t.check('Copy uses displayed JSON locally with no POST or comparison', copied === displayed
+      && comparisonCalls().length === 0 && requests.every(r => r.method === 'GET'));
+    const downloadPromise = browserPage.waitForEvent('download');
+    await browserPage.getByRole('button', { name: 'Optional: download displayed .json', exact: true }).click();
+    const download = await downloadPromise;
+    const downloadedPath = '/home/user/workspace/preview_v7_html_local_download_20260916.json';
+    await download.saveAs(downloadedPath);
+    t.check('optional local Blob download is nonzero complete JSON, never server POST',
+      download.suggestedFilename() === 'cardresell-synthetic-encoder-comparison.json'
+      && readFileSync(downloadedPath, 'utf8') === displayed && requests.every(r => r.method === 'GET')
+      && comparisonCalls().length === 0 && store.get(CONTROL) === consumedBytes);
+    await browserPage.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText: async () => { throw new Error('local denied'); } },
+    }));
+    await browserPage.getByRole('button', { name: 'Copy results', exact: true }).click();
+    t.check('clipboard denial selects readable JSON and offers manual copy without network',
+      (await browserPage.locator('#copy-status').textContent()).includes('manually')
+      && await browserPage.evaluate(() => window.getSelection().toString()) === displayed
+      && store.get(CONTROL) === consumedBytes);
+    t.check('mobile results do not overflow viewport',
+      await browserPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    await browserPage.screenshot({ path: '/home/user/workspace/preview_v7_html_mobile_chromium_20260916.png', fullPage: true });
+    await ctx.close();
+  } finally { await browser.close(); }
+  t.check('all retrieval actions preserve exact control bytes and only issue fixed GET reads',
+    store.get(CONTROL) === consumedBytes && comparisonCalls().length === 0
+    && commands.every(c => c.cmd === 'get' && c.key === CONTROL));
+  process.env.VERCEL_GIT_COMMIT_REF = 'wrong';
+  const count = commands.length, unavailable = await invoke(null, { method: 'GET', body: undefined });
+  t.check('guard failures retain404 but now explicit nonempty HTML with no environment leak or Redis access',
+    unavailable.statusCode === 404 && unavailable.headers['Content-Type'].startsWith('text/html')
+    && unavailable.headers['Content-Disposition'] === 'inline' && unavailable.body.length > 0
+    && unavailable.body.includes('UNAVAILABLE') && !unavailable.body.includes('wrong') && commands.length === count);
+  writeFileSync('/home/user/workspace/preview_v7_html_retrieval_offline_evidence_20260916.json',
     JSON.stringify({ sourceSha256: createHash('sha256').update(source).digest('hex'),
       scope: 'LOCAL ONLY: native local Redis and injected hypotheses; no managed encoder result claimed', evidence }, null, 2));
 } finally { globalThis.fetch = originalFetch; Date.now = originalNow; }

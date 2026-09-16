@@ -282,36 +282,74 @@ function permitted(req) {
       && !u.port && !u.search && !u.hash && u.pathname === '/';
   } catch (_) { return false; }
 }
+const escapeHtml = value => String(value).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error = null } = {}) {
+  const token = nonce();
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${token}'; style-src 'nonce-${token}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`);
+  const messages = {
+    NOT_CONSUMED: 'No consumed run was found. Stop here: no experiment has been requested by this page. There are no saved results to retrieve.',
+    CONSUMED_SAVED: 'The one-use control is consumed. Preserved results are shown below; reading or copying them does not rerun the experiment.',
+    CONSUMED_NO_RESULTS: 'The one-use control is consumed, but no preserved results are available. Stop here: do not run the experiment again. Reading this page does not perform cleanup.',
+    RESPONSE_ONLY: 'This is the response from the requested operation. Reload this page to check the preserved copy; reloading does not rerun the experiment.',
+    UNAVAILABLE: 'The protected comparison or its saved state is unavailable. No experiment was started by opening this page. Use the exact protected Preview URL and normal Vercel sign-in.',
+  };
+  const message = messages[state] || messages.UNAVAILABLE;
+  const text = evidence ? JSON.stringify(evidence, null, 2) : '';
+  return res.status(status).send('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic encoder comparison</title>'
+    + `<style nonce="${token}">body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#f6f7f9;color:#192433}main{max-width:850px;margin:auto;padding:24px 18px}h1{font-size:26px;line-height:1.2}button{font:inherit;min-height:44px;padding:10px 14px;margin:8px 0;border:1px solid #526271;border-radius:6px;background:white;color:#192433}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;padding:16px;background:white;border:1px solid #d4dbe2;border-radius:6px;font-size:13px}small{display:block}form{display:inline-block;margin-right:10px}</style></head><body><main>`
+    + '<h1>Synthetic encoder comparison</h1><p>Controlled encoder evidence only. No billing acceptance, authenticated-client or HTTP-loss proof.</p>'
+    + `<p id="run-state" data-state="${Object.hasOwn(messages, state) ? state : 'UNAVAILABLE'}">${message}</p>`
+    + (error && CODES.includes(error) ? `<p id="error">Status: ${error}</p>` : '')
+    + (evidence ? '<h2>Sanitized results</h2><p>No download is required. You may select the JSON text manually.</p>'
+      + '<button id="copy-results" type="button">Copy results</button><span id="copy-status" role="status" aria-live="polite"></span>'
+      + '<button id="download-results" type="button">Optional: download displayed .json</button>'
+      + `<pre id="evidence" tabindex="0">${escapeHtml(text)}</pre>` : '')
+    + '<p>Results retrieval is read-only. Copy and download use only the text already displayed in this browser; they do not contact the server, execute the comparison, or perform lifecycle cleanup.</p>'
+    + (evidence ? `<script nonce="${token}">const output=document.getElementById('evidence'),status=document.getElementById('copy-status');
+document.getElementById('copy-results').addEventListener('click',async()=>{
+try{await navigator.clipboard.writeText(output.textContent);status.textContent=' Results copied.';}
+catch(_){const selection=window.getSelection(),range=document.createRange();range.selectNodeContents(output);
+selection.removeAllRanges();selection.addRange(range);status.textContent=' Select and copy the highlighted JSON manually.';}
+});
+document.getElementById('download-results').addEventListener('click',()=>{
+const link=document.createElement('a'),url=URL.createObjectURL(new Blob([output.textContent],{type:'application/json;charset=utf-8'}));
+link.href=url;link.download='cardresell-synthetic-encoder-comparison.json';document.body.append(link);link.click();link.remove();
+setTimeout(()=>URL.revokeObjectURL(url),30000);
+});</script>` : '')
+    + '</main></body></html>');
+}
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
-  if (!permitted(req)) return res.status(404).end();
-  if (!['GET', 'POST'].includes(req.method)) return res.status(405).end();
+  if (!permitted(req)) return html(res, { status: 404 });
+  if (!['GET', 'POST'].includes(req.method)) return html(res, { status: 405 });
   try {
     if (req.method === 'GET') {
-      if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length)) return res.status(400).end();
+      if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length)) return html(res, { status: 400 });
       const old = await record();
-      const button = (operation, label) => `<form method="POST"><button name="operation" value="${operation}">${label}</button></form>`;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send('<!doctype html><meta charset="utf-8"><title>Synthetic encoder comparison</title>'
-        + '<h1>Synthetic encoder comparison</h1><p>One fixed encoder-only experiment. Equal journal content; shared versus independent selected-card tables. No billing acceptance or authenticated-client proof.</p>'
-        + (!old && Date.now() < END ? button('run', 'Run comparison once and download') : '')
-        + (old?.artifact ? button('download', 'Download preserved comparison') : '')
-        + (old ? button('recover', 'Recover synthetic cleanup') : ''));
+      return html(res, { evidence: old?.artifact ? artifact(old) : null,
+        state: old ? old.artifact ? 'CONSUMED_SAVED' : 'CONSUMED_NO_RESULTS' : 'NOT_CONSUMED' });
     }
     const body = req.body;
     if (req.headers.origin !== `https://${process.env.VERCEL_URL}` || req.headers['sec-fetch-site'] !== 'same-origin'
         || !['application/x-www-form-urlencoded', 'application/json'].includes((req.headers['content-type'] || '').split(';')[0])
         || !body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1
-        || !['run', 'recover', 'download'].includes(body.operation)) return res.status(400).end();
-    if (body.operation === 'run' && Date.now() >= END) return res.status(410).end();
+        || !['run', 'recover', 'download'].includes(body.operation)) return html(res, { status: 400 });
+    if (body.operation === 'run' && Date.now() >= END) return html(res, { status: 410 });
     let evidence;
     if (body.operation === 'run') evidence = await run();
     else if (body.operation === 'recover') evidence = await recover();
     else { const old = await record(); if (!old?.artifact) throw new Diagnostic('missing_run'); evidence = artifact(old); }
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="cardresell-synthetic-encoder-comparison.json"');
-    return res.status(200).send(JSON.stringify(evidence, null, 2));
-  } catch (e) { return res.status(503).json({ status: 'FAIL', error: codeOf(e) }); }
+    if (body.operation === 'download') {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="cardresell-synthetic-encoder-comparison.json"');
+      return res.status(200).send(JSON.stringify(evidence, null, 2));
+    }
+    return html(res, { evidence, state: 'RESPONSE_ONLY' });
+  } catch (e) { return html(res, { status: 503, error: codeOf(e) }); }
 }
