@@ -1,4 +1,5 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { stage2Scoped, stage2Denied } from './_previewIdStage2.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
@@ -828,6 +829,7 @@ export function identityResponseFields(cardInfo) {
 }
 
 export default async function handler(req, res) {
+  if (stage2Scoped()) return stage2Denied(res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // ── 1. Auth ──

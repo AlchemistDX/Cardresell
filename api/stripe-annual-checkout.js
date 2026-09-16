@@ -9,7 +9,9 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 
 const ANNUAL_PRICE_FALLBACK = 'price_1TosPSFW2YZoedIZ5e0abG3y'; // $89.99/yr
 
+import { stage2Scoped, stage2Denied } from './_previewIdStage2.js';
 export default async function handler(req, res) {
+  if (stage2Scoped()) return stage2Denied(res);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

@@ -87,6 +87,21 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'preview-id-authenticated-worker.mjs':
+    'Required temporary worker gate: node tests/preview-id-authenticated-worker.mjs. ' +
+    'Actual isolated Redis state transitions plus real local HTTP/normal-verifier ' +
+    'and shipped srcdoc picker service-worker suppression/retry. Not managed Safari.',
+  'preview-id-authenticated-acceptance.mjs':
+    'Required temporary Stage2 gate: node tests/preview-id-authenticated-acceptance.mjs. ' +
+    'Private Redis executes actual Lua, normal production signature verification uses ' +
+    'synthetic local JWKS. Checks pre-login no-Stripe fence, UID binding, finite phases, ' +
+    'real confirmation handler, conflict refusal and terminal cleanup guards. Not managed sign-in.',
+  'authenticated-confirmation-http-browser.mjs':
+    'Required explicit Stage2 local gate: node tests/authenticated-confirmation-http-browser.mjs. ' +
+    'Requires Playwright Chromium and private Redis. Real production signature verifier, ' +
+    'tier and scan/debit handlers via actual local HTTP; synthetic RSA issuer, browser ' +
+    'session bootstrap and vision/catalogue. Tests post-commit HTTP suppression then real ' +
+    'picker retry. Not managed normal Firebase login or physical Safari evidence.',
   'preview-id-serialization-comparison.mjs':
     'Temporary protected v7 in-memory encoder-only alias comparison; not billing ' +
     'acceptance. Explicit gate: node tests/preview-id-serialization-comparison.mjs. ' +

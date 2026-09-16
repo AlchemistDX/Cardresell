@@ -1,3 +1,4 @@
+import { stage2Scoped, stage2Owner, Stage2Error } from './_previewIdStage2.js';
 // /api/_verifyToken.js
 // Shared Firebase ID token verifier for all API routes.
 // Firebase tokens are JWTs signed by Google — we verify using Google's public keys.
@@ -123,7 +124,15 @@ async function verifyFirebaseToken(idToken) {
 //      user who has ever signed in successfully.
 //   4. If no UID mapping exists (brand-new user + Firebase completely down),
 //      throw — don't silently fabricate a fake identity.
-async function verifyTokenFlexible(idToken) {
+async function verifyTokenFlexible(idToken, previewPurpose) {
+  // Temporary dedicated Preview: real Firebase verification, no legacy
+  // fallback or asynchronous UID-by-email write, and no unrelated API access.
+  if (stage2Scoped()) {
+    if (previewPurpose !== 'id-confirmation') throw new Stage2Error('preview_acceptance_only');
+    const user = await verifyFirebaseToken(idToken);
+    await stage2Owner(user);
+    return user;
+  }
   // Try Firebase first
   try {
     const result = await verifyFirebaseToken(idToken);

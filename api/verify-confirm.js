@@ -1,4 +1,5 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { stage2Scoped, stage2Denied } from './_previewIdStage2.js';
 
 // /api/verify-confirm — Validate a 6-digit code and mark the user's email verified.
 //
@@ -53,6 +54,7 @@ function normalizeEmail(email) {
 }
 
 export default async function handler(req, res) {
+  if (stage2Scoped()) return stage2Denied(res);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

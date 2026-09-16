@@ -1,3 +1,4 @@
+import { stage2Scoped, Stage2Error } from './_previewIdStage2.js';
 // Shared tier resolution + grant table for CardResell subscription tiers.
 //
 // Tiers are stored in KV under `pro:<googleSub>` as JSON:
@@ -64,6 +65,7 @@ export function priceIdToTier(priceId) {
 //
 // Returns: 'free' | 'pro' | 'pro_max' | 'ultimate'
 export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email, { strict = false } = {}) {
+  if (stage2Scoped()) throw new Stage2Error('preview_acceptance_only');
   // Fast path — KV
   if (kvUrl && kvToken && googleSub) {
     try {

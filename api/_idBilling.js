@@ -2,6 +2,7 @@
 // receipt, bound to owner / scan / offered candidates / expiry / identify mode.
 import { randomBytes, createHash } from 'node:crypto';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
+import { stage2Scoped, stage2Entitlement } from './_previewIdStage2.js';
 
 export const CONFIRM_TTL_SECONDS = 900;
 const RETENTION_SECONDS = 86400;
@@ -221,6 +222,7 @@ async function command(...args) {
   return data.result;
 }
 export async function idEntitlement({ uid, email }) {
+  if (stage2Scoped()) return stage2Entitlement({ uid, email });
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) throw new IdBillingError();
   const tier = await getUserTier(process.env.STRIPE_SECRET_KEY,
     process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN, uid, email, { strict: true });

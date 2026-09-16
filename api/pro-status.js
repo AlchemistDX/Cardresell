@@ -1,4 +1,5 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { stage2Scoped, stage2Status } from './_previewIdStage2.js';
 // /api/pro-status — Check Pro status + scan credits for a Google user
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
@@ -9,6 +10,7 @@ const TIER_GRADE_GRANT = { free: 1, pro: 15, pro_max: 40,  ultimate: 100 };
 const TIER_ID_GRANT    = { free: 5, pro: 30, pro_max: 100, ultimate: 300 }; // 2026-08-21: pro_max 80→100, ultimate 250→300
 
 export default async function handler(req, res) {
+  if (stage2Scoped()) return stage2Status(req, res);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

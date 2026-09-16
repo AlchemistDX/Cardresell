@@ -2,6 +2,7 @@
 // Handles: Pro/Pro Max/Ultimate subscriptions + per-scan payments
 
 import { priceIdToTier } from './_tier.js';
+import { stage2Scoped, stage2Denied } from './_previewIdStage2.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -15,6 +16,7 @@ async function getRawBody(req) {
 }
 
 export default async function handler(req, res) {
+  if (stage2Scoped()) return stage2Denied(res);
   if (req.method !== 'POST') return res.status(405).end();
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
